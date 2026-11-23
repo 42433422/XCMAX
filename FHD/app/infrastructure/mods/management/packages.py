@@ -198,9 +198,9 @@ class ModPackages:
                     shutil.rmtree(mod_path)
                     self._ports.logger.info("MOD files removed")
             return (True, f"MOD {mod_id} 卸载成功")
-        except RECOVERABLE_ERRORS as e:
+        except RECOVERABLE_ERRORS:
             self._ports.logger.exception("MOD uninstallation failed")
-            return (False, f"卸载失败：{e}")
+            return (False, "扩展卸载失败，请核对当前安装状态")
 
     def validate(self, package_path: str) -> tuple[bool, str, Payload]:
         """

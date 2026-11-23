@@ -136,13 +136,13 @@ def test_orchestrator_resumes_in_place_instead_of_replanning(monkeypatch):
 
 
 def test_confirmation_decision_parsing():
-    from app.application.ai_chat.workflow_session import _plan_confirmation_decision
+    from app.application.workflow.clarification_selection import plan_confirmation_decision
 
-    assert _plan_confirmation_decision("确认清空全部") is None
-    assert _plan_confirmation_decision("确认") is True
-    assert _plan_confirmation_decision("可以，执行") is True
-    assert _plan_confirmation_decision("取消") is False
-    assert _plan_confirmation_decision("不要清空了") is False
-    assert _plan_confirmation_decision("改成只清空客户") is None
-    assert _plan_confirmation_decision("确认，但换成第二个") is None
-    assert _plan_confirmation_decision("可以换成上个月吗") is None
+    assert plan_confirmation_decision("确认清空全部") is None
+    assert plan_confirmation_decision("确认") is True
+    assert plan_confirmation_decision("可以，执行") is True
+    assert plan_confirmation_decision("取消") is False
+    assert plan_confirmation_decision("不要清空了") is False
+    assert plan_confirmation_decision("改成只清空客户") is None
+    assert plan_confirmation_decision("确认，但换成第二个") is None
+    assert plan_confirmation_decision("可以换成上个月吗") is None

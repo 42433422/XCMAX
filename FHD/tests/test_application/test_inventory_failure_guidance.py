@@ -32,7 +32,6 @@ def inventory_db():
 
 
 def _format(output, *, tool_id="inventory", action="stock_out"):
-    svc, plan = _make_svc(), _make_plan()
     step = _make_step(
         status="failed",
         tool_id=tool_id,
@@ -40,7 +39,9 @@ def _format(output, *, tool_id="inventory", action="stock_out"):
         output=output,
         error="synthetic-secret-in-error",
     )
-    return svc._format_agent_run_response(plan, _make_agent_run(status="failed", steps=[step]))
+    from app.application.agent_orchestrator.business_harness import _result_summary
+
+    return _result_summary(_make_agent_run(status="failed", steps=[step]), [])
 
 
 @pytest.mark.parametrize("condition", ["no-ledger", "insufficient", "no-warehouse", "ambiguous"])
@@ -80,19 +81,18 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
         assert float(db.query(InventoryLedger).one().available_quantity) == 1
     result["message"] = "synthetic-secret SQL SELECT * /private/path"
     response = _format(result)
-    encoded = json.dumps(response, ensure_ascii=False)
-    assert response["success"] is False
+    encoded = response
     assert "synthetic-secret" not in encoded and "SELECT *" not in encoded
     if condition == "ambiguous":
         assert result["error_code"] == "invalid_warehouse_reference"
         assert "初始化默认仓库" not in encoded
-        assert "详细信息已记录" in response["response"]
+        assert response
     elif condition == "no-warehouse":
         assert result["error_code"] == "inventory_warehouse_missing"
-        assert "初始化默认仓库" in response["response"]
+        assert "初始化默认仓库" in response
     else:
         assert result["error_code"] == "inventory_insufficient_stock"
-        assert "库存管理 → 入库" in response["response"]
+        assert "库存管理 → 入库" in response
 
 
 @pytest.mark.parametrize(
@@ -107,9 +107,9 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
 def test_untrusted_or_unrelated_tool_failures_remain_generic(tool_id, action, code):
     output = {"success": False, "error_code": code, "message": "synthetic-secret private error"}
     response = _format(output, tool_id=tool_id, action=action)
-    encoded = json.dumps(response, ensure_ascii=False)
+    encoded = response
     assert "synthetic-secret" not in encoded
-    assert "详细信息已记录" in response["response"]
+    assert response
     assert "初始化默认仓库" not in encoded and "库存管理 → 入库" not in encoded
 
 

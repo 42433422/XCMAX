@@ -8,12 +8,17 @@ git concerns.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
+from filelock import FileLock
 
 from app.application.group_chat.storage import GroupChatRepository
 
@@ -50,9 +55,19 @@ class MessageRepository:
     ) -> dict[str, Any]:
         path = (
             self._outbox_dir
-            / f"{request['created_at'].replace(':', '').replace('+', 'Z')}-{request['request_id']}.json"
+            / f"{request['created_at'].replace(':', '').replace('+', 'Z')}-{int(request.get('user_id') or 0)}-{request['request_id']}.json"
         )
-        path.write_text(json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        # Persist the send intent before crossing the remote side-effect boundary.
+        # Atomic replacement preserves the last receipt if a writer is interrupted.
+        fd, temporary = tempfile.mkstemp(dir=self._outbox_dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(request, stream, ensure_ascii=False, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
         return {
             "request_id": request["request_id"],
             "status": status,
@@ -62,6 +77,25 @@ class MessageRepository:
             "reason": reason,
             "outbox_path": str(path),
         }
+
+    def dispatch_lock(self, user_id: int, request_id: str) -> FileLock:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
+            raise ValueError("request_id 格式无效")
+        key = hashlib.sha256(f"{int(user_id)}:{request_id}".encode()).hexdigest()
+        # Dispatch can project messages before returning; that readback uses
+        # the same per-request lock. Reuse FileLock's native reentrancy.
+        return FileLock(self._outbox_dir / f"{key}.lock", timeout=30, is_singleton=True)
+
+    def read_dispatch_request(self, user_id: int, request_id: str) -> dict[str, Any] | None:
+        for path in self._outbox_dir.glob(f"*-{request_id}.json"):
+            request = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(request, dict):
+                raise ValueError("持久化执行回执必须是对象")
+            if request.get("request_id") == request_id and int(request.get("user_id") or 0) == int(
+                user_id
+            ):
+                return request
+        return None
 
     def message_row(
         self,

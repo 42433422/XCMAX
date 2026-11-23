@@ -394,12 +394,15 @@ def _handoff_exhausted_remediations(keys: set[tuple[str, ...]], *, attempts: int
             handed.append((branch, task_id))
     if not handed:
         return False
-    close_loop_memory_items(
+    closed = close_loop_memory_items(
         actor="scheduler",
         branches=[branch for branch, _ in handed],
         task_ids=[task_id for _, task_id in handed],
         resolution_reason="remediation_retry_budget_exhausted_handoff",
     )
+    if closed.get("ok") is not True:
+        logger.info("deferred exhausted remediation memory closure: %s", closed.get("status"))
+        return False
     logger.warning("handed %d exhausted remediation item(s) to human queue", len(handed))
     return True
 

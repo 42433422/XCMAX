@@ -26,7 +26,8 @@ def test_planner_tools_config_file():
 def test_planner_blueprints_tools_execute_route():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/tools/execute" in text
-    assert "execute_planner_tool" in text
+    assert "run_planner_tool_agent" in text
+    assert "request=request, body=body or {}, route_path=str(request.url.path)" in text
     assert 'data.get("success")' in text
 
 

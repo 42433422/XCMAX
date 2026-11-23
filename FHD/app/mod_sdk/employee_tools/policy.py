@@ -53,7 +53,7 @@ async def _check_write_gate(
         config = manifest.get("employee_config_v2") or {}
         workspace_root = str(ctx.get("workspace_root") or os.getcwd())
         ws_gate = build_employee_gate(employee_id, manifest, config, workspace_root)
-        write_gate = build_write_approval_gate(employee_id, params)
+        write_gate = build_write_approval_gate(employee_id, runtime_context=ctx)
         gate = compose_gates(ws_gate, write_gate)
         if gate is None:
             return {"ok": True}

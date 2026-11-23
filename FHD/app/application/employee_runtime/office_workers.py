@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.domain.workbook_write_contract import WORKBOOK_QC, WORKBOOK_WRITER
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -10,6 +11,8 @@ def is_deterministic_office_worker(employee_id: str, handler_list: list[str]) ->
 
     if handler_list != ["direct_python"]:
         return False
+    if employee_id in {WORKBOOK_WRITER, WORKBOOK_QC}:
+        return True
     try:
         from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
 

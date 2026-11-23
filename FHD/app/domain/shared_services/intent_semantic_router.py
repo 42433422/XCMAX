@@ -239,8 +239,8 @@ def get_semantic_router() -> Any | None:
                 semantic_threshold(),
             )
         except BOUNDARY_ERRORS as exc:  # Third-party model initialization is a plugin boundary.
-            _router_error = f"{type(exc).__name__}: {exc}"
-            logger.warning("intent semantic router unavailable: %s", _router_error)
+            _router_error = "semantic_router_unavailable"
+            logger.warning("intent semantic router unavailable: %s", exc)
             _router = None
     return _router
 

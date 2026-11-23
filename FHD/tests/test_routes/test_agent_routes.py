@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +29,6 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.planner_model import goal_review_response
 
 
 def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(trusted_actor) -> None:
@@ -311,10 +311,16 @@ def _drain_background_run(run_id: str) -> AgentRun:
     state = {
         "completed": "completed",
         "failed": "failed",
+        "blocked": "failed",
         "cancelled": "cancelled",
         "paused": "paused",
     }.get(run.status, "blocked")
-    queue.finish(run_id, "route-test-worker", state)
+    queue.finish(
+        run_id,
+        "route-test-worker",
+        state,
+        error_code="needs_verification" if run.status == "blocked" else "",
+    )
     return run
 
 
@@ -377,99 +383,63 @@ def test_resume_explains_unreconciled_result_without_state_changes():
     assert repository.latest_task_control(run.run_id) is None
 
 
-def _planner_fallback_patches():
+def _seed_legacy_run(*, user_id="u1", runtime_context=None, write=False, enqueue=True):
+    """Restore the already-frozen graph used by pre-Codex task control tests."""
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.fastapi_routes.domains.agent.route_support import enqueue_run
 
-    def model_plan(plan_id, user_id, message, registry, context):
-        del user_id, registry, context
-        write = "发货单" in message
-        node = (
-            WorkflowNode(
-                node_id="generate_shipment",
-                tool_id="shipment_orders",
-                action="generate",
-                params={
-                    "unit_name": "星光贸易",
-                    "products": [{"model_number": "XG-5003", "quantity": 1}],
-                },
-            )
-            if write
-            else WorkflowNode(
-                node_id="read_products",
-                tool_id="business_db",
-                action="read",
-                params={"entity": "products", "keyword": "XG-5003"},
-            )
+    node = (
+        WorkflowNode(
+            node_id="generate_shipment",
+            tool_id="shipment_orders",
+            action="generate",
+            params={
+                "unit_name": "星光贸易",
+                "products": [{"model_number": "XG-5003", "quantity": 1}],
+            },
         )
-        return PlanGraph(
-            plan_id=plan_id,
+        if write
+        else WorkflowNode(
+            node_id="read_products",
+            tool_id="business_db",
+            action="read",
+            params={"entity": "products", "keyword": "XG-5003"},
+        )
+    )
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message="请为星光贸易生成发货单" if write else "查数据库产品 XG-5003",
+        runtime_context=runtime_context,
+        plan=PlanGraph(
+            plan_id=f"legacy_{uuid.uuid4().hex}",
             intent="shipment_generate" if write else "business_db_read",
             nodes=[node],
-        )
-
-    def review_completion(**kwargs):
-        payload = json.loads(kwargs["messages"][-1]["content"])
-        source = payload["user_message"]
-        nodes = {
-            "查数据库产品 XG-5003": ["read_products"],
-            "查产品": ["read_products"],
-            "请为星光贸易生成发货单": ["generate_shipment"],
-        }
-        return goal_review_response(
-            payload, source=source, node_ids=nodes[source], outcome="execute"
-        )
-
-    return (
-        patch("app.application.workflow.planner.get_ai_conversation_service"),
-        patch(
-            "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm",
-            side_effect=model_plan,
         ),
-        patch(
-            "app.application.workflow.tool_profile.resolve_tool_execution_profile",
-            return_value="pro_default",
-        ),
-        patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch(
-            "app.application.workflow.planner.request_planner_completion",
-            side_effect=review_completion,
-        ),
+        auto_execute=False,
     )
+    if enqueue:
+        run = orchestrator.stage_run_for_dispatch(run.run_id, requested_by=user_id)
+        enqueue_run(run, requested_by=user_id)
+    return run
 
 
-def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
+def test_get_and_list_historical_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(user_id=17, role="admin")
     client = _client(actor=actor)
-    patches = _planner_fallback_patches()
-
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
-        ) as mock_execute,
-    ):
-        response = client.post(
-            "/api/agent/runs",
-            json={
-                "message": "查数据库产品 XG-5003",
-                "user_id": "forged-user",
-                "runtime_context": {"source": "route-test"},
-            },
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
+    ) as mock_execute:
+        queued = _seed_legacy_run(
+            user_id=str(actor.user_id),
+            runtime_context={**actor.context, "source": "route-test"},
         )
-        completed_run = _drain_background_run(response.json()["data"]["run_id"])
+        assert queued.status == "queued"
+        completed_run = _drain_background_run(queued.run_id)
 
-    assert response.status_code == 202
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["data"]["status"] == "queued"
-    assert payload["execution"]["state"] == "queued"
     run = completed_run.to_dict()
     assert run["status"] == "completed"
     assert run["user_id"] == str(actor.user_id)
@@ -489,7 +459,12 @@ def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) 
     assert events_response.status_code == 200
     events_payload = events_response.json()
     assert events_payload["count"] == len(run["events"])
-    assert events_payload["data"][-1]["event_type"] == "run.completed"
+    assert any(event["event_type"] == "run.completed" for event in events_payload["data"])
+    assert events_payload["data"][-1]["event_type"] == "run.observed"
+    events = events_payload["data"]
+    assert sum(event["event_type"] == "run.completed" for event in events) == 1
+    observation = next(event for event in reversed(events) if event["event_type"] == "run.observed")
+    assert observation["data"]["status"] == "completed"
 
     first_event_id = events_payload["data"][0]["event_id"]
     tail_response = client.get(
@@ -558,6 +533,69 @@ def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "case", ["deep_unknown", "late_unknown", "nested_failure", "missing_success", "nonbool_success"]
+)
+def test_observed_receipt_classification_survives_sql_storage_and_bounded_view(trusted_actor, case):
+    from app.application.agent_orchestrator import SQLAlchemyAgentRunRepository
+
+    actor = trusted_actor(role="admin")
+    set_agent_run_repository_for_tests(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    output = {"success": True}
+    if case == "deep_unknown":
+        child = {"outcome_unknown": True}
+        for _ in range(6):
+            child = {"result": child}
+        output["result"] = child
+    elif case == "late_unknown":
+        output.update({f"field_{index}": index for index in range(45)})
+        output["requires_reconciliation"] = True
+    elif case == "nested_failure":
+        output["result"] = {"outputs": [{"success": False, "message": "child rejected"}]}
+    elif case == "missing_success":
+        output = {"message": "transport delivered"}
+    else:
+        output["success"] = "false"
+    client = _client(actor=actor)
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as dispatch:
+        response = client.post(
+            "/api/agent/runs/observed-tool",
+            json={
+                "message": "查产品",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "5003"},
+                "output": output,
+                "response": "已全部完成",
+            },
+        )
+        assert response.status_code == 200, response.text
+        reference = response.json()["data"]
+        unknown = case in {"deep_unknown", "late_unknown"}
+        assert reference["status"] == ("blocked" if unknown else "failed")
+        # Reopen the durable repository before reading or attempting continuation.
+        repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+        set_agent_run_repository_for_tests(repository)
+        read = client.get(f"/api/agent/runs/{reference['run_id']}")
+        assert read.status_code == 200, read.text
+        stored = repository.get(reference["run_id"])
+        assert stored.status == reference["status"]
+        assert read.json()["data"]["status"] == stored.status
+        assert stored.steps[0].output["success"] is False
+        assert stored.tool_calls[0].status == "failed"
+        assert stored.final_output["response"] != "已全部完成"
+        assert stored.events[-1].event_type == f"run.{stored.status}"
+        if unknown:
+            assert stored.steps[0].output["outcome"] == "unknown"
+            assert stored.steps[0].output["retryable"] is False
+            assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        before = stored.to_dict()
+        assert client.post(f"/api/agent/runs/{stored.run_id}/retry", json={}).status_code == 409
+        assert repository.get(stored.run_id).to_dict() == before
+        assert get_task_execution_repository().get(stored.run_id) is None
+        dispatch.assert_not_called()
+
+
 def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     get_agent_run_repository().clear()
     client = _client("u1")
@@ -580,33 +618,15 @@ def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
     assert "观察记录" in retry.json()["message"]
 
 
-def test_continue_waiting_agent_run(local_tools) -> None:
+def test_approved_agent_run_without_source_evidence_stays_blocked(local_tools) -> None:
     get_agent_run_repository().clear()
     client = _client()
-    patches = _planner_fallback_patches()
-
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool"
-        ) as mock_execute,
-    ):
-        create_response = client.post(
-            "/api/agent/runs",
-            json={
-                "message": "请为星光贸易生成发货单",
-                "user_id": "u1",
-                "runtime_context": {"source": "route-continue-test"},
-            },
-        )
-        assert create_response.status_code == 202
-        queued = create_response.json()["data"]
-        assert queued["status"] == "queued"
-        waiting = _drain_background_run(queued["run_id"])
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool"
+    ) as mock_execute:
+        queued = _seed_legacy_run(write=True, runtime_context={"source": "route-continue-test"})
+        assert queued.status == "queued"
+        waiting = _drain_background_run(queued.run_id)
         approval_response = client.get(f"/api/agent/runs/{waiting.run_id}").json()
         approval_grant = approval_response["approval"]["grant"]
         assert waiting.status == "waiting_user"
@@ -624,11 +644,12 @@ def test_continue_waiting_agent_run(local_tools) -> None:
     payload = continue_response.json()
     assert payload["success"] is True
     completed = completed_run.to_dict()
-    assert completed["status"] == "completed", completed["error"]
+    assert completed["status"] == "blocked", completed["error"]
     assert completed["steps"][0]["status"] == "completed"
+    assert completed["final_output"]["verification"]["accepted"] is False
     event_types = [event["event_type"] for event in completed["events"]]
     assert "step.approved" in event_types
-    assert "tool.completed" in event_types
+    assert "tool.completed" not in event_types
     mock_execute.assert_called_once()
 
 
@@ -638,19 +659,8 @@ def test_agent_routes_require_authentication_and_enforce_ownership() -> None:
     assert anonymous.get("/api/agent/runs").status_code == 401
 
     owner = _client("owner")
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ),
-    ):
-        created = owner.post("/api/agent/runs", json={"message": "查产品"}).json()["data"]
+    created = _seed_legacy_run(user_id="owner").to_dict()
+    assert owner.get(f"/api/agent/runs/{created['run_id']}").status_code == 200
 
     stranger = _client("stranger")
     assert stranger.get(f"/api/agent/runs/{created['run_id']}").status_code == 403
@@ -663,20 +673,11 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
 ) -> None:
     get_agent_run_repository().clear()
     owner = _client("owner")
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True},
-        ) as execute,
-    ):
-        response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
-        run_id = response.json()["data"]["run_id"]
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True},
+    ) as execute:
+        run_id = _seed_legacy_run(user_id="owner", write=True).run_id
         _drain_background_run(run_id)
         grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
         second_grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
@@ -704,7 +705,8 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
             == 403
         )
         completed = _drain_background_run(run_id)
-        assert completed.status == "completed"
+        assert completed.status == "blocked"
+        assert completed.final_output["verification"]["accepted"] is False
         assert len(completed.tool_calls) == 1
         finished = owner.post(
             f"/api/agent/runs/{run_id}/continue",
@@ -714,7 +716,8 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
         assert finished.json()["message"] == "任务已结束，不能审批通过后执行"
         execution = get_task_execution_repository().get(run_id)
         assert execution is not None
-        assert execution.state == "succeeded"
+        assert execution.state == "failed"
+        assert execution.last_error_code == "needs_verification"
         assert execution.execution_count == 2
         execute.assert_called_once()
 
@@ -731,24 +734,15 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
     )
 
     owner = _client("owner")
-    patches = _planner_fallback_patches()
     engine = create_engine(f"sqlite:///{tmp_path / 'unmigrated.db'}")
     durable_repository = approval_grant._consumption_repository()
     unavailable_repository = SQLAlchemyApprovalConsumptionRepository(sessionmaker(bind=engine))
     try:
-        with (
-            patches[0],
-            patches[1],
-            patches[2],
-            patches[3],
-            patches[4],
-            patch(
-                "app.application.facades.tools_facade.execute_registered_workflow_tool",
-                return_value={"success": True},
-            ) as execute,
-        ):
-            response = owner.post("/api/agent/runs", json={"message": "请为星光贸易生成发货单"})
-            run_id = response.json()["data"]["run_id"]
+        with patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True},
+        ) as execute:
+            run_id = _seed_legacy_run(user_id="owner", write=True).run_id
             _drain_background_run(run_id)
             grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
             monkeypatch.setattr(
@@ -770,7 +764,9 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
                 f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
             )
             assert accepted.status_code == 202
-            assert _drain_background_run(run_id).status == "completed"
+            completed = _drain_background_run(run_id)
+            assert completed.status == "blocked"
+            assert completed.final_output["verification"]["accepted"] is False
             execute.assert_called_once()
     finally:
         engine.dispose()
@@ -1043,15 +1039,16 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
         )
     )
     run.add_event("run.failed", "Agent run 失败", {"error": secret})
+    repository.save(run)
 
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
-        return_value=run,
+        "app.application.agent_runtime.gateway.run_runtime_task",
+        return_value={"run_id": run.run_id, "ok": False, "execution_state": "failed"},
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
 
-    assert response.status_code == 200
+    assert response.status_code == 409
     assert secret not in response.text
     payload = response.json()["data"]
     assert payload["error"] == "Agent 执行失败，详细信息已记录"
@@ -1068,7 +1065,7 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
 def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
+        "app.application.agent_runtime.gateway.run_runtime_task",
         side_effect=RuntimeError("Traceback: database password=do-not-expose"),
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
@@ -1080,27 +1077,19 @@ def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     }
 
 
-def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypatch) -> None:
+def test_pause_resume_and_cancel_historical_run(local_tools, trusted_actor, monkeypatch) -> None:
     get_agent_run_repository().clear()
     clear_run_controls_for_tests()
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    client = _client(actor=trusted_actor(user_id=17, role="admin"))
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ) as execute,
-    ):
-        created = client.post(
-            "/api/agent/runs",
-            json={"message": "查产品", "auto_execute": False},
-        ).json()["data"]
+    actor = trusted_actor(user_id=17, role="admin")
+    client = _client(actor=actor)
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={"success": True, "data": []},
+    ) as execute:
+        created = _seed_legacy_run(
+            user_id=str(actor.user_id), runtime_context=actor.context, enqueue=False
+        ).to_dict()
         paused = client.post(f"/api/agent/runs/{created['run_id']}/pause").json()["data"]
         assert paused["status"] == "paused"
         execute.assert_not_called()
@@ -1115,10 +1104,9 @@ def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypat
         assert resumed["status"] == "completed"
         execute.assert_called_once()
 
-        second = client.post(
-            "/api/agent/runs",
-            json={"message": "查产品", "auto_execute": False},
-        ).json()["data"]
+        second = _seed_legacy_run(
+            user_id=str(actor.user_id), runtime_context=actor.context, enqueue=False
+        ).to_dict()
         cancelled = client.post(f"/api/agent/runs/{second['run_id']}/cancel").json()["data"]
         assert cancelled["status"] == "cancelled"
         assert cancelled["steps"][0]["status"] == "skipped"
@@ -1265,9 +1253,10 @@ def test_unified_task_requires_approval_and_deduplicates_execution(
         assert approved.status_code == 202
         assert approved.json()["data"]["status"] == "queued"
         completed = _drain_background_run(run["run_id"]).to_dict()
-        assert completed["status"] == "completed"
+        assert completed["status"] == "blocked"
         assert completed["tool_calls"][0]["status"] == "completed"
-        assert completed["final_output"]["node_outputs"]
+        assert completed["tool_calls"][0]["output"]["order_id"] == 41
+        assert completed["final_output"]["verification"]["accepted"] is False
         assert "step.approved" in [event["event_type"] for event in completed["events"]]
         execute.assert_called_once()
         assert execute.call_args.args[:2] == ("shipment_orders", "generate")
@@ -1461,6 +1450,110 @@ def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
         "completed_count": 0,
         "overall_percent": 0,
     }
+
+
+@pytest.mark.parametrize("error_code", ["needs_verification", "retries_exhausted"])
+@pytest.mark.parametrize("run_status", ["running", "completed"])
+def test_queue_recovery_stop_projects_consistently_without_overwriting_receipts(
+    tmp_path, error_code, run_status
+):
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'recovery-projection.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    set_agent_run_repository_for_tests(runs)
+    set_task_execution_repository_for_tests(queue)
+    run = AgentRun(user_id="u1", message="保留已确认结果", status=run_status)
+    run.metadata["task_context"] = {"task_id": "recovery-projection"}
+    run.final_output = {"business_result": {"receipt_id": "confirmed-part", "rows_written": 3}}
+    run.steps = [
+        AgentStep(
+            node_id="confirmed",
+            tool_id="products",
+            action="query",
+            status="completed",
+            output={"success": True, "receipt_id": "confirmed-part"},
+        )
+    ]
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    task_before = runs.get_task(user_id="u1", task_id="recovery-projection").to_dict()
+    queued = queue.enqueue(run)
+    now = datetime.fromisoformat(queued.available_at)
+    assert queue.claim("expired-worker", lease_seconds=1, now=now.isoformat()) is not None
+    if error_code == "needs_verification":
+        queue.mark_open_effect(run.run_id, "unconfirmed-next-write")
+    else:
+        for attempt in range(1, DEFAULT_MAX_ATTEMPTS):
+            assert (
+                queue.claim(
+                    f"worker-{attempt}",
+                    lease_seconds=1,
+                    now=(now + timedelta(seconds=attempt * 2)).isoformat(),
+                )
+                is not None
+            )
+    assert (
+        queue.claim("replacement", lease_seconds=1, now=(now + timedelta(seconds=20)).isoformat())
+        is None
+    )
+    assert queue.get(run.run_id).last_error_code == error_code
+    expected = (
+        "completed"
+        if run_status == "completed"
+        else "blocked"
+        if error_code == "needs_verification"
+        else "failed"
+    )
+    client = _client()
+    with patch.object(AgentOrchestrator, "execute_dispatched_run") as execute:
+        run_response = client.get(f"/api/agent/runs/{run.run_id}").json()
+        run_listing = client.get("/api/agent/runs").json()["data"][0]
+        task = client.get("/api/agent/tasks/recovery-projection").json()["data"]
+        listing = client.get("/api/agent/tasks").json()["data"][0]
+        streamed = client.get("/api/agent/tasks/events/stream?once=true").text
+        snapshot = json.loads(
+            next(line[6:] for line in streamed.splitlines() if line.startswith("data: ["))
+        )[0]
+        overview = client.get("/api/agent/task-runtime").json()["data"]["progress"]
+        execute.assert_not_called()
+    assert run_response["data"]["status"] == expected
+    assert run_listing["status"] == expected
+    assert run_response["data"]["final_output"] == before["final_output"]
+    assert run_response["data"]["steps"] == before["steps"]
+    assert run_response["capabilities"]["retry"] is False
+    for payload in (task, listing, snapshot):
+        assert payload["status"] == payload["progress"]["status"] == expected
+        assert payload["execution"]["last_error_code"] == error_code
+        assert payload["metadata"]["business_result"] == before["final_output"]["business_result"]
+        assert payload["progress"]["completed_units"] == 1
+        assert payload["attention_state"] == (
+            "result_unread" if expected == "completed" else expected
+        )
+    assert task["active_run"]["status"] == task["runs"][0]["status"] == expected
+    assert task["capabilities"]["retry"] is False
+    if expected == "blocked":
+        assert (
+            run_response["data"]["metadata"]["recovery"]["state"]
+            == "manual_reconciliation_required"
+        )
+    assert overview["active_count"] == 0
+    assert overview["attention_count"] == int(expected != "completed")
+    assert overview["completed_count"] == int(expected == "completed")
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.get_task(user_id="u1", task_id="recovery-projection").to_dict() == task_before
+    engine.dispose()
 
 
 def test_task_control_command_survives_process_local_control_reset() -> None:

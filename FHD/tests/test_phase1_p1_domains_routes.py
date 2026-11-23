@@ -130,7 +130,11 @@ def test_products_batch_empty(mock_get: MagicMock, product_client: TestClient) -
 def test_products_update(mock_get: MagicMock, product_client: TestClient, local_tools) -> None:
     mock_get.return_value.update_product.return_value = {"success": True}
     r = product_client.put("/api/products/1", json={"name": "N"})
-    assert r.status_code == 200
+    assert r.status_code == 400
+    assert r.json()["success"] is False
+    assert r.json()["error_code"] == "result_verification_inconclusive"
+    assert r.json()["retryable"] is False
+    mock_get.return_value.update_product.assert_called_once_with(1, {"name": "N"})
 
 
 @patch("app.bootstrap.get_products_service")

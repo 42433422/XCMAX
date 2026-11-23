@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from starlette.requests import Request
 
 from app.infrastructure.auth.client_shell_session import (
@@ -12,6 +13,7 @@ from app.infrastructure.auth.client_shell_session import (
     session_cookie_name_for_request,
     session_cookie_name_for_shell,
 )
+from app.infrastructure.auth.dependencies import session_id_from_request
 
 
 def _make_request(
@@ -40,7 +42,8 @@ def test_session_cookie_name_by_shell_header() -> None:
     assert client_shell_from_request(admin_req) == ADMIN_SHELL
 
 
-def test_resolve_session_id_uses_shell_cookie() -> None:
+@pytest.mark.parametrize("resolve", [resolve_session_id_from_request, session_id_from_request])
+def test_resolve_session_id_uses_shell_cookie(resolve) -> None:
     admin_req = _make_request(
         shell="admin",
         cookie_header="admin_session_id=adm-sid; session_id=ent-sid",
@@ -49,8 +52,16 @@ def test_resolve_session_id_uses_shell_cookie() -> None:
         shell="enterprise",
         cookie_header="admin_session_id=adm-sid; session_id=ent-sid",
     )
-    assert resolve_session_id_from_request(admin_req) == "adm-sid"
-    assert resolve_session_id_from_request(ent_req) == "ent-sid"
+    assert resolve(admin_req) == "adm-sid"
+    assert resolve(ent_req) == "ent-sid"
+
+
+@pytest.mark.parametrize("resolve", [resolve_session_id_from_request, session_id_from_request])
+def test_other_shell_cookie_cannot_supply_identity(resolve) -> None:
+    assert resolve(_make_request(shell="admin", cookie_header="session_id=ent-sid")) == ""
+    assert (
+        resolve(_make_request(shell="enterprise", cookie_header="admin_session_id=adm-sid")) == ""
+    )
 
 
 def test_attach_session_cookie_writes_separate_names() -> None:

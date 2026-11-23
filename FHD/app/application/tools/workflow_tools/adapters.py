@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-import json
 from typing import Literal, Protocol
 
 import pandas as pd
@@ -31,11 +29,17 @@ def invalidate_employee_tools() -> None:
 
 
 def employee(call: ToolCall) -> str | None:
-    from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+    from app.mod_sdk.employee_tool_registry import (
+        execute_employee_tool,
+        is_employee_tool,
+    )
 
     if is_employee_tool(call.name):
         return execute_employee_tool(
-            call.name, call.args, call.workspace_root, runtime_context=call.runtime_context
+            call.name,
+            call.args,
+            call.workspace_root,
+            runtime_context=call.runtime_context,
         )
     return None
 
@@ -54,7 +58,9 @@ def native(call: ToolCall) -> str | None:
 
 
 def legacy_employee(call: ToolCall) -> str | None:
-    from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
+    from app.domain.app_pure.employee_pack_runner import (
+        try_execute_employee_planner_tool,
+    )
 
     return try_execute_employee_planner_tool(
         call.name,
@@ -66,13 +72,15 @@ def legacy_employee(call: ToolCall) -> str | None:
 
 
 def template(call: ToolCall) -> str:
-    from app.application.tools.workflow_tools.dispatch import (
-        execute_registered_workflow_tool,
+    from app.application.tools.registered_capabilities import (
+        execute_registered_capability,
     )
 
     action = str(call.args.get("action") or "view").strip() or "view"
-    return json.dumps(
-        execute_registered_workflow_tool(call.name, action, call.args), ensure_ascii=False
+    return execute_registered_capability(
+        {"tool_id": call.name, "action": action, "params": call.args},
+        workspace_root=call.workspace_root,
+        runtime_context=call.runtime_context,
     )
 
 
@@ -89,8 +97,15 @@ def crud_tools() -> dict[str, JsonTool]:
         list_roles,
         update_role,
     )
-    from app.application.tools.report_config_tools import configure_report, list_report_configs
-    from app.application.tools.shipment_crud_tools import delete_order, list_orders, update_order
+    from app.application.tools.report_config_tools import (
+        configure_report,
+        list_report_configs,
+    )
+    from app.application.tools.shipment_crud_tools import (
+        delete_order,
+        list_orders,
+        update_order,
+    )
 
     return {
         "delete_order": delete_order,
@@ -110,13 +125,30 @@ def crud_tools() -> dict[str, JsonTool]:
 
 
 class PandasTranslator(Protocol):
-    def translate(self, natural_language: str, df: pd.DataFrame) -> str | None: ...
+    def translate(
+        self,
+        natural_language: str,
+        df: pd.DataFrame,
+        *,
+        error_feedback: str | None = None,
+    ) -> str | None: ...
 
 
-def translate_pandas(natural_language: str, df: pd.DataFrame) -> str | None:
-    legacy = importlib.import_module("app.legacy.excel_text_to_pandas")
-    translator: PandasTranslator = legacy.ExcelTextToPandas()
-    return translator.translate(natural_language, df)
+_TRANSLATOR: PandasTranslator | None = None
+
+
+def translate_pandas(
+    natural_language: str,
+    df: pd.DataFrame,
+    *,
+    error_feedback: str | None = None,
+) -> str | None:
+    global _TRANSLATOR
+    if _TRANSLATOR is None:
+        from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
+
+        _TRANSLATOR = LLMPandasTranslator()
+    return _TRANSLATOR.translate(natural_language, df, error_feedback=error_feedback)
 
 
 def customer_hint(path: str, sheet: str | None) -> str:
@@ -126,7 +158,9 @@ def customer_hint(path: str, sheet: str | None) -> str:
 
 
 def inline_customer_hints(text: str) -> list[str]:
-    from app.application.template_grid_core import _extract_inline_customer_hits_from_cell
+    from app.application.template_grid_core import (
+        _extract_inline_customer_hits_from_cell,
+    )
 
     return _extract_inline_customer_hits_from_cell(text)
 
@@ -176,12 +210,16 @@ def ingest_vector(*, file_path: str, index_name: str | None, index_id: str | Non
 
 
 def generate_document(request: str, output_format: Literal["docx", "xlsx"]) -> tuple[bytes, str]:
-    from app.domain.shared_services.kitten_ai_document.generate import generate_office_file
+    from app.domain.shared_services.kitten_ai_document.generate import (
+        generate_office_file,
+    )
 
     return generate_office_file(request, output_format)
 
 
 def store_document(content: bytes, name: str, mime: str) -> str:
-    from app.domain.shared_services.kitten_ai_document.pickup import store_document_pickup
+    from app.domain.shared_services.kitten_ai_document.pickup import (
+        store_document_pickup,
+    )
 
     return store_document_pickup(content, name, mime)

@@ -132,22 +132,38 @@ def close_loop_memory_items(
     task_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Close resolved loop-memory risks without deleting audit history."""
-    memory = store._load_loop_memory()
-    result = _close_open_items_in_memory(
-        memory,
-        actor=actor,
-        branches=branches,
-        reasons=reasons,
-        resolution_reason=resolution_reason,
-        run_ids=run_ids,
-        task_ids=task_ids,
-    )
-    store._write_loop_memory(memory)
-    return {
-        **result,
-        "memory_path": str(store.loop_memory_path()),
-        "open_items_remaining": len(memory.get("open_items") or []),
-    }
+    with store._exclusive_loop_lease() as acquired:
+        if not acquired:
+            return {
+                "ok": False,
+                "status": "skipped_active_lease",
+                "changed": False,
+                "closed_count": 0,
+            }
+        memory = store._load_loop_memory()
+        if memory.get("execution_state_unavailable"):
+            return {
+                "ok": False,
+                "status": "waiting_reconciliation",
+                "changed": False,
+                "closed_count": 0,
+            }
+        result = _close_open_items_in_memory(
+            memory,
+            actor=actor,
+            branches=branches,
+            reasons=reasons,
+            resolution_reason=resolution_reason,
+            run_ids=run_ids,
+            task_ids=task_ids,
+        )
+        store._write_loop_memory(memory)
+        return {
+            **result,
+            "ok": True,
+            "memory_path": str(store.loop_memory_path()),
+            "open_items_remaining": len(memory.get("open_items") or []),
+        }
 
 
 def _evict_loop_memory_items(
@@ -258,12 +274,30 @@ def evict_loop_memory_items(
     Exposed via POST /api/xcmax/admin/loop/memory/evict for human override when
     the loop is stuck resuming long-failed runs.
     """
-    memory = store._load_loop_memory()
-    result = _evict_loop_memory_items(memory, actor=actor, note=note, admin_user_id=admin_user_id)
-    memory["updated_at"] = config._iso(config._utc_now())
-    store._write_loop_memory(memory)
-    return {
-        **result,
-        "memory_path": str(store.loop_memory_path()),
-        "open_items_remaining": len(memory.get("open_items") or []),
-    }
+    with store._exclusive_loop_lease() as acquired:
+        if not acquired:
+            return {
+                "ok": False,
+                "status": "skipped_active_lease",
+                "changed": False,
+                "evicted_count": 0,
+            }
+        memory = store._load_loop_memory()
+        if memory.get("execution_state_unavailable"):
+            return {
+                "ok": False,
+                "status": "waiting_reconciliation",
+                "changed": False,
+                "evicted_count": 0,
+            }
+        result = _evict_loop_memory_items(
+            memory, actor=actor, note=note, admin_user_id=admin_user_id
+        )
+        memory["updated_at"] = config._iso(config._utc_now())
+        store._write_loop_memory(memory)
+        return {
+            **result,
+            "ok": True,
+            "memory_path": str(store.loop_memory_path()),
+            "open_items_remaining": len(memory.get("open_items") or []),
+        }

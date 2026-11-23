@@ -24,7 +24,7 @@ from app.application.workflow.plan_store import (
 _TOOL = "catalog_products_v1"
 
 
-def preserve_catalog_run_authority(db, run, previous):
+def preserve_catalog_run_authority(db, run, previous) -> bool:
     """Keep signed catalog identity through all saves, including stale snapshots.
 
     This runs before generic generation matching: renewed sessions may change that
@@ -42,7 +42,7 @@ def preserve_catalog_run_authority(db, run, previous):
         )
 
     if not catalog(run) and not catalog(previous):
-        return
+        return False
     from app.application.agent_orchestrator.approval_grant import _EVIDENCE_KEY
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.catalog_product_edit import (
@@ -124,7 +124,8 @@ def preserve_catalog_run_authority(db, run, previous):
         raise ValueError("catalog approval identity differs")
     if evidence:
         run.metadata[_EVIDENCE_KEY] = deepcopy(evidence)
-    if row is not None and row.status in {"resolving_no_effect", "finalized_no_effect"}:
+    fenced = row is not None and row.status in {"resolving_no_effect", "finalized_no_effect"}
+    if fenced:
         # The original action is fenced, including when a late worker saves an
         # older snapshot. Preserve failed evidence; never present a fresh success.
         run.status = "cancelled"
@@ -141,6 +142,7 @@ def preserve_catalog_run_authority(db, run, previous):
         and (head.status != "active" or head.runtime_context != key)
     ):
         raise ValueError("catalog operation head missing or changed")
+    return fenced
 
 
 @dataclass(frozen=True)

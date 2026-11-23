@@ -309,6 +309,45 @@ def _check_step_errors(
 def _result(
     task: dict[str, Any], checks: list[dict[str, Any]], details: dict[str, Any]
 ) -> dict[str, Any]:
+    run = details.get("run") or {}
+    reports = [
+        (call.get("metadata") or {}).get("verification") or {} for call in run.get("tool_calls", [])
+    ]
+    expected_response = (task.get("expected") or {}).get("response_contract")
+    if isinstance(expected_response, dict):
+        response = details.get("response") or {}
+        for key, value in expected_response.items():
+            _check_equal(checks, f"response_contract.{key}", response.get(key), value)
+    expected_proof = (task.get("expected") or {}).get("verification")
+    if isinstance(expected_proof, dict):
+        _check_equal(checks, "verification.receipts_present", bool(reports), True)
+        for index, report in enumerate(reports):
+            for key, value in expected_proof.items():
+                _check_equal(checks, f"verification[{index}].{key}", report.get(key), value)
+        if expected_proof.get("accepted") is False:
+            _check_equal(
+                checks,
+                "verification.no_authoritative_evidence",
+                all(
+                    check.get("status") != "passed"
+                    for report in reports
+                    for check in report.get("checks", [])
+                ),
+                True,
+            )
+            _check_equal(
+                checks,
+                "verification.no_business_completion",
+                "run.completed" not in {event.get("event_type") for event in run.get("events", [])},
+                True,
+            )
+            _check_equal(
+                checks,
+                "verification.original_dispatch_only",
+                [step.get("attempt_count") for step in run.get("steps", [])],
+                [1] * len(run.get("steps", [])),
+            )
+    coverage = _verification_coverage(reports)
     failed_checks = [check for check in checks if not check["passed"]]
     return {
         "id": str(task.get("id") or ""),
@@ -316,8 +355,32 @@ def _result(
         "passed": not failed_checks,
         "failed_checks": failed_checks,
         "checks": checks,
+        "coverage_scope": task.get("coverage_scope", "fixture_contract"),
+        "business_goal_expected": task.get("business_goal_expected"),
+        "result_coverage": coverage,
         "details": _json_safe(details),
     }
+
+
+def _verification_coverage(reports: list[dict[str, Any]]) -> str:
+    """Keep an offline contract score separate from proved business outcomes."""
+    if not reports:
+        return "not_exercised"
+    if any(report.get("accepted") is not True for report in reports):
+        return "unverified"
+    verified = [report for report in reports if report.get("status") == "verified"]
+    if not verified:
+        return "read_only_contract"
+    evidence = [
+        check.get("evidence") or {} for report in verified for check in report.get("checks", [])
+    ]
+    if any(item.get("scope") == "task_admission" for item in evidence):
+        return "task_admission_verified"
+    if any(item.get("verification_scope") == "artifact_integrity" for item in evidence):
+        return "artifact_integrity_verified"
+    if any(item.get("business_effect_verified") is False for item in evidence):
+        return "not_exercised"
+    return "business_effect_verified"
 
 
 def _failed(task: dict[str, Any], message: str) -> dict[str, Any]:
@@ -356,6 +419,32 @@ def _patched_llm_env(env: dict[str, str]) -> Iterator[None]:
                 os.environ[key] = value
 
 
+def _write_junitxml(result: dict[str, Any], path: Path) -> None:
+    """Publish identifiers, not fixture payloads, in the standard CI report format."""
+    from xml.etree import ElementTree as ET
+
+    suite = ET.Element(
+        "testsuite",
+        name="agent_platform_minimum",
+        tests=str(result["total"]),
+        failures=str(result["failed"]),
+        errors="0",
+    )
+    properties = ET.SubElement(suite, "properties")
+    ET.SubElement(properties, "property", name="execution_mode", value="fixture_local")
+    for name in ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
+        ET.SubElement(properties, "property", name=name, value=os.environ.get(name, ""))
+    for row in result["results"]:
+        case = ET.SubElement(suite, "testcase", name=row["id"], classname=row["kind"])
+        if not row["passed"]:
+            # Some check names append expected fragments after ':'; omit those too.
+            names = dict.fromkeys(check["name"].split(":", 1)[0] for check in row["failed_checks"])
+            ET.SubElement(case, "failure", message=", ".join(names) or "contract failed")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(suite)
+    ET.ElementTree(suite).write(path, encoding="utf-8", xml_declaration=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run offline agent contract fixtures.")
     parser.add_argument(
@@ -364,7 +453,10 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_TASKS_PATH,
         help="Path to JSONL eval tasks.",
     )
+    parser.add_argument("--junitxml", type=Path, help="Write sanitized JUnit contract diagnostics.")
     args = parser.parse_args(argv)
+    if args.junitxml:
+        args.junitxml.unlink(missing_ok=True)
     result = run_eval(args.tasks)
     public_summary = {
         "suite": "agent_platform_minimum",
@@ -372,6 +464,9 @@ def main(argv: list[str] | None = None) -> int:
         "execution_mode": "fixture_local",
         **{key: result[key] for key in ("total", "passed", "failed", "score")},
     }
+    if "coverage" in result:
+        public_summary["coverage"] = result["coverage"]
     print(json.dumps(public_summary, ensure_ascii=False, indent=2))
+    if args.junitxml:
+        _write_junitxml(result, args.junitxml)
     return 0 if result["failed"] == 0 else 1
-

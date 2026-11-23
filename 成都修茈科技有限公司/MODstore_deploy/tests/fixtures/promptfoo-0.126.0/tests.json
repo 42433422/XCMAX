@@ -1,0 +1,1 @@
+[{"vars": {"task": "Fixture alpha", "case_id": "case-0"}, "assert": [{"type": "contains", "value": "CANDIDATE_PASS"}]}, {"vars": {"task": "Fixture beta", "case_id": "case-1"}, "assert": [{"type": "contains", "value": "CANDIDATE_PASS"}]}]

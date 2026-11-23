@@ -459,6 +459,7 @@ def save_office_file_elt(
     parsed: dict[str, Any] | None = None,
     preview_wait_seconds: float = 180,
     client_disconnected: bool = False,
+    submission_origin: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Stage the file and queue one docking approval. A disconnect does not skip the queue.
 
@@ -536,6 +537,7 @@ def save_office_file_elt(
         template_id=template_id,
         prepared_plan=plan,
         owned_upload_user_id=int(owner_user_id),
+        submission_origin=submission_origin,
     )
     return {
         "pipeline": "elt",
@@ -592,6 +594,14 @@ def _office_reply(text: str, *, success: bool) -> dict[str, Any]:
     }
 
 
+def office_submission_origin(context: dict[str, Any], message: str) -> dict[str, str]:
+    """Bind the staged approval to host-supplied execution identity, without credentials."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+    origin = {key: str(context.get(key) or "") for key in ("run_id", "step_id", "idempotency_key")}
+    return {**origin, "request_sha256": canonical_hash(message)} if all(origin.values()) else {}
+
+
 def office_chat_elt_reply(
     message: str, runtime_context: dict[str, Any] | None = None
 ) -> dict[str, Any] | None:
@@ -621,11 +631,16 @@ def office_chat_elt_reply(
             owner_user_id=owner,
             template_index=_sheet_index(str(message), parsed["templates"]),
             parsed=parsed,
+            submission_origin=office_submission_origin(runtime_context or {}, message),
         )
-        return _office_reply(
+        reply = _office_reply(
             f"已提交审批：数据对接入库：{saved.get('file_name') or parsed.get('file_name')}。通过后才会写入，驳回不写入。",
             success=True,
         )
+        reply["data"] = {
+            key: saved.get(key) for key in ("approval_request_id", "batch_id", "status")
+        }
+        return reply
     except EltError as exc:
         return _office_reply(f"处理失败：{exc.message}", success=False)
     except RECOVERABLE_ERRORS:

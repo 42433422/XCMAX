@@ -356,7 +356,6 @@ void main() {
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
     expect(find.text('不同意'), findsOneWidget);
-    expect(find.text('打开本地工作台'), findsNothing);
     expect(find.text('密码登录'), findsNothing);
     await tester.tap(find.text('不同意'));
     await tester.pumpAndSettle();
@@ -550,7 +549,6 @@ void main() {
         'https://xiu-ci.com/market/register?source=xcagi-mobile');
     expect(api.session.hasAuth, isFalse);
     expect(find.text('密码登录'), findsOneWidget);
-    expect(find.text('打开本地工作台'), findsOneWidget);
     expect(find.byType(HomeShell), findsNothing);
   });
 

@@ -7,6 +7,7 @@
   display: flex;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
   padding: 16px;
   gap: 16px;
   --chat-right-pane-width: 300px;
@@ -14,6 +15,8 @@
 
 .chat-view {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -24,6 +27,7 @@
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
 }
 
 .chat-messages {
@@ -40,6 +44,7 @@
 .message {
   max-width: min(85%, 760px);
   min-width: 0;
+  overflow-wrap: anywhere;
   flex-shrink: 0; /* 避免 flex 列布局把气泡压扁导致内容被裁切 */
   padding: 10px 0 8px;
   border-radius: 0;
@@ -459,6 +464,8 @@
 
 .input-wrapper textarea {
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid rgba(190, 203, 221, 0.95);
   border-radius: 16px;
   padding: 13px 14px;
@@ -625,10 +632,6 @@
 }
 
 @media screen and (max-width: 1023px) {
-  .chat-container {
-    --chat-right-pane-width: 300px;
-  }
-
   .chat-pane-handle-slot {
     display: none;
   }
@@ -1347,4 +1350,33 @@
 .chat-loading-spinner {
   color: var(--xc-color-primary, #0d47a1);
   font-size: 14px;
+}
+
+.chat-header-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; min-width: 0; }
+.chat-header-actions > .quick-actions { flex: 1; min-width: 0; }
+.chat-panel-toggle { flex-shrink: 0; margin-right: 12px; }
+
+@media (max-width: 1023px) {
+  .chat-header-actions { padding: 8px 12px 0; }
+  .chat-header-actions .quick-actions { padding: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .chat-header-actions .quick-btn { flex-shrink: 0; min-height: 44px; white-space: nowrap; }
+  .chat-panel-toggle { margin-right: 0; }
+  .chat-container { padding: 8px; gap: 0; }
+  .chat-messages { padding: 12px; }
+  .chat-messages .message { max-width: 100%; }
+}
+
+@media (max-width: 768px) {
+  .chat-header-actions { padding: 6px 10px 0; }
+  .chat-messages { padding: 8px 4px; gap: 12px; }
+  .chat-view .input-area { padding: 8px 10px max(8px, env(safe-area-inset-bottom, 0px)); }
+  .chat-view .input-wrapper { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .chat-view #messageInput { flex: 1 0 100%; width: 100%; min-height: 60px; max-height: 120px; font-size: 16px; padding: 10px; }
+  .chat-view .composer-voice-stack { flex-direction: row; gap: 4px; }
+  .chat-view .input-wrapper .btn { min-width: 44px; min-height: 44px; padding: 6px 10px; }
+  .chat-view .input-wrapper .voice-call-entry-btn { width: 44px; padding: 0; }
+  .chat-view .input-wrapper .voice-input-btn { gap: 4px; font-size: 12px; }
+  .chat-view .send-message-btn { margin-left: auto; }
+  .chat-view .message-copy-btn, .chat-view .message-recall-btn, .chat-view .message-tts-btn { width: 36px; height: 36px; }
+  .chat-view .message :is(pre, .md-code, .md-table-wrap) { max-width: 100%; }
 }

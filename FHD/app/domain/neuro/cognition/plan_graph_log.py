@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.security.log_redaction import redact_log_text
+from app.security.secrets_redactor import redact_obj
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,7 @@ def plan_to_record(
         node_summaries = []
 
     return {
+        "schema_version": 2,
         "ts": _utc_now(),
         "ts_unix": time.time(),
         "phase": phase,  # planned | probed | revised | executed | failed
@@ -112,6 +115,22 @@ def plan_to_record(
         "nodes": node_summaries[:64],
         "node_count": len(node_summaries),
         "metadata_keys": sorted(str(k) for k in metadata.keys())[:32],
+        "planning_failure_kind": str(
+            metadata.get("planning_failure_kind") or metadata.get("failure_kind") or ""
+        ),
+        "planning_failure_reason": redact_log_text(
+            str(
+                metadata.get("planning_failure_reason")
+                or metadata.get("failure_reason")
+                or metadata.get("rejection_reason")
+                or ""
+            )
+        )[:240],
+        "planning_diagnostics": {
+            key: metadata[key]
+            for key in ("model_diagnostics", "planning_diagnostics", "goal_coverage_trace")
+            if isinstance(metadata.get(key), dict)
+        },
         "extra": dict(extra or {}),
     }
 
@@ -126,7 +145,7 @@ def append_plan_graph(
     extra: dict[str, Any] | None = None,
 ) -> bool:
     """写入 PlanGraph 日志。多步强制；force=True 时单步也写。"""
-    if not force and not requires_plan_log(plan):
+    if not force and phase not in {"failed", "rejected"} and not requires_plan_log(plan):
         return False
     record = plan_to_record(
         plan,
@@ -138,7 +157,7 @@ def append_plan_graph(
     path = _log_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record, ensure_ascii=False)
+        line = json.dumps(redact_obj(record), ensure_ascii=False)
         with _lock:
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")

@@ -1,7 +1,7 @@
 """语义层多轮闭环的确定性验收（不依赖真实模型）。
 
 覆盖真实模型验收里不稳定复现的三条路径：
-- S1 追问继承：上一轮用户原话与助手回复必须进入规划 prompt 的 ``recent_messages``。
+- S1 追问继承：上一轮用户原话与助手回复必须进入Codex 请求的只读历史区。
 - S2 候选澄清：「就第二个」必须解析到第二个候选并推进到执行/审批，而不是重复追问。
 - S3 参数补充：补齐 missing_required 后原计划续跑，澄清步骤完成、参数落到目标节点。
 - S4 审批执行：审批通过（approved_step_id）后真正写库，并完成数据库回查核验。
@@ -14,16 +14,10 @@ from unittest.mock import Mock
 
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
-from app.application.ai_chat.workflow_session import WorkflowSession
-from app.application.workflow.clarification_node import build_clarify_node
+from app.application.workflow.clarification_node import build_clarify_node, resolve_confirmed_target
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from tests.fixtures.backend_ci_isolation import dialogue_db as dialogue_db
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-
-
-class _Callbacks:
-    """WorkflowSession 只需一个可提供 workflow_planner 的占位回调。"""
-
-    workflow_planner = None
 
 
 def _plan_with_candidates(
@@ -106,20 +100,16 @@ def test_s2_candidate_reply_resolves_second_target_and_reaches_approval(
         assert waiting.node_id == "update_price_clarify"
 
         # 生产解析逻辑：口语序号「就第二个」绑定到第二个候选。
-        answer = WorkflowSession({}, _Callbacks())._clarification_answer(run, waiting, "就第二个")
-        assert answer is not None
-        parameters, confirmed, allowed_fields = answer
-        assert parameters == {"payload": {"id": str(expected_id)}}
-        assert confirmed is True and allowed_fields == set()
-
-        parameters = {**parameters, "payload": {"id": expected_id}}
+        selected = resolve_confirmed_target("就第二个", candidates)
+        assert selected == {"id": str(expected_id)}
+        parameters = {"payload": {"id": expected_id}}
         continued = orchestrator.continue_after_clarification(
             run.run_id,
             answered_by=str(actor.user_id),
             clarification_step_id=waiting.step_id,
             parameters=parameters,
             confirmed=True,
-            allowed_fields=allowed_fields,
+            allowed_fields=set(),
             runtime_context=runtime_context,
         )
 
@@ -254,14 +244,13 @@ def test_s4_approved_step_writes_database_and_verifies_readback(
             assert int(other.price) == 10, "未选中的候选不应被修改"
 
 
-def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path, dialogue_db) -> None:
+def test_s1_actual_recent_turns_reach_codex_input(monkeypatch, tmp_path, dialogue_db) -> None:
+    from app.application.agent_runtime.codex_runtime import _input_text
     from app.application.ai_chat.dialogue_memory import (
         prepare_chat_turn,
         recent_conversation_messages,
         settle_chat_turn,
     )
-    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
-    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue-memory"))
     base = {"actor_id": "42", "tenant_id": 7, "session_id": "s1", "conversation_id": "s1"}
@@ -279,37 +268,8 @@ def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path, dialogue_db
     assert [item["role"] for item in history] == ["user", "assistant"]
     assert "张三" in history[0]["content"]
 
-    captured: dict[str, object] = {}
-
-    def completion(**kwargs):
-        captured.update(kwargs)
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {"mode": "reply", "reply": "张三目前有一笔订单。"},
-                            ensure_ascii=False,
-                        )
-                    }
-                }
-            ]
-        }
-
-    conversation = Mock(get_context=Mock(return_value=None))
-    generation = LlmPlanGeneration(conversation, completion, lambda: Mock())
-    generation.generate(
-        plan_id="s1-inherit",
-        user_id="42",
-        message="那他的订单呢",
-        tool_registry=get_workflow_tool_registry(),
-        context=second_turn,
-    )
-
-    messages = captured.get("messages")
-    assert isinstance(messages, list) and len(messages) == 2
-    prompt = json.loads(messages[1]["content"])
-    recent = prompt.get("recent_messages") or []
-    assert [item["role"] for item in recent] == ["user", "assistant"]
-    assert "张三" in recent[0]["content"]
-    assert "客户编号 12" in recent[1]["content"]
+    prompt = _input_text("那他的订单呢", history, None)
+    assert "帮我查一下客户张三的资料" in prompt
+    assert "客户编号 12" in prompt
+    assert "那他的订单呢" in prompt
+    assert "历史会话仅供解释指代" in prompt

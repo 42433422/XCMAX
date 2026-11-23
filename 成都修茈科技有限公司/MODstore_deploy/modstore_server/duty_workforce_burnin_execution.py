@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -17,6 +18,8 @@ from modstore_server.duty_workforce_burnin_constants import (
 )
 from modstore_server.models import EmployeeExecutionMetric, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def _facade():
@@ -210,7 +213,8 @@ def _execute_one(
             user_id=0,
             bench_llm_override=(provider, model) if provider and model else None,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
+        logger.exception("duty workforce burn-in execution failed")
         return {
             "employee_id": employee_id,
             "marker": marker,
@@ -218,7 +222,7 @@ def _execute_one(
             "receipt_accepted": False,
             "manifest_sha256": str(candidate.get("manifest_sha256") or ""),
             "contract_sha256": str(candidate.get("contract_sha256") or ""),
-            "error": f"{type(exc).__name__}: {str(exc)[:1000]}",
+            "error": "burn_in_execution_failed",
         }
     acceptance = _facade().validate_burn_in_execution_result(execution)
     if not acceptance["passed"]:
@@ -312,12 +316,13 @@ def run_burn_in(
                 item = futures[future]
                 try:
                     row = future.result()
-                except RECOVERABLE_ERRORS as exc:
+                except RECOVERABLE_ERRORS:
+                    logger.exception("duty workforce burn-in orchestration failed")
                     row = {
                         "employee_id": str(item.get("employee_id") or ""),
                         "status": "failed",
                         "receipt_accepted": False,
-                        "error": f"orchestrator:{type(exc).__name__}:{str(exc)[:500]}",
+                        "error": "burn_in_orchestrator_failed",
                     }
                 results.append(row)
                 _facade()._append_audit({"run_id": run_id, **row})

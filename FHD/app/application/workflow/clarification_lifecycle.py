@@ -152,6 +152,25 @@ def _chinese_ordinal(text: str) -> int | None:
     return _CN_DIGITS[raw]
 
 
+def option_letter_ordinal(text: str) -> int | None:
+    """解析「A / 选 B / B 选项 / 选项 C」等单字母选项回复。
+
+    全角字母先归一化为 ASCII；仅接受单个字母，映射到 1 起的候选位次。
+    超出候选数量时由调用方判定，这里只做位次换算，不做猜测。
+    """
+    import re
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKC", str(text or "").strip()).rstrip("。.!！,，")
+    match = re.fullmatch(
+        r"(?:就|选|选择|要|回答|是)?\s*(?:选项\s*)?([A-Za-z])\s*(?:选项|项|号)?",
+        normalized,
+    )
+    if match is None:
+        return None
+    return ord(match.group(1).upper()) - ord("A") + 1
+
+
 def resolve_confirmed_target(
     message: str,
     candidates: list[dict[str, Any]],
@@ -174,6 +193,8 @@ def resolve_confirmed_target(
         }
     }
     index = int(text) if text.isdigit() else _chinese_ordinal(text)
+    if index is None:
+        index = option_letter_ordinal(text)
     if index is not None:
         if 1 <= index <= len(candidates):
             candidate = candidates[index - 1]

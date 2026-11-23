@@ -169,12 +169,15 @@ def test_live_session_revocation_blocks_memory(memory):
 
 
 @pytest.mark.parametrize("authenticated", [False, True])
-def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatch, authenticated):
+def test_runtime_cannot_recall_existing_namespace_anonymously(memory, monkeypatch, authenticated):
     _, ctx, namespace, _, rag = memory
     memory_namespace = scoped_personal_memory_id(ctx)
     capture(namespace, ctx)
     confirm_personal_memory(ctx)
-    from app.application.workflow.planner import LLMWorkflowPlanner
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_runtime.goal_admission import prepare_runtime_goal
 
     calls = []
     original = rag.query
@@ -191,16 +194,18 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     formatter = MagicMock(wraps=v2.format_memory_v2_for_prompt)
     monkeypatch.setattr(v2, "format_memory_v2_for_prompt", formatter)
 
-    class AfterMemory(Exception):
-        pass
-
-    def stop(*args, **kwargs):
-        raise AfterMemory
-
-    planner = LLMWorkflowPlanner(ai_service=MagicMock())
-    monkeypatch.setattr(planner, "_plan_with_llm", stop)
-    with pytest.raises(AfterMemory):
-        planner.plan(namespace, "简洁报告", {}, context=ctx if authenticated else {})
+    monkeypatch.setattr(
+        "app.application.user_memory_vector_app_service.get_user_memory_rag_app_service",
+        lambda: rag,
+    )
+    context = ctx if authenticated else {}
+    goal = prepare_runtime_goal(
+        SimpleNamespace(
+            run=AgentRun(user_id="7", message="简洁报告", metadata={"runtime_context": context}),
+            context=context,
+        )
+    )
+    assert bool(goal.contract["request"].get("context_evidence")) is authenticated
     assert len(calls) == int(authenticated)
     assert v2.format_memory_v2_for_prompt.call_count == int(authenticated)
     if authenticated:

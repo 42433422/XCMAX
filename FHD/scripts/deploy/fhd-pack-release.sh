@@ -184,6 +184,7 @@ rsync -a --delete "$ADMIN_DIST/" "$STAGING/templates/admin-vue-dist/"
 mkdir -p "$STAGING/scripts/deploy/lib" "$STAGING/docker"
 cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release.sh" \
+  "$SCRIPT_DIR/fhd-bootstrap-staging-cvm.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
   "$SCRIPT_DIR/fhd-load-release-image.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
@@ -204,6 +205,7 @@ cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/verify_admin_console.py" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
+  "$SCRIPT_DIR/lib/staging_environment.py" \
   "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/ops/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 

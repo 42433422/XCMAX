@@ -367,28 +367,19 @@ def test_kg_label_never_invents_twenty_kg_package(tmp_path):
     assert not any("20±" in value for value in texts)
 
 
-def test_chat_uses_fixed_quantity_hint_not_tool_message():
-    import json
-
-    from tests.test_application.ai_chat_test_helpers import (
-        _make_agent_run,
-        _make_plan,
-        _make_step,
-        _make_svc,
-    )
+def test_public_summary_uses_fixed_quantity_hint_not_tool_message():
+    from app.application.agent_orchestrator.business_harness import _result_summary
+    from tests.test_application.ai_chat_test_helpers import _make_agent_run, _make_step
 
     output = {
         "success": False,
         "error_code": "SHIPMENT_SPEC_REQUIRED",
         "message": "secret SQL /private/path",
     }
-    service = _make_svc()
     step = _make_step(status="failed", tool_id="shipment_orders", action="generate", output=output)
-    result = service._format_agent_run_response(
-        _make_plan(), _make_agent_run(status="failed", steps=[step])
-    )
-    assert "计量单位" in result["response"]
-    assert "secret" not in json.dumps(result)
+    result = _result_summary(_make_agent_run(status="failed", steps=[step]), [])
+    assert "计量单位" in result
+    assert "secret" not in result
 
 
 def test_compat_http_quantity_error_is_400_and_sanitized():

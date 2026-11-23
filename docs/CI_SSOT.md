@@ -178,12 +178,14 @@ PR Fast CI
 
 否则默认继续执行本 SSOT。普通 bug fix 的目标为「修改 → 快测 → PR 验证 → 合并」尽量在分钟级完成，开发速度以**有效修复数量 / 单位时间**衡量，而非「跑了多少次 CI」。
 
-## 分片执行与耗时观测（2026-11-01）
+## 分片执行与耗时观测（2026-11-22）
 
-本轮保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`backend-test`、`frontend-test` 仍是最终聚合门禁；质量检查与分片只等待 `guard-temp-scripts` 和分类完成；`SSOT Drift Gate` 同时运行，两个最终聚合门禁仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
+保留现有 11 个 required checks、测试全集及覆盖率基线，调整工作流依赖与报告成本。`guard-temp-scripts` 在同一次检出中完成临时文件守卫、统一分类和分片计划，质量检查与分片只等待这一任务；`SSOT Drift Gate` 同时运行，`backend-test`、`frontend-test` 最终聚合仍显式要求守卫与 SSOT 均成功。聚合使用 `always()`，分类失败、质量失败、分片缺失或取消不能变成成功。
 
 | 环节 | 执行与验证口径 |
 | --- | --- |
+| 事件去重 | Flutter、Android smoke、Market E2E 和 Retort 的分支 push 限定 main/develop/master，特性分支由 PR 验证；保留 tag、手动及既有定时入口。源 workflow 与根镜像的触发路径分别保留，生成器仅重写精确的根路径。 |
+| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据，仅对同 PR、同主 CI、旧 head、已有 cancelled job 且仍未完成的运行使用官方 force-cancel；取消前复查事件 head、live PR、run/attempt 和完整 jobs，身份缺失或漂移即停止。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
 | 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
 | 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
@@ -192,7 +194,11 @@ PR Fast CI
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
 | 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
 
-原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
+原 `Vitest (173 文件 · jsdom)` 与 `frontend-smoke` 检查名称保留为轻量兼容任务，显式要求 `frontend-test` 聚合成功；上游失败、取消或跳过均拒绝。兼容任务和镜像结果转接任务使用 `!cancelled()`，在整次工作流被取消时释放旧 PR 并发槽；两道必需的前后端聚合门禁仍使用 `always()` 核对证据，取消不会产生成功。`frontend-smoke` 还运行原仓库卫生检查。独立重复 Vitest、smoke 子集和 mock E2E 已移除；真实全栈 E2E、严格构建、安全扫描及覆盖率门禁保留。当前 `coverage_ramp` 为零时，后端复用已验证的 full 结果作为 behavior 结果，不重复执行测试。
+
+独立 `Smoke Tests` 将仓库卫生检查合并为 `backend-smoke` 安装前的第一道检查，保留失败阻断，减少一次串行排队与检出。Smoke 和真实 API E2E 复用官方 setup-uv 下载缓存及当前源码安装校验。离线 Agent 评测的可选 `--junitxml` 保留原退出码和公开摘要，只保存用例 ID、类型、失败检查名及 SHA/run/attempt；fixture 内容与凭证不进入报告，开始执行前删除同路径旧报告。`always()` 上传用于诊断，缺失报告不能将失败改成成功。
+
+构建复用须同时匹配源码、构建配置及 run/attempt。现有服务器打包产物继续供同轮下游使用；真实 API E2E 将随机 API 端口编入前端，因此不能复用其他配置的 dist。测试结果、整套虚拟环境及不同身份的报告不作为下载缓存复用。
 
 测试去重须核对实现、输入、夹具和独有断言，保留有效场景；不以文件名或执行条数判断质量。现有 `test_bloat_report.py --check` 同时拒绝后端测试的字面 `assert True` 和同一状态码集合同时接受成功与服务器错误。业务回归应核对精确状态、响应及副作用；ELT 全栈闭环验证预演不写入、未确认拒绝、执行后读回及重复提交拒绝，模型闭环使用真实会话与适配器、仅替代外部 HTTP 传输，不调用付费模型。
 
@@ -232,7 +238,7 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
 > 以下根仓 workflow 为手写（无生成头，直接在根仓维护）：
-> `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> `corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
 > `e2e.yml`、`e2e-playwright-reusable.yml`。
 
 ## 常用 workflow
@@ -244,11 +250,11 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
 | 前端 Vitest | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → `frontend-test-shard` / `frontend-test` |
 | Playwright 全栈 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
+| 浏览器工具执行契约（path 过滤） | [`fhd-browser-runtime.yml`](../.github/workflows/fhd-browser-runtime.yml)，真实 Chromium 必跑、禁止 skip |
 | Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
-| Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |
 | FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
 | FHD 单机 CVM 手动 rolling | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |
@@ -485,6 +491,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 静态代码（广） | `security-scan`（bandit `-lll --skip B101,B601,B110 --exit-zero`） | **Advisory** |
 | 静态代码（SQL 注入） | `security-scan`（bandit `-lll -s B608`，无 `--exit-zero`） | **硬门禁** |
 
+全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
+手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
+
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
 ## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）
@@ -519,6 +528,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 |------|----------|------|------|
 | FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
 | 前端/后端 path 过滤、nightly、手动 | `e2e.yml` → `e2e-playwright-reusable.yml` | 每次运行均为 `E2E_FULL_STACK=1`，含严格构建和真实 FastAPI | 全栈 P0 与 `plan2026-skeleton`，结果以当次报告为准 |
+| 浏览器执行器、Agent 工具入口、契约、测试或依赖变化 | `fhd-browser-runtime.yml` | `XCMAX_BROWSER_REQUIRE_REAL=1`，固定 Playwright 依赖与 Chromium，保持 sandbox 开启 | runtime/snapshot：真实表单回执、下载、隔离、域名策略、快照隐私、iframe 遮罩、生产资源限制、超时及租约；Agent 整链：真实审批、spawn、归属文件和幂等回读。两份独立 JUnit 缺失、skip 或失败均阻断该 job |
+
+浏览器专项源位于 `FHD/.github/workflows/browser-runtime.yml`；先只安装 `pyproject.toml` 的 browser extra 与 `uv.lock` 中的 pytest、pytest-asyncio、SQLAlchemy、PyYAML、psutil、Pillow，以 `--confcutdir=tests/test_infrastructure` 执行 runtime/snapshot。随后按 `requirements-server-api.txt` 和既有部署锁约束安装服务器依赖，以 `--confcutdir=tests/test_application` 单独执行 `test_browser_agent_e2e.py`，保留原 AgentToolExecutor 与真实子进程浏览器。每轮保存提交、run/attempt、Python/Playwright 版本、服务器锁摘要及实际依赖版本、两份 JUnit 和合成页面产物。本地 skip 不构成验收；专项成功须由对应提交的实际运行确认，不改变既有分支保护清单。
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
 
@@ -668,7 +680,9 @@ PR。合入仍使用既定顺序和 GitHub 保护规则。06:00 仅由批准队�
 
 从 `FHD/` 执行 `python scripts/ci/ai_self_heal.py --reconcile --dry-run` 仅生成 `test_reports/self_heal_reconciliation.json`；省略 `--dry-run` 才按证据续接或处理已替代事故。手动工作流设置 `reconcile=true` 默认只读，定时对账自动恢复。超过文件体量、授权缺失或不明写入结果仍明确等待处理，不通过提高阈值回避。GitHub 发布凭据按 VM 隔离；执行器仍使用现有 Para 设备及管理服务身份，不宣称模型与同一执行 VM 的管理进程相互隔离。现有 `run_attempt=1` 保护继续有效，失败 GitHub 工作空间需按原派工核对，不保证任意 workflow 重跑都能续接。
 
-原 PR 和客户反馈自动修复的新执行、候选发布和晋级当前暂停，直到任务模型凭据具备不可导出的隔离边界；环境白名单、工作区权限、提示词约束与秘密扫描不能代替该边界。原事故、原 PR、客户任务、当前提交、派工与候选制品摘要的持久身份仍保留，已完成任务和已存在的匹配 PR 仅作只读核对，客户流程明确显示等待凭据隔离。普通非修复 Para 任务维持既有流程。原 PR 更新协议仍要求 Git 快进和 pre-push 钩子核对服务端当前 HEAD，并将控制任务、Para 任务、GitHub 云端运行、新 HEAD 与新 CI 关联；这些协议不代表暂停中的自动修复已启用。正式合入沿用主线保护。 [Git 钩子文档](https://git-scm.com/docs/githooks#_pre_push)
+原 PR 和客户反馈修复仅接受已有 `srt-0.0.83-header-only-platform-v1` 隔离及原请求的已批准预算：可信控制器持有模型凭据，模型进程只获得占位符，实际调用经过原逐调用额度预留与结算。原 PR 使用自身 MacControlTask、原请求摘要及派生预算身份，不能借用客户工单或 Retort 身份。缺少批准、隔离或可信用量时继续等待；环境白名单、工作区权限、提示词约束与秘密扫描均不能代替这些条件。
+
+独立 publisher 核对原 attempt、原候选和不可变隔离证据；即使远端候选分支已存在，也须验证原证据才能签发发布回执。原 Issue 消费者在全新 bare Git 仓库中只读取对象，验证祖先关系和受限改动，持久化唯一更新意图，并重新核对原 Issue/PR 与实时发布授权，再以原 head 为期望值执行 CAS 快进。候选树与 hooks 不执行，`main` 不在此写入范围内。丢失确认后只读原 PR HEAD/CI，候选发布或 CI 被观察到都不等于修复完成；只有原候选同提交的真实 CI 终态才结算原任务，正式合入与生产发布继续走原保护和审批。
 
 ### 触发条件矩阵
 

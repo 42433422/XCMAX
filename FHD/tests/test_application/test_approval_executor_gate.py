@@ -22,6 +22,7 @@ from app.db.models.customer import Customer
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.db.models.task_lifecycle import TaskLifecycleRecord
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 NAME = "闭环待审批客户丁"
 REJECTED_NAME = "闭环驳回不应写入"
@@ -287,10 +288,11 @@ def test_ordinary_create_without_lifecycle_still_writes(customers_db) -> None:
     assert str(row.tenant_id) == "11"
 
 
-def test_approved_customer_is_read_back_from_caller_database(customers_db) -> None:
+def test_approved_customer_is_read_back_from_caller_database(customers_db, trusted_actor) -> None:
     engine, _audit = customers_db
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
+    actor = trusted_actor(user_id=11, tenant_id=11, role="admin")
     node = WorkflowNode(
         node_id="create-customer",
         tool_id="customers",
@@ -317,18 +319,20 @@ def test_approved_customer_is_read_back_from_caller_database(customers_db) -> No
     )
     run.plan_id = plan.plan_id
     run.metadata["plan"] = plan_to_dict(plan)
-    run.metadata["runtime_context"] = _context(run.run_id)
-    gate = AgentOrchestrator(
-        repository=InMemoryAgentRunRepository(), dependencies=_runtime_dependencies()
-    )
+    run.metadata["runtime_context"] = {**actor.context, "task_id": run.run_id}
+    repo = InMemoryAgentRunRepository()
+    repo.save(run)
+    gate = AgentOrchestrator(repository=repo, dependencies=_runtime_dependencies())
     gate._execute_ready_steps(run, runtime_context=run.metadata["runtime_context"])
     assert run.steps[0].status == "waiting_user"
     assert NAME not in _names(engine)
-    gate._execute_ready_steps(
-        run,
-        runtime_context=run.metadata["runtime_context"],
+    resumed = gate.continue_run(
+        run.run_id,
+        approved_by=str(actor.user_id),
         approved_step_id=run.steps[0].step_id,
     )
+    assert resumed is not None
+    run = resumed
     row = _row(engine, NAME)
     assert row is not None
     assert str(row.tenant_id) == "11"

@@ -105,7 +105,7 @@ def api_sandbox_connect(body: ConnectRequest, _user=Depends(require_user)):
             health_data = health.json()
     except RECOVERABLE_ERRORS as exc:
         logger.warning("sandbox connect failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "sandbox_connect_failed"}
 
     mods_info: dict[str, Any] = {}
     try:
@@ -165,7 +165,7 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
                 install_data = resp.json()
         except RECOVERABLE_ERRORS as exc:
             logger.warning("sandbox push failed: %s", exc)
-            return {"ok": False, "error": str(exc)}
+            return {"ok": False, "error": "sandbox_push_failed"}
 
     return {
         "ok": True,
@@ -192,4 +192,5 @@ def api_sandbox_host_status(_user=Depends(require_user)):
             resp.raise_for_status()
             return {"ok": True, "data": resp.json()}
     except RECOVERABLE_ERRORS as exc:
-        return {"ok": False, "error": str(exc)}
+        logger.warning("sandbox status unavailable: %s", exc)
+        return {"ok": False, "error": "sandbox_status_unavailable"}

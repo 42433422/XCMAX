@@ -731,9 +731,9 @@ def sync_missing_evidence_backlog(*, limit: int = 32) -> _facade().Dict[str, _fa
             append_digest_backlog,
             read_digest_backlog_entries,
         )
-    except _facade().RECOVERABLE_ERRORS as exc:
+    except _facade().RECOVERABLE_ERRORS:
         _facade().logger.exception("time_rail: event backlog unavailable")
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "event_backlog_unavailable"}
     existing = {
         str(row.get("node_id") or "")
         for row in read_digest_backlog_entries()

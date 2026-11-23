@@ -57,9 +57,50 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep provider/tool exception details behind the public chat boundary."""
     from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 
-    if execution_result_outcome_unknown(payload):
+    data = payload.get("data")
+    details = data.get("data") if isinstance(data, dict) else None
+    details = details if isinstance(details, dict) else {}
+    raw_execution = payload.get("execution")
+    if not isinstance(raw_execution, dict):
+        raw_execution = details.get("execution")
+    execution: dict[str, Any] = {}
+    if isinstance(raw_execution, dict):
+        if type(raw_execution.get("committed")) is bool:
+            execution["committed"] = raw_execution["committed"]
+        for key, allowed in (
+            ("effect", {"none", "write", "partial", "unknown"}),
+            ("outcome", {"not_executed", "succeeded", "partial", "unknown"}),
+        ):
+            value = raw_execution.get(key)
+            if isinstance(value, str) and value in allowed:
+                execution[key] = value
+    identity = {
+        key: str(value)[:128]
+        for key in (
+            "run_id",
+            "agent_run_id",
+            "task_id",
+            "request_id",
+            "approval_request_id",
+            "plan_id",
+        )
+        if isinstance(value := payload.get(key) or details.get(key), (str, int)) and value
+    }
+    run_id = identity.get("agent_run_id") or identity.get("run_id")
+    if run_id:
+        identity.update(run_id=run_id, agent_run_id=run_id)
+    receipt = (
+        {"execution": execution, "data": {"data": {**identity, "execution": execution}}}
+        if execution
+        else {}
+    )
+    # Waiting for confirmation is a successful control reply; only failed replies
+    # use the workflow execution receipt to decide whether writes need reconciliation.
+    if execution_result_outcome_unknown(payload) or (
+        not payload.get("success")
+        and (execution_result_outcome_unknown(execution) or execution.get("committed") is True)
+    ):
         message = "业务结果暂时无法核实，请核对原任务和业务数据，勿重复提交。"
-        run_id = str(payload.get("agent_run_id") or payload.get("run_id") or "")[:128]
         return {
             "success": False,
             "message": message,
@@ -67,7 +108,8 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "execution_state": "unknown",
             "requires_reconciliation": True,
             "retryable": False,
-            **({"run_id": run_id, "agent_run_id": run_id} if run_id else {}),
+            **identity,
+            **receipt,
             "_http_status": 409,
         }
     if bool(payload.get("success")):
@@ -77,9 +119,20 @@ def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
         status = max(400, min(int(raw_status), 599))
     except (TypeError, ValueError):
         status = 500
+    not_executed = (
+        execution.get("outcome") == "not_executed" and execution.get("committed") is False
+    )
+    message = (
+        "本轮未执行任何写入，请核对原任务后重试。"
+        if not_executed
+        else "AI 服务暂时不可用，请稍后重试"
+    )
     return {
         "success": False,
-        "message": "AI 服务暂时不可用，请稍后重试",
+        "message": message,
+        **({"response": message, "execution_state": "not_executed"} if not_executed else {}),
+        **identity,
+        **receipt,
         "error_code": str(payload.get("error_code") or "ai_service_unavailable")[:64],
         "_http_status": status,
     }

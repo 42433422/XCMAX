@@ -79,7 +79,7 @@ vi.mock('./desktop-navigation', () => ({
 }))
 
 import { clampWindowBounds } from './window-state'
-import { handleDesktopWindowOpen, isTrustedDesktopOrigin } from './desktop-navigation'
+import { handleDesktopWindowOpen, handleDesktopWillNavigate, isTrustedDesktopOrigin } from './desktop-navigation'
 import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
 import { moveDesktopAssistant, resizeDesktopAssistant, syncDesktopAssistant } from './desktop-assistant'
@@ -591,8 +591,8 @@ describe('同一进程附加窗口', () => {
     expect(firstStore).toBeDefined()
     expect(secondStore).toBeDefined()
     expect(firstStore).not.toBe(secondStore)
-    expect(firstStore!.webRequest.onBeforeSendHeaders).toHaveBeenCalledOnce()
-    expect(secondStore!.webRequest.onBeforeSendHeaders).toHaveBeenCalledOnce()
+    expect(firstStore!.webRequest.onBeforeSendHeaders).not.toHaveBeenCalled()
+    expect(secondStore!.webRequest.onBeforeSendHeaders).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(firstStore!.cookies.set).toHaveBeenCalled())
     expect(firstStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'session_id', value: 'live-session' }))
     expect(secondStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'csrf_token', value: 'csrf-live' }))
@@ -601,4 +601,42 @@ describe('同一进程附加窗口', () => {
     expect(sessionMocks.partitions.get('xcagi-aux-1')!.clearStorageData).toHaveBeenCalled()
     expect(first).not.toBeNull()
   })
+})
+
+it.each(['main', 'auxiliary'])('keeps %s renderer navigation and redirects on the backend origin', async kind => {
+  const navigation = await vi.importActual<typeof import('./desktop-navigation')>('./desktop-navigation')
+  vi.mocked(isTrustedDesktopOrigin).mockImplementation(navigation.isTrustedDesktopOrigin)
+  vi.mocked(handleDesktopWillNavigate).mockImplementation(navigation.handleDesktopWillNavigate)
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async (_url: string) => undefined),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() }, executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  if (kind === 'main') {
+    await createWindow()
+    await desktopRuntime.mainApplicationReady
+    expect(win.loadURL.mock.calls[0][0]).toMatch(/^(file:|data:)/)
+  } else expect(openAuxiliaryWindow('http://127.0.0.1:17500/orders')).toBe(win)
+
+  for (const name of ['will-navigate', 'will-redirect']) {
+    const handler = win.webContents.on.mock.calls.find(([event]) => event === name)?.[1]
+    expect(handler).toBeTypeOf('function')
+    const preventDefault = vi.fn()
+    handler({ preventDefault }, 'https://untrusted.example/', false, true)
+    expect(preventDefault).toHaveBeenCalledOnce()
+    handler({ preventDefault }, 'http://127.0.0.1:17500/orders', false, true)
+    expect(preventDefault).toHaveBeenCalledOnce()
+    if (name === 'will-redirect') {
+      handler({ preventDefault }, 'https://untrusted.example/frame', false, false)
+      expect(preventDefault).toHaveBeenCalledOnce()
+    }
+  }
 })

@@ -389,18 +389,15 @@ def test_codeql_provenance_requires_fresh_exact_sha_for_each_language() -> None:
         },
     ]
 
-    assert (
-        normalizer._validate_codeql_provenance(
-            analyses,
-            release_sha=sha,
-            required_categories=[
-                "/language:python",
-                "/language:javascript-typescript",
-            ],
-            now=now,
-        )
-        == sha
-    )
+    assert normalizer._validate_codeql_provenance(
+        analyses,
+        release_sha=sha,
+        required_categories=[
+            "/language:python",
+            "/language:javascript-typescript",
+        ],
+        now=now,
+    ) == (sha, "exact")
 
     analyses[1]["commit_sha"] = "b" * 40
     with pytest.raises(ValueError, match="SHA mismatch"):
@@ -411,6 +408,57 @@ def test_codeql_provenance_requires_fresh_exact_sha_for_each_language() -> None:
                 "/language:python",
                 "/language:javascript-typescript",
             ],
+            now=now,
+        )
+
+
+def test_codeql_provenance_accepts_ancestor_analysis(monkeypatch) -> None:
+    normalizer = _normalizer_module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    sha = "a" * 40
+    ancestor = "b" * 40
+    monkeypatch.setattr(normalizer, "_is_ancestor", lambda a, d: a == ancestor)
+    analyses = [
+        {
+            "category": "/language:python",
+            "commit_sha": ancestor,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        },
+        {
+            "category": "/language:javascript-typescript",
+            "commit_sha": sha,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        },
+    ]
+
+    assert normalizer._validate_codeql_provenance(
+        analyses,
+        release_sha=sha,
+        required_categories=["/language:python", "/language:javascript-typescript"],
+        now=now,
+        allow_ancestor=True,
+    ) == (sha, "ancestor")
+
+
+def test_codeql_provenance_rejects_ancestor_by_default(monkeypatch) -> None:
+    normalizer = _normalizer_module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    sha = "a" * 40
+    ancestor = "b" * 40
+    monkeypatch.setattr(normalizer, "_is_ancestor", lambda a, d: True)
+    analyses = [
+        {
+            "category": "/language:python",
+            "commit_sha": ancestor,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        }
+    ]
+
+    with pytest.raises(ValueError, match="SHA mismatch"):
+        normalizer._validate_codeql_provenance(
+            analyses,
+            release_sha=sha,
+            required_categories=["/language:python"],
             now=now,
         )
 
@@ -459,7 +507,101 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
         in workflow
     )
     assert "Normalize all scanner reports\n        if: always()" in workflow
-    assert "Enforce all-source zero critical/high gate\n        if: always()" in workflow
+    assert "Check scheduled trend or enforce release clearance\n        if: always()" in workflow
     assert (
         "Upload auditable security evidence even when gate fails\n        if: always()" in workflow
     )
+
+
+def _gate_with_finding(tmp_path: Path, mod, now: datetime, finding: dict) -> Path:
+    _write_reports(tmp_path, mod, now)
+    report = tmp_path / "trivy-filesystem.json"
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    payload["findings"] = [finding]
+    report.write_text(json.dumps(payload), encoding="utf-8")
+    return report
+
+
+def _baseline_entry(mod, now: datetime, *, expires_delta: timedelta) -> dict:
+    return {
+        ("trivy-filesystem", "CVE-2026-0001"): {
+            "scanner": "trivy-filesystem",
+            "id": "CVE-2026-0001",
+            "reason": "历史存量,等待基础镜像升级",
+            "owner": "42433422",
+            "expires": (now + expires_delta).isoformat(),
+        }
+    }
+
+
+def test_release_gate_baseline_freezes_reviewed_history(tmp_path: Path) -> None:
+    mod = _module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    _gate_with_finding(
+        tmp_path, mod, now, {"id": "CVE-2026-0001", "severity": "high", "status": "open"}
+    )
+
+    result = mod.evaluate(
+        tmp_path, now=now, baseline=_baseline_entry(mod, now, expires_delta=timedelta(days=30))
+    )
+
+    assert result["passed"] is True
+    assert result["suppressed"] == {"trivy-filesystem": ["CVE-2026-0001"]}
+    assert result["applicable_open"] == {"critical": 0, "high": 0}
+
+
+def test_release_gate_expired_baseline_blocks_again(tmp_path: Path) -> None:
+    mod = _module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    _gate_with_finding(
+        tmp_path, mod, now, {"id": "CVE-2026-0001", "severity": "high", "status": "open"}
+    )
+
+    result = mod.evaluate(
+        tmp_path,
+        now=now,
+        baseline=_baseline_entry(mod, now, expires_delta=timedelta(days=-1)),
+    )
+
+    assert result["passed"] is False
+    assert result["expired_baselines"] == ["trivy-filesystem:CVE-2026-0001"]
+    assert any(blocker.startswith("baseline_expired:") for blocker in result["blockers"])
+
+
+def test_release_gate_baseline_never_exempts_secrets(tmp_path: Path) -> None:
+    mod = _module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    _gate_with_finding(
+        tmp_path,
+        mod,
+        now,
+        {"id": "CVE-2026-0001", "severity": "high", "status": "open", "secret": True},
+    )
+
+    result = mod.evaluate(
+        tmp_path, now=now, baseline=_baseline_entry(mod, now, expires_delta=timedelta(days=30))
+    )
+
+    assert result["passed"] is False
+    assert result["suppressed"] == {}
+    assert any("unresolved_secret" in blocker for blocker in result["blockers"])
+
+
+def test_security_baseline_file_schema_is_fail_closed(tmp_path: Path) -> None:
+    mod = _module()
+    incomplete = tmp_path / "baseline.json"
+    incomplete.write_text(
+        json.dumps({"schema": "security-baseline/v1", "entries": [{"scanner": "trivy"}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="incomplete"):
+        mod._load_baseline(incomplete)
+    with pytest.raises(ValueError, match="missing"):
+        mod._load_baseline(tmp_path / "absent.json")
+
+
+def test_repository_security_baseline_is_valid() -> None:
+    mod = _module()
+    path = Path(__file__).resolve().parents[2] / "config" / "security_baseline.json"
+
+    assert mod._load_baseline(path) == {}

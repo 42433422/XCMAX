@@ -222,9 +222,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 normalized_raw_tpl = _normalize_relpath(
                     raw_tpl_rel, field_name="template_relpath"
                 )
-            except ValueError as e:
+            except ValueError:
                 return JSONResponse(
-                    {"success": False, "error": str(e)}, status_code=400
+                    {"success": False, "error": "template_relpath 无效"},
+                    status_code=400,
                 )
             if normalized_raw_tpl != DEFAULT_TEMPLATE_RELPATH:
                 return JSONResponse(
@@ -248,8 +249,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                     status_code=400,
                 )
-        except BOUNDARY_ERRORS as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except BOUNDARY_ERRORS:
+            logger.exception("Attendance template could not be read")
+            return JSONResponse(
+                {"success": False, "error": "模板文件不可用"}, status_code=400
+            )
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -287,10 +291,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 use_llm=use_llm_flag or None,  # None -> 交给 env 开关决定
                 personnel_roster=roster,
             )
-        except BOUNDARY_ERRORS as e:
+        except BOUNDARY_ERRORS:
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
-                {"success": False, "error": f"convert failed: {e}"},
+                {"success": False, "error": "convert failed"},
                 status_code=500,
             )
         if not result.get("success"):
@@ -367,10 +371,15 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             return JSONResponse(
                 {"success": False, "error": "file not found"}, status_code=404
             )
-        except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
-        except BOUNDARY_ERRORS as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "error": "relpath 无效"}, status_code=400
+            )
+        except BOUNDARY_ERRORS:
+            logger.exception("Attendance download could not be read")
+            return JSONResponse(
+                {"success": False, "error": "下载文件不可用"}, status_code=400
+            )
 
         if not p.exists() or not p.is_file():
             return JSONResponse(

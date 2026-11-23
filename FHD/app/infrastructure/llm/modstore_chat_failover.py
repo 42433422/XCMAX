@@ -7,40 +7,7 @@
 from __future__ import annotations
 
 import os
-import re
 from typing import Any, Iterable, Optional
-
-_FAILOVER_NEEDLES = (
-    "insufficient_quota",
-    "insufficient quota",
-    "quota exhausted",
-    "quota_exhausted",
-    "rate limit",
-    "ratelimit",
-    "too many requests",
-    "配额",
-    "额度",
-    "余额不足",
-    "payment required",
-    # 网关/上游 5xx 与传输抖动：换厂商或模型可能恢复
-    "internal server error",
-    "bad gateway",
-    "service unavailable",
-    "gateway timeout",
-    "temporarily unavailable",
-    "overloaded",
-    "timeout",
-    "timed out",
-    "readtimeout",
-    "connecterror",
-    "connection reset",
-    "connection aborted",
-    "connection refused",
-    "remotedisconnected",
-    "remote protocol error",
-    "eof occurred",
-)
-
 
 _NON_FAILOVER_NEEDLES = (
     "java 支付服务不可用",
@@ -65,18 +32,12 @@ def chat_failover_max_attempts() -> int:
 
 
 def is_market_chat_failoverable(status_code: Optional[int], error_text: str) -> bool:
-    """市场返回是否值得换厂商/模型再试。"""
-    if is_market_chat_wallet_dependency_error(error_text):
-        return False
-    if status_code in {402, 403, 404, 429, 500, 502, 503, 504}:
-        return True
-    text = str(error_text or "")
-    # 「平台错误(429): ...」
-    m = re.search(r"平台错误\((\d{3})\)", text)
-    if m and int(m.group(1)) in {402, 403, 404, 429, 500, 502, 503, 504}:
-        return True
-    low = text.lower()
-    return any(n in text or n in low for n in _FAILOVER_NEEDLES)
+    """Only an explicit unavailable-model/quota refusal permits another route.
+
+    A proxy 5xx or transport exception does not prove inference never started.
+    Text such as "timeout" cannot authorize replay or override account refusals.
+    """
+    return status_code in {404, 429} and not is_market_chat_wallet_dependency_error(error_text)
 
 
 def _provider_row_usable(row: dict[str, Any], *, fernet_ok: bool) -> bool:
@@ -177,6 +138,17 @@ def build_chat_failover_candidates(
                 add(pid, mid)
             if len(out) >= limit:
                 break
+
+    # A gateway can expose several deployment aliases under one provider.
+    # Prefer provider diversity above, then fill the remaining bounded slots.
+    if len(out) < limit:
+        for pid, block in by_provider.items():
+            mids = block.get("runtime_models", block.get("models", []))
+            for mid in mids if isinstance(mids, list) else []:
+                if isinstance(mid, str):
+                    add(pid, mid)
+                if len(out) >= limit:
+                    return out[:limit]
 
     return out[:limit]
 

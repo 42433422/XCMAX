@@ -12,6 +12,8 @@ from modstore_server import (
     self_maintenance_remediation_prompts,
     self_maintenance_retry,
 )
+from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
+from modstore_server.employee_executor_policies import execution_blocks_redispatch
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, para_client, results, review, store
@@ -48,11 +50,15 @@ def _execute_employee_task_with_retries(
 ) -> Dict[str, Any]:
     retries = max(0, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", 2))
     delay_sec = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRY_DELAY_SEC", 10))
-    attempts = retries + 1
+    attempts = 1 if input_data.get("request_id") or input_data.get("para_task_id") else retries + 1
     bench_override = _loop_platform_bench_override()
     result: Dict[str, Any] = {}
     for attempt in range(1, attempts + 1):
-        device_wait = para_client._wait_for_para_device_online()
+        device_wait = (
+            {"online": True}
+            if input_data.get("para_task_id")
+            else para_client._wait_for_para_device_online()
+        )
         if not device_wait.get("online"):
             config.logger.warning(
                 "self-maintenance para device not online before dispatch attempt=%s/%s",
@@ -135,11 +141,17 @@ def _run_step_with_inner_retries(
         if para_report_excerpt:
             report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
         failure_reason = "" if ok else results._extract_failure_reason(result, para_meta)
+        if execution_blocks_redispatch(result):
+            break
         is_final = attempt >= inner_max
         should_retry = False
+        if extra.get("para_task_id") or extra.get("request_id"):
+            # A durable attempt executes/reads once; outer repair persists a new identity.
+            break
         if not ok and (not is_final):
             if (
                 retry_kind == "code_fix"
+                and not execution_requires_reconciliation(result)
                 and not results._is_accepted_para_wait_timeout(result)
                 and not self_maintenance_retry.is_execution_environment_failure(result)
             ):

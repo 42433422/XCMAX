@@ -57,14 +57,14 @@ export function handleDesktopWindowOpen(
   return action
 }
 
-/** Never log a navigation URL: fragments may contain one-use sign-in codes. */
+/** Renderer navigation stays local; startup loadURL(file/data) does not emit will-navigate. */
 export function handleDesktopWillNavigate(
   rawUrl: string,
   expectedPort: number,
   preventDefault: () => void,
   warn: (message: string) => void,
 ): void {
-  if (!isTrustedDesktopOrigin(rawUrl, expectedPort) && !rawUrl.startsWith('file://') && !rawUrl.startsWith('data:')) {
+  if (!isTrustedDesktopOrigin(rawUrl, expectedPort)) {
     preventDefault()
     warn('[xcagi-desktop] blocked untrusted will-navigate')
   }

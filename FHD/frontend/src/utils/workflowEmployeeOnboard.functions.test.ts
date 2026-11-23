@@ -5,6 +5,11 @@ vi.mock('@/api/modStore', () => ({
   reloadEmployeePacks: vi.fn(),
 }))
 
+vi.mock('@/api/employeeDirectory', () => ({
+  employeeDirectoryScope: () => 'onboard-test-scope',
+  fetchEmployeeDirectory: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/stores/mods', () => ({
   useModsStore: vi.fn(() => ({
     modsForUi: [],

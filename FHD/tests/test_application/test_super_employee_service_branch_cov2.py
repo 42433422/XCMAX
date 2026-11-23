@@ -37,6 +37,10 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.super_employee.cli import CliExecutionError
+
+# ───────────────────── helpers ─────────────────────
+from app.application.super_employee.dispatch import _digest
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -53,8 +57,6 @@ from app.application.super_employee_service import (
 )
 from app.domain.app_pure.execution_scope import CapabilityGrant, ExecutionScope
 from tests.pure_builders import super_employee_request as _make_request
-
-# ───────────────────── helpers ─────────────────────
 
 
 def _make_svc(
@@ -97,7 +99,37 @@ def _mock_response(
     )
     resp.text = text or (json.dumps(json_data) if json_data else "")
     resp.json = MagicMock(return_value=json_data or {})
+    resp.raise_for_status = MagicMock()
+    if status_code >= 400:
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error", request=MagicMock(), response=resp
+        )
     return resp
+
+
+def _para_ack_response(request, *, task_id="t1", subtask_id="s1", task_status="pending"):
+    """Echo the original-request receipt that create_para_task now requires."""
+    body = dict((request.kwargs or {}).get("json") or {})
+    digest_body = {key: value for key, value in body.items() if key != "client_request_id"}
+    return _mock_response(
+        status_code=200,
+        json_data={
+            "task": {"id": task_id, "status": task_status},
+            "subtask": {
+                "id": subtask_id,
+                "task_id": task_id,
+                "device_id": body.get("device_id"),
+            },
+            "request": {
+                "client_request_id": body.get("client_request_id"),
+                "payload_sha256": _digest(digest_body),
+            },
+        },
+    )
+
+
+def _recovery_health() -> MagicMock:
+    return _mock_response(status_code=200, json_data={"task_request_recovery_version": 1})
 
 
 def _mock_http_client(
@@ -278,8 +310,10 @@ class TestDispatchModeBranches:
         req = _make_request()
         result = svc._dispatch(req)
         assert result["accepted"] is False
-        # Non-JSON body with 200 status and no success flag → dispatch_failed
-        assert result["status"] == "dispatch_failed"
+        # A successful HTTP exchange without an acknowledgement does not prove
+        # that the remote handler made no changes.
+        assert result["status"] == "dispatch_unknown"
+        assert result["safe_to_fallback"] is False
 
     def test_webhook_accepted_with_success_flag(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "unknown_mode")
@@ -310,7 +344,7 @@ class TestDispatchModeBranches:
         result = svc._dispatch(req)
         assert result["accepted"] is True
 
-    def test_webhook_exception_goes_to_outbox(self, tmp_path, monkeypatch) -> None:
+    def test_webhook_exception_preserves_unknown_receipt(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "unknown_mode")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://hook.test")
         mock_client = _mock_http_client(post_exc=RuntimeError("network error"))
@@ -322,7 +356,8 @@ class TestDispatchModeBranches:
         req = _make_request()
         result = svc._dispatch(req)
         assert result["accepted"] is False
-        assert result["status"] == "dispatch_error"
+        assert result["status"] == "dispatch_unknown"
+        assert result["safe_to_fallback"] is False
 
 
 # ───────────────────── _dispatch_to_para error branches ─────────────────────
@@ -586,11 +621,10 @@ class TestCreateParaTask:
         monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://repo.git")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
-        mock_resp = _mock_response(
-            status_code=200,
-            json_data={"task": {"id": "t1", "status": "pending"}, "subtask": {"id": "s1"}},
+        mock_client.get.return_value = _recovery_health()
+        mock_client.request.side_effect = lambda *args, **kwargs: _para_ack_response(
+            type("Req", (), {"kwargs": kwargs})()
         )
-        mock_client.request.return_value = mock_resp
         req = _make_request()
         result = svc._create_para_task(
             mock_client,
@@ -606,9 +640,10 @@ class TestCreateParaTask:
         call_kwargs = mock_client.request.call_args
         assert call_kwargs.kwargs.get("json", {}).get("repo_url") == "https://repo.git"
 
-    def test_task_not_dict_keeps_previous(self, tmp_path) -> None:
+    def test_missing_task_receipt_is_unknown(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         mock_resp = _mock_response(
             status_code=200,
             json_data={"task": "not a dict", "subtask": {"id": "s1"}},
@@ -623,22 +658,23 @@ class TestCreateParaTask:
             [{"id": "d1", "name": "dev1"}],
             tier=2,
         )
-        assert result["accepted"] is True
+        assert result["accepted"] is False
+        assert result["status"] == "dispatch_unknown"
         assert result["task_id"] == ""
 
     def test_task_id_chained_across_devices(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         # First call returns task with id, second call should include task_id
-        responses = [
-            _mock_response(
-                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s1"}}
-            ),
-            _mock_response(
-                status_code=200, json_data={"task": {"id": "t1"}, "subtask": {"id": "s2"}}
-            ),
-        ]
-        mock_client.request.side_effect = responses
+        subtasks = iter(("s1", "s2"))
+
+        def respond(*args, **kwargs):
+            return _para_ack_response(
+                type("Req", (), {"kwargs": kwargs})(), task_id="t1", subtask_id=next(subtasks)
+            )
+
+        mock_client.request.side_effect = respond
         req = _make_request()
         result = svc._create_para_task(
             mock_client,
@@ -656,6 +692,7 @@ class TestCreateParaTask:
     def test_subtask_not_dict(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
+        mock_client.get.return_value = _recovery_health()
         mock_resp = _mock_response(
             status_code=200,
             json_data={"task": {"id": "t1"}, "subtask": "not a dict"},
@@ -670,8 +707,8 @@ class TestCreateParaTask:
             [{"id": "d1", "name": "dev1"}],
             tier=1,
         )
-        assert result["accepted"] is True
-        assert result["devices"][0]["subtask_id"] == ""
+        assert result["accepted"] is False
+        assert result["status"] == "dispatch_unknown"
 
 
 # ───────────────────── _cli_subprocess_env ─────────────────────
@@ -1204,8 +1241,8 @@ class TestVerifyWorkspace:
     def test_no_changes_passes(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        # tmp_path is not a git repo, so git status fails → changed=[]
-        ok, msg = svc._verify_workspace(str(tmp_path))
+        with patch.object(svc, "_git", return_value=subprocess.CompletedProcess([], 0, "", "")):
+            ok, msg = svc._verify_workspace(str(tmp_path))
         assert ok is True
         assert "无文件改动" in msg
 
@@ -1258,13 +1295,13 @@ class TestVerifyWorkspace:
             ok, msg = svc._verify_workspace(str(tmp_path))
             assert ok is True
 
-    def test_git_exception_returns_no_changes(self, tmp_path, monkeypatch) -> None:
+    def test_git_exception_fails_verification(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         with patch.object(svc, "_git", side_effect=RuntimeError("git error")):
             ok, msg = svc._verify_workspace(str(tmp_path))
-            assert ok is True
-            assert "无文件改动" in msg
+            assert ok is False
+            assert "git error" in msg
 
 
 # ───────────────────── _commit_and_push ─────────────────────
@@ -1273,8 +1310,8 @@ class TestVerifyWorkspace:
 class TestCommitAndPush:
     def test_no_changes_returns_false(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = ""
         with patch.object(svc, "_git", side_effect=[mock_add, mock_status]):
             ok, msg = svc._commit_and_push(str(tmp_path), "branch", "task")
@@ -1283,8 +1320,8 @@ class TestCommitAndPush:
 
     def test_commit_fails(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 1
@@ -1297,8 +1334,8 @@ class TestCommitAndPush:
 
     def test_push_fails(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 0
@@ -1315,8 +1352,8 @@ class TestCommitAndPush:
 
     def test_success(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        mock_add = MagicMock()
-        mock_status = MagicMock()
+        mock_add = MagicMock(returncode=0, stdout="", stderr="")
+        mock_status = MagicMock(returncode=0, stdout="", stderr="")
         mock_status.stdout = "M file.py\n"
         mock_commit = MagicMock()
         mock_commit.returncode = 0
@@ -1409,7 +1446,11 @@ class TestPrepareWorktree:
 class TestRunDevTaskLoop:
     def test_worktree_fail_falls_back_to_cli_once(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("cli answer"))
-        with patch.object(svc, "_prepare_worktree", return_value=None):
+        with (
+            patch.object(svc, "_prepare_worktree", return_value=None),
+            patch.object(svc, "_is_git_repo", return_value=False),
+            patch("app.application.super_employee.development.Path.exists", return_value=False),
+        ):
             result = svc._run_dev_task_loop("/fake/cli", "do task", str(tmp_path))
             assert "cli answer" in result
 
@@ -1418,15 +1459,17 @@ class TestRunDevTaskLoop:
         with (
             patch.object(svc, "_prepare_worktree", return_value=None),
             patch.object(svc, "_run_cli_once") as run_once,
+            pytest.raises(CliExecutionError) as error,
         ):
-            result = svc._run_dev_task_loop(
+            svc._run_dev_task_loop(
                 "/fake/cli",
                 "do task",
                 str(tmp_path),
                 {"branch_context": "feature/mobile"},
             )
-            assert "选中的工作分支不可用" in result
-            run_once.assert_not_called()
+        assert error.value.receipt["error_code"] == "development_workspace_unavailable"
+        assert error.value.receipt["execution_state"] == "not_started"
+        run_once.assert_not_called()
 
     def test_verify_fail_triggers_fix(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("fixed"))

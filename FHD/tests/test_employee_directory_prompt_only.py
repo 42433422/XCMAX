@@ -74,3 +74,16 @@ def test_prompt_only_requires_explicit_system_prompt(monkeypatch):
         [{"pack_id": "wb-expert-demo", "manifest": manifest}],
     )
     assert employee_directory.build_employee_directory(include_prompt_only=True) == []
+
+
+def test_directory_preserves_explicit_department_without_reclassifying_by_name(monkeypatch):
+    manifest = _manifest("print-support")
+    manifest["enterprise_layer"] = "service"
+    _patch(
+        monkeypatch,
+        [{"pack_id": "print-support", "runtime_ok": True, "handlers": ["direct_python"]}],
+        [{"pack_id": "print-support", "manifest": manifest}],
+    )
+    row = employee_directory.build_employee_directory()[0]
+    assert row["enterprise_layer"] == "service"
+    assert row["area"] == "craft-workshop"

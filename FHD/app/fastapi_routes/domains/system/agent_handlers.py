@@ -286,6 +286,10 @@ def run_document_template_agent(
                 runtime_context["template_base_dir"] = route_facade.get_base_dir()
             except RECOVERABLE_ERRORS:
                 return {"success": False, "message": "删除模板失败"}, 500
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
+    runtime_context = request_runtime_context(request, runtime_context)
+    user_id = str(runtime_context["user_id"])
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,
@@ -308,6 +312,13 @@ def run_document_template_agent(
     )
     if payload.get("error_code") == "tool_exception":
         status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
+    refused_target = {"template_target_not_owned": 404, "template_builtin_read_only": 403}
+    if (
+        payload.get("error_code") in refused_target
+        and payload.get("outcome") == "denied"
+        and not payload.get("reconciliation_required")
+    ):
+        status_code = refused_target[payload["error_code"]]
+    elif run.status in {"waiting_user", "blocked"}:
         status_code = 202
     return payload, status_code

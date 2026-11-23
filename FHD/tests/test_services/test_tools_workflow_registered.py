@@ -460,7 +460,9 @@ class TestExecuteRegisteredWorkflowTool:
         expected_keys = {
             "client_product_issue",
             "conversation_history",
+            "kellai",
             "desktop_automation",
+            "image_generate",
             "customers",
             "products",
             "materials",
@@ -478,6 +480,7 @@ class TestExecuteRegisteredWorkflowTool:
             "excel_analysis",
             "excel_analyzer",
             "excel_toolkit",
+            "excel_join_compare",
             "excel_import",
             "excel_vector_index",
             "generate_office_document",

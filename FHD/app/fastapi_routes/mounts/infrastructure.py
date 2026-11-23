@@ -36,17 +36,6 @@ def register_infrastructure_routes(app: FastAPI) -> None:
             detail="desktop runtime routes unavailable",
         )
         logger.exception("Desktop runtime routes skipped")
-    from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
-
-    if is_desktop_mode():
-        from app.fastapi_routes.local_workspace import resume_local_workspace
-        from app.fastapi_routes.local_workspace import router as local_workspace_router
-
-        app.include_router(local_workspace_router)
-        try:
-            resume_local_workspace()
-        except (OSError, ValueError):
-            logger.warning("Desktop local workspace peer listener could not resume")
     try:
         from app.fastapi_routes.desktop_automation import router as desktop_automation_router
 

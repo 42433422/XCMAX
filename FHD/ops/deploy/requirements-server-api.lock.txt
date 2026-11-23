@@ -22,6 +22,7 @@ gunicorn==23.0.0
 gevent==26.8.0
 python-dotenv==1.2.3
 httpx==0.28.1
+httpx-sse==0.4.3
 requests==2.34.2
 urllib3==2.8.0
 trafilatura==2.3.1
@@ -62,3 +63,5 @@ socksio==1.0.0
 defusedxml==0.7.1
 semantic-router==1.1.2
 fastembed==0.9.1
+openai-codex==0.171.0
+openai-codex-cli-bin==0.171.0

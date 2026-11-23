@@ -615,7 +615,7 @@ def test_all_public_handlers_can_be_remounted_by_compatibility_consumers() -> No
 
     app = FastAPI()
     endpoints = list(endpoints_in(routes.router))
-    assert len(endpoints) == 32
+    assert len(endpoints) == 33
     for route in endpoints:
         app.add_api_route(
             route.path,

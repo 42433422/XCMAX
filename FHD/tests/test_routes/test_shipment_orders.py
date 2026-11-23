@@ -23,6 +23,20 @@ def client(trusted_actor) -> TestClient:
     )
 
 
+def _assert_unverified_mutation(
+    response, status_code=500, code="result_verifier_unavailable", verdict="inconclusive"
+):
+    assert response.status_code == status_code, response.text
+    output = response.json()
+    assert output["success"] is False
+    assert output["agent_status"] == "blocked"
+    assert output["error_code"] == f"result_verification_{verdict}"
+    assert output["verification_code"] == code
+    assert output["outcome"] == "unknown"
+    assert output["retryable"] is False
+    assert output["reconciliation_required"] is True
+
+
 @pytest.fixture(autouse=True)
 def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
@@ -69,7 +83,9 @@ class TestShipmentGenerate:
             "/api/shipment/generate",
             json={"unit_name": "测试单位", "products": [{"name": "A", "qty": 1}]},
         )
-        assert r.status_code == 200
+        _mock_svc.generate_shipment_document.assert_called_once()
+        _assert_unverified_mutation(r)
+        assert r.json()["file_path"] == "/tmp/out.xlsx"
 
     def test_empty_unit_name(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/generate", json={"unit_name": "", "products": []})
@@ -94,7 +110,8 @@ class TestShipmentGenerateBatch:
             "/api/shipment/generate-batch",
             json={"shipments": [{"unit_name": "A", "products": [{"name": "X"}]}]},
         )
-        assert r.status_code == 200
+        _mock_svc.generate_shipment_document.assert_called_once()
+        _assert_unverified_mutation(r, status_code=200)
         assert r.json()["data"]["processed"] == 1
 
     def test_empty_shipments(self, client: TestClient, _mock_svc: MagicMock):
@@ -133,13 +150,15 @@ class TestShipmentPrint:
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
         r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
-        assert r.status_code == 200
+        _mock_svc.mark_as_printed.assert_called_once_with(1, printer_name="")
+        _assert_unverified_mutation(r)
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
         test_file = Path(get_shipment_output_dir()) / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
-        assert r.status_code == 200
+        _mock_svc.mark_as_printed.assert_not_called()
+        _assert_unverified_mutation(r)
         assert r.json()["updated"] is False
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
@@ -251,7 +270,8 @@ class TestShipmentOrdersDelete:
     def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.delete_shipment.return_value = {"success": True}
         r = client.delete("/api/shipment/orders/1")
-        assert r.status_code == 200
+        _mock_svc.delete_shipment.assert_called_once_with(1)
+        _assert_unverified_mutation(r, status_code=400)
 
     def test_invalid_format(self, client: TestClient, _mock_svc: MagicMock):
         r = client.delete("/api/shipment/orders/abc")
@@ -281,8 +301,12 @@ class TestApiOrdersList:
                 ],
             },
         )
-        assert r.status_code == 201
-        assert r.json()["success"] is True
+        assert _mock_svc.create_shipment.call_count == 1, r.text
+        assert _mock_svc.create_shipment.call_args.kwargs["unit_name"] == "单位A"
+        _assert_unverified_mutation(
+            r, status_code=400, code="result_scope_mismatch", verdict="failed"
+        )
+        assert r.json()["shipment"] == {"id": 1, "purchase_unit": "单位A"}
 
     def test_create_requires_products(self, client: TestClient):
         r = client.post("/api/orders", json={"purchase_unit": "单位A", "products": []})
@@ -305,8 +329,14 @@ class TestApiOrdersGet:
             "/api/orders/1",
             json={"purchase_unit": "单位B", "status": "completed"},
         )
-        assert r.status_code == 200
-        assert r.json()["data"]["purchase_unit"] == "单位B"
+        assert _mock_svc.update_shipment_record.call_count == 1, r.text
+        _mock_svc.update_shipment_record.assert_called_with(
+            record_id=1, unit_name="单位B", status="completed"
+        )
+        _assert_unverified_mutation(
+            r, status_code=404, code="result_scope_mismatch", verdict="failed"
+        )
+        _mock_svc.get_order.assert_not_called()
 
     def test_update_rejects_unknown_status(self, client: TestClient):
         r = client.patch("/api/orders/1", json={"status": "shipped"})
@@ -331,24 +361,28 @@ class TestApiOrdersExport:
 
 
 class TestApiOrdersDelete:
-    def test_clear_all(self, client: TestClient, _mock_svc: MagicMock):
+    def test_clear_all(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.clear_all_orders.return_value = {"success": True}
         r = client.delete("/api/orders")
-        assert r.status_code == 200
+        _mock_svc.clear_all_orders.assert_called_once()
+        _assert_unverified_mutation(r)
 
 
 class TestApiOrdersSetSequence:
-    def test_set(self, client: TestClient, _mock_svc: MagicMock):
+    def test_set(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.set_order_sequence.return_value = {"success": True}
         r = client.post("/api/orders/set-sequence", json={"sequence": 10})
-        assert r.status_code == 200
+        _mock_svc.set_order_sequence.assert_called_once_with(10)
+        _assert_unverified_mutation(r)
+        assert r.json()["sequence"] == 10
 
 
 class TestApiOrdersResetSequence:
-    def test_reset(self, client: TestClient, _mock_svc: MagicMock):
+    def test_reset(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.reset_order_sequence.return_value = {"success": True}
         r = client.post("/api/orders/reset-sequence")
-        assert r.status_code == 200
+        _mock_svc.reset_order_sequence.assert_called_once()
+        _assert_unverified_mutation(r)
 
 
 class TestApiOrdersPurchaseUnits:
@@ -363,17 +397,20 @@ class TestApiOrdersClearShipment:
         r = client.post("/api/orders/clear-shipment", json={})
         assert r.status_code == 400
 
-    def test_success(self, client: TestClient, _mock_svc: MagicMock):
+    def test_success(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.clear_shipment_by_unit.return_value = {"success": True}
         r = client.post("/api/orders/clear-shipment", json={"purchase_unit": "单位A"})
-        assert r.status_code == 200
+        _mock_svc.clear_shipment_by_unit.assert_called_once_with("单位A")
+        _assert_unverified_mutation(r)
+        assert r.json()["purchase_unit"] == "单位A"
 
 
 class TestApiOrdersClearAll:
-    def test_clear(self, client: TestClient, _mock_svc: MagicMock):
+    def test_clear(self, client: TestClient, _mock_svc: MagicMock, local_tools):
         _mock_svc.clear_all_orders.return_value = {"success": True}
         r = client.delete("/api/orders/clear-all")
-        assert r.status_code == 200
+        _mock_svc.clear_all_orders.assert_called_once()
+        _assert_unverified_mutation(r)
 
 
 # shipment records

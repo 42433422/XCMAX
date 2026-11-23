@@ -1,7 +1,7 @@
 {
   "id": "xcagi-erp-domain-bridge",
   "name": "XCAGI 通用业务领域门面 Mod",
-  "version": "1.0.0.15",
+  "version": "1.0.0.16",
   "author": "成都修茈科技有限公司",
   "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
   "primary": false,
@@ -15,7 +15,12 @@
   "frontend": {
     "routes": "frontend/routes",
     "menu": [
-      { "id": "mod-erp-purchase", "label": "采购管理", "icon": "fa-shopping-cart", "path": "/mod/xcagi-erp-domain-bridge/purchase" },
+      {
+        "id": "mod-erp-purchase",
+        "label": "采购管理",
+        "icon": "fa-shopping-cart",
+        "path": "/mod/xcagi-erp-domain-bridge/purchase"
+      },
       {
         "id": "mod-erp-products",
         "label": "产品管理",
@@ -51,12 +56,6 @@
         "label": "表格模式",
         "icon": "fa-table",
         "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
-      },
-      {
-        "id": "mod-erp-data-sources",
-        "label": "数据来源",
-        "icon": "fa-database",
-        "path": "/mod/xcagi-erp-domain-bridge/data-sources"
       },
       {
         "id": "mod-erp-print",
@@ -107,10 +106,6 @@
         "hidden": true
       },
       {
-        "key": "data-sources",
-        "hidden": true
-      },
-      {
         "key": "print",
         "hidden": true
       },
@@ -156,7 +151,6 @@
       "MaterialsView.vue",
       "TraditionalModeView.vue",
       "BusinessDockingView.vue",
-      "DataSourcesView.vue",
       "PrintView.vue",
       "PrinterListView.vue",
       "TemplatePreviewView.vue",
@@ -181,7 +175,6 @@
       "/materials-list",
       "/traditional-mode",
       "/business-docking",
-      "/data-sources",
       "/print",
       "/printer-list",
       "/template-preview",

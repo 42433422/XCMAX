@@ -66,7 +66,11 @@ def _prepared_fixture(prefix: str):
     original_session = customers.get_customers_session
     keys = ("XCAGI_TOOL_IDEMPOTENCY_PATH", "AUDIT_LOG_PATH", "SECRET_KEY")
     original_env = {key: os.environ.get(key) for key in keys}
-    with tempfile.TemporaryDirectory(prefix=prefix) as raw:
+    with tempfile.TemporaryDirectory(prefix=prefix) as raw, pytest.MonkeyPatch.context() as paths:
+        # Full-shard collection can prepend vendor/Mod roots with their own
+        # tests package. A fresh spawn interpreter must resolve this module
+        # from FHD first; preserve the real process boundary and restore after.
+        paths.syspath_prepend(str(Path(__file__).resolve().parents[2]))
         engine = None
         try:
             tmp = Path(raw)

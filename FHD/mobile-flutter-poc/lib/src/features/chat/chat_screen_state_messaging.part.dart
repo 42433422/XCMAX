@@ -158,10 +158,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     final assistantId = 'assistant-$now';
     final outgoing =
         quoted == null ? text : '引用「${_take(quoted.body, 200)}」\n\n$text';
-    _lastAttachmentTurnId = _lastSentAttachments.isEmpty
-        ? ''
-        : 'mobile-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
-    _lastAttachmentOutgoing = _lastSentAttachments.isEmpty ? '' : outgoing;
+    final turnId = 'mobile-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
     late List<ChatMessage> recentMessages;
     setState(() {
       _sending = true;
@@ -175,6 +172,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         body: text,
         timeText: '刚刚',
         quote: quoted == null ? null : _take(quoted.body, 120),
+        turnId: turnId,
       );
       final assistantMessage = ChatMessage(
         id: assistantId,
@@ -184,6 +182,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         timeText: '刚刚',
         hasEmployeeProfile: _employeeProfile != null,
         status: ChatDeliveryStatus.sending,
+        turnId: turnId,
       );
       recentMessages = [..._messages, userMessage];
       _messages.addAll([
@@ -198,6 +197,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
           senderAvatarUrl: assistantMessage.senderAvatarUrl,
           hasEmployeeProfile: assistantMessage.hasEmployeeProfile,
           status: assistantMessage.status,
+          turnId: assistantMessage.turnId,
         ),
       ]);
     });
@@ -209,7 +209,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       outgoing: outgoing,
       recentMessages: recentMessages,
       attachments: _lastSentAttachments,
-      idempotencyKey: _lastAttachmentTurnId,
+      idempotencyKey: turnId,
     );
   }
 
@@ -219,6 +219,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     required List<ChatMessage> recentMessages,
     List<MobileChatAttachment> attachments = const [],
     String idempotencyKey = '',
+    bool resumeOnly = false,
   }) async {
     final repository = _repository;
     if (repository == null) {
@@ -241,6 +242,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               body: outgoing,
               attachments: attachments,
               idempotencyKey: idempotencyKey,
+              resumeOnly: resumeOnly,
               recentMessages: recentMessages,
               onToken: (token) {
                 if (mounted &&
@@ -253,6 +255,9 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               conversation: widget.conversation,
               body: outgoing,
               userId: _userId,
+              idempotencyKey: idempotencyKey,
+              resumeOnly: resumeOnly,
+              cacheUserMessage: !resumeOnly,
               recentMessages: recentMessages,
               onToken: (token) {
                 if (!mounted) return;
@@ -269,7 +274,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
             );
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
-      await repository.removeQueuedMessage(widget.conversation.id, outgoing);
+      await repository.removeQueuedMessage(widget.conversation.id, outgoing, idempotencyKey: idempotencyKey);
       setState(() {
         _replaceMessage(
           assistantId,
@@ -282,11 +287,13 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
-      final offline = isOfflineError(error);
+      final pending = error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_PENDING';
+      final offline = !pending && isOfflineError(error);
       final queuedId = offline && attachments.isEmpty
           ? await repository.enqueuePendingMessage(
               conversation: widget.conversation,
               body: outgoing,
+              idempotencyKey: idempotencyKey,
             )
           : 0;
       if (!mounted) return;
@@ -301,7 +308,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
                 ),
           status: queuedId > 0
               ? ChatDeliveryStatus.queued
-              : ChatDeliveryStatus.failed,
+              : pending ? ChatDeliveryStatus.pending : ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
@@ -323,8 +330,6 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _attachments.clear();
       _failedAttachments.clear();
       _lastSentAttachments = const [];
-      _lastAttachmentTurnId = '';
-      _lastAttachmentOutgoing = '';
       _showToolPanel = false;
       _replyTo = null;
     });
@@ -352,7 +357,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               ),
             )
             .body,
-        status: ChatDeliveryStatus.sent,
+        status: ChatDeliveryStatus.pending,
       );
       _sending = false;
       _activeAssistantId = null;
@@ -376,53 +381,28 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     }
   }
 
-  Future<void> _resendLastChat() async {
+  Future<void> _readOriginalChatTurn(ChatMessage message) async {
     if (_sending) return;
-    ChatMessage? lastUser;
-    for (final message in _messages.reversed) {
-      if (message.role == ChatRole.user) {
-        lastUser = message;
-        break;
-      }
+    if (message.turnId.isEmpty && widget.conversation.type.superTool == null) {
+      setState(() => _replaceMessage(message.id,
+          body: '这条历史消息缺少原任务标识，请在任务工作区核对结果，勿重复提交。',
+          status: ChatDeliveryStatus.pending));
+      return;
     }
-    if (lastUser == null) return;
-
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final assistantId = 'assistant-resend-$now';
-    late List<ChatMessage> recentMessages;
+    final assistantId = message.id;
     setState(() {
-      final trimmed = [..._messages];
-      if (trimmed.isNotEmpty && trimmed.last.role == ChatRole.assistant) {
-        trimmed.removeLast();
-      }
-      final assistantMessage = ChatMessage(
-        id: assistantId,
-        conversationId: widget.conversation.id,
-        role: ChatRole.assistant,
-        body: '',
-        timeText: '刚刚',
-        hasEmployeeProfile: true,
-        status: ChatDeliveryStatus.sending,
-      );
-      recentMessages = trimmed;
-      _messages = [...trimmed, assistantMessage];
+      _replaceMessage(assistantId, body: '正在核对原任务回执…', status: ChatDeliveryStatus.sending);
       _sending = true;
       _showToolPanel = false;
       _activeAssistantId = assistantId;
       _stopRequested = false;
     });
-
-    final quote = lastUser.quote?.trim() ?? '';
-    final outgoing = quote.isEmpty
-        ? lastUser.body
-        : '引用「${_take(quote, 200)}」\n\n${lastUser.body}';
     await _streamAssistantReply(
       assistantId: assistantId,
-      outgoing:
-          _lastSentAttachments.isEmpty ? outgoing : _lastAttachmentOutgoing,
-      recentMessages: recentMessages,
-      attachments: _lastSentAttachments,
-      idempotencyKey: _lastAttachmentTurnId,
+      outgoing: '',
+      recentMessages: const [],
+      idempotencyKey: message.turnId,
+      resumeOnly: true,
     );
   }
 

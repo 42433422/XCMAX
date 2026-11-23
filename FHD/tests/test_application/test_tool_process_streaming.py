@@ -90,6 +90,17 @@ class FileDeadlineExecutor(AgentToolExecutor):
         return {"success": True}
 
 
+class ParentBudgetFileExecutor(AgentToolExecutor):
+    def execute(self, step, *, runtime_context):
+        from app.application.tool_execution_deadline import remaining_invocation_seconds
+
+        runtime_context["_renew_elt_file_deadline"]("linked_preview")
+        Path(step.params["started"]).write_text(str(remaining_invocation_seconds(1000)))
+        time.sleep(20)
+        Path(step.params["late"]).write_text("must never happen")
+        return {"success": True}
+
+
 @pytest.fixture(autouse=True)
 def no_business_database(monkeypatch):
     # Exercise the real process transport without opening an unrelated customer DB.
@@ -274,20 +285,55 @@ def test_elt_file_deadline_supersedes_startup_and_still_bounds_stalled_stage(
 
     if stage_stalls:
         monkeypatch.setitem(ELT_FILE_WATCHDOG_SECONDS, marker, 0.2)
+    # Match the other real-spawn tests: cold worker imports can exceed 3 seconds.
+    # The stage must still outlive this initial budget; its own stall cap remains 0.2s.
+    startup_seconds = 8
     step = AgentStep(
         "batch",
         "elt_import",
         "execute",
-        params={"run_id": "child-preview", "preview_delay": 3.1, "phase": stage},
+        params={
+            "run_id": "child-preview",
+            "preview_delay": startup_seconds + 0.1,
+            "phase": stage,
+        },
     )
     result = execute_with_tool_deadline(
-        FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=3
+        FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=startup_seconds
     )
     if stage_stalls:
         assert result["outcome"] == "unknown"
         assert result["reconciliation_evidence"]["error_code"] == "tool_worker_incomplete"
     else:
         assert result == {"success": True}
+
+
+def test_elt_stage_cannot_extend_trusted_parent_budget_or_write_after_timeout(tmp_path):
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    began = time.monotonic()
+    step = AgentStep(
+        "batch",
+        "elt_import",
+        "execute",
+        params={
+            "run_id": "existing-preview",
+            "started": str(tmp_path / "started"),
+            "late": str(tmp_path / "late"),
+        },
+    )
+    with invocation_deadline(began + 8):
+        result = execute_with_tool_deadline(
+            ParentBudgetFileExecutor(),
+            step,
+            runtime_context={"deadline_monotonic": 1e20},
+            timeout_seconds=60,
+        )
+    assert time.monotonic() - began < 12
+    assert (tmp_path / "started").is_file(), result
+    assert 0 < float((tmp_path / "started").read_text()) <= 8
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert not (tmp_path / "late").exists()
 
 
 def test_spawned_deltas_keep_whitespace_through_sse_queue_and_final_deduplication(tmp_path):

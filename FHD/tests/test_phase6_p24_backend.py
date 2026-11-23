@@ -57,6 +57,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.desktop_runtime import queue as desktop_queue
 from app.domain.shared_services.session_service import SessionService
 from app.domain.shared_services.xcmax_sync_service import (
@@ -129,10 +130,33 @@ def _mock_get_db(mock_db: MagicMock):
 
 
 @pytest.fixture
-def print_client() -> TestClient:
+def print_client(monkeypatch) -> TestClient:
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
     app = FastAPI()
+    app.state.agent_runs = repo
     app.include_router(print_router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+def _assert_unknown_print(client, response, action):
+    assert response.status_code == 400, response.text
+    data = response.json()
+    assert data["success"] is False and data["outcome"] == "unknown"
+    assert data["error_code"] == "result_verification_inconclusive"
+    assert data["verification_code"] == "result_verifier_unavailable"
+    assert data["retryable"] is False and data["reconciliation_required"] is True
+    run = client.app.state.agent_runs.get(data["run_id"])
+    assert run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert (call.tool_id, call.action) == ("print", action)
+    assert call.output["success"] is True
+    assert call.metadata["verification"]["accepted"] is False
+    assert run.steps[0].attempt_count == 1
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return run
 
 
 @pytest.fixture
@@ -355,10 +379,11 @@ class TestPrintRoutesSaveSelection:
                 "/api/print/printer-selection",
                 json={"document_printer": "P1", "label_printer": "P1"},
             )
-        assert r.status_code == 200
-        data = r.json()
-        assert data["success"] is True
-        assert data["doc"] == "P1"
+        _assert_unknown_print(print_client, r, "save_printer_selection")
+        assert r.json()["doc"] == "P1"
+        svc.return_value.save_printer_selection.assert_called_once_with(
+            document_printer="P1", label_printer="P1"
+        )
 
     def test_save_selection_exception(self, print_client: TestClient, local_tools):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -390,8 +415,8 @@ class TestPrintRoutesDocument:
                 "/api/print/document",
                 json={"file_path": str(document), "printer_name": "P1"},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        _assert_unknown_print(print_client, r, "print_document")
+        svc.return_value.print_document.assert_called_once_with(str(document), "P1", False)
 
     def test_print_document_failed_result_returns_400(
         self, print_client: TestClient, tmp_path: Path
@@ -497,8 +522,9 @@ class TestPrintRoutesLabel:
                 "/api/print/label",
                 json={"file_path": "/tmp/x.pdf", "require_confirm": True, "confirm_token": token},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        _assert_unknown_print(print_client, r, "print_label")
+        svc.return_value.print_label.assert_called_once_with("/tmp/x.pdf", "P1", 2)
+        assert token not in print_routes._print_confirm_cache
 
     def test_print_label_no_confirm_failed(self, print_client: TestClient):
         with (
@@ -530,7 +556,8 @@ class TestPrintRoutesLabel:
                 "/api/print/label", json=body, headers={"X-Request-ID": "print-request-2"}
             )
             anonymous = print_client.post("/api/print/label", json=body)
-        assert first.status_code == retry.status_code == 200
+        _assert_unknown_print(print_client, first, "print_label")
+        _assert_unknown_print(print_client, retry, "print_label")
         assert first.json()["run_id"] == retry.json()["run_id"]
         assert separate.status_code == anonymous.status_code == 500
         assert separate.json()["success"] is anonymous.json()["success"] is False
@@ -560,7 +587,8 @@ class TestPrintRoutesOtherEndpoints:
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.test_printer.return_value = {"success": True}
             r = print_client.post("/api/print/test", json={"printer_name": "P1"})
-        assert r.status_code == 200
+        _assert_unknown_print(print_client, r, "test")
+        svc.return_value.test_printer.assert_called_once_with("P1")
 
     def test_validate_printer_separation(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -601,17 +629,34 @@ class TestPrintRoutesWorkflowLabel:
         assert r.status_code == 400
         assert "model_number" in r.json()["message"]
 
-    def test_dispatch_idempotency_skips_duplicate(self, print_client: TestClient):
-        print_routes._print_confirm_cache["wf_lp:key1"] = {
-            "expires_at": time.time() + 100,
-            "model_number": "M1",
-        }
-        r = print_client.post(
-            "/api/print/workflow/label-print/dispatch",
-            json={"idempotency_key": "key1", "model_number": "M1"},
+    def test_dispatch_idempotency_skips_duplicate(
+        self, print_client: TestClient, local_tools, monkeypatch, tmp_path
+    ):
+        ledger = tmp_path / "print-idempotency.sqlite"
+        monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(ledger))
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as get_svc,
+            patch("app.application.get_product_app_service") as get_prod,
+        ):
+            get_prod.return_value.search_products.return_value = []
+            get_svc.return_value.print_single_label.return_value = {"success": True}
+            body = {"idempotency_key": "key1", "model_number": "M1"}
+            first = print_client.post("/api/print/workflow/label-print/dispatch", json=body)
+            print_routes._print_confirm_cache.clear()
+            again = print_client.post("/api/print/workflow/label-print/dispatch", json=body)
+        original = _assert_unknown_print(print_client, first, "workflow_label_dispatch")
+        repeated = _assert_unknown_print(print_client, again, "workflow_label_dispatch")
+        assert original.tool_calls[0].output == repeated.tool_calls[0].output
+        get_svc.return_value.print_single_label.assert_called_once_with(
+            product_name="M1", model_number="M1", specification=None, unit="个", quantity=1
         )
-        assert r.status_code == 200
-        assert r.json()["skipped"] is True
+        with sqlite3.connect(ledger) as db:
+            row = db.execute(
+                "SELECT inflight, output_json FROM tool_idempotency WHERE scope_key = ?",
+                ("::print:workflow_label_dispatch:key1",),
+            ).fetchone()
+        assert row is not None and row[0] == 0
+        assert json.loads(row[1]) == original.tool_calls[0].output
 
     def test_dispatch_lookup_error_still_prints(self, print_client: TestClient, local_tools):
         with (
@@ -624,7 +669,13 @@ class TestPrintRoutesWorkflowLabel:
                 "/api/print/workflow/label-print/dispatch",
                 json={"idempotency_key": "key2", "model_number": "M1"},
             )
-        assert r.status_code == 200
+        _assert_unknown_print(print_client, r, "workflow_label_dispatch")
+        get_prod.return_value.search_products.assert_called_once_with(
+            keyword="M1", filters={"per_page": 1}
+        )
+        get_svc.return_value.print_single_label.assert_called_once_with(
+            product_name="M1", model_number="M1", specification=None, unit="个", quantity=1
+        )
 
     def test_dispatch_print_failed(self, print_client: TestClient):
         with (

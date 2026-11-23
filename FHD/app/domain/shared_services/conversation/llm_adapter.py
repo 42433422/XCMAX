@@ -357,7 +357,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
                 {
                     "index": 0,
                     "message": {"role": "assistant", "content": content},
-                    "finish_reason": data.get("stop_reason") or "stop",
+                    "finish_reason": data.get("stop_reason"),
                 }
             ],
             "usage": data.get("usage") or {},

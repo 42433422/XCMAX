@@ -470,14 +470,13 @@ class PyAutoGuiComputer:
                     status="outcome_unknown",
                     completed=completed,
                 )
+            actual_pixels = [list(image.getpixel((pixel["x"], pixel["y"]))) for pixel in pixels]
             checks = [
                 all(
                     abs(actual - wanted) <= pixel.get("tolerance", 0)
-                    for actual, wanted in zip(
-                        image.getpixel((pixel["x"], pixel["y"])), pixel["rgb"]
-                    )
+                    for actual, wanted in zip(observed, pixel["rgb"])
                 )
-                for pixel in pixels
+                for pixel, observed in zip(pixels, actual_pixels)
             ]
             verified = bool(checks) and all(checks)
             return {
@@ -494,6 +493,8 @@ class PyAutoGuiComputer:
                 "verification": {
                     "scope": "visual_pixels",
                     "checks": checks,
+                    "actual_pixels": actual_pixels,
+                    "observed_at": time.time(),
                     "business_verified": False,
                 },
                 "clipboard_text_restored": clipboard_restored,

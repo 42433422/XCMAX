@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -57,7 +57,7 @@ def test_deploy_staged_runs_three_commands_in_order(fresh_db, monkeypatch):
 
 def test_reject_all_marks_pending(fresh_db, monkeypatch):
     sf = models.get_session_factory()
-    exp = datetime.utcnow() + timedelta(hours=10)
+    exp = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=10)
     with sf() as s:
         s.add(
             models.OpsStagedChange(
@@ -96,7 +96,7 @@ def test_digest_identity_ack_only(fresh_db):
     plain = "A1B2C3"
     th = hashlib.sha256(plain.encode("utf-8")).hexdigest()
     sf = models.get_session_factory()
-    exp = datetime.utcnow() + timedelta(hours=10)
+    exp = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=10)
     with sf() as s:
         tok = models.OpsApprovalToken(
             token_hash=th,

@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "browser": {
+      "transport": "stdio",
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/FHD/scripts/autonomy/runtime_tools/browser_mcp_deps/node_modules/@playwright/mcp/cli.js",
+        "--headless",
+        "--isolated"
+      ],
+      "browser": true,
+      "session_mode": "persistent",
+      "session_start_tools": ["browser_navigate", "browser_snapshot"],
+      "session_idle_seconds": 300,
+      "max_sessions": 8,
+      "timeout_seconds": 60,
+      "read_only_tools": ["browser_snapshot", "browser_wait_for", "browser_take_screenshot"]
+    }
+  }
+}

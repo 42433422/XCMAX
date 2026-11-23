@@ -97,7 +97,8 @@ def test_missing_optional_backend_fails_closed_without_disabling_rule_support(mo
     routes, _ = mod._build_routes()
     assert routes
     assert mod.get_semantic_router() is None
-    assert "ModuleNotFoundError" in mod.semantic_router_status()["error"]
+    assert mod.semantic_router_status()["error"] == "semantic_router_unavailable"
+    assert mod.route_intent("给客户安排发货") is None
 
 
 @pytest.mark.parametrize(

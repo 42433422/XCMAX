@@ -28,7 +28,7 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../../views/ModStore.vue'),
-    meta: { title: '能力库' },
+    meta: { title: 'AI 市场' },
   },
   {
     path: '/settings',
@@ -84,10 +84,16 @@ export const SHELL_ROUTES: RouteRecordRaw[] = [
     meta: { title: '流程可视化' },
   },
   {
+    path: '/employee-workbench',
+    name: 'employee-workbench',
+    component: () => import('../../views/EmployeeWorkbenchView.vue'),
+    meta: { title: '员工工作台' },
+  },
+  {
     path: '/workflow-employee-space',
     name: 'workflow-employee-space',
     component: () => import('../../views/EmployeeWorkspaceView.vue'),
-    meta: { title: '员工工作台' },
+    meta: { title: '员工工作空间' },
   },
   ...(isAdminConsoleSpa()
     ? [

@@ -3,13 +3,20 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
+import pytest
 
 from app.application.codex_super_employee_service import (
     CODEX_DIRECT_MESSAGE_KIND,
     CodexSuperEmployeeService,
 )
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_outcome_unknown,
+)
+from tests.test_application.test_super_employee_dispatch_recovery import _ack
 
 
 def fake_codex_runner(reply: str, seen: list[list[str]] | None = None):
@@ -164,7 +171,7 @@ def test_codex_super_employee_backfills_stuck_identity_dispatch(
     assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
 
 
-def test_codex_super_employee_backfills_stuck_natural_question_with_codex_cli(
+def test_codex_super_employee_history_never_reexecutes_a_stuck_natural_question(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -211,10 +218,10 @@ def test_codex_super_employee_backfills_stuck_natural_question_with_codex_cli(
     second = svc.list_messages(user_id=1)
 
     direct = [item for item in first if item["kind"] == CODEX_DIRECT_MESSAGE_KIND]
-    assert len(direct) == 1
-    assert "不能查看你的真实账户额度" in direct[0]["body"]
-    assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
-    assert len(seen) == 1
+    assert direct == []
+    assert not any(item["kind"] == CODEX_DIRECT_MESSAGE_KIND for item in second)
+    assert seen == []
+    assert any(item["dispatch_request_id"] == request_id for item in second)
 
 
 def test_codex_super_employee_upgrades_legacy_dispatch_ack_and_syncs_status(
@@ -307,7 +314,7 @@ def test_codex_super_employee_dispatches_to_para_codex_device(tmp_path: Path, mo
         payload = json.loads(request.content.decode("utf-8") or "{}") if request.content else {}
         seen.append((request.method, request.url.path, payload))
         if request.method == "GET" and request.url.path == "/api/health":
-            return httpx.Response(200, json={"success": True})
+            return httpx.Response(200, json={"success": True, "task_request_recovery_version": 1})
         if request.method == "POST" and request.url.path == "/api/auth/guest":
             return httpx.Response(200, json={"token": "token-1"})
         if request.method == "GET" and request.url.path == "/api/devices":
@@ -347,13 +354,7 @@ def test_codex_super_employee_dispatches_to_para_codex_device(tmp_path: Path, mo
             assert payload["device_id"] == "device-1"
             assert payload["branch"] == "main"
             assert "提交到调度器分配的工作分支" in str(payload["prompt"])
-            return httpx.Response(
-                200,
-                json={
-                    "task": {"id": "task-1", "status": "running"},
-                    "subtask": {"id": "sub-1"},
-                },
-            )
+            return _ack(request, task_id="task-1")
         if request.method == "GET" and request.url.path == "/api/tasks/task-1":
             return httpx.Response(
                 200,
@@ -401,3 +402,130 @@ def test_codex_super_employee_dispatches_to_para_codex_device(tmp_path: Path, mo
         for item in result["messages"]
     )
     assert ("PUT", "/api/devices/device-1/dev-tool", {"devTool": "codex"}) in seen
+
+
+@pytest.mark.parametrize(
+    ("scenario", "code", "exit_code", "partial", "started"),
+    [
+        ("stdout", "cli_nonzero_exit", 23, "partial stdout", True),
+        ("file", "cli_nonzero_exit", 23, "partial file", True),
+        ("empty_failure", "cli_nonzero_exit", 23, "", True),
+        ("empty_success", "cli_empty_response", 0, "", True),
+        ("unknown_exit", "cli_execution_failed", None, "partial stdout", True),
+        ("timeout", "cli_timeout", None, "partial stdout", True),
+        ("launch", "cli_launch_failed", None, "", False),
+    ],
+)
+def test_codex_public_invoke_preserves_cli_failure_evidence(
+    tmp_path, monkeypatch, scenario, code, exit_code, partial, started
+):
+    calls = []
+
+    def runner(cmd, **kwargs):
+        calls.append(cmd)
+        if scenario == "file":
+            Path(cmd[cmd.index("--output-last-message") + 1]).write_text(partial)
+        if scenario == "timeout":
+            raise subprocess.TimeoutExpired(cmd, 1, output=partial.encode(), stderr=b"diagnostic")
+        if scenario == "launch":
+            raise FileNotFoundError("fixture CLI missing")
+        return SimpleNamespace(
+            returncode=exit_code,
+            stdout=partial if scenario != "file" else "",
+            stderr="diagnostic",
+        )
+
+    svc = CodexSuperEmployeeService(storage_root=tmp_path, codex_cli_runner=runner)
+    monkeypatch.setattr(svc, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(svc, "_cli_workspace", lambda context: str(tmp_path))
+    result = svc.invoke(user_id=7, message="描述当前任务", context={"mode": "chat"})
+
+    assert result["success"] is False
+    assert result["error_code"] == code
+    assert result["exit_code"] == exit_code
+    assert result["partial_text"] == partial
+    assert result["execution_started"] is started
+    assert result["outcome"] == ("unknown" if started else "failed")
+    assert result["retryable"] is False
+    assert result["dispatch"]["status"] == result["assistant_message"]["status"] == "failed"
+    # Acceptance records whether execution began; it is not a completion receipt.
+    assert result["dispatch"]["accepted"] is started
+    assert execution_result_error(result) == result["dispatch"]["message"]
+    assert execution_result_outcome_unknown(result) is started
+    persisted = svc._messages.read_all_message_rows()[-1]
+    assert persisted["cli_execution"]["termination_reason"] == result["termination_reason"]
+    assert persisted["cli_execution"]["partial_text"] == partial
+    assert partial in result["assistant_message"]["body"]
+    svc.list_messages(user_id=7)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("termination", ["idle:1", "hardcap:1"])
+def test_codex_public_timeout_takes_precedence_over_text_and_zero_exit(
+    tmp_path, monkeypatch, termination
+):
+    svc = CodexSuperEmployeeService(storage_root=tmp_path)
+    monkeypatch.setattr(svc, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(svc, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(svc, "_run_cli_idle", lambda *args: (0, "partial result", "", termination))
+    result = svc.invoke(user_id=1, message="描述当前任务", context={"mode": "chat"})
+    assert result["error_code"] == "cli_timeout"
+    assert result["termination_reason"] == termination
+    assert result["partial_text"] == "partial result"
+    assert result["assistant_message"]["status"] == "failed"
+
+
+def test_failed_local_fallback_preserves_dispatch_acceptance_and_stops_replay(
+    tmp_path, monkeypatch
+):
+    calls = []
+
+    def runner(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 9, "调用队列 partial local work", "fixture failure")
+
+    svc = CodexSuperEmployeeService(storage_root=tmp_path, codex_cli_runner=runner)
+    monkeypatch.setattr(svc, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(svc, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(
+        svc, "_dispatch", lambda request: {"accepted": False, "queued": True, "status": "queued"}
+    )
+    result = svc.invoke(user_id=1, message="修复登录问题", context={"mode": "code"})
+    assert result["dispatch"]["accepted"] is False
+    assert result["dispatch"]["status"] == "failed"
+    assert result["dispatch"]["queued"] is False
+    assert result["dispatch"]["fallback"] == "codex_cli"
+    assert result["partial_text"] == "调用队列 partial local work"
+    svc.list_messages(user_id=1)
+    svc.list_messages(user_id=1)
+    assert len(calls) == 1
+
+
+def test_history_read_never_starts_a_cli_attempt(tmp_path, monkeypatch):
+    calls = []
+
+    def runner(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 7, "调用队列 partial backfill", "fixture failure")
+
+    svc = CodexSuperEmployeeService(storage_root=tmp_path, codex_cli_runner=runner)
+    monkeypatch.setattr(svc, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(svc, "_cli_workspace", lambda context: str(tmp_path))
+    svc._append_messages(
+        [
+            svc._message_row(
+                user_id=1,
+                role="user",
+                body="解释这段对话",
+                created_at="fixture",
+                request_id="pending-reply",
+                status="sent",
+            )
+        ]
+    )
+    first = svc.list_messages(user_id=1)
+    second = svc.list_messages(user_id=1)
+    assert first == second
+    assert len(first) == 1 and first[0]["status"] == "sent"
+    assert "cli_execution" not in svc._messages.read_all_message_rows()[-1]
+    assert calls == []

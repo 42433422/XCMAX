@@ -1,37 +1,6 @@
-import { session, type Session } from 'electron'
+import { session } from 'electron'
 import { DEFAULT_PORT } from './desktop-config'
 import { isTrustedDesktopOrigin } from './desktop-navigation'
-import { desktopWorkspaceToken } from './backend-env'
-import { isTrustedIpcSender } from './ipc-sender-guard'
-import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
-
-/** Authenticate the anonymous local workspace without disclosing the token to JS. */
-export function installDesktopWorkspaceCapability(ses: Session = session.defaultSession): void {
-  // All URLs must be intercepted: redirects must not carry a capability off-origin.
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = { ...details.requestHeaders }
-    for (const name of Object.keys(headers)) {
-      if (name.toLowerCase() === 'x-xcagi-workspace-capability') delete headers[name]
-    }
-    try {
-      const target = new URL(details.url)
-      if (hasVerifiedDesktopBackend() && details.resourceType === 'xhr'
-        && !target.username && !target.password
-        && target.pathname.startsWith('/api/local-workspace/')
-        && isTrustedDesktopOrigin(target.href, DEFAULT_PORT)
-        && details.frame && target.origin === new URL(details.frame.url).origin
-        && isTrustedIpcSender(
-          { sender: { id: details.webContentsId ?? -1 }, senderFrame: details.frame },
-          desktopRuntime.mainWindow,
-          { port: DEFAULT_PORT, splashUrl: '' },
-          [...desktopRuntime.auxiliaryWindows],
-        )) {
-        headers['X-XCAGI-Workspace-Capability'] = desktopWorkspaceToken
-      }
-    } catch { /* A destroyed frame or invalid URL never receives a capability. */ }
-    callback({ requestHeaders: headers })
-  })
-}
 
 /**
  * 媒体权限（麦克风/音频）仅放行可信本地 origin。
@@ -61,15 +30,8 @@ export function configureDesktopMediaPermissions(): void {
 }
 
 /**
- * 桌面端 CSP 纵深防御兜底。
- *
- * 常规路径：后端（XCAGI_DESKTOP_MODE=1）已在 SecurityHeadersMiddleware 为本地方向
- * 注入 CSP 头（见 app/middleware/security_headers.py）。Electron 主进程看不到 HTTP
- * 响应头，electronegativity 因此误报 CSP_GLOBAL_CHECK。
- *
- * 本模块在 Electron 层做兜底：仅当响应自带 CSP 且资源是可信任本地主文档时，才注入
- * 一份与后端桌面模式一致的 CSP。若后端已注入则原样保留，绝不叠加多个 CSP header
- * —— 浏览器会取多个 CSP 的交集（更严格），叠加易导致 SPA 脚本/字体/WebSocket 被误拦。
+ * 可信本地主文档没有 CSP 时才注入后端桌面策略。
+ * 已有策略（包括仅含 script-src 的策略及多个策略）原样保留，避免放宽响应的限制。
  */
 const DESKTOP_FALLBACK_CSP = [
   "default-src 'self'",
@@ -101,7 +63,7 @@ export function resolveDesktopCspInjection(input: {
   const hasExistingCsp = Object.entries(headers).some(
     ([key, values]) =>
       key.toLowerCase() === 'content-security-policy' &&
-      (values || []).some(value => String(value).includes('default-src')),
+      (values || []).some(value => String(value).trim().length > 0),
   )
   if (
     hasExistingCsp ||

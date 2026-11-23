@@ -219,35 +219,38 @@ def test_chat_invalid_credentials_do_not_downgrade(sessions, monkeypatch):
 
 
 def test_delegate_keeps_original_actor_and_rejects_revocation(sessions):
-    from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_runtime.gateway import _trusted_context
     from app.db.models.user import Session
     from app.fastapi_routes.xcagi_compat_chat_helpers import (
         _runtime_context_with_authenticated_actor,
     )
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
     from app.utils.time import utc_now_naive
 
     ctx = _runtime_context_with_authenticated_actor(request("valid"), {"tenant_id": "999"})
     before = deepcopy(ctx["_actor_authorization"])
-    merged = AIChatApplicationService._merge_tool_runtime_context("conversation-999", "hello", ctx)
+    ctx["turn_id"] = "host-request"
+    merged, owner = _trusted_context(ctx)
+    assert owner == "71"
     assert merged["user_id"] == "71" and merged["_actor_authorization"] == before
     forged = deepcopy(ctx)
     forged["_actor_authorization"]["proof"] = "not-a-server-proof"
-    with pytest.raises(RuntimeContextOwnershipError):
-        AIChatApplicationService._merge_tool_runtime_context("71", "write", forged)
+    with pytest.raises(AgentModAuthorizationError):
+        _trusted_context(forged)
     with sessions() as db:
         row = db.query(Session).filter_by(session_id="valid").one()
         row.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
-    with pytest.raises(RuntimeContextOwnershipError):
-        AIChatApplicationService._merge_tool_runtime_context("71", "write", ctx)
+    with pytest.raises(AgentModAuthorizationError):
+        _trusted_context(ctx)
 
 
 def test_anonymous_conversation_never_supplies_executor_identity(sessions):
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.agent_runtime.gateway import _trusted_context
     from app.fastapi_routes.xcagi_compat_chat_helpers import (
         _runtime_context_with_authenticated_actor,
     )
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 
     context = _runtime_context_with_authenticated_actor(
         request(),
@@ -261,9 +264,8 @@ def test_anonymous_conversation_never_supplies_executor_identity(sessions):
         },
     )
     assert context == {}
-    merged = AIChatApplicationService._merge_tool_runtime_context("71", "hello", context)
-    assert merged["conversation_id"] == "71"
-    assert "user_id" not in merged and "_actor_authorization" not in merged
+    with pytest.raises(AgentModAuthorizationError):
+        _trusted_context(context)
 
 
 @pytest.mark.parametrize("kind", ["mobile", "web"])

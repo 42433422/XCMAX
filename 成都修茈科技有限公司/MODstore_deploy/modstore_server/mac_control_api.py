@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Literal
@@ -28,6 +29,7 @@ from modstore_server.mac_control_transport import stale_window
 from modstore_server.models import User
 
 router = APIRouter(prefix="/api/admin/mac-control", tags=["mac-control"])
+logger = logging.getLogger(__name__)
 
 
 class TaskRequest(BaseModel):
@@ -125,7 +127,8 @@ def task_detail(
                 payload = view(task)
             payload["evidence_checked_at"] = time.time()
         except ParaUnavailable as exc:
-            payload["evidence_error"] = str(exc)
+            logger.warning("Mac control evidence refresh failed: %s", exc)
+            payload["evidence_error"] = "执行证据暂时无法核验"
         finally:
             if client:
                 client.close()

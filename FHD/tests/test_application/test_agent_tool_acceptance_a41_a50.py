@@ -64,6 +64,29 @@ def _ocr_effect_probe(tmp_path):
     return ocr, effects
 
 
+def _assert_ocr_publication_pending(response, repo, request_id):
+    """Publication is a real effect; it does not prove an independently read OCR result."""
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["success"] is False and body["published"] is True
+    assert body["error_code"] == "result_verification_inconclusive"
+    assert body["verification_code"] == "result_verifier_unavailable"
+    assert body["retryable"] is False and body["reconciliation_required"] is True
+    assert body["outcome"] == "unknown"
+    assert body["request_id"] == request_id and body["agent_status"] == "blocked"
+    run = repo.get(body["run_id"])
+    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.status == "completed" and call.output["request_id"] == request_id
+    assert call.output["success"] is True and call.output["published"] is True
+    report = call.metadata["verification"]
+    assert report["status"] == "inconclusive" and report["accepted"] is False
+    assert report["code"] == "result_verifier_unavailable"
+    assert all(check["status"] != "passed" for check in report["checks"])
+    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    return run
+
+
 @pytest.fixture(autouse=True)
 def _clear_replay():
     clear_idempotent_replay_for_tests()
@@ -153,7 +176,7 @@ def test_permission_revocation_blocks_the_next_call(
             "/api/tools/execute",
             json={**payload, "params": {**payload["params"], "request_id": "revoke-2"}},
         )
-    assert allowed.status_code == 200 and allowed.json()["success"] is True
+    _assert_ocr_publication_pending(allowed, repo, "revoke-1")
     assert denied.status_code == 202
     assert denied.json()["success"] is False
     assert denied.json()["error_code"] == "tool_permission_denied"
@@ -288,14 +311,10 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
                     },
                 },
             )
-            assert response.status_code == 200, response.text
-            body = response.json()
-            assert body["success"] is True
-            run = repo.get(body["run_id"])
-            assert run is not None and run.tool_calls
+            run = _assert_ocr_publication_pending(response, repo, f"real-{index}")
             call = run.tool_calls[0]
             started = next(item for item in run.events if item.event_type == "tool.started")
-            assert started.data["trace_id"] == run.run_id
+            assert started.data["trace_id"] == run.metadata["trace_id"]
             assert started.data["tool_id"] == "ocr"
             assert started.data["user_id"] == "50"
             assert started.data["tenant_id"] == "50"
@@ -314,7 +333,7 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
                 },
             },
         )
-        assert replay.status_code == 200 and replay.json()["success"] is True
+        _assert_ocr_publication_pending(replay, repo, "real-0")
         other_response = _client(other).post(
             "/api/tools/execute",
             json={
@@ -328,10 +347,14 @@ def test_thirty_real_calls_match_sqlite_and_do_not_replay_side_effects(
                 },
             },
         )
-    assert other_response.status_code == 200
+    other_run = _assert_ocr_publication_pending(other_response, repo, "real-other")
+    assert other_run.metadata["runtime_context"]["tenant_id"] == str(other.tenant_id)
     rows = connection.execute("select code, tenant from effects order by code").fetchall()
     connection.close()
     assert len(rows) == 31
+    assert {code for code, _tenant in rows} == {f"real-{index}" for index in range(30)} | {
+        "real-other"
+    }
     assert rows.count(("real-0", "50")) == 1
     assert ocr.emit_ocr_requested.call_count == 31
 

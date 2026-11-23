@@ -70,6 +70,7 @@ from app.domain.neuro.processors.conscious import (
 )
 from app.domain.value_objects import ContactInfo
 from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ===========================================================================
 # Shared fixtures
@@ -544,6 +545,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "ledger": 0,
             "conversation": 0,
             "push": 0,
+            "cognition": 0,
             "erp": 0,
         }
 
@@ -575,6 +577,9 @@ class TestInitDbRuntimeAuthBootstrap:
         def fake_push(engine, *, database_url=None, swallow_errors=True):
             called["push"] += 1
 
+        def fake_cognition(engine, *, database_url=None, swallow_errors=True):
+            called["cognition"] += 1
+
         def fake_erp(engine, *, database_url=None, swallow_errors=True):
             called["erp"] += 1
 
@@ -586,6 +591,7 @@ class TestInitDbRuntimeAuthBootstrap:
         monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
         monkeypatch.setattr("app.db.init_db.ensure_ai_conversation_bootstrap", fake_conversation)
         monkeypatch.setattr("app.db.init_db.ensure_mobile_push_bootstrap", fake_push)
+        monkeypatch.setattr("app.db.init_db.ensure_enterprise_cognition_bootstrap", fake_cognition)
         monkeypatch.setattr("app.db.init_db.ensure_erp_bootstrap", fake_erp)
 
         ensure_runtime_auth_bootstrap()
@@ -598,6 +604,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "ledger": 1,
             "conversation": 1,
             "push": 1,
+            "cognition": 1,
             "erp": 1,
         }
 
@@ -2479,12 +2486,13 @@ class TestExcelAiFileAnalyze:
 class TestExcelAiSqliteImport:
     """Cover ``ai_sqlite_import_unit_products`` endpoint."""
 
-    def test_sqlite_import_success(self, excel_client, local_tools):
+    def test_sqlite_import_success(self, excel_client, local_tools, trusted_actor):
         from app.application.agent_orchestrator import (
             AgentOrchestrator,
             InMemoryAgentRunRepository,
         )
 
+        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
         repo = InMemoryAgentRunRepository()
         with (
             patch(
@@ -2504,13 +2512,16 @@ class TestExcelAiSqliteImport:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name": "Acme"},
+                headers=actor.headers,
             )
             assert response.status_code == 202
             body = response.json()
+            assert body["success"] is False
             run_id = body["run_id"]
             run = repo.get(run_id)
             assert run is not None
             assert run.status == "waiting_user"
+            assert run.user_id == str(actor.user_id)
             assert run.intent == "import_unit_products_db"
             assert run.steps[0].tool_id == "unit_products_import"
             assert run.steps[0].action == "execute_import"
@@ -2518,22 +2529,42 @@ class TestExcelAiSqliteImport:
 
             completed = AgentOrchestrator(repository=repo).continue_run(
                 run_id,
-                approved_by="pytest",
+                approved_by=str(actor.user_id),
             )
 
         assert completed is not None
-        assert completed.status == "completed"
+        assert completed.status == "blocked"
+        proof = completed.tool_calls[-1].metadata["verification"]
+        assert proof["status"] == "inconclusive" and proof["accepted"] is False
+        assert proof["code"] == "result_verifier_unavailable"
+        assert completed.tool_calls[-1].output["success"] is True
+        assert completed.final_output.get("business_result", {}).get("success") is not True
+        events = {event.event_type for event in completed.events}
+        assert {"step.approved", "tool.started", "verification.inconclusive"} <= events
+        assert not {"tool.completed", "run.completed"} & events
         mock_service.import_unit_products.assert_called_once_with(
             saved_name="test.xlsx",
             unit_name="Acme",
             create_purchase_unit=True,
             skip_duplicates=True,
         )
-        output = completed.final_output["node_outputs"]["import_unit_products"]
+        output = completed.tool_calls[-1].output
         assert output["success"] is True
         assert output["created_customers"] == 1
         assert output["created_products"] == 5
         assert output["data"]["unit_name"] == "Acme"
+
+    def test_sqlite_import_forged_identity_cannot_create_run(self, excel_client):
+        with patch(
+            "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan"
+        ) as start:
+            response = excel_client.post(
+                "/api/ai/sqlite/import_unit_products",
+                json={"saved_name": "test.xlsx", "unit_name": "Acme", "user_id": "1"},
+                headers={"X-User-Id": "1", "X-Tenant-ID": "7"},
+            )
+        assert response.status_code == 401
+        start.assert_not_called()
 
     def test_sqlite_import_failure_returns_400(self, excel_client):
         with patch("app.application.get_unit_products_import_app_service") as mock_get:
@@ -2544,7 +2575,8 @@ class TestExcelAiSqliteImport:
         mock_get.assert_not_called()
         assert response.status_code == 400
 
-    def test_sqlite_import_exception_returns_500(self, excel_client):
+    def test_sqlite_import_exception_returns_500(self, excel_client, trusted_actor):
+        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
         with patch(
             "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
             side_effect=RuntimeError("db error"),
@@ -2552,12 +2584,14 @@ class TestExcelAiSqliteImport:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name": "Acme"},
+                headers=actor.headers,
             )
         assert response.status_code == 500
 
-    def test_sqlite_import_with_unit_name_guess(self, excel_client):
+    def test_sqlite_import_with_unit_name_guess(self, excel_client, trusted_actor):
         from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
+        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
         repo = InMemoryAgentRunRepository()
         with patch(
             "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -2566,6 +2600,7 @@ class TestExcelAiSqliteImport:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name_guess": "Guessed"},
+                headers=actor.headers,
             )
         assert response.status_code == 202
         run = repo.get(response.json()["run_id"])

@@ -21,7 +21,13 @@ class HybridRiskGate:
         actions: list[dict[str, Any]] = []
         for node in plan.nodes:
             spec = get_autonomy_guard().get_action_spec(node.tool_id, node.action)
-            risk = node.risk if spec is not None or node.tool_id == "clarify" else "blocked"
+            # 注册表声明为只读的动作不受规划器自评风险影响，避免只读查询被重复审批。
+            read_only = bool(isinstance(spec, dict) and spec.get("read_only") is True)
+            risk = (
+                "low"
+                if read_only
+                else (node.risk if spec is not None or node.tool_id == "clarify" else "blocked")
+            )
             decision = evaluate_risk(
                 {
                     "action": f"{node.tool_id}.{node.action}",

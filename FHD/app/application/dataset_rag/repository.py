@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from app.application.dataset_rag.models import (
     _chunk_to_dict,
@@ -28,11 +29,17 @@ class DatasetRepository:
         self._prepare_loaded_state = prepare_loaded_state
         self.lock = DatasetStateLock(self)
 
-    def read_rebuild_state(self, dataset_id: str) -> _DatasetState | None:
+    def read_committed_dataset(self, dataset_id: str) -> dict[str, Any] | None:
         # _persist_locked publishes with atomic replace: one read sees one committed
         # JSON generation, not a transaction spanning the vector index or ledger.
         # Never acquire the writer lock or run projection/recovery initialization.
-        raw = json.loads(self.storage_path.read_text(encoding="utf-8"))
+        from app.application.dataset_rag.store_identity import MAX_STORE_BYTES, _constant, _pairs
+
+        with self.storage_path.open("rb") as stream:
+            encoded = stream.read(MAX_STORE_BYTES + 1)
+        if len(encoded) > MAX_STORE_BYTES:
+            raise ValueError("dataset snapshot exceeds limit")
+        raw = json.loads(encoded, object_pairs_hook=_pairs, parse_constant=_constant)
         if (
             not isinstance(raw, dict)
             or type(raw.get("version")) is not int
@@ -43,11 +50,15 @@ class DatasetRepository:
         if dataset_id not in raw["datasets"]:
             return None
         payload = raw["datasets"][dataset_id]
-        if (
-            not isinstance(payload, dict)
-            or payload.get("dataset_id") != dataset_id
-            or not isinstance(payload.get("rebuild_jobs"), dict)
-        ):
+        if not isinstance(payload, dict) or payload.get("dataset_id") != dataset_id:
+            raise ValueError("invalid dataset snapshot")
+        return payload
+
+    def read_rebuild_state(self, dataset_id: str) -> _DatasetState | None:
+        payload = self.read_committed_dataset(dataset_id)
+        if payload is None:
+            return None
+        if not isinstance(payload.get("rebuild_jobs"), dict):
             raise ValueError("invalid rebuild snapshot")
         state = _DatasetState(dataset_id)
         for job_id, row in payload["rebuild_jobs"].items():

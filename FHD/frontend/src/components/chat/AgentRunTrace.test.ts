@@ -50,6 +50,21 @@ function makeTrace(status: AgentRunTraceData['status'] = 'waiting'): AgentRunTra
 }
 
 describe('AgentRunTrace', () => {
+  it('shows failure details and diagnostic identity without losing a measured zero', () => {
+    const trace: AgentRunTraceData = {
+      run_id: 'run-failed', trace_id: 'trace-a', intent: '', status: 'failed', terminal: true, total_duration_ms: 0,
+      phases: [{ kind: 'run', title: '执行失败', status: 'failed', started_event_id: 'failed',
+        trace_id: 'trace-a', span_id: 'span-a', error_code: 'tool_timeout', detail: '等待工具回执超时', duration_ms: 0 }],
+    }
+    const wrapper = mount(AgentRunTrace, { props: { trace } })
+    expect(wrapper.get('.art-duration').text()).toBe('0ms')
+    expect(wrapper.text()).toContain('等待工具回执超时')
+    expect(wrapper.text()).toContain('tool_timeout')
+    expect(wrapper.text()).toContain('trace-a')
+    expect(wrapper.text()).toContain('run-failed')
+    expect(wrapper.text()).toContain('span-a')
+  })
+
   afterEach(() => {
     clearToolPermission('browser_search')
     mermaidRender.mockClear()

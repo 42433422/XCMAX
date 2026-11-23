@@ -7,7 +7,7 @@ Create Date: 2026-07-26
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -58,13 +58,13 @@ def _seed_elt_permissions(bind) -> None:
                     INSERT INTO permissions (name, code, description, module, created_at)
                     VALUES (:name, :code, :description, :module, :created_at)
                     """
-                ),
+                ).bindparams(sa.bindparam("created_at", type_=sa.DateTime())),
                 {
                     "name": name,
                     "code": code,
                     "description": "",
                     "module": "elt",
-                    "created_at": datetime.utcnow(),
+                    "created_at": datetime.now(UTC).replace(tzinfo=None),
                 },
             )
             permission_id = bind.execute(
@@ -133,9 +133,7 @@ def upgrade() -> None:
     op.create_index("ix_elt_uploads_tenant_id", "elt_uploads", ["tenant_id"])
     op.create_index("ix_elt_uploads_owner_user_id", "elt_uploads", ["owner_user_id"])
     op.create_index("ix_elt_upload_owner", "elt_uploads", ["tenant_id", "owner_user_id"])
-    op.create_index(
-        "ix_elt_upload_sha256", "elt_uploads", ["tenant_id", "owner_user_id", "sha256"]
-    )
+    op.create_index("ix_elt_upload_sha256", "elt_uploads", ["tenant_id", "owner_user_id", "sha256"])
 
     op.create_table(
         "elt_templates",
@@ -172,7 +170,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("template_id", "version", name="uq_elt_template_version"),
     )
-    op.create_index("ix_elt_template_versions_template_id", "elt_template_versions", ["template_id"])
+    op.create_index(
+        "ix_elt_template_versions_template_id", "elt_template_versions", ["template_id"]
+    )
     op.create_index("ix_elt_template_versions_tenant_id", "elt_template_versions", ["tenant_id"])
     op.create_index(
         "ix_elt_template_versions_owner_user_id", "elt_template_versions", ["owner_user_id"]
@@ -189,9 +189,7 @@ def upgrade() -> None:
         *_tenant_owner_columns(),
         sa.Column("upload_id", sa.String(36), sa.ForeignKey("elt_uploads.id"), nullable=False),
         sa.Column("template_id", sa.String(36), sa.ForeignKey("elt_templates.id")),
-        sa.Column(
-            "template_version_id", sa.String(36), sa.ForeignKey("elt_template_versions.id")
-        ),
+        sa.Column("template_version_id", sa.String(36), sa.ForeignKey("elt_template_versions.id")),
         sa.Column("target_type", sa.String(64), nullable=False),
         sa.Column("status", sa.String(32), nullable=False, server_default="queued"),
         sa.Column("stage", sa.String(32), nullable=False, server_default="queued"),
@@ -258,12 +256,8 @@ def upgrade() -> None:
     op.create_index("ix_elt_run_rows_run_id", "elt_run_rows", ["run_id"])
     op.create_index("ix_elt_run_rows_tenant_id", "elt_run_rows", ["tenant_id"])
     op.create_index("ix_elt_run_rows_owner_user_id", "elt_run_rows", ["owner_user_id"])
-    op.create_index(
-        "ix_elt_run_rows_owner", "elt_run_rows", ["tenant_id", "owner_user_id"]
-    )
-    op.create_index(
-        "ix_elt_run_rows_run_action", "elt_run_rows", ["run_id", "final_action"]
-    )
+    op.create_index("ix_elt_run_rows_owner", "elt_run_rows", ["tenant_id", "owner_user_id"])
+    op.create_index("ix_elt_run_rows_run_action", "elt_run_rows", ["run_id", "final_action"])
 
     op.create_table(
         "elt_target_configs",
@@ -281,9 +275,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_elt_target_configs_tenant_id", "elt_target_configs", ["tenant_id"])
-    op.create_index(
-        "ix_elt_target_configs_owner_user_id", "elt_target_configs", ["owner_user_id"]
-    )
+    op.create_index("ix_elt_target_configs_owner_user_id", "elt_target_configs", ["owner_user_id"])
     op.create_index(
         "ix_elt_target_config_owner",
         "elt_target_configs",

@@ -1,8 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
 import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
+import type { AgentRunResponse, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
 
 vi.mock('@/utils', () => ({ downloadBlob: vi.fn() }))
 
@@ -26,11 +29,29 @@ const task = {
 }
 
 describe('AgentTaskRuntimePanel', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   const mountTask = (overrides: Record<string, unknown> = {}) =>
     mount(AgentTaskRuntimePanel, {
       props: { task: { ...task, ...overrides } },
       global: { mocks: { $t: (key: string) => key } },
     })
+
+  function verificationTask(status: AgentVerificationStatus = 'inconclusive') {
+    const report: AgentVerificationReport = {
+      protocol: 'xcagi.result-verification.v1',
+      status,
+      accepted: ['verified', 'not_required'].includes(status),
+      independently_verified_steps: status === 'verified' ? 1 : 0,
+      contract_only_steps: 1,
+      steps: [{ call_id: 'call-1', contract_sha256: 'contract', status, checks: [{ code: 'persisted_effect', passed: status === 'verified' }] }],
+    }
+    return {
+      ...task,
+      status: 'blocked' as const,
+      payload: { activeRunId: 'run-1', rawRunStatus: 'blocked', finalOutput: { verification: report } },
+    }
+  }
 
   it('downloads an owned artifact and retains a retry action after failure', async () => {
     const blob = new Blob(['spreadsheet'])
@@ -217,5 +238,140 @@ describe('AgentTaskRuntimePanel', () => {
     expect(summary).toContain('订单 ID：41')
     expect(summary).toContain('业务单号：SO-0041')
     expect(summary).not.toContain('内部节点文本')
+  })
+
+  it.each([
+    ['verified', '独立核验通过'],
+    ['failed', '核验未通过'],
+    ['inconclusive', '结果待核验，证据暂不可确认'],
+    ['pending', '等待核验'],
+    ['not_required', '已完成输出契约检查，无需独立读回'],
+    ['not_verified', '尚无独立核验证据'],
+  ] as const)('explains %s verification separately from execution and keeps checks in advanced details', (status, label) => {
+    const wrapper = mountTask(verificationTask(status))
+    const report = wrapper.get('.agent-result-verification')
+    expect(report.text()).toContain('独立结果核验')
+    expect(report.text()).toContain(label)
+    expect(report.text()).toContain(`独立通过 ${status === 'verified' ? 1 : 0} 步 · 仅契约检查 1 步`)
+    expect(report.text()).not.toContain('persisted_effect')
+    expect(wrapper.get('.agent-verification-details').text()).toContain('persisted_effect')
+    expect(wrapper.get('.agent-result-evidence').attributes('open')).toBeUndefined()
+  })
+
+  it('does not present an unverified successful receipt as a successful business result', () => {
+    const source = verificationTask('failed')
+    const wrapper = mountTask({
+      ...source,
+      payload: { ...source.payload, finalOutput: { ...source.payload.finalOutput, business_result: { summary: '订单创建成功' } } },
+    })
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果尚未完成核验')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+    expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
+  })
+
+  it('does not claim a saved receipt while execution has only frozen a pending contract', () => {
+    const source = verificationTask('pending')
+    source.payload.finalOutput.verification.steps = [{ call_id: 'call-1', status: 'pending', code: 'awaiting_execution_receipt', checks: [] }]
+    const wrapper = mountTask({ ...source, status: 'running', payload: { ...source.payload, rawRunStatus: 'running' } })
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果尚未完成核验')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('回执已保存')
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it('makes the limited scope of file integrity verification visible outside advanced details', () => {
+    const source = verificationTask('verified')
+    source.payload.finalOutput.verification.steps.push({
+      call_id: 'file-call', status: 'verified',
+      checks: [{ evidence: { verification_scope: 'artifact_integrity', format: 'pdf' } }],
+    })
+    const wrapper = mountTask(source)
+    expect(wrapper.get('.agent-result-verification').text()).toContain('文件核验涵盖完整性与可读结构；业务语义仍需按任务要求验收。')
+    expect(wrapper.get('.agent-result-verification').text()).not.toContain('artifact_integrity')
+    expect(wrapper.get('.agent-result-evidence').attributes('open')).toBeUndefined()
+  })
+
+  it.each(['completed', 'running', 'cancelled', 'waiting_user'])('does not offer reverification for %s execution', (rawRunStatus) => {
+    const source = verificationTask()
+    const wrapper = mountTask({ ...source, payload: { ...source.payload, rawRunStatus } })
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it('does not offer reverification for a historical result without a frozen contract report', () => {
+    const source = verificationTask('not_verified')
+    source.payload.finalOutput.verification.steps = [{ status: 'not_verified', code: 'historical_receipt_has_no_verification_contract' }]
+    const wrapper = mountTask(source)
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it('disables duplicate verification and refreshes without accepting transport success', async () => {
+    let resolve!: (response: AgentRunResponse) => void
+    const verify = vi.spyOn(agentRunsApi, 'verifyRun').mockImplementation(() => new Promise((done) => { resolve = done }))
+    const retry = vi.spyOn(agentRunsApi, 'retryRun')
+    const source = verificationTask()
+    const wrapper = mountTask(source)
+    const action = wrapper.get('.agent-verification-action')
+    await action.trigger('click')
+    expect(action.attributes('disabled')).toBeDefined()
+    expect(action.text()).toBe('正在核验…')
+    await action.trigger('click')
+    expect(verify).toHaveBeenCalledTimes(1)
+    expect(verify).toHaveBeenCalledWith('run-1')
+    resolve({ success: true, verification: source.payload.finalOutput.verification })
+    await flushPromises()
+    expect(action.attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.agent-result-verification [role="status"]').text()).toContain('结果仍待核验')
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    expect(wrapper.props('task').status).toBe('blocked')
+    expect(retry).not.toHaveBeenCalled()
+    expect(wrapper.emitted('retry')).toBeUndefined()
+  })
+
+  it('refreshes an accepted report through the original task flow without setting completed locally', async () => {
+    vi.spyOn(agentRunsApi, 'verifyRun').mockResolvedValue({ success: true, verification: verificationTask('verified').payload.finalOutput.verification })
+    const source = verificationTask()
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-verification-action').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.agent-result-verification [role="status"]').text()).toContain('正在更新任务状态')
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    expect(wrapper.props('task').status).toBe('blocked')
+    expect(source.payload.finalOutput.verification.status).toBe('inconclusive')
+  })
+
+  it.each(['rejected', 'transport'])('keeps the original run on %s failure and offers verification again', async (failure) => {
+    const verify = vi.spyOn(agentRunsApi, 'verifyRun')
+    if (failure === 'rejected') verify.mockResolvedValue({ success: false })
+    else verify.mockRejectedValue(new Error('network unavailable'))
+    const retry = vi.spyOn(agentRunsApi, 'retryRun')
+    const wrapper = mountTask(verificationTask())
+    await wrapper.get('.agent-verification-action').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.agent-result-verification [role="alert"]').text()).toContain('重新核验失败')
+    expect(wrapper.get('.agent-verification-action').attributes('disabled')).toBeUndefined()
+    expect(wrapper.props('task').status).toBe('blocked')
+    expect(retry).not.toHaveBeenCalled()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+  })
+
+  it.each(['run', 'task', 'account', 'mod', 'unmount'])('retires a late verification response when the %s changes', async (change) => {
+    let resolve!: (response: AgentRunResponse) => void
+    vi.spyOn(agentRunsApi, 'verifyRun').mockImplementation(() => new Promise((done) => { resolve = done }))
+    const source = verificationTask()
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-verification-action').trigger('click')
+    if (change === 'run') await wrapper.setProps({ task: { ...source, payload: { ...source.payload, activeRunId: 'run-2' } } })
+    if (change === 'task') await wrapper.setProps({ task: { ...source, id: 'agent_task_task-2' } })
+    if (change === 'account') productReadAccountEpoch.value++
+    if (change === 'mod') writeActiveExtensionModIdToStorage('another-mod')
+    if (change === 'unmount') wrapper.unmount()
+    resolve({ success: true, verification: verificationTask('verified').payload.finalOutput.verification })
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+    if (change !== 'unmount') {
+      expect(wrapper.find('.agent-result-verification [role="status"]').exists()).toBe(false)
+      expect(wrapper.find('.agent-result-verification [role="alert"]').exists()).toBe(false)
+      wrapper.unmount()
+    }
+    if (change === 'mod') writeActiveExtensionModIdToStorage(null)
   })
 })

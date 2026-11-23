@@ -20,6 +20,8 @@ def execution_succeeded(result: Any) -> bool:
         or result.get("handler_failed")
         or result.get("blocked_by_risk_gate")
         or result.get("partial")
+        or result.get("isError") is True
+        or execution_requires_reconciliation(result)
         or (result.get("accepted") is True and result.get("completed") is not True)
         or result.get("outcome") == "unknown"
         or result.get("requires_reconciliation")
@@ -40,6 +42,14 @@ def execution_succeeded(result: Any) -> bool:
             "reconciling",
             "dispatching",
             "blocked_by_risk_gate",
+            "blocked",
+            "cancelled",
+            "canceled",
+            "timed_out",
+            "aborted",
+            "rejected",
+            "declined",
+            "waiting_approval",
         }
     ):
         return False
@@ -50,6 +60,9 @@ def execution_succeeded(result: Any) -> bool:
             and result.get("completed") is True
             and bool(_para_task_id(result))
         )
+    outputs = result.get("outputs")
+    if isinstance(outputs, list) and outputs:
+        return _handler_outputs_succeeded(outputs)
     nested = result.get("result")
     if isinstance(nested, dict) and nested:
         if any(
@@ -105,7 +118,13 @@ def execution_requires_reconciliation(result: Any) -> bool:
     """An error or lost response does not prove that accepted work stopped."""
     if not isinstance(result, dict):
         return False
-    if result.get("outcome") == "unknown" or result.get("requires_reconciliation"):
+    if any(
+        result.get(key)
+        for key in ("requires_reconciliation", "reconciliation_required", "outcome_unknown")
+    ) or any(
+        str(result.get(key) or "").lower() in {"unknown", "reconciling", "outcome_unknown"}
+        for key in ("status", "execution_status", "execution_state", "outcome")
+    ):
         return True
     status = str(result.get("status") or result.get("execution_status") or "").lower()
     terminal = status in {

@@ -321,7 +321,6 @@ def test_customer_pg_insert_created_at_appended():
         patch(f"{MODULE}.append_mod_scope_where"),
         patch(f"{MODULE}._pg_purchase_unit_active_sql", return_value="is_active = true"),
         patch(f"{MODULE}._sql_select_from_where", return_value="SELECT …"),
-        patch(f"{MODULE}._sql_insert_returning", return_value="INSERT …"),
         patch(f"{MODULE}.utc_now_naive", return_value=now_val),
         patch(f"{MODULE}._customer_pg_fetch_by_id", return_value={"id": new_id}),
     ):

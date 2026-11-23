@@ -18,6 +18,7 @@ from app.application.elt import batch_continuation
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 from app.db.models.elt import EltRun, EltRunRow, EltTemplate, EltTemplateVersion, EltUpload
 from app.db.models.shipment import ShipmentRecord
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture(params=["memory", "sqlite"])
@@ -485,54 +486,52 @@ def test_continue_completed_shipments_only_reviews_proven_original_companions(mo
             batch_continuation.build_batch_continuation(scope)
 
 
-def test_continue_dispatch_uses_the_regular_approval_gate_without_replanning(monkeypatch):
+def test_formal_batch_continuation_uses_the_regular_durable_approval_gate(
+    monkeypatch, trusted_actor
+):
     from unittest.mock import Mock
 
-    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+    from app.application.agent_orchestrator import task_execution_repository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
 
+    actor = trusted_actor(role="admin")
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+    monkeypatch.setattr(task_execution_repository, "_task_execution_repository", queue)
+    executor = Mock()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.AgentToolExecutor", lambda: executor
+    )
     plan = PlanGraph(
         "continued",
         "续接原导入",
         nodes=[
             WorkflowNode(
-                "import",
-                "elt_import",
-                "execute",
-                {"file_paths": ["remaining"]},
-                risk="high",
-            )
+                "import", "elt_import", "execute", {"file_paths": ["remaining"]}, risk="high"
+            ),
         ],
     )
-    callbacks, planner, risk_gate, approval = Mock(), Mock(), Mock(), Mock()
-    callbacks._resume_pending_dynamic_workflow.return_value = (
-        True,
-        {"data": {"data": {"reason": "no_pending_workflow"}}},
+    run = AgentOrchestrator(repository=repository).start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="继续原导入",
+        plan=plan,
+        runtime_context={**actor.context, "task_id": "original-task"},
     )
-    callbacks._merge_tool_runtime_context.return_value = {"chat_approval_mode": "manual"}
-    callbacks._persist_plan_state.return_value = True
-    risk_gate.evaluate.return_value = SimpleNamespace(
-        allowed=True,
-        requires_confirmation=False,
-        blocked_nodes=[],
-        blocking_nodes=[],
-        denied_nodes=[],
-        reason="原任务续接",
-    )
-    approval.get_approval_required_nodes.return_value = plan.nodes
-    monkeypatch.setattr(
-        batch_continuation,
-        "build_batch_continuation",
-        lambda _: (plan, {"task_id": "original-task"}),
-    )
-    pending = {}
-    result = PlannedWorkflowDispatch(pending, callbacks, planner, risk_gate, approval).handle(
-        "user", "继续", "normal", {}, "继续"
-    )
-    planner.plan.assert_not_called()
-    risk_gate.evaluate.assert_called_once_with(plan=plan, context={})
-    assert pending["user"]["runtime_context"]["task_id"] == "original-task"
-    assert pending["user"]["approval_required"] is True
-    assert result["data"]["data"]["approval_required"] is True
+    assert run.status == "waiting_user", run.error
+    saved = repository.get(run.run_id)
+    assert saved.plan_id == plan.plan_id
+    assert saved.steps[0].status == "waiting_user"
+    assert saved.metadata["runtime_context"]["task_id"] == "original-task"
+    assert saved.steps[0].params == {"file_paths": ["remaining"]}
+    assert not saved.tool_calls
+    executor.execute.assert_not_called()
+    executor.execute_with_deadline.assert_not_called()
+    queued = queue.enqueue_waiting_approval(saved, approver=str(actor.user_id))
+    assert queued.state == "waiting_approval"
+    assert queue.claim("worker", lease_seconds=30) is None
+    assert not hasattr(AgentOrchestrator, "start_run")
 
 
 def test_shipment_readback_rejects_cleaned_or_replaced_business_rows():

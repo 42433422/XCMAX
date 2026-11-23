@@ -8,15 +8,6 @@ from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.application.aiopen.usage import UsageLedger
 
 
-def _authorization_worker(path, key, ready, proceed):
-    registry = ApiKeyRegistry(
-        RuntimeState({}), lambda: "", lambda _: "unused", lambda: 1000.0, storage=lambda: path
-    )
-    ready.put(registry.authorize(key, "ui_click")["ok"])
-    proceed.get(timeout=10)
-    ready.put(registry.authorize(key, "ui_click")["ok"])
-
-
 def _registry(tmp_path, *, env: str = ""):
     issued = count(1)
     return ApiKeyRegistry(
@@ -79,7 +70,10 @@ def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_p
 
 
 def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
-    from multiprocessing import get_context
+    """Use a real subprocess: pytest modules are not importable by spawn in CI."""
+    import subprocess
+    import sys
+    import time
 
     from app.domain.aiopen.principal import ScreenPrincipal
 
@@ -88,25 +82,53 @@ def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
     key = registry.generate(
         principal=owner, scopes=["ui_click"], expires_at=2000.0, client_key=True
     )["key"]
-    context = get_context("spawn")
-    ready, proceed = context.Queue(), context.Queue()
-    worker = context.Process(
-        target=_authorization_worker, args=(tmp_path / "keys.json", key, ready, proceed)
+    before, after, release = (tmp_path / name for name in ("before.txt", "after.txt", "release"))
+    # No test-module pickling: subprocess imports the production registry directly.
+    script = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState\n"
+        "storage, key, before, release, after = sys.argv[1:]\n"
+        "registry = ApiKeyRegistry(RuntimeState({}), lambda: '', lambda _: 'unused', "
+        "lambda: 1000.0, storage=lambda: Path(storage))\n"
+        "Path(before).write_text(str(registry.authorize(key, 'ui_click')['ok']))\n"
+        "deadline = time.monotonic() + 30\n"
+        "while not Path(release).exists() and time.monotonic() < deadline: time.sleep(0.03)\n"
+        "if not Path(release).exists(): sys.exit(2)\n"
+        "Path(after).write_text(str(registry.authorize(key, 'ui_click')['ok']))\n"
     )
-    worker.start()
+    storage = str(tmp_path / "keys.json")
+    worker = subprocess.Popen(
+        [sys.executable, "-c", script, storage, key, str(before), str(release), str(after)],
+        cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    def read_worker_result(path):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if path.exists():
+                return path.read_text() == "True"
+            if worker.poll() is not None:
+                raise AssertionError(f"worker exited {worker.returncode}: {worker.stderr.read()}")
+            time.sleep(0.05)
+        raise AssertionError(f"worker did not publish {path.name} within 30s")
+
     try:
-        assert ready.get(timeout=10) is True
+        assert read_worker_result(before) is True
         assert registry.revoke_client_key(owner) is True
-        proceed.put(True)
-        assert ready.get(timeout=10) is False
-        worker.join(timeout=10)
-        assert worker.exitcode == 0
+        release.touch()
+        assert read_worker_result(after) is False
+        worker.wait(timeout=10)
+        assert worker.returncode == 0, worker.stderr.read()
     finally:
-        if worker.is_alive():
-            worker.terminate()
-            worker.join(timeout=5)
-        ready.close()
-        proceed.close()
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait(timeout=5)
+        if worker.stderr is not None:
+            worker.stderr.close()
 
 
 def test_workers_do_not_overwrite_each_others_keys(tmp_path):

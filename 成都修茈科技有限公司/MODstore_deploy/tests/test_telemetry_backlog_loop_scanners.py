@@ -456,3 +456,35 @@ class TestScanWorkflowDrift:
         signals = tbl._scan_workflow_drift()
         assert len(signals) == 1
         assert signals[0]["payload"]["drifted_count"] == 2
+
+
+def test_run_telemetry_scan_reports_failures(monkeypatch):
+    """入库失败时 run_telemetry_scan 必须返回 ok=False，不能静默成功。"""
+    monkeypatch.setattr(tbl, "_telemetry_loop_enabled", lambda: True)
+    for name in (
+        "_scan_employee_execution_metrics",
+        "_scan_coverage_trend",
+        "_scan_ci_failure_rate",
+        "_scan_market_signals",
+        "_scan_auto_merge_metrics",
+        "_scan_security_scan_metrics",
+        "_scan_coverage_ratchet_gap",
+        "_scan_workflow_drift",
+    ):
+        monkeypatch.setattr(tbl, name, lambda *a, **k: [])
+    monkeypatch.setattr(
+        tbl,
+        "_scan_employee_execution_metrics",
+        lambda *a, **k: [{"type": "employee_execution", "payload": {}}],
+    )
+
+    def _boom(**kwargs):
+        raise tbl.RECOVERABLE_ERRORS[0]("db down")
+
+    monkeypatch.setattr(tbl, "ingest_telemetry_signal", _boom)
+
+    out = tbl.run_telemetry_scan()
+
+    assert out["ok"] is False
+    assert out["signals_failed"] == 1
+    assert out["errors"][0]["type"] == "employee_execution"

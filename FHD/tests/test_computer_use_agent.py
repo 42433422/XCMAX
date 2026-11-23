@@ -15,8 +15,11 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_planner_only_advertises_physical_actions_on_enabled_host(monkeypatch, enabled):
-    from app.application.workflow.llm_plan_generation import _tool_specs
+def test_canonical_catalog_only_advertises_physical_actions_on_enabled_host(monkeypatch, enabled):
+    from app.application.agent_orchestrator.tool_spec import (
+        build_tool_specs_v2,
+        invalidate_tool_specs_cache,
+    )
     from app.application.workflow.planning_graph_policy import filter_registry_for_profile
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -25,17 +28,25 @@ def test_planner_only_advertises_physical_actions_on_enabled_host(monkeypatch, e
     original = registry["desktop_automation"]["actions"]
     planner_registry = filter_registry_for_profile(registry, "pro_default")
     filtered = planner_registry["desktop_automation"]["actions"]
-    schema = _tool_specs({"desktop_automation": planner_registry["desktop_automation"]})[0]
-    offered = {action["action"]: action for action in schema["actions"]}
+    monkeypatch.setattr(
+        "app.services.tools_execution.registry.get_workflow_tool_registry", lambda: planner_registry
+    )
+    invalidate_tool_specs_cache()
+    offered = {
+        action: spec
+        for (tool, action), spec in build_tool_specs_v2().items()
+        if tool == "desktop_automation"
+    }
     physical = {"computer_observe", "computer_execute"}
     retained = {"list", "open_app", "computer_status", "computer_stop", "computer_result"}
     assert physical <= original.keys()
     assert retained <= offered.keys()
     assert physical.intersection(offered) == (physical if enabled else set())
     if enabled:
-        assert offered["computer_execute"]["risk"] == "high"
-        assert offered["computer_execute"]["idempotent"] is False
+        assert offered["computer_execute"].risk == "high"
+        assert offered["computer_execute"].idempotent is False
     assert all(filtered[action] == original[action] for action in filtered)
+    invalidate_tool_specs_cache()
 
 
 class FakeBrowser:
@@ -49,6 +60,8 @@ class FakeBrowser:
         assert verification == {"kind": "url", "expected": "https://example.com/"}
 
     def execute(self, steps, verification, *, cancelled):
+        from app.domain.browser_receipt import observed_assertion
+
         # Read the actual persisted run while executing, rather than injecting
         # an approval-shaped object into ComputerUseService._approved.
         runs = self.repository.list_recent(user_id="7")
@@ -66,6 +79,10 @@ class FakeBrowser:
             "executed": True,
             "steps_completed": 1,
             "status": "verified" if self.verified else "needs_verification",
+            "verification": observed_assertion(
+                verification,
+                "https://example.com/" if self.verified else "https://example.com/unfinished",
+            ),
         }
 
 
@@ -171,7 +188,9 @@ def test_computer_use_runs_only_after_persisted_agent_approval(
         assert completed.steps[0].status == "failed"
         # The existing executor preserves uncertain physical effects in its
         # reconciliation envelope rather than reporting a completed step.
-        evidence = completed.steps[0].output["reconciliation_evidence"]
+        evidence = completed.steps[0].output.get(
+            "reconciliation_evidence", completed.steps[0].output
+        )
         assert evidence["verified"] is False
         assert evidence["status"] == "needs_verification"
         assert evidence["steps_completed"] == 1

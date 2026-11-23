@@ -12,7 +12,7 @@ export type WorkflowEmployeeDatabaseLink = {
   empId: string
   /** vue-router name */
   routeName: string
-  /** 可选 query，如数据来源页预选微信本地库 */
+  /** 可选 query，如客来来预选消息工作区 */
   query?: Record<string, string>
   /** 按钮文案（动作语气，如「查看出货记录」） */
   label: string
@@ -42,9 +42,9 @@ const CORE_LINKS: Record<string, WorkflowEmployeeDatabaseLink> = {
   wechat_msg: {
     empId: 'wechat_msg',
     routeName: 'data-sources',
-    query: { source: 'wechat_local_db' },
-    label: '查看微信数据来源',
-    description: '微信消息处理 AI 员工监控的星标联系人与会话（数据来源 · 微信本地库）',
+    query: { workspace: 'messages' },
+    label: '查看客来来会话',
+    description: '查看已授权渠道的客户与会话；微信数据须先通过客来来接入',
   },
   wechat_phone: {
     empId: 'wechat_phone',

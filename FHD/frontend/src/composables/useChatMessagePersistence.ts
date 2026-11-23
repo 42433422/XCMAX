@@ -3,6 +3,7 @@ import chatApi from '@/api/chat'
 import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
+import { restoreRuntimeContinuation } from '@/utils/chatRuntimeContinuation'
 
 export function localMessagePersistence(): NonNullable<UiChatMessage['persistence']> {
   return { id: createBusinessHarnessId('message'), status: 'local' }
@@ -112,6 +113,8 @@ export function useChatMessagePersistence(deps: {
       message = { role, content: deps.html(visible), time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
       list.push(message)
     }
+    const continuation = role === 'ai' ? restoreRuntimeContinuation(extras?.runtimeContinuation) : undefined
+    if (continuation?.sessionId === sid) message.runtimeContinuation = continuation
     message.persistence ||= localMessagePersistence()
     const ui = { ...(message.turnId ? { turnId: message.turnId } : {}), ...(extras || {}) }
     delete ui.persistence

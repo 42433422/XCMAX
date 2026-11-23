@@ -20,7 +20,6 @@ from app.fastapi_routes.domains.conversation.helpers import (
     _chat_db_read_grace_seconds_left,
     _chat_request_subject,
     _ensure_chat_db_read_authorized,
-    _ensure_vector_index_if_needed,
     _extract_excel_paths_from_context,
     _extract_excel_paths_from_message,
     _merge_runtime_context_with_message_paths,
@@ -356,48 +355,6 @@ class TestMergeRuntimeContextWithMessagePaths:
         _, found = _merge_runtime_context_with_message_paths(ctx_in, "report.xlsx")
         # found is list of message paths
         assert any("report.xlsx" in p for p in found)
-
-
-# ===========================================================================
-# 9. _ensure_vector_index_if_needed (lines 549-551, 553-557)
-# ===========================================================================
-
-
-class TestEnsureVectorIndexIfNeeded:
-    def test_not_vector_request_returns_none(self):
-        result = _ensure_vector_index_if_needed("普通消息", {})
-        assert result is None
-
-    def test_vector_request_no_file_path_returns_message(self):
-        result = _ensure_vector_index_if_needed("向量检索", {})
-        assert result is not None
-        assert "路径" in result or "Excel" in result or "xlsx" in result.lower()
-
-    def test_vector_request_with_file_path_success(self):
-        # resolve_planner_tool_executor() is called with no args and returns an executor.
-        # The executor is then called as executor(tool_name, params, workspace_root=root).
-        # Patch return_value must itself accept (**kw) since it IS the executor.
-        def _fake_executor(*a, **kw):
-            return json.dumps({"success": True})
-
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=_fake_executor,
-        ):
-            result = _ensure_vector_index_if_needed("向量索引", {"excel_file_path": "/x.xlsx"})
-        assert result is None
-
-    def test_vector_request_with_file_path_error_result(self):
-        def _fake_executor(*a, **kw):
-            return json.dumps({"error": "E", "message": "fail"})
-
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=_fake_executor,
-        ):
-            result = _ensure_vector_index_if_needed("向量索引", {"excel_file_path": "/x.xlsx"})
-        assert result is not None
-        assert "fail" in result
 
 
 # ===========================================================================

@@ -130,4 +130,14 @@ def publication_candidate(db, event, *, fetcher=None):
         or task.get("repo_url") != f"https://github.com/{workspace['repository']}.git"
     ):
         raise ValueError("publication_para_dispatch_mismatch")
-    return candidate_receipt(_task_result_snapshot({"task": task}), workspace, fix["attempt_id"])
+    candidate = candidate_receipt(
+        _task_result_snapshot({"task": task}), workspace, fix["attempt_id"]
+    )
+    if workspace.get("retort_run_id"):
+        from modstore_server.strategic_workspace_bridge import attached, candidate_metered
+
+        if attached(workspace["request_id"], db) and (
+            not candidate or not candidate_metered(workspace["request_id"], candidate)
+        ):
+            return None
+    return candidate

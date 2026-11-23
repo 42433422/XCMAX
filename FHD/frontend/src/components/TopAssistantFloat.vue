@@ -47,6 +47,8 @@
         @open-tutorial="openTutorialTab"
       />
 
+      <p v-if="employeeRegistryError || employeeScopeError" class="assistant-empty" role="alert">{{ employeeRegistryError || employeeScopeError }} <button type="button" @click="refreshEmployeeRegistry(); refreshEmployeeScope()">重新同步员工目录</button></p>
+
       <div v-if="activeTab === 'push'" class="assistant-body">
         <div v-if="pushFeed.length === 0" class="assistant-empty">暂无推送</div>
         <div v-else class="push-list">
@@ -262,7 +264,7 @@ import { useIndustryUiText } from '@/composables/useIndustryUiText';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
 import { useEnterpriseScopedWorkflowRegistry } from '@/composables/useEnterpriseScopedWorkflowRegistry';
-import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry';
+import { useWorkflowEmployeeRegistrySync } from '@/composables/useWorkflowEmployeeRegistrySync';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 import AssistantTabsBar from './top-assistant-float/AssistantTabsBar.vue';
@@ -287,7 +289,8 @@ const productUnitLabel = computed(() => String(uiText.unitLabel?.value || '单�
 const { modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext();
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore();
 const { enabled: workflowEmployeesEnabled, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
-const { scopedRegistryEntries } = useEnterpriseScopedWorkflowRegistry();
+const { scopedRegistryEntries, error: employeeScopeError, refresh: refreshEmployeeScope } = useEnterpriseScopedWorkflowRegistry();
+const { error: employeeRegistryError, refresh: refreshEmployeeRegistry } = useWorkflowEmployeeRegistrySync();
 
 // 状态与行为按领域拆分到 top-assistant-float/ 下的 composables，此处仅组装（对外 vm 表面与拆分前一致）
 const state = useAssistantFloatState();
@@ -459,19 +462,8 @@ onMounted(() => {
   syncTopScrollMetrics();
   if (modsStore.clientModsUiOff) {
     workflowAiEmployeesStore.stripModWorkflowEmployeeKeys();
-  } else {
-    void syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi);
   }
 });
-
-watch(
-  () => modsStore.modsForWorkflowUi,
-  (list) => {
-    if (modsStore.clientModsUiOff) return;
-    void syncEnterpriseWorkflowRegistry(list);
-  },
-  { deep: true }
-);
 
 onBeforeUnmount(() => {
   stopDesktopProductSearch?.();

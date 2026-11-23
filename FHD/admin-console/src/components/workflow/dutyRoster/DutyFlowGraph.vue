@@ -86,6 +86,14 @@ defineProps<{
                         title="正在参与自进化 Loop"
                       />
                     </span>
+                    <router-link
+                      v-if="data?.taskSnapshot"
+                      class="dg-node-task nodrag nopan"
+                      :data-state="data.taskSnapshot.officeState"
+                      :title="data.taskSnapshot.hintLine || data.taskSnapshot.stage"
+                      :to="{ name: 'employee-workbench', query: { employee: data.id, task: data.taskSnapshot.taskId } }"
+                      @click.stop
+                    >{{ data.taskSnapshot.stage }}</router-link>
                   </div>
                 </template>
               </VueFlow>

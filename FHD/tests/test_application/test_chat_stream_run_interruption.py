@@ -106,6 +106,16 @@ def test_observer_never_overwrites_real_terminal_or_replaced_owner(repositories,
         newer.metadata["runtime_context"]["_mod_authorization"]["mod_id"] = "new-mod"
     else:
         newer.metadata["runtime_context"][{"tenant": "tenant_id", "turn": "turn_id"}[field]] = "new"
+    if field in {"owner", "tenant", "mod", "created_at"}:
+        before = repo.get(expected.run_id).to_dict()
+        with pytest.raises(ValueError, match="run identity cannot change"):
+            repo.save(newer)
+        assert repo.get(expected.run_id).to_dict() == before
+        # A late observer carrying a foreign identity is also rejected; the
+        # ordinary save API cannot replace the committed run's identity.
+        observer(repo)(newer, pending=False, reason="consumer_closed")
+        assert repo.get(expected.run_id).to_dict() == before
+        return
     repo.save(newer)
     before = repo.get(expected.run_id).to_dict()
     observer(repo)(expected, pending=False, reason="consumer_closed")
@@ -626,7 +636,7 @@ def test_worker_control_and_finalization_cannot_erase_independent_evidence(
 
 
 @pytest.mark.parametrize("identity", ["owner", "created_at", "tenant_id", "turn_id", "mod"])
-def test_plain_save_does_not_copy_receipts_between_generations(
+def test_plain_save_preserves_mutable_turn_receipts_and_rejects_changed_identity(
     independent_run_stores, monkeypatch, identity
 ):
     from app.application.agent_orchestrator import chat_trace
@@ -647,11 +657,20 @@ def test_plain_save_does_not_copy_receipts_between_generations(
         replacement.metadata["runtime_context"]["_mod_authorization"] = {"mod_id": "replacement"}
     else:
         replacement.metadata["runtime_context"][identity] = "replacement"
+    if identity != "turn_id":
+        before = reader.get(expected.run_id).to_dict()
+        with pytest.raises(ValueError, match="run identity cannot change"):
+            repo.save(replacement)
+        assert reader.get(expected.run_id).to_dict() == before
+        return
     repo.save(replacement)
     final = reader.get(expected.run_id)
-    assert "stream_tool_audit" not in final.metadata
-    assert "stream_interruption" not in final.metadata
-    assert "non_retryable" not in final.metadata
+    # Continuations may update turn_id on the same run. A stale context update
+    # must not erase the original unknown outcome or authorize another write.
+    assert final.metadata["runtime_context"]["turn_id"] == "replacement"
+    assert final.metadata["stream_tool_audit"][0]["record"] == {"receipt": "old-scope"}
+    assert final.metadata["stream_interruption"]["business_outcome"] == "unknown"
+    assert final.metadata["non_retryable"] is True
 
 
 @pytest.mark.parametrize("unknown", [False, True])
@@ -718,7 +737,8 @@ def test_known_idempotent_repair_keeps_references_but_unknown_result_never_repla
         assert final.status == "blocked"
         assert final.steps[0].output == stored.steps[0].output
         assert final.steps[0].output["outcome"] == "unknown"
-        assert final.steps[0].output["reconciliation_evidence"]["io_reconciliation"] == [
+        assert final.tool_calls[0].output == stored.tool_calls[0].output
+        assert final.steps[0].output["io_reconciliation"] == [
             {"method": "GET", "kind": "response_unknown"}
         ]
         with pytest.raises(ValueError, match="人工核对"):
