@@ -459,6 +459,7 @@ class PersyMemoryQueryRequest(BaseModel):
     reinforce: bool = Field(True)
     max_hops: int = Field(2, ge=0, le=3)
     as_of: str | None = Field(None, max_length=64)
+    effective_at: str | None = Field(None, max_length=64)
 
 
 class PersyMemoryMutationRequest(BaseModel):

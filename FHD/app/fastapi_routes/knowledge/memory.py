@@ -117,6 +117,8 @@ class MemoryReview:
             options["max_hops"] = req.max_hops
         if req.as_of is not None:
             options["as_of"] = req.as_of
+        if req.effective_at is not None:
+            options["effective_at"] = req.effective_at
         payload = self._service().query(
             access_context=self._access(request),
             query=req.query,

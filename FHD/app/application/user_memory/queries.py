@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.policy import is_recallable_memory
+from app.application.user_memory.relation_retrieval import select_effective_records
 from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,
@@ -67,13 +67,9 @@ class MemoryQueries:
         self, user_id: str, *, max_items: int = 6, memory_type: str | None = None
     ) -> str:
         """Format confirmed Memory v2 records as compact planner context."""
-        active = [
-            record
-            for record in self.ports.list_memories(
-                user_id, status="active", memory_type=memory_type
-            )
-            if is_recallable_memory(record)
-        ]
+        active, _, _ = select_effective_records(
+            self.ports.list_memories(user_id, status="active", memory_type=memory_type)
+        )
         if not active:
             return "【MemoryV2】无已确认记忆。"
         type_order = {"preference": 0, "entity": 1, "episodic": 2}

@@ -409,6 +409,10 @@ export interface PersyMemoryQueryResponse extends PersyMemoryListResponse {
   chunks: KnowledgeBaseChunk[]
   retriever?: string
   as_of?: string | null
+  effective_at?: string | null
+  relation_conflicts?: Array<Record<string, unknown>>
+  relation_conflict_count?: number
+  revalidation_dropped?: number
   historical_review_only?: boolean
   temporal_unavailable_count?: number
   coverage_complete?: boolean
@@ -733,6 +737,7 @@ export const knowledgeBaseApi = {
       reinforce?: boolean
       maxHops?: number
       asOf?: string
+      effectiveAt?: string
     },
   ): Promise<PersyMemoryQueryResponse> {
     await primeCsrfCookie()
@@ -742,6 +747,7 @@ export const knowledgeBaseApi = {
       reinforce: payload.reinforce !== false,
       ...(payload.maxHops === undefined ? {} : { max_hops: payload.maxHops }),
       ...(payload.asOf === undefined ? {} : { as_of: payload.asOf }),
+      ...(payload.effectiveAt === undefined ? {} : { effective_at: payload.effectiveAt }),
     })
   },
 

@@ -10,6 +10,7 @@ from typing import Any
 
 from app.application.user_memory.preferences import sync_preference_projection
 from app.application.user_memory.projections import project_after_commit
+from app.application.user_memory.relation_retrieval import validate_relation_value
 from app.application.user_memory.protocols import (
     CandidateGovernance,
     JsonObject,
@@ -68,6 +69,9 @@ class CandidateMemory:
             return {"success": False, "message": "缺少 user_id"}
         if not normalized_key:
             return {"success": False, "message": "缺少 memory key"}
+        invalid = validate_relation_value(value)
+        if invalid is not None:
+            return invalid
         governance = self.ports.govern(source=source, confidence=confidence, evidence=evidence)
         personal_capture = (
             user_id.startswith("personal-memory:v1:")
@@ -176,6 +180,9 @@ class CandidateMemory:
             updated["correction_count"] = int(updated.get("correction_count") or 0) + 1
         if not str(updated.get("key") or "").strip():
             return {"success": False, "message": "缺少 memory key"}
+        invalid = validate_relation_value(updated.get("value"))
+        if invalid is not None:
+            return invalid
         now = self.access.now()
         updated["status"] = "active"
         updated["confirmed_at"] = now
@@ -259,6 +266,9 @@ class CandidateMemory:
             updated["value"] = value
         if not str(updated.get("key") or "").strip():
             return {"success": False, "message": "缺少 memory key"}
+        invalid = validate_relation_value(updated.get("value"))
+        if invalid is not None:
+            return invalid
         now = self.access.now()
         updated["updated_at"] = now
         updated["last_correction_reason"] = reason

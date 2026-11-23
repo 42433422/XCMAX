@@ -213,10 +213,21 @@ class UserMemoryRagApplicationService:
             ]
         safe_hits: list[dict[str, Any]] = []
         hits = self._validated_hits(user_id, hits)
-        if not hits and self._recall_validator is None:
-            from app.application.user_memory.retrieve import recall_authoritative_memories
+        if self._recall_validator is None:
+            from app.application.user_memory.retrieve import (
+                merge_relation_hits,
+                recall_authoritative_memories,
+                relation_recall_hits,
+            )
 
-            hits = recall_authoritative_memories(user_id, query_text, max(1, min(20, int(top_k))))
+            bounded = max(1, min(20, int(top_k)))
+            if not hits:
+                hits = recall_authoritative_memories(user_id, query_text, bounded)
+            else:
+                related = relation_recall_hits(user_id, query_text)
+                if channel:
+                    related = [hit for hit in related if allows_channel(hit.get("metadata"), channel)]
+                hits = merge_relation_hits(hits, related, limit=bounded)
         for hit in hits:
             if not isinstance(hit, dict):
                 continue
@@ -277,6 +288,9 @@ class UserMemoryRagApplicationService:
             if len(preview) > 240:
                 preview = preview[:240] + "…"
 
+            from app.application.user_memory.retrieve import format_relation_evidence
+
+            preview += format_relation_evidence({**hit, "metadata": md})
             line = (
                 f"{idx}. source={source}; intent={intent}; feedback={user_feedback or '-'}; corrected_intent={corrected_intent or '-'}; "
                 f"last_used={last_used or '-'}; slots({slot_str or '-'}) ; score={score:.4f}\n"

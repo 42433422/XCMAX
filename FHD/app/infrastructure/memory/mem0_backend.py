@@ -304,6 +304,10 @@ class Mem0LongTermMemory:
             )
         hits = authority.filter_recalled_memories(user_id, hits)
         ranked = rank_hits(hits, query=text, limit=top_k)
+        from app.application.user_memory.retrieve import merge_relation_hits, relation_recall_hits
+
+        related = relation_recall_hits(user_id, text, memory_service=authority)
+        ranked = merge_relation_hits(ranked, related, limit=top_k)
         observe_memory_recall(
             outcome="hit" if ranked else "empty",
             duration_ms=(time.perf_counter() - started) * 1000,
@@ -649,7 +653,9 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
         metadata = hit.get("metadata")
         meta: dict[str, Any] = metadata if isinstance(metadata, dict) else {}
         prefix = "事实：" if str(meta.get("memory_type") or "") == "fact" else ""
-        line = f"{index}. {prefix}{content}"
+        from app.application.user_memory.retrieve import format_relation_evidence
+
+        line = f"{index}. {prefix}{content}{format_relation_evidence(hit)}"
         if len("\n".join([*lines, line])) > budget:
             break
         lines.append(line)

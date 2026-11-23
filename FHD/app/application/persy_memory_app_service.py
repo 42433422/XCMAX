@@ -57,6 +57,7 @@ from app.application.user_memory.relation_retrieval import (
     parse_as_of,
     record_key,
     relation_paths,
+    select_effective_records,
     snapshot_at,
 )
 from app.domain.shared_services.user_memory_service import (
@@ -381,6 +382,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         reinforce: bool = True,
         max_hops: int = 2,
         as_of: str | None = None,
+        effective_at: str | None = None,
     ) -> dict[str, Any]:
         access = _coerce_access_context(access_context)
         if access is None or not access.actor_id or not access.tenant_id:
@@ -411,6 +413,19 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                     "memories": [],
                     "chunks": [],
                 }
+        business_time = None
+        if effective_at is not None:
+            try:
+                business_time = parse_as_of(effective_at)
+            except ValueError:
+                return {
+                    "success": False,
+                    "error_code": "persy_memory_invalid_effective_at",
+                    "message": "effective_at requires an ISO timestamp with UTC offset",
+                    "memories": [],
+                    "chunks": [],
+                }
+        review_only = instant is not None or business_time is not None
         # Pending, revoked and blocked records never supply recall facts.
         listed = self.list_memories(access_context=access, status="active", limit=1000)
         if not listed.get("success"):
@@ -421,6 +436,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             for row in (listed_memories if isinstance(listed_memories, list) else [])
             if is_recallable_memory(row)
         ]
+        original_revisions = {record_key(row): row.get("revision") for row in rows}
         unavailable = 0
         if instant is not None:
             historical = []
@@ -438,9 +454,16 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                     recorded_until=snapshot["recorded_until"],
                     strength=0.0,
                 )
-                public.pop("history", None)
+                for field in ("history", "last_recalled_at", "recall_count"):
+                    public.pop(field, None)
                 historical.append(public)
             rows = historical
+        conflicts: list[dict[str, Any]] = []
+        if instant is None or business_time is not None:
+            rows, conflicts, invalid_count = select_effective_records(
+                rows, at=business_time, require_explicit=business_time is not None
+            )
+            unavailable += invalid_count
         paths, traversal_truncated = relation_paths(query_text, rows, max_hops=max_hops)
         scored: list[tuple[float, dict[str, Any]]] = []
         query_tokens = _search_tokens(query_text)
@@ -452,17 +475,42 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             path = paths.get(record_key(row))
             if lexical <= 0 and not path:
                 continue
-            lexical_rank = (
-                lexical if instant is not None else
-                lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28
-            ) if lexical > 0 else 0.0
+            lexical_rank = 0.0
+            if lexical > 0:
+                lexical_rank = (
+                    lexical if review_only else
+                    lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28
+                )
             relation_rank = 0.68 / len(path) ** 0.5 if path else 0.0
             score = min(1.0, max(lexical_rank, relation_rank))
             scored.append((score, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         selected = scored[: max(1, min(int(top_k or 5), 20))]
 
-        if instant is None and reinforce and selected:
+        dropped = 0
+        if selected and (paths or review_only):
+            # A second authority read fences changes while building paths. Each returned
+            # result still identifies its source revision, never a new business authorization.
+            fresh = self.list_memories(access_context=access, status="active", limit=1000)
+            if not fresh.get("success"):
+                return {**fresh, "memories": [], "chunks": []}
+            fresh_rows = [row for row in fresh.get("memories", []) if is_recallable_memory(row)]
+            if not review_only:
+                fresh_rows, _, _ = select_effective_records(fresh_rows)
+            latest = {record_key(row): row.get("revision") for row in fresh_rows}
+
+            def unchanged(row: dict[str, Any]) -> bool:
+                keys = [record_key(row)]
+                keys.extend(
+                    (str(step["scope"]), str(step["memory_id"]))
+                    for step in paths.get(record_key(row), [])
+                )
+                return all(key in latest and latest[key] == original_revisions.get(key) for key in keys)
+
+            checked = [(score, row) for score, row in selected if unchanged(row)]
+            dropped = len(selected) - len(checked)
+            selected = checked
+        if not review_only and reinforce and selected:
             with self._lock:
                 for _score, row in selected:
                     owner_id = _memory_owner_id(access, str(row.get("scope") or "user"))
@@ -478,12 +526,12 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             public["score"] = score
             if paths.get(record_key(row)):
                 public["relation_path"] = paths[record_key(row)]
-            if instant is not None:
-                # Historical records are for explicit review, not model/tool authority.
+            if review_only:
+                # Historical or business-time views are for explicit review, not tool authority.
                 public["eligible_for_planner"] = False
                 public["historical"] = True
             memories.append(public)
-            if instant is not None:
+            if review_only:
                 continue
             chunks.append(
                 {
@@ -515,11 +563,16 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "chunks": chunks,
             "retriever": "persy_memory_relation_v2" if max_hops > 0 else "persy_memory_lexical_strength_v1",
             "as_of": instant.isoformat() if instant is not None else None,
-            "historical_review_only": instant is not None,
+            "historical_review_only": review_only,
+            "effective_at": business_time.isoformat() if business_time is not None else None,
             "temporal_unavailable_count": unavailable,
+            "relation_conflicts": conflicts[:50],
+            "relation_conflict_count": len(conflicts),
+            "revalidation_dropped": dropped,
             "coverage_complete": (
                 not traversal_truncated
                 and unavailable == 0
+                and dropped == 0
                 and int((listed.get("summary") or {}).get("total") or 0)
                 <= len(listed_memories or [])
             ),
