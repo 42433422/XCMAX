@@ -40,6 +40,9 @@
 状态含义：`E2`=有单测/回归；`E1`=仅源码或静态证据；`E0`=仅目录/资料；`—`=未采集。
 「必选短板」指阻断 60 分的首要缺口。
 
+> **rev.3 更新（2026-11-24）**：下表是 rev.2 的静态基线。rev.3 已在隔离真实栈上完成 01/02/06/07/15 五域
+> E3 实测，并把其余域逐一记录为带具体阻塞原因的 UNRATED。**最新域名状态以第九节为准。**
+
 | # | 域 | 已具备证据 | 必选短板 | 状态 |
 |---|---|---|---|---|
 | 01 | 依赖注入与分层 | E2：组合根 `FHD/app/di/`、边界校验脚本、单测 | 无替换实现/故障 E3；C1 未测 | UNRATED |
@@ -110,3 +113,97 @@
 - 18 域 workflow 数改为根仓 86 + FHD 51，并记录部署事件更新到 2026-11-14。
 - 13 域补充 mock 行号（`AlipayNotifyIntegrationTest.java:100`）。
 - 其余域结论不变，正式状态仍为 18 域 `UNRATED`、总分 `null`。
+
+---
+
+## 九、rev.3（2026-11-24）真实运行 E3 实测
+
+本轮把审计从「读代码/跑单测」推进到**在真实运行的产品上执行完整任务 + 注入故障 + 恢复**。
+采集器：`/Users/Shared/XCMAX/.e3run/harness.py`；逐域结构化证据：
+`FHD/docs/evidence/audit-benchmark/e3-20261124/{01..18}.json`，全量请求轨迹 `harness-steps.json`。
+
+### 9.1 运行环境（可复核）
+
+| 项 | 值 |
+|---|---|
+| 形态 | FHD 服务真实进程，`XCAGI_DESKTOP_MODE=1`，端口 5199 |
+| 数据 | 隔离目录 `/Users/Shared/XCMAX/.e3run/data`，SQLite 主库 `data/data/xcagi.db` |
+| 账号 | 本机 `e3runner`（user id=2，tenant_id=1）；桌面模式禁止 admin 会话 |
+| 就绪判据 | 仅 `/health/liveness` 不足：必须 `GET /api/inventory/warehouses` 返回 200（延迟路由已挂载） |
+| 证据原则 | 不信写入信封，一律独立读回校验；金钱/数量按精确值比对 |
+| 代理 | localhost 请求显式绕过 `http_proxy` |
+
+### 9.2 18 域当前状态
+
+| # | 域 | 等级 | 断言 | 证据 |
+|---|---|---|---|---|
+| 01 | 依赖注入与分层 | **E3** | 7/7 | `01.json` |
+| 02 | ERP 订单与资金闭环 | **E3** | 17/17 | `02.json` |
+| 03 | Agent 编排与审批 | UNRATED | — | `03.json`（无模型凭证） |
+| 04 | ETL 与业务文件处理 | UNRATED | 8/12 | `04.json`（预览需真实模型会话） |
+| 05 | AI 意图与工具路由 | UNRATED | — | `05.json`（无模型 + 样本量 0/100） |
+| 06 | NeuroBus 事件内核 | **E3** | 5/5 | `06.json` |
+| 07 | Mod SDK 与行业模块 | **E3** | 9/9 | `07.json` |
+| 08 | 桌面壳与更新恢复 | UNRATED | — | `08.json`（无 GUI/签名安装包） |
+| 09 | FHD 前端与用户任务 | UNRATED | — | `09.json`（前端无 dist 构建） |
+| 10 | 商城前端与工作流 UI | UNRATED | — | `10.json`（无市场凭证/未构建） |
+| 11 | 商城交易与交付后端 | UNRATED | — | `11.json`（服务未部署） |
+| 12 | 自治与维护执行 | UNRATED | 6/6 | `12.json`（无 GitHub/CVM 执行器，动作未真实执行） |
+| 13 | Java 支付服务 | UNRATED | — | `13.json`（无支付宝沙箱凭证） |
+| 14 | Flutter 移动端 | UNRATED | — | `14.json`（无 flutter/adb/真机） |
+| 15 | Retort 共享引擎 | **E3** | 7/7 | `15.json` |
+| 16 | Vibe 编码与沙箱 | UNRATED | — | `16.json`（仅 MockLLM，不构成 E3） |
+| 17 | 客来来独立子系统 | UNRATED | — | `17.json`（0 文件） |
+| 18 | CI、发布与治理 | UNRATED | — | `18.json`（未跑构建/回退） |
+
+**结论：5 域 E3（01/02/06/07/15），13 域 UNRATED；因存在 UNRATED，不出 18 域正式总分。**
+
+### 9.3 E3 域的任务协议摘要
+
+- **01 组合根/分层**：真实启动 → 就绪探测 → `SIGKILL` 强杀（确认不可用）→ 重启 → 数据与服务恢复；7 条断言全过。
+- **02 ERP 订单与资金闭环**：真实建商品 → 建仓 → 入库/出库 → 汇总核对 → 订单创建 → 凭证增删改查 → 看板对账 →
+  幂等重放与租户负向；17 条断言全过，金额按精确值核对。
+- **06 NeuroBus 事件内核**：真实发布事件 → `published` 计数增长 → 负向缺 `event_type` 被拒 → `SIGKILL` 重启 → 统计仍可读；5/5。
+- **07 Mod SDK 与行业模块**：`build_mod.py --sign` 真实打包 → 上传安装 → 路由立即生效（版本号核对）→
+  `SIGKILL` 重启后仍安装且路由可用 → 内容篡改包被签名校验拒绝 → 安装者本人真实卸载并确认移除；9/9。
+- **15 Retort 共享引擎**：真实 CLI `quality-gates` 跑真实 `ruff` + `pytest` 子进程（4 门禁）→ 注入未使用导入、
+  失败断言、语法损坏三类真实缺陷，均被判失败且 CLI 不崩溃 → 修复后恢复全绿；7/7，报告落盘可解析。
+
+### 9.4 本轮在真实运行中发现的产品问题
+
+1. **finance 路由租户上下文缺失（已由上游 T03-T12 重构消除，本 PR 不改 finance.py）**：审计基线上
+   `finance.py` 手工构造的 `runtime_context` 缺 `tenant_id`，导致所有财务写入被租户作用域工具拒绝；
+   基线分支上以 `authenticated_runtime_context` + `require_agent_principal` 修复，02 域 17/17 通过。
+   合入 main 后该手工路径已被 `run_tools_execute_agent` 统一替代，租户上下文改由
+   `request_runtime_context` 注入（`FHD/app/fastapi_routes/tools_execute.py`），因此本 PR 不再携带该改动；
+   02 域证据产生于 rev.3 基线，需在 main 上复跑确认。
+2. **Mod 路由注册器是硬约束**：宿主只认模块级 `register_fastapi_routes(app, mod_id)`；
+   仅声明 `router = APIRouter()` 会得到日志「Mod has no HTTP route registrar, skip」，
+   `/api/mod/{id}/*` 返回 503 `mod_unavailable`。
+3. **本机上传安装的扩展无法被安装者卸载（已修）**：`POST /api/mod-store/upload` 写入的安装收据
+   `owner_scope` 为空，而卸载端点要求「admin 或 owner 绑定」，桌面模式又显式拒绝 admin 账号
+   （`is_admin_account_kind`），普通账号因此能安装却无法卸载自己安装的签名扩展（403「扩展归属或卸载权限
+   未通过校验」）。修复：上传安装时绑定当前工作空间 owner（`resolve_workspace_owner_id`），
+   收据与卸载侧的归属判定口径一致。修复后 07 域 9/9 通过，卸载返回
+   `MOD <id> 卸载成功` 且安装列表已移除。
+4. **幂等重放会吞掉同 id 的 DELETE**：同一 `transaction_id` 的删除请求命中幂等作用域而不真正执行；
+   硬删除验证必须使用新建凭证。
+5. **`finance.*` 无独立核验器**：写入提交成功但信封返回 `outcome:"unknown"`；
+   只能以独立读回判定，不能信 `success` 字段。
+6. **同 id 同版本不同字节会被拒装**（`Mod version already exists with different package bytes`），
+   升级验证必须递增版本号。
+
+### 9.5 UNRATED 的阻塞类型
+
+| 类型 | 域 | 具体缺口 |
+|---|---|---|
+| 无真实模型会话 | 03, 05, 16 | `require_model_session` 失败（实测 `model_configuration_error`）；05 还需 ≥100 留出任务 ×3 |
+| 缺外部执行器/凭证 | 12, 13, 10, 11 | GitHub/CVM 执行器缺；支付宝沙箱密钥为空；市场账号与回调不可用 |
+| 缺目标平台/产物 | 08, 09, 14, 18 | 无 GUI 与签名安装包；前端未构建；无 flutter/adb/真机；未跑构建与回退 |
+| 源码缺失 | 17 | `market/src/domain/客来来` 文件数 0 |
+| 证据未闭环 | 04 | 分类确认缺区域参数；预览依赖真实模型 |
+
+### 9.6 口径声明
+
+本节只把「真实进程/真实 CLI 跑通完整任务并完成故障恢复」记作 E3；单测、绿 CI、模拟 LLM、静态代码
+一律不计入 E3。未达 E3 的域保持 `UNRATED` 且 `score: null`，不以 0 分或「通过」填空。

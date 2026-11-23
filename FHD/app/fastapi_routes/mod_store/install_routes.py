@@ -4,11 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .commands import LocalCommands
 from .packages import PackageInstaller
 from .schemas import ModStoreInstallResult
+
+
+def _workspace_owner(request: Request) -> str:
+    """当前工作空间的安装归属；判定不了就返回空串。
+
+    上传端点原本不要求登录鉴权，此处不得把匿名调用改成 401；只在能确认会话时
+    绑定归属，使安装者之后可以卸载自己的扩展。
+    """
+    try:
+        from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+        from app.infrastructure.auth.dependencies import get_logged_in_user
+
+        return resolve_workspace_owner_id(request, get_logged_in_user(request)) or ""
+    except (HTTPException, *RECOVERABLE_ERRORS):
+        return ""
 
 
 class InstallRoutes:
@@ -24,6 +41,7 @@ class InstallRoutes:
 
         @router.post("/upload", response_model=ModStoreInstallResult)
         async def mod_store_upload(
+            request: Request,
             file: UploadFile = File(..., description="Mod 包文件 (.xcemp 或 .zip)"),
             activate: bool = Query(True, description="安装后是否立即激活"),
         ) -> ModStoreInstallResult:
@@ -34,8 +52,13 @@ class InstallRoutes:
               - 校验文件扩展名（.xcemp / .zip）
               - 落地到临时文件后调用 ``mod_manager.install_mod_package``
               - 返回安装结果（含 manifest 元数据）
+
+            安装收据绑定当前工作空间 owner，使安装者可卸载自己上传的扩展
+            （卸载端点对非 admin 账号要求 owner 绑定）。
             """
-            return await packages().upload(file, activate)
+            return await packages().upload(
+                file, activate, owner_scope=_workspace_owner(request)
+            )
 
         self.mod_store_upload = mod_store_upload
 
