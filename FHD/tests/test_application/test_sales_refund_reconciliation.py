@@ -216,3 +216,97 @@ def test_new_payment_without_original_tenant_customer_is_rejected_before_posting
     with tenant_scope(actor.tenant_id), actor.factory() as db:
         assert db.query(JournalEntry).count() == db.query(ReceivableAllocation).count() == 0
         assert db.get(SalesOrder, ids["order_id"]).paid_amount == 0
+
+
+@pytest.mark.parametrize("kind", ["payment", "refund"])
+def test_orphan_posted_journal_cannot_be_ignored_by_payment_reconciliation(sales, kind):
+    from app.domain.shared_services.accounting_services import create_journal_entry
+
+    actor, service, ids = sales
+    payment = effect(sales, prepare(sales, "payment"))
+    with tenant_scope(actor.tenant_id):
+        result = service.refund(payment["data"]["id"]) if kind == "refund" else payment
+    assert result["success"]
+    assert _total(sales) == (0 if kind == "refund" else Decimal("100"))
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        original = db.get(JournalEntry, result["data"]["journal_entry_id"])
+        duplicate = create_journal_entry(
+            {
+                "reference_type": original.reference_type,
+                "reference_id": original.reference_id,
+                "lines": [
+                    {
+                        "account_code": line.account_code,
+                        "debit": line.debit,
+                        "credit": line.credit,
+                        "partner_id": line.partner_id,
+                    }
+                    for line in original.lines
+                ],
+            },
+            db=db,
+        )
+        assert duplicate["success"]
+        before = db.query(ReceivableAllocation).count(), db.query(JournalEntry).count()
+    assert _total(sales) is None
+    with tenant_scope(actor.tenant_id):
+        payment_rejected = service.payment(ids["order_id"], 50)
+        refund_rejected = service.refund(payment["data"]["id"])
+    assert payment_rejected["code"] == "PAYMENT_RECEIPT_UNVERIFIED"
+    assert refund_rejected["code"] == "REFUND_RECEIPT_UNVERIFIED"
+    assert payment_rejected["retryable"] is refund_rejected["retryable"] is False
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        assert (db.query(ReceivableAllocation).count(), db.query(JournalEntry).count()) == before
+
+
+@pytest.mark.parametrize("corruption", ["missing_journal", "wrong_balance"])
+def test_new_payment_preserves_inconsistent_original_ledger(sales, corruption):
+    actor, service, ids = sales
+    original_id = effect(sales, prepare(sales, "payment", idempotency_key="first-payment"))["data"][
+        "id"
+    ]
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        original = db.get(ReceivableAllocation, original_id)
+        order = db.get(SalesOrder, ids["order_id"])
+        if corruption == "missing_journal":
+            original.journal_entry_id = None
+        else:
+            order.paid_amount = Decimal("50")
+        before = (
+            db.query(ReceivableAllocation).count(),
+            db.query(JournalEntry).count(),
+            order.paid_amount,
+            order.payment_state,
+        )
+    assert _total(sales) is None
+    with tenant_scope(actor.tenant_id):
+        replay = service.payment(ids["order_id"], 100, idempotency_key="first-payment")
+        assert replay["success"] is False
+        assert replay["code"] == "PAYMENT_RECEIPT_UNVERIFIED"
+        assert replay["retryable"] is False
+        rejected = service.payment(ids["order_id"], 50, idempotency_key="second-payment")
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        order = db.get(SalesOrder, ids["order_id"])
+        assert (
+            db.query(ReceivableAllocation).count(),
+            db.query(JournalEntry).count(),
+            order.paid_amount,
+            order.payment_state,
+        ) == before
+    assert rejected["success"] is False
+    assert rejected["code"] == "PAYMENT_RECEIPT_UNVERIFIED"
+    assert rejected["retryable"] is False
+
+
+def test_valid_new_payment_after_refund_preserves_both_original_receipts(sales):
+    actor, service, ids = sales
+    original = effect(sales, prepare(sales, "payment", idempotency_key="first-payment"))
+    with tenant_scope(actor.tenant_id):
+        assert service.refund(original["data"]["id"])["success"]
+        replacement = service.payment(ids["order_id"], 50, idempotency_key="replacement-payment")
+        replay = service.payment(ids["order_id"], 50, idempotency_key="replacement-payment")
+    assert replacement["success"] and replay["idempotent"]
+    assert replacement["data"]["id"] == replay["data"]["id"] != original["data"]["id"]
+    assert _total(sales) == Decimal("50")
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        assert db.query(ReceivableAllocation).count() == db.query(JournalEntry).count() == 3

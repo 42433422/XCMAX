@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from app.application.agent_orchestrator.verification_transactions import _decimal, _journal
-from app.db.models import ReceivableAllocation
+from app.db.models import JournalEntry, ReceivableAllocation
 
 
 def payment_receipt_journal(db, tenant, order, receipt):
@@ -95,8 +95,27 @@ def verified_sales_payment_total(db, tenant, order) -> Decimal | None:
         else:
             total += _decimal(receipt.allocated_amount)
     expected_state = _compute_status(total, _decimal(order.total_amount)) if total else "unpaid"
+    posted_journals = set(
+        db.scalars(
+            select(JournalEntry.id).where(
+                JournalEntry.tenant_id == tenant,
+                JournalEntry.status == "posted",
+                or_(
+                    and_(
+                        JournalEntry.reference_type == "payment",
+                        JournalEntry.reference_id == order.id,
+                    ),
+                    and_(
+                        JournalEntry.reference_type == "refund",
+                        JournalEntry.reference_id.in_([receipt.id for receipt in payments]),
+                    ),
+                ),
+            )
+        )
+    )
     if (
         reversals
+        or posted_journals != journals
         or total > _decimal(order.total_amount)
         or total != _decimal(order.paid_amount or 0)
         or order.payment_state != expected_state

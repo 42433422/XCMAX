@@ -297,3 +297,16 @@ def test_report_reconciliation_is_read_only_and_checks_exact_cells(report_case):
         ("经营验收产品", 10, 1000),
     ]
     book.close()
+
+
+@pytest.mark.parametrize("kind,scope", [("sales", "customer_id"), ("inventory", "warehouse_id")])
+def test_explicit_zero_scope_cannot_expand_report_to_all_business_records(report_case, kind, scope):
+    from app.domain.shared_services.report_service import ReportService
+
+    actor, _ = report_case
+    with tenant_scope(actor.tenant_id):
+        service = ReportService()
+        assert service.query_report(kind, {})["data"]
+        # An explicit, nonexistent identity must remain a filter. Treating it
+        # as an omitted value makes exporter and readback agree on the wrong scope.
+        assert service.query_report(kind, {scope: 0})["data"] == []

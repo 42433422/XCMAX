@@ -134,6 +134,8 @@ def payment(
         return {"success": False, "message": "idempotency_key 必须为 1–128 字符的非空字符串"}
     key = idempotency_key.strip() if idempotency_key is not None else None
     fingerprint = _fingerprint(amount_dec, partner_id, partner_name, reference, journal_date)
+    from app.application.sales.payment_verification import verified_sales_payment_total
+
     with get_db() if db is None else nullcontext(db) as ctx:
         order = _locked_order(ctx, sales_order_id)
         if order is None:
@@ -154,6 +156,16 @@ def payment(
                         "success": False,
                         "code": "IDEMPOTENCY_CONFLICT",
                         "message": "同一收款幂等键不能用于不同请求",
+                    }
+                if (
+                    prior.reference_type != "payment"
+                    or verified_sales_payment_total(ctx, order.tenant_id, order) is None
+                ):
+                    return {
+                        "success": False,
+                        "code": "PAYMENT_RECEIPT_UNVERIFIED",
+                        "retryable": False,
+                        "message": "原收款与冲销账本无法核对，禁止重复收款",
                     }
                 return {
                     "success": True,
@@ -186,7 +198,14 @@ def payment(
         resolved_partner_id = order.customer_id
         resolved_partner_name = partner_name if partner_name is not None else order.customer_name
         receivable = _to_decimal(order.total_amount)
-        current_allocated = _sum_allocated(_existing_allocations(ctx, sales_order_id))
+        current_allocated = verified_sales_payment_total(ctx, order.tenant_id, order)
+        if current_allocated is None:
+            return {
+                "success": False,
+                "code": "PAYMENT_RECEIPT_UNVERIFIED",
+                "retryable": False,
+                "message": "原收款与冲销账本无法核对，拒绝继续收款",
+            }
         new_total = current_allocated + amount_dec
         if new_total > receivable + _MONEY_EPSILON:
             return {
