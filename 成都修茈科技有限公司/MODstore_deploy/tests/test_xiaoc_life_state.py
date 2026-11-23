@@ -340,6 +340,7 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(
         persisted = json.loads(session.get(XiaoCLifeState, store.IDENTITY_ID).state_json)
     assert persisted["budget"]["used_tokens"] == 63
     state = store.read_state()
+    assert state["budget"]["date"] == store._day()
     assert state["budget"]["used_tokens"] == (0 if next_day else 63)
     assert state["budget"]["reserved_tokens"] == 0
     assert state["unknown_usage"] is False
