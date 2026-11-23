@@ -182,8 +182,10 @@ def performance(
 
 def project(state: dict[str, Any]) -> dict[str, Any]:
     scope = execution_scope(state)
-    events = state.get("events", [])
-    proof_events = state.get("self_identity_checks", events)
+    from modstore_server.xiaoc_self_metrics import completion_review
+
+    events = state.get("self_cycle_receipts", state.get("events", []))
+    proof_events = state.get("self_identity_checks", state.get("events", []))
     budget = state.get("budget") or {}
     policy = state.get("policy") or {}
     return {
@@ -202,6 +204,8 @@ def project(state: dict[str, Any]) -> dict[str, Any]:
         "self_assessment": {"status": "hypothesis_not_capability_proof"},
         "historical_evaluations": historical_evaluations(state.get("self_promptfoo_checks", [])),
         "performance": performance(scope, events),
+        "performance_review": completion_review(scope, events),
+        "performance_source": state.get("self_metrics_source", "recent_lifecycle_events"),
         "resources": {
             "daily_token_limit": policy.get("daily_token_limit"),
             "used_tokens": budget.get("used_tokens"),
@@ -225,6 +229,7 @@ def cognition_projection(state: dict[str, Any]) -> dict[str, Any]:
         "identity_check": snapshot["identity_readback"]["status"],
         "current_receipts": snapshot["performance"]["current_scope_count"],
         "historical_receipts": snapshot["performance"]["historical_or_unbound_count"],
+        "completion_review": snapshot["performance_review"]["status"],
         "rule": "registry and history do not prove current mastery",
     }
 
@@ -345,10 +350,10 @@ async def model_inventory() -> dict[str, Any]:
     return result
 
 
-def record_identity_check() -> dict[str, Any]:
-    """Explicit operator-side independent SQL check; never a model/API write path."""
-    from modstore_server.db.xiaoc_life import XiaoCLifeState
-    from modstore_server.xiaoc_life_store import _active_principal, _event, _mutate
+def record_identity_check(*, only_if_due: bool = False) -> dict[str, Any]:
+    """Independent SQL check; never accepts a verdict or scope from the model."""
+    from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
+    from modstore_server.xiaoc_life_store import _active_principal, _event, _event_dict, _mutate
 
     def check(data: dict[str, Any], session: Any) -> dict[str, Any]:
         now = utcnow()
@@ -357,6 +362,22 @@ def record_identity_check() -> dict[str, Any]:
         )
         if not scope:
             return {"status": "unverified", "reason": "immutable_release_identity_missing"}
+        if only_if_due:
+            previous = [
+                _event_dict(row)
+                for row in session.scalars(
+                    select(XiaoCLifeEvent)
+                    .where(
+                        XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                        XiaoCLifeEvent.kind == "self_identity_check",
+                    )
+                    .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                    .limit(20)
+                )
+            ]
+            evidence = current_identity_evidence(scope, previous, now=now)
+            if evidence["status"] != "unverified":
+                return {"status": "not_due", "evidence_ref": evidence["evidence_ref"]}
         actual = session.execute(
             select(XiaoCLifeState.identity_id, XiaoCLifeState.state_json).where(
                 XiaoCLifeState.identity_id == IDENTITY_ID

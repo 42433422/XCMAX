@@ -368,9 +368,12 @@ class CyclePorts:
             facts = await self.research() + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
+        from modstore_server.xiaoc_self_metrics import with_cycle_receipts
         from modstore_server.xiaoc_self_model import cognition_projection, employee_preflight
 
-        projection = cognition_projection(self.state)
+        self_snapshot = await asyncio.to_thread(with_cycle_receipts, self.state)
+        self.active()
+        projection = cognition_projection(self_snapshot)
         employee = self.state.get("policy", {}).get("employee_id")
         if employee:
             preflight = await asyncio.to_thread(
@@ -973,6 +976,14 @@ async def tick_async() -> dict[str, Any]:
     reconcile_goals()
     store = _store()
     state = store.read_state()
+    # Revalidate only the read-only persistent identity, using the original SQL
+    # ledger. No model call, task dispatch, budget or new permission is involved.
+    from modstore_server.xiaoc_self_model import execution_scope, record_identity_check
+
+    if execution_scope(state) is not None:
+        checked = await asyncio.to_thread(record_identity_check, only_if_due=True)
+        if checked["status"] != "not_due":
+            state = store.read_state()
     for domain in _domain_order(state):
         claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
         if claim is not None:
