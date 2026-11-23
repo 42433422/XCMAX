@@ -20,9 +20,11 @@ from modstore_server.xiaoc_life_cognition import (
     SYSTEM_PROMPT,
     CognitionContextError,
     cognition_messages,
+    cognitive_review_facts,
     feedback_facts,
     parse_decision,
     portfolio_feedback,
+    prior_self_assessment,
     reflection_facts,
     reflection_receipt,
 )
@@ -651,3 +653,99 @@ def test_reflection_recall_uses_same_owner_original_receipt_only():
     event["details"]["learning_applied"] = True
     event["details"]["reflection_receipt"]["hypothesis_verdicts"]["miss"] = 0
     assert reflection_facts(state) == []
+
+def _review_event(record, *, cycle="a", owner=17):
+    feedback = portfolio_feedback(record)
+    refs = [feedback["evidence_ref"]]
+    return {
+        "id": "cycle:" + cycle * 32,
+        "status": "completed",
+        "actual_tokens": 50,
+        "evidence_refs": refs,
+        "details": {
+            "owner_user_id": owner,
+            "learning_applied": True,
+            "outcome_feedback": feedback,
+            "reflection_receipt": reflection_receipt(
+                feedback, evidence_refs=refs, status="completed", actual_tokens=50
+            ),
+        },
+    }
+
+
+def _measured_review_record():
+    record = reviewed_record()
+    hypothesis = record["reviews"][0]["hypotheses"][0]
+    hypothesis.update(
+        window_start="2026-11-20T10:00:00+00:00",
+        window_end="2026-11-21T10:00:00+00:00",
+        reviewed_at="2026-11-21T10:00:00+00:00",
+    )
+    return record
+
+
+def test_cognitive_review_deduplicates_measurements_and_respects_original_stop():
+    event = _review_event(_measured_review_record())
+    ref = event["evidence_refs"][0]
+    state = {
+        "identity_id": "test",
+        "level": 6,
+        "owner_user_id": 17,
+        "goals": [{"id": "g", "status": "stopped", "outcome_ref": ref}],
+        "events": [event, _review_event(_measured_review_record(), cycle="b")],
+    }
+    facts = cognitive_review_facts(state)
+    review = facts[0]["cognitive_review"]
+    assert review["sample_count"] == 1
+    assert review["verdict_counts"] == {"hit": 0, "miss": 1}
+    assert review["latest_goal_review"]["recommendation"] == "respect_recorded_stop"
+    assert review["source_refs"] == [ref]
+    assert state["goals"][0]["status"] == "stopped"
+    messages, refs = cognition_messages(state, "reflection", facts)
+    assert facts[0]["ref"] in refs
+    assert json.loads(messages[1]["content"])["observations"][0]["evidence_status"] == (
+        "historical_ledger_review_not_prediction"
+    )
+
+
+@pytest.mark.parametrize("change", ["wrong_owner", "forged_fingerprint", "wrong_verdict", "open_window"])
+def test_cognitive_review_rejects_unverified_calibration(change):
+    record = _measured_review_record()
+    target = record["reviews"][0]["hypotheses"][0]
+    if change == "wrong_verdict":
+        target["verdict"] = "hit"
+    if change == "open_window":
+        target["window_end"] = "2026-11-22T10:00:00+00:00"
+    event = _review_event(record, owner=8 if change == "wrong_owner" else 17)
+    if change == "forged_fingerprint":
+        event["details"]["outcome_feedback"]["metrics"]["revenue_cents"] = 999
+    assert cognitive_review_facts({"owner_user_id": 17, "events": [event]}) == []
+
+
+def test_prior_self_assessment_is_scoped_and_never_a_verified_capability():
+    state = {
+        "owner_user_id": 17,
+        "self_model": {"owner_user_id": 17, "description": "hypothesis", "status": "verified"},
+    }
+    assert prior_self_assessment(state) == {
+        "title": "",
+        "description": "hypothesis",
+        "status": "hypothesis",
+    }
+    state["owner_user_id"] = 8
+    assert prior_self_assessment(state) == {"status": "unbound_or_previous_owner_hypothesis"}
+    del state["self_model"]["owner_user_id"]
+    assert prior_self_assessment(state) == {"status": "unbound_or_previous_owner_hypothesis"}
+
+
+def test_real_cognition_graph_reads_historical_review_without_new_execution_authority(ports):
+    store, calls, *_ = ports
+    store.state["owner_user_id"] = 17
+    store.state["events"] = [_review_event(_measured_review_record())]
+    result = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    review = next(row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row)
+    assert review["verdict_counts"]["miss"] == 1
+    assert result["goals"][0]["status"] == "proposed"
+    assert "decision_id" not in result["goals"][0]

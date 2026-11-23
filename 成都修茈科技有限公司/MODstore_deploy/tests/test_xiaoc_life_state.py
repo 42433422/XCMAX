@@ -287,6 +287,12 @@ def test_experiences_accumulate_and_hypotheses_never_become_verified_capability(
     assert len(state["interests"]) == 1
     assert state["interests"][0]["confidence"] == 0.5
     assert state["self_model"]["status"] == "hypothesis"
+    assert state["self_model"]["owner_user_id"] == 7
+    assert any(
+        row["id"] == state["self_model"]["assessment_event_id"]
+        for row in state["events"]
+        if row["kind"] == "reflection"
+    )
     assert len([event for event in state["events"] if event["kind"] == "reflection"]) == 2
 
 
@@ -394,6 +400,17 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(
         assert state["unknown_usage"] is False
         assert state["events"][0]["kind"] == "reconciliation"
         assert state["events"][0]["actual_tokens"] == 63
+
+    original_day = date.fromisoformat(persisted["budget"]["date"])
+    for offset, used in ((0, 63), (1, 0)):
+        day = (original_day + timedelta(days=offset)).isoformat()
+        monkeypatch.setattr(store, "_day", lambda: day)
+        state = store.read_state()
+        assert state["budget"]["date"] == day
+        assert state["budget"]["used_tokens"] == used
+        assert state["budget"]["reserved_tokens"] == 0
+        assert state["unknown_usage"] is False
+        assert state["events"][0]["kind"] == "reconciliation"
 
 
 def test_unknown_finished_cycle_reconciles_once_and_preserves_original_fact(database, monkeypatch):

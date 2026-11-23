@@ -18,6 +18,7 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
+    cognitive_review_facts,
     feedback_facts,
     parse_decision,
     portfolio_feedback,
@@ -261,6 +262,7 @@ class CyclePorts:
 
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        facts.extend(cognitive_review_facts(self.state))
         facts.extend(reflection_facts(self.state))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)

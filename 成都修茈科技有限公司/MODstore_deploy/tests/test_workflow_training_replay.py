@@ -17,6 +17,7 @@ import pytest
 from openpyxl import Workbook
 
 from modstore_server import workflow_training_replay as replay
+from modstore_server import workflow_training_sandbox as replay_sandbox
 from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.workflow_nl_training import get_assert
 
@@ -483,12 +484,168 @@ def test_csv_existing_native_fixture_keeps_its_content_comparison():
     assert replay._equal_files("result.csv", b'"order","quantity"\n"A-1","3"\n', expected) is True
 
 
+@pytest.fixture
+def configured_replay_sandbox(tmp_path, monkeypatch):
+    """Inspect the actual controller's configuration without starting native SRT."""
+    runtime = tmp_path / "trusted" / "sandbox-runtime"
+    entry = runtime / "dist" / "cli.js"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// Configuration fixture only; never executed.\n")
+    (entry.parent / "index.js").touch()
+    (runtime / "package.json").write_text(
+        json.dumps({"name": "@anthropic-ai/sandbox-runtime", "version": "0.0.83"})
+    )
+    node = replay.shutil.which("node")
+    assert node, "the existing controller configuration tests require Node"
+    arch = subprocess.check_output([node, "-p", "process.arch"], text=True).strip()
+    seccomp = runtime / "vendor/seccomp" / arch / "apply-seccomp"
+    seccomp.parent.mkdir(parents=True)
+    seccomp.touch(mode=0o700)
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(entry.parent / "index.js"))
+    wrapper = replay._sandbox_support().with_name("promptfoo_sandbox.mjs")
+
+    def configure(directory, *, executable=sys.executable, reject_host=False):
+        return subprocess.run(
+            [
+                node,
+                "--input-type=module",
+                "-e",
+                "const m = await import(process.argv[1]); "
+                "if (process.argv[5] === 'host') { "
+                "const h = await import(new URL('./opencode_agent.mjs', process.argv[1])); "
+                "h.assertOpenCodeHost({platform:'unsupported'}); } "
+                "const spec=m.replaySpec({directory:process.argv[2],python:process.argv[3]}); "
+                "process.stdout.write(JSON.stringify({runtime:spec.runtime.path,"
+                "python:spec.python,policy:m.replayPolicy(spec)}));",
+                wrapper.as_uri(),
+                str(directory),
+                executable,
+                "configuration-only",
+                "host" if reject_host else "",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+
+    return entry, node, seccomp, configure
+
+
+def test_worker_policy_has_no_network_or_ambient_customer_directory(
+    tmp_path, configured_replay_sandbox
+):
+    entry, _, _, configure = configured_replay_sandbox
+    root = tmp_path / "replay"
+    root.mkdir()
+    control = tmp_path / "control"
+    control.mkdir()
+    result = configure(root)
+    assert result.returncode == 0, result.stderr
+    configured = json.loads(result.stdout)
+    assert configured["runtime"] == str(entry)
+    assert configured["python"] == sys.executable
+    policy = configured["policy"]
+    assert policy["network"] == {
+        "allowedDomains": [],
+        "deniedDomains": ["*"],
+        "strictAllowlist": True,
+        "allowUnixSockets": [],
+        "allowAllUnixSockets": False,
+        "allowLocalBinding": False,
+    }
+    assert policy["filesystem"]["allowWrite"] == [str(root)]
+    readable = policy["filesystem"]["allowRead"]
+    project = Path(replay.__file__).resolve().parents[1]
+    for private in (
+        "/",
+        str(control),
+        str(tmp_path),
+        str(project),
+        str(project.parents[1] / "FHD"),
+        str(project.parents[1] / "FHD/packages"),
+        str(project.parents[1] / "packages"),
+    ):
+        assert private not in readable
+    assert "/" in policy["filesystem"]["denyRead"]
+    for name in ("catalog_data", "market_files", "tests"):
+        assert str(project / "modstore_server" / name) in policy["filesystem"]["denyRead"]
+    # The public source needs this one generated contract, not its data siblings.
+    resource = project / "modstore_server/data/commerce_terms.generated.json"
+    assert str(resource) in readable
+    for name in (
+        "allowNestedUserNamespaces",
+        "enableWeakerNestedSandbox",
+        "enableWeakerNetworkIsolation",
+    ):
+        assert policy[name] is False
+    assert policy["credentials"] == {"envVars": [{"name": "OPENCODE_API_KEY", "mode": "deny"}]}
+    assert "tlsTerminate" not in policy["network"]
+
+
+def test_worker_policy_reads_exact_python_shared_library(tmp_path, monkeypatch):
+    library_dir = tmp_path / "python-runtime/lib"
+    library_dir.mkdir(parents=True)
+    library = library_dir / "libpython-test.so"
+    library.touch()
+    config = {
+        "LIBDIR": str(library_dir),
+        "LDLIBRARY": library.name,
+        "INSTSONAME": library.name,
+        "PYTHONFRAMEWORK": "",
+    }
+    original = replay_sandbox.sysconfig.get_config_var
+    monkeypatch.setattr(
+        replay_sandbox.sysconfig,
+        "get_config_var",
+        lambda name: config[name] if name in config else original(name),
+    )
+    readable = replay_sandbox.runtime_read_paths()
+    assert str(library) in readable
+    assert str(library_dir) not in readable
+    assert str(library_dir.parent) not in readable
+
+
+@pytest.mark.parametrize("unavailable", ["package", "node", "host", "identity", "seccomp"])
+def test_unavailable_native_boundary_fails_before_employee_execution(
+    unavailable, tmp_path, monkeypatch, configured_replay_sandbox
+):
+    _, node, seccomp, configure = configured_replay_sandbox
+    if unavailable == "node":
+        monkeypatch.setattr(replay.shutil, "which", lambda *args, **kwargs: None)
+
+        def forbidden_start(*args, **kwargs):
+            pytest.fail("employee started without the required native boundary")
+
+        monkeypatch.setattr(subprocess, "Popen", forbidden_start)
+        source, graph, _ = _fixture()
+        result = replay.evaluate_business_replay(json.dumps(graph), source)
+        assert result["pass"] is False
+        assert result["score"] == 0
+        assert result["runtime_verified"] is False
+        assert result["reason"] == "training_replay_sandbox_unavailable"
+        return
+    if unavailable == "package":
+        monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "missing"))
+    elif unavailable == "seccomp":
+        seccomp.unlink()
+    # These cases call only the existing configuration/admission functions.
+    # The pinned native CLI and all employee execution remain unstarted.
+    result = configure(
+        tmp_path,
+        executable=node if unavailable == "identity" else sys.executable,
+        reject_host=unavailable == "host",
+    )
+    assert result.returncode != 0
+    assert result.stdout == ""
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process group contract")
 def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
     # This fixture tests owned-process cleanup only; native isolation is covered
     # by the original employee tests on the supported, provisioned CI runner.
     monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "unused-srt"))
     original = subprocess.Popen
+    controls = []
     pid_file = tmp_path / "descendant.pid"
     script = (
         "import pathlib,subprocess,sys,time; "
@@ -497,6 +654,10 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
     )
 
     def start(args, **kwargs):
+        control = Path(args[args.index("--control") + 1])
+        assert control.is_dir()
+        assert not control.is_relative_to(tmp_path)
+        controls.append(control)
         return original([sys.executable, "-c", script], **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", start)
@@ -505,6 +666,7 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
     child = int(pid_file.read_text())
     state = Path(f"/proc/{child}/stat")
     assert not state.exists() or state.read_text().split()[2] == "Z"
+    assert controls and all(not path.exists() for path in controls)
 
 
 def test_missing_sandbox_blocks_the_original_employee_before_start(monkeypatch):

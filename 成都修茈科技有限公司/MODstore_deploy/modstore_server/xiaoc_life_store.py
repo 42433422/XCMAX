@@ -353,6 +353,9 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 settled = _settled_owner_goals(data, session)
                 if settled is None:
                     raise LifePolicyError("原授权任务或模型用量尚未结清，请先核对执行与用量回执")
+                # Historical events remain; the active self hypothesis is not
+                # transferred to another administrator's cognition context.
+                data["self_model"] = {}
                 for goal, status in settled:
                     # Old approvals must not keep prioritizing the enterprise lane
                     # after its original owner and execution ledger are settled.
@@ -589,7 +592,12 @@ def finish_cycle(
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)
             if self_model and self_model.get("evidence_refs"):
-                data["self_model"] = {**self_model, "status": "hypothesis"}
+                data["self_model"] = {
+                    **self_model,
+                    "status": "hypothesis",
+                    "owner_user_id": claim["owner_user_id"],
+                    "assessment_event_id": event_id,
+                }
         final_status = "unknown" if actual_tokens is None else status if fresh else "policy_changed"
         _event(
             session,

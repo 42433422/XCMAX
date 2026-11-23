@@ -70,6 +70,9 @@ New goals remain proposals. Only use supplied refs, including on nested objects.
 Alternatives are optional, for propose only, and never authorize actions.
 Evidence status describes observations, not certainty about their contents.
 Historical measured outcomes do not establish success or subjective consciousness.
+A cognitive review is historical ledger consistency, not a future prediction,
+causal proof, model ability score or permission to change an approved goal.
+Honor recorded stop decisions; suggestions never replace an existing approval.
 Interests are allowed at levels 5 and 6; self_assessment only in reflection at level 6.
 The current domain limits this cycle: enterprise=business proposals;
 exploration=learning and research proposals; reflection=self-improvement proposals.
@@ -306,6 +309,8 @@ def observation_status(row: dict[str, Any]) -> str:
             if evolution.get("terminal_verified") is True
             else "evolution_evidence_pending"
         )
+    if isinstance(row.get("cognitive_review"), dict):
+        return "historical_ledger_review_not_prediction"
     return "observed_source_not_verified_claim"
 
 
@@ -346,8 +351,11 @@ def reflection_receipt(
     return {**receipt, "status": "measurement_verified", "hypothesis_verdicts": counts}
 
 
-def reflection_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Read the original same-owner, accepted event, never its free-form text."""
+def _settled_reflections(
+    state: dict[str, Any],
+) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """Bounded read of same-owner accepted receipts, not another memory store."""
+    settled: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     owner = state.get("owner_user_id")
     if type(owner) is not int or owner <= 0:
         return []
@@ -379,6 +387,13 @@ def reflection_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
             "reflection_receipt"
         ):
             continue
+        settled.append((event_id, details["outcome_feedback"], receipt))
+    return settled
+
+
+def reflection_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read the original same-owner, accepted event, never its free-form text."""
+    for event_id, _, receipt in _settled_reflections(state):
         return [
             {
                 "ref": f"reflection:{event_id}",
@@ -394,6 +409,133 @@ def reflection_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
             }
         ]
     return []
+
+
+def _closed_hypothesis(row: Any) -> dict[str, Any] | None:
+    """Check an existing pre-registered metric against its recorded observation."""
+    from modstore_server.strategy_bets import (
+        CUSTOMER_ACCEPTANCE_METRIC,
+        DOMAIN_METRIC,
+        METRIC_SOURCES,
+        REVENUE_METRIC,
+        judge,
+    )
+
+    if not isinstance(row, dict):
+        return None
+    metric, direction = row.get("metric_id"), row.get("direction")
+    if (
+        not isinstance(metric, str)
+        or metric not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
+        or direction not in ("min", "max")
+    ):
+        return None
+    value, threshold = _number(row.get("value")), _number(row.get("threshold"))
+    snapshot = row.get("snapshot_sha256")
+    if (
+        value is None
+        or threshold is None
+        or not isinstance(snapshot, str)
+        or len(snapshot) != 64
+        or any(ch not in "0123456789abcdef" for ch in snapshot)
+    ):
+        return None
+    times = [_timestamp(row.get(key)) for key in ("window_start", "window_end", "reviewed_at")]
+    if not all(times):
+        return None
+    start, end, reviewed = (datetime.fromisoformat(item) for item in times)
+    if any(item.utcoffset() is None for item in (start, end, reviewed)) or not start < end <= reviewed:
+        return None
+    verdict = judge(metric, float(value), float(threshold), direction)
+    if verdict not in ("hit", "miss") or row.get("verdict") != verdict:
+        return None
+    return {
+        "metric_id": metric,
+        "value": value,
+        "threshold": threshold,
+        "direction": direction,
+        "verdict": verdict,
+        "snapshot_sha256": snapshot,
+    }
+
+
+def cognitive_review_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project historical calibration and goal review from original settled evidence."""
+    samples: dict[str, dict[str, Any]] = {}
+    sources: list[str] = []
+    review: dict[str, Any] = {}
+    for _, feedback, _ in _settled_reflections(state):
+        metrics = feedback["metrics"]
+        ref = feedback["evidence_ref"]
+        fingerprint = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()[:24]
+        if not ref.endswith(":" + fingerprint) or ref in sources:
+            continue
+        sources.append(ref)
+        if not review:
+            for goal in state.get("goals", []):
+                if not isinstance(goal, dict) or goal.get("outcome_ref") != ref:
+                    continue
+                goal_id = goal.get("id")
+                if not isinstance(goal_id, str) or len(goal_id) > 96:
+                    continue
+                decision = metrics.get("decision")
+                review = {
+                    "goal_id": goal_id,
+                    "evidence_ref": ref,
+                    "recommendation": (
+                        "respect_recorded_stop"
+                        if decision == "stop" or goal.get("status") == "stopped"
+                        else "review_existing_approval_only"
+                    ),
+                }
+                break
+        hypotheses = metrics.get("hypotheses")
+        if isinstance(hypotheses, list):
+            for row in hypotheses[:4]:
+                sample = _closed_hypothesis(row)
+                if sample is not None:
+                    samples.setdefault(sample["snapshot_sha256"], sample)
+        if len(sources) == 3:
+            break
+    if not samples and not review:
+        return []
+    counts = dict.fromkeys(("hit", "miss"), 0)
+    for sample in samples.values():
+        counts[sample["verdict"]] += 1
+    projection = {
+        "scope": "recent_historical_ledger_consistency_not_forecast_or_permission",
+        "source_refs": sources,
+        "sample_count": len(samples),
+        "verdict_counts": counts,
+        "latest_goal_review": review,
+        "examples": list(samples.values())[:2],
+    }
+    fingerprint = hashlib.sha256(json.dumps(projection, sort_keys=True).encode()).hexdigest()[:24]
+    return [
+        {
+            "ref": f"cognitive-review:{fingerprint}",
+            "text": "Historical pre-registered hypotheses and recorded goal review; no new authority.",
+            "cognitive_review": projection,
+        }
+    ]
+
+
+def prior_self_assessment(state: dict[str, Any]) -> dict[str, str]:
+    """A prior model assessment remains a hypothesis and is not transferred as truth."""
+    assessment = state.get("self_model")
+    if not isinstance(assessment, dict) or not assessment:
+        return {}
+    owner = state.get("owner_user_id")
+    if owner is not None and (
+        type(assessment.get("owner_user_id")) is not int
+        or assessment["owner_user_id"] != owner
+    ):
+        return {"status": "unbound_or_previous_owner_hypothesis"}
+    return {
+        "title": str(assessment.get("title") or "")[:200],
+        "description": str(assessment.get("description") or "")[:200],
+        "status": "hypothesis",
+    }
 
 
 def cognition_messages(
@@ -427,10 +569,7 @@ def cognition_messages(
             for row in state.get("interests", [])[:6]
             if isinstance(row, dict) and row.get("evidence_refs")
         ],
-        "prior_self_assessment": {
-            key: str(state.get("self_model", {}).get(key) or "")[:200]
-            for key in ("title", "description", "status")
-        },
+        "prior_self_assessment": prior_self_assessment(state),
         "open_goals": [
             {
                 "title": str(row.get("title") or "")[:80],
