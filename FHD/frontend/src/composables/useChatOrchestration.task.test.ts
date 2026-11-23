@@ -373,10 +373,12 @@ describe('useChatOrchestration task/print', () => {
   it('allows a waiting card to query and approve its existing run with the real grant', async () => {
     const legacyFetch = vi.fn()
     vi.stubGlobal('fetch', legacyFetch)
-    agentRunsApiMock.getRun.mockResolvedValue({
+    const waiting = {
       success: true, data: { run_id: 'original-run', status: 'waiting_user' },
       approval: { grant: 'original-grant' },
-    })
+    }
+    agentRunsApiMock.getRun.mockResolvedValue(waiting)
+    agentRunsApiMock.createTask.mockResolvedValue({ ...waiting, deduplicated: true })
     agentRunsApiMock.continueRun.mockResolvedValue({
       success: true, data: {
         run_id: 'original-run', status: 'completed',
@@ -394,7 +396,9 @@ describe('useChatOrchestration task/print', () => {
     expect(agentRunsApiMock.continueRun).toHaveBeenCalledExactlyOnceWith('original-run', {
       approval_grant: 'original-grant', runtime_context: { source: 'chat_task_card_approval' },
     })
-    expect(agentRunsApiMock.createTask).not.toHaveBeenCalled()
+    expect(agentRunsApiMock.createTask).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      task_id: 'original-task', tool_id: 'business_db', action: 'write', params: {},
+    }))
     expect(legacyFetch).not.toHaveBeenCalled()
     expect(api.currentTask.value?.completed).toBe(true)
   })

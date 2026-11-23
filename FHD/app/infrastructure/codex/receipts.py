@@ -113,22 +113,63 @@ def _unknown(call: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _verified_step(step: Any, record: Any) -> bool:
+def _verified_step(run: AgentRun, step: Any, record: Any) -> bool:
     """A successful step needs its independently persisted matching tool call."""
+    from app.application.agent_orchestrator.result_verification import verified_step_output
+
+    if step is None or record is None:
+        return False
+    output = verified_step_output(run, step)
     return bool(
-        step is not None
-        and record is not None
-        and step.status == record.status == "completed"
+        step.status == record.status == "completed"
         and (record.node_id, record.tool_id, record.action, record.params, record.output)
         == (step.node_id, step.tool_id, step.action, step.params, step.output)
-        and step.output.get("success") is True
-        and not execution_result_error(step.output)
+        and output.get("success") is True
+        and not execution_result_error(output)
         and not execution_result_outcome_unknown(step.output, include_execution=True)
         and not any(
             isinstance(row.get("status_code"), int) and row["status_code"] >= 400
             for row in execution_result_envelopes(step.output)
         )
     )
+
+
+def _pending_step(run: AgentRun, step: Any, record: Any) -> bool:
+    """An acknowledged effect can wait while its host is parked for readback."""
+    from app.application.agent_orchestrator.result_verification import (
+        _binding_valid,
+        pending_execution_receipt,
+    )
+
+    if (
+        run.status != "blocked"
+        or step is None
+        or record is None
+        or step.status != "completed"
+        or record.status != "completed"
+        or not pending_execution_receipt(record.output)
+        or (record.metadata.get("verification") or {}).get("status")
+        not in {"pending", "inconclusive", "verified"}
+        or (
+            (run.metadata.get("recovery") or {}).get("state") != "result_pending"
+            and not _verified_step(run, step, record)
+        )
+        or any(
+            isinstance(row.get("status_code"), int) and row["status_code"] >= 400
+            for row in execution_result_envelopes(record.output)
+        )
+    ):
+        return False
+    try:
+        return _binding_valid(
+            run,
+            step,
+            record,
+            run.metadata.get("runtime_context") or {},
+            record.metadata.get("verification_contract"),
+        )
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
 
 
 def _failed_execution_receipt(child: Any, step: Any, record: Any) -> dict[str, Any] | None:
@@ -214,9 +255,16 @@ def read_call_receipt(
     from app.application.agent_orchestrator.result_verification import summarize_verification
 
     verification = summarize_verification(child)
+    steps = {step.step_id: step for step in child.steps}
+    pending_calls = {
+        record.call_id
+        for record in child.tool_calls
+        if _pending_step(child, steps.get(record.step_id), record)
+    }
     unverified_effect = not verification["accepted"] and any(
         record.output.get("success") is True
         and (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+        and record.call_id not in pending_calls
         for record in child.tool_calls
     )
     unknown = (
@@ -258,9 +306,11 @@ def read_call_receipt(
         child.status == "completed"
         and bool(completed_steps)
         and verification["accepted"]
-        and all(_verified_step(step, latest.get(step.step_id)) for step in completed_steps)
+        and all(_verified_step(child, step, latest.get(step.step_id)) for step in completed_steps)
     )
     status = child.status
+    if status == "blocked" and any(record.call_id in pending_calls for record in latest.values()):
+        status = "running"
     if status == "completed" and not verified:
         status = "failed"
     execution = _failed_execution_receipt(child, step, latest.get(step.step_id))

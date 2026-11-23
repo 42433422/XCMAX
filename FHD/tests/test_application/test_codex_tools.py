@@ -195,6 +195,76 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
     assert dispatched == [("customers", "query", "first"), ("customers", "query", "second")]
 
 
+def test_acknowledged_child_completion_uses_original_independent_readback(
+    bridge_setup, monkeypatch, tmp_path
+):
+    import copy
+    import sqlite3
+
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+    )
+
+    setup = bridge_setup
+    source = tmp_path / "acknowledged-result.sqlite"
+    with sqlite3.connect(source) as db:
+        db.execute("CREATE TABLE result (request_id TEXT PRIMARY KEY, completed INTEGER)")
+        db.execute("INSERT INTO result VALUES ('original-request', 0)")
+    dispatched = []
+
+    def dispatch(*args):
+        dispatched.append(args)
+        return {"success": False, "execution_state": "pending", "request_id": "original-request"}
+
+    def readback(**kwargs):
+        with sqlite3.connect(source) as db:
+            row = db.execute(
+                "SELECT completed FROM result WHERE request_id = ?",
+                (kwargs["output"]["request_id"],),
+            ).fetchone()
+        ready = row == (1,)
+        return {
+            "status": "verified" if ready else "inconclusive",
+            "code": "original_result_observed" if ready else "original_result_pending",
+            "checks": [
+                {
+                    "check_id": "original_request",
+                    "status": "passed" if ready else "unavailable",
+                    "source": "independent_sqlite_connection",
+                    "evidence": {"request_id": "original-request", "completed": ready},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.verification_readback.verify_independent_result",
+        readback,
+    )
+    args = {"tool_id": "customers", "action": "query", "params": {}, "call_id": "original"}
+    first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
+    assert first["status"] == "running" and first["verified"] is False
+    with pytest.raises(CodexBindingError) as error:
+        _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "next"})
+    assert error.value.code == "call_in_progress"
+    original = copy.deepcopy(setup.store.repository.get(first["run_id"]).tool_calls[0].output)
+    with sqlite3.connect(source) as db:
+        db.execute("UPDATE result SET completed = 1 WHERE request_id = 'original-request'")
+    observed = reverify_run(setup.store.repository, first["run_id"])
+    assert verification_can_finalize(observed)
+    setup.bridge.orchestrator.retry_run(first["run_id"], requested_by=setup.run.user_id)
+    completed = setup.bridge.orchestrator.execute_dispatched_run(first["run_id"])
+    assert completed.status == "completed"
+    receipt = _invoke(setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": "original"})
+    assert receipt["verified"] is True and receipt["status"] == "completed"
+    assert receipt["run_id"] == first["run_id"] and receipt["task_id"] == first["task_id"]
+    assert receipt["tool_calls"][0]["output"] == original
+    assert len(dispatched) == 1 and len(completed.tool_calls) == 1
+
+
 def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_setup, monkeypatch):
     setup = bridge_setup
     calls = []
