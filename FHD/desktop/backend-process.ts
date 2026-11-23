@@ -2,6 +2,7 @@ import { BrowserWindow, app, dialog } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import backendLog from 'electron-log/node'
 import {
   APP_NAME,
   DEFAULT_PORT,
@@ -40,58 +41,44 @@ let migrationStopInProgress = false
 let rollbackAttempt: Promise<RollbackTriggerResult | null> | null = null
 let backendStopAttempt: Promise<void> | null = null
 
-function rotateBackendLogIfNeeded(logPath: string): void {
-  const maxBytes = 8 * 1024 * 1024
-  try {
-    if (!fs.existsSync(logPath) || fs.statSync(logPath).size < maxBytes) {
-      return
-    }
-    const rotated = `${logPath}.1`
-    if (fs.existsSync(rotated)) {
-      fs.unlinkSync(rotated)
-    }
-    fs.renameSync(logPath, rotated)
-  } catch {
-    /* ignore rotation failures */
-  }
+// The upstream file transport rotates during use and closes each synchronous write;
+// no process-lifetime stream, unbounded async queue, or competing log writer remains.
+// electron-log 5.4.4 caches NullFile after an initial I/O failure. Own its registry
+// and evict only failed entries so the next write can retry after disk recovery.
+// These two upstream internal APIs are pinned and covered by first-access fault tests.
+type LogRegistryFile = { path: string; isNull(): boolean }
+type LogRegistry = { store: Record<string, LogRegistryFile>; provide(options: unknown): LogRegistryFile }
+const FileRegistry = require('electron-log/src/node/transports/file/FileRegistry.js') as new () => LogRegistry
+const registry = new FileRegistry()
+const provideLogFile = registry.provide.bind(registry)
+registry.provide = options => {
+  const file = provideLogFile(options)
+  if (file.isNull()) delete registry.store[file.path]
+  return file
 }
-
-function ensureBackendLogStream(): fs.WriteStream | null {
-  if (desktopRuntime.backendLogStream) {
-    return desktopRuntime.backendLogStream
-  }
-  try {
-    const logDir = path.join(app.getPath('userData'), 'logs')
-    fs.mkdirSync(logDir, { recursive: true })
-    const logPath = path.join(logDir, 'electron-backend.log')
-    rotateBackendLogIfNeeded(logPath)
-    desktopRuntime.backendLogStream = fs.createWriteStream(logPath, { flags: 'a' })
-    desktopRuntime.backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
-    desktopRuntime.backendLogStream.write(
-      JSON.stringify(
-        {
-          platform: process.platform,
-          arch: process.arch,
-          packaged: isDesktopPackaged(),
-          resourcesPath: isDesktopPackaged() ? process.resourcesPath : null,
-          userData: app.getPath('userData'),
-          sku: readPackagedProductSku() || 'generic'
-        },
-        null,
-        2
-      ) + '\n'
-    )
-    return desktopRuntime.backendLogStream
-  } catch {
-    return null
-  }
-}
+const fileTransport = require('electron-log/src/node/transports/file/index.js') as (
+  logger: typeof backendLog, dependencies: Record<string, unknown>,
+) => typeof backendLog.transports.file
+const logDependencies = (backendLog as typeof backendLog & { dependencies: Record<string, unknown> }).dependencies
+backendLog.transports.file = fileTransport(backendLog, { ...logDependencies, registry })
+backendLog.transports.file.setAppName(APP_NAME)
+backendLog.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'logs', 'electron-backend.log')
+backendLog.transports.file.maxSize = 8 * 1024 * 1024
+backendLog.transports.file.sync = true
+backendLog.transports.file.format = '{text}'
+backendLog.transports.console.level = false
+backendLog.transports.remote.level = false
+// Internal file/rotation errors still use this console writer when its normal transport is disabled.
+backendLog.transports.console.writeFn = ({ message }) => console.error('[xcagi-desktop] backend log unavailable', ...message.data)
+const BACKEND_LOG_MAX_CHARACTERS = 16_384
 
 export function writeBackendLog(line: string): void {
   try {
-    ensureBackendLogStream()?.write(line)
-  } catch {
-    /* ignore logging failures */
+    backendLog.info(line.length > BACKEND_LOG_MAX_CHARACTERS
+      ? `${line.slice(0, BACKEND_LOG_MAX_CHARACTERS)}\n[backend-log truncated ${line.length - BACKEND_LOG_MAX_CHARACTERS} characters]`
+      : line.trimEnd())
+  } catch (error) {
+    console.error('[xcagi-desktop] backend log unavailable', error)
   }
 }
 
@@ -142,8 +129,11 @@ const HEALTH_RESTART_BUDGET = 3
 let healthWatchdogTimer: NodeJS.Timeout | null = null
 let healthFailures = 0
 let healthEverReady = false
-let healthRestartInFlight = false
+let healthCheckInFlight = false
+let healthWatchdogGeneration = 0
 let healthRestarts = 0
+let healthHealthySince: number | null = null
+let healthLastReadyAt: number | null = null
 
 /** 把后端健康状态推给渲染端；渲染端据此恢复请求，而不是刷新整个页面。 */
 let backendHealthNotifier: ((state: 'unhealthy' | 'restarting' | 'ready') => void) | null = null
@@ -181,37 +171,59 @@ async function probeBackendPing(port = DEFAULT_PORT, timeoutMs = 3_000): Promise
   return false
 }
 
-async function runHealthCheck(): Promise<void> {
-  if (app.isQuitting || migrationStopInProgress || healthRestartInFlight) return
-  if (!desktopRuntime.backendProcess) return
-  const wasVerified = hasVerifiedDesktopBackend()
-  if (await probeBackendPing()) {
-    healthFailures = 0
-    healthEverReady = true
-    if (!wasVerified) broadcastBackendHealth('ready')
-    return
-  }
-  // 首次就绪前不判定失联，避免把冷启动阶段的探测失败当成故障。
-  if (!healthEverReady) return
-  healthFailures += 1
-  writeBackendLog(`[health] backend ping failed ${healthFailures}/${HEALTH_FAILURES_BEFORE_RESTART}\n`)
-  if (healthFailures < HEALTH_FAILURES_BEFORE_RESTART) return
-  if (healthRestarts >= HEALTH_RESTART_BUDGET) {
-    writeBackendLog('[health] backend unresponsive; restart budget exhausted\n')
-    broadcastBackendHealth('unhealthy')
-    return
-  }
-  healthRestarts += 1
-  healthRestartInFlight = true
+function recordBackendHealthy(): void {
+  const now = Date.now()
+  // Suspend/clock changes do not prove continuously healthy operation.
+  if (healthLastReadyAt === null || now < healthLastReadyAt
+    || now - healthLastReadyAt > HEALTH_WATCH_INTERVAL_MS * 2) healthHealthySince = now
+  healthHealthySince ??= now
+  healthLastReadyAt = now
+  if (now - healthHealthySince >= BACKEND_STABLE_WINDOW_MS) healthRestarts = 0
   healthFailures = 0
-  broadcastBackendHealth('restarting')
-  writeBackendLog('[health] backend unresponsive; restarting in place\n')
+  healthEverReady = true
+}
+
+async function runHealthCheck(generation: number): Promise<void> {
+  const active = () => generation === healthWatchdogGeneration && healthWatchdogTimer !== null
+    && !app.isQuitting && !migrationStopInProgress
+  if (!active() || healthCheckInFlight || backendStopAttempt) return
+  const owner = desktopRuntime.backendProcess
+  if (!isLiveDesktopBackend(owner)) return
+  healthCheckInFlight = true
   try {
+    const wasVerified = hasVerifiedDesktopBackend()
+    const healthy = await probeBackendPing()
+    // The probe yielded: stop/quit/rollback or another child may now own the lifecycle.
+    if (!active() || backendStopAttempt || desktopRuntime.backendProcess !== owner || !isLiveDesktopBackend(owner)) return
+    if (healthy) {
+      recordBackendHealthy()
+      if (!wasVerified) broadcastBackendHealth('ready')
+      return
+    }
+    healthHealthySince = healthLastReadyAt = null
+    // 首次就绪前不判定失联，避免把冷启动阶段的探测失败当成故障。
+    if (!healthEverReady) return
+    healthFailures += 1
+    writeBackendLog(`[health] backend ping failed ${healthFailures}/${HEALTH_FAILURES_BEFORE_RESTART}\n`)
+    if (healthFailures < HEALTH_FAILURES_BEFORE_RESTART) return
+    if (healthRestarts >= HEALTH_RESTART_BUDGET) {
+      writeBackendLog('[health] backend unresponsive; restart budget exhausted\n')
+      broadcastBackendHealth('unhealthy')
+      return
+    }
+    healthRestarts += 1
+    healthFailures = 0
+    broadcastBackendHealth('restarting')
+    writeBackendLog('[health] backend unresponsive; restarting in place\n')
     await stopBackend()
-    if (!app.isQuitting) await startBackend()
+    if (!active()) return
+    await startBackend()
+    if (!active()) return
+    const replacement = desktopRuntime.backendProcess
     const ready = await waitForBackendPing(DEFAULT_PORT, 90_000).then(() => true).catch(() => false)
+    if (!active() || desktopRuntime.backendProcess !== replacement) return
     if (ready) {
-      healthEverReady = true
+      recordBackendHealthy()
       writeBackendLog('[health] backend recovered after restart\n')
       broadcastBackendHealth('ready')
     } else {
@@ -219,27 +231,32 @@ async function runHealthCheck(): Promise<void> {
       broadcastBackendHealth('unhealthy')
     }
   } catch (error) {
-    writeBackendLog(`[health] restart failed: ${error instanceof Error ? error.message : String(error)}\n`)
-    broadcastBackendHealth('unhealthy')
+    if (active()) {
+      writeBackendLog(`[health] restart failed: ${error instanceof Error ? error.message : String(error)}\n`)
+      broadcastBackendHealth('unhealthy')
+    }
   } finally {
-    healthRestartInFlight = false
+    if (generation === healthWatchdogGeneration) healthCheckInFlight = false
   }
 }
 
 /** 常驻健康看门狗：进程还在但接口失联时原地重启，不通过刷新页面掩盖问题。 */
 export function startBackendHealthWatchdog(): void {
   if (healthWatchdogTimer || app.isQuitting) return
-  healthWatchdogTimer = setInterval(() => { void runHealthCheck() }, HEALTH_WATCH_INTERVAL_MS)
+  const generation = ++healthWatchdogGeneration
+  healthWatchdogTimer = setInterval(() => { void runHealthCheck(generation) }, HEALTH_WATCH_INTERVAL_MS)
   healthWatchdogTimer.unref?.()
 }
 
 export function stopBackendHealthWatchdog(): void {
+  healthWatchdogGeneration += 1
   if (healthWatchdogTimer) clearInterval(healthWatchdogTimer)
   healthWatchdogTimer = null
   healthFailures = 0
   healthEverReady = false
-  healthRestartInFlight = false
+  healthCheckInFlight = false
   healthRestarts = 0
+  healthHealthySince = healthLastReadyAt = null
 }
 
 const STARTUP_HEALTH_LIMIT_MS = 180_000
@@ -425,6 +442,11 @@ export async function startBackend(): Promise<void> {
   desktopRuntime.startupMarks.backendSpawnMs = Date.now()
   // 清掉上一轮的健康耗时，避免用陈旧值误判「已稳定运行」。
   desktopRuntime.startupMarks.backendHealthMs = undefined
+  writeBackendLog(`[bootstrap] ${JSON.stringify({
+    platform: process.platform, arch: process.arch, packaged: isDesktopPackaged(),
+    resourcesPath: isDesktopPackaged() ? process.resourcesPath : null,
+    userData: app.getPath('userData'), sku: readPackagedProductSku() || 'generic',
+  })}\n`)
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   desktopRuntime.verifiedBackendProcess = null
@@ -433,6 +455,7 @@ export async function startBackend(): Promise<void> {
   // process stays alive but never answers ping. The cold-start default and
   // stopBackendHealthWatchdog() still reset it at the proper lifecycle boundary.
   healthFailures = 0
+  healthHealthySince = healthLastReadyAt = null
   const child = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
     env: desktopBackendEnv({
@@ -651,13 +674,14 @@ async function stopBackendProcess(): Promise<void> {
   }
   markBackendStopRequested(child)
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
+  const observedExit = () => typeof child.exitCode === 'number' || typeof child.signalCode === 'string'
   let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
     const exited = waitForChildExit(child, 2500)
     await new Promise<void>(resolve => {
-      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
+      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 2500 }, () => resolve())
     })
-    const hasExited = await exited
+    const hasExited = await exited || observedExit()
     result = hasExited ? 'killed' : 'kill-timeout'
     if (!hasExited) {
       clearBackendStopRequest(child)
@@ -666,14 +690,14 @@ async function stopBackendProcess(): Promise<void> {
     }
   } else {
     result = await terminateChildProcess(child)
-    if (result === 'kill-timeout') {
+    if (result === 'kill-timeout' && !observedExit()) {
       clearBackendStopRequest(child)
       if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
       throw new Error('后端仍未退出，已中止账本交接和回滚。')
     }
+    if (result === 'kill-timeout') result = 'already-exited'
   }
-  desktopRuntime.backendLogStream?.end(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
-  desktopRuntime.backendLogStream = null
+  writeBackendLog(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
 }
 
 /**

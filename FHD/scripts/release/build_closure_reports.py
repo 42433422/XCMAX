@@ -23,6 +23,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.release.verify_desktop_soak import verify_bundle
+
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 REPORT_FILENAMES = (
     "release-convergence-report.json",
@@ -36,6 +39,7 @@ SOURCE_WORKFLOWS = {
     "security/current": ("fhd-security-full-scan.yml", "xcagi-security-release-reports"),
     "security/previous": ("fhd-security-full-scan.yml", "xcagi-security-release-reports"),
     "rollback": ("fhd-upgrade-rollback-evidence.yml", "xcagi-upgrade-rollback-evidence"),
+    "desktop_soak": ("fhd-desktop-soak.yml", "xcagi-desktop-soak"),
 }
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
 
@@ -84,6 +88,38 @@ def _stamp(value: Any) -> datetime:
     if result.tzinfo is None:
         raise ValueError("evidence timestamps must include a timezone")
     return result.astimezone(UTC)
+
+
+def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> dict:
+    """Bind reports to the actual registered-device jobs in this exact attempt."""
+    data = api(f"{route}/attempts/{run['run_attempt']}/jobs?per_page=100&page=1")
+    rows, count = data.get("jobs"), data.get("total_count")
+    if (not isinstance(rows, list) or type(count) is not int or not 1 <= count <= 100
+            or len(rows) != count or len({row.get("id") for row in rows}) != count):
+        raise ValueError("desktop_soak: incomplete original native job listing")
+    jobs = {}
+    for platform in ("windows", "macos"):
+        matches = [row for row in rows if row.get("name") == f"Desktop soak ({platform})"]
+        if len(matches) != 1:
+            raise ValueError(f"desktop_soak: {platform} original job missing or ambiguous")
+        row = matches[0]
+        labels = row.get("labels") if isinstance(row.get("labels"), list) else []
+        if not (
+            type(row.get("id")) is int and row["id"] > 0
+            and row.get("run_id") == run["id"] and row.get("head_sha") == run["head_sha"]
+            and row.get("status") == "completed" and row.get("conclusion") == "success"
+            and type(row.get("runner_id")) is int and row["runner_id"] > 0
+            and isinstance(row.get("runner_name"), str) and row["runner_name"]
+            and {"self-hosted", "xcagi-physical", platform} <= {str(label).lower() for label in labels}
+            and start <= _stamp(row.get("started_at")) <= _stamp(row.get("completed_at")) <= end
+        ):
+            raise ValueError(f"desktop_soak: {platform} original registered-device job mismatch")
+        jobs[platform] = {key: row[key] for key in (
+            "id", "runner_id", "runner_name", "labels", "started_at", "completed_at",
+        )}
+    if jobs["windows"]["runner_id"] == jobs["macos"]["runner_id"]:
+        raise ValueError("desktop_soak: two distinct registered native runners are required")
+    return jobs
 
 
 def collect_sources(
@@ -179,15 +215,21 @@ def collect_sources(
                     or any(stat.S_ISLNK(member.external_attr >> 16) for member in members)):
                 raise ValueError(f"{label}: unsafe artifact contents")
             bundle.extractall(output_dir / label)
+        proof["sources"][label] = {
+            "run_id": run["id"], "run_attempt": attempt, "controller_sha": controller,
+            "workflow": workflow, "artifact_id": artifact_id, "artifact_digest": artifact["digest"],
+        }
+        if label == "desktop_soak":
+            proof["sources"][label]["native_jobs"] = _native_jobs(api, route, run, start, end)
+            proof["sources"][label]["reports"] = {
+                platform: _digest(output_dir / label / f"{platform}.json")
+                for platform in ("windows", "macos")
+            }
         latest = api(route)
         if any(latest.get(key) != run.get(key) for key in (
             "id", "run_attempt", "head_sha", "status", "conclusion", "updated_at",
         )):
             raise ValueError(f"{label}: run changed during evidence readback")
-        proof["sources"][label] = {
-            "run_id": run["id"], "run_attempt": attempt, "controller_sha": controller,
-            "workflow": workflow, "artifact_id": artifact_id, "artifact_digest": artifact["digest"],
-        }
     (output_dir / "provenance.json").write_bytes(_canonical(proof))
     return proof
 
@@ -238,6 +280,8 @@ def build_reports(
     release_sha: str,
     product_version: str | None = None,
     now: datetime | None = None,
+    desktop_soak_dir: Path | None = None,
+    provenance_path: Path | None = None,
 ) -> dict[str, Any]:
     release_sha = release_sha.strip().lower()
     if not FULL_SHA.fullmatch(release_sha):
@@ -250,6 +294,10 @@ def build_reports(
     security = _load(security_path)
     slo = _load(slo_path)
     rollback = _load(rollback_path)
+    desktop_soak = verify_bundle(
+        desktop_soak_dir, release_sha=release_sha, product_version=product_version,
+        provenance=_load(provenance_path) if provenance_path else None,
+    )
     customer = _load(customer_path)
     common = _common(
         release_sha=release_sha,
@@ -317,6 +365,7 @@ def build_reports(
         and rollback.get("release_sha") == release_sha
         and not slo_blockers
         and not rollback_blockers
+        and desktop_soak["passed"] is True
     )
     reliability_report = {
         **common,
@@ -332,10 +381,18 @@ def build_reports(
             "slo_blockers": slo_blockers,
             "upgrade_rollback_blockers": rollback_blockers,
             "upgrade_rollback_scope": rollback.get("verification_scope", "unverified"),
+            "desktop_soak_scope": desktop_soak["verification_scope"],
+            "desktop_soak_blockers": desktop_soak["blockers"],
+            "desktop_soak_platforms": desktop_soak["per_platform"],
         },
         "source_evidence": [
             _source("production_slo_window", slo_path, slo),
             _source("upgrade_rollback", rollback_path, rollback),
+        ] + [
+            _source(f"desktop_soak_{platform}", desktop_soak_dir / f"{platform}.json",
+                    {"schema": "xcagi.desktop_soak/v1"})
+            for platform in ("windows", "macos")
+            if desktop_soak_dir and (desktop_soak_dir / f"{platform}.json").is_file()
         ],
     }
 
@@ -420,6 +477,8 @@ def main() -> int:
     parser.add_argument("--security", type=Path, required=True)
     parser.add_argument("--slo", type=Path, required=True)
     parser.add_argument("--upgrade-rollback", type=Path, required=True)
+    parser.add_argument("--desktop-soak-dir", type=Path)
+    parser.add_argument("--provenance", type=Path)
     parser.add_argument("--customer-value", type=Path, required=True)
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--product-version")
@@ -434,6 +493,8 @@ def main() -> int:
         output_dir=args.output_dir,
         release_sha=args.release_sha,
         product_version=args.product_version,
+        desktop_soak_dir=args.desktop_soak_dir,
+        provenance_path=args.provenance,
     )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return 0 if manifest["passed"] else 1

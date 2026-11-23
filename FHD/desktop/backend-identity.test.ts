@@ -3,12 +3,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createHmac } from 'node:crypto'
+import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
   userData: '',
   packaged: true,
   spawn: vi.fn(),
+  execFile: vi.fn(),
   lifecycle: [] as string[],
 }))
 
@@ -24,7 +26,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false }] },
   dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })) },
 }))
-vi.mock('node:child_process', () => ({ spawn: state.spawn, execFile: vi.fn() }))
+vi.mock('node:child_process', () => ({ spawn: state.spawn, execFile: state.execFile }))
 vi.mock('./desktop-config', async importOriginal => ({
   ...await importOriginal<typeof import('./desktop-config')>(),
   isPortAvailable: vi.fn(async () => true),
@@ -40,9 +42,10 @@ vi.mock('./rollback', () => ({
 vi.mock('./desktop-resilience', () => ({ createForceUpgradeHandler: vi.fn() }))
 
 import { desktopBackendChallenge, desktopBackendEnv, desktopWorkspaceToken } from './backend-env'
-import { startBackend, stopBackend, waitForBackendPing, startBackendHealthWatchdog, stopBackendHealthWatchdog, setBackendHealthNotifier, runBackendMigrationWithRollback } from './backend-process'
+import { BACKEND_STABLE_WINDOW_MS, startBackend, stopBackend, waitForBackendPing, startBackendHealthWatchdog, stopBackendHealthWatchdog, setBackendHealthNotifier, runBackendMigrationWithRollback, writeBackendLog } from './backend-process'
 import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
 import * as loopback from './backend-loopback-http'
+import * as lifecycle from './backend-lifecycle'
 import { markPreparedRollbackRecoveryRequired, clearPreparedRollbackRecoveryRequired } from './rollback'
 
 describe('packaged backend build identity resource handoff', () => {
@@ -56,6 +59,7 @@ describe('packaged backend build identity resource handoff', () => {
     resources = path.join(root, 'XCAGI.app', 'Contents', 'Resources')
     state.userData = path.join(root, 'user-data')
     state.packaged = true
+    app.isQuitting = false
     state.lifecycle.length = 0
     fs.mkdirSync(path.join(resources, 'backend'), { recursive: true })
     fs.mkdirSync(state.userData)
@@ -74,13 +78,21 @@ describe('packaged backend build identity resource handoff', () => {
     state.spawn.mockImplementation((_command: string, args: string[]) => {
       const child = Object.assign(new EventEmitter(), {
         stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn(),
-        pid: 123, exitCode: null, signalCode: null,
+        pid: 123, exitCode: null as number | null, signalCode: null,
+      })
+      child.kill.mockImplementation(() => {
+        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null) })
+        return true
       })
       if (args.includes('--migrate-only')) {
         state.lifecycle.push('spawn')
         queueMicrotask(() => child.emit('exit', 0))
       }
       return child
+    })
+    state.execFile.mockImplementation((_command, _args, _options, callback) => {
+      state.spawn.mock.results.at(-1)?.value.kill('SIGKILL')
+      callback(null, '', '')
     })
   })
 
@@ -91,11 +103,6 @@ describe('packaged backend build identity resource handoff', () => {
     desktopRuntime.verifiedBackendProcess = null
     await stopBackend()
     vi.useRealTimers()
-    const stream = desktopRuntime.backendLogStream
-    desktopRuntime.backendLogStream = null
-    if (stream) {
-      await new Promise<void>(resolve => { stream.once('close', resolve); stream.end() })
-    }
     if (originalResources) Object.defineProperty(process, 'resourcesPath', originalResources)
     else Reflect.deleteProperty(process, 'resourcesPath')
     if (originalDefaultApp) Object.defineProperty(process, 'defaultApp', originalDefaultApp)
@@ -164,17 +171,6 @@ describe('packaged backend build identity resource handoff', () => {
       if (!responsive) throw new Error('backend has stopped answering ping')
       return provenResponse(url)
     })
-    state.spawn.mockImplementation(() => {
-      const child = Object.assign(new EventEmitter(), {
-        stdout: new EventEmitter(), stderr: new EventEmitter(),
-        kill: vi.fn(), pid: 123, exitCode: null as number | null, signalCode: null,
-      })
-      child.kill.mockImplementation(() => {
-        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null) })
-        return true
-      })
-      return child
-    })
     await startBackend()
     startBackendHealthWatchdog()
     await vi.advanceTimersByTimeAsync(20_000)
@@ -184,6 +180,182 @@ describe('packaged backend build identity resource handoff', () => {
     // 90-second readiness wait. The watchdog must still attempt another one.
     await vi.advanceTimersByTimeAsync(320_000)
     expect(state.spawn.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it.each([
+    { stableMs: 0, clockJump: 0, spawns: 4 },
+    { stableMs: BACKEND_STABLE_WINDOW_MS, clockJump: 0, spawns: 5 },
+    { stableMs: 20_000, clockJump: 8 * 60 * 60 * 1000, spawns: 4 },
+  ])('bounds consecutive hang restarts with $stableMs ms of verified health and $clockJump ms unobserved', async ({ stableMs, clockJump, spawns }) => {
+    vi.useFakeTimers()
+    let responsive = true
+    const spawn = state.spawn.getMockImplementation()!
+    state.spawn.mockImplementation((...args) => { responsive = true; return spawn(...args) })
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      if (!responsive) throw new Error('backend hang')
+      return provenResponse(url)
+    })
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    for (let episode = 0; episode < 4; episode += 1) {
+      responsive = false
+      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(stableMs)
+      if (clockJump) {
+        vi.setSystemTime(Date.now() + clockJump)
+        await vi.advanceTimersByTimeAsync(20_000)
+      }
+    }
+    expect(state.spawn).toHaveBeenCalledTimes(spawns)
+  })
+
+  it.each(['stop', 'quit'])('discards an in-flight health result after watchdog %s', async action => {
+    vi.useFakeTimers()
+    let complete!: () => void
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(url => new Promise(resolve => {
+      complete = () => resolve(provenResponse(url))
+    }))
+    const notify = vi.fn()
+    setBackendHealthNotifier(notify)
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    if (action === 'stop') stopBackendHealthWatchdog()
+    else app.isQuitting = true
+    complete()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('keeps one probe in flight per watchdog generation without a stale completion unlocking the next', async () => {
+    vi.useFakeTimers()
+    const completions: Array<() => void> = []
+    const request = vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(url => new Promise(resolve => {
+      completions.push(() => resolve(provenResponse(url)))
+    }))
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(request).toHaveBeenCalledOnce()
+    stopBackendHealthWatchdog()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    completions.shift()!()
+    await vi.advanceTimersByTimeAsync(20_000)
+    stopBackendHealthWatchdog()
+    completions.forEach(complete => complete())
+    await vi.advanceTimersByTimeAsync(0)
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not charge a replacement backend for its predecessor\'s delayed failure', async () => {
+    vi.useFakeTimers()
+    let mode = 'ready'
+    let failOld!: () => void
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      if (mode === 'ready') return provenResponse(url)
+      if (mode === 'pending') return new Promise((_resolve, reject) => {
+        failOld = () => reject(new Error('old child timed out'))
+      })
+      throw new Error('backend hang')
+    })
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    mode = 'failed'
+    await vi.advanceTimersByTimeAsync(40_000)
+    mode = 'pending'
+    await vi.advanceTimersByTimeAsync(20_000)
+    await stopBackend()
+    await startBackend()
+    mode = 'failed'
+    failOld()
+    await vi.advanceTimersByTimeAsync(40_000)
+    expect(state.spawn).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(state.spawn).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports a failed log write without crashing and persists the next healthy write', () => {
+    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    writeBackendLog('before disk failure\n')
+    const failure = Object.assign(new Error('disk full'), { code: 'ENOSPC' })
+    vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => { throw failure })
+    expect(() => writeBackendLog('failed log entry\n')).not.toThrow()
+    expect(report.mock.calls.flat().map(String).join(' ')).toContain('disk full')
+    writeBackendLog('logging recovered\n')
+    const contents = fs.readFileSync(path.join(state.userData, 'logs', 'electron-backend.log'), 'utf8')
+    expect(contents).toContain('logging recovered')
+    expect(contents).not.toContain('failed log entry')
+  })
+
+  it.each(['ENOSPC', 'EACCES'])('recovers after %s on the first log access without retaining a null writer', code => {
+    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const fault = code === 'ENOSPC' ? vi.spyOn(fs, 'writeFileSync') : vi.spyOn(fs, 'mkdirSync')
+    fault.mockImplementationOnce(() => { throw Object.assign(new Error(`${code}: log creation failed`), { code }) })
+    expect(() => writeBackendLog('lost during initial I/O failure')).not.toThrow()
+    expect(report.mock.calls.flat().map(String).join(' ')).toContain(code)
+    writeBackendLog('persisted after disk recovery')
+    const contents = fs.readFileSync(path.join(state.userData, 'logs', 'electron-backend.log'), 'utf8')
+    expect(contents).toContain('persisted after disk recovery')
+    expect(contents).not.toContain('lost during initial I/O failure')
+  })
+
+  it('keeps continuous log output and oversized messages bounded without an async queue or open stream', () => {
+    const stream = vi.spyOn(fs, 'createWriteStream')
+    const asyncWrite = vi.spyOn(fs, 'writeFile')
+    const chunk = '日志'.repeat(10_000)
+    for (let index = 0; index < 400; index += 1) writeBackendLog(chunk)
+    writeBackendLog('latest diagnostic marker\n')
+    const logDir = path.join(state.userData, 'logs')
+    expect(fs.readdirSync(logDir).sort()).toEqual(['electron-backend.log', 'electron-backend.old.log'])
+    for (const name of fs.readdirSync(logDir)) {
+      expect(fs.statSync(path.join(logDir, name)).size).toBeLessThan(8 * 1024 * 1024 + 64 * 1024)
+    }
+    const current = fs.readFileSync(path.join(logDir, 'electron-backend.log'), 'utf8')
+    expect(current).toContain('latest diagnostic marker')
+    expect(current).toContain('[backend-log truncated ')
+    expect(stream).not.toHaveBeenCalled()
+    expect(asyncWrite).not.toHaveBeenCalled()
+  })
+
+  it('observes a late child exit after the Windows taskkill waiter deadline before restoring ownership', async () => {
+    vi.useFakeTimers()
+    await startBackend()
+    const child = desktopRuntime.backendProcess!
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' })
+    try {
+      state.execFile.mockImplementation((_command, _args, _options, callback) => {
+        setTimeout(() => { Object.assign(child, { exitCode: 0 }); child.emit('exit', 0); callback(null, '', '') }, 2501)
+      })
+      const stopped = stopBackend().then(() => null, error => error)
+      await vi.advanceTimersByTimeAsync(2501)
+      expect(await stopped).toBeNull()
+      expect(desktopRuntime.backendProcess).toBeNull()
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
+    await startBackend()
+    expect(state.spawn).toHaveBeenCalledTimes(2)
+  })
+
+  it('observes a late child signal exit after a POSIX termination timeout', async () => {
+    await startBackend()
+    const child = desktopRuntime.backendProcess!
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' })
+    try {
+      vi.spyOn(lifecycle, 'terminateChildProcess').mockImplementationOnce(async () => {
+        Object.assign(child, { signalCode: 'SIGTERM' })
+        return 'kill-timeout'
+      })
+      await expect(stopBackend()).resolves.toBeUndefined()
+      expect(desktopRuntime.backendProcess).toBeNull()
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
   })
 
   it('does not let a late proof from the old child authorize or revoke its replacement', async () => {
@@ -269,8 +441,6 @@ describe('packaged backend build identity resource handoff', () => {
     desktopRuntime.backendProcess = null
     await startBackend()
     expect(state.spawn.mock.calls[1][2].env.XCAGI_DESKTOP_WORKSPACE_TOKEN).toBe(token)
-    const stream = desktopRuntime.backendLogStream
-    if (stream) await new Promise<void>(resolve => stream.write('', () => resolve()))
     for (const name of fs.readdirSync(path.join(state.userData, 'logs'))) {
       expect(fs.readFileSync(path.join(state.userData, 'logs', name), 'utf8')).not.toContain(token)
     }

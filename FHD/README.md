@@ -79,6 +79,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 层 | 固定来源 | 复用边界 |
 |---|---|---|
 | 桌面更新 | [electron-updater 6.8.11](https://github.com/electron-userland/electron-builder/tree/electron-updater%406.8.11/packages/electron-updater)，MIT | 沿用上游频道、灰度、制品哈希校验与安装。产品 provider 在同一次清单请求上验 Ed25519。Windows 未签名候选沿用 NSIS 安装包和临时手动下载流程。 |
+| 桌面长时运行 | [psutil 7.2.2](https://github.com/giampaolo/psutil)，BSD-3-Clause；[Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)，Apache-2.0；[electron-log 5.4.4](https://github.com/megahertz/electron-log/tree/v5.4.4)，MIT | 复用进程树采样、真实窗口/CDP 与同步文件轮转；版本固定于现有 Python 锁、原生工作流和桌面 npm 锁。产品胶水仅绑定安装身份、隔离账号、故障观察与原始工作流证据，取代旧 Bash 探针和自制日志流。运行入口、资源预算与实机证据边界见 [CI SSOT](../docs/CI_SSOT.md#桌面双平台长时运行)。 |
 | 执行卡片 | [shadcn-vue v2.9.0](https://github.com/unovue/shadcn-vue/tree/39cb0b277f009e47de2dc62c4217755fb9a27eec/apps/v4/registry/bases/reka/ui/trace)，MIT | `frontend/src/components/ui/trace/` 保留上游 Trace / Collapsible 结构及许可；仅替换样式、图标和 Vue getter，使用已有 Reka UI 2.11.0，无额外 CSS 框架。 |
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |

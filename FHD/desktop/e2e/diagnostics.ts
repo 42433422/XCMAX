@@ -7,7 +7,7 @@ export function preserveElectronDiagnostics(child: ChildProcess | undefined, use
   const capture = (name: string, write: () => void): void => {
     try { write() } catch (error) { console.warn(`[electron diagnostics] Failed to preserve ${name}:`, error) }
   }
-  for (const relative of ['logs/electron-backend.log', 'session-lifecycle.json', 'crash-dumps']) {
+  for (const relative of ['logs/electron-backend.log', 'logs/electron-backend.old.log', 'session-lifecycle.json', 'crash-dumps']) {
     capture(relative, () => {
       const source = path.join(userDataDir, relative)
       if (fs.existsSync(source)) fs.cpSync(source, testInfo.outputPath(path.basename(relative)), { recursive: true })

@@ -356,6 +356,20 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥。生产部署不依赖 kubeconfig。
 
+## 桌面双平台长时运行
+
+手动 `fhd-desktop-soak.yml` 使用 `main` 的验收控制代码，分别在已登记的 Windows、macOS 专用交互桌面执行安装版。输入的完整 `release_sha` 必须已在 main，`product_version` 必须在既有版本目录；预装应用的 build-info、后端运行 SHA、窗口版本和实测文件摘要必须一致。Windows/macOS 账号使用各自的专用测试身份，普通 PR 不在有凭据的 self-hosted 设备上执行。
+
+设备需有 `self-hosted`、对应 OS、`xcagi-physical` 标签及可用的交互桌面；标签由维护者按设备登记赋予，本身不是物理硬件的加密证明。仓库变量 `XCAGI_SOAK_WINDOWS_BINARY` / `XCAGI_SOAK_MACOS_BINARY` 指向实际可执行文件。对应 secrets 为 `XCAGI_SOAK_WINDOWS_USER` / `XCAGI_SOAK_WINDOWS_PASS` 和 `XCAGI_SOAK_MACOS_USER` / `XCAGI_SOAK_MACOS_PASS`。缺设备、安装包或凭据时保留阻断，不能用托管虚拟机或 Linux 短测替代。
+
+唯一采集入口为 `FHD/scripts/release/desktop_soak.py`；旧 `desktop-soak.sh` 已移除。脚本使用独立临时 userData 和回环端口，真实登录后交替打开设置、聊天、客户、产品页，持续至少 28,800 秒。稳定性策略统一在 `verify_desktop_soak.py`：采样缺口最多 90 秒，整棵进程树 RSS 最多 2 GiB、稳定窗口增长最多 256 MiB，句柄/文件描述符最多 16,384、增长最多 512，按主机逻辑 CPU 归一化的平均利用率最多 80%，95% 以上持续超过 180 秒阻断。这是当前桌面验收预算，不是实际测得结果或全部部署方式的容量承诺。
+
+长跑后实际执行渲染网络离线恢复、渲染进程崩溃恢复、后端崩溃恢复、桌面正常重启、附加窗口创建/关闭、正常退出；故障仅作用于本次启动的进程与隔离数据。正常退出必须留下本进程的干净退出标记且没有残留进程；失败清理无法确认完成时保留私有测试目录。主进程、后端、GUI、资源和版本任何必要观测缺失均不能通过。此流程覆盖桌面生命周期与界面活性；真实模型业务、系统睡眠唤醒和安装升级回滚仍使用各自的原始验收证据。
+
+每轮和每个故障阶段保存原始 JSON，取消或失败也上传；渲染崩溃和未处理页面错误即时落盘，采样间隙发生后自行恢复也不能漏报，错误内容仅保留摘要。双平台原始文件聚合为 `xcagi-desktop-soak`。独立验证器从原始样本重算时长、资源、页面覆盖和故障结果；单平台、短测、重复 PID 身份、静态窗口、非预期崩溃、伪 `passed` 字段及缺失证据均被拒绝。`--measurements-only` 的成功退出仅表示测量格式和内容合格，不能认证设备来源。
+
+既有 `closure-evidence-report` 增加 `desktop_soak_run_id`，由 `build_closure_reports.py collect` 核对原始工作流、当前 attempt、main 祖先、原始制品摘要以及两个不同的登记 runner 作业，再将报告字节摘要绑定到可靠性报告。缺少双平台长跑证据时，原生产可靠性报告继续阻断；既有 SLO、安装升级回滚、安全与客户验收条件同时保留。原生 runtime-contract 矩阵执行采集器和验证器回归，这些短测不产生八小时实机资格。
+
 ## 超大源码增长审查
 
 800 行仍是提醒线，不是文件长度硬上限。沿用 `scripts/dev/source_governance.py`
