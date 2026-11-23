@@ -284,7 +284,7 @@ def _qualified_settings(
         ) from exc
 
 
-def get_deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
+def _deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
     """Local operator entry only; never resolves an account or starts a business task."""
     settings = runtime_settings()
     route, root, destination = settings.route, settings.runtime_root, settings.qualification_file
@@ -349,6 +349,15 @@ def get_deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
         )
     current.require_qualified().token()
     return current
+
+
+def get_deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
+    try:
+        return _deployment_runtime_settings(retry=retry)
+    except OSError as exc:
+        raise RuntimeSetupError(
+            "runtime_storage_invalid", "部署运行目录无法安全访问，请检查本机数据目录权限。"
+        ) from exc
 
 
 def _prepared_route(connection: Connection, selected: tuple[str, str] | None) -> PreparedChatRoute:
@@ -453,7 +462,12 @@ def get_account_runtime_settings(
 
 def _read_setup_attempt(path: Path, qualification: Path) -> dict:
     if not path.exists() and not qualification.exists():
-        return {}
+        try:
+            with os.scandir(path.parent) as entries:
+                if not any(entry.name.startswith("attempt-") for entry in entries):
+                    return {}
+        except FileNotFoundError:
+            return {}
     try:
         with path.open(encoding="utf-8") as stream:
             result = json.loads(stream.read(65_537))
@@ -461,8 +475,8 @@ def _read_setup_attempt(path: Path, qualification: Path) -> dict:
             return result
     except (OSError, ValueError):
         pass
-    # A missing journal beside old evidence, truncation or a crash cannot prove
-    # that no paid request was sent. A valid current certificate is reused first.
+    # A missing journal beside prior probe evidence, truncation or a crash cannot
+    # prove that no paid request was sent. A valid current certificate is reused first.
     return {"state": "interrupted", "error_code": "runtime_qualification_interrupted"}
 
 

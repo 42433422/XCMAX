@@ -160,6 +160,42 @@ def test_explicit_deployment_requires_configuration_and_credential_before_probe(
     assert deployment.attempts == []
 
 
+@pytest.mark.parametrize("operation", ["stat", "mkdir"])
+def test_deployment_storage_errors_remain_private_structured_cli_failures(
+    deployment, monkeypatch, capsys, operation
+):
+    from app.cli.brain import main
+
+    original = getattr(Path, operation)
+    denied = deployment.destination if operation == "stat" else deployment.root
+
+    def fail_storage(path, *args, **kwargs):
+        if path == denied:
+            raise PermissionError(13, "private-storage-denied", str(path))
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, operation, fail_storage)
+    assert main(["--json", "runtime-check", "--deployment"]) == 1
+    captured = capsys.readouterr()
+    assert deployment.attempts == []
+    assert captured.err == ""
+    response = json.loads(captured.out)
+    assert response["success"] is False and response["error_code"] == "runtime_storage_invalid"
+    assert str(deployment.root) not in captured.out
+    assert "private-storage-denied" not in captured.out
+
+
+@pytest.mark.parametrize("existing_empty_root", [False, True])
+def test_empty_deployment_directory_allows_its_first_qualification(deployment, existing_empty_root):
+    if existing_empty_root:
+        deployment.root.mkdir(mode=0o700)
+    status = configuration.runtime_qualification_status(configuration.runtime_settings())
+    assert status["qualification"] == "required" and status["retry_required"] is False
+    settings = configuration.get_deployment_runtime_settings()
+    assert settings.require_qualified() == settings.route
+    assert len(deployment.attempts) == 1
+
+
 @pytest.mark.parametrize(
     "invalid",
     [
@@ -260,6 +296,12 @@ def test_lost_model_response_preserves_attempt_and_never_automatically_rebills(
     assert not deployment.destination.exists()
     artifacts = list(deployment.root.glob("attempt-*/evidence.json"))
     assert len(artifacts) == 1 and json.loads(artifacts[0].read_text())["ok"] is False
+    deployment.destination.with_name("setup-attempt.json").unlink()
+    status = configuration.runtime_qualification_status(configuration.runtime_settings())
+    with pytest.raises(configuration.RuntimeSetupError):
+        configuration.get_deployment_runtime_settings()
+    assert len(probes) == 1
+    assert status["qualification"] == "interrupted" and status["retry_required"] is True
     with pytest.raises(configuration.RuntimeSetupError):
         configuration.get_deployment_runtime_settings(retry=True)
     assert len(probes) == 2
