@@ -186,6 +186,45 @@ def test_runtime_qualification_failure_remains_actionable(client):
     }
 
 
+@pytest.mark.parametrize("method", ["get", "post"])
+@pytest.mark.parametrize("kind", ["policy", "known", "unknown"])
+def test_runtime_qualification_errors_expose_only_public_codes_and_checks(client, method, kind):
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+    from app.infrastructure.codex.policy import RuntimePolicyError
+
+    private = "/private/runtime/secret.json Bearer sensitive-probe-token"
+    error = (
+        RuntimePolicyError(private)
+        if kind == "policy"
+        else RuntimeSetupError(
+            "runtime_configuration_required" if kind == "known" else private,
+            private,
+            checks={
+                "responses_stream": "PASS",
+                "multi_turn_tools": "FAIL",
+                "business_receipt_verified": private,
+                private: "PASS",
+            },
+        )
+    )
+    operation = "get_account_runtime_status" if method == "get" else "get_account_runtime_settings"
+    with patch(f"app.application.agent_runtime.configuration.{operation}", side_effect=error):
+        response = getattr(client, method)(
+            "/api/desktop/agent-runtime/qualification", **({"json": {}} if method == "post" else {})
+        )
+    assert response.status_code == 409
+    assert private not in response.text and "sensitive-probe-token" not in response.text
+    assert response.json()["error_code"] == (
+        "runtime_configuration_required" if kind == "known" else "runtime_not_qualified"
+    )
+    assert response.json()["checks"] == (
+        {} if kind == "policy" else {"responses_stream": "PASS", "multi_turn_tools": "FAIL"}
+    )
+    if method == "get":
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["qualification"] == "blocked"
+
+
 @pytest.mark.parametrize("method", ["GET", "POST"])
 def test_runtime_qualification_keeps_internal_policy_diagnostics_private(
     client, monkeypatch, method

@@ -124,14 +124,19 @@ verify_current_component() {
   verify_runtime "$component" "$manifest" "$expected_sha" "http://127.0.0.1:$port/api/health"
 }
 
-# Call only while the release lock is held. The optional SHA checks a saved
-# committed pair before its receipt is republished; normal readback requires it.
+# Call only while the release lock is held. Component health is not pair evidence.
 verify_applied_release_pair() {
-  local aggregate component applied
-  aggregate="${1:-$(cat "$STATE/release_applied_sha" 2>/dev/null)}" &&
+  local aggregate
+  aggregate="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
     [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || {
     log "ERROR: 缺少有效整组发布 SHA，不能确认运行验收"; return 1;
   }
+  verify_component_release_pair "$aggregate"
+}
+
+verify_component_release_pair() {
+  local aggregate="$1" component applied
+  [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || return 1
   # Independent healthy components can belong to different releases after a
   # partial apply/rollback. Require the committed pair before any live checks.
   for component in modstore fhd; do
@@ -147,11 +152,32 @@ verify_applied_release_pair() {
 
 verify_current_release_pair() {
   local component
-  verify_applied_release_pair "${1:-}" || return 1
+  verify_applied_release_pair || return 1
   for component in modstore fhd; do
     verify_current_component "$component" || return 1
   done
-  verify_applied_release_pair "${1:-}"
+  verify_applied_release_pair
+}
+
+# Restore only an original receipt, under the same release lock as activation.
+# Independent component health cannot manufacture a previously absent pair.
+restore_previous_release_pair() {
+  local expected="$1" component temporary="$STATE/.release_applied_sha.$$"
+  [[ ! -e "$STATE/release_applied_sha" && ! -L "$STATE/release_applied_sha" ]] || return 1
+  verify_component_release_pair "$expected" || return 1
+  for component in modstore fhd; do
+    verify_current_component "$component" || return 1
+  done
+  verify_component_release_pair "$expected" || return 1
+  # Publish atomically without replacing a receipt created during the readback.
+  if printf '%s\n' "$expected" >"$temporary" &&
+    ln -T -- "$temporary" "$STATE/release_applied_sha"; then
+    rm -f -- "$temporary"
+    log "原整组发布回执已重新核验: $expected"
+    return 0
+  fi
+  rm -f -- "$temporary"
+  return 1
 }
 
 acquire_release_lock() {
@@ -203,29 +229,18 @@ IDENTITY
     [[ ! -f "$STATE/release_applied_${component}_$suffix" ]] ||
       cp -- "$STATE/release_applied_${component}_$suffix" "$pending/$suffix"
   done
-  restore_previous_pair() {
-    [[ -n "$previous_pair" ]] || return 0
-    local receipt="$STATE/.release_applied_sha.$$"
-    if [[ ! -e "$STATE/release_applied_sha" ]] &&
-      verify_current_release_pair "$previous_pair" &&
-      printf '%s\n' "$previous_pair" >"$receipt" &&
-      mv -Tf -- "$receipt" "$STATE/release_applied_sha"; then
-      log "原整组运行身份已重新核验，已原子恢复发布回执"
-    else
-      rm -f -- "$receipt"
-      log "ERROR: 原整组运行身份或回执未恢复，继续阻断整组验收"
-    fi
-  }
   finish_activation() {
-    local code="$?" restored=0 observed
+    local code="$?" restored=0 observed previous_pair_sha
     trap - EXIT
     if [[ "$code" == 0 ]]; then
       rm -rf -- "$pending"
       return
     fi
+    previous_pair_sha="$(cat "$pending/release_sha" 2>/dev/null || true)"
     if [[ "$touched" == 0 ]]; then
       rm -rf -- "$pending"
-      restore_previous_pair
+      restore_previous_release_pair "$previous_pair_sha" ||
+        log "ERROR: 原整组发布尚未核验，保持整组验收阻断"
       return "$code"
     fi
     # A competing pointer is never overwritten by this attempt's compensation.
@@ -259,7 +274,8 @@ IDENTITY
     if [[ "$restored" == 1 ]]; then
       log "ERROR: $component 候选未通过，已恢复原版本及原运行状态"
       rm -rf -- "$pending"
-      restore_previous_pair
+      restore_previous_release_pair "$previous_pair_sha" ||
+        log "ERROR: 原整组发布尚未核验，保持整组验收阻断"
     else
       log "ERROR: $component 恢复结果未核实，保留原切换证据: $pending"
     fi

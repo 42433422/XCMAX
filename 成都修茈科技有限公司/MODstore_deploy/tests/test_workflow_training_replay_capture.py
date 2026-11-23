@@ -44,16 +44,40 @@ def _oracle(env, monkeypatch, *, changed=False):
     return source
 
 
+@pytest.mark.parametrize("reference_change", [None, "delete", "replace", "input"])
 def test_production_freezes_original_source_and_oracle_before_delivery(
-    customer_workflow, monkeypatch
+    customer_workflow, monkeypatch, reference_change
 ):
     env = customer_workflow
     original = _oracle(env, monkeypatch)
     original_bytes = original.read_bytes()
+    reference = env["workspace"] / "references/verified.csv"
+    reference_bytes = reference.read_bytes()
+    capture = replay.capture_business_replay
+    captured = []
+
+    def capture_before_reference_change(*args, **kwargs):
+        snapshot = capture(*args, **kwargs)
+        captured.append(snapshot)
+        if len(captured) == 1:
+            if reference_change == "delete":
+                reference.unlink()
+            elif reference_change == "replace":
+                reference.write_text("order,quantity\nchanged,999\n")
+            elif reference_change == "input":
+                original.write_text('{"columns":["order","quantity"],"rows":[["changed",999]]}')
+        return snapshot
+
+    monkeypatch.setattr(replay, "capture_business_replay", capture_before_reference_change)
     response = env["execute"]()
+    if reference_change == "input":
+        assert response.status_code == 500, response.text
+        assert not (env["workspace"] / "outputs/output.csv").exists()
+        return
     assert response.status_code == 200, response.text
     binding = env["binding"]
     assert binding["customer_delivery"]["business_replay"]["replay_ready"] is True
+    assert binding["customer_delivery"]["business_replay"] == captured[0]
     # A later import cannot replace the historical source used by this failure.
     original.write_text('{"columns":["wrong"],"rows":[[999]]}')
     inputs = {
@@ -65,6 +89,7 @@ def test_production_freezes_original_source_and_oracle_before_delivery(
     }
     manifest = replay.export_customer_replay(binding, inputs, "e" * 64)
     assert replay._bytes(manifest["assets"]["input_files"][0]) == original_bytes
+    assert replay._bytes(manifest["assets"]["expected_files"][0]) == reference_bytes
     source = {
         "graph": {
             "name": "Frozen original customer replay",
