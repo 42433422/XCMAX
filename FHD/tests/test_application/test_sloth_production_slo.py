@@ -36,9 +36,7 @@ def test_sloth_v1_events_match_live_slo_contract() -> None:
         slo_id, objective, total_metric = EVENT_BASED_TARGETS[name]
         assert entry["objective"] == objective
         assert round(slo.TARGETS[slo_id][1] * 100, 4) == (
-            objective
-            if slo.TARGETS[slo_id][2] == "ge"
-            else 100 - objective
+            objective if slo.TARGETS[slo_id][2] == "ge" else 100 - objective
         )
         queries = entry["sli"]["events"]
         assert set(queries) == {"error_query", "total_query"}
@@ -100,6 +98,7 @@ def test_prometheus_empty_vector_is_unknown_not_zero() -> None:
     response = {"status": "success", "data": {"result": []}}
     with patch.object(slo, "_prom_get", return_value=response):
         assert slo.prom_query("http://127.0.0.1:9091", "sum(metric)", attempts=1) is None
+
 
 def test_ambiguous_production_telemetry_persists_red_evidence(tmp_path: Path) -> None:
     """A live source returning multiple series cannot silently certify one subset."""

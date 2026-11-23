@@ -47,7 +47,10 @@ def test_daily_workflow_queries_prometheus_over_ssh_exec_not_port_forward() -> N
     assert "PRODUCTION_PROMETHEUS_SSH_TARGET" in workflow
     assert "PRODUCTION_PROMETHEUS_SSH_CONTROL" in workflow
     assert "Close production SSH channel" in workflow
-    assert "always() && steps.slo_collect.outcome != 'success'" in workflow
+    assert (
+        "always() && (steps.slo_collect.outcome != 'success' "
+        "|| steps.sloth_generate.outcome != 'success')"
+    ) in workflow
     assert "seed" not in workflow.lower()
 
 
