@@ -1,5 +1,5 @@
 {
-  "lines": 2709855,
+  "lines": 2709850,
   "updated": "2026-11-24",
-  "note": "browser contract diagnostics: preserve the original real Chromium success, verification and privacy assertions while serializing only safe failure metadata instead of truncated dict repr; measured +3 test lines over eae0453, with no production behavior, retries, timeouts or gate changes\n本轮按用户“完成这些闭环”授权保留公开85774255b1b46cbb14b7ef73316f934d794304fa及全部原来源；唯一增量531行（生产74、原回归455、既有说明/登记2），修复原尝试/版本身份、钱包等待前持久收尾、坏用量隔离及独立原始输入摘要，复用公开回滚与冻结训练参考实现。全部冲突暂存后原计数实测2709855，不预留多计额度。合解交付142通过、1个真实原生回放被Debian13宿主准入拒绝；DR21方法及9子场景通过。保留所有最新公开异常边界与回归；源码增长仅请求人工评审，最终Ubuntu22原生CI、完整当前检查、原队列合入及真实客户验收分别核对。"
+  "note": "browser contract diagnostics: preserve the original real Chromium success, verification and privacy assertions while serializing only safe failure metadata instead of truncated dict repr; measured +3 test lines over eae0453, with no production behavior, retries, timeouts or gate changes\n本轮按用户“完成这些闭环”授权保留公开85774255b1b46cbb14b7ef73316f934d794304fa及全部原来源；唯一增量531行（生产74、原回归455、既有说明/登记2），修复原尝试/版本身份、钱包等待前持久收尾、坏用量隔离及独立原始输入摘要，复用公开回滚与冻结训练参考实现。全部冲突暂存后原计数实测2709855，不预留多计额度。合解交付142通过、1个真实原生回放被Debian13宿主准入拒绝；DR21方法及9子场景通过。保留所有最新公开异常边界与回归；源码增长仅请求人工评审，最终Ubuntu22原生CI、完整当前检查、原队列合入及真实客户验收分别核对。\n本轮保留公开3faaa97a及全部来源；仅对齐实际手动上传、同SHA部署审批和严格缺配置行为，合并同一交付说明的重复配置表。净减少5行，按原脚本实测下调维护行基线，保留原代码及发布验收边界。"
 }

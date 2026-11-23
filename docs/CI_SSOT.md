@@ -309,27 +309,20 @@ FHD_AUTO_UPDATE_LOCK=/tmp/fhd-staging-auto-update.lock \
 bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 ```
 
-## CVM 自动 CD（GitHub Actions）
+## CVM 制品上传（GitHub Actions 手动触发）
 
-`fhd-ci-cd.yml` job **`cvm-push-release`**：`main` push 且 `docker-build-fhd-api` 成功后，若配置了 secrets 则自动 scp 制品；**无 secrets 时跳过（不失败）**。
+`fhd-ci-cd.yml` job **`cvm-push-release`**：仅在 `workflow_dispatch` 明确设置 `push_to_cvm=true` 且 `docker-build-fhd-api` 成功后上传制品。服务器上传采用严格模式，缺少目标或 SSH 配置即失败。stable 上传绑定同一 main SHA 的原安全证据，并设置 `FHD_PUSH_APPLY_NOW=0` 等待部署审批；staging 可立即应用。
 
-| Secret / 变量 | 说明 |
-|---------------|------|
-| `FHD_PUSH_HOST` | 默认 `119.27.178.147` |
-| `FHD_PUSH_SSH_KEY` | SSH 私钥（**勿入库**） |
-| `FHD_PUSH_USER` | 可选，默认 `root` |
-| GitHub Environment `production` / `staging` | 可选审批门；`workflow_dispatch` 可选 channel |
-
-手动触发：`Actions → CI/CD Pipeline → Run workflow` → 勾选 **Push release artifacts to CVM**，选 channel。
+手动触发：`Actions → CI/CD Pipeline → Run workflow` → 勾选 **Push release artifacts to CVM**，选 channel；所需 `FHD_PUSH_*` 配置统一见下方 Secrets / Variables 清单。
 
 **仍需人工（仓外）**：GHCR `read:packages` PAT 写入服务器、`/root/fhd-full.env`、首次 cron 安装、branch protection。
 
 ## 单机 CVM 手动 rolling（`fhd-deploy.yml`）
 
 生产唯一路径：单台腾讯云 CVM（`119.27.178.147`）上的 **tarball + docker compose**。
-自动 CD 见上文 `cvm-push-release` → 服务器 cron `fhd-auto-update.sh`。
+制品上传见上文 `cvm-push-release`；stable 的应用由 `fhd-deploy.yml` 原审批链核验发布身份后执行。
 
-`fhd-deploy.yml` 仅为 **break-glass**：SSH 到该机执行 `apply-latest`（强制跑 `fhd-auto-update.sh`）或 `restart-only`（`docker compose restart`）。
+`fhd-deploy.yml` 使用所选 GitHub Environment，通过 SSH 执行 `apply-latest` 或 `restart-only`；环境审批要求以对应配置为准。生产应用必须提供完整 `release_sha` 与 `release:<同一 SHA>` action ID，经过原发布审批并核对 stable manifest；应用后核对部署标记及健康接口中的实际 SHA。
 
 > 2026-07-14：已删除 `FHD/k8s/`、`FHD/helm/` 及 blue-green/canary/GitOps/预览环境等从未接通真实集群的清单与文档路径。
 > 历史脚本已外置归档（见根 `ARCHIVE_POINTER.md` 第六批 `docs-20260917-batch6/`）；需要时从归档或 git 历史取回。
@@ -342,8 +335,8 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 | 名称 | 类型 | 用途 | 缺失行为 |
 |------|------|------|---------|
 | `GITHUB_TOKEN` | 自动 | GHCR 推送、`gh workflow run` dispatch、GitHub Release | 自动注入 |
-| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标（默认 `119.27.178.147`） | CVM/桌面推送跳过 |
-| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | CVM 推送跳过 |
+| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标 | Actions 服务器上传失败；桌面按对应工作流处理 |
+| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | Actions 服务器上传失败 |
 | `FHD_PUSH_USER` | Secret | CVM SSH 用户（默认 `root`） | 用默认 |
 | `SERVER_SSH_KEY` | Secret | 桌面安装包上传 SSH 私钥（缺失则回退 `FHD_PUSH_SSH_KEY`） | 桌面上传跳过 |
 | `CODECOV_TOKEN` | Secret | 覆盖率上传 | 步骤 `continue-on-error` |

@@ -1401,7 +1401,7 @@ jobs:
   # gitops-image-bump 已随假 k8s/GitOps 路径退役（2026-07-01 运维根治）——
   # 生产 CD 的唯一正道是下方 cvm-push-release + 服务器端 fhd-auto-update.sh。
 
-  # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
+  # 手动请求上传已验证制品；缺少 secrets 失败，stable 等待原部署审批。
   cvm-push-release:
     needs: [docker-build-fhd-api]
     if: |
