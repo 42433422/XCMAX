@@ -381,7 +381,7 @@ def verify_native_run(
             (
                 same_run
                 and current_run_attempt == (run["id"], attempt)
-                and controller == release_sha
+                and controller == os.environ.get("GITHUB_SHA")
                 and run.get("status") == "in_progress"
                 and run.get("conclusion") is None
             )

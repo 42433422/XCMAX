@@ -500,6 +500,8 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 macOS 冻结双架构修复保留原发布开关和精确 SHA 授权：由主线控制器传 `--authorized-frozen-sha`，核对该 SHA 是当前 main 祖先，并执行相同的完整检查。门禁代码从控制器提交独立检出；原安装包、产品源及版本仍来自已授权的冻结提交。该参数携带原授权身份，不授予发布权限，也不适用于普通 orchestrator。
 
+冻结桌面、稳定制品上传、生产 apply 与 Windows hotfix 同样从触发工作流的主线 `github.sha` 独立检出校验器，并核对实际控制器提交；产品构建和原包仍绑定 `release_sha`，因此旧产品提交无需具备新版校验 CLI。正式桌面流程只允许当前 run/attempt 读取本次已完成作业的原制品，并核对调用工作流、控制器 SHA 和 `release_sha → controller → main` 祖先关系，不能沿用其他进行中的运行。Windows 临时下载指针分别核对原安装包、交付回执和摘要旁文件，任一不符均在发布前失败。
+
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
 ## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）

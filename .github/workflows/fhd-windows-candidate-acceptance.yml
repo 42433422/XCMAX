@@ -146,10 +146,16 @@ jobs:
             // in this same run. Waiting for the entire run would be a dependency cycle.
             const sameRun = runId === String(context.runId);
             const attempt = process.env.CURRENT_RELEASE_ATTEMPT || '';
-            const formalCall = /^[1-9]\d*$/.test(attempt) && attempt === process.env.GITHUB_RUN_ATTEMPT && Number(attempt) === run.run_attempt && process.env.CANDIDATE_ARTIFACT === 'xcagi-desktop-windows-enterprise';
-            const completed = sameRun ? formalCall && run.status === 'in_progress' && run.conclusion == null : !attempt && run.status === 'completed' && run.conclusion === 'success';
             const repository = `${context.repo.owner}/${context.repo.repo}`;
-            if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository || run.head_sha !== sha || !completed || run.path !== '.github/workflows/fhd-release-desktop.yml' || run.head_branch !== 'main' || run.event !== 'workflow_dispatch') throw new Error('Candidate run provenance mismatch');
+            const formalCall = /^[1-9]\d*$/.test(attempt) && attempt === process.env.GITHUB_RUN_ATTEMPT && Number(attempt) === run.run_attempt && process.env.CANDIDATE_ARTIFACT === 'xcagi-desktop-windows-enterprise' && process.env.GITHUB_WORKFLOW_REF === `${repository}/.github/workflows/fhd-release-desktop.yml@refs/heads/main` && run.head_sha === context.sha;
+            const completed = sameRun ? formalCall && run.status === 'in_progress' && run.conclusion == null : !attempt && run.status === 'completed' && run.conclusion === 'success';
+            if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository || (!sameRun && run.head_sha !== sha) || !completed || run.path !== '.github/workflows/fhd-release-desktop.yml' || run.head_branch !== 'main' || run.event !== 'workflow_dispatch') throw new Error('Candidate run provenance mismatch');
+            if (sameRun && run.head_sha !== sha) {
+              for (const [base, head] of [[sha, run.head_sha], [run.head_sha, 'main']]) {
+                const comparison = (await github.rest.repos.compareCommits({ ...context.repo, base, head })).data;
+                if (!['ahead', 'identical'].includes(comparison.status) || comparison.merge_base_commit?.sha !== base) throw new Error('Frozen candidate is outside the trusted main controller ancestry');
+              }
+            }
       - uses: actions/download-artifact@v8
         with:
           name: ${{ env.CANDIDATE_ARTIFACT }}

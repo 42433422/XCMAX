@@ -301,6 +301,7 @@ def _native_scope(tmp_path, monkeypatch):
 
     monkeypatch.setenv("GITHUB_RUN_ID", "50")
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_SHA", sha)
     monkeypatch.setenv(
         "GITHUB_WORKFLOW_REF", f"{repo}/.github/workflows/fhd-release-desktop.yml@refs/heads/main"
     )
@@ -334,6 +335,37 @@ def test_native_installers_have_real_passes_without_claiming_full_release(tmp_pa
         "Rollback",
         "Upgrade",
     ]
+
+
+@pytest.mark.parametrize("relation", ["ahead", "diverged", "behind"])
+def test_newer_main_controller_keeps_frozen_installer_source(tmp_path, monkeypatch, relation):
+    packages, sha, kwargs, run, artifacts, _ = _native_scope(tmp_path, monkeypatch)
+    controller = "b" * 40
+    run["head_sha"] = controller
+    for artifact in artifacts:
+        artifact["workflow_run"]["head_sha"] = controller
+    monkeypatch.setenv("GITHUB_SHA", controller)
+    original = kwargs["api"]
+    comparisons = []
+
+    def api(route):
+        if "/compare/" in route:
+            comparisons.append(route)
+            return {"status": relation}
+        return original(route)
+
+    kwargs["api"] = api
+    code, report = release_gate(packages, sha, **kwargs)
+    assert code == 1  # Full native OTA/customer-device qualification remains blocked.
+    assert report["platforms"] == {
+        "windows": "PASS" if relation == "ahead" else "FAIL",
+        "macos": "PASS" if relation == "ahead" else "FAIL",
+    }
+    assert f"repos/fixture/product/compare/{sha}...{controller}" in comparisons
+    if relation == "ahead":
+        assert f"repos/fixture/product/compare/{controller}...main" in comparisons
+        assert all(source["controller_sha"] == controller for source in report["sources"].values())
+        assert all(row["source_sha"] == sha for row in report["rows"])
 
 
 @pytest.mark.parametrize(

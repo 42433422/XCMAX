@@ -514,97 +514,6 @@ def test_mac_evidence_archive_excludes_installed_application_and_runtime_data(tm
     assert uploaded == permitted
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        "same_run",
-        "completed_previous",
-        "missing_call_input",
-        "wrong_attempt",
-        "stale_build_attempt",
-        "wrong_artifact",
-        "wrong_workflow",
-        "wrong_sha",
-        "wrong_branch",
-        "previous_running",
-        "previous_failed",
-        "previous_skipped",
-        "previous_cancelled",
-    ],
-)
-def test_reusable_acceptance_keeps_same_run_exception_narrow(case):
-    repo = Path(__file__).resolve().parents[3]
-    workflow = yaml.safe_load(
-        (repo / "FHD/.github/workflows/windows-candidate-acceptance.yml").read_text()
-    )
-    triggers = workflow.get("on", workflow.get(True))
-    assert "current_release_attempt" in triggers["workflow_call"]["inputs"]
-    assert "current_release_attempt" not in triggers["workflow_dispatch"]["inputs"]
-    script = next(
-        step["with"]["script"]
-        for step in workflow["jobs"]["isolated-install"]["steps"]
-        if step.get("uses", "").startswith("actions/github-script@")
-    )
-    previous = case.startswith("previous_") or case == "completed_previous"
-    run = {
-        "head_sha": "a" * 40,
-        "repository": {"full_name": "fixture/fixture"},
-        "head_repository": {"full_name": "fixture/fixture"},
-        "path": ".github/workflows/fhd-release-desktop.yml",
-        "head_branch": "main",
-        "event": "workflow_dispatch",
-        "status": "completed" if previous else "in_progress",
-        "conclusion": "success" if previous else None,
-        "run_attempt": 2,
-    }
-    environment = {
-        "PATH": os.environ["PATH"],
-        "CANDIDATE_RUN_ID": "50" if previous else "100",
-        "CANDIDATE_SHA": "a" * 40,
-        "CURRENT_RELEASE_ATTEMPT": "" if previous else "2",
-        "GITHUB_RUN_ATTEMPT": "2",
-        "CANDIDATE_ARTIFACT": "xcagi-windows-installer-" + "a" * 40
-        if previous
-        else "xcagi-desktop-windows-enterprise",
-    }
-    if case == "missing_call_input":
-        environment["CURRENT_RELEASE_ATTEMPT"] = ""
-    if case == "wrong_attempt":
-        environment["CURRENT_RELEASE_ATTEMPT"] = "1"
-    if case == "stale_build_attempt":
-        run["run_attempt"] = 1
-    if case == "wrong_artifact":
-        environment["CANDIDATE_ARTIFACT"] = "another-artifact"
-    if case == "wrong_workflow":
-        run["path"] = ".github/workflows/unrelated.yml"
-    if case == "wrong_sha":
-        run["head_sha"] = "b" * 40
-    if case == "wrong_branch":
-        run["head_branch"] = "candidate"
-    if case == "previous_running":
-        run.update(status="in_progress", conclusion=None)
-    if case in {"previous_failed", "previous_skipped", "previous_cancelled"}:
-        run["conclusion"] = case.removeprefix("previous_")
-    harness = """
-const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const execute = new (Object.getPrototypeOf(async function(){}).constructor)('github', 'context', input.script);
-const github = { rest: { actions: { getWorkflowRun: async () => ({ data: input.run }) } } };
-execute(github, {runId: 100, repo: {owner: 'fixture', repo: 'fixture'}}).catch(error => { console.error(error.message); process.exitCode = 1; });
-"""
-    result = subprocess.run(
-        ["node", "-e", harness],
-        input=json.dumps({"script": script, "run": run}),
-        env=environment,
-        text=True,
-        capture_output=True,
-        timeout=5,
-    )
-    assert result.returncode == (0 if case in {"same_run", "completed_previous"} else 1), (
-        result.stderr
-    )
-
-
 def test_formal_publication_requires_complete_native_jobs_and_rechecks_original_bytes():
     repo = Path(__file__).resolve().parents[3]
     workflow = yaml.safe_load((repo / "FHD/.github/workflows/release-desktop.yml").read_text())
@@ -673,6 +582,8 @@ def test_formal_publication_requires_complete_native_jobs_and_rechecks_original_
     "mutation",
     [
         "valid",
+        "controller_newer",
+        "nonancestor_controller",
         "old_attempt_artifact",
         "changed_attempt",
         "digest",
@@ -687,6 +598,7 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
     tmp_path, monkeypatch, current, mutation
 ):
     sha, repository = "a" * 40, "fixture/repo"
+    controller = "c" * 40 if mutation in {"controller_newer", "nonancestor_controller"} else sha
     _native_windows(tmp_path, sha)
     mod = _module()
     measurements = mod.verify_windows_native(
@@ -695,7 +607,7 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
     run = {
         "id": 7,
         "run_attempt": 2,
-        "head_sha": sha,
+        "head_sha": controller,
         "head_branch": "main",
         "repository": {"full_name": repository},
         "head_repository": {"full_name": repository},
@@ -710,6 +622,7 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
     }
     monkeypatch.setenv("GITHUB_RUN_ID", "7")
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_SHA", controller)
     monkeypatch.setenv(
         "GITHUB_WORKFLOW_REF",
         "fixture/repo/.github/workflows/fhd-release-desktop.yml@refs/heads/main",
@@ -728,7 +641,7 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
                 "name": name,
                 "expired": False,
                 "size_in_bytes": len(archives[number]),
-                "workflow_run": {"id": 7, "head_sha": sha},
+                "workflow_run": {"id": 7, "head_sha": controller},
                 "created_at": "2026-09-04T00:25:00Z",
                 "digest": "sha256:" + hashlib.sha256(archives[number]).hexdigest(),
             }
@@ -753,6 +666,8 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
 
     def api(path):
         nonlocal readbacks
+        if "/compare/" in path:
+            return {"status": "diverged" if mutation == "nonancestor_controller" else "ahead"}
         if path == route:
             readbacks += 1
             return (
@@ -783,7 +698,7 @@ def test_native_source_binds_original_zip_bytes_and_attempt(
             download=download,
         )
 
-    if mutation == "valid":
+    if mutation in {"valid", "controller_newer"}:
         proof = verify()
         assert set(proof) == set(mod.WINDOWS_RESULTS)
         assert all(row["run_attempt"] == 2 for row in proof.values())

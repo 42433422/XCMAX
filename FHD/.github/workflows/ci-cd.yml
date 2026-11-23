@@ -1420,6 +1420,17 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
 
+      - name: Check out the trusted security controller
+        if: ${{ inputs.release_channel == 'stable' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8
@@ -1443,14 +1454,19 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          python FHD/scripts/security/verify_security_scan_pair.py
-          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
-          --current-dir "${RUNNER_TEMP}/security-reports/current"
-          --repository "${{ github.repository }}"
-          --current-run-id "${{ inputs.security_scan_run_id }}"
-          --previous-run-id "${{ inputs.previous_security_scan_run_id }}"
-          --release-sha "${XCAGI_RELEASE_SHA}"
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${RUNNER_TEMP}/security-reports/previous" \
+            --current-dir "${RUNNER_TEMP}/security-reports/current" \
+            --repository "${{ github.repository }}" \
+            --current-run-id "${{ inputs.security_scan_run_id }}" \
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" \
+            --release-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8

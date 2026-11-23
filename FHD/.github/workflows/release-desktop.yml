@@ -282,6 +282,7 @@ jobs:
     needs: [windows-installer-delivery, notice-publication-policy]
     if: >-
       always() &&
+      github.ref == 'refs/heads/main' &&
       needs.notice-publication-policy.result == 'success' &&
       inputs.windows_installer_only == true &&
       inputs.verify_only != true &&
@@ -300,18 +301,31 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
+      - name: Check out the trusted frozen-candidate acceptance controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: FHD/scripts/release
       - name: Verify frozen mainline source and original run provenance
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
           ACCEPTANCE_RUN: ${{ inputs.acceptance_run_id }}
+          CONTROLLER_SHA: ${{ github.sha }}
+          CONTROLLER_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
           [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CONTROLLER_SHA" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          git merge-base --is-ancestor "$CONTROLLER_SHA" origin/main
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN}" \
             | jq -e --arg sha "$RELEASE_SHA" '.conclusion == "success" and .head_sha == $sha and .head_branch == "main" and .path == ".github/workflows/fhd-release-desktop.yml"' >/dev/null
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ACCEPTANCE_RUN}" \
@@ -336,7 +350,7 @@ jobs:
         run: |
           set -euo pipefail
           receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
-          python3 FHD/scripts/release/verify_upgrade_rollback_evidence.py \
+          python3 release-controller/FHD/scripts/release/verify_upgrade_rollback_evidence.py \
             --windows-native-dir "${RUNNER_TEMP}/acceptance" \
             --release-sha "$XCAGI_BUILD_SHA" --version "$DELIVERY_VERSION" \
             --installer-sha256 "$(jq -er .sha256 "$receipt")" \
@@ -379,7 +393,8 @@ jobs:
           artifact_sha="$(sha256sum "${artifact}" | cut -d' ' -f1)"
           receipt_sha="$(jq -er '.sha256' "$receipt")"
           sidecar_sha="$(cut -d' ' -f1 "${artifact}.sha256")"
-          test "$artifact_sha" = "$receipt_sha" && test "$artifact_sha" = "$sidecar_sha"
+          test "$artifact_sha" = "$receipt_sha"
+          test "$artifact_sha" = "$sidecar_sha"
           release_sha="${{ inputs.release_sha }}"
           args=(
             --version "$version"
@@ -497,7 +512,7 @@ jobs:
 
   release-preflight:
     needs: [notice-publication-policy]
-    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true && inputs.candidate_only != true }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.verify_only != true && inputs.windows_installer_only != true && inputs.candidate_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.
     defaults:
@@ -523,6 +538,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
+      - name: Check out the trusted security controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -554,14 +578,18 @@ jobs:
       - name: Enforce fresh exact-SHA zero-critical/high security scan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          python FHD/scripts/security/verify_security_scan_pair.py
-          --previous-dir security-reports/previous
-          --current-dir security-reports/current
-          --repository "${{ github.repository }}"
-          --current-run-id "${{ inputs.security_scan_run_id }}"
-          --previous-run-id "${{ inputs.previous_security_scan_run_id }}"
-          --release-sha "${XCAGI_BUILD_SHA}"
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$XCAGI_BUILD_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir security-reports/previous \
+            --current-dir security-reports/current \
+            --repository "${{ github.repository }}" \
+            --current-run-id "${{ inputs.security_scan_run_id }}" \
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" \
+            --release-sha "${XCAGI_BUILD_SHA}"
       - name: Fail closed before either platform builds
         shell: bash
         run: |
@@ -766,10 +794,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
+      - name: Check out the trusted macOS acceptance controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: FHD/scripts/release
       - name: Lock macOS checkout to release SHA
         shell: bash
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git -C ../release-controller rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${XCAGI_BUILD_SHA}" | tr '[:upper:]' '[:lower:]')"
       - name: Download shared vue-dist (single frontend build)
         uses: actions/download-artifact@v8
@@ -881,7 +918,7 @@ jobs:
             export XCAGI_ACCEPTANCE_EVIDENCE_DIR="$evidence"
             bash scripts/package/acceptance-macos.sh --version "$version" --dmg "$dmg" \
               --dest "$evidence/install" --data-dir "$evidence/data"
-            python3 scripts/release/verify_upgrade_rollback_evidence.py \
+            python3 ../release-controller/FHD/scripts/release/verify_upgrade_rollback_evidence.py \
               --macos-startup "$evidence/installed-startup.json" \
               --release-sha "$XCAGI_BUILD_SHA" --version "$version" \
               --installer-sha256 "$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)" \
@@ -923,8 +960,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
+      - name: Check out the trusted release-scope controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/release
+            FHD/scripts/dev
       - name: Lock manifest checkout to release SHA
-        run: test "$(git rev-parse HEAD)" = "${XCAGI_BUILD_SHA}"
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git -C ../release-controller rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "${XCAGI_BUILD_SHA}"
       - uses: actions/download-artifact@v8
         with:
           pattern: xcagi-desktop-*
@@ -968,7 +1018,7 @@ jobs:
         run: |
           set -euo pipefail
           installer="release/xcagi-v${DELIVERY_VERSION}/enterprise/XCAGI-Enterprise-Setup-${DELIVERY_VERSION}-x64.exe"
-          python3 scripts/release/verify_upgrade_rollback_evidence.py \
+          python3 ../release-controller/FHD/scripts/release/verify_upgrade_rollback_evidence.py \
             --windows-native-dir "${RUNNER_TEMP}/windows-acceptance" \
             --release-sha "$XCAGI_BUILD_SHA" --version "$DELIVERY_VERSION" \
             --installer-sha256 "$(sha256sum "$installer" | cut -d ' ' -f 1)" \
@@ -979,7 +1029,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python scripts/dev/check_release_scope_evidence.py
+          python ../release-controller/FHD/scripts/dev/check_release_scope_evidence.py
           --artifact-dir release --source-sha "${XCAGI_BUILD_SHA}" --version "${{ inputs.version }}"
           --repository "${{ github.repository }}" --run-id "${{ github.run_id }}"
           --run-attempt "${{ github.run_attempt }}"

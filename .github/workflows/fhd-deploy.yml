@@ -94,6 +94,17 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
 
+      - name: Check out the trusted security controller
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - name: Verify exact production release input
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         env:
@@ -133,8 +144,13 @@ jobs:
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
         run: |
-          python FHD/scripts/security/verify_security_scan_pair.py \
+          set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
             --previous-dir "${{ runner.temp }}/security-reports/previous" \
             --current-dir "${{ runner.temp }}/security-reports/current" \
             --repository "${{ github.repository }}" \
