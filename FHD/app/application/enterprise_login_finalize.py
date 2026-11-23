@@ -154,7 +154,6 @@ async def finalize_enterprise_login(
                         and market_result.get("account_state") == "active"
                         and market_result.get("desktop_access") is True
                     )
-                    personal_sync = personal_plan and verified_account_sync
                     applied = False
                     if verified_account_sync:
                         applied = apply_paid_plan_for_user(
@@ -166,8 +165,8 @@ async def finalize_enterprise_login(
                         )
                     if trial_sync and not applied:
                         raise TenantIdentityError("体验授权的到期信息未同步，请重新登录后重试")
-                    if personal_sync and not applied:
-                        raise TenantIdentityError("市场免费授权未同步，请重新登录后重试")
+                    if verified_account_sync and not applied:
+                        raise TenantIdentityError("市场账号授权未同步，请重新登录后重试")
                     if applied:
                         result["personal_plan"] = personal_plan
                         result["account_license_plan_id"] = active_plan_id

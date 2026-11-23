@@ -207,3 +207,51 @@ def test_desktop_startup_repairs_upgraded_customer_db(tmp_path: Path) -> None:
     backups = sorted((data_dir / "backups").glob("xcagi-*.db"))
     assert len(backups) == 1
     assert "credit_limit" not in _columns(backups[0], "customers")
+
+
+@pytest.mark.parametrize("startup", [False, True])
+def test_trial_deadline_migration_keeps_old_sessions_unknown(tmp_path: Path, startup: bool) -> None:
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+
+    data_dir = tmp_path / "trial-home"
+    db = ensure_desktop_dirs(data_dir)["data"] / "xcagi.db"
+    previous = "2026_11_24_code_edit_proposals"
+    column = "verified_trial_expires_at"
+    _upgrade(db, previous)
+    engine = sa.create_engine(_url(db))
+    with Session(engine) as session:
+        user = User(username="legacy-trial", password="unused", account_tier="normal")
+        session.add(user)
+        session.commit()
+        user_id = user.id
+    engine.dispose()
+    with sqlite3.connect(db) as connection:
+        connection.execute(f"ALTER TABLE sessions DROP COLUMN {column}")
+        connection.execute(
+            "INSERT INTO sessions (session_id, user_id, created_at, expires_at, market_is_admin, market_is_enterprise) "
+            "VALUES ('legacy-trial-session', ?, '2026-01-01', '2036-01-01', 0, 1)",
+            (user_id,),
+        )
+    if startup:
+        assert migrate.ensure_startup_migration(str(data_dir))["action"] == "upgraded"
+        backups = list((data_dir / "backups").glob("xcagi-*.db"))
+        assert len(backups) == 1 and column not in _columns(backups[0], "sessions")
+    else:
+        _upgrade(db)
+    fresh = tmp_path / "fresh-trial.db"
+    _upgrade(fresh)
+    got, want = _columns(db, "sessions")[column], _columns(fresh, "sessions")[column]
+    assert type(got["type"]) is type(want["type"])
+    assert got["nullable"] is want["nullable"] is True
+    engine = sa.create_engine(_url(db))
+    with Session(engine) as session:
+        row = session.query(UserSession).filter_by(session_id="legacy-trial-session").one()
+        assert row.verified_trial_expires_at is None
+        assert row.expires_at.year == 2036
+    engine.dispose()
+    os.environ["DATABASE_URL"] = _url(db)
+    command.stamp(Config(str(_ALEMBIC_INI)), previous)
+    _upgrade(db)
+    with sqlite3.connect(db) as connection:
+        assert connection.execute(f"SELECT {column} FROM sessions").fetchone() == (None,)

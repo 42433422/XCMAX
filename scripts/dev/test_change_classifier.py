@@ -230,7 +230,9 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             with self.subTest(category=category):
                 self.assertFalse(decide(category, BACKEND_ONLY))
 
-    def test_shipment_elt_native_sources_and_tests_run_cross_platform_contract(self) -> None:
+    def test_shipment_elt_native_sources_and_tests_run_cross_platform_contract(
+        self,
+    ) -> None:
         for path in (
             *ELT_OUTPUT_SECURITY,
             "FHD/app/application/shipment_elt/directory_listing.py",
@@ -240,7 +242,9 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(decide("runtime_contract", [path]))
 
-    def test_shared_receipts_authority_and_persisted_workers_run_native_contract(self) -> None:
+    def test_shared_receipts_authority_and_persisted_workers_run_native_contract(
+        self,
+    ) -> None:
         for path in (
             "FHD/app/domain/task_lifecycle/results.py",
             "FHD/app/domain/task_lifecycle/agent_runtime_results.py",
@@ -289,6 +293,15 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             "FHD/requirements-server-api.txt",
             "FHD/ops/deploy/requirements-server-api.lock.txt",
             "FHD/uv.lock",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_artifact_verification.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_training.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay_capture.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_business_promptfoo.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_dataset.py",
         ):
             with self.subTest(path=path):
                 self.assertTrue(decide("runtime_contract", [path]))

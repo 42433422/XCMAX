@@ -218,6 +218,15 @@ RELEVANT = {
             "FHD/scripts/dev/e2e-full.sh",
             "FHD/scripts/dev/e2e_supervise.py",
             "FHD/tests/test_ci/test_isolated_e2e_credentials.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_artifact_verification.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_training.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay_capture.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_business_promptfoo.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_dataset.py",
         ],
         "contains": [],
     },
@@ -329,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
             "changed_count": len(changed),
             "decisions": decisions,
-            "reason": "changed_paths" if changed else "empty_or_unavailable_diff_run_all",
+            "reason": ("changed_paths" if changed else "empty_or_unavailable_diff_run_all"),
         }
         outputs = {"valid": "true", "source_sha": source}
         for category, run in decisions.items():

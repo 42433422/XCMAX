@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlite3 import OperationalError
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -172,10 +173,11 @@ class TestEnsureLocalUserAfterMarket:
         with (
             patch("app.db.session.get_db") as mock_get_db,
             patch(
-                "app.db.init_db.ensure_runtime_auth_bootstrap", side_effect=RuntimeError("db down")
+                "app.db.init_db.ensure_runtime_auth_bootstrap",
+                side_effect=OperationalError("db down"),
             ),
         ):
-            mock_get_db.side_effect = RuntimeError("db down")
+            mock_get_db.side_effect = OperationalError("db down")
             result, err = await ensure_local_user_after_market(
                 username="alice",
                 password="pass",

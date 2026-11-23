@@ -551,7 +551,7 @@ def test_native_file_hash_ignores_read_access_but_rejects_content_identity_chang
     env = customer_workflow
     target = env["workspace"] / "outputs/output.csv"
     actions = employee_executor._actions_real
-    file_digest = hashlib.file_digest
+    hash_file = hashlib.file_digest
     reads = []
 
     def native_with_old_access_time(*args, **kwargs):
@@ -560,15 +560,14 @@ def test_native_file_hash_ignores_read_access_but_rejects_content_identity_chang
         os.utime(target, ns=(current.st_mtime_ns - 172_800_000_000_000, current.st_mtime_ns))
         return result
 
-    def hash_then_change(stream, algorithm, *args, **kwargs):
-        before = os.fstat(stream.fileno())
-        if not target.exists() or (before.st_dev, before.st_ino) != (
-            target.stat().st_dev,
-            target.stat().st_ino,
-        ):
-            return file_digest(stream, algorithm, *args, **kwargs)
-        checksum = file_digest(stream, algorithm, *args, **kwargs)
-        after = os.fstat(stream.fileno())
+    def hash_then_change(source, digest, **kwargs):
+        path = target
+        if not path.exists() or not os.path.samestat(os.fstat(source.fileno()), path.stat()):
+            return hash_file(source, digest, **kwargs)
+        before = path.stat()
+        hashed = hash_file(source, digest, **kwargs)  # The actual descriptor read updates atime.
+        checksum = hashed.hexdigest()
+        after = path.stat()
         assert before.st_atime_ns != after.st_atime_ns
         assert all(
             getattr(before, key) == getattr(after, key)
@@ -584,20 +583,20 @@ def test_native_file_hash_ignores_read_access_but_rejects_content_identity_chang
                 "st_ctime_ns",
             )
         )
-        reads.append(checksum.hexdigest())
+        reads.append(checksum)
         if change != "atime":
-            original = target.read_bytes()
+            original = path.read_bytes()
             changed = original.replace(b",3", b",4")
             assert original != changed and len(original) == len(changed)
             if change == "write":
-                target.write_bytes(changed)
-                os.utime(target, ns=(after.st_atime_ns, after.st_mtime_ns + 1_000_000))
+                path.write_bytes(changed)
+                os.utime(path, ns=(after.st_atime_ns, after.st_mtime_ns + 1_000_000))
             else:
-                replacement = target.with_suffix(".replacement")
+                replacement = path.with_suffix(".replacement")
                 replacement.write_bytes(changed)
                 os.utime(replacement, ns=(after.st_atime_ns, after.st_mtime_ns))
-                replacement.replace(target)
-        return checksum
+                replacement.replace(path)
+        return hashed
 
     monkeypatch.setattr(employee_executor, "_actions_real", native_with_old_access_time)
     monkeypatch.setattr(hashlib, "file_digest", hash_then_change)

@@ -187,7 +187,7 @@ async def test_failed_restore_never_returns_other_accounts_cache(monkeypatch, ma
     monkeypatch.setattr(entitlements, "restore_entitlements_from_session_row", lambda sid: False)
     monkeypatch.setattr(entitlements, "_session_username_for_entitlements", lambda sid: "")
     resolver = (
-        AsyncMock(side_effect=RuntimeError("unavailable"))
+        AsyncMock(side_effect=OSError("unavailable"))
         if market_failure
         else AsyncMock(return_value=None)
     )

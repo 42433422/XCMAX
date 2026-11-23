@@ -10,6 +10,7 @@ import tempfile
 from contextlib import contextmanager
 from typing import Any
 
+from app.infrastructure.session.session_manager import session_has_expired
 from app.request_active_mod_ctx import (
     normalize_active_mod_id,
     reset_request_active_mod_id,
@@ -117,10 +118,8 @@ def _actor_binding(
     return binding
 
 
-def _check_actor_row(row: Any, user_id: str) -> None:
-    from app.utils.time import utc_now_naive
-
-    if row is None or str(row.user_id) != user_id or row.expires_at <= utc_now_naive():
+def _check_actor_row(db: Any, row: Any, user_id: str) -> None:
+    if row is None or str(row.user_id) != user_id or session_has_expired(db, row):
         raise AgentModAuthorizationError("任务绑定的登录会话已失效")
     if row.user is None or not row.user.is_active:
         raise AgentModAuthorizationError("任务所属账号已停用")
@@ -137,11 +136,11 @@ def bind_agent_actor_scope(
         raise AgentModAuthorizationError("工具任务需要有效的登录会话")
     with HostSessionLocal() as db:
         row = db.query(UserSession).filter(UserSession.session_id == session_id).first()
-        _check_actor_row(row, user_id)
+        _check_actor_row(db, row, user_id)
         if normalize_active_mod_id(mod_id) != mod_id:
             raise AgentModAuthorizationError("任务 Mod 标识无效")
         if mod_id:
-            _check_row(row, user_id=user_id, mod_id=mod_id)
+            _check_row(db, row, user_id=user_id, mod_id=mod_id)
         return _actor_binding(row, execution_tenant_id, mod_id)
 
 
@@ -155,7 +154,7 @@ def _bound_actor(context: dict[str, Any]) -> Any:
         raise AgentModAuthorizationError("工具缺少可信登录会话绑定")
     with HostSessionLocal() as db:
         row = db.get(UserSession, binding["session_row_id"])
-        _check_actor_row(row, str(binding.get("user_id") or ""))
+        _check_actor_row(db, row, str(binding.get("user_id") or ""))
         effective_tenant = binding.get("execution_tenant_id")
         if not isinstance(effective_tenant, str):
             raise AgentModAuthorizationError("任务租户授权不完整")
@@ -189,7 +188,7 @@ def _bound_actor(context: dict[str, Any]) -> Any:
                 or (selected_mod and selected_mod != mod["mod_id"])
             ):
                 raise AgentModAuthorizationError("工具 Mod 授权与任务身份不匹配")
-            _check_row(row, user_id=actual["user_id"], mod_id=mod["mod_id"])
+            _check_row(db, row, user_id=actual["user_id"], mod_id=mod["mod_id"])
         elif selected_mod or actor_mod:
             raise AgentModAuthorizationError("工具缺少当前 Mod 授权")
         db.expunge(row.user)
@@ -211,12 +210,11 @@ def validate_actor_context(runtime_context: dict[str, Any]) -> dict[str, Any] | 
     return None
 
 
-def _check_row(row: Any, *, user_id: str, mod_id: str) -> None:
+def _check_row(db: Any, row: Any, *, user_id: str, mod_id: str) -> None:
     from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
     from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
-    from app.utils.time import utc_now_naive
 
-    if row is None or str(row.user_id) != user_id or row.expires_at <= utc_now_naive():
+    if row is None or str(row.user_id) != user_id or session_has_expired(db, row):
         raise AgentModAuthorizationError("任务绑定的登录会话已失效")
     if row.user is None or not row.user.is_active:
         raise AgentModAuthorizationError("任务所属账号已停用")
@@ -240,7 +238,7 @@ def bind_agent_mod_scope(*, session_id: str, user_id: str, mod_id: str) -> dict[
         raise AgentModAuthorizationError("Mod 任务需要有效的登录会话")
     with HostSessionLocal() as db:
         row = db.query(UserSession).filter(UserSession.session_id == session_id).first()
-        _check_row(row, user_id=user_id, mod_id=normalized)
+        _check_row(db, row, user_id=user_id, mod_id=normalized)
         return {
             "session_row_id": row.id,
             "user_id": user_id,
@@ -274,7 +272,7 @@ def agent_mod_execution_scope(binding: dict[str, Any] | None):
         raise AgentModAuthorizationError("任务 Mod 授权上下文无效")
     with HostSessionLocal() as db:
         row = db.get(UserSession, row_id)
-        _check_row(row, user_id=user_id, mod_id=mod_id)
+        _check_row(db, row, user_id=user_id, mod_id=mod_id)
         if binding.get("account_tenant_id") != str(row.user.tenant_id or "") or binding.get(
             "account_role"
         ) != str(row.user.role or ""):

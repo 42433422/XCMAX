@@ -103,6 +103,12 @@ jobs:
           fi
           PARA_TEST_SANDBOX_ENTRY="$sandbox_root/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
             node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/opencode_sandbox_controller.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
+      - name: Install the existing business replay dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          python -m pip install -e "$GITHUB_WORKSPACE/packages/retort_engine" \
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" \
+            -e "$GITHUB_WORKSPACE/成都修茈科技有限公司/MODstore_deploy[governance]"
       - name: Verify private training with the real CLI and native sandbox
         if: matrix.os == 'ubuntu-22.04'
         run: |
@@ -112,7 +118,52 @@ jobs:
           PROMPTFOO_CLI="$RUNNER_TEMP/promptfoo-contract/node_modules/.bin/promptfoo" \
           PROMPTFOO_SANDBOX_ENTRY="$RUNNER_TEMP/para-worker/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
           PROMPTFOO_PYTHON="$(command -v python)" PROMPTFOO_TEST_NATIVE_SANDBOX=1 \
-            node --test scripts/autonomy/runtime_tools/promptfoo_sandbox.test.mjs
+            node --test --test-reporter=junit scripts/autonomy/runtime_tools/promptfoo_sandbox.test.mjs \
+              > "$RUNNER_TEMP/native-trainer.xml"
+      - name: Verify original business replay inside the native sandbox
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          PROMPTFOO_SANDBOX_ENTRY: ${{ runner.temp }}/para-worker/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js
+          PROMPTFOO_CLI: ${{ runner.temp }}/promptfoo-contract/node_modules/.bin/promptfoo
+        run: |
+          cd "$GITHUB_WORKSPACE/成都修茈科技有限公司/MODstore_deploy"
+          python -m pytest -o addopts= tests/test_workflow_training_replay.py \
+            tests/test_workflow_training_replay_capture.py tests/test_workflow_business_promptfoo.py \
+            --junitxml="$RUNNER_TEMP/native-business-replay.xml" -q
+      - name: Reject missing or skipped native business replay evidence
+        if: ${{ always() && matrix.os == 'ubuntu-22.04' }}
+        shell: python
+        run: |
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          reports = {"native-business-replay.xml": {
+              'test_real_native_employee_and_independent_file_check[csv]',
+              'test_real_native_employee_and_independent_file_check[excel]',
+              'test_successful_native_run_with_wrong_cells_fails_business_assertion',
+              'test_native_replay_cannot_read_host_oracle_write_outside_or_use_network[seal]',
+              'test_native_replay_cannot_read_host_oracle_write_outside_or_use_network[cli]',
+              'test_native_replay_without_sandbox_cannot_be_verified',
+              'test_production_freezes_original_source_and_oracle_before_delivery',
+              'test_running_delivery_reuses_its_original_optional_training_snapshot[delete]',
+              'test_running_delivery_reuses_its_original_optional_training_snapshot[replace]',
+              'test_running_delivery_reuses_its_original_optional_training_snapshot[disable_policy]',
+              'test_frozen_training_snapshot_still_rejects_changed_business_input',
+              'test_missing_training_snapshot_cannot_be_recaptured_during_delivery',
+              'test_delivery_recheck_does_not_add_a_late_training_snapshot',
+              'test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout[direct]',
+              'test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout[deferred]',
+              'test_timeout_reaps_worker_descendants',
+          }, "native-trainer.xml": {
+              'real promptfoo uses the approved model through the official SRT proxy',
+              'real promptfoo uses the approved model inside native SRT',
+          }}
+          for report, required in reports.items():
+              cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / report).iter("testcase"))
+              if not required <= {case.get("name") for case in cases}:
+                  raise SystemExit(f"mandatory native scenarios are missing from {report}")
+              if any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")):
+                  raise SystemExit(f"{report} contains skips or failures")
+              print(f"Verified {len(cases)} contracts in {report}; zero skipped")
       - uses: actions/checkout@v4
         if: matrix.os == 'ubuntu-26.04'
         with:

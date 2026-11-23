@@ -7,7 +7,10 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import case
+
 from app.db.models.tenant import Tenant
+from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.session import get_host_db as get_db
 from app.infrastructure.billing.saas_plans import (
@@ -26,6 +29,16 @@ _ACCOUNT_TIERS = ("normal", "pro", "max", "ultra")
 
 def _tier_rank(value: Any) -> int:
     return _ACCOUNT_TIERS.index(value) if value in _ACCOUNT_TIERS else 0
+
+
+def _parse_trial_deadline(value: str | None) -> datetime | None:
+    try:
+        expires = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=UTC)
+        return expires.astimezone(UTC).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
 
 
 def _select_license(
@@ -50,12 +63,8 @@ def _select_license(
     expires = None
     if plan.get("license_type") == "trial":
         if sync_from_market:
-            try:
-                expires = datetime.fromisoformat(str(active_plan_expires_at).replace("Z", "+00:00"))
-                if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=UTC)
-                expires = expires.astimezone(UTC).replace(tzinfo=None)
-            except (TypeError, ValueError):
+            expires = _parse_trial_deadline(active_plan_expires_at)
+            if expires is None:
                 return None
         else:
             expires = utc_now_naive() + timedelta(
@@ -335,12 +344,14 @@ def apply_paid_plan_for_user(
     sync_from_market: bool = False,
     active_plan_expires_at: str | None = None,
     verified_account_sync: bool = False,
+    verified_payment_grant: bool = False,
 ) -> bool:
     if verified_account_sync and not sync_from_market:
         return False
     if not is_saas_plan_id(plan_id):
         return False
     plan = plan_by_id(plan_id) or {}
+    verified_grant = verified_account_sync or verified_payment_grant
     with get_db() as db:
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user:
@@ -412,6 +423,32 @@ def apply_paid_plan_for_user(
         user.account_tier = _ACCOUNT_TIERS[
             rank if verified_account_sync else max(_tier_rank(user.account_tier), rank)
         ]
+        if (
+            verified_grant
+            and effective.get("license_type") == "trial"
+            and expires is not None
+            and user.account_tier == "normal"
+            and user.tier != "admin"
+            and (user.role or "").lower() not in {"admin", "superadmin"}
+        ):
+            # The account grant owns the deadline; sessions retain only the
+            # narrower credential bound established by this verified grant.
+            db.query(UserSession).filter(UserSession.user_id == user.id).update(
+                {
+                    "expires_at": case(
+                        (UserSession.expires_at > expires, expires),
+                        else_=UserSession.expires_at,
+                    ),
+                    "verified_trial_expires_at": expires,
+                },
+                synchronize_session=False,
+            )
+        elif verified_grant and plan.get("license_type") == "permanent":
+            # Only this account's verified upgrade replaces its trial evidence;
+            # another tenant member's license cannot renew this session.
+            db.query(UserSession).filter(UserSession.user_id == user.id).update(
+                {"verified_trial_expires_at": None}, synchronize_session=False
+            )
         db.commit()
         logger.info(
             "[tenant-subscription] market license applied user_id=%s tenant_id=%s account_tier=%s",

@@ -95,6 +95,8 @@ class Session(Base):
     )
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # A verified trial grant bounds this session even if its ordinary TTL is refreshed.
+    verified_trial_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     market_access_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     market_refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     market_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

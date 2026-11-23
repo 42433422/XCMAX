@@ -399,6 +399,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertFalse((self.state / "release_applied_sha").exists())
         self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
 
+
     def test_failed_activation_before_switch_retains_verified_pair_receipt(self) -> None:
         self.add_fhd_release(self.old_sha)
         self.current.unlink()
@@ -456,6 +457,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
                 self.assertFalse((self.state / "release_applied_sha").exists())
                 self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
 
+
     def test_compensation_keeps_other_pending_or_unverified_component_blocked(self) -> None:
         self.add_fhd_release(self.old_sha)
         self.bad_sha.add(self.new_sha)
@@ -477,6 +479,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
                     self.assertTrue(other_pending.exists())
                     other_pending.rmdir()
 
+
     def test_compensation_never_invents_a_missing_original_pair_receipt(self) -> None:
         self.add_fhd_release(self.old_sha)
         (self.state / "release_applied_sha").unlink()
@@ -488,6 +491,87 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertFalse(self.pending.exists())
         self.assertFalse((self.state / "release_applied_sha").exists())
         self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
+
+    def assert_failed_candidate_preserves_pair(self, component: str) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.component = component
+        self.current = self.runtime / ("fhd" if component == "fhd" else "source")
+        self.make_release(self.new_sha)
+        self.write_marker("created_at", "100")
+        self.env["CURRENT_NAME"] = self.current.name
+        verified = self.run_function("verify_current_release_pair")
+        self.assertEqual(verified.returncode, 0, verified.stderr + verified.stdout)
+        self.bad_sha.add(self.new_sha)
+        failed = self.activate()
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assert_old_markers()
+        self.assertFalse(self.pending.exists())
+        restored = self.run_function("verify_current_release_pair")
+        self.assertEqual(restored.returncode, 0, restored.stderr + restored.stdout)
+
+    def test_failed_modstore_candidate_restores_verified_pair(self) -> None:
+        self.assert_failed_candidate_preserves_pair("modstore")
+
+    def test_failed_fhd_candidate_restores_verified_pair(self) -> None:
+        self.assert_failed_candidate_preserves_pair("fhd")
+
+    def test_untouched_bootstrap_failure_preserves_verified_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.current.unlink()
+        shutil.copytree(self.old, self.current)
+        Path(str(self.current) + ".previous").mkdir()
+        result = self.activate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.current.is_dir())
+        self.assertFalse(self.current.is_symlink())
+        self.assertFalse(self.pending.exists())
+        verified = self.run_function("verify_current_release_pair")
+        self.assertEqual(verified.returncode, 0, verified.stderr + verified.stdout)
+        self.assertNotIn("systemctl stop", self.events.read_text())
+
+    def test_compensation_does_not_invent_a_previous_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.bad_sha.add(self.new_sha)
+        aggregate = self.state / "release_applied_sha"
+        for original in (None, "invalid", "c" * 40):
+            with self.subTest(original=original):
+                aggregate.unlink(missing_ok=True)
+                if original is not None:
+                    aggregate.write_text(original + "\n")
+                self.assertNotEqual(self.activate().returncode, 0)
+                self.assertEqual(self.current.resolve(), self.old)
+                self.assertFalse(self.pending.exists())
+                self.assertFalse(aggregate.exists())
+
+    def test_compensation_rechecks_peer_health_before_restoring_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.bad_sha.add(self.new_sha)
+        self.bad_components.add("fhd")
+        self.assertNotEqual(self.activate().returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
+
+    def test_compensation_does_not_commit_a_mixed_release_pair(self) -> None:
+        self.add_fhd_release(self.new_sha)
+        self.env["PREPARE_FAIL_SHA"] = self.new_sha
+        self.assertNotEqual(self.activate().returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assertEqual((self.runtime / "fhd").resolve(), self.new)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
+
+    def test_compensation_preserves_unresolved_peer_switch(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        peer_pending = self.state / "release_apply_fhd.pending"
+        peer_pending.mkdir()
+        self.bad_sha.add(self.new_sha)
+        self.assertNotEqual(self.activate().returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assertFalse(self.pending.exists())
+        self.assertTrue(peer_pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
 
     def test_compensation_never_reinstates_an_invalid_original_pair_receipt(
         self,

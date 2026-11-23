@@ -70,6 +70,16 @@ def first_date(
     if not text:
         return None
     match = _CN_DATE.search(text)
+    iso_match = _ISO_LIKE.search(text)
+    if iso_match and (match is None or iso_match.start() < match.start()):
+        try:
+            return datetime(
+                int(iso_match.group("year")),
+                int(iso_match.group("month")),
+                int(iso_match.group("day")),
+            )
+        except ValueError:
+            return None
     if match:
         month = int(match.group("month"))
         day = int(match.group("day") or 1)
@@ -80,14 +90,6 @@ def first_date(
             year = default_year or datetime.now().year
         try:
             return datetime(year, month, day)
-        except ValueError:
-            return None
-    match = _ISO_LIKE.search(text)
-    if match:
-        try:
-            return datetime(
-                int(match.group("year")), int(match.group("month")), int(match.group("day"))
-            )
         except ValueError:
             return None
     if allow_serial and re.fullmatch(r"\d+(?:\.\d+)?", text):

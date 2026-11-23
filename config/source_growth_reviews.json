@@ -802,7 +802,7 @@
       "reason": "本记录是精确源码增长的评审请求，不是审批证据。按用户开始实现真实闭环的授权，原 AgentRun 审批领取 CAS 同一事务保存真实审批人及时间，关闭领取已提交但决策身份尚未保存的中断窗口。",
       "boundary": "复用既有 SQLAlchemy 条件更新、原审批快照与原 agent_execution_claim；保留租户、计划、步骤和历史状态限制，领取后未知结果继续禁止重放，不新增任务账本或恢复引擎。",
       "validation": "真实隔离 SQL 回归覆盖领取前后中断、原审批人恢复、撤权与跨租户拒绝、配置节点实际交付及详情完整计划核对；以本 PR 最终文件树的集成回归与必需 CI 结果为准。",
-      "follow_up": "精确基线为 main@07c7489fe05fdc5a4a2a703e4000cc156fd4c8f3（本文件与38b03d2c及原基线34937513的blob相同），由 @42433422 复核同一事务的决策身份、未知结果边界及最终 CI；本记录和 AI 代码复核不替代实际人工审批。",
+      "follow_up": "精确基线为 main@07c7489fe05fdc5a4a2a703e4000cc156fd4c8f3（本文件与38b03d2c及原基线34937513的blob相同），由 @42433422 复核同一事务的决策身份、未知结果边界及最终 CI；本记录和 AI 代码复核不替代实际人工审批。 本轮合解继续保留既有执行状态语义；本登记仍不替代架构审批。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py": {
@@ -976,12 +976,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "39f51ffa73bc7c09ddbb6296d022a011cacb38b7",
+      "head_blob": "6da0d4893c0854d5b35d928b6613485a81b50965",
       "before_lines": 0,
-      "after_lines": 876,
-      "reason": "原有界CSV/XLSX回放复用WorkflowEngine、EmployeeRuntimeClient与openpyxl/CSV，统一到固定JS入口和官方SRT0.0.83；保留worker隔离核验、原输入校验、60秒截止及进程组回收，抽取比较函数后保持原lazy API。",
+      "after_lines": 879,
+      "reason": "原有界CSV/XLSX回放复用WorkflowEngine、EmployeeRuntimeClient与openpyxl/CSV，统一到固定JS入口和官方SRT0.0.83；保留worker隔离核验、原输入校验、60秒截止及进程组回收，抽取比较函数后保持原lazy API。 本轮仅将未参与证据核验的员工stdout/stderr重定向至DEVNULL，避免无人消费的输出无界缓冲；沿现有worker、原生沙箱及独立产物核验。",
       "boundary": "仅准入原Ubuntu22非root命名空间合同；禁止网络、Unix socket及嵌套放宽，仅本次临时目录可写。程序目录只读挂载后屏蔽非源码、非包目录及符号链接，仅声明资源例外；MODstore父目录和旁置DB/catalog不授读。组件、宿主或原生核验缺失均阻断。",
-      "validation": "合解77项Python与3项Node合同通过；固定SRT仅编译策略生成251个argv，低于原9000上限，没有执行工作负载。旧3272源码文件至少9816参数的问题已修复；原生文件边界和业务正控仍需最终Ubuntu22 CI，不把本机拒绝或SIGKILL计作成功。",
+      "validation": "合解77项Python与3项Node合同通过；固定SRT仅编译策略生成251个argv，低于原9000上限，没有执行工作负载。旧3272源码文件至少9816参数的问题已修复；原生文件边界和业务正控仍需最终Ubuntu22 CI，不把本机拒绝或SIGKILL计作成功。 原Ubuntu22控制工具作业完整执行现有Python和Node模块，并核对16个Python必选案例及2个Node原生案例；缺报告、缺项、失败或跳过均阻断。Debian13本地不满足原生准入，未将拒绝或仅策略编译称为原生执行成功。",
       "follow_up": "请求@42433422核对精确源码身份、独立策略审查和原生CI；不为体积放宽策略或复制比较器。此记录只请求审查，实际模型增益、客户验收与运行版本仍需原始证据。",
       "review_owner": "@42433422"
     },

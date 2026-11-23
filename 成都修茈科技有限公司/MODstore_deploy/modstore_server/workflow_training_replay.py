@@ -526,8 +526,9 @@ def _run_worker(request, directory, env, *, timeout=60):
     with subprocess.Popen(
         [node, str(wrapper), "--replay", "--directory", str(directory), "--python", sys.executable],
         stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        # Employee logs are not evidence; discard them instead of buffering unbounded data.
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         text=True,
         cwd=directory,
         env={**env, "PROMPTFOO_SANDBOX_ENTRY": runtime},
@@ -537,7 +538,9 @@ def _run_worker(request, directory, env, *, timeout=60):
             stdout, stderr = proc.communicate(
                 json.dumps(request), timeout=max(0, deadline - time.monotonic())
             )
-            return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+            return subprocess.CompletedProcess(
+                proc.args, proc.returncode, stdout or "", stderr or ""
+            )
         finally:
             # Reap the owned group before Popen closes its pipes, including on timeout.
             terminate_subprocess(proc, process_group=True)

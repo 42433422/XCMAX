@@ -252,6 +252,26 @@ def test_missing_training_snapshot_cannot_be_recaptured_during_delivery(
     assert stored == snapshots[0] and stored["replay_ready"] is False
 
 
+def test_delivery_recheck_does_not_add_a_late_training_snapshot(customer_workflow, monkeypatch):
+    env = customer_workflow
+    monkeypatch.setattr(training, "_policies", lambda: [])
+    capture = replay.capture_business_replay
+    calls = []
+
+    def capture_then_configure(*args):
+        frozen = capture(*args)
+        calls.append(frozen)
+        if len(calls) == 1:
+            _oracle(env, monkeypatch)
+        return frozen
+
+    monkeypatch.setattr(replay, "capture_business_replay", capture_then_configure)
+    response = env["execute"]()
+    assert response.status_code == 200, response.text
+    assert calls == [None]
+    assert "business_replay" not in env["binding"]["customer_delivery"]
+
+
 @pytest.mark.parametrize("change", ["remove", "replace"])
 def test_delivery_reuses_training_snapshot_after_optional_reference_changes(
     customer_workflow, monkeypatch, change

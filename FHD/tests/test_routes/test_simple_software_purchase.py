@@ -229,7 +229,7 @@ def market_login(purchase, monkeypatch):
     )
     monkeypatch.setattr("app.application.enterprise_login_flow._is_desktop_runtime", lambda: False)
 
-    async def login(plan_id, **overrides):
+    async def login(plan_id, *, session_id="purchase-session", **overrides):
         profile = {
             "id": 41,
             "username": "buyer",
@@ -247,7 +247,7 @@ def market_login(purchase, monkeypatch):
         market.update(overrides)
         return await finalize_enterprise_login(
             result={"success": True, "user": {"id": 1}},
-            session_id="purchase-session",
+            session_id=session_id,
             market_result=market,
             account_kind="enterprise",
             username="buyer",
@@ -291,6 +291,253 @@ async def test_verified_market_free_login_reclaims_refunded_permanent_access(
         assert result["personal_plan"] is True
         assert result["account_license_plan_id"] == saas_plans.PERSONAL_PLAN_ID
         assert result["account_tier"] == "personal"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_id", [STANDARD, "saas-trial-30"])
+@pytest.mark.parametrize("shared_tenant", [False, True])
+@pytest.mark.parametrize("via_checkout", [False, True])
+async def test_repurchase_after_revocation_cannot_restore_tenant_account_tier(
+    purchase, market_login, plan_id, shared_tenant, via_checkout
+):
+    client, sessions, _ = purchase
+    assert (await market_login("saas-permanent-ultra"))["success"]
+    if shared_tenant:
+        with sessions.begin() as db:
+            db.add(
+                User(
+                    id=2,
+                    username="licensed-member",
+                    password="unused",
+                    tenant_id=1,
+                    market_user_id=42,
+                    tier="enterprise",
+                    account_tier="ultra",
+                    is_active=True,
+                )
+            )
+    assert (await market_login(saas_plans.PERSONAL_PLAN_ID))["account_tier"] == "personal"
+    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+
+    if via_checkout:
+        response = client.post("/api/model-payment/checkout", json={"plan_id": plan_id})
+        assert response.status_code == 200, response.text
+        order_id = response.json()["data"]["order_id"]
+        amount = "6800.00" if plan_id == STANDARD else "99.00"
+        assert notify(client, order_id, amount).text == "success"
+        assert notify(client, order_id, amount).text == "success"
+        assert order_store.get_entitlement(plan_id)["purchase_count"] == 1
+    else:
+        expires = utc_now_naive() + timedelta(days=2)
+        result = await market_login(plan_id, active_plan_expires_at=expires.isoformat() + "Z")
+        assert result["success"]
+        assert result["account_tier"] == "normal"
+
+    with sessions() as db:
+        # A tenant's retained licence must never grant this account the old tier.
+        assert db.get(User, 1).account_tier == "normal"
+        assert db.get(User, 1).market_user_id == 41
+        if shared_tenant:
+            assert db.get(User, 2).account_tier == "ultra"
+            assert db.get(User, 2).market_user_id == 42
+            assert db.get(Tenant, 1).plan_id == "saas-permanent-ultra"
+    if shared_tenant:
+        assert subscriptions.subscription_status_for_user(2)["plan_id"] == "saas-permanent-ultra"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_id", [STANDARD, "saas-trial-30"])
+@pytest.mark.parametrize("shared_tenant", [False, True])
+async def test_verified_repurchase_sync_reclaims_old_tier_without_free_login(
+    purchase, market_login, plan_id, shared_tenant
+):
+    _, sessions, _ = purchase
+    assert (await market_login("saas-permanent-ultra"))["success"]
+    if shared_tenant:
+        with sessions.begin() as db:
+            db.add(
+                User(
+                    id=2,
+                    username="licensed-member",
+                    password="unused",
+                    tenant_id=1,
+                    market_user_id=42,
+                    tier="enterprise",
+                    account_tier="ultra",
+                    is_active=True,
+                )
+            )
+    # Refunding deactivates the old market UserPlan; a new paid UserPlan can
+    # become authoritative before this desktop ever observes a free licence.
+    expires = utc_now_naive() + timedelta(days=2)
+    result = await market_login(plan_id, active_plan_expires_at=expires.isoformat() + "Z")
+    assert result["success"]
+    assert result["account_tier"] == "normal"
+    with sessions() as db:
+        assert db.get(User, 1).account_tier == "normal"
+        if shared_tenant:
+            assert db.get(User, 2).account_tier == "ultra"
+            assert db.get(Tenant, 1).plan_id == "saas-permanent-ultra"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shared_tenant", [False, True])
+@pytest.mark.parametrize("purchase_source", ["market", "payment"])
+async def test_refunded_ultra_repurchase_keeps_account_and_tenant_rights_separate(
+    purchase, market_login, shared_tenant, purchase_source
+):
+    client, sessions, _ = purchase
+    ultra = "saas-permanent-ultra"
+    assert (await market_login(ultra))["success"]
+    if shared_tenant:
+        with sessions.begin() as db:
+            db.add(User(id=2, username="colleague", password="unused", tenant_id=1))
+        assert subscriptions.apply_paid_plan_for_user(user_id=2, plan_id=ultra)
+
+    assert (await market_login(saas_plans.PERSONAL_PLAN_ID))["success"]
+    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+    if shared_tenant:
+        assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+
+    order_id = ""
+    if purchase_source == "payment":
+        response = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD})
+        assert response.status_code == 200, response.text
+        order_id = response.json()["data"]["order_id"]
+    for _ in range(2):
+        if purchase_source == "market":
+            assert (await market_login(STANDARD))["success"]
+        else:
+            assert notify(client, order_id).text == "success"
+        with sessions() as db:
+            assert db.get(User, 1).account_tier == "normal"
+            assert db.get(User, 1).market_user_id == 41
+            if shared_tenant:
+                assert db.get(User, 2).account_tier == "ultra"
+                assert db.get(Tenant, 1).plan_id == ultra
+        assert subscriptions.subscription_status_for_user(1)["plan_id"] == STANDARD
+        if shared_tenant:
+            assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+    assert client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_id", [saas_plans.PERSONAL_PLAN_ID, STANDARD, "saas-trial-30"])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"token": ""},
+        {"token": "xcagi-local-surface-audit-demo"},
+        {"account_state": "pending_plan"},
+        {"desktop_access": False},
+        {"raw": {"user": {"username": "buyer"}}},
+        {"raw": {"user": {"id": 42, "username": "buyer"}}},
+    ],
+)
+async def test_unverified_market_login_cannot_reclaim_paid_access(
+    purchase, market_login, plan_id, overrides
+):
+    _, sessions, _ = purchase
+    assert (await market_login("saas-permanent-ultra"))["success"]
+    result = await market_login(plan_id, **overrides)
+    with sessions() as db:
+        assert db.get(User, 1).account_tier == "ultra"
+        assert db.get(User, 1).market_user_id == 41
+        assert db.get(Tenant, 1).plan_id == "saas-permanent-ultra"
+    assert subscriptions.subscription_status_for_user(1)["plan_id"] == "saas-permanent-ultra"
+    if "raw" in overrides and overrides["raw"]["user"].get("id") == 42:
+        assert result["success"] is False
+        assert result["error"]["code"] == "TENANT_IDENTITY_REJECTED"
+
+
+def test_free_profile_budget_never_becomes_enterprise_authorization(purchase):
+    _, sessions, _ = purchase
+    apply_account_profile_on_register("buyer", tier="enterprise", budget_range="50–100 万")
+    with sessions() as db:
+        assert db.get(User, 1).account_tier == "personal"
+        assert db.get(User, 1).budget_range == "50–100 万"
+        assert db.get(Tenant, 1).plan_id is None
+    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+
+
+@pytest.mark.parametrize(
+    "failure,status_code",
+    [
+        (OSError, 503),
+        (RuntimeError, 500),
+        pytest.param(
+            lambda message: OperationalError("UPDATE users", {}, OSError(message)),
+            503,
+            id="database-503",
+        ),
+    ],
+)
+def test_fulfillment_failure_is_visible_and_original_order_retries(
+    purchase, monkeypatch, failure, status_code
+):
+    client, _, _ = purchase
+    order_id = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).json()[
+        "data"
+    ]["order_id"]
+    apply_plan = subscriptions.apply_paid_plan_for_user
+    monkeypatch.setattr(
+        subscriptions, "apply_paid_plan_for_user", Mock(side_effect=failure("offline"))
+    )
+    assert notify(client, order_id).status_code == status_code
+    pending = order_store.get_order(order_id)
+    assert pending["status"] == "paid_pending_fulfillment"
+    assert order_store.get_entitlement(STANDARD) is None
+    assert (
+        client.get("/api/model-payment/query/" + order_id).json()["data"]["local"]["status"]
+        == "paid_pending_fulfillment"
+    )
+    monkeypatch.setattr(subscriptions, "apply_paid_plan_for_user", apply_plan)
+    reload(order_store)  # Recover only from the persisted original order, without process memory.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(
+            pool.map(
+                lambda _: order_store.apply_notify_paid(
+                    out_trade_no=order_id,
+                    trade_no="provider-" + order_id,
+                    total_amount="6800.00",
+                )[0],
+                range(3),
+            )
+        )
+    assert results.count("marked_paid") == 1
+    assert results.count("already_paid") == 2
+    assert order_store.get_order(order_id)["paid_at"] == pending["paid_at"]
+    assert order_store.get_entitlement(STANDARD)["purchase_count"] == 1
+
+
+def test_crash_after_trial_grant_keeps_original_deadline(purchase, monkeypatch):
+    client, sessions, _ = purchase
+    order_id = client.post("/api/model-payment/checkout", json={"plan_id": "saas-trial-30"}).json()[
+        "data"
+    ]["order_id"]
+    write = order_store._atomic_write
+
+    def fail_final_write(path, payload):
+        if payload["orders"][order_id]["status"] == "paid":
+            raise OSError("interrupted after license commit")
+        write(path, payload)
+
+    monkeypatch.setattr(order_store, "_atomic_write", fail_final_write)
+    assert notify(client, order_id, "99.00").status_code == 500
+    with sessions() as db:
+        expires = db.get(Tenant, 1).trial_expires_at
+    pending = order_store.get_order(order_id)
+    reload(order_store)
+    monkeypatch.setattr(
+        order_store,
+        "_utc_iso",
+        lambda: (utc_now_naive() + timedelta(days=5)).isoformat() + "+00:00",
+    )
+    assert notify(client, order_id, "99.00").text == "success"
+    with sessions() as db:
+        assert db.get(Tenant, 1).trial_expires_at == expires
+    assert order_store.get_order(order_id)["paid_at"] == pending["paid_at"]
+    assert order_store.get_entitlement("saas-trial-30")["purchase_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -488,74 +735,6 @@ def test_account_license_migration_preserves_legacy_rows_and_blocks_unsafe_rollb
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("shared_tenant", [False, True])
-@pytest.mark.parametrize("purchase_source", ["market", "payment"])
-async def test_refunded_ultra_repurchase_keeps_account_and_tenant_rights_separate(
-    purchase, market_login, shared_tenant, purchase_source
-):
-    client, sessions, _ = purchase
-    ultra = "saas-permanent-ultra"
-    assert (await market_login(ultra))["success"]
-    if shared_tenant:
-        with sessions.begin() as db:
-            db.add(User(id=2, username="colleague", password="unused", tenant_id=1))
-        assert subscriptions.apply_paid_plan_for_user(user_id=2, plan_id=ultra)
-
-    assert (await market_login(saas_plans.PERSONAL_PLAN_ID))["success"]
-    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
-    if shared_tenant:
-        assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
-
-    order_id = ""
-    if purchase_source == "payment":
-        response = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD})
-        assert response.status_code == 200, response.text
-        order_id = response.json()["data"]["order_id"]
-    for _ in range(2):
-        if purchase_source == "market":
-            assert (await market_login(STANDARD))["success"]
-        else:
-            assert notify(client, order_id).text == "success"
-        with sessions() as db:
-            assert db.get(User, 1).account_tier == "normal"
-            assert db.get(User, 1).market_user_id == 41
-            if shared_tenant:
-                assert db.get(User, 2).account_tier == "ultra"
-                assert db.get(Tenant, 1).plan_id == ultra
-        assert subscriptions.subscription_status_for_user(1)["plan_id"] == STANDARD
-        if shared_tenant:
-            assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
-    assert client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).status_code == 409
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"token": ""},
-        {"token": "xcagi-local-surface-audit-demo"},
-        {"account_state": "pending_plan"},
-        {"desktop_access": False},
-        {"raw": {"user": {"username": "buyer"}}},
-        {"raw": {"user": {"id": 42, "username": "buyer"}}},
-    ],
-)
-async def test_unverified_free_login_cannot_reclaim_paid_access(purchase, market_login, overrides):
-    _, sessions, _ = purchase
-    plan_id = "saas-permanent-ultra"
-    assert (await market_login(plan_id))["success"]
-    result = await market_login(saas_plans.PERSONAL_PLAN_ID, **overrides)
-    with sessions() as db:
-        assert db.get(User, 1).account_tier == "ultra"
-        assert db.get(User, 1).market_user_id == 41
-        assert db.get(Tenant, 1).plan_id == plan_id
-    assert subscriptions.subscription_status_for_user(1)["plan_id"] == plan_id
-    if "raw" in overrides and overrides["raw"]["user"].get("id") == 42:
-        assert result["success"] is False
-        assert result["error"]["code"] == "TENANT_IDENTITY_REJECTED"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("plan_id", [STANDARD, "saas-trial-30"])
 @pytest.mark.parametrize("overrides", [{"token": ""}, {"account_state": "pending_plan"}])
 async def test_unverified_market_plan_cannot_project_a_new_paid_grant(
@@ -571,81 +750,3 @@ async def test_unverified_market_plan_cannot_project_a_new_paid_grant(
         assert db.get(User, 1).tenant_id == 1
         assert db.get(Tenant, 1).plan_id is None
     provider.assert_not_called()
-
-
-def test_free_profile_budget_never_becomes_enterprise_authorization(purchase):
-    _, sessions, _ = purchase
-    apply_account_profile_on_register("buyer", tier="enterprise", budget_range="50–100 万")
-    with sessions() as db:
-        assert db.get(User, 1).account_tier == "personal"
-        assert db.get(User, 1).budget_range == "50–100 万"
-        assert db.get(Tenant, 1).plan_id is None
-    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
-
-
-def test_fulfillment_failure_is_visible_and_original_order_retries(purchase, monkeypatch):
-    client, _, _ = purchase
-    order_id = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).json()[
-        "data"
-    ]["order_id"]
-    apply_plan = subscriptions.apply_paid_plan_for_user
-    monkeypatch.setattr(
-        subscriptions,
-        "apply_paid_plan_for_user",
-        Mock(side_effect=OperationalError("UPDATE users", {}, OSError("offline"))),
-    )
-    assert notify(client, order_id).status_code == 503
-    pending = order_store.get_order(order_id)
-    assert pending["status"] == "paid_pending_fulfillment"
-    assert order_store.get_entitlement(STANDARD) is None
-    assert (
-        client.get("/api/model-payment/query/" + order_id).json()["data"]["local"]["status"]
-        == "paid_pending_fulfillment"
-    )
-    monkeypatch.setattr(subscriptions, "apply_paid_plan_for_user", apply_plan)
-    reload(order_store)  # Recover only from the persisted original order, without process memory.
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        results = list(
-            pool.map(
-                lambda _: order_store.apply_notify_paid(
-                    out_trade_no=order_id,
-                    trade_no="provider-" + order_id,
-                    total_amount="6800.00",
-                )[0],
-                range(3),
-            )
-        )
-    assert results.count("marked_paid") == 1
-    assert results.count("already_paid") == 2
-    assert order_store.get_order(order_id)["paid_at"] == pending["paid_at"]
-    assert order_store.get_entitlement(STANDARD)["purchase_count"] == 1
-
-
-def test_crash_after_trial_grant_keeps_original_deadline(purchase, monkeypatch):
-    client, sessions, _ = purchase
-    order_id = client.post("/api/model-payment/checkout", json={"plan_id": "saas-trial-30"}).json()[
-        "data"
-    ]["order_id"]
-    write = order_store._atomic_write
-
-    def fail_final_write(path, payload):
-        if payload["orders"][order_id]["status"] == "paid":
-            raise OSError("interrupted after license commit")
-        write(path, payload)
-
-    monkeypatch.setattr(order_store, "_atomic_write", fail_final_write)
-    assert notify(client, order_id, "99.00").status_code == 500
-    with sessions() as db:
-        expires = db.get(Tenant, 1).trial_expires_at
-    pending = order_store.get_order(order_id)
-    reload(order_store)
-    monkeypatch.setattr(
-        order_store,
-        "_utc_iso",
-        lambda: (utc_now_naive() + timedelta(days=5)).isoformat() + "+00:00",
-    )
-    assert notify(client, order_id, "99.00").text == "success"
-    with sessions() as db:
-        assert db.get(Tenant, 1).trial_expires_at == expires
-    assert order_store.get_order(order_id)["paid_at"] == pending["paid_at"]
-    assert order_store.get_entitlement("saas-trial-30")["purchase_count"] == 1
