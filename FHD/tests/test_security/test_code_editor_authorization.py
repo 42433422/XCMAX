@@ -733,6 +733,134 @@ def test_deleting_the_owner_also_removes_saved_proposal_content(
         assert (root / "note.txt").read_text() == "private fixture\n"
 
 
+@pytest.mark.parametrize("legacy_schema", [True, False])
+def test_forward_proposal_scope_migration_keeps_payload_claims_and_ownership(
+    editor_http, legacy_schema
+):
+    import sqlite3
+    from contextlib import closing
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import text
+
+    from alembic import command
+
+    client, root, engine = editor_http
+    proposed = "原文 <value> &lt; &amp; 'quoted' \\literal\n"
+    client.headers["X-Session-ID"] = "editor-session-1"
+    ids = {}
+    for state in ("pending", "applying", "applied", "unknown"):
+        response = client.post(
+            "/api/code-editor/edit", json={"path": "note.txt", "new_content": proposed}
+        )
+        assert response.status_code == 200, response.text
+        ids[state] = response.json()["edit_id"]
+    consumed_id = _stage(client)
+    with engine.begin() as db:
+        for state, edit_id in ids.items():
+            db.execute(
+                text("UPDATE code_edit_proposals SET state=:state WHERE edit_id=:edit_id"),
+                {"state": state, "edit_id": edit_id},
+            )
+        db.execute(
+            text("DELETE FROM code_edit_proposals WHERE edit_id=:edit_id"),
+            {"edit_id": consumed_id},
+        )
+        columns = "edit_id, user_id, scope_json, payload_json, state"
+        before = {
+            row["edit_id"]: dict(row)
+            for row in db.execute(text(f"SELECT {columns} FROM code_edit_proposals")).mappings()
+        }
+        if legacy_schema:
+            CodeEditProposal.__table__.drop(db)
+            db.execute(
+                text(
+                    "CREATE TABLE code_edit_proposals (edit_id VARCHAR(40) NOT NULL, "
+                    "owner_user_id INTEGER NOT NULL, "
+                    "tenant_id INTEGER, workspace_root TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                    "apply_state VARCHAR(16) NOT NULL DEFAULT 'pending', created_at DATETIME NOT NULL, "
+                    "PRIMARY KEY (edit_id), "
+                    "FOREIGN KEY(owner_user_id) REFERENCES users (id) ON DELETE CASCADE)"
+                )
+            )
+            db.execute(
+                text(
+                    "CREATE INDEX ix_code_edit_proposals_owner "
+                    "ON code_edit_proposals(owner_user_id, tenant_id)"
+                )
+            )
+            db.execute(
+                text(
+                    "INSERT INTO code_edit_proposals VALUES "
+                    "(:edit_id, :user_id, 10, :workspace, :payload_json, :state, :created_at)"
+                ),
+                [
+                    {
+                        **row,
+                        "workspace": str(root.resolve()),
+                        "created_at": "2026-11-23 00:00:00",
+                    }
+                    for row in before.values()
+                ],
+            )
+        original_schema = db.execute(
+            text("SELECT sql FROM sqlite_master WHERE name='code_edit_proposals'")
+        ).scalar_one()
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    command.stamp(config, "2026_11_24_code_edit_proposals")
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(engine.url.database)) as db:
+        db.row_factory = sqlite3.Row
+        after = {
+            row["edit_id"]: dict(row)
+            for row in db.execute(f"SELECT {columns} FROM code_edit_proposals")
+        }
+        assert after == before
+        assert consumed_id not in after
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        if legacy_schema:
+            retained = db.execute(
+                "SELECT tenant_id, workspace_root, created_at FROM code_edit_proposals"
+            ).fetchall()
+            assert [tuple(row) for row in retained] == [
+                (10, str(root.resolve()), "2026-11-23 00:00:00")
+            ] * 4
+        else:
+            assert (
+                db.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='code_edit_proposals'"
+                ).fetchone()[0]
+                == original_schema
+            )
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            "2026_11_24_code_edit_scope"
+        )
+    assert ScriptDirectory.from_config(config).get_heads() == ["2026_11_24_code_edit_scope"]
+    _p2(client)
+    client.headers["X-Session-ID"] = "editor-session-2"
+    assert client.get(f"/api/code-editor/diff/{ids['pending']}").status_code == 404
+    client.headers["X-Session-ID"] = "editor-session-1"
+    for state in ("applying", "unknown"):
+        assert client.get(f"/api/code-editor/diff/{ids[state]}").status_code == 200
+        assert client.post(f"/api/code-editor/apply/{ids[state]}").status_code == 409
+    for edit_id in (ids["applied"], consumed_id):
+        assert client.get(f"/api/code-editor/diff/{edit_id}").status_code == 404
+        assert client.post(f"/api/code-editor/apply/{edit_id}").status_code == 404
+    assert (root / "note.txt").read_text() == "private fixture\n"
+    assert client.post(f"/api/code-editor/apply/{ids['pending']}").status_code == 200
+    assert (root / "note.txt").read_bytes() == proposed.encode("utf-8")
+    assert client.post(f"/api/code-editor/apply/{ids['pending']}").status_code == 404
+    # The migrated schema also accepts new ORM inserts and retains owner deletion.
+    fresh_id = _stage(client)
+    with engine.begin() as db:
+        db.execute(text("DELETE FROM users WHERE id=1"))
+    with closing(sqlite3.connect(engine.url.database)) as db:
+        assert db.execute("SELECT count(*) FROM code_edit_proposals").fetchone() == (0,)
+    assert client.get(f"/api/code-editor/diff/{fresh_id}").status_code == 401
+
+
 @pytest.mark.parametrize(
     "starting_revision",
     [
@@ -774,6 +902,6 @@ def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(
         ).all() == [("ultra", None, None)]
         assert (
             db.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "2026_11_24_merge_account_edit"
+            == "2026_11_24_code_edit_scope"
         )
     engine.dispose()

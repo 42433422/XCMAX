@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from functools import wraps
 
 from app.db import SessionLocal
@@ -101,16 +101,17 @@ def _db_session_scope():
     前者是 ``contextmanager``（``with get_db() as db:``），后者是 FastAPI
     依赖用的裸生成器（``Depends(get_db_dependency)``）。
     """
-    db = SessionLocal()
-    try:
-        yield db
-        db.commit()
-    except RECOVERABLE_ERRORS as e:
-        db.rollback()
-        logger.error("数据库事务失败，已回滚: %s", type(e).__name__)
-        raise
-    finally:
-        db.close()
+    with closing(SessionLocal()) as db:
+        completed = False
+        try:
+            yield db
+            db.commit()
+            completed = True
+        finally:
+            # A failed after_commit hook must keep its original error.
+            if not completed and db.is_active:
+                db.rollback()
+                logger.error("数据库事务失败，已回滚")
 
 
 get_db = contextmanager(_db_session_scope)
@@ -121,16 +122,16 @@ def get_host_db():
     """宿主基库事务：users/sessions 等，不受 Active-Mod 分库影响。"""
     from app.db import HostSessionLocal
 
-    db = HostSessionLocal()
-    try:
-        yield db
-        db.commit()
-    except RECOVERABLE_ERRORS as e:
-        db.rollback()
-        logger.error("宿主库事务失败，已回滚: %s", type(e).__name__)
-        raise
-    finally:
-        db.close()
+    with closing(HostSessionLocal()) as db:
+        completed = False
+        try:
+            yield db
+            db.commit()
+            completed = True
+        finally:
+            if not completed and db.is_active:
+                db.rollback()
+                logger.error("宿主库事务失败，已回滚")
 
 
 def get_db_dependency():

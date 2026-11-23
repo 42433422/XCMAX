@@ -28,12 +28,12 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "b252e6ff3dc6721108a39f5c4785541702699d01",
-      "head_blob": "53fdbda98be97dafdb68ebfc5daffd84e065db1d",
+      "head_blob": "0ded2ed2e0133c366cb71093e5d3eff48b40ef2d",
       "before_lines": 1310,
       "after_lines": 1318,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。 CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮复用contextlib.closing与ExitStack在任何失败退出时清理SQLAlchemy事务，净减5行。",
-      "boundary": "保持原SQLAlchemy事务、租约及CAS，仅收紧原记录合并和有证据的pending结算。",
-      "validation": "真实SQLite准入、同请求回读、损坏父调用及pending回执专项已运行；远端PostgreSQL门禁仍须通过。 原未改测试先复现rollback=0，修后相关组136通过；13项PostgreSQL参数因缺CI服务跳过，不计通过。原mutation完整分数及最终CI仍须核对。 本轮合解公共60767后，原事务组合、回执outbox、远端JSON适配器和AgentRunRepository完整组合53项通过、零跳过；五类异常核对原对象、rollback/close各一次及不commit，真实HTTP503与读取断连保留原请求体和待核对回执。最终公开head的CI结果另行核对。 继续合入公共6a996的TypeError和回执字节不变断言后，原组合及两项IO故障夹具共56项通过、零跳过；三个相邻交付恢复模块116项通过、零跳过，仅显式恢复DeliveryRemoteError，普通编程错误继续传播。",
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮合解复用contextlib.closing与ExitStack覆盖读写scope的失败清理，并按SQLAlchemy实际状态保留已提交或已回滚事实。",
+      "boundary": "保持原SQLAlchemy事务、租约及CAS。清理不依赖可恢复异常集合；退出时读取公开is_active状态，成功后移除回滚callback，不将普通RuntimeError重新纳入恢复集合。",
+      "validation": "原CI未改测试先复现rollback=0。本轮将peer三个scope原样装入独立进程，63项中6项失败：只读外部事务、提交后hook原异常保留及共享会话回滚；合解后两会话模块与完整run repository模块90项通过、零跳过。此前e14753a事务/DI/contexts/异常分类190项通过，包含SQLite外部事务、提交前后hook和flush约束失败。完整mutmut杀死率和PostgreSQL服务仍由最终正式CI验证，本地通过不替代这些门禁。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },

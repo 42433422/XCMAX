@@ -85,25 +85,29 @@ async def test_response_loss_retries_same_install_id_and_body(pending, monkeypat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
-async def test_programming_failure_propagates_without_reporting_install(
-    pending, monkeypatch, error_type
+@pytest.mark.parametrize(
+    "retry", [outbox.retry_delivery_receipts, outbox.retry_delivery_receipts_best_effort]
+)
+async def test_programming_error_surfaces_without_marking_receipt(
+    pending, monkeypatch, retry, error_type
 ):
     request, root = pending
     path = next(root.glob("mod-delivery-receipts/*/*.json"))
     original = path.read_bytes()
     error = error_type("invalid internal contract")
 
-    async def post(*args, **kwargs):
+    async def broken(*args, **kwargs):
         raise error
 
     monkeypatch.setattr(
-        "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", post
+        "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", broken
     )
     with pytest.raises(error_type) as caught:
-        await outbox.retry_delivery_receipts(request, "current-token")
+        await retry(request, "current-token")
     assert caught.value is error
     row = json.loads(path.read_text())
-    assert row["installed_reported"] is row["runtime_reported"] is False
+    assert row["installed_reported"] is False and row["runtime_reported"] is False
+    assert "last_error" not in row
     assert path.read_bytes() == original
 
 

@@ -1192,8 +1192,8 @@ class SQLAlchemyAgentRunRepository:
             # Scheduling state must be visible outside the originating Mod request.
             session_factory = HostSessionLocal
         with closing(session_factory()) as db, ExitStack() as rollback:
-            if not read_only:
-                rollback.callback(db.rollback)
+            # Failed reads also roll back; inactive sessions only need closing.
+            rollback.callback(lambda: db.rollback() if db.is_active else None)
             yield db
             if not read_only:
                 db.commit()

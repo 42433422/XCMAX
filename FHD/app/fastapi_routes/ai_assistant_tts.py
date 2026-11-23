@@ -54,7 +54,7 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
         async def _run() -> str:
             result = await translate_zh_to_en(text, max_chars=500)
             if not result.get("success"):
-                raise RuntimeError(str(result.get("message") or "translate failed"))
+                raise TtsUpstreamResponseError(str(result.get("message") or "translate failed"))
             return str(result.get("translation") or "").strip().strip('"').strip("'")
 
         try:
@@ -68,7 +68,7 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
             finally:
                 loop.close()
         if not translation:
-            raise RuntimeError("empty translation")
+            raise TtsUpstreamResponseError("empty translation")
         return JSONResponse(
             _trace(
                 {
@@ -81,7 +81,7 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
                 body=payload,
             )
         )
-    except RECOVERABLE_ERRORS as error:
+    except (*RECOVERABLE_ERRORS, TtsUpstreamResponseError) as error:
         logger.warning("TTS translate unavailable: %s", error)
         return JSONResponse(
             {"success": False, "message": "翻译暂不可用", "data": {}}, status_code=503

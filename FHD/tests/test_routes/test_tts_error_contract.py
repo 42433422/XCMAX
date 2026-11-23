@@ -27,6 +27,35 @@ def client(monkeypatch):
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"success": False, "message": "translation provider unavailable"},
+        {"success": True, "translation": ""},
+    ],
+)
+def test_translation_upstream_failure_remains_service_unavailable(client, monkeypatch, result):
+    from app.application import tts_translate_app_service
+
+    monkeypatch.setattr(
+        tts_translate_app_service, "translate_zh_to_en", AsyncMock(return_value=result)
+    )
+    response = client.post("/api/tts/translate", json={"text": "hello", "target": "en"})
+    assert response.status_code == 503
+    assert response.json() == {"success": False, "message": "翻译暂不可用", "data": {}}
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("translation bug"), TypeError("translation bug")])
+def test_translation_programming_error_is_not_a_service_outage(client, monkeypatch, failure):
+    from app.application import tts_translate_app_service
+
+    monkeypatch.setattr(
+        tts_translate_app_service, "translate_zh_to_en", AsyncMock(side_effect=failure)
+    )
+    response = client.post("/api/tts/translate", json={"text": "hello", "target": "en"})
+    assert response.status_code == 500
+
+
 def test_platform_only_does_not_replay_after_read_timeout_or_fall_back(client, monkeypatch):
     monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "1")
     monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")

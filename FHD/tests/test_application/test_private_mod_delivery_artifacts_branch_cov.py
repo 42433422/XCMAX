@@ -11,32 +11,16 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.application import private_mod_delivery_artifacts as mod
 from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
-
-
-async def _assert_shared_http_error_dict_detail_0(
-    self, _shared_literal_0, _shared_literal_1, _shared_literal_2, _shared_literal_3
-):
-    resp = _resp(_shared_literal_0, body={_shared_literal_2: _shared_literal_3})
-    client = _async_client(request_resp=resp)
-    with (
-        patch("httpx.AsyncClient", return_value=client),
-        patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://m.example.com",
-        ),
-    ):
-        with pytest.raises(mod.DeliveryRemoteError) as ei:
-            await mod.custom_delivery_remote_json("tok", "/foo")
-    assert _shared_literal_1 in str(ei.value)
-
 
 BASE = "app.application.private_mod_delivery_artifacts"
 
@@ -176,32 +160,29 @@ class TestCustomDeliveryRemoteJson:
             result = await mod.custom_delivery_remote_json("tok", "/foo")
         assert result == {}
 
-    async def test_http_error_dict_detail(self):
-        return await _assert_shared_http_error_dict_detail_0(
-            self, 404, "not found", "detail", "not found"
+    @pytest.mark.parametrize(
+        ("status", "body", "message"),
+        [
+            (404, {"detail": "not found"}, "not found"),
+            (500, {"message": "remote failure"}, "remote failure"),
+            (503, {"detail": "response lost after commit"}, "response lost after commit"),
+            (403, "plain", "403"),
+            (400, {"detail": ""}, "400"),
+        ],
+    )
+    async def test_http_failure_raises_delivery_domain_error(
+        self, monkeypatch, status, body, message
+    ):
+        response = httpx.Response(
+            status, json=body, request=httpx.Request("POST", "https://synthetic-market.invalid/foo")
         )
+        client = _async_client(request_resp=response)
+        monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic-market.invalid")
+        with pytest.raises(mod.DeliveryRemoteError, match=message):
+            await mod.custom_delivery_remote_json("tok", "/foo", method="POST")
 
-    async def test_http_error_dict_message_fallback(self):
-        return await _assert_shared_http_error_dict_detail_0(self, 500, "boom", "message", "boom")
-
-    async def test_http_error_non_dict_uses_status(self):
-        resp = _resp(403, body="plain")
-        client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
-            with pytest.raises(mod.DeliveryRemoteError) as ei:
-                await mod.custom_delivery_remote_json("tok", "/foo")
-        assert "403" in str(ei.value)
-
-    async def test_http_error_dict_empty_detail_uses_status(self):
-        return await _assert_shared_http_error_dict_detail_0(self, 400, "400", "detail", "")
-
-    async def test_non_dict_ok_body_raises(self):
+    async def test_non_dict_ok_body_raises_delivery_domain_error(self):
         resp = _resp(200, body=[1, 2])
         client = _async_client(request_resp=resp)
         with (
@@ -527,14 +508,22 @@ class TestInstallCustomDeliveryArtifact:
         delivery.install.assert_not_called()
         assert delivery.outbox_rows() == []
 
-    async def test_module_api_ready_failure_does_not_claim_running(self, delivery):
+    @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
+    async def test_module_api_ready_failure_does_not_claim_running(self, delivery, error_type):
         delivery.client.get.return_value = delivery.response(delivery.package())
-        delivery.api_ready.side_effect = OSError("flush failed")
-        result = await mod.install_custom_delivery_artifact(
-            "tok", 9, "module", owner_scope="tenant:1"
+        delivery.api_ready.side_effect = error_type("flush failed")
+        expected = (
+            pytest.raises(RuntimeError, match="flush failed")
+            if error_type is RuntimeError
+            else nullcontext()
         )
-        assert result["success"] is True
-        assert result["runtime_verified"] is False
+        with expected:
+            result = await mod.install_custom_delivery_artifact(
+                "tok", 9, "module", owner_scope="tenant:1"
+            )
+            assert result["success"] is True
+            assert result["runtime_verified"] is False
+        assert delivery.install.call_count == 1
         assert delivery.outbox_rows()[0]["runtime_reported"] is False
 
     async def test_download_response_loss_retries_without_duplicate_activation(self, delivery):
@@ -858,12 +847,21 @@ class TestUpdatePrivateModFromLibrary:
         assert rows[0]["installed_reported"] is False
         assert rows[0]["runtime_reported"] is False
 
-    async def test_api_ready_recoverable_error_logged(self, delivery, library):
-        delivery.api_ready.side_effect = OSError("flush failed")
-        result = await mod.update_private_mod_from_library(
-            "fixture-mod", "tok", owner_scope="tenant:1"
+    @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
+    async def test_api_ready_failure_preserves_error_class(self, delivery, library, error_type):
+        delivery.api_ready.side_effect = error_type("flush failed")
+        expected = (
+            pytest.raises(RuntimeError, match="flush failed")
+            if error_type is RuntimeError
+            else nullcontext()
         )
-        assert result["updated"] is True
+        with expected:
+            result = await mod.update_private_mod_from_library(
+                "fixture-mod", "tok", owner_scope="tenant:1"
+            )
+            assert result["updated"] is True
+        assert delivery.install.call_count == 1
+        assert delivery.outbox_rows()[0]["runtime_reported"] is False
 
     async def test_previous_version_from_local(self, delivery, library):
         old = delivery.package(version="1.0.0", content="old")
