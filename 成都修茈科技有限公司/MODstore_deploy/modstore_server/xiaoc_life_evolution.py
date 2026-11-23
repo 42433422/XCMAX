@@ -388,17 +388,21 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     delivery = state.get("delivery") or {}
     impact = state.get("impact") or {}
     verification = state.get("verification") or {}
-    historical_rejection = _historical_rejection(session, row.id)
-    if historical_rejection and terminal and terminal["ok"]:
+    current_rejection = (
+        status == "evolution_failed" or impact.get("status") == "customer_impact_rejected"
+    )
+    # Do not re-hash a negative event merely because it has just been persisted.
+    historical_rejection = (
+        None if current_rejection else _historical_rejection(session, row.id)
+    )
+    if historical_rejection:
         status = "evolution_evidence_incomplete"
-        summary = "原改进曾被拒绝，当前成功回执与历史失败冲突；须人工复核，不登记成功。"
+        summary = "原改进曾被拒绝，当前回执与历史失败冲突；须人工复核，不登记成功。"
         terminal = None
     # Delivery and independent checks are not evidence of improved outcomes.
     # The original Retort impact and recovery ports remain authoritative.
     effect_verdict = "not_verified"
-    if historical_rejection or status == "evolution_failed" or (
-        impact.get("status") == "customer_impact_rejected"
-    ):
+    if historical_rejection or current_rejection:
         effect_verdict = "rejected"
     elif (
         terminal
@@ -446,7 +450,8 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "summary": summary,
         "metrics": metrics,
         "candidate_audit": audit,
-        "evidence_ref": "evolution-outcome:" + row.id + ":" + digest({"metrics": metrics, "audit": audit})[:24],
+        "evidence_ref": "evolution-outcome:" + row.id + ":"
+        + digest({"metrics": metrics, "audit": audit})[:24],
     }
 
 
