@@ -29,6 +29,45 @@ def test_projection_preserves_execution_schema_and_cannot_mutate_authority():
     assert ids.count("catalog_products_v1.append_price") == 1
 
 
+def test_execution_projection_includes_only_supported_screen_actions():
+    from app.application.workflow.planning_graph_policy import validate_required_params
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow_registry_app import get_workflow_tool_registry
+
+    assert "aiopen" not in get_workflow_tool_registry()
+    registry = get_workflow_tool_registry(include_aiopen=True)
+    actions = registry["aiopen"]["actions"]
+    assert {"ui_sessions", "ui_snapshot", "ui_type", "ui_verify"} <= actions.keys()
+    assert (
+        actions["ui_type"]["input_schema"]
+        == tool_spec.get_tool_action_spec("aiopen", "ui_type").input_schema
+    )
+    for action in ("chat", "api_call", "operation_call"):
+        assert action not in actions
+        plan = PlanGraph(
+            "recursive", "must not reenter", nodes=[WorkflowNode("action", "aiopen", action)]
+        )
+        assert validate_required_params(plan, registry) == (
+            f"节点 action 使用未授权动作: aiopen.{action}"
+        )
+    assert "aiopen" not in workflow_registry()
+
+
+def test_execution_screen_projection_rechecks_live_actor_authority(trusted_actor):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.db.models.permission import Role
+
+    actor = trusted_actor(permissions=["aiopen.ui_snapshot"])
+    registry = workflow_registry(actor.context, include_aiopen=True)
+    assert set(registry["aiopen"]["actions"]) == {"ui_snapshot"}
+    assert actor_tool_denial("aiopen", "ui_snapshot", actor.context) is None
+    with actor.factory.begin() as db:
+        db.query(Role).filter_by(name="user").one().permissions = []
+    assert "aiopen" not in workflow_registry(actor.context, include_aiopen=True)
+    assert actor_tool_denial("aiopen", "ui_snapshot", actor.context) is not None
+    assert workflow_registry({"user_id": str(actor.user_id)}, include_aiopen=True) == {}
+
+
 def test_discovery_uses_live_permissions_and_entity_scope(trusted_actor):
     actor = trusted_actor(permissions=["customer.view"])
     result = discover_capabilities(actor.context, limit=500)

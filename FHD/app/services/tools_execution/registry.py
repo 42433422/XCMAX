@@ -97,8 +97,10 @@ def _validate_required_params(tool_id: str, action: str, params: dict | None) ->
     return True, ""
 
 
-def get_workflow_tool_registry(runtime_context: dict | None = None) -> dict:
+def get_workflow_tool_registry(
+    runtime_context: dict | None = None, *, include_aiopen: bool = False
+) -> dict:
     """Project the execution contracts; context-bearing discovery is account scoped."""
     from app.application.capability_catalog import workflow_registry
 
-    return workflow_registry(runtime_context)
+    return workflow_registry(runtime_context, include_aiopen=include_aiopen)

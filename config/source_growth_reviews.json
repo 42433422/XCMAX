@@ -16,12 +16,12 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "b38c8ebac26205ce4dd3d548abc2fd6d5fb98ec1",
-      "head_blob": "250ba0c8426818e53ca9ef85004da791e5a02423",
+      "head_blob": "d8a6e6d20f332bf3c22db1cce2ca8324712922e7",
       "before_lines": 1748,
       "after_lines": 1771,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。",
-      "boundary": "仍使用原LangGraph、持久计划和现有审批；未知结果不重放，不增加第二执行入口。",
-      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。",
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。",
+      "boundary": "仍使用原LangGraph、持久计划和现有审批；未知结果不重放，不增加第二执行入口。 普通目录仍不含 AIOPEN；执行审核仅纳入现有 supports_aiopen_step 支持的屏幕动作，继续排除 chat/API 递归入口，账号、租户及原签名审批校验保持。",
+      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },

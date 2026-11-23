@@ -56,9 +56,8 @@ def enable_orphan_adoption() -> bool:
     import ctypes
 
     libc = ctypes.CDLL(None, use_errno=True)
-    try:
-        prctl = libc.prctl
-    except AttributeError:
+    prctl = getattr(libc, "prctl", None)
+    if prctl is None:
         raise RuntimeError("worker orphan ownership is unavailable") from None
     prctl.argtypes = [ctypes.c_int, *([ctypes.c_ulong] * 4)]
     prctl.restype = ctypes.c_int

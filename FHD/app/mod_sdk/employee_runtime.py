@@ -68,9 +68,10 @@ def warm_employee_tool_registry() -> dict[str, Any]:
         status["triggers"] = refresh_employee_triggers()
     except RECOVERABLE_ERRORS:
         logger.debug("warm employee triggers skipped", exc_info=True)
+    tool_count = int(status.get("registered_tool_count") or 0)
     logger.info(
         "employee package warm scan: %s installed tool definitions",
-        status.get("registered_tool_count"),
+        tool_count,
     )
     return status
 

@@ -117,9 +117,21 @@ def _authorized_registry(registry: dict[str, Any], context: dict[str, Any]) -> d
     return visible
 
 
-def workflow_registry(runtime_context: dict[str, Any] | None = None) -> dict[str, Any]:
+def workflow_registry(
+    runtime_context: dict[str, Any] | None = None, *, include_aiopen: bool = False
+) -> dict[str, Any]:
     """Internal metadata without context; live authorized projection with context."""
-    registry = _project_registry()
+    registry = _project_registry(include_aiopen=include_aiopen)
+    if include_aiopen and "aiopen" in registry:
+        from app.application.aiopen.agent_bridge import supports_aiopen_step
+
+        # Execution preflight may include the existing screen adapter, never
+        # recursive chat/API transports that bypass its bound-step authority.
+        registry["aiopen"]["actions"] = {
+            action: metadata
+            for action, metadata in registry["aiopen"]["actions"].items()
+            if supports_aiopen_step(action)
+        }
     if runtime_context is None:
         return registry
     try:

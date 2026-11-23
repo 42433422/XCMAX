@@ -619,7 +619,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for node in plan.nodes
         ):
             return "持久化计划参数或依赖已变化，拒绝续跑"
-        registry = get_workflow_tool_registry()
+        registry = get_workflow_tool_registry(include_aiopen=True)
         if validate_required_params(plan, registry):
             return "计划不再符合当前工具注册表或参数契约，拒绝续跑"
         approval_ids = plan.metadata.get("approval_required_node_ids") or []
@@ -1027,7 +1027,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.workflow.workflow_types import validate_plan_graph
         from app.application.workflow_registry_app import get_workflow_tool_registry
 
-        registry = get_workflow_tool_registry()
+        registry = get_workflow_tool_registry(include_aiopen=True)
         plan_error = validate_plan_graph(plan) or validate_required_params(plan, registry)
         if plan_error:
             run.status, run.error = "blocked", f"执行前计划审核未通过：{plan_error}"

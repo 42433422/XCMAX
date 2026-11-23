@@ -9,10 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 
-def get_workflow_tool_registry(runtime_context: dict[str, Any] | None = None) -> dict[str, Any]:
+def get_workflow_tool_registry(
+    runtime_context: dict[str, Any] | None = None, *, include_aiopen: bool = False
+) -> dict[str, Any]:
     from app.services.tools_execution.registry import get_workflow_tool_registry as resolve
 
-    return resolve(runtime_context)
+    return resolve(runtime_context, include_aiopen=include_aiopen)
 
 
 def _normalize_action(action: str, params: dict[str, Any] | None = None) -> str:
