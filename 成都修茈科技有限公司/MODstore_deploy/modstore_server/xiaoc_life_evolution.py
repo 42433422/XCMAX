@@ -10,6 +10,8 @@ from copy import deepcopy
 from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
+from sqlalchemy import select
+
 from modstore_server import xiaoc_life_store as life
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
@@ -323,6 +325,34 @@ def propose_budget(claim: dict[str, Any], goal: dict[str, Any]) -> dict[str, Any
     return life._mutate(bind)
 
 
+def _historical_rejection(session: Any, request_id: str) -> str | None:
+    """An original request cannot erase a recorded rejection with a later snapshot.
+
+    Use the existing append-only events, not the bounded goal projection. The
+    exact request ID is immutable and already bound to its owner and protocol.
+    """
+    events = session.scalars(
+        select(XiaoCLifeEvent)
+        .where(
+            XiaoCLifeEvent.identity_id == IDENTITY_ID,
+            XiaoCLifeEvent.kind == "reflection",
+            XiaoCLifeEvent.status.in_(("evolution_failed", "waiting_recovery")),
+            XiaoCLifeEvent.evidence_json.contains(f'"retort:{request_id}"', autoescape=True),
+        )
+        .order_by(XiaoCLifeEvent.created_at, XiaoCLifeEvent.id)
+    )
+    for event in events:
+        if f"retort:{request_id}" not in json_loads(event.evidence_json, []):
+            continue
+        outcome = json_loads(event.details_json, {}).get("evolution_outcome") or {}
+        metrics = outcome.get("metrics") or {}
+        if event.status == "evolution_failed" or (
+            metrics.get("impact_status") == "customer_impact_rejected"
+        ):
+            return str(outcome.get("evidence_ref") or event.id)
+    return None
+
+
 def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     from modstore_server.strategic_workspace_receipts import _evidence, _terminal
 
@@ -356,6 +386,47 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     elif row.status == "customer_impact_rejected":
         status, summary = "waiting_recovery", "真实效果未通过，等待原回滚核验，未登记改进成功。"
     delivery = state.get("delivery") or {}
+    impact = state.get("impact") or {}
+    verification = state.get("verification") or {}
+    historical_rejection = _historical_rejection(session, row.id)
+    if historical_rejection and terminal and terminal["ok"]:
+        status = "evolution_evidence_incomplete"
+        summary = "原改进曾被拒绝，当前成功回执与历史失败冲突；须人工复核，不登记成功。"
+        terminal = None
+    # Delivery and independent checks are not evidence of improved outcomes.
+    # The original Retort impact and recovery ports remain authoritative.
+    effect_verdict = "not_verified"
+    if historical_rejection or status == "evolution_failed" or (
+        impact.get("status") == "customer_impact_rejected"
+    ):
+        effect_verdict = "rejected"
+    elif (
+        terminal
+        and terminal["ok"]
+        and state.get("has_customer_feedback") is True
+        and impact.get("status") == "customer_impact_verified"
+        and impact.get("release_sha")
+        and impact["release_sha"] == delivery.get("release_sha")
+        and impact.get("verified_at")
+    ):
+        effect_verdict = "impact_receipt_verified"
+    audit = {
+        "baseline_sha": protocol.get("source_sha", ""),
+        "candidate_sha": verification.get("target_sha", ""),
+        "protocol_digest": protocol["protocol_digest"],
+        "verification_archive_sha256": (verification.get("evidence_archive") or {}).get(
+            "sha256", ""
+        ),
+        "dispatch_approval_digest": (evidence["effects"].get("authorization") or {}).get(
+            "digest", ""
+        ),
+        "acceptance_approval_digest": (state.get("approval") or {}).get("digest", ""),
+        "impact_receipt_sha256": digest(impact) if impact else "",
+        "recovery_receipt_sha256": digest(state["recovery"]) if state.get("recovery") else "",
+        # Code-level CI checks are not a paired baseline/candidate measurement.
+        "comparison_status": "paired_measurement_not_established",
+        "historical_rejection_ref": historical_rejection,
+    }
     metrics = {
         "request_id": row.id,
         "status": status,
@@ -367,13 +438,15 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "impact_status": (state.get("impact") or {}).get("status", "not_measured"),
         "recovery_status": (state.get("recovery") or {}).get("status", "not_requested"),
         "terminal_verified": terminal is not None,
+        "effect_verdict": effect_verdict,
         "scope": "original_retort_receipt_not_model_self_assessment",
     }
     return {
         "status": status,
         "summary": summary,
         "metrics": metrics,
-        "evidence_ref": "evolution-outcome:" + row.id + ":" + digest(metrics)[:24],
+        "candidate_audit": audit,
+        "evidence_ref": "evolution-outcome:" + row.id + ":" + digest({"metrics": metrics, "audit": audit})[:24],
     }
 
 
@@ -396,6 +469,7 @@ def reconcile() -> int:
                         "status": "evolution_evidence_incomplete",
                         "observed_at": "",
                         "terminal_verified": False,
+                        "effect_verdict": "not_verified",
                     },
                     "evidence_ref": "evolution-outcome:"
                     + goal["retort_request_id"]
