@@ -928,13 +928,13 @@
     "FHD/app/infrastructure/codex/model_gateway.py": {
       "base_file": "FHD/app/infrastructure/codex/model_gateway.py",
       "base_blob": "d12a1b1e7a4214ef57d6d659435952d95d7b4e53",
-      "head_blob": "9d7935e18edffe9e5a74bffaecf7c5e74707e79d",
+      "head_blob": "5145d9050f80e18898194c23b494c1086de34f8a",
       "before_lines": 828,
       "after_lines": 872,
       "reason": "用户于 2026-11-23 要求 Agent 长期可靠性代码闭环。本次补齐失败结算后的资源释放、流式断开清理和原模型回执恢复；这是精确源码增长评审请求，不表示已获人工架构批准。",
       "boundary": "继续使用现有 Codex/HTTPX/AnyIO 与 Python AsyncExitStack、aclosing；无第二执行器。取消保留原异常，连接和并发槽各释放一次；未知用量保留原预留，可信原请求回执只能解除已确认的模型待核对，不能解除其他模型请求或业务写入限制。",
       "validation": "当前源码模型网关与清理回归共 104 passed；新增原场景在修复前复现存储失败、连接关闭失败、取消与流式响应断开，以及迟到原用量已结算仍被永久阻断。实际并发计数、连接关闭与原钱包回执均有断言。",
-      "follow_up": "由 @42433422 按原主线流程核对该薄适配及精确提交 CI；本机正常 mypy 因资源不足 exit 137，完整类型结果待 CI。真实模型运行与 PostgreSQL/设备验收以各自实际证据为准，不由本记录替代。",
+      "follow_up": "由 @42433422 按原主线流程核对该薄适配及精确提交 CI；标准 CI mypy 已定位流式错误载荷局部变量的类型冲突，修复只区分异常对象与 JSON 载荷名称；由最终提交的标准 mypy 再校验。真实模型运行与 PostgreSQL/设备验收以各自实际证据为准，不由本记录替代。",
       "review_owner": "@42433422"
     }
   }

@@ -785,7 +785,7 @@ async def forward_responses(request: Request):
             except BOUNDARY_ERRORS as exc:
                 failure = exc
                 await record_failure(exc, output_started=output_visible)
-                error = {
+                error_payload = {
                     "code": getattr(exc, "code", "model_stream_error"),
                     "message": (
                         "Model stream output was rejected"
@@ -793,7 +793,7 @@ async def forward_responses(request: Request):
                         else "Model stream requires reconciliation"
                     ),
                 }
-                yield f"data: {json.dumps({'type': 'error', 'error': error})}\n\n".encode()
+                yield f"data: {json.dumps({'type': 'error', 'error': error_payload})}\n\n".encode()
             finally:
                 await close_resources(failure, mark_unknown if not terminal else None)
 
