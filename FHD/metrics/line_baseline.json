@@ -1,5 +1,5 @@
 {
-  "lines": 2685413,
+  "lines": 2685492,
   "updated": "2026-11-23",
-  "note": "按用户“全部复用成熟组件实现代码层闭环”实施授权：复用 promptfoo、原 WorkflowEngine/EmployeeRuntimeClient、openpyxl、Retort/LangGraph 与 GrowthBook，新增有界客户原件重放、独立对账、跨轮保留集和原发布核验；实现增量约 1720 行、回归约 2105 行，其余为原文传输、CI/依赖与精确源码增长评审登记。无成熟组件可替代本产品的租户/原合同/源码身份绑定，保留薄适配；不删无关功能凑数。本记录说明增量原因，不是人工架构批准或真实客户验收。"
+  "note": "按用户“全部复用成熟组件实现代码层闭环”实施授权，复用 promptfoo、原 WorkflowEngine/EmployeeRuntimeClient、openpyxl、Retort/LangGraph 与 GrowthBook，新增原件冻结、独立核验、跨轮保留集及原发布反馈适配。源码净增 1753 行、回归净增 2155 行，其余为原文传输、CI/依赖和精确源码评审登记；维护口径由本计数器核定。CSV 核验额外复用标准 csv.Sniffer，以冻结参考方言拒绝错误单列并保留单元格空白。产品专属租户、合同和源码身份绑定保留自有适配；不删无关功能凑数。本登记不是人工架构批准或真实客户验收。"
 }

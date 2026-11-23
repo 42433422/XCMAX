@@ -483,9 +483,38 @@ def _workbook(raw):
 def _equal_files(path, actual, expected):
     if Path(path).suffix.lower() == ".xlsx":
         return _workbook(actual) == _workbook(expected)
-    return list(csv.reader(io.StringIO(actual.decode("utf-8-sig")))) == list(
-        csv.reader(io.StringIO(expected.decode("utf-8-sig")))
-    )
+    if actual == expected:
+        return True
+    try:
+        reference = expected.decode("utf-8-sig")
+        dialects = []
+        for delimiter in ",;\t|":
+            try:
+                dialect = csv.Sniffer().sniff(reference, delimiters=delimiter)
+                # Match the native DictWriter's defaults: whitespace is cell data,
+                # and doubled quote characters are escapes, even if absent in gold.
+                dialect.skipinitialspace = False
+                dialect.doublequote = True
+                rows = list(csv.reader(io.StringIO(reference, newline=""), dialect, strict=True))
+            except csv.Error:
+                continue
+            if rows and len(rows[0]) > 1 and all(len(row) == len(rows[0]) for row in rows):
+                dialects.append((dialect, rows))
+        # Only the frozen oracle chooses the dialect. Ambiguous/single-column
+        # references can establish exact bytes, never inferred semantic success.
+        if len(dialects) != 1:
+            return False
+        dialect, rows = dialects[0]
+        return (
+            list(
+                csv.reader(
+                    io.StringIO(actual.decode("utf-8-sig"), newline=""), dialect, strict=True
+                )
+            )
+            == rows
+        )
+    except (csv.Error, UnicodeError):
+        return False
 
 
 def _remap(value, original, workspace):

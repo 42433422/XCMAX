@@ -940,13 +940,13 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "2bfadbce3d64315d62b65855e61302776454d0a3",
+      "head_blob": "0150cbfbccbc3954d4df1002669d126f87d843fd",
       "before_lines": 0,
-      "after_lines": 848,
+      "after_lines": 877,
       "reason": "按用户成熟组件复用要求，新增产品适配层绑定原客户合同、授权员工包、执行前原件与独立参考；复用 WorkflowEngine、EmployeeRuntimeClient、openpyxl 和 CSV，不另写工作流或电子表格引擎。此记录不是审批。",
       "boundary": "仅支持有界原生 CSV/XLSX 文件交付；使用原路径和权限校验、临时数据库及原进程回收。参考字节留在父进程，禁止由失败输出自造 oracle、代码节点或生产副作用。",
-      "validation": "原生 CSV/XLSX 重放、执行前 capture、来源/路径/包漂移及进程超时回收回归已通过；真实 SQL 公共入口独立重跑后形成待审批候选，发布门禁保留回滚可达性。最终 CI 另验。",
-      "follow_up": "由指定 reviewer 核对 848 行适配边界与新增安全负控；后续格式或并行业务扩展仍应接原组件合同，不能以此记录替代原客户原件、独立基准与生产验收。",
+      "validation": "原生 CSV/XLSX、执行前 capture、来源与路径漂移、进程回收回归已通过；新增独立 CSV 参考方言 12 项通过，拒绝错误单列并保留空白/转义。最终完整应用 HTTP + 原生 CSV + 原 SQL 到待审批/幂等回读再次通过；最终 CI 另验。",
+      "follow_up": "由指定 reviewer 核对 877 行适配边界与安全负控；后续格式或并行业务扩展仍接原组件合同，此记录不替代原客户原件、独立基准和生产验收。",
       "review_owner": "@42433422"
     }
   }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 import os
@@ -293,6 +294,55 @@ def test_formula_without_independent_calculated_value_is_not_verified():
     workbook.save(buffer)
     with pytest.raises(ValueError, match="formula_value_unverified"):
         replay._equal_files("result.xlsx", buffer.getvalue(), buffer.getvalue())
+
+
+@pytest.mark.parametrize("delimiter", [";", "\t"])
+def test_csv_reference_dialect_rejects_quoted_single_column(delimiter):
+    expected = f"a{delimiter}b\n1{delimiter}2\n".encode()
+    actual = f'"a{delimiter}b"\n"1{delimiter}2"\n'.encode()
+    assert replay._equal_files("result.csv", actual, expected) is False
+
+
+@pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+def test_csv_reference_dialect_accepts_equivalent_quoting_and_record_newlines(delimiter):
+    rows = [["label", "amount"], [f'café{delimiter} "quoted"', "2"]]
+    expected, actual = io.StringIO(newline=""), io.StringIO(newline="")
+    csv.writer(expected, delimiter=delimiter, lineterminator="\n").writerows(rows)
+    csv.writer(actual, delimiter=delimiter, quoting=csv.QUOTE_ALL, lineterminator="\r\n").writerows(
+        rows
+    )
+    assert (
+        replay._equal_files(
+            "result.csv", actual.getvalue().encode("utf-8-sig"), expected.getvalue().encode()
+        )
+        is True
+    )
+
+
+@pytest.mark.parametrize("expected", [b"header\nvalue\n", b"a,b;c\n1,2;3\n"])
+def test_csv_undetected_or_ambiguous_reference_only_accepts_exact_bytes(expected):
+    assert replay._equal_files("result.csv", expected, expected) is True
+    assert replay._equal_files("result.csv", expected.replace(b"\n", b"\r\n"), expected) is False
+
+
+def test_csv_reference_dialect_rejects_malformed_quoted_candidate():
+    assert replay._equal_files("result.csv", b'a;b\n"1;2\n', b"a;b\n1;2\n") is False
+
+
+def test_csv_reference_dialect_preserves_literal_cell_whitespace():
+    assert replay._equal_files("result.csv", b"a;b\n1;2\n", b"a; b\n1; 2\n") is False
+
+
+def test_csv_reference_dialect_accepts_standard_doubled_quote_escapes():
+    expected = b'a;b\nhe said "hi";2\n'
+    actual = b'"a";"b"\r\n"he said ""hi""";"2"\r\n'
+    assert replay._equal_files("result.csv", actual, expected) is True
+
+
+def test_csv_existing_native_fixture_keeps_its_content_comparison():
+    source, _, _ = _fixture("csv")
+    expected = replay._bytes(source["customer_business_replay"]["assets"]["expected_files"][0])
+    assert replay._equal_files("result.csv", b'"order","quantity"\n"A-1","3"\n', expected) is True
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process group contract")
