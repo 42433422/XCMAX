@@ -168,7 +168,7 @@ def run_runtime_chat(
                 {
                     "ok": False,
                     "error": "运行状态目录不可用于安全并发控制，本轮任务未启动。",
-"run_id": str(context.get("agent_runtime_run_id") or "") or None,
+                    "run_id": str(context.get("agent_runtime_run_id") or "") or None,
                     "resume_required": bool(context.get("agent_runtime_run_id")),
                     "error_code": "runtime_storage_invalid",
                     "execution_state": "blocked",
