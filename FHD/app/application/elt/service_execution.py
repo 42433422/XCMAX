@@ -658,7 +658,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                         row.execution_error_code = None
                         row.execution_error_message = None
                     completed_in_chunk += 1
-            except TRANSACTION_ERRORS as exc:
+            except (EltError, *TRANSACTION_ERRORS) as exc:
                 if external_rows:
                     raise  # The worker preserves outcome_unknown; no row replay.
                 if isinstance(exc, EltError) and exc.code == "ELT_OPERATION_LEASE_LOST":

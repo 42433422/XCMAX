@@ -285,7 +285,8 @@ def get_assert(output, context):
         raise AssertionError('controller data must stay unreadable')
     assert 'XCAGI_LLM_API_KEY' not in os.environ
     passed = output == 'CANDIDATE_PASS'
-    return {'pass': passed, 'score': int(passed), 'reason': 'candidate verified' if passed else 'baseline output'}
+    return {'pass': passed, 'score': int(passed),
+            'reason': 'native_candidate_match' if passed else 'native_baseline_mismatch'}
 `);
   }
   writeFileSync(config, JSON.stringify({ sharing: false, writeLatestResults: false,
@@ -344,4 +345,10 @@ def get_assert(output, context):
   const rows = JSON.parse(readFileSync(output, 'utf8')).results.results;
   assert.equal(rows.filter(row => row.success).length, 1, JSON.stringify(rows, null, 2));
   assert.equal(rows.filter(row => !row.success).length, 1);
+  if (native) {
+    assert.equal(rows.find(row => row.success).gradingResult.componentResults[0].reason,
+      'native_candidate_match');
+    assert.equal(rows.find(row => !row.success).gradingResult.componentResults[0].reason,
+      'native_baseline_mismatch');
+  }
 });

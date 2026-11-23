@@ -6,10 +6,13 @@ import csv
 import io
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
+import threading
 import zipfile
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 
@@ -19,7 +22,104 @@ from openpyxl import Workbook
 from modstore_server import workflow_training_replay as replay
 from modstore_server import workflow_training_sandbox as replay_sandbox
 from modstore_server.employee_runtime import parse_employee_config_v2
+from modstore_server.self_maintenance_subprocess import _ExcerptReader, terminate_subprocess
 from modstore_server.workflow_nl_training import get_assert
+
+
+def _native_stderr_summary(text):
+    """Only fixed error classes and trusted source locations may reach CI logs."""
+    categories = (
+        "ModuleNotFoundError|ImportError|PermissionError|FileNotFoundError|OSError|"
+        "ValueError|RuntimeError|TypeError|KeyError|AssertionError|NameError|SyntaxError|AttributeError"
+    )
+    details = set(re.findall(rf"^({categories}):", text, flags=re.MULTILINE))
+    for category in re.findall(
+        r"^sqlalchemy\.exc\.(OperationalError|IntegrityError|InvalidRequestError):",
+        text,
+        flags=re.MULTILINE,
+    ):
+        details.add("sqlalchemy.exc." + category)
+    for name in re.findall(
+        r"^ModuleNotFoundError: No module named '([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)'$",
+        text,
+        flags=re.MULTILINE,
+    ):
+        if len(name) <= 128:
+            details.add("missing_module:" + name)
+    repository = Path(replay.__file__).resolve().parents[3]
+    for path, line in re.findall(
+        r'^\s*File "([^"\n]+)", line ([0-9]{1,7})(?=,|\s|$)', text, re.MULTILINE
+    ):
+        frame = Path(os.path.normpath(path))
+        if (
+            frame.is_relative_to(repository)
+            and frame.is_file()
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\.py", frame.name)
+        ):
+            details.add(f"{frame.name}:{int(line)}")
+    for marker, category in (
+        ("training_sandbox_failed; no unsandboxed evaluation fallback", "controller_failed"),
+        ("bwrap:", "bwrap_failed"),
+    ):
+        if marker in text:
+            details.add(category)
+    if re.search(r"^Error(?: \[[A-Z_]+\])?:", text, re.MULTILINE):
+        details.add("node_or_srt_error")
+    for code in ("ERR_MODULE_NOT_FOUND", "ERR_DLOPEN_FAILED", "ENOENT", "EACCES", "EPERM"):
+        if f"[{code}]" in text:
+            details.add(code)
+    return "; ".join(sorted(details)) or "no_allowed_stderr_diagnostic"
+
+
+@contextmanager
+def _native_stderr_diagnostic(monkeypatch):
+    """Observe the fixed controller in tests; production still discards all logs."""
+    original = subprocess.Popen
+    wrapper = str(replay._sandbox_support().with_name("promptfoo_sandbox.mjs"))
+    readers = []
+
+    def start(args, **kwargs):
+        if len(args) < 2 or args[1] != wrapper or "--replay" not in args:
+            return original(args, **kwargs)
+        assert kwargs["stderr"] == subprocess.DEVNULL
+        read_fd, write_fd = os.pipe()
+        try:
+            proc = original(args, **{**kwargs, "stderr": write_fd})
+        except BaseException:
+            os.close(read_fd)
+            raise
+        finally:
+            os.close(write_fd)
+        # 16K characters retain at most 64KiB of UTF-8, never an unbounded PIPE.
+        reader = _ExcerptReader(os.fdopen(read_fd, "rb"), 16384)
+
+        def guard():
+            reader.changed.wait()
+            if reader.snapshot()[1] is not None:
+                terminate_subprocess(proc, process_group=True)
+
+        watcher = threading.Thread(target=guard, name="native-stderr-cap", daemon=True)
+        readers.append((reader, watcher))
+        reader.thread.start()
+        watcher.start()
+        return proc
+
+    with monkeypatch.context() as patch:
+        patch.setattr(subprocess, "Popen", start)
+        try:
+            yield lambda: _native_stderr_summary(
+                "\n".join(reader.snapshot()[0] for reader, _ in readers)
+            )
+        finally:
+            for reader, watcher in readers:
+                reader.thread.join(timeout=1)
+                watcher.join(timeout=1)
+                assert (
+                    not reader.thread.is_alive() and not watcher.is_alive()
+                ), "native_stderr_cleanup_incomplete"
+                assert reader.error is None, "native_stderr_read_failed"
+                capped_at = reader.snapshot()[1]
+                assert capped_at is None, "native_stderr_limit_exceeded"
 
 
 def _fixture(kind="csv", *, wrong_reference=False, module_suffix="", order="A-1"):
@@ -156,8 +256,9 @@ def test_real_native_employee_and_independent_file_check(kind, monkeypatch):
         assert "expected_files" not in request["assets"]
         assert "customer_business_replay" not in request["source"]
         assert "XCAGI_LLM_API_KEY" not in env
-        result = original(request, directory, env)
-        assert result.returncode == 0, result.stderr[-7000:]
+        with _native_stderr_diagnostic(monkeypatch) as diagnostic:
+            result = original(request, directory, env)
+        assert result.returncode == 0, diagnostic()
         return result
 
     monkeypatch.setattr(replay, "_run_worker", run)
@@ -661,12 +762,49 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
         return original([sys.executable, "-c", script], **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", start)
-    with pytest.raises(subprocess.TimeoutExpired):
+    with pytest.raises(subprocess.TimeoutExpired), _native_stderr_diagnostic(monkeypatch):
         replay._run_worker({}, tmp_path, dict(os.environ), timeout=1)
     child = int(pid_file.read_text())
     state = Path(f"/proc/{child}/stat")
     assert not state.exists() or state.read_text().split()[2] == "Z"
     assert controls and all(not path.exists() for path in controls)
+
+
+@pytest.mark.parametrize("overflow", [False, True])
+def test_native_stderr_diagnostic_bounds_and_redacts_output(tmp_path, monkeypatch, overflow):
+    # Synthetic child only: this validates observation and cleanup, not native isolation.
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "unused-srt"))
+    original = subprocess.Popen
+    message = (
+        f'  File "{replay.__file__}", line 624, in evaluate_business_replay\n'
+        "ModuleNotFoundError: No module named 'synthetic_missing'\n"
+        "PermissionError: synthetic-private-data-must-never-be-printed\n"
+        "AttributeError: synthetic-private-data-must-never-be-printed\n"
+        "sqlalchemy.exc.OperationalError: synthetic-private-data-must-never-be-printed\n"
+    )
+    script = (
+        "import sys,time; "
+        f"sys.stderr.write({('x' * 20000 if overflow else message)!r}); sys.stderr.flush(); "
+        + ("time.sleep(30)" if overflow else "sys.exit(3)")
+    )
+    monkeypatch.setattr(
+        subprocess, "Popen", lambda args, **kw: original([sys.executable, "-c", script], **kw)
+    )
+    if overflow:
+        with (
+            pytest.raises(AssertionError, match="native_stderr_limit_exceeded"),
+            _native_stderr_diagnostic(monkeypatch),
+        ):
+            replay._run_worker({}, tmp_path, dict(os.environ), timeout=5)
+    else:
+        with _native_stderr_diagnostic(monkeypatch) as diagnostic:
+            result = replay._run_worker({}, tmp_path, dict(os.environ), timeout=5)
+        assert result.returncode == 3
+        assert diagnostic() == (
+            "AttributeError; ModuleNotFoundError; PermissionError; "
+            "missing_module:synthetic_missing; sqlalchemy.exc.OperationalError; "
+            "workflow_training_replay.py:624"
+        )
 
 
 def test_missing_sandbox_blocks_the_original_employee_before_start(monkeypatch):
