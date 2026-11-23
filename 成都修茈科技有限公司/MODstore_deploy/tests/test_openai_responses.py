@@ -147,6 +147,8 @@ def billed(db, monkeypatch):
         "duplicate": False,
         "closed": False,
         "pause": None,
+        "read_blocked": asyncio.Event(),
+        "cancel_on_terminal": None,
     }
     real_client = transport.DefaultAsyncHttpxClient
     httpx = importlib.import_module(real_client.__mro__[1].__module__.split(".")[0])
@@ -181,8 +183,11 @@ def billed(db, monkeypatch):
                     {"type": "response.completed", "sequence_number": 3, "response": result}
                 )
             for event in events:
+                if event["type"] in responses._TERMINALS and state["cancel_on_terminal"]:
+                    asyncio.get_running_loop().call_soon(state["cancel_on_terminal"].cancel)
                 yield responses._sse(event).encode()
             if state["pause"] is not None:
+                state["read_blocked"].set()
                 await state["pause"].wait()
 
         async def aclose(self):
@@ -345,7 +350,7 @@ async def test_terminal_is_held_until_native_eof_and_authoritative_settlement(bi
     assert "response.created" in await anext(events)
     assert "response.function_call_arguments.delta" in await anext(events)
     pending = asyncio.create_task(anext(events))
-    await asyncio.sleep(0)
+    await asyncio.wait_for(billed["read_blocked"].wait(), timeout=5)
     assert not pending.done()
     billed["wallet"].settle.assert_not_awaited()
     assert ledger.lookup(db, 7, KEY, 90) == "settling"
@@ -357,8 +362,9 @@ async def test_terminal_is_held_until_native_eof_and_authoritative_settlement(bi
         await anext(events)
 
 
+@pytest.mark.parametrize("cancel_point", ["blocked-read", "ready-terminal"])
 async def test_client_cancellation_closes_the_real_stream_and_keeps_original_attempt_pending(
-    billed, db
+    billed, db, cancel_point
 ):
     billed["pause"] = asyncio.Event()
     response = await billed["call"](body=_payload(stream=True))
@@ -366,15 +372,25 @@ async def test_client_cancellation_closes_the_real_stream_and_keeps_original_att
     await anext(events)
     await anext(events)
     waiting = asyncio.create_task(anext(events))
-    await asyncio.sleep(0)
-    waiting.cancel()
+    if cancel_point == "ready-terminal":
+        billed["cancel_on_terminal"] = waiting
+    else:
+        await asyncio.wait_for(billed["read_blocked"].wait(), timeout=5)
+        assert not waiting.done()
+        waiting.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await waiting
+        async with asyncio.timeout(5):
+            await waiting
+    with pytest.raises(StopAsyncIteration):
+        await anext(events)
     assert billed["closed"] is True
     assert ledger.lookup(db, 7, KEY, 90) == "settling"
     assert all(client.is_closed for client in billed["clients"])
     billed["wallet"].settle.assert_not_awaited()
     billed["wallet"].release.assert_not_awaited()
+    with pytest.raises(HTTPException) as error:
+        await billed["call"](body=_payload(stream=True))
+    assert error.value.status_code == 409 and len(billed["requests"]) == 1
 
 
 async def test_definite_wallet_rejection_is_not_an_unknown_paid_attempt(billed, db):

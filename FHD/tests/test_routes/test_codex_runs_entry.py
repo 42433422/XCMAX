@@ -160,7 +160,7 @@ def test_cancel_staged_parent_never_creates_runtime_authority(runtime_entry):
     assert state.calls == state.servers == []
 
 
-def test_unqualified_entry_blocks_without_a_native_fallback(runtime_entry):
+def test_unqualified_entry_queues_but_worker_blocks_without_a_native_fallback(runtime_entry):
     state = runtime_entry
     state.settings = replace(state.settings, qualification_file=None)
     response = state.client.post("/api/agent/runs", json={"message": "解释库存含义"})
@@ -172,9 +172,15 @@ def test_unqualified_entry_blocks_without_a_native_fallback(runtime_entry):
     assert state.calls == state.servers == []
 
     run_id = payload["data"]["run_id"]
-    state.drain(run_id)
+    blocked = state.drain(run_id)
+    result = blocked.final_output["codex_result"]
+    assert result["run_id"] == run_id and result["ok"] is False
+    assert result["error_code"] == "runtime_policy_blocked"
+    assert result["legacy_fallback_allowed"] is False
+    assert blocked.metadata["codex_runtime"]["generation"] == 0
     assert state.queue.get(run_id).last_error_code == "runtime_policy_blocked"
     assert state.repository.get(run_id).final_output["codex_result"]["run_id"] == run_id
+    assert len(state.repository.list_recent()) == 1
     assert state.calls == state.servers == []
 
 
