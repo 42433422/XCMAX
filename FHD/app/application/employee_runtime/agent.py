@@ -460,7 +460,7 @@ class EmployeeAgent:
                     )
                     record_employee_run(
                         employee_id,
-                        success=True,
+                        success=False,
                         task=task,
                         summary=self._summarize(result["result"]),
                     )
@@ -471,7 +471,7 @@ class EmployeeAgent:
                             record_employee_run,
                         )
 
-                        record_employee_run(employee_id, success=True, task=task)
+                        record_employee_run(employee_id, success=False, task=task)
                         return build_interactive_chat_fallback_result(
                             self.employee_id,
                             pack,
