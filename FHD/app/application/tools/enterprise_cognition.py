@@ -39,7 +39,13 @@ def execute_enterprise_cognition(action: str, params: dict, context: dict) -> di
             "success": (
                 result.get("observation_verified") is True
                 if action == "evaluate"
-                else result.get("current_state_verified") is True
+                else (
+                    result.get("historical_observation_verified") is True
+                    if params.get("as_of") is not None
+                    else (result.get("scenario") or {}).get("knowledge_kind") == "prediction"
+                    if params.get("scenario_delivery_quantity") is not None
+                    else result.get("current_state_verified") is True
+                )
                 if action == "query"
                 else True
             ),
