@@ -338,8 +338,17 @@ def test_approved_sales_plan_writes_once_and_does_not_invent_receipt(
 
 
 @pytest.fixture
-def verified_closed_loop(trusted_actor, monkeypatch, tmp_path):
+def verified_closed_loop(trusted_actor, monkeypatch, tmp_path, request):
     actor, payload, _ = _seed_closed_loop_sale(trusted_actor, monkeypatch, tmp_path, 375)
+    if getattr(request, "param", None) == "located":
+        from app.db.models import StorageLocation
+
+        with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+            ledger = db.query(InventoryLedger).one()
+            location = StorageLocation(warehouse_id=ledger.warehouse_id, code="original-location")
+            db.add(location)
+            db.flush()
+            ledger.location_id = location.id
     orchestrator = AgentOrchestrator(
         repository=SQLAlchemyAgentRunRepository(session_factory=actor.factory),
         tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute),
@@ -386,6 +395,21 @@ def verified_closed_loop(trusted_actor, monkeypatch, tmp_path):
         "payment",
         "customer",
         "permission",
+        "currency",
+        "line_amount",
+        "ordered_quantity",
+        "delivered_quantity",
+        "returned_quantity",
+        "movement_transition",
+        "movement_reference",
+        "movement_delivered",
+        "movement_identity",
+        "ledger_quantity",
+        "ledger_available",
+        "ledger_missing",
+        "allocation_amount",
+        "allocation_reference",
+        "allocation_line",
     ],
 )
 def test_closed_loop_verification_reads_original_receipt_and_current_ledger_without_writes(
@@ -431,6 +455,43 @@ def test_closed_loop_verification_reads_original_receipt_and_current_ledger_with
                 role.permissions = [
                     p for p in role.permissions if p.code != "tool.finance.ledger_query"
                 ]
+            elif change == "currency":
+                order.currency = "USD"
+            elif change in {
+                "line_amount",
+                "ordered_quantity",
+                "delivered_quantity",
+                "returned_quantity",
+            }:
+                field = "amount" if change == "line_amount" else change
+                setattr(order.items[0], field, 11 if change == "ordered_quantity" else 1)
+            elif change.startswith("movement_"):
+                move = db.query(InventoryTransaction).filter_by(sales_order_id=order.id).one()
+                if change == "movement_transition":
+                    move.before_quantity = move.after_quantity = 500
+                elif change == "movement_reference":
+                    move.reference_type, move.reference_id = "other", order.id + 999
+                elif change == "movement_delivered":
+                    move.delivered_quantity = 0
+                else:
+                    move.remark = "idempotency:deliver:another-approved-request"
+            elif change.startswith("ledger_"):
+                move = db.query(InventoryTransaction).filter_by(sales_order_id=order.id).one()
+                if change == "ledger_missing":
+                    move.ledger_id = None
+                else:
+                    ledger = db.get(InventoryLedger, move.ledger_id)
+                    ledger.available_quantity = 20
+                    if change == "ledger_quantity":
+                        ledger.quantity = 20
+            elif change.startswith("allocation_"):
+                allocation = db.get(ReceivableAllocation, original["data"]["payment_allocation_id"])
+                if change == "allocation_amount":
+                    allocation.amount = 999
+                elif change == "allocation_reference":
+                    allocation.reference_id = order.id + 999
+                else:
+                    allocation.line_id = None
     writes = []
 
     def observe(_connection, _cursor, statement, _params, _context, _many):
@@ -488,3 +549,131 @@ def test_forged_closed_loop_success_cannot_borrow_an_existing_sale(verified_clos
     report = verify(case, output)
     assert report["accepted"] is False
     assert report["code"] == "result_receipt_unavailable"
+
+
+@pytest.mark.parametrize("corrupt_later_move", [False, True])
+def test_stock_reconciliation_follows_later_real_movements(
+    verified_closed_loop, corrupt_later_move
+):
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.db.models import InventoryTransaction
+    from app.domain.shared_services.inventory_service import InventoryService
+
+    actor, run = verified_closed_loop
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        original = db.query(InventoryTransaction).filter_by(transaction_type="out").one()
+        result = InventoryService().inventory_in(
+            product_id=original.product_id,
+            warehouse_id=original.warehouse_id,
+            batch_no=original.batch_no,
+            location_id=original.location_id,
+            quantity=5,
+            session=db,
+        )
+        assert result["success"] is True
+        if corrupt_later_move:
+            db.query(InventoryTransaction).filter_by(
+                transaction_type="in"
+            ).one().before_quantity = 0
+    step, call = run.steps[0], run.tool_calls[0]
+    report = verify_step_result(
+        run=run,
+        step=step,
+        call=call,
+        context={
+            **run.metadata["runtime_context"],
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            **task_execution_context(run, step),
+        },
+    )
+    assert report["accepted"] is (not corrupt_later_move), report
+
+
+@pytest.mark.parametrize("verified_closed_loop", ["located"], indirect=True)
+@pytest.mark.parametrize(
+    "later_change,accepted",
+    [
+        ("relocate", True),
+        ("unlocated_in", True),
+        ("unrecorded_location", False),
+        ("changed_original", False),
+    ],
+)
+def test_stock_location_history_preserves_original_move(
+    verified_closed_loop, later_change, accepted
+):
+    from app.application.agent_orchestrator.result_verification import verify_step_result
+    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.db.models import InventoryTransaction
+    from app.domain.shared_services.inventory_service import InventoryService
+
+    actor, run = verified_closed_loop
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        move = db.query(InventoryTransaction).filter_by(transaction_type="out").one()
+        identity = {
+            field: getattr(move, field)
+            for field in (
+                "id",
+                "ledger_id",
+                "product_id",
+                "warehouse_id",
+                "location_id",
+                "batch_no",
+                "remark",
+            )
+        }
+    assert identity["location_id"] is not None
+    service = InventoryService()
+    with tenant_scope(actor.tenant_id):
+        created = service.create_storage_location(
+            {"warehouse_id": identity["warehouse_id"], "code": "later-location"}
+        )
+        assert created["success"] is True
+        later_location = created["data"]["id"]
+        if later_change == "relocate":
+            result = service.inventory_count(
+                identity["product_id"],
+                identity["warehouse_id"],
+                actual_quantity=10,
+                batch_no=identity["batch_no"],
+                location_id=later_location,
+                confirmed=True,
+            )
+            assert result["success"] is True
+        elif later_change == "unlocated_in":
+            result = service.inventory_in(
+                identity["product_id"],
+                identity["warehouse_id"],
+                quantity=5,
+                batch_no=identity["batch_no"],
+            )
+            assert result["success"] is True
+        else:
+            with actor.factory.begin() as db:
+                if later_change == "unrecorded_location":
+                    db.get(InventoryLedger, identity["ledger_id"]).location_id = later_location
+                else:
+                    db.get(InventoryTransaction, identity["id"]).location_id = later_location
+        if accepted:
+            with actor.factory() as db:
+                original = db.get(InventoryTransaction, identity["id"])
+                assert {field: getattr(original, field) for field in identity} == identity
+                ledger = db.get(InventoryLedger, identity["ledger_id"])
+                assert ledger.location_id == (
+                    later_location if later_change == "relocate" else identity["location_id"]
+                )
+    step, call = run.steps[0], run.tool_calls[0]
+    report = verify_step_result(
+        run=run,
+        step=step,
+        call=call,
+        context={
+            **run.metadata["runtime_context"],
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            **task_execution_context(run, step),
+        },
+    )
+    assert report["accepted"] is accepted, report

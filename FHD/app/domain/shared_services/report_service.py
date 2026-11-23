@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd  # noqa: F401 - compatibility patch point for existing tests/extensions
 from sqlalchemy import func
@@ -23,8 +23,60 @@ from app.db.session import get_db
 from app.domain.shared_services.report_export import export_report_to_excel
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
+REPORT_FILTERS = {
+    "sales": (
+        "start_date",
+        "end_date",
+        "group_by",
+        "customer_id",
+        "customer_name",
+        "order_no",
+        "status",
+        "payment_state",
+        "min_amount_exclusive",
+        "region",
+    ),
+    "inventory": ("warehouse_id", "category", "model_number"),
+    "purchase": ("start_date", "end_date", "group_by"),
+}
+
+
+def report_source_ambiguous(params: dict[str, Any]) -> bool:
+    """Explicit table rows cannot also claim a database query scope."""
+    return params.get("data") is not None and any(
+        params.get(key) not in (None, "") for keys in REPORT_FILTERS.values() for key in keys
+    )
+
+
+def resolve_report_type(params: dict[str, Any], user_message: str = "") -> str:
+    kind = str(params.get("report_type") or "").removesuffix("_summary")
+    if kind and kind != "report":
+        return kind
+    requested = [
+        key
+        for key, word in zip(REPORT_FILTERS, ("销售", "库存", "采购"), strict=True)
+        if key in user_message.casefold() or word in user_message
+    ]
+    return requested[0] if len(requested) == 1 else "report"
+
 
 class ReportService(NeuroEventPublisherMixin):
+    def query_report(self, kind: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Share the original report filters between execution and independent readback."""
+        if kind not in REPORT_FILTERS:
+            raise ValueError("unsupported report type")
+        unsupported = {key for keys in REPORT_FILTERS.values() for key in keys} - set(
+            REPORT_FILTERS[kind]
+        )
+        if any(params.get(key) not in (None, "") for key in unsupported):
+            raise ValueError("unsupported report filters")
+        return cast(
+            dict[str, Any],
+            getattr(self, f"get_{kind}_report")(
+                **{key: params[key] for key in REPORT_FILTERS[kind] if params.get(key) is not None}
+            ),
+        )
+
     @staticmethod
     def _decimal_to_float(value: Any) -> Any:
         return float(value) if isinstance(value, Decimal) else value
@@ -59,7 +111,7 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.created_at >= start_date)
             if end_date:
                 query = query.filter(SalesOrder.created_at <= end_date)
-            if customer_id:
+            if customer_id is not None:
                 query = query.filter(SalesOrder.customer_id == customer_id)
             if customer_name:
                 query = query.filter(SalesOrder.customer_name == customer_name)
@@ -159,7 +211,7 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(ShipmentRecord.created_at >= start_date)
             if end_date:
                 query = query.filter(ShipmentRecord.created_at <= end_date)
-            if customer_id:
+            if customer_id is not None:
                 query = query.filter(ShipmentRecord.unit_id == customer_id)
 
             records = query.group_by(ShipmentRecord.id).all()
@@ -231,7 +283,7 @@ class ReportService(NeuroEventPublisherMixin):
         with get_db() as db:
             query = db.query(InventoryLedger, Product).join(Product)
 
-            if warehouse_id:
+            if warehouse_id is not None:
                 query = query.filter(InventoryLedger.warehouse_id == warehouse_id)
             if category:
                 query = query.filter(Product.category == category)

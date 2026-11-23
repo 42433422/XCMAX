@@ -20,6 +20,7 @@ from app.application.agent_orchestrator.artifact_files import verified_spreadshe
 from app.application.employee_runtime.executor import execute_employee_task_local
 from app.application.employee_runtime.task_continuity import load_employee_task_ledger
 from app.db.models.customer import Customer
+from app.db.models.permission import Permission, Role
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SalesOrder, SalesOrderItem
@@ -107,6 +108,8 @@ def business_workspace(workspace: Path):
             db.commit()
 
     with factory() as db:
+        role = db.query(Role).filter_by(name="admin").one()
+        role.permissions.append(Permission(code="tool.reports.export", name="导出报表"))
         for identity, tenant, name in ((101, 11, CUSTOMER), (202, 22, "其他企业客户")):
             db.add(PurchaseUnit(id=identity, unit_name=name, tenant_id=tenant, is_active=True))
             db.add(Customer(id=identity, customer_name=name, tenant_id=tenant))

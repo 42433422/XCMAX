@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from contextlib import closing
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from openpyxl import load_workbook
 
+from app.application.agent_orchestrator.artifact_files import verified_spreadsheet_path
+from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+from app.domain.shared_services.report_service import ReportService
 from app.domain.shared_services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     _registered_router_business_docking_family,
@@ -26,6 +31,8 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_suppliers,
     execute_registered_workflow_tool,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_verification_readback import invocation
 
 # ---------------------------------------------------------------------------
 # _registered_router_customers
@@ -33,15 +40,17 @@ from app.domain.shared_services.tools_workflow_registered import (
 
 
 class TestCustomersRouter:
-    def test_query_action(self):
-        mock_svc = MagicMock()
-        mock_svc.get_all.return_value = {"success": True, "data": [{"id": 1}]}
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers("query", {"keyword": "test"}, {}, "normal", "")
-            assert result["success"] is True
+    @pytest.fixture
+    def mock_svc(self):
+        with patch("app.application.get_customer_app_service") as factory:
+            yield factory.return_value
 
-    def test_ensure_exists_matched(self):
-        mock_svc = MagicMock()
+    def test_query_action(self, mock_svc):
+        mock_svc.get_all.return_value = {"success": True, "data": [{"id": 1}]}
+        result = _registered_router_customers("query", {"keyword": "test"}, {}, "normal", "")
+        assert result["success"] is True
+
+    def test_ensure_exists_matched(self, mock_svc):
         mock_svc.lookup_purchase_unit_for_ensure.return_value = {
             "status": "matched",
             "id": 7,
@@ -51,42 +60,37 @@ class TestCustomersRouter:
             "success": True,
             "data": {"id": 7, "customer_name": "TestCo"},
         }
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "TestCo"}, {}, "normal", ""
-            )
+        result = _registered_router_customers(
+            "ensure_exists", {"unit_name": "TestCo"}, {}, "normal", ""
+        )
         assert result["success"] is True and result["exists"] is True
         assert result["id"] == 7
         mock_svc.lookup_purchase_unit_for_ensure.assert_called_once_with("TestCo")
         mock_svc.get_by_id.assert_called_once_with(7)
         mock_svc.create.assert_not_called()
 
-    def test_ensure_exists_creates_new(self):
-        mock_svc = MagicMock()
+    def test_ensure_exists_creates_new(self, mock_svc):
         mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
         mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
         mock_svc.get_by_id.return_value = {
             "success": True,
             "data": {"id": 8, "customer_name": "NewCo"},
         }
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
-            )
+        result = _registered_router_customers(
+            "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
+        )
         assert result["success"] is True and result["created"] is True
         assert result["id"] == 8
         mock_svc.create.assert_called_once_with({"customer_name": "NewCo"})
         mock_svc.get_by_id.assert_called_once_with(8)
 
     @pytest.mark.parametrize("message", ["客户已存在", "DB error"])
-    def test_ensure_exists_create_failure_never_claims_success(self, message):
-        mock_svc = MagicMock()
+    def test_ensure_exists_create_failure_never_claims_success(self, mock_svc, message):
         mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
         mock_svc.create.return_value = {"success": False, "message": message}
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "FailCo"}, {}, "normal", ""
-            )
+        result = _registered_router_customers(
+            "ensure_exists", {"unit_name": "FailCo"}, {}, "normal", ""
+        )
         assert result["success"] is False and result["outcome"] == "unknown"
         assert result["retryable"] is False and result["reconciliation_required"] is True
         mock_svc.create.assert_called_once_with({"customer_name": "FailCo"})
@@ -100,15 +104,13 @@ class TestCustomersRouter:
             {"success": True, "data": {"id": 8, "customer_name": "OtherCo"}},
         ],
     )
-    def test_ensure_exists_unverified_receipt_is_not_success(self, readback):
-        mock_svc = MagicMock()
+    def test_ensure_exists_unverified_receipt_is_not_success(self, mock_svc, readback):
         mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
         mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
         mock_svc.get_by_id.return_value = readback
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
-            )
+        result = _registered_router_customers(
+            "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
+        )
         assert result["success"] is False
         assert result["error_code"] == "customer_receipt_unverified"
         assert result["retryable"] is False and result["reconciliation_required"] is True
@@ -119,29 +121,21 @@ class TestCustomersRouter:
         result = _registered_router_customers("ensure_exists", {}, {}, "normal", "")
         assert result["success"] is False
 
-    def test_create_action_success(self):
-        mock_svc = MagicMock()
+    def test_create_action_success(self, mock_svc):
         mock_svc.create.return_value = {"success": True, "data": {"id": 1}}
         mock_svc.get_by_id.return_value = {
             "success": True,
             "data": {"id": 1, "customer_name": "NewCo"},
         }
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "create", {"unit_name": "NewCo"}, {}, "normal", ""
-            )
-            assert result["success"] is True
+        result = _registered_router_customers("create", {"unit_name": "NewCo"}, {}, "normal", "")
+        assert result["success"] is True
         assert result["id"] == 1 and result["data"]["customer_name"] == "NewCo"
         mock_svc.get_by_id.assert_called_once_with(1)
 
-    def test_create_action_failure(self):
-        mock_svc = MagicMock()
+    def test_create_action_failure(self, mock_svc):
         mock_svc.create.return_value = {"success": False, "message": "error"}
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "create", {"unit_name": "NewCo"}, {}, "normal", ""
-            )
-            assert result["success"] is False
+        result = _registered_router_customers("create", {"unit_name": "NewCo"}, {}, "normal", "")
+        assert result["success"] is False
 
     def test_create_missing_name(self):
         result = _registered_router_customers("create", {}, {}, "normal", "")
@@ -219,39 +213,32 @@ class TestMaterialsRouter:
 
 
 class TestShipmentRecordsRouter:
-    def test_list_action(self):
-        mock_svc = MagicMock()
+    @pytest.fixture
+    def mock_svc(self):
+        with patch("app.bootstrap.get_shipment_app_service") as factory:
+            yield factory.return_value
+
+    def test_list_action(self, mock_svc):
         mock_svc.get_shipment_records.return_value = []
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _registered_router_shipment_records(
-                "list", {"unit": "TestCo"}, {}, "admin", ""
-            )
-            assert result["success"] is True
+        result = _registered_router_shipment_records("list", {"unit": "TestCo"}, {}, "admin", "")
+        assert result["success"] is True
 
-    def test_update_action(self):
-        mock_svc = MagicMock()
+    def test_update_action(self, mock_svc):
         mock_svc.update_shipment_record.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _registered_router_shipment_records(
-                "update", {"id": 1, "status": "shipped"}, {}, "admin", ""
-            )
-            assert result["success"] is True
+        result = _registered_router_shipment_records(
+            "update", {"id": 1, "status": "shipped"}, {}, "admin", ""
+        )
+        assert result["success"] is True
 
-    def test_delete_action(self):
-        mock_svc = MagicMock()
+    def test_delete_action(self, mock_svc):
         mock_svc.delete_shipment_record.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _registered_router_shipment_records("delete", {"id": 1}, {}, "admin", "")
-            assert result["success"] is True
+        result = _registered_router_shipment_records("delete", {"id": 1}, {}, "admin", "")
+        assert result["success"] is True
 
-    def test_export_action(self):
-        mock_svc = MagicMock()
+    def test_export_action(self, mock_svc):
         mock_svc.export_shipment_records.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _registered_router_shipment_records(
-                "export", {"unit": "TestCo"}, {}, "admin", ""
-            )
-            assert result["success"] is True
+        result = _registered_router_shipment_records("export", {"unit": "TestCo"}, {}, "admin", "")
+        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -630,32 +617,54 @@ class TestErpRouterDispatch:
         assert r["success"] is False
 
     @pytest.mark.parametrize("kind", ["sales", "inventory", "purchase"])
-    def test_reports_summary_and_export_use_same_rows(self, kind):
+    def test_reports_summary_and_export_use_same_rows(
+        self, kind, trusted_actor, tmp_path, monkeypatch
+    ):
+        actor = trusted_actor(role="admin")
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         rows = [{"model_number": "P002", "total_quantity": 18}]
-        with patch("app.domain.shared_services.report_service.ReportService") as factory:
-            svc = factory.return_value
-            query = getattr(svc, f"get_{kind}_report")
-            query.return_value = {"success": True, "data": rows}
-            svc.export_to_excel.return_value = {"success": True}
+        case = invocation(actor, "reports", "export", {})
+        case.run.message = f"EXPORT {kind.upper()}"
+        case.context.update(
+            node_id=case.step.node_id,
+            call_id=case.call.call_id,
+            input_sha256=canonical_hash(case.step.params),
+        )
+        with patch.object(
+            ReportService, f"get_{kind}_report", return_value={"success": True, "data": rows}
+        ) as query:
             assert (
-                _registered_router_reports(f"{kind}_summary", {}, {}, "shared", "")["data"] == rows
+                _registered_router_reports(f"{kind}_summary", {}, case.context, "shared", "")[
+                    "data"
+                ]
+                == rows
             )
             result = _registered_router_reports(
-                "export", {}, {}, "shared", f"EXPORT {kind.upper()}"
+                "export", case.step.params, case.context, "shared", case.run.message
             )
-            assert result["success"]
-            svc.export_to_excel.assert_called_once_with(report_type=kind, data=rows, filename=kind)
+            assert result["success"] and result["row_count"] == len(rows)
             assert query.call_count == 2
+            assert query.call_args_list == [call(), call()]
+        artifact = result["artifacts"][0]
+        assert artifact["metadata"]["owner_user_id"] == str(actor.user_id)
+        assert artifact["metadata"]["tenant_id"] == str(actor.tenant_id)
+        with closing(
+            load_workbook(verified_spreadsheet_path(case.run.run_id, artifact), read_only=True)
+        ) as workbook:
+            assert workbook.sheetnames == [kind]
+            assert list(workbook.active.values) == [tuple(rows[0]), tuple(rows[0].values())]
 
     @pytest.mark.parametrize("report", [{"success": False, "message": "query failed"}, None])
     def test_reports_export_does_not_fabricate_empty_success(self, report):
-        with patch("app.domain.shared_services.report_service.ReportService") as factory:
-            svc = factory.return_value
-            svc.get_inventory_report.return_value = report
+        with (
+            patch.object(ReportService, "get_inventory_report", return_value=report) as query,
+            patch.object(ReportService, "export_to_excel") as exporter,
+        ):
             params = {"report_type": "inventory"} if report else {}
             result = _registered_router_reports("export", params, {}, "shared", "")
             assert not result["success"]
-            svc.export_to_excel.assert_not_called()
+            exporter.assert_not_called()
+            assert query.call_count == bool(report)
 
     def test_finance_router_ledger_query(self):
         from app.services import accounting_services

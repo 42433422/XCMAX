@@ -352,12 +352,16 @@ def test_crash_between_receipt_and_verification_retains_recheckable_result(tmp_p
 def test_rechecking_saved_file_receipt_restores_download_projection_once(
     tmp_path, monkeypatch, trusted_actor
 ):
-    from app.application.agent_orchestrator.artifact_files import (
-        read_verified_run_file,
-        store_run_file,
-    )
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.application.agent_orchestrator.artifact_files import read_verified_run_file
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.agent_orchestrator.verification_recovery import reverify_run
+    from app.domain.shared_services.report_service import ReportService
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
 
     actor = trusted_actor(role="admin")
     monkeypatch.setattr(
@@ -367,7 +371,7 @@ def test_rechecking_saved_file_receipt_restores_download_projection_once(
         node_id="export",
         tool_id="reports",
         action="export",
-        params={"data": [{"product": "A", "quantity": 2}]},
+        params={"report_type": "sales", "data": [{"product": "A", "quantity": 2}]},
         status="completed",
         attempt_count=1,
     )
@@ -378,16 +382,12 @@ def test_rechecking_saved_file_receipt_restores_download_projection_once(
         steps=[step],
         metadata={"runtime_context": copy.deepcopy(actor.context)},
     )
-    content = b"product,quantity\nA,2\n"
-    artifact = store_run_file(run.run_id, content, name="approved.csv")
-    step.output = {"success": True, "artifacts": [artifact]}
     call = ToolCall(
         step_id=step.step_id,
         node_id=step.node_id,
         tool_id=step.tool_id,
         action=step.action,
         params=copy.deepcopy(step.params),
-        output=copy.deepcopy(step.output),
         status="completed",
         metadata={"attempt_count": 1},
     )
@@ -395,10 +395,39 @@ def test_rechecking_saved_file_receipt_restores_download_projection_once(
     freeze_verification_contract(
         run, step, call, get_tool_action_spec("reports", "export"), actor.context
     )
+    step.output = _registered_router_reports(
+        step.action,
+        step.params,
+        {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(step.params),
+        },
+        "shared",
+        run.message,
+    )
+    assert step.output["success"] and step.output["row_count"] == 1
+    artifact = step.output["artifacts"][0]
+    content = read_verified_run_file(run.run_id, artifact)
+    workbook = load_workbook(BytesIO(content), read_only=True)
+    try:
+        assert workbook.sheetnames == ["sales"]
+        assert list(workbook.active.values) == [("product", "quantity"), ("A", 2)]
+    finally:
+        workbook.close()
+    call.output = copy.deepcopy(step.output)
     bind_execution_receipt(call)
     repo = InMemoryAgentRunRepository()
     repo.save(run)
     assert not run.artifacts
+
+    def no_reexport(*_args, **_kwargs):
+        pytest.fail("Restoring an original receipt must not re-export the report")
+
+    monkeypatch.setattr(ReportService, "export_to_excel", no_reexport)
     # This is the durable snapshot after the raw receipt was saved but before
     # verification/artifact projection completed. Reading it must not export again.
     for _ in range(2):
@@ -408,6 +437,7 @@ def test_rechecking_saved_file_receipt_restores_download_projection_once(
         assert restored.artifacts[0].artifact_id == artifact["artifact_id"]
         assert read_verified_run_file(run.run_id, restored.artifacts[0].to_dict()) == content
         assert restored.tool_calls[0].output == step.output
+        assert len(restored.tool_calls) == 1
         assert restored.steps[0].attempt_count == 1
 
 
