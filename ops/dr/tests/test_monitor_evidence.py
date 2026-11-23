@@ -60,6 +60,45 @@ class MonitorEvidenceTest(unittest.TestCase):
                     self.assertFalse(results["wal:ship"]["ok"])
                     self.assertTrue(results["wal:base"]["ok"])
 
+    def test_backup_requires_success_receipt_and_manifest(self):
+        with tempfile.TemporaryDirectory() as root, patch.multiple(
+            monitor, STATE_DIR=root, BACKUP_DIR=root
+        ):
+            state = Path(root) / "state"
+            state.mkdir()
+            stamp = int(monitor.time.time())
+            day = monitor.time.strftime("%Y%m%d", monitor.time.gmtime(stamp))
+            snapshot = Path(root) / "daily" / day
+            snapshot.mkdir(parents=True)
+            marker = state / "backup_last_success"
+            manifest = snapshot / "MANIFEST.txt"
+            self.assertFalse(monitor.check_backup_freshness()[0]["ok"])
+            marker.write_text(str(stamp), encoding="utf-8")
+            self.assertFalse(monitor.check_backup_freshness()[0]["ok"])
+            manifest.write_text("fixture manifest", encoding="utf-8")
+            self.assertTrue(monitor.check_backup_freshness()[0]["ok"])
+            marker.write_text(str(stamp + 3600), encoding="utf-8")
+            self.assertFalse(monitor.check_backup_freshness()[0]["ok"])
+            marker.write_text(str(stamp - 27 * 3600), encoding="utf-8")
+            self.assertFalse(monitor.check_backup_freshness()[0]["ok"])
+
+    def test_deploy_requires_valid_digests(self):
+        with tempfile.TemporaryDirectory() as root, patch.multiple(
+            monitor, MANIFEST=str(Path(root) / "manifest.json"), FHD_DEPLOY_ROOT=root
+        ):
+            manifest = Path(monitor.MANIFEST)
+            deployed = Path(root) / ".deploy-sha256"
+            deployed.write_text("a" * 64, encoding="utf-8")
+            for doc in ("{}", "[]", '{"sha256": null}', '{"sha256": "x"}'):
+                with self.subTest(doc=doc):
+                    manifest.write_text(doc, encoding="utf-8")
+                    self.assertFalse(monitor.check_deploy_chain()[0]["ok"])
+            manifest.write_text(monitor.json.dumps({"sha256": "a" * 64}), encoding="utf-8")
+            self.assertTrue(monitor.check_deploy_chain()[0]["ok"])
+            deployed.write_text("", encoding="utf-8")
+            self.assertFalse(monitor.check_deploy_chain()[0]["ok"])
+
+
 
 if __name__ == "__main__":
     unittest.main()

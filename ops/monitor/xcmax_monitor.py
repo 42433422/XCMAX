@@ -309,33 +309,28 @@ def check_disk_mem():
 
 
 def check_backup_freshness():
+    """Use the backup producer's successful-run receipt, not directory mtime."""
+    now = time.time()
     daily = os.path.join(BACKUP_DIR, "daily")
-    newest = 0.0
-    if os.path.isdir(daily):
-        for name in os.listdir(daily):
-            path = os.path.join(daily, name)
-            try:
-                newest = max(newest, os.path.getmtime(path))
-            except OSError:
-                pass
-    if not newest:
-        return [
-            _result(
-                "backup:fresh",
-                False,
-                "crit",
-                "无任何备份产物（%s/daily 为空）" % BACKUP_DIR,
-            )
-        ]
-    age_h = (time.time() - newest) / 3600.0
-    return [
-        _result(
-            "backup:fresh",
-            age_h < 26,
-            "crit",
-            "最新备份 %.1f 小时前" % age_h,
-        )
-    ]
+    try:
+        with open(os.path.join(STATE_DIR, "state", "backup_last_success"), encoding="utf-8") as fh:
+            last_success = float(fh.read().strip())
+        if not 0 < last_success <= now or now - last_success >= 26 * 3600:
+            raise ValueError("missing or stale successful backup")
+        # The run can start before UTC midnight and finish after it.
+        for offset in (0, 86400):
+            day = time.strftime("%Y%m%d", time.gmtime(last_success - offset))
+            manifest = os.path.join(daily, day, "MANIFEST.txt")
+            if not os.path.isfile(manifest) or not os.path.getsize(manifest):
+                continue
+            modified = os.path.getmtime(manifest)
+            if 0 <= now - modified < 26 * 3600 and modified <= last_success + 1:
+                return [
+                    _result("backup:fresh", True, "crit", "最近成功备份 %.1f 小时前（清单存在）" % ((now - last_success) / 3600))
+                ]
+    except (OSError, ValueError, OverflowError):
+        pass
+    return [_result("backup:fresh", False, "crit", "26 小时内无有效成功回执和对应备份清单")]
 
 
 def check_wal_freshness():
@@ -404,7 +399,9 @@ def check_deploy_chain():
     try:
         with open(MANIFEST, encoding="utf-8") as fh:
             doc = json.load(fh)
-        manifest_sha = doc.get("sha256", "")
+        manifest_sha = doc.get("sha256", "") if isinstance(doc, dict) else ""
+        if not isinstance(manifest_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", manifest_sha):
+            raise ValueError("invalid manifest sha256")
     except (ValueError, IOError, OSError) as exc:
         return [_result("deploy:chain", False, "warn", "manifest 解析失败: %s" % exc)]
     deployed_file = os.path.join(FHD_DEPLOY_ROOT, ".deploy-sha256")
@@ -421,10 +418,14 @@ def check_deploy_chain():
     try:
         with open(deployed_file, encoding="utf-8") as fh:
             deployed_sha = fh.read().strip()
-    except (IOError, OSError):
-        deployed_sha = ""
-    manifest_age_h = (time.time() - os.path.getmtime(MANIFEST)) / 3600.0
-    if manifest_sha and deployed_sha != manifest_sha and manifest_age_h > 6:
+        if not re.fullmatch(r"[0-9a-f]{64}", deployed_sha):
+            raise ValueError("invalid deployed sha256")
+        manifest_age_h = (time.time() - os.path.getmtime(MANIFEST)) / 3600.0
+        if manifest_age_h < 0:
+            raise ValueError("manifest timestamp is in the future")
+    except (OSError, ValueError):
+        return [_result("deploy:chain", False, "warn", "部署摘要或发布时间不可核验")]
+    if deployed_sha != manifest_sha and manifest_age_h > 6:
         return [
             _result(
                 "deploy:chain",
@@ -434,11 +435,9 @@ def check_deploy_chain():
                 % (manifest_sha[:12], manifest_age_h, (deployed_sha or "无")[:12]),
             )
         ]
-    return [
-        _result(
-            "deploy:chain", True, "warn", "已部署 sha=%s…" % (deployed_sha or "?")[:12]
-        )
-    ]
+    if deployed_sha != manifest_sha:
+        return [_result("deploy:chain", True, "warn", "发布待同步（仍在 6 小时告警宽限期）")]
+    return [_result("deploy:chain", True, "warn", "已部署 sha=%s…" % deployed_sha[:12])]
 
 
 def check_tls_expiry():
