@@ -1315,6 +1315,55 @@ def test_unified_task_requires_approval_and_deduplicates_execution(
     assert mismatched.status_code == 409
 
 
+def test_cancelled_unstarted_shipment_can_be_previewed_again_without_execution(
+    local_tools,
+) -> None:
+    client = _client("task-owner")
+    body = {
+        "task_id": "shipment-preview-original",
+        "title": "发货预演",
+        "tool_id": "shipment_orders",
+        "action": "generate",
+        "params": {
+            "unit_name": "客户甲",
+            "order_number": "SO-original",
+            "products": [{"model_number": "A-01", "quantity": 1}],
+        },
+    }
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute:
+        original = client.post("/api/agent/tasks", json=body).json()["data"]
+        duplicate = client.post("/api/agent/tasks", json=body).json()
+        assert duplicate["deduplicated"] is True
+        assert duplicate["data"]["run_id"] == original["run_id"]
+        assert duplicate["data"]["status"] == "waiting_user"
+        changed = {**body, "params": {**body["params"], "order_number": "SO-revised"}}
+        assert client.post("/api/agent/tasks", json=changed).status_code == 409
+
+        cancelled = client.post(f"/api/agent/runs/{original['run_id']}/cancel").json()["data"]
+        assert cancelled["status"] == "cancelled"
+        assert cancelled["tool_calls"] == []
+        assert cancelled["steps"]
+        for step in cancelled["steps"]:
+            assert step["status"] == "skipped"
+            assert not any(
+                step.get(key) for key in ("started_at", "finished_at", "attempt_count", "output")
+            )
+        assert not cancelled["final_output"].get("node_outputs")
+        assert (cancelled["metadata"].get("execution") or {}).get("state") != "active"
+
+        revised = client.post(
+            "/api/agent/tasks", json={**changed, "task_id": "shipment-preview-revised"}
+        ).json()["data"]
+        assert revised["run_id"] != original["run_id"]
+        assert revised["status"] == "waiting_user"
+        assert revised["steps"][0]["params"]["order_number"] == "SO-revised"
+        assert (
+            client.get(f"/api/agent/runs/{original['run_id']}").json()["data"]["status"]
+            == "cancelled"
+        )
+        execute.assert_not_called()
+
+
 def test_cancelled_task_requires_an_explicit_new_business_request() -> None:
     repository = get_agent_run_repository()
     client = _client("task-owner")

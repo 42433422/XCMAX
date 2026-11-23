@@ -305,6 +305,20 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
     )
     assert requested.status_code == 200
     assert requested.json()["state"] == "pending_approval"
+    original_pending = get_action_state("workflow-freeze")
+    for approval_id in (None, "", "   "):
+        body = {
+            "action_id": "workflow-freeze",
+            "decision": "approved",
+            "approver": "42433422",
+            "workflow_action": "freeze-manifest",
+            "defer_execution": True,
+        }
+        if approval_id is not None:
+            body["approval_id"] = approval_id
+        missing_binding = client.post("/api/ops/autonomy/github-approval", json=body)
+        assert missing_binding.status_code == 409
+        assert get_action_state("workflow-freeze") == original_pending
     dispatched = client.post(
         "/api/ops/autonomy/github-approval",
         json={
@@ -329,6 +343,21 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
     )
     assert approved.status_code == 200
     assert approved.json()["action"]["state"] == "approved"
+    original = get_action_state("workflow-freeze")
+    for approval_id in ("deployment-other", ""):
+        for decision in ("executed", "execution_failed"):
+            mismatched = client.post(
+                "/api/ops/autonomy/github-approval",
+                json={
+                    "action_id": "workflow-freeze",
+                    "decision": decision,
+                    "approval_id": approval_id,
+                    "approver": "42433422",
+                    "workflow_action": "freeze-manifest",
+                },
+            )
+            assert mismatched.status_code == 409
+            assert get_action_state("workflow-freeze") == original
     executed = client.post(
         "/api/ops/autonomy/github-approval",
         json={
@@ -342,6 +371,18 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
     )
     assert executed.status_code == 200
     assert executed.json()["action"]["state"] == "executed"
+    duplicate = client.post(
+        "/api/ops/autonomy/github-approval",
+        json={
+            "action_id": "workflow-freeze",
+            "decision": "executed",
+            "approval_id": "deployment-other",
+            "approver": "42433422",
+            "workflow_action": "freeze-manifest",
+        },
+    )
+    assert duplicate.status_code == 409
+    assert get_action_state("workflow-freeze") == executed.json()["action"]
 
     invalid = client.post(
         "/api/ops/autonomy/actions/request",
