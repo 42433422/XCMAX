@@ -128,10 +128,12 @@ def _chat_file_lock_path(user_id: str) -> Path:
     return path
 
 
-def _chat_busy(session: str) -> dict[str, Any]:
+def _chat_busy(session: str, run_id: str = "") -> dict[str, Any]:
     return runtime_chat_payload(
         {
             "ok": False,
+            "run_id": run_id or None,
+            "resume_required": bool(run_id),
             "error": "当前账号已有任务正在执行，请稍后重试。",
             "error_code": "runtime_busy",
             "execution_state": "blocked",
@@ -152,20 +154,22 @@ def run_runtime_chat(
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     slot = _chat_slot(user_id)
     if not slot.acquire(blocking=False):
-        return _chat_busy(session)
+        return _chat_busy(session, str(context.get("agent_runtime_run_id") or ""))
     disk_lock: FileLock | None = None
     try:
         try:
             disk_lock = FileLock(_chat_file_lock_path(user_id), timeout=0, mode=0o600)
             disk_lock.acquire(timeout=0)
         except Timeout:
-            return _chat_busy(session)
+            return _chat_busy(session, str(context.get("agent_runtime_run_id") or ""))
         except (OSError, RuntimePolicyError):
             # Never drop the cross-process guard and proceed unprotected.
             return runtime_chat_payload(
                 {
                     "ok": False,
                     "error": "运行状态目录不可用于安全并发控制，本轮任务未启动。",
+"run_id": str(context.get("agent_runtime_run_id") or "") or None,
+                    "resume_required": bool(context.get("agent_runtime_run_id")),
                     "error_code": "runtime_storage_invalid",
                     "execution_state": "blocked",
                     "retryable": False,

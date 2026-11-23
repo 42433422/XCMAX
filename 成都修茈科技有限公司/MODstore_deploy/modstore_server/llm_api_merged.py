@@ -144,7 +144,9 @@ async def resolve_default_llm_route(
                         continue
                     try:
                         codex_route_contract(
-                            p, candidate, model_context_capabilities(p, candidate, rows.get(candidate))
+                            p,
+                            candidate,
+                            model_context_capabilities(p, candidate, rows.get(candidate)),
                         )
                     except HTTPException:
                         # A platform default may try the next advertised model;

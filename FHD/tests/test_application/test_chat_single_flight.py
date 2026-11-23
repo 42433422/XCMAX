@@ -108,3 +108,21 @@ def test_unverified_reply_does_not_claim_zero_operations_completed():
     assert state == "blocked"
     assert "已核验 0 项操作" not in result["output"]
     assert "尚未核验" in result["output"]
+
+
+def test_busy_continuation_keeps_original_parent_pointer(monkeypatch, tmp_path):
+    from filelock import FileLock
+
+    path = tmp_path / "account.lock"
+    monkeypatch.setattr(chat, "_chat_file_lock_path", lambda _owner: path)
+    with FileLock(path, timeout=0):
+        busy = chat.run_runtime_chat(
+            user_id="owner",
+            message="原任务下一步",
+            context={"agent_runtime_run_id": "original-parent", "session_id": "same-session"},
+            file_context={},
+        )
+    assert busy["success"] is False
+    assert busy["data"]["error_code"] == "runtime_busy"
+    assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-parent"
+    assert busy["retryable"] is True
