@@ -179,7 +179,8 @@ def test_shared_chat_boundary_keeps_successful_waiting_confirmation_reply():
 
 
 @pytest.mark.parametrize(
-    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
+    "outcome,committed",
+    [("partial", True), ("unknown", False), ("not_executed", False)],
 )
 def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome, committed):
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
@@ -217,7 +218,8 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
 
 
 @pytest.mark.parametrize(
-    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
+    "outcome,committed",
+    [("partial", True), ("unknown", False), ("not_executed", False)],
 )
 def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(
     outcome, committed
