@@ -12,7 +12,6 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict
-from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
@@ -337,6 +336,7 @@ class CyclePorts:
 
     async def research(self) -> list[dict[str, Any]]:
         from modstore_server.research_tools import searxng_instance_url, searxng_search
+        from modstore_server.xiaoc_world_evidence import public_source_observation
 
         if not searxng_instance_url():
             raise LifeBlocked("research_not_configured")
@@ -361,19 +361,17 @@ class CyclePorts:
         self.active()
         facts = []
         for row in rows[:3]:
-            url = str(row.get("url") or "")[:1000]
-            parsed = urlsplit(url)
-            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
+            if not isinstance(row, dict):
+                continue
+            observation = public_source_observation(row, datetime.now(UTC))
+            if observation is None:
                 continue
             facts.append(
                 _fact(
                     "web",
-                    {
-                        "title": str(row.get("title") or "")[:150],
-                        "snippet": str(row.get("content") or "")[:700],
-                    },
-                    url=url,
-                    observed_at=datetime.now(UTC).isoformat(),
+                    observation,
+                    url=observation["url"],
+                    observed_at=observation["collected_at"],
                     interpretation="retrieved_source_not_verified_claim",
                 )
             )
