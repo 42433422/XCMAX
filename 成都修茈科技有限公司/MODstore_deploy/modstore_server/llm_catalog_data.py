@@ -28,6 +28,28 @@ def load_fallback() -> Dict[str, List[Any]]:
         return {}
 
 
+def declared_model_capabilities(provider: str, model: str) -> dict[str, int]:
+    """Exact vendor declarations in the existing shipped catalog, never guessed limits.
+
+    This supplements direct model metadata only. A deployment alias must retain
+    its own explicit capacity intersection and cannot inherit these model limits.
+    ``max_tokens`` remains an output setting, not a combined context declaration.
+    """
+    records = [
+        record
+        for record in load_fallback().get(provider, [])
+        if isinstance(record, dict)
+        and record.get("model") == model
+        and isinstance(record.get("capability_source"), str)
+        and record["capability_source"].startswith("https://")
+    ]
+    return {
+        key: min(record[key] for record in records)
+        for key in ("context_window", "max_input_tokens", "max_output_tokens")
+        if records and all(type(record.get(key)) is int and record[key] > 0 for record in records)
+    }
+
+
 def cache_key(user_id: int, provider: str, api_key: str) -> str:
     payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
     # A process-secret MAC hides credentials without a password KDF on the event

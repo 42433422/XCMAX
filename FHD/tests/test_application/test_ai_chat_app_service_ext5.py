@@ -52,7 +52,7 @@ def test_public_chat_model_failure_has_no_local_success_or_implicit_import(sourc
     service = _make_svc()
     with (
         patch(
-            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+            "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()
         ),
         patch(
             "app.application.agent_runtime.gateway.run_runtime_task",

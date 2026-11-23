@@ -56,7 +56,14 @@ jobs:
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
       - name: Install frontend dependencies
-        run: npm ci --prefix FHD/frontend
+        working-directory: FHD/frontend
+        env:
+          # Browser builds use WASM; keep npm hooks and bundled CPU bindings.
+          # https://github.com/microsoft/onnxruntime/blob/v1.30.0/js/node/README.md#cuda-ep-installation
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: |
+          npm ci
+          node --input-type=module -e "import { listSupportedBackends } from 'onnxruntime-node'; if (!listSupportedBackends().some(({ name, bundled }) => name === 'cpu' && bundled)) throw new Error('ONNX CPU binding unavailable')"
       - name: Rebuild Sunbird console from source
         run: npm --prefix FHD/sunbird-console run build
       - name: Verify generated entrypoint

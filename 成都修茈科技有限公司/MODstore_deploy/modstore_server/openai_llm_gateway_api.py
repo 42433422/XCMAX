@@ -17,7 +17,8 @@ Billing / wallet preauthorize-settle mirrors ``POST /api/llm/chat``.
 - ``OPENAI_BASE_URL=https://<market-host>/v1``
 - ``OPENAI_API_KEY=<login JWT or configured llm:use PAT>``
 
-``stream=true`` is not implemented here; use ``POST /api/llm/chat/stream`` for SSE.
+Chat streaming uses ``POST /api/llm/chat/stream``. ``POST /v1/responses`` supports
+native SDK streaming with a bound runtime route and an idempotent billing receipt.
 
 ``GET /v1/models`` 返回完整目录（含 llm/vlm/image/video/…），不只是计价表里的 LLM；
 每条带 ``category`` / ``pricing`` / ``runtime_selectable``，便于桌面端选型与计费对齐。
@@ -92,6 +93,26 @@ def _get_llm_gateway_user(request: Request, authorization: Optional[str] = Heade
         request.state.llm_pat_user_id = int(identity.user.id)
         return identity.user
     return _get_current_user(authorization, request)
+
+
+@router.post("/responses")
+async def openai_responses(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_llm_gateway_user),
+):
+    from modstore_server.llm_responses import MAX_REQUEST_BYTES, run_billed_responses
+
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > MAX_REQUEST_BYTES:
+            raise HTTPException(413, "Responses 请求超过允许大小")
+    try:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, "Responses 请求不是有效 JSON") from None
+    return await run_billed_responses(request, db, user, payload)
 
 
 # 账户路由虚拟名（XCauto 对外主品牌 + 历史 xiuci 别名）

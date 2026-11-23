@@ -675,14 +675,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
-      "base_blob": "f449f5781af352aabd6eb54d5abb1c29e79e4685",
-      "head_blob": "a4eb93d515424c689c1c86717f13b6776794306c",
-      "before_lines": 1534,
-      "after_lines": 1549,
-      "reason": "审查请求（不代表批准）：将LiteLLM已选模型的公开输入、输出和总窗口能力沿原默认路由响应传到桌面，消除只传别名导致错误回落16384的断点。",
-      "boundary": "复用原账号目录与路由签名，公开能力限于数值、模型身份和来源；保留BYOK、平台计费、原生流式回执重放与原审批边界，不添加另一套模型路由。",
-      "validation": "服务端6个相关测试文件178项通过且无跳过，包含实际LiteLLM1.109.3能力读取、同名别名隔离与多部署共同限制；Black、isort、flake8及定向类型检查通过。完整CI和架构审查待完成，本记录不是批准。",
-      "follow_up": "由维护者复核公开能力投影与15行净增长，部署后确认当前网关别名实际返回能力；容量未知继续报告来源，不猜测窗口或替换计费模型。",
+      "base_blob": "a4eb93d515424c689c1c86717f13b6776794306c",
+      "head_blob": "7dc99fc24bbf369e3d7ca00ca3f81c19727fa8df",
+      "before_lines": 1549,
+      "after_lines": 1572,
+      "reason": "本条为精确变更的审查请求，不是审批回执。用户要求解决配置后提交PR并合入；现有账号模型未接入固定执行器，补齐同一路由的资格准备、平台Responses合同和结算证据。",
+      "boundary": "复用现有账号默认路由、原任务与原账本，只增加身份和协议接线；保持显式管理员配置、原模型身份、未知费用不重放及业务审批边界。",
+      "validation": "本地完整Codex与受影响入口1125项通过；固定CLI/MCP/SQLite压缩重启、真实LiteLLM/OpenAI SDK协议、平台计费与账号隔离均有回归。真实收费模型资格由首次使用实际执行，不以fixture代替。",
+      "follow_up": "由@42433422按本条base/head blob核对增量；本次不混入无关架构拆分。保留同一配置来源和持久恢复合同，完整远端检查通过后按用户授权合入。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
@@ -923,6 +923,18 @@
       "boundary": "路由仅认证、校验、封存输入并调用 gateway/route_support；明确工具任务仍走原确定性图，子任务 resume/retry 受父控制约束，未知效果不重放。",
       "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 runs_entry 13 项、control 10 项、queued_runtime 19 项，覆盖即时受理、原父续接、会话删除、撤权和幂等；71 文件迁移集 1546 项另行通过，不合并计数。",
       "follow_up": "新增运行控制继续收敛到已有 route_support 与 gateway；最终提交验证原 API 状态及错误码，按最新用户授权与实际 CI、审查结果合入；本请求不代表部署验收。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/infrastructure/codex/model_gateway.py": {
+      "base_file": "FHD/app/infrastructure/codex/model_gateway.py",
+      "base_blob": "050890bdd09e8da92a482044005e262540e84663",
+      "head_blob": "d12a1b1e7a4214ef57d6d659435952d95d7b4e53",
+      "before_lines": 781,
+      "after_lines": 828,
+      "reason": "本条为精确变更的审查请求，不是审批回执。用户要求解决配置后提交PR并合入；现有账号模型未接入固定执行器，补齐同一路由的资格准备、平台Responses合同和结算证据。",
+      "boundary": "复用现有账号默认路由、原任务与原账本，只增加身份和协议接线；保持显式管理员配置、原模型身份、未知费用不重放及业务审批边界。",
+      "validation": "本地完整Codex与受影响入口1125项通过；固定CLI/MCP/SQLite压缩重启、真实LiteLLM/OpenAI SDK协议、平台计费与账号隔离均有回归。真实收费模型资格由首次使用实际执行，不以fixture代替。",
+      "follow_up": "由@42433422按本条base/head blob核对增量；本次不混入无关架构拆分。保留同一配置来源和持久恢复合同，完整远端检查通过后按用户授权合入。",
       "review_owner": "@42433422"
     }
   }

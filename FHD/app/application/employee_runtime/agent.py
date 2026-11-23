@@ -404,32 +404,10 @@ class EmployeeAgent:
             build_employee_context(employee_id, payload)
             perceived = self._perceive(config, payload)
 
-            selected_runtime = None
             defer_cognition = False
             if "agent" in handler_list and not (
                 is_interactive_chat_payload(payload) or is_collaboration_context_payload(payload)
             ):
-                from app.infrastructure.codex import policy
-
-                try:
-                    selected_runtime = policy.runtime_settings()
-                    if (
-                        selected_runtime.engine != "codex"
-                        or "employee" not in selected_runtime.surfaces
-                    ):
-                        raise policy.RuntimePolicyError("员工 Agent 必须启用固定 Codex 执行器")
-                except policy.RuntimePolicyError:
-                    return self._cognition_failed_result(
-                        pack,
-                        task,
-                        handler_list,
-                        {
-                            "error": "员工运行时配置无效",
-                            "error_code": "runtime_configuration_invalid",
-                            "retryable": False,
-                        },
-                        t0,
-                    )
                 defer_cognition = True
                 if handler_list != ["agent"]:
                     return self._cognition_failed_result(
@@ -576,7 +554,6 @@ class EmployeeAgent:
                 agent_gate=agent_gate,
                 runtime_context=trusted_context,
                 on_event=on_event,
-                settings=selected_runtime,
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             ok = _ex._handlers_execution_ok(result)

@@ -11,6 +11,95 @@ from collections.abc import Mapping
 from typing import Any
 
 
+def codex_deployment_identity(info: Mapping[str, Any], params: Mapping[str, Any]) -> dict[str, str]:
+    """Project an explicit gateway deployment, without exposing its credentials.
+
+    This is an expected identity for qualification, never evidence that a model
+    request has passed. OpenAI-compatible transport names alone do not identify
+    a non-OpenAI upstream; those deployments must declare their actual vendor.
+    """
+    from urllib.parse import urlsplit
+
+    resolved = params.get("model")
+    prefix, _, native = resolved.partition("/") if isinstance(resolved, str) else ("", "", "")
+    vendor = info.get("upstream_vendor") or (prefix if prefix not in {"openai", "azure"} else "")
+    response_model = info.get("response_model") or native
+    host = (urlsplit(str(params.get("api_base") or "")).hostname or "").lower().rstrip(".")
+    if (
+        not isinstance(vendor, str)
+        or not vendor.strip()
+        or vendor.lower() in {"openai", "azure", "azure-openai", "azure_openai", "litellm"}
+        or not isinstance(response_model, str)
+        or not 0 < len(response_model) <= 256
+        or any(char.isspace() or ord(char) < 32 for char in response_model)
+        or any(
+            host == domain or host.endswith("." + domain)
+            for domain in ("openai.com", "chatgpt.com", "openai.azure.com")
+        )
+    ):
+        return {}
+    return {"upstream_vendor": vendor.strip(), "response_model": response_model}
+
+
+def codex_route_contract(
+    provider: str, model: str, capabilities: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Describe only routes that can be independently qualified by the host."""
+    from fastapi import HTTPException
+
+    from modstore_server.llm_key_resolver import OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+
+    identity = {key: capabilities.get(key) for key in ("upstream_vendor", "response_model")}
+    if provider != "litellm":
+        if provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS or provider in {
+            "openai",
+            "openrouter",
+        }:
+            raise HTTPException(
+                409,
+                {
+                    "code": "CODEX_MODEL_UNSUPPORTED",
+                    "message": "当前所选模型没有已支持的独立 Responses 路由，请在模型设置中选择兼容模型。",
+                    "recovery": "choose_compatible_runtime_model",
+                },
+            )
+        identity = {"upstream_vendor": provider, "response_model": model}
+    elif capabilities.get("source") != "litellm_model_info" or not all(identity.values()):
+        raise HTTPException(
+            409,
+            {
+                "code": "CODEX_MODEL_METADATA_REQUIRED",
+                "message": "当前模型未提供独立运行时所需的 Responses 路由信息，请管理员在现有 LiteLLM 模型配置中确认上游厂商和响应模型。",
+                "recovery": "configure_gateway_model_metadata",
+            },
+        )
+    if (
+        any(
+            type(capabilities.get(key)) is not int or capabilities[key] <= 0
+            for key in ("context_window", "max_output_tokens")
+        )
+        or capabilities["max_output_tokens"] >= capabilities["context_window"]
+    ):
+        raise HTTPException(
+            409,
+            {
+                "code": "CODEX_MODEL_CAPACITY_REQUIRED",
+                "message": "当前模型缺少有效上下文和输出容量，请管理员补齐现有模型配置。",
+                "recovery": "configure_gateway_model_capabilities",
+            },
+        )
+    return {
+        "schema": "xcmax.codex-route.v1",
+        "codex_version": "0.171.0",
+        **identity,
+        "gateway_kind": "market",
+        "failover_policy": "disabled",
+        "max_model_calls": 24,
+        "max_request_bytes": 4_194_304,
+        "qualification": {"state": "requires_local_qualification"},
+    }
+
+
 def gateway_body(provider: str) -> dict[str, Any]:
     """Return server-owned per-request proxy controls, never worker input."""
     return {"num_retries": 0, "disable_fallbacks": True} if provider == "litellm" else {}

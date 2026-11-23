@@ -202,8 +202,15 @@ def test_saved_invalid_route_blocks_http_billing_until_explicit_recovery(
 def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
     operation = chat_client.app.openapi()["paths"]["/api/llm/resolve-chat-default"]["get"]
     query = {p["name"]: p for p in operation["parameters"] if p["in"] == "query"}
-    assert set(query) == {"provider", "model", "platform_only", "operation"}
+    assert set(query) == {"provider", "model", "platform_only", "operation", "runtime"}
     assert query["operation"]["schema"]["default"] == "chat"
+    assert query["runtime"]["required"] is False
+    assert query["runtime"]["schema"] == {
+        "type": "string",
+        "pattern": "^(|codex)$",
+        "default": "",
+        "title": "Runtime",
+    }
     assert query["platform_only"]["required"] is False
     assert query["platform_only"]["schema"] == {
         "type": "boolean",

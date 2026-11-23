@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -23,6 +24,10 @@ from app.application.agent_orchestrator.runtime_context import merge_runtime_con
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_permission import redact
 from app.application.agent_runtime.codex_runtime import run_codex_agent
+from app.application.agent_runtime.configuration import (
+    RuntimeSetupError,
+    get_account_runtime_settings,
+)
 from app.domain.task_lifecycle.agent_runtime_contract import (
     canonical_digest,
 )
@@ -48,6 +53,9 @@ _PRIVATE_KEYS = frozenset(
         "model_token",
         "mcp_token",
         "provider_token",
+        "route_token",
+        "credential",
+        "auth_token",
         "api_key",
         "access_token",
         "refresh_token",
@@ -309,15 +317,6 @@ async def run_runtime_task_async(
     request_key = ""
     admitted = False
     try:
-        settings = settings or runtime_settings()
-        if settings.engine != "codex":
-            return _failure(
-                "runtime_not_selected", "当前部署未选择 Codex 运行时", run_id=resolved_id
-            )
-        route = settings.require_qualified()
-        route.token()  # Fail before persisting a runnable parent if credentials are unavailable.
-        if settings.runtime_root is None:
-            raise RuntimePolicyError("Codex private runtime_root is required")
         if (
             not isinstance(task, str)
             or not task.strip()
@@ -345,20 +344,30 @@ async def run_runtime_task_async(
         if not isinstance(repository, SQLAlchemyAgentRunRepository):
             raise CodexBindingError("durable_storage_required", "运行需要持久化任务仓储")
         store = CodexBindingStore(repository)
-        queue = None
+        parent = repository.get(resolved_id) if run_id else None
+        previous = None
+        if run_id:
+            if parent is None:
+                raise CodexBindingError("binding_missing", "原运行任务不存在")
+            _same_owner(parent, context, owner)
+            if parent.intent != "codex.runtime" or parent.metadata.get("runtime_type") != "codex":
+                raise CodexBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Codex")
+            previous = parent.metadata.get("runtime_route") or (
+                parent.metadata.get("codex_runtime") or {}
+            ).get("runtime_config")
+        ancestor = None
+        parent_run_id = str(context.get("parent_run_id") or "")
+        if not run_id and parent_run_id:
+            ancestor = repository.get(parent_run_id)
+            if ancestor is None:
+                raise CodexBindingError("parent_missing", "员工父任务不存在")
+            _same_owner(ancestor, context, owner, ancestor=True)
         queued_payload = {
             "task": task,
             "input_data": input_data,
             "history": history,
             "answer_to_waiting_input": answer_to_waiting_input,
         }
-        if start_queued:
-            from app.infrastructure.codex.queued_runtime import (
-                durable_queue,
-                stage_queued_request,
-            )
-
-            queue = durable_queue(repository)
         request_key = canonical_digest({"turn_id": context["turn_id"], "owner": owner})
         instruction_digest = canonical_digest(system_prompt)
         requested = {
@@ -375,10 +384,7 @@ async def run_runtime_task_async(
         }
         is_resume = bool(run_id)
         if is_resume:
-            parent = repository.get(resolved_id)
-            if parent is None:
-                raise CodexBindingError("binding_missing", "原运行任务不存在")
-            _same_owner(parent, context, owner)
+            assert parent is not None  # Resolved and owner-checked before loading credentials.
             stored_task_id = parent.metadata.get("runtime_task_id")
             if _task_id is not None and _task_id != stored_task_id:
                 raise CodexBindingError("request_conflict", "原运行任务的宿主任务标识不能改变")
@@ -387,10 +393,6 @@ async def run_runtime_task_async(
             ):
                 raise CodexBindingError("request_conflict", "原运行任务的任务绑定已改变")
             requested["task_id"] = stored_task_id
-            if parent.intent != "codex.runtime" or parent.metadata.get("runtime_type") != "codex":
-                raise CodexBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Codex")
-            if parent.metadata.get("runtime_route_identity") != route.identity:
-                raise CodexBindingError("runtime_changed", "原任务的模型路由不能改变")
             if parent.metadata.get("runtime_gate_required") and gate is None:
                 raise CodexBindingError("gate_required", "原任务的员工工具检查不可省略")
             if parent.metadata.get("runtime_instruction_digest") != instruction_digest:
@@ -424,18 +426,72 @@ async def run_runtime_task_async(
             if _task_id is not None:
                 seed["task_id"] = _task_id
             resolved_id = "run_codex_" + canonical_digest(seed)[:48]
-            parent_run_id = str(context.get("parent_run_id") or "")
-            if parent_run_id:
-                ancestor = repository.get(parent_run_id)
-                if ancestor is None:
-                    raise CodexBindingError("parent_missing", "员工父任务不存在")
-                _same_owner(ancestor, context, owner, ancestor=True)
+            if ancestor is not None:
                 parent_context = ancestor.metadata.get("task_context") or {}
                 context["parent_task_id"] = parent_context.get("task_id") or ancestor.run_id
                 context["root_run_id"] = parent_context.get("root_run_id") or ancestor.run_id
             else:
                 context["root_run_id"] = resolved_id
             context.update(task_id=_task_id or resolved_id, source="codex_runtime")
+            parent = repository.get(resolved_id)
+            if parent is not None:
+                _same_owner(parent, context, owner)
+        digest = canonical_digest(requested)
+        if parent is not None:
+            request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
+            if request is not None:
+                if request.get("digest") != digest:
+                    raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
+                return _duplicate_result(parent, request)
+            if not is_resume:
+                raise CodexBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
+            if parent.status != "blocked":
+                store._validate_control(parent)
+        elif ancestor is not None:
+            store._validate_control(ancestor)
+        # Read-only replay and deferred execution never start paid qualification.
+        deferred = (
+            start_paused or start_queued or (parent is not None and parent.status == "blocked")
+        )
+        explicit_settings = settings is not None
+        settings = settings or runtime_settings()
+        if settings.engine != "codex":
+            return _failure(
+                "runtime_not_selected", "当前部署未选择 Codex 运行时", run_id=resolved_id
+            )
+        if (
+            not explicit_settings
+            and settings.route is None
+            and not os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
+        ):
+            if run_id and previous is None:
+                raise CodexBindingError(
+                    "runtime_changed", "原任务缺少模型路由绑定，请恢复原部署配置。"
+                )
+            options = {"qualify": False} if deferred else {}
+            settings = await asyncio.to_thread(
+                get_account_runtime_settings, owner, previous=previous, **options
+            )
+        surface = "employee" if context.get("employee_id") else "chat"
+        if surface not in settings.surfaces:
+            raise RuntimePolicyError("当前入口未启用固定 Codex 执行器")
+        route = settings.route if deferred else settings.require_qualified()
+        if route is None or settings.runtime_root is None:
+            raise RuntimePolicyError("Codex model route and private runtime_root are required")
+        if not deferred:
+            route.token()  # Credentials and real qualification precede business execution.
+        if is_resume and parent is not None:
+            if parent.metadata.get("runtime_route_identity") != route.identity:
+                raise CodexBindingError("runtime_changed", "原任务的模型路由不能改变")
+        queue = None
+        if start_queued:
+            from app.infrastructure.codex.queued_runtime import (
+                durable_queue,
+                stage_queued_request,
+            )
+
+            queue = durable_queue(repository)
+        if not is_resume:
             parent = AgentRun(
                 user_id=owner, message=task, run_id=resolved_id, intent="codex.runtime"
             )
@@ -444,6 +500,7 @@ async def run_runtime_task_async(
                 runtime_task_id=_task_id,
                 runtime_context=context,
                 runtime_route_identity=route.identity,
+                runtime_route=route.runtime_identity(),
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
                 runtime_completion_mode=completion_mode,
@@ -493,7 +550,7 @@ async def run_runtime_task_async(
             _same_owner(parent, context, owner)
             if created:
                 admitted = True
-        digest = canonical_digest(requested)
+        assert parent is not None
         request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
         if request is not None and request.get("digest") != digest:
             raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
@@ -624,6 +681,12 @@ async def run_runtime_task_async(
         result = _failure(
             getattr(exc, "code", "runtime_policy_blocked"), str(exc), run_id=resolved_id
         )
+        if isinstance(exc, RuntimeSetupError):
+            result.update(
+                failure_stage="runtime_setup",
+                resume_required=bool(run_id),
+                execution_state="blocked",
+            )
     except RECOVERABLE_ERRORS:
         result = _failure(
             "runtime_unavailable", "运行未能完成，原任务状态与回执已保留", run_id=resolved_id

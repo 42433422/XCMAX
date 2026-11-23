@@ -63,6 +63,7 @@ async def _litellm_deployment_capabilities(client, base_url, api_key, items, tim
     """Read capabilities with the same credential; never expose deployment credentials."""
     import httpx
     from modstore_server.llm_model_taxonomy import public_model_capabilities
+    from modstore_server.llm_gateway_contract import codex_deployment_identity
 
     target = httpx.URL(base_url)
     path = target.path.rstrip("/")
@@ -98,6 +99,7 @@ async def _litellm_deployment_capabilities(client, base_url, api_key, items, tim
         capabilities = public_model_capabilities(
             {**info, "resolved_model": params.get("model"), "source": "litellm_model_info"},
         )
+        capabilities.update(codex_deployment_identity(info, params))
         groups.setdefault(row["model_name"], []).append(capabilities)
     for item in items:
         name = item.get("id") if isinstance(item, dict) else None
@@ -116,6 +118,10 @@ async def _litellm_deployment_capabilities(client, base_url, api_key, items, tim
             if key in declared:
                 merged[key] = min(merged.get(key, declared[key]), declared[key])
         resolved = {row.get("resolved_model") for row in deployments}
+        for field in ("upstream_vendor", "response_model"):
+            values = {row.get(field) for row in deployments}
+            if len(values) == 1 and None not in values:
+                merged[field] = values.pop()
         if (
             len(resolved) == 1
             and None not in resolved
