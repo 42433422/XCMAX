@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -254,9 +255,20 @@ def prom_query(
             if data.get("status") != "success":
                 raise RuntimeError("prometheus_query_failed")
             results = data.get("data", {}).get("result", [])
+            if not isinstance(results, list):
+                raise ValueError("prometheus_query_invalid_vector")
             if not results:
                 return None
-            return str(results[0]["value"][1])
+            # Every configured expression aggregates to a single time series.
+            # Taking results[0] silently hides accidental label fan-out, which
+            # could certify a healthy subset while another instance is failing.
+            if len(results) != 1:
+                raise ValueError("prometheus_query_ambiguous_series")
+            sample = results[0]
+            value = sample.get("value") if isinstance(sample, dict) else None
+            if not isinstance(value, list) or len(value) != 2:
+                raise ValueError("prometheus_query_invalid_sample")
+            return str(value[1])
         except _TRANSIENT_QUERY_ERRORS as exc:
             last_error = exc
             if attempt >= max(attempts, 1):
@@ -288,9 +300,14 @@ def telemetry_admissible(payload: dict[str, Any]) -> bool:
 
 
 def _numeric(raw: str | None) -> float | None:
-    if raw in (None, "NaN", "nan", "+Inf", "-Inf"):
+    """Reject malformed and non-finite Prometheus samples without crashing before evidence."""
+    if raw is None:
         return None
-    return float(raw)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def meets_target(slo_id: str, value: float | None) -> bool | None:
