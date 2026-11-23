@@ -66,7 +66,7 @@ def capture_report_baseline(run: Any, step: Any, context: dict) -> dict:
         return {"status": "explicit_table", "report_type": kind}
     try:
         return _snapshot(kind, _read_report(kind, step.params, context))
-    except (*RECOVERABLE_ERRORS, HTTPException):
+    except RECOVERABLE_ERRORS + (HTTPException,):
         return {"status": "unavailable", "report_type": kind}
 
 
