@@ -178,6 +178,21 @@ jobs:
             tests/test_routes/test_mobile_super_employee_receipts.py \
             tests/test_services/test_mobile_relay_request_identity.py \
             -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify ELT ownership, savepoints, and lost commit receipts on PostgreSQL
+        working-directory: FHD
+        env:
+          ELT_TEST_POSTGRES_URL: postgresql+psycopg://agent_test:agent-test-only@127.0.0.1:5432/agent_test
+        run: |
+          test -n "$ELT_TEST_POSTGRES_URL"
+          uv run --no-sync pytest \
+            tests/test_application/test_etl_operation_owner.py \
+            tests/test_application/test_elt_execution_transactions.py \
+            -q -o addopts= --junitxml=elt-postgres-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          report = ET.parse("elt-postgres-results.xml")
+          assert len(report.findall(".//testcase")) >= 37 and not report.findall(".//skipped"), "ELT PostgreSQL transactions must execute"
+          PY
       - name: Verify backup snapshot counts on the disposable PostgreSQL service
         working-directory: FHD
         env:
@@ -197,6 +212,7 @@ jobs:
           name: agent-postgres-transactions
           path: |
             FHD/agent-postgres-results.xml
+            FHD/elt-postgres-results.xml
             FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
   # Share one runner checkout for the cheap guard, change classification, and shard plan.

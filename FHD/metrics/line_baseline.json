@@ -1,5 +1,5 @@
 {
-  "lines": 2679939,
+  "lines": 2681542,
   "updated": "2026-11-23",
-  "note": "按用户修复配置并提PR合入的授权，修复最终CI原设置页E2E暴露的历史导航竞态。实际生产同步器与vue-router createWebHistory诊断确认：前进已换entry、异步guard未完成时，旧40ms定时器以旧route覆盖新entry。仅让成功导航持有position/fullPath/generation一致的同步权，新导航/reset撤销旧timer，保留同entry地址纠正。生产净增16行、4项真实webHistory回归新增148行；旧3失败1正控通过，新4全过，相关48项及类型/ESLint通过。原Playwright断言未改，固定浏览器仍由最终CI验收；未删除无关功能或降低门禁。"
+  "note": "依据用户2026-11-23复用成熟组件并实现ELT代码闭环的任务授权，基于主线PR3498保留全部现有改动。本PR相对主线实测净增1603行：生产412、回归1165、CI源16、README和CHANGELOG10。此轮补齐真实评审发现的分片ACK丢失，生产再增16行、501行两片故障回归再增114行；先2项失败后通过，原run逐片存证且保存失败不继续发送。其余复用SQLAlchemy、filelock、Fernet、Tenacity、jsonschema和openpyxl，沿原批准任务与账本，不删无关代码抵数。"
 }
