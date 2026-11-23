@@ -90,6 +90,8 @@ log() {
   echo "[$(date -Is)] $*" | tee -a "$LOG"
 }
 
+verify_applied_release_pair
+
 APP_SUPERUSER="$(cat "$STATE/wal_pg16_superuser" 2>/dev/null || true)"
 [[ -n "$APP_SUPERUSER" ]] || {
   log "ERROR: PostgreSQL 16 superuser 状态缺失"
@@ -145,8 +147,7 @@ OPS_DR_RUNTIME_MODE=promoted \
 systemctl restart xcmax-dr-modstore
 systemctl start xcmax-dr-fhd
 
-verify_current_component modstore
-verify_current_component fhd
+verify_current_release_pair
 systemctl start xcmax-dr-payment
 curl -fsS http://127.0.0.1:18080/actuator/health >/dev/null
 systemctl start xcmax-dr-scheduler

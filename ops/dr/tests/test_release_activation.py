@@ -248,6 +248,29 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertEqual(self.current.resolve(), self.old)
         self.assert_old_markers()
 
+    def test_healthy_components_require_a_matching_release_pair(self) -> None:
+        fhd_marker = self.state / "release_applied_fhd_sha"
+        pair_marker = self.state / "release_applied_sha"
+        health = 'verify_current_component() { printf "%s\n" "$1"; }'
+        fhd_marker.write_text(self.new_sha + "\n")
+        self.assertNotEqual(
+            self.run_function("verify_current_release_pair", extra=health).returncode, 0
+        )
+        pair_marker.unlink()
+        self.assertNotEqual(
+            self.run_function("verify_current_release_pair", extra=health).returncode, 0
+        )
+        fhd_marker.write_text(self.old_sha + "\n")
+        pair_marker.write_text(self.old_sha + "\n")
+        paired = self.run_function("verify_current_release_pair", extra=health)
+        self.assertEqual(paired.returncode, 0, paired.stderr)
+        self.assertEqual(paired.stdout.splitlines(), ["modstore", "fhd"])
+        inactive = self.run_function(
+            "verify_current_release_pair",
+            extra='verify_current_component() { [[ "$1" == modstore ]]; }',
+        )
+        self.assertNotEqual(inactive.returncode, 0)
+
     def test_promotion_readback_cannot_report_success_when_apply_lock_is_busy(
         self,
     ) -> None:

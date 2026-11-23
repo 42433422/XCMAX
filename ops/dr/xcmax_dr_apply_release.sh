@@ -120,8 +120,28 @@ verify_current_component() {
   [[ "$component" == modstore ]] || manifest="$RUNTIME/$name/fhd-manifest.json"
   expected_sha="$(cat "$STATE/release_applied_${component}_sha")"
   [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
-  systemctl is-active --quiet "xcmax-dr-$component"
+  systemctl is-active --quiet "xcmax-dr-$component" || return 1
   verify_runtime "$component" "$manifest" "$expected_sha" "http://127.0.0.1:$port/api/health"
+}
+
+
+# Call only while the release lock is held. Component health is not pair evidence.
+verify_applied_release_pair() {
+  local pair=""
+  pair="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
+    [[ "$pair" =~ ^[0-9a-f]{40}$ ]] &&
+    [[ "$(cat "$STATE/release_applied_modstore_sha" 2>/dev/null)" == "$pair" ]] &&
+    [[ "$(cat "$STATE/release_applied_fhd_sha" 2>/dev/null)" == "$pair" ]] || {
+      log "ERROR: FHD/MODstore 缺少一致的已应用发布配对回执"
+      return 1
+    }
+}
+
+verify_current_release_pair() {
+  verify_applied_release_pair || return 1
+  verify_current_component modstore || return 1
+  verify_current_component fhd || return 1
+  verify_applied_release_pair
 }
 
 acquire_release_lock() {
@@ -393,8 +413,7 @@ main() {
   }
 
   if [[ "$VERIFY_CURRENT" == 1 ]]; then
-    verify_current_component modstore
-    verify_current_component fhd
+    verify_current_release_pair
     log "FHD/MODstore 运行身份与已应用发布完全一致"
     exit 0
   fi
