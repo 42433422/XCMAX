@@ -348,9 +348,8 @@ class CodexTransport:
         self, fn: Callable, *args: Any, outcome_unknown: bool = False, **kwargs: Any
     ) -> Any:
         try:
-            return await asyncio.wait_for(
-                asyncio.to_thread(fn, *args, **kwargs), self.config.timeout_seconds
-            )
+            async with asyncio.timeout(self.config.timeout_seconds):
+                return await asyncio.to_thread(fn, *args, **kwargs)
         except TimeoutError:
             raise CodexTransportError(
                 "codex_timeout", "Codex request timed out", outcome_unknown=outcome_unknown

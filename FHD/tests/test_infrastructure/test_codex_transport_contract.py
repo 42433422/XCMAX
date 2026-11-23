@@ -159,7 +159,7 @@ def send(value):
 def notify(method, params):
     send({"method": method, "params": params})
 def turn(status="inProgress"):
-    return {"id": "turn-1", "items": [], "status": status}
+    return {"id": "turn-1", "items": [], "itemsView": "full", "status": status}
 def finish(status="completed"):
     notify("turn/completed", {"threadId": "thread-1", "turn": turn(status)})
 def thread():
@@ -193,6 +193,12 @@ for line in sys.stdin:
     elif method == "turn/interrupt":
         send({"id":msg["id"],"result":{}})
         finish("interrupted")
+    elif method == "thread/compact/start":
+        send({"id":msg["id"],"result":{}})
+        notify("turn/started", {"threadId":"thread-1", "turn":turn()})
+        notify("item/completed", {"threadId":"thread-1","turnId":"turn-1",
+          "item":{"type":"contextCompaction","id":"compact-1"}})
+        finish()
     elif msg.get("id") == "approval-1":
         finish()
 """.replace("LOG_PATH", repr(str(log)))
@@ -287,6 +293,71 @@ def test_timeout_closes_runtime_without_starting_another_turn(config, fake_runti
     asyncio.run(scenario())
     messages = [json.loads(line) for line in log.read_text().splitlines()]
     assert len([m for m in messages if m.get("method") == "turn/start"]) == 1
+
+
+@pytest.mark.parametrize("cancellation", ["caller", "total_deadline"])
+def test_compaction_completion_cannot_swallow_cancellation(
+    config, fake_runtime, monkeypatch, cancellation
+):
+    binary, log = fake_runtime
+    config = replace(config, codex_bin=str(binary), turn_timeout_seconds=2)
+
+    async def scenario():
+        async with CodexTransport(config) as runtime:
+            await runtime.start_thread()
+            client, process = runtime._client, runtime._client._proc
+            original_to_thread, original_timeout = asyncio.to_thread, asyncio.timeout
+            original_unregister = client.unregister_goal_operation
+            deadlines, unregistered = [], []
+
+            def observe_timeout(delay):
+                deadline = original_timeout(delay)
+                if delay == config.turn_timeout_seconds:
+                    deadlines.append(deadline)
+                return deadline
+
+            def unregister(subscription):
+                unregistered.append(subscription)
+                original_unregister(subscription)
+
+            async def deliver_at_cancellation(fn, *args, **kwargs):
+                result = await original_to_thread(fn, *args, **kwargs)
+                if fn.__name__ == "next_goal_notification" and result.method == "turn/completed":
+                    # The real SDK result is ready. Deliver it and cancellation
+                    # in one loop iteration, before the awaiting task resumes.
+                    loop = asyncio.get_running_loop()
+                    handoff = loop.create_future()
+                    loop.call_soon(handoff.set_result, result)
+                    if cancellation == "caller":
+                        loop.call_soon(compacting.cancel)
+                    else:
+                        deadlines[0].reschedule(loop.time())
+                    return await handoff
+                return result
+
+            with monkeypatch.context() as timing:
+                timing.setattr(asyncio, "timeout", observe_timeout)
+                timing.setattr(asyncio, "to_thread", deliver_at_cancellation)
+                timing.setattr(client, "unregister_goal_operation", unregister)
+                compacting = asyncio.create_task(runtime.compact_thread())
+                async with original_timeout(10):
+                    if cancellation == "caller":
+                        with pytest.raises(asyncio.CancelledError):
+                            await compacting
+                        assert compacting.cancelled()
+                    else:
+                        with pytest.raises(CodexTransportError) as caught:
+                            await compacting
+                        assert caught.value.code == "codex_timeout"
+                        assert deadlines[0].expired()
+            assert len(unregistered) == 1
+            assert runtime._client is None and runtime._streaming is False
+            assert process.poll() is not None
+
+    asyncio.run(scenario())
+    messages = [json.loads(line) for line in log.read_text().splitlines()]
+    assert len([m for m in messages if m.get("method") == "thread/compact/start"]) == 1
+    assert not any(m.get("method") == "turn/start" for m in messages)
 
 
 def test_unpinned_runtime_is_rejected_before_creating_thread(config, fake_runtime):
