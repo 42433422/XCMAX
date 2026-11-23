@@ -2,8 +2,12 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from modstore_server import business_decision_review as review
+from modstore_server import strategic_portfolio as portfolio
 from modstore_server.strategic_portfolio import digest
+from tests.test_strategic_portfolio import database, limits, opportunity, seed_owner
 
 
 def test_unknown_and_nonoverlapping_temporal_evidence():
@@ -88,3 +92,62 @@ def test_review_is_part_of_original_proposal_content():
     assert digest(review.proposal_content(proposal)) != original
     proposal.pop("decision_review")
     assert "decision_review" not in review.proposal_content(proposal)
+
+
+def test_original_sql_approval_freezes_options_and_never_executes_alternative(database, monkeypatch):
+    seed_owner(database)
+    monkeypatch.setattr(review, "get_session_factory", lambda: database)
+    options = {
+        "alternatives": [
+            {
+                "title": "alternative",
+                "task": "other measurable task",
+                "tradeoff": "unverified",
+                "evidence_refs": ["incident:1"],
+            }
+        ],
+        "context_sha256": digest("observed world"),
+        "evidence_refs": ["incident:1"],
+    }
+    kwargs = dict(
+        owner_user_id=7, goal="Improve delivery", period="decision-review",
+        limits=limits(), opportunities=[opportunity()], idempotency_key="same-review",
+        decision_options=options,
+    )
+    first = portfolio.create_portfolio_proposal(**kwargs)
+    again = portfolio.create_portfolio_proposal(**kwargs)
+    assert first["decision"]["decision_id"] == again["decision"]["decision_id"]
+    assert first["decision_review"] == again["decision_review"]
+    comparison = first["decision_review"]
+    assert comparison["options"][0]["option_id"] == "no_action"
+    assert sum(row["feasible"] for row in comparison["options"]) == 3
+    assert comparison["selection_basis"] == "unranked_experiment_for_human_review"
+    decision_id = first["decision"]["decision_id"]
+    status = portfolio.portfolio_status(decision_id, owner_user_id=7)
+    assert status["decision_review"] == comparison
+    assert len(status["opportunities"]) == 1
+    assert status["status"] == "proposed"
+    with pytest.raises(portfolio.PortfolioError):
+        portfolio.plan_portfolio(decision_id, owner_user_id=7)
+    portfolio.authorize_portfolio(
+        decision_id, owner_user_id=7, actor="admin",
+        expected_proposal_sha256=status["proposal_sha256"],
+    )
+    plan = portfolio.plan_portfolio(decision_id, owner_user_id=7)
+    assert plan["selected"] == [comparison["selected_for_approval"]]
+
+
+def test_high_risk_cannot_become_executable_and_no_action_remains(database, monkeypatch):
+    seed_owner(database)
+    monkeypatch.setattr(review, "get_session_factory", lambda: database)
+    response = portfolio.create_portfolio_proposal(
+        owner_user_id=7, goal="Improve delivery", period="blocked-review", limits=limits(),
+        opportunities=[opportunity(risk="high")], idempotency_key="blocked-review",
+        decision_options={
+            "alternatives": [], "context_sha256": digest("observed world"),
+            "evidence_refs": ["incident:1"],
+        },
+    )
+    assert response["decision"] is None
+    assert response["decision_review"]["selected_for_approval"] == "no_action"
+    assert not response["decision_review"]["options"][1]["feasible"]

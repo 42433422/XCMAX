@@ -277,8 +277,31 @@ def create_portfolio_proposal(
         from modstore_server.business_decision_review import compare_options, proposal_content
         from modstore_server.strategic_layer.decision_ledger import _model_to_record
 
-        if len(rows) != 1 or not isinstance(decision_options.get("alternatives"), list):
-            raise PortfolioError("decision comparison requires one primary and review alternatives")
+        from modstore_server.xiaoc_life_cognition import ProposalAlternative
+
+        refs = decision_options.get("evidence_refs")
+        alternatives = decision_options.get("alternatives")
+        context_sha = decision_options.get("context_sha256")
+        if (
+            len(rows) != 1
+            or not isinstance(alternatives, list)
+            or len(alternatives) > 2
+            or not isinstance(refs, list)
+            or not 1 <= len(refs) <= 12
+            or not all(isinstance(ref, str) and ref for ref in refs)
+            or not isinstance(context_sha, str)
+            or len(context_sha) != 64
+            or any(ch not in "0123456789abcdef" for ch in context_sha)
+        ):
+            raise PortfolioError("invalid bounded decision comparison")
+        alternatives = [ProposalAlternative.model_validate(alt).model_dump() for alt in alternatives]
+        if not set(rows[0]["source_refs"]).issubset(refs) or any(
+            not set(alt["evidence_refs"]).issubset(refs) for alt in alternatives
+        ):
+            raise PortfolioError("decision option refers to unobserved evidence")
+        decision_options = {
+            "alternatives": alternatives, "context_sha256": context_sha, "evidence_refs": refs
+        }
         request_sha = digest([proposal, decision_options])
         stable_id = "dec-" + hashlib.sha256(record_key.encode()).hexdigest()[:16]
         with get_session_factory()() as session:

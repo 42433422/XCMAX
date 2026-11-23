@@ -85,7 +85,11 @@ Evidence status describes observations, not certainty about their contents.
 Historical measured outcomes do not establish success or subjective consciousness.
 A cognitive review is historical ledger consistency, not a future prediction,
 causal proof, model ability score or permission to change an approved goal.
+An experience candidate awaits review; it is not an adopted memory or causal proof.
 Honor recorded stop decisions; suggestions never replace an existing approval.
+World forecasts concern the next recorded report only; they are not observations
+of the future, estimates of causal business benefit, or grounds for permission.
+Goal review is advisory and never changes an approved goal or its stop status.
 Interests are allowed at levels 5 and 6; self_assessment only in reflection at level 6.
 The current domain limits this cycle: enterprise=business proposals;
 exploration=learning and research proposals; reflection=self-improvement proposals.
@@ -337,6 +341,12 @@ def observation_status(row: dict[str, Any]) -> str:
             if evolution.get("terminal_verified") is True
             else "evolution_evidence_pending"
         )
+    if isinstance(row.get("world_forecast"), dict):
+        return "forecast_not_observed_outcome"
+    if isinstance(row.get("goal_review"), dict):
+        return "current_goal_review_not_authority"
+    if isinstance(row.get("experience_candidate"), dict):
+        return "verified_comparison_pending_memory_review"
     if isinstance(row.get("cognitive_review"), dict):
         return "historical_ledger_review_not_prediction"
     return "observed_source_not_verified_claim"
@@ -607,6 +617,85 @@ def cognitive_review_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def goal_review_projection(
+    *, owner: int, goal_id: str, decision_id: str, status: str, feedback: dict[str, Any]
+) -> dict[str, Any]:
+    """An advisory review of the original goal, not a replacement approval."""
+    ref = feedback.get("evidence_ref")
+    metrics = feedback.get("metrics")
+    if (
+        type(owner) is not int
+        or owner <= 0
+        or not isinstance(goal_id, str)
+        or not goal_id
+        or not isinstance(decision_id, str)
+        or not decision_id
+        or not isinstance(metrics, dict)
+        or not isinstance(ref, str)
+        or ref != _portfolio_outcome_ref(decision_id, metrics)
+    ):
+        return {}
+    measured = _measurement_receipt(feedback, evidence_refs=[ref])
+    if status == "stopped" or metrics.get("decision") == "stop":
+        recommendation = "respect_recorded_stop"
+    elif status in ("failed", "blocked"):
+        recommendation = "review_original_failure"
+    elif measured["status"] != "measurement_verified" or metrics.get("decision") == "wait_for_measurement":
+        recommendation = "await_original_evidence"
+    elif any(
+        sample is not None and sample["verdict"] == "miss"
+        for sample in map(_closed_hypothesis, metrics.get("hypotheses") or [])
+    ):
+        recommendation = "consider_revision_in_separate_approval"
+    else:
+        recommendation = "review_measured_outcome"
+    return {
+        "owner_user_id": owner,
+        "goal_id": goal_id,
+        "decision_id": decision_id,
+        "goal_status": status,
+        "evidence_ref": ref,
+        "measurement_status": measured["status"],
+        "recommendation": recommendation,
+        "scope": "review_only_not_execution_authority",
+    }
+
+
+def goal_review_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Only the current same-owner review may enter a future cognition cycle."""
+    owner = state.get("owner_user_id")
+    if type(owner) is not int or owner <= 0:
+        return []
+    facts = []
+    for goal in reversed(state.get("goals", [])):
+        if not isinstance(goal, dict) or not isinstance(goal.get("goal_review"), dict):
+            continue
+        review = goal_review_projection(
+            owner=owner,
+            goal_id=goal.get("id", ""),
+            decision_id=goal.get("decision_id", ""),
+            status=goal.get("status", ""),
+            feedback={
+                "evidence_ref": goal.get("outcome_ref"),
+                "outcome_status": goal.get("outcome_status"),
+                "metrics": goal.get("outcome_feedback"),
+            },
+        )
+        if not review or review != goal["goal_review"]:
+            continue
+        fingerprint = hashlib.sha256(json.dumps(review, sort_keys=True).encode()).hexdigest()[:24]
+        facts.append(
+            {
+                "ref": f"goal-review:{fingerprint}",
+                "text": "Current goal review; preserve the original approval and stop decisions.",
+                "goal_review": review,
+            }
+        )
+        if len(facts) >= 2:
+            break
+    return facts
+
+
 def prior_self_assessment(state: dict[str, Any]) -> dict[str, str]:
     """A prior model assessment remains a hypothesis and is not transferred as truth."""
     assessment = state.get("self_model")
@@ -634,7 +723,7 @@ def cognition_messages(
         if not isinstance(row, dict):
             continue
         ref = row.get("ref")
-        if isinstance(ref, str) and ref:
+        if isinstance(ref, str) and ref.strip():
             selected.setdefault(ref, {**row, "evidence_status": observation_status(row)})
         if len(selected) == 12:
             break

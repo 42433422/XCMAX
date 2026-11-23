@@ -20,6 +20,8 @@ from modstore_server.xiaoc_life_cognition import (
     cognition_messages,
     cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
     parse_decision,
     portfolio_feedback,
     reflection_facts,
@@ -246,6 +248,13 @@ class CyclePorts:
 
     async def observe(self, _state: LifeCycle) -> LifeCycle:
         self.active()
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import read_samples
+
+            self.details["world_observations"] = await asyncio.to_thread(
+                read_samples, datetime.now(UTC)
+            )
+            self.active()
         portfolio = self.approved_portfolio()
         if portfolio is not None:
             self.details["portfolio_selection"] = {
@@ -263,7 +272,24 @@ class CyclePorts:
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
+        from modstore_server.xiaoc_life_reflection import experience_candidate_facts
+
+        facts.extend(experience_candidate_facts(self.state))
         facts.extend(reflection_facts(self.state))
+        facts.extend(goal_review_facts(self.state))
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import review_projection
+
+            try:
+                projection = review_projection(
+                    self.state.get("world_review"), self.claim["owner_user_id"]
+                )
+            except ValueError:
+                self.details["world_review_error"] = "invalid_persisted_review"
+                projection = {}
+            for metric, item in projection.items():
+                value = {"metric_id": metric, **item}
+                facts.append(_fact("world-review", value, world_forecast=value))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -326,10 +352,15 @@ class CyclePorts:
                     }
                 facts.append(_fact("company:" + key, value))
         for event in self.state.get("events", [])[:4]:
-            if isinstance(event, dict) and event.get("summary"):
+            if (
+                isinstance(event, dict)
+                and event.get("summary")
+                and event.get("kind") != "experience_candidate"
+                and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
+            ):
                 facts.append(
                     _fact(
-                        "experience",
+                        "historical_life_event",
                         {k: event.get(k) for k in ("id", "cycle_id", "status", "summary")},
                     )
                 )
@@ -715,7 +746,10 @@ class CyclePorts:
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
+        from modstore_server.xiaoc_life_reflection import review_experiences
+
         feedback = portfolio_feedback(after)
+        self.details["business_reflection"], _ = review_experiences(after)
         self.details["outcome_feedback"] = feedback
         self.evidence = [f"strategic_portfolio:{decision_id}", feedback["evidence_ref"]]
         self.details["portfolio_receipt"] = {
@@ -748,6 +782,13 @@ class CyclePorts:
             "outcome_status": feedback["outcome_status"],
             "outcome_feedback": feedback["metrics"],
             "outcome_ref": feedback["evidence_ref"],
+            "goal_review": goal_review_projection(
+                owner=owner,
+                goal_id=binding["goal"]["id"],
+                decision_id=decision_id,
+                status=goal_status,
+                feedback=feedback,
+            ),
             "evidence_refs": list(
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),

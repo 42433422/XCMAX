@@ -130,18 +130,27 @@ def history(session: Any, owner: int, as_of: datetime) -> dict[str, list[dict[st
     )
     samples: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        proposal = json.loads(row.decision_payload_json or "{}")
-        state = json.loads(row.execution_result_json or "{}")
+        try:
+            proposal = json.loads(row.decision_payload_json or "{}")
+            state = json.loads(row.execution_result_json or "{}")
+            if not isinstance(proposal, dict) or not isinstance(state, dict):
+                continue
+            canonical_hash = digest(proposal_content(proposal))
+        except (KeyError, TypeError, ValueError):
+            continue
         authorization = state.get("authorization", {})
+        if not isinstance(authorization, dict):
+            continue
         if (
             proposal.get("schema") != SCHEMA
             or type(proposal.get("owner_user_id")) is not int
             or proposal["owner_user_id"] != owner
+            or type(authorization.get("user_id")) is not int
             or authorization.get("user_id") != owner
             or not authorization.get("actor")
             or row.decided_by not in {"user", "council-vote"}
             or authorization.get("proposal_sha256") != proposal.get("proposal_sha256")
-            or digest(proposal_content(proposal)) != proposal.get("proposal_sha256")
+            or canonical_hash != proposal.get("proposal_sha256")
         ):
             continue
         for item in proposal["opportunities"]:
@@ -252,6 +261,7 @@ def compare_options(
                 "expected_metric_value": None,
                 "probability_of_target": None,
                 "risk_of_target_miss": None,
+                "direct_new_action_cost_cents": 0,
             },
         }
     ]
@@ -365,6 +375,13 @@ def evaluate_review(
     review = proposal.get("decision_review")
     if not isinstance(review, dict) or digest(proposal_content(proposal)) != proposal.get(
         "proposal_sha256"
+    ):
+        return None
+    authorization = state.get("authorization", {})
+    if (
+        authorization.get("user_id") != proposal["owner_user_id"]
+        or not authorization.get("actor")
+        or authorization.get("proposal_sha256") != proposal["proposal_sha256"]
     ):
         return None
     selected = review.get("selected_for_approval")
