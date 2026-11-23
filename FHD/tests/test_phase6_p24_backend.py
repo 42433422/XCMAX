@@ -223,13 +223,14 @@ class TestSessionServiceGetSessionInfo:
         mock_db = MagicMock()
         user_session = MagicMock()
         user_session.expires_at = utc_now_naive() + timedelta(hours=1)
+        user_session.verified_trial_expires_at = None
         user_session.session_id = "sess-1"
         user_session.user_id = 42
         user_session.user.username = "alice"
         user_session.created_at = utc_now_naive()
         mock_db.query.return_value.filter.return_value.first.return_value = user_session
 
-        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.infrastructure.session.session_manager.get_host_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("sess-1")
 
         assert result is not None
@@ -240,7 +241,7 @@ class TestSessionServiceGetSessionInfo:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.infrastructure.session.session_manager.get_host_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("missing")
 
         assert result is None
@@ -251,13 +252,14 @@ class TestSessionServiceGetSessionInfo:
         mock_db = MagicMock()
         user_session = MagicMock()
         user_session.expires_at = utc_now_naive() - timedelta(hours=1)
+        user_session.verified_trial_expires_at = None
         user_session.session_id = "expired"
         user_session.user_id = 42
         user_session.user.username = "alice"
         user_session.created_at = utc_now_naive()
         mock_db.query.return_value.filter.return_value.first.return_value = user_session
 
-        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.infrastructure.session.session_manager.get_host_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("expired")
 
         assert result is None
