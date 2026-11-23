@@ -256,68 +256,39 @@ def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outc
         assert result["requires_reconciliation"] is True
         assert result["retryable"] is False
 
-def test_shared_chat_actual_workflow_builder_partial_write_requires_reconciliation():
-    """A completed write followed by a failed step is not a safe voice retry."""
-    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+def test_shared_chat_current_runtime_partial_write_requires_reconciliation():
+    """The current Codex runtime must retain a completed write and unresolved next effect."""
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
 
-    class Formatter(AIChatWorkflowResponseMixin):
-        @staticmethod
-        def _format_workflow_tool_success_line(_step, _params):
-            return ["- 写入完成"]
+    rows = [
+        {
+            "state": "completed",
+            "tool_id": "materials",
+            "action": "create",
+            "call_id": "original-material-write",
+            "receipt": {"status": "completed", "success": True, "verified": True},
+        },
+        {
+            "state": "unknown",
+            "tool_id": "shipment_records",
+            "action": "create",
+            "call_id": "original-shipment-write",
+            "receipt": {"status": "unknown", "success": False, "error": PRIVATE},
+        },
+    ]
+    runtime = {"run_id": "original-run", "output": PRIVATE}
+    assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
+    assert runtime["business_receipts"][0]["receipt"]["verified"] is True
+    assert runtime["execution_state"] == "unknown"
 
-        @staticmethod
-        def _workflow_output_message(_output):
-            return "写入完成"
-
-    plan = SimpleNamespace(
-        intent="materials_shipment",
-        plan_id="original-plan",
-        todo_steps=[],
-        nodes=[],
-        metadata={},
-    )
-    run = SimpleNamespace(
-        run_id="original-run",
-        status="failed",
-        metadata={},
-        artifacts=[],
-        tool_calls=[],
-        steps=[
-            SimpleNamespace(
-                node_id="write-material",
-                status="completed",
-                tool_id="materials",
-                action="create",
-                output={"success": True, "material_id": 17},
-                duration_ms=1,
-            ),
-            SimpleNamespace(
-                node_id="failed-shipment",
-                status="failed",
-                tool_id="shipment_records",
-                action="create",
-                output={"success": False, "error": PRIVATE},
-                duration_ms=1,
-            ),
-        ],
-    )
-    raw = Formatter()._format_agent_run_response(plan, run)
-    assert raw["success"] is False
-    assert raw["execution"]["committed"] is True
-    assert raw["execution"]["effect"] == "partial"
-    assert raw["execution"]["outcome"] == "partial"
-    assert "execution" not in raw["data"]["data"]
-
-    public = _public_unified_chat_payload(raw)
+    transport = runtime_chat_payload(runtime, conversation_id="original-session")
+    assert transport["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
+    assert transport["requires_reconciliation"] is True
+    public = _public_unified_chat_payload(transport)
     assert public["success"] is False
     assert public["run_id"] == "original-run"
-    assert public["plan_id"] == "original-plan"
-    assert public["execution"] == {
-        "committed": True,
-        "effect": "partial",
-        "outcome": "partial",
-    }
     assert public["requires_reconciliation"] is True
     assert public["retryable"] is False
     assert public["_http_status"] == 409
