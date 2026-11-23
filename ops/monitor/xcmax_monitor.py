@@ -239,8 +239,11 @@ def check_journal_errors():
         ],
         timeout=25,
     )
-    if rc == 127:
-        return [_result("journal:errors", True, "warn", "journalctl 不可用，跳过")]
+    if rc != 0:
+        return [
+            _result(check_id, False, "warn", "journalctl 读取失败 (rc=%s)" % rc)
+            for check_id in ("journal:errors", "journal:quota")
+        ]
     err_count = 0
     quota_count = 0
     quota_re = re.compile(
@@ -371,7 +374,9 @@ def check_wal_freshness():
         try:
             with open(path, encoding="utf-8") as fh:
                 last_success = float(fh.read().strip())
-            age = max(0.0, now - last_success)
+            if not 0 < last_success <= now:
+                raise ValueError("invalid WAL success timestamp")
+            age = now - last_success
             results.append(
                 _result(
                     check_id,
@@ -606,22 +611,25 @@ def main(argv=None):
 
     state = load_state()
     new_state, newly_bad, realert, recovered = evaluate(results, state)
-    save_state(new_state)
-
+    delivered = True
     to_alert = newly_bad + realert
     if to_alert:
         worst = "crit" if any(r["level"] == "crit" for r in to_alert) else "warn"
         crit_n = sum(1 for r in to_alert if r["level"] == "crit")
         title = "%d 项故障（%d crit）" % (len(to_alert), crit_n)
-        notify.deliver(
+        delivered, _ = notify.deliver(
             worst, title, format_report(results, newly_bad, realert, recovered)
         )
     elif recovered:
-        notify.deliver(
+        delivered, _ = notify.deliver(
             "ok",
             "%d 项已恢复" % len(recovered),
             format_report(results, [], [], recovered),
         )
+    # Do not suppress a still-pending alert or recovery on the next cron tick.
+    if not delivered:
+        return 3
+    save_state(new_state)
     return 0
 
 
