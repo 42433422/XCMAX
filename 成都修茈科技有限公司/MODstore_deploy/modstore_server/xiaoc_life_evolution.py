@@ -10,7 +10,7 @@ from copy import deepcopy
 from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from modstore_server import xiaoc_life_store as life
 from modstore_server.customer_service_tools import json_loads
@@ -325,24 +325,34 @@ def propose_budget(claim: dict[str, Any], goal: dict[str, Any]) -> dict[str, Any
     return life._mutate(bind)
 
 
-def _historical_rejection(session: Any, request_id: str) -> str | None:
+def _historical_rejection(
+    session: Any, request_id: str, candidate_identity: str = ""
+) -> str | None:
     """An original request cannot erase a recorded rejection with a later snapshot.
 
     Use the existing append-only events, not the bounded goal projection. The
     exact request ID is immutable and already bound to its owner and protocol.
+    An exact candidate commit resubmitted under a different request is also
+    subject to review, scoped to the same owner and repository.
     """
+    refs = {f"retort:{request_id}"}
+    if candidate_identity:
+        refs.add(f"retort-candidate:{candidate_identity}")
     events = session.scalars(
         select(XiaoCLifeEvent)
         .where(
             XiaoCLifeEvent.identity_id == IDENTITY_ID,
             XiaoCLifeEvent.kind == "reflection",
             XiaoCLifeEvent.status.in_(("evolution_failed", "waiting_recovery")),
-            XiaoCLifeEvent.evidence_json.contains(f'"retort:{request_id}"', autoescape=True),
+            or_(*(
+                XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True)
+                for ref in sorted(refs)
+            )),
         )
         .order_by(XiaoCLifeEvent.created_at, XiaoCLifeEvent.id)
     )
     for event in events:
-        if f"retort:{request_id}" not in json_loads(event.evidence_json, []):
+        if not refs.intersection(json_loads(event.evidence_json, [])):
             continue
         outcome = json_loads(event.details_json, {}).get("evolution_outcome") or {}
         metrics = outcome.get("metrics") or {}
@@ -388,12 +398,30 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     delivery = state.get("delivery") or {}
     impact = state.get("impact") or {}
     verification = state.get("verification") or {}
+    candidate_sha = verification.get("target_sha") or (state.get("execution") or {}).get(
+        "target_sha"
+    ) or ""
+    candidate_identity = (
+        digest({"owner": owner, "repository": protocol["repository"], "candidate": candidate_sha})
+        if isinstance(candidate_sha, str)
+        and len(candidate_sha) == 40
+        and all(char in "0123456789abcdef" for char in candidate_sha)
+        and protocol.get("repository")
+        else ""
+    )
     current_rejection = (
         status == "evolution_failed" or impact.get("status") == "customer_impact_rejected"
     )
+    # A contradictory terminal snapshot must never override a negative impact.
+    if current_rejection and terminal and terminal["ok"]:
+        status = "waiting_recovery"
+        summary = "原改进的交付回执与拒绝效果冲突，未登记成功；等待人工复核与恢复。"
+        terminal = None
     # Do not re-hash a negative event merely because it has just been persisted.
     historical_rejection = (
-        None if current_rejection else _historical_rejection(session, row.id)
+        None
+        if current_rejection
+        else _historical_rejection(session, row.id, candidate_identity)
     )
     if historical_rejection:
         status = "evolution_evidence_incomplete"
@@ -416,7 +444,8 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         effect_verdict = "impact_receipt_verified"
     audit = {
         "baseline_sha": protocol.get("source_sha", ""),
-        "candidate_sha": verification.get("target_sha", ""),
+        "candidate_sha": candidate_sha,
+        "candidate_identity": candidate_identity,
         "protocol_digest": protocol["protocol_digest"],
         "verification_archive_sha256": (verification.get("evidence_archive") or {}).get(
             "sha256", ""
@@ -492,13 +521,17 @@ def reconcile() -> int:
             goal["evolution_outcome"] = observed
             event_id = "evolution:" + digest(observed)
             if session.get(XiaoCLifeEvent, event_id) is None:
+                refs = ["retort:" + goal["retort_request_id"], observed["evidence_ref"]]
+                candidate_identity = observed.get("candidate_audit", {}).get("candidate_identity")
+                if candidate_identity:
+                    refs.append("retort-candidate:" + candidate_identity)
                 life._event(
                     session,
                     event_id,
                     kind="reflection",
                     status=observed["status"],
                     summary=observed["summary"],
-                    evidence_refs=["retort:" + goal["retort_request_id"], observed["evidence_ref"]],
+                    evidence_refs=refs,
                     details={"evolution_outcome": observed},
                 )
             changed += 1
