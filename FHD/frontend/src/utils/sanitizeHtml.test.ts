@@ -93,12 +93,20 @@ describe('sanitizeTaskSummaryHtml', () => {
   })
 
   it('keeps preview controls and data while removing inline handlers', () => {
-    const html =
-      '<div class="sales-contract-excel-preview">' +
-      '<input class="sales-contract-excel-preview__qty-input" type="number" data-row-id="1" value="10" onchange="f()" />' +
-      '<button class="sales-contract-row-action-btn" data-row-id="1" onclick="f()">Edit</button>' +
-      '</div>'
-    const out = sanitizeTaskSummaryHtml({ type: 'sales_contract', summary: html })
+    const fixture = new DOMParser().parseFromString(
+      `<div class="sales-contract-excel-preview">
+        <input class="sales-contract-excel-preview__qty-input" type="number" data-row-id="1" value="10" />
+        <button class="sales-contract-row-action-btn" data-row-id="1">Edit</button>
+      </div>`,
+      'text/html',
+    )
+    const input = fixture.querySelector('input')
+    const button = fixture.querySelector('button')
+    input?.setAttribute('onchange', 'f()')
+    button?.setAttribute('onclick', 'f()')
+    expect(input?.getAttribute('onchange')).toBe('f()')
+    expect(button?.getAttribute('onclick')).toBe('f()')
+    const out = sanitizeTaskSummaryHtml({ type: 'sales_contract', summary: fixture.body.innerHTML })
     expect(out).toContain('input')
     expect(out).toContain('button')
     expect(out).toContain('data-row-id="1"')
