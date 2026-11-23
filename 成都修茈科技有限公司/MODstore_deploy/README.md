@@ -69,6 +69,7 @@ SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备�
 [LiteLLM 1.109.3](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/litellm_core_utils/streaming_handler.py)
 可能合成或补齐流式 usage，适配器在 Router 预读首块之前通过专属 SDK client 保留原始 chunk 中的两项 token 计数并核对最终值。
 CI 安装既有 `llm-router` extra，使用真实固定版 SDK 回归缺失、部分用量和取消场景。
+远程报告、默认 Runtime 的 Responses、原生 OpenAI 兼容流及注入 SDK 的 Router，继续使用固定 OpenAI SDK、LiteLLM 与现有 HTTPX 的解析和连接生命周期。远程请求逐块核对原有 2,000,000 字节上限；响应传输及解码后的累计回执分别限 16 MiB，解码事件最多 65,536 个，在工具参数拼接和转发前检查。受控流请求要求 `identity` 编码，异常压缩响应在读取前拒绝，未完成的 SSE 行和心跳也计入字节。其他 LiteLLM 自有供应商 SDK 路径仍在规范化事件边界限额，不据此声称其原始缓冲均已验证。超限或终态后的追加事件关闭原流并保留未知用量；付费、钱包关闭和 BYOK 均不因超限而换模重发，有键请求保留原账本，不释放原预授权。战略 Responses 与账号 Runtime 的严格结算仅在正常 EOF、完整原用量与清理成功一起满足时继续；普通原生与 Router 聊天保留原有用量策略。这些控制共用 `llm_gateway_contract`，不另写协议解析器或模型执行器。
 工作流训练继续从私有 `WorkflowSandboxRun` 与原 `WorkflowExecution`、客户效果回执取样：已完成但 KPI 未达标的任务也进入失败簇；已核验退款继续原停流恢复，待验收和证据缺失保留各自分类，不归因为提示词错误或追补已封口观察。停止、撤回或进入恢复的实验仍可只读提供原失败；推广后新交付达到原固定窗口后，同样从原业务回执读取失败，不增加原实验曝光或观察。采样仍核验当前权限及原发布、合同和观察身份。promptfoo 以原 system/user 文本调用同一生产图转换；普通生成失败仍用静态断言，业务失败必须使用 `workflow_business_artifact_verification` 的真实文件重放，不能降级成静态通过。
 
 业务重放复用原 `WorkflowEngine.run_sandbox(mock_employees=False)`、`EmployeeRuntimeClient` 和已批准的原生文件员工包，在临时 SQLite、目录和独立进程中执行。原交付执行前冻结输入原件、员工包及独立参考文件；候选仅能使用原合同输入和前序产物，输出与必交文件路径必须匹配原合同。参考字节不进入员工进程，由父进程用 openpyxl / 标准库 CSV 独立对账；未缓存的 Excel 公式不能据此证明计算正确。CSV 依据冻结参考文件的方言核对列与单元格并保留空白；方言有歧义或只有单列时，仅接受字节完全一致。promptfoo 原有导出脱敏保持开启，服务端只从已核验的冻结输入恢复被省略的摘要或字节，并独立执行；公开 Actions artifact 仅保留统计和摘要。进程退出、模型自报通过或仅生成同名文件都不足以通过核验。

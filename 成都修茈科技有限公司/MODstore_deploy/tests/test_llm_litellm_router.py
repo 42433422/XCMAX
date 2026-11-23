@@ -273,21 +273,24 @@ async def test_chat_normalizes_router_response(monkeypatch, fallback):
 
 @pytest.mark.asyncio
 async def test_stream_events_translate_chunks(monkeypatch):
+    from openai.types.chat import ChatCompletionChunk
+
     class FakeRouter:
         async def acompletion(self, **_kwargs):
             async def gen():
-                yield SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(
-                            delta=SimpleNamespace(content="he", tool_calls=None), finish_reason=None
-                        )
-                    ],
-                    usage=None,
+                yield ChatCompletionChunk(
+                    id="original",
+                    created=0,
+                    model="gpt-4o-mini",
+                    object="chat.completion.chunk",
+                    choices=[{"index": 0, "delta": {"content": "he"}, "finish_reason": None}],
                 )
-                yield SimpleNamespace(
-                    choices=[
-                        SimpleNamespace(delta=None, finish_reason="stop"),
-                    ],
+                yield ChatCompletionChunk(
+                    id="original",
+                    created=0,
+                    model="gpt-4o-mini",
+                    object="chat.completion.chunk",
+                    choices=[{"index": 0, "delta": {}, "finish_reason": "stop"}],
                     usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
                 )
 
@@ -308,6 +311,104 @@ async def test_stream_events_translate_chunks(monkeypatch):
 
     assert {"type": "delta", "delta": "he"} in out
     assert any(event.get("type") == "usage" for event in out)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overflow", ["events", "arguments"])
+async def test_unmetered_router_bounds_decoded_chunks_before_tool_accumulation(
+    monkeypatch, overflow
+):
+    from openai.types.chat import ChatCompletionChunk
+
+    from modstore_server import llm_gateway_contract
+
+    monkeypatch.setattr(
+        llm_gateway_contract, "MAX_STREAM_EVENTS", 2 if overflow == "events" else 100, raising=False
+    )
+    monkeypatch.setattr(llm_gateway_contract, "MAX_STREAM_BYTES", 1000, raising=False)
+    observed = {"read": 0, "calls": 0, "closed": False}
+
+    class FakeRouter:
+        async def acompletion(self, **_kwargs):
+            observed["calls"] += 1
+
+            async def gen():
+                try:
+                    for index in range(5):
+                        observed["read"] += 1
+                        yield ChatCompletionChunk(
+                            id="original",
+                            created=0,
+                            model="gpt-4o-mini",
+                            object="chat.completion.chunk",
+                            choices=[
+                                {
+                                    "index": 0,
+                                    "delta": (
+                                        {}
+                                        if overflow == "events"
+                                        else {
+                                            "tool_calls": [
+                                                {
+                                                    "index": 0,
+                                                    "id": "original-call",
+                                                    "type": "function",
+                                                    "function": {
+                                                        "name": "approved" if index == 0 else "",
+                                                        "arguments": "猫" * 120,
+                                                    },
+                                                }
+                                            ]
+                                        }
+                                    ),
+                                    "finish_reason": "tool_calls" if index == 4 else None,
+                                }
+                            ],
+                        )
+                finally:
+                    observed["closed"] = True
+
+            return gen()
+
+    monkeypatch.setattr(router_mod, "available", lambda: True)
+    monkeypatch.setattr(router_mod, "_get_router", lambda *_a, **_k: FakeRouter())
+    source = router_mod.stream_events(
+        "openai", api_key="byok", base_url=None, model="gpt-4o-mini", messages=[]
+    )
+    received = [event async for event in source]
+    assert received and received[-1]["type"] == "error", received
+    assert received[-1]["code"] == "model_stream_limit_exceeded", received
+    assert received[-1]["outcome_unknown"] is True and received[-1]["non_retryable"] is True
+    assert not any(event["type"] in {"toolcall", "finish", "usage"} for event in received)
+    assert 0 < observed["read"] < 5
+    assert observed["calls"] == 1 and observed["closed"]
+
+
+@pytest.mark.parametrize("chain", ["direct", "cause", "context", "cycle"])
+def test_stream_limit_errors_keep_unknown_without_upstream_text(chain):
+    error = router_mod.StreamLimitError("private-upstream-receipt")
+    if chain != "direct":
+        wrapper = RuntimeError("private-wrapper-context")
+        if chain == "cause":
+            wrapper.__cause__ = error
+        else:
+            wrapper.__context__ = error
+            if chain == "cycle":
+                wrapper.__cause__ = wrapper
+        error = wrapper
+    result = router_mod._error_payload(error, timeout_s=None)
+    assert result == {
+        "ok": False,
+        "status": 502,
+        "error": "模型响应超过资源上限，原调用用量尚未核验",
+        "code": "model_stream_limit_exceeded",
+        "outcome_unknown": True,
+        "non_retryable": True,
+    }
+    ordinary = router_mod._error_payload(
+        RuntimeError("model stream byte limit exceeded"), timeout_s=None
+    )
+    assert "code" not in ordinary and "outcome_unknown" not in ordinary
 
 
 @pytest.mark.asyncio

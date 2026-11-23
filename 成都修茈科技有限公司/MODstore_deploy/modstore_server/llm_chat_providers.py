@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from modstore_server.llm_gateway_contract import gateway_single_attempt
+from modstore_server.llm_gateway_contract import (
+    StreamReceiptBudget,
+    gateway_single_attempt,
+)
 from modstore_server.platform_model_transport import llm_http_response, redact_key
 
 
@@ -144,7 +147,10 @@ async def stream_openai_compatible(
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
     from modstore_server.llm_litellm_router import fallback_receipt_from_headers
-    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+    from modstore_server.strategic_portfolio_usage import (
+        require_call_reservation,
+        scope_active,
+    )
 
     budgeted = scope_active()
     require_call_reservation(provider=provider, model=model, start_transport=True)
@@ -178,6 +184,7 @@ async def stream_openai_compatible(
         reported_model = None
         usage_reported = False
         tool_calls_accum: dict[int, dict[str, Any]] = {}
+        receipt_budget = StreamReceiptBudget()
         async for line in r.aiter_lines():
             if not line:
                 continue
@@ -192,6 +199,7 @@ async def stream_openai_compatible(
                 data = redact_key(json.loads(raw), api_key)
             except json.JSONDecodeError:
                 continue
+            receipt_budget.consume(data)
             # Preserve the first conflicting raw identity for this reservation;
             # a later approved alias cannot make earlier consumption known.
             if data.get("model") and reported_model in (None, model):

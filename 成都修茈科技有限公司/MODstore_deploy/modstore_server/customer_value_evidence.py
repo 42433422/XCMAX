@@ -114,7 +114,7 @@ def _release_bound_receipts(
             }:
                 continue
             try:
-                owner = int(orders.get(row.order_no, {}).get("user_id") or 0)
+                owner = int(orders.get(str(row.order_no), {}).get("user_id") or 0)
                 if owner not in owners or row.environment not in {"production", "prod"}:
                     continue
                 execution_id = int(match[1])
