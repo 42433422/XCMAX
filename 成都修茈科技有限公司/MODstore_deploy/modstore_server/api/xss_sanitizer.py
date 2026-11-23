@@ -21,7 +21,11 @@ _BYPASS_PATHS: frozenset[str] = frozenset(
 )
 
 
-def _is_bypass_path(path: str) -> bool:
+def _is_bypass_path(path: str, method: str = "") -> bool:
+    # Frozen prompts/evaluation artifacts must reach the source/hash gate unchanged.
+    # Keep this exact machine POST opaque; route authentication still applies.
+    if method.upper() == "POST" and path == "/api/service/mac-control/training/candidates":
+        return True
     if _machine_webhook_path(path):
         return True
     for prefix in _BYPASS_PATHS:
@@ -133,7 +137,7 @@ class XSSSanitizerMiddleware:
         request = Request(scope, receive, send)
 
         path = request.url.path
-        if _is_bypass_path(path):
+        if _is_bypass_path(path, request.method):
             await self.app(scope, receive, send)
             return
 

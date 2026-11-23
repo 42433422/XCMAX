@@ -46,7 +46,8 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 | [Google OR-Tools](https://github.com/google/or-tools/releases/tag/v9.15) | `9.15.6755` / Apache-2.0 | CP-SAT 处理依赖、风险及同公司多组合资源选择，保留各组合分组约束；产品层校验整数边界、审批范围及最终可行性 |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | 本轮验证 `2.0.58` / MIT，沿用既有依赖约束 | 公司预算、组合任务、调用预留与行动项使用同事务条件 UPDATE；真实责任未知时不采用 TTL 自动回收 |
 | [GrowthBook Python SDK](https://github.com/growthbook/growthbook-python) | `4.0.1` / MIT | 官方稳定身份分流；与既有 GrowthBook `5.2.0` REST 统计接口衔接真实曝光/结果 |
-| [promptfoo](https://github.com/promptfoo/promptfoo/releases/tag/0.126.0) | CLI `0.126.0` / MIT | 原员工、工作流和 RAG 提示词失败的成对回归；保留真实 chat roles 与输入，复用生产静态校验器或引用完整性断言，只形成待审批候选 |
+| [promptfoo](https://github.com/promptfoo/promptfoo/releases/tag/0.126.0) | CLI `0.126.0` / MIT | 原员工、工作流和 RAG 提示词失败的成对回归；Python 断言复用生产校验器、原生文件执行与独立制品核验，只形成待审批候选 |
+| [openpyxl](https://pypi.org/project/openpyxl/3.1.5/) | `3.1.5` / MIT | 复用现有 XLSX 解析器核对工作表、类型、单元格值、数字格式和合并区域；产品只绑定原合同与独立基准，不另写电子表格引擎 |
 | [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime) | `0.0.83` / Apache-2.0 | 官方命名空间、seccomp、TLS 与请求过滤；原始 key 只在受信控制进程闭包中使用 |
 | [LangGraph](https://github.com/langchain-ai/langgraph) / [GEPA](https://github.com/gepa-ai/gepa) | `1.2.10` / `0.1.4`，MIT | 沿用仓库固定包、持久检查点、审批中断和辅助实验；产品只实现协议适配 |
 | [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
@@ -68,7 +69,15 @@ SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备�
 [LiteLLM 1.109.3](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/litellm_core_utils/streaming_handler.py)
 可能合成或补齐流式 usage，适配器在 Router 预读首块之前通过专属 SDK client 保留原始 chunk 中的两项 token 计数并核对最终值。
 CI 安装既有 `llm-router` extra，使用真实固定版 SDK 回归缺失、部分用量和取消场景。
-工作流训练通过私有 `WorkflowSandboxRun` 保存原失败；promptfoo 以原 system/user 文本调用同一生产图转换和静态校验器，服务端重验冻结证据。实际 `WorkflowExecution` 终态另用独立 GrowthBook 指标与冻结 SQL 查询，按账号分流并核对实际加载图，撤回会阻止旧 treatment 图再启动；关闭模拟的真实沙盒也使用同一持久回执，运行中改图后原成功不会计到新图。静态校验、执行完成和领域业务达标各保留自己的口径。
+工作流训练继续从私有 `WorkflowSandboxRun` 与原 `WorkflowExecution`、客户效果回执取样：已完成但 KPI 未达标的任务也进入失败簇；已核验退款继续原停流恢复，待验收和证据缺失保留各自分类，不归因为提示词错误或追补已封口观察。停止、撤回或进入恢复的实验仍可只读提供原失败；推广后新交付达到原固定窗口后，同样从原业务回执读取失败，不增加原实验曝光或观察。采样仍核验当前权限及原发布、合同和观察身份。promptfoo 以原 system/user 文本调用同一生产图转换；普通生成失败仍用静态断言，业务失败必须使用 `workflow_business_artifact_verification` 的真实文件重放，不能降级成静态通过。
+
+业务重放复用原 `WorkflowEngine.run_sandbox(mock_employees=False)`、`EmployeeRuntimeClient` 和已批准的原生文件员工包，在临时 SQLite、目录和独立进程中执行。原交付执行前冻结输入原件、员工包及独立参考文件；候选仅能使用原合同输入和前序产物，输出与必交文件路径必须匹配原合同。参考字节不进入员工进程，由父进程用 openpyxl / 标准库 CSV 独立对账；未缓存的 Excel 公式不能据此证明计算正确。promptfoo 原有导出脱敏保持开启，服务端只从已核验的冻结输入恢复被省略的摘要或字节，并独立执行；公开 Actions artifact 仅保留统计和摘要。进程退出、模型自报通过或仅生成同名文件都不足以通过核验。
+
+原业务输入按实际字节分组，稳定保留约五分之一组作 holdout；相同原件不能通过改名、换客户或模板进入两组。每轮在提案前按来源固定排序选择一个开发案例和一个保留案例，总私有上下文不超过 160 KB；这是执行与传输成本边界，不是线上效果所需样本量。只有开发组进入提示词提案，独立基准与保留任务不发送给提案模型；缺任一组、原件或有效基准时在付费提案前阻断。服务端先从原 SQL 核对全部选中案例、合同、账号和发布身份，再独立重跑完整双臂评测；候选须无回归、全部保留案例通过且确有改善，才能沿原 Retort / LangGraph 审批进入 GrowthBook 客户实验。离线通过不是客户确认、线上收益或推广许可，推广、撤回和下一轮反馈仍走同一原链路。
+
+前置快照由已有 `MODSTORE_RETORT_PROTOCOLS` 的 `training_candidate.offline_business_replay.references` 显式配置，格式为 `{ "<source_group_sha256>": [{ "output_path": "outputs/report.xlsx", "reference_path": "approved/report.xlsx", "sha256": "<已独立审核的参考文件 SHA-256>" }] }`。源组由 `workflow_training_replay.source_group_sha256` 按原合同业务输入计算；参考文件须属于同一授权工作区、覆盖全部必交文件，且不能是原输入或本次产生的文件。当前适配有界的 CSV/XLSX 文件交付；没有配置、历史原件缺失、基准摘要不符或超出传输边界时，正常交付仍沿原流程运行，但不产生合格训练证据。不会从失败产物事后补造正确答案。
+
+训练候选仍按原 `training_plan` 将提示词替换写入共享主干并正式发布。新实验、续租和推广前同时核对固定 `release_sha` 的 GitHub 源码常量及当前进程 `SYSTEM_PROMPT` 等于批准 treatment，使下一轮继续从同一主干基线采样；读回失败阻止新增流量或推广，原回滚和停止路径仍可运行。SRT 仅追加原文件员工 SDK 所需 `FHD/app` 的只读许可，网络、凭据和写目录边界保持。
 RAG 的 `rag_context_prompt` / `employee_rag_context` 消费者位于原员工认知入口，在权限过滤后的检索资料上替换 `rag_service.RAG_SYSTEM_PROMPT`，仍使用原模型调用、费用和预算。私有 SQL 冻结原消息角色、资料与提示词摘要；`rag_citation_integrity` 只核对回答具有引用且编号存在，**不证明陈述受资料支持或业务成功**。原 `MODSTORE_RETORT_PROTOCOLS` 的 RAG training_candidate 和获批 cohort 控制失败采集；现有双镜像 trainer 经 pinned promptfoo、服务端重验与 Retort 审批产生候选。在线统计要求 `rag_outcomes.source=modstore_rag_observations_postgres_v1`、固定 SQL 和按账户 `MAX(VALUE)`，重复调用不增加独立账户样本；停止损失同样按失败账户计算。撤回、过期租约、权限变化或跟踪落库失败均不能增加合格实验结果；推广后继续核验资料权限但不追加实验样本。原资料仅经私有训练端点读取，公共事件只包含身份和摘要。此消费者演进 RAG 上下文提示词，检索算法、模型路由和预算策略仍各需真实消费者与独立效果合同。
 `workflow_customer_accepted_outcome` 将原企业客户的一个或多个原生文件员工与原付款/KPI 协议、实际 producer 制品、管理员测量及客户确认关联到原 assignment。当前支持 `start -> employee -> ... -> end` 的无条件串行图；每个员工仍须是原授权的不可变 `direct_python` 包。条件分支、并行、循环和其他副作用节点继续拒绝进入该客户合同；多领域 KPI 也须各自接入真实效果来源。
 

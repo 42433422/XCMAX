@@ -806,15 +806,15 @@
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py": {
-      "base_file": null,
-      "base_blob": null,
-      "head_blob": "e961e10eab3bdfbcfa537a6035de9e54cc56ae18",
-      "before_lines": 0,
-      "after_lines": 844,
-      "reason": "本记录是评审请求，不是审批证据。identity 已按当前 main@d5184dad4897a30ec6b010264ad4cd1269c00a8a 与本集成 head 的精确 blob 重算。仅描述已纳入来源在本文件上的独特合并结果；不把任一来源评审请求或本记录视为已批准，也不合成新的批准记录。",
-      "boundary": "该文件来自已纳入来源，只把真实失败沉淀为回归并用既有 promptfoo 判定是否改 prompt，不自研评测引擎。本请求不批准弱化存储或日志门禁；安全扫描新增的 blocking 需另按原安全合同修复。不纳入未批准来源或 draft。",
-      "validation": "待合入前按真实调用链与当前 main 精确 identity 复验；远端完整 CI 与未完成验收仍待进行。本说明不是通过证明，也不是审查结论。 PR #3460 本轮修复已复验对应规划/回执、前端时限或私有训练回归；最终精确 head 的远端 CI 另行核验，本记录仍不是审批。",
-      "follow_up": "由 @42433422 按本记录精确 identity 复核后再决定是否合入；本记录只请求架构评审，不表示评审已批准。未纳入项（含未批准的旧727、#3398/+18 及 drafts）见集成 PR 正文。",
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py",
+      "base_blob": "e961e10eab3bdfbcfa537a6035de9e54cc56ae18",
+      "head_blob": "a1f9a4a714ebede36601c4c4ca992635745e7b56",
+      "before_lines": 844,
+      "after_lines": 982,
+      "reason": "按用户“全部复用成熟组件实现代码层闭环”授权，原 promptfoo trainer 增加真实业务样本分区、原生断言重验与完整结果矩阵绑定；本记录是精确源码增长评审请求，不是审批证明。",
+      "boundary": "继续使用固定 promptfoo、原 SQL 来源及 Retort 候选入口；只适配来源、预算与结果证据，不实现新的模型评测器、发布器或状态机。",
+      "validation": "真实 SQL 公共候选入口及幂等回读已验证；最终分区和候选/发布门禁 56 项通过，包含跨轮原件 holdout 隔离和静态证据拒绝。远端全量 CI 以最终提交为准。",
+      "follow_up": "评审本次精确前后 blob 与有界两案例传输；继续由原审批、固定发布身份及 GrowthBook 控制推广，真实模型增益和客户验收须另有原始证据。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": {
@@ -935,6 +935,18 @@
       "boundary": "复用现有账号默认路由、原任务与原账本，只增加身份和协议接线；保持显式管理员配置、原模型身份、未知费用不重放及业务审批边界。",
       "validation": "本地完整Codex与受影响入口1125项通过；固定CLI/MCP/SQLite压缩重启、真实LiteLLM/OpenAI SDK协议、平台计费与账号隔离均有回归。真实收费模型资格由首次使用实际执行，不以fixture代替。",
       "follow_up": "由@42433422按本条base/head blob核对增量；本次不混入无关架构拆分。保留同一配置来源和持久恢复合同，完整远端检查通过后按用户授权合入。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "2bfadbce3d64315d62b65855e61302776454d0a3",
+      "before_lines": 0,
+      "after_lines": 848,
+      "reason": "按用户成熟组件复用要求，新增产品适配层绑定原客户合同、授权员工包、执行前原件与独立参考；复用 WorkflowEngine、EmployeeRuntimeClient、openpyxl 和 CSV，不另写工作流或电子表格引擎。此记录不是审批。",
+      "boundary": "仅支持有界原生 CSV/XLSX 文件交付；使用原路径和权限校验、临时数据库及原进程回收。参考字节留在父进程，禁止由失败输出自造 oracle、代码节点或生产副作用。",
+      "validation": "原生 CSV/XLSX 重放、执行前 capture、来源/路径/包漂移及进程超时回收回归已通过；真实 SQL 公共入口独立重跑后形成待审批候选，发布门禁保留回滚可达性。最终 CI 另验。",
+      "follow_up": "由指定 reviewer 核对 848 行适配边界与新增安全负控；后续格式或并行业务扩展仍应接原组件合同，不能以此记录替代原客户原件、独立基准与生产验收。",
       "review_owner": "@42433422"
     }
   }

@@ -1,5 +1,5 @@
 {
-  "lines": 2681542,
+  "lines": 2685413,
   "updated": "2026-11-23",
-  "note": "依据用户2026-11-23复用成熟组件并实现ELT代码闭环的任务授权，基于主线PR3498保留全部现有改动。本PR相对主线实测净增1603行：生产412、回归1165、CI源16、README和CHANGELOG10。此轮补齐真实评审发现的分片ACK丢失，生产再增16行、501行两片故障回归再增114行；先2项失败后通过，原run逐片存证且保存失败不继续发送。其余复用SQLAlchemy、filelock、Fernet、Tenacity、jsonschema和openpyxl，沿原批准任务与账本，不删无关代码抵数。"
+  "note": "按用户“全部复用成熟组件实现代码层闭环”实施授权：复用 promptfoo、原 WorkflowEngine/EmployeeRuntimeClient、openpyxl、Retort/LangGraph 与 GrowthBook，新增有界客户原件重放、独立对账、跨轮保留集和原发布核验；实现增量约 1720 行、回归约 2105 行，其余为原文传输、CI/依赖与精确源码增长评审登记。无成熟组件可替代本产品的租户/原合同/源码身份绑定，保留薄适配；不删无关功能凑数。本记录说明增量原因，不是人工架构批准或真实客户验收。"
 }

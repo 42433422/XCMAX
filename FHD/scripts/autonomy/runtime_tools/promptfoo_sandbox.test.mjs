@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { tmpdir } from 'node:os';
@@ -16,6 +16,7 @@ const runtime = process.env.PROMPTFOO_SANDBOX_ENTRY;
 const cli = process.env.PROMPTFOO_CLI;
 const python = process.env.PROMPTFOO_PYTHON;
 const pythonpath = resolve(dirname(wrapper), '../../../../成都修茈科技有限公司/MODstore_deploy');
+const hostApp = realpathSync(resolve(dirname(wrapper), '../../../app'));
 const key = 'synthetic-model-key', model = 'approved-model';
 
 async function child(command, args, options) {
@@ -128,10 +129,45 @@ for (const native of [false, true]) test(`real promptfoo uses the approved model
   mkdirSync(folder); mkdirSync(temp);
   const provider = { id: 'openai:chat:' + model, config: { apiBaseUrl: endpoint.href, maxRetries: 0, max_tokens: 20 } };
   const config = join(folder, 'config.json'), output = join(folder, 'result.json');
+  const nativeAssertion = join(folder, 'native_sdk_assertion.py');
+  const privateSentinel = join(root, 'controller-only.txt');
+  if (native) {
+    writeFileSync(privateSentinel, 'synthetic controller data outside the workload');
+    writeFileSync(nativeAssertion, `import hashlib, inspect, os, sys
+from pathlib import Path
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+sys.path.insert(0, ${JSON.stringify(dirname(hostApp))})
+from app.mod_sdk.file_employee_support import FileEmployeeSupport
+from modstore_server.capability_trainer import _workflow_validation_hashes
+
+def get_assert(output, context):
+    source = Path(${JSON.stringify(join(hostApp, 'mod_sdk/file_employee_support.py'))})
+    assert Path(inspect.getfile(FileEmployeeSupport)).resolve() == source
+    hashes = _workflow_validation_hashes(business=True)
+    assert hashes['FHD/app/mod_sdk/file_employee_support.py'] == hashlib.sha256(source.read_bytes()).hexdigest()
+    try:
+        fd = os.open(source, os.O_WRONLY)
+    except OSError:
+        pass
+    else:
+        os.close(fd)
+        raise AssertionError('native SDK source must stay read-only')
+    try:
+        Path(${JSON.stringify(privateSentinel)}).read_bytes()
+    except OSError:
+        pass
+    else:
+        raise AssertionError('controller data must stay unreadable')
+    assert 'XCAGI_LLM_API_KEY' not in os.environ
+    return {'pass': output == 'CANDIDATE_PASS', 'score': int(output == 'CANDIDATE_PASS')}
+`);
+  }
   writeFileSync(config, JSON.stringify({ sharing: false, writeLatestResults: false,
     providers: [provider], defaultTest: { options: { provider } },
     prompts: ['BASELINE_ONLY {{task}}', 'CANDIDATE_PASS {{task}}'],
-    tests: [{ vars: { task: 'synthetic fixture only' }, assert: [{ type: 'contains', value: 'CANDIDATE_PASS' }] }] }));
+    tests: [{ vars: { task: 'synthetic fixture only' }, assert: [native
+      ? { type: 'python', value: 'file://' + nativeAssertion + ':get_assert' }
+      : { type: 'contains', value: 'CANDIDATE_PASS' }] }] }));
   const environment = { PATH: process.env.PATH, PROMPTFOO_CLI: cli, PROMPTFOO_SANDBOX_ENTRY: runtime,
     PROMPTFOO_PYTHON: python, PYTHONPATH: pythonpath, XCAGI_LLM_BASE_URL: endpoint.href,
     XCAGI_LLM_MODEL: model, XCAGI_LLM_API_KEY: key };
@@ -139,6 +175,10 @@ for (const native of [false, true]) test(`real promptfoo uses the approved model
   const policy = SandboxRuntimeConfigSchema.parse(trainerPolicy(spec, temp, key));
   assert.deepEqual(policy.network.allowedDomains, [endpoint.host]);
   assert.equal(policy.network.strictAllowlist, true);
+  assert.ok(policy.filesystem.allowRead.includes(hostApp));
+  assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
+  assert.ok(!policy.filesystem.allowRead.includes(dirname(dirname(hostApp))));
+  assert.deepEqual(policy.filesystem.allowWrite, [folder, temp]);
   let result;
   if (native) {
     result = await child(process.execPath, [wrapper, '--config', config, '--output', output], {

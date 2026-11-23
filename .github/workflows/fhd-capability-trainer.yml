@@ -45,7 +45,7 @@ jobs:
           node-version: '22'
 
       - name: Install product validation and bounded model client
-        run: python -m pip install -e '../成都修茈科技有限公司/MODstore_deploy[web]' httpx==0.28.1
+        run: python -m pip install -e '../成都修茈科技有限公司/MODstore_deploy[web]' httpx==0.28.1 openpyxl==3.1.5
 
       - name: Install fixed training CLI and native sandbox
         run: |
@@ -76,11 +76,13 @@ jobs:
           curl -fsS -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
             "${API_BASE%/}/api/service/mac-control/training/failures?days=14&min_count=2" \
             -o /tmp/clusters.json
-          count="$(jq '.clusters | length' /tmp/clusters.json)"
+          python -m modstore_server.capability_trainer select \
+            --clusters /tmp/clusters.json --out /tmp/top-cluster.json \
+            > /tmp/training-selection.json
+          count="$(jq '.clusters' /tmp/training-selection.json)"
           echo "clusters=$count" >> "$GITHUB_OUTPUT"
-          jq -ce '.clusters[:1]' /tmp/clusters.json > /tmp/top-cluster.json
           if [ "$count" = "0" ]; then
-            echo "::notice::近 14 天没有可训练的失败簇"
+            echo "::notice::近 14 天没有满足来源、重放及留出要求的可训练失败簇"
           fi
 
       - name: Suggest candidate prompt
@@ -181,6 +183,18 @@ jobs:
           python -m modstore_server.capability_trainer decide \
             --bundle /tmp/eval/training-bundle.json \
             --result /tmp/eval/result.json > /tmp/eval/verdict.json
+          python - <<'PY_SUMMARY'
+          import json
+          from pathlib import Path
+          folder = Path('/tmp/eval')
+          verdict = json.loads((folder / 'verdict.json').read_text())
+          public = ('verdict', 'reason', 'engine', 'baseline', 'candidate', 'total',
+                    'improved', 'runtime_verified', 'holdout_verified', 'evaluation_scope',
+                    'measurement_scope', 'bundle_sha256', 'results_sha256')
+          (folder / 'verdict-summary.json').write_text(json.dumps({
+              key: verdict[key] for key in public if key in verdict
+          }))
+          PY_SUMMARY
           if [ "$(jq -r '.verdict' /tmp/eval/verdict.json)" != "candidate_for_approval" ]; then
             echo "::notice::候选未通过成对回归，本轮结束"
             exit 0
@@ -202,9 +216,12 @@ jobs:
               'files': {name: (folder / entry['name']).read_bytes().decode('utf-8') for name, entry in bundle['files'].items()},
               'result_json': (folder / 'result.json').read_bytes().decode('utf-8'),
           }
-          (folder / 'candidate-request.json').write_text(json.dumps(payload, ensure_ascii=False))
+          encoded = json.dumps(payload, ensure_ascii=False)
+          if len(payload['result_json']) > 1_500_000 or len(encoded.encode()) > 2_000_000:
+              raise SystemExit('training_request_payload_too_large')
+          (folder / 'candidate-request.json').write_text(encoded)
           PY_PAYLOAD
-          curl --proto '=https' --max-time 60 --fail-with-body --silent --show-error \
+          curl --proto '=https' --connect-timeout 10 --max-time 300 --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" -H 'Content-Type: application/json' \
             --data-binary @/tmp/eval/candidate-request.json \
             "${API_BASE%/}/api/service/mac-control/training/candidates" \
@@ -220,6 +237,6 @@ jobs:
           retention-days: 7
           path: |
             /tmp/eval/training-bundle.json
-            /tmp/eval/verdict.json
+            /tmp/eval/verdict-summary.json
             /tmp/eval/candidate-response.json
           if-no-files-found: ignore

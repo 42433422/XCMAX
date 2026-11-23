@@ -34,6 +34,8 @@ web = [
     "python-pptx>=0.6.23",
     # Signed private deliveries execute FHD's Mod SDK in a fresh interpreter.
     "pandas>=2.0",
+    # Customer workflow replays verify actual workbook bytes on the API host too.
+    "openpyxl==3.1.5",
     "PyYAML>=6.0",
     "paramiko>=3.4",
     "cryptography>=50.0.2",

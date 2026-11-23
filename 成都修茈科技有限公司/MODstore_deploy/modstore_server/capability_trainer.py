@@ -229,6 +229,8 @@ def append_cases(
     max_per_cluster: int = 3,
 ) -> list[dict[str, Any]]:
     """只追加新用例，重复失败不会反复写同一条。"""
+    from modstore_server.workflow_training_dataset import is_business_case
+
     corpus_dir.mkdir(parents=True, exist_ok=True)
     written: list[dict[str, Any]] = []
     for cluster in clusters:
@@ -250,7 +252,12 @@ def append_cases(
                     existing.add(json.loads(line).get("case_id"))
                 except json.JSONDecodeError:
                     continue
-            for sample in cluster["samples"][:max_per_cluster]:
+            limit = (
+                20
+                if any(is_business_case(item) for item in cluster["samples"])
+                else max_per_cluster
+            )
+            for sample in cluster["samples"][:limit]:
                 if not sample.get("task"):
                     continue  # An observation is not a reproduction input.
                 case_id = _case_id(cluster, sample)
@@ -327,7 +334,7 @@ def _prompt_value(document, surface):
     return value
 
 
-def _workflow_validation_hashes():
+def _workflow_validation_hashes(*, business=False):
     names = (
         "workflow_nl_training.py",
         "workflow_nl_apply.py",
@@ -335,10 +342,35 @@ def _workflow_validation_hashes():
         "workflow_engine.py",
         "workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin01.py",
     )
-    return {name: _file_hash(Path(__file__).with_name(name)) for name in names}
+    if business:
+        names += (
+            "capability_trainer.py",
+            "retort_experiment_surfaces.py",
+            "workflow_training_dataset.py",
+            "workflow_training_replay.py",
+            "workflow_customer_delivery.py",
+            "workflow_variables.py",
+            "workflow_engine_workflowengine_mixin01.py",
+            "workflow_engine_workflowengine_mixin02.py",
+            "workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin02.py",
+            "self_maintenance_subprocess.py",
+            "employee_runtime.py",
+            "employee_runtime_policy.py",
+            "strategic_execution_contract.py",
+            "services/employee.py",
+            "employee_executor.py",
+            "employee_executor_merged.py",
+            "employee_executor_merged_mod1.py",
+            "employee_executor_merged_mod2.py",
+        )
+    hashes = {name: _file_hash(Path(__file__).parent / name) for name in names}
+    if business:
+        support = "FHD/app/mod_sdk/file_employee_support.py"
+        hashes[support] = _file_hash(Path(__file__).resolve().parents[3] / support)
+    return hashes
 
 
-def _validation(surface):
+def _validation(surface, *, business=False):
     if surface == "rag_context_prompt":
         from modstore_server.rag_prompt_feedback import get_assert
         from modstore_server.retort_experiment_surfaces import RAG_MEASUREMENT
@@ -351,10 +383,11 @@ def _validation(surface):
             "rag_prompt_feedback.py",
         )
     from modstore_server.workflow_nl_training import get_assert
+    from modstore_server.workflow_training_dataset import BUSINESS_SCOPE
 
     return (
-        "workflow_generation_static_validation",
-        _workflow_validation_hashes(),
+        BUSINESS_SCOPE if business else "workflow_generation_static_validation",
+        _workflow_validation_hashes(business=business),
         get_assert,
         "workflow_nl_training.py",
     )
@@ -368,6 +401,12 @@ def build_config(
     cases: list[dict[str, Any]],
     surface: str = "employee_prompt",
 ) -> dict[str, str]:
+    from modstore_server.workflow_training_dataset import (
+        is_business_case,
+        partition_cases,
+        validate_business_budget,
+    )
+
     workflow = surface in STRUCTURED_SURFACES
     if surface not in {"employee_prompt", *STRUCTURED_SURFACES}:
         raise ValueError("invalid_training_surface")
@@ -378,6 +417,11 @@ def build_config(
         for case in cases
     ):
         raise ValueError("training_reproduction_cases_required")
+    business = surface == "workflow_nl_prompt" and any(is_business_case(case) for case in cases)
+    cases = partition_cases(cases) if business else cases
+    if business:
+        validate_business_budget(cases)
+    validation = _validation(surface, business=business) if workflow else None
     model = os.environ.get("XCAGI_LLM_MODEL", "").strip()
     endpoint = os.environ.get("XCAGI_LLM_BASE_URL", "").strip()
     if not model or not endpoint.startswith("https://"):
@@ -399,14 +443,22 @@ def build_config(
                 "task": case["task"],
                 "case_id": f"case-{index}",
                 **({"generation_context": case["generation_context"]} if workflow else {}),
+                **(
+                    {
+                        "evaluation_partition": case["evaluation_partition"],
+                        "source_group_sha256": case["source_group_sha256"],
+                    }
+                    if business
+                    else {}
+                ),
             },
             "assert": [
                 (
                     {
                         "type": "python",
-                        "value": f"file://{Path(__file__).with_name(_validation(surface)[3])}:get_assert",
+                        "value": f"file://{Path(__file__).with_name(validation[3])}:get_assert",
                     }
-                    if workflow
+                    if validation is not None
                     else {"type": "llm-rubric", "value": _RUBRIC}
                 )
             ],
@@ -451,13 +503,21 @@ def build_config(
         "provider_id": provider["id"],
         "case_ids": [test["vars"]["case_id"] for test in tests],
         "case_sha256": [_hash(case["task"]) for case in cases],
-        "evaluation_scope": "failure_regression",
+        "evaluation_scope": "business_regression_and_holdout" if business else "failure_regression",
         "holdout_verified": False,
         **(
             {
+                "case_partitions": [case["evaluation_partition"] for case in cases],
+                "case_source_groups": [case["source_group_sha256"] for case in cases],
+            }
+            if business
+            else {}
+        ),
+        **(
+            {
                 "surface": surface,
-                "measurement_scope": _validation(surface)[0],
-                "validation_sha256": _validation(surface)[1],
+                "measurement_scope": validation[0],
+                "validation_sha256": validation[1],
                 "case_context_sha256": [
                     _hash(
                         json.dumps(
@@ -470,7 +530,7 @@ def build_config(
                     for case in cases
                 ],
             }
-            if workflow
+            if validation is not None
             else {}
         ),
     }
@@ -564,6 +624,13 @@ def decide(result: dict[str, Any], *, bundle=None) -> dict[str, Any]:
 
 def seal_evaluation(bundle_path: Path, result_path: Path):
     """Freeze the exact inputs and official output file before an operator approves a trial."""
+    from modstore_server.workflow_training_dataset import (
+        bound_result_variables,
+        is_business_case,
+        seal_business_evidence,
+        verify_partitions,
+    )
+
     bundle = json.loads(bundle_path.read_bytes().decode("utf-8"))
     if (
         bundle.get("schema") != "xcagi.training-bundle/v1"
@@ -598,10 +665,15 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         raise ValueError("training_case_hash_mismatch")
     if [prompt.get("raw") for prompt in prompts] != expected:
         raise ValueError("training_result_prompts_unbound")
+    business = surface == "workflow_nl_prompt" and any(
+        is_business_case(test["vars"]) for test in tests
+    )
+    verdict = None if business else decide(result, bundle=bundle)
+    verified = {}
     if surface in STRUCTURED_SURFACES:
         from modstore_server.workflow_nl_training import _digest
 
-        scope, hashes, get_assert, _module = _validation(surface)
+        scope, hashes, get_assert, _module = _validation(surface, business=business)
 
         if (
             bundle.get("measurement_scope") != scope
@@ -610,19 +682,56 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
             != [_digest(test["vars"].get("generation_context")) for test in tests]
         ):
             raise ValueError("training_workflow_validation_unbound")
+        if business:
+            verify_partitions(bundle, [test["vars"] for test in tests])
+        pending, pairs = [], set()
         for row in result.get("results", {}).get("results", []):
             variables = row.get("vars") or (row.get("testCase") or {}).get("vars") or {}
             index = row.get("testIdx")
             output = (row.get("response") or {}).get("output")
+            if business and type(index) is int and 0 <= index < len(tests):
+                variables = bound_result_variables(variables, tests[index]["vars"])
+                for container in (row, row.get("testCase") or {}):
+                    if "vars" in container:
+                        bound_result_variables(container["vars"], tests[index]["vars"])
             if (
                 type(index) is not int
                 or not 0 <= index < len(tests)
                 or variables != tests[index]["vars"]
                 or not isinstance(output, str)
-                or get_assert(output, {"vars": variables})["pass"] is not row.get("success")
             ):
                 raise ValueError("training_workflow_result_unverified")
-    verdict = decide(result, bundle=bundle)
+            arm = row.get("promptIdx")
+            if business:
+                if type(arm) is not int or arm not in (0, 1) or (arm, index) in pairs:
+                    raise ValueError("training_business_results_incomplete")
+                pairs.add((arm, index))
+            pending.append((row, arm, index, output, variables))
+        if business and pairs != {(arm, index) for arm in (0, 1) for index in range(len(tests))}:
+            raise ValueError("training_business_results_incomplete")
+        if business:
+            verdict = decide(
+                {
+                    **result,
+                    "results": {
+                        **result["results"],
+                        "results": [{**row, "vars": values} for row, _, _, _, values in pending],
+                    },
+                },
+                bundle=bundle,
+            )
+            if "baseline" not in verdict:
+                raise ValueError("training_business_results_incomplete")
+        # Validate the complete matrix before starting any original native employee.
+        for row, arm, index, output, variables in pending:
+            assertion = get_assert(output, {"vars": variables})
+            if assertion["pass"] is not row.get("success"):
+                raise ValueError("training_workflow_result_unverified")
+            if business:
+                verified[arm, index] = assertion
+    if business:
+        verdict = seal_business_evidence(bundle, tests, verified, verdict)
+    assert verdict is not None
     return {
         **verdict,
         "engine": bundle["engine"],
@@ -659,6 +768,9 @@ def candidate_for_experiment(bundle_path: Path, result_path: Path):
 
 
 def build_patch_prompt(baseline_prompt: str, clusters: list[dict[str, Any]]) -> str:
+    from modstore_server.workflow_training_dataset import proposal_clusters
+
+    clusters = proposal_clusters(clusters)
     reasons = "\n".join(
         f"- {training_identity(cluster)}: {cluster['failure_reason']} ({cluster['count']} 次)"
         + (
@@ -731,6 +843,10 @@ def main(argv: list[str] | None = None) -> int:
     mine_p.add_argument("--days", type=int, default=DEFAULT_DAYS)
     mine_p.add_argument("--min-count", type=int, default=DEFAULT_MIN_COUNT)
 
+    select = sub.add_parser("select", help="选择具备独立业务留出样本的原失败簇")
+    select.add_argument("--clusters", required=True)
+    select.add_argument("--out", required=True)
+
     prep = sub.add_parser("prepare", help="生成回归集与 promptfoo 配置")
     prep.add_argument("--clusters", required=True)
     prep.add_argument("--packs-dir", required=True)
@@ -762,6 +878,14 @@ def main(argv: list[str] | None = None) -> int:
     sug.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
+    if args.command == "select":
+        from modstore_server.workflow_training_dataset import select_clusters
+
+        payload = json.loads(Path(args.clusters).read_bytes())
+        clusters, blocked = select_clusters(payload["clusters"])
+        Path(args.out).write_text(json.dumps(clusters, ensure_ascii=False), encoding="utf-8")
+        print(json.dumps({"clusters": len(clusters), "blocked": blocked}, ensure_ascii=False))
+        return 0
     if args.command == "baseline":
         text = prompt_from_source(
             Path(args.source).read_bytes().decode("utf-8"), surface=args.surface
@@ -816,6 +940,20 @@ def main(argv: list[str] | None = None) -> int:
             if corpus_path.is_file()
             else []
         )
+        from modstore_server.workflow_training_dataset import is_business_case
+
+        if any(is_business_case(sample) for cluster in clusters for sample in cluster["samples"]):
+            current_sources = {
+                (str(sample["run_id"]), _case_id(cluster, sample))
+                for cluster in clusters
+                for sample in cluster["samples"]
+                if sample.get("run_id")
+            }
+            persisted = [
+                case
+                for case in persisted
+                if (case.get("source_run"), case.get("case_id")) in current_sources
+            ]
         if not persisted:
             print(json.dumps({"ok": False, "reason": "training_reproduction_cases_required"}))
             return 0
