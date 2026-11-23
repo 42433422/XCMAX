@@ -9,11 +9,12 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
 import zipfile
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from copy import deepcopy
 from pathlib import Path
 
@@ -41,7 +42,7 @@ def _native_stderr_summary(text):
     ):
         details.add("sqlalchemy.exc." + category)
     for name in re.findall(
-        r"^ModuleNotFoundError: No module named '([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)'$",
+        r"\bNo module named '([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)'",
         text,
         flags=re.MULTILINE,
     ):
@@ -251,6 +252,7 @@ def _fixture(kind="csv", *, wrong_reference=False, module_suffix="", order="A-1"
 def test_real_native_employee_and_independent_file_check(kind, monkeypatch):
     source, graph, _ = _fixture(kind)
     original = replay._run_worker
+    observed = []
 
     def run(request, directory, env):
         # Gold is not in the worker request/environment, and the child has no live credentials.
@@ -260,11 +262,50 @@ def test_real_native_employee_and_independent_file_check(kind, monkeypatch):
         with _native_stderr_diagnostic(monkeypatch) as diagnostic:
             result = original(request, directory, env)
         assert result.returncode == 0, diagnostic()
+        observation = {"stderr": diagnostic()}
+        state = directory / "executed.json"
+        if state.is_file() and not state.is_symlink():
+            executed = json.loads(state.read_text())
+            observation.update(
+                runtime_verified=executed.get("runtime_verified") is True,
+                workflow_ok=executed.get("ok") is True,
+            )
+        database = directory / "replay.db"
+        if database.is_file() and not database.is_symlink():
+            # Observe this disposable worker's own records before cleanup. Never
+            # emit raw employee errors, tasks, customer bytes or ambient state.
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+                rows = db.execute(
+                    "SELECT status, substr(error, 1, 16384) FROM employee_execution_metrics "
+                    "WHERE user_id = ? ORDER BY id DESC LIMIT 5",
+                    (request["user_id"],),
+                ).fetchall()
+            observation["employees"] = [
+                {
+                    "status": (
+                        status
+                        if status
+                        in {
+                            "success",
+                            "failed",
+                            "handler_failed",
+                            "blocked_by_risk_gate",
+                            "blocked_by_life_policy",
+                            "blocked_by_path_guard",
+                            "outcome_unknown",
+                        }
+                        else "other"
+                    ),
+                    "diagnostic": _native_stderr_summary(error or ""),
+                }
+                for status, error in rows
+            ]
+        observed.append(observation)
         return result
 
     monkeypatch.setattr(replay, "_run_worker", run)
     result = get_assert(json.dumps(graph), {"vars": {"generation_context": source}})
-    assert result["pass"], result
+    assert result["pass"], json.dumps({"result": result, "worker": observed}, ensure_ascii=True)
     assert result["runtime_verified"] is True
     assert result["measurement_scope"] == replay.WORKFLOW_BUSINESS_MEASUREMENT
     assert result["business_evidence"]["output_sha256"]
@@ -808,6 +849,7 @@ def test_native_stderr_diagnostic_bounds_and_redacts_output(tmp_path, monkeypatc
     message = (
         f'  File "{replay.__file__}", line 624, in evaluate_business_replay\n'
         "ModuleNotFoundError: No module named 'synthetic_missing'\n"
+        "handler failed: handler=direct_python error=No module named 'synthetic_nested'\n"
         "PermissionError: synthetic-private-data-must-never-be-printed\n"
         "AttributeError: synthetic-private-data-must-never-be-printed\n"
         "sqlalchemy.exc.OperationalError: synthetic-private-data-must-never-be-printed\n"
@@ -832,7 +874,8 @@ def test_native_stderr_diagnostic_bounds_and_redacts_output(tmp_path, monkeypatc
         assert result.returncode == 3
         assert diagnostic() == (
             "AttributeError; ModuleNotFoundError; PermissionError; "
-            "missing_module:synthetic_missing; sqlalchemy.exc.OperationalError; "
+            "missing_module:synthetic_missing; missing_module:synthetic_nested; "
+            "sqlalchemy.exc.OperationalError; "
             "workflow_training_replay.py:624"
         )
 
