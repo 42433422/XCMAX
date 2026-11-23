@@ -211,8 +211,6 @@ class EmployeeOrchestrator:
             )
         if current_tenant is not None:
             ctx["tenant_id"] = current_tenant
-        ctx["user_id"] = user_id
-
         stable_id = canonical_hash(
             {
                 "employee_id": str(employee_id),
@@ -301,14 +299,19 @@ def _project_collaboration_result(
         seen.add(step.node_id)
         output = step.output
         published = outputs.get(step.node_id)
+        # AgentOrchestrator unwraps a business_outcome when collecting graph results.
+        outcome = output.get("business_outcome") if isinstance(output, dict) else None
+        projected = outcome if isinstance(outcome, dict) else output
         completed = bool(
             bound
             and step.status == "completed"
             and isinstance(output, dict)
             and isinstance(published, dict)
-            and output == published
+            and projected == published
             and not execution_result_error(output)
             and not execution_result_pending_state(output)
+            and not execution_result_error(published)
+            and not execution_result_pending_state(published)
         )
         node_results.append(
             {
@@ -337,9 +340,11 @@ def _project_collaboration_result(
         # This is a context execution receipt, not independent business acceptance.
         "validation_scope": "agent_run_execution_receipt",
         "independent_verified": False,
-        "message": run.error or (
+        "message": run.error
+        or (
             str((run.final_output or {}).get("message") or run.status)
-            if success else "协作节点未全部完成或回执不一致，未放行下游"
+            if success
+            else "协作节点未全部完成或回执不一致，未放行下游"
         ),
         "node_outputs": outputs if success else {},
         "node_results": node_results,
