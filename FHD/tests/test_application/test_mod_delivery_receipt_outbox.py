@@ -225,6 +225,105 @@ async def test_programming_error_surfaces_without_marking_receipt(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failed_stage", ["installed", "running"])
+async def test_http_response_loss_retries_original_durable_receipt(
+    pending, monkeypatch, failed_stage
+):
+    request, root = pending
+    sent = []
+    lost = False
+
+    def respond(remote_request):
+        nonlocal lost
+        payload = json.loads(remote_request.content)
+        sent.append(payload)
+        if payload["stage"] == failed_stage and not lost:
+            lost = True
+            return httpx.Response(503, json={"detail": "response lost after server commit"})
+        return httpx.Response(
+            200, json={"receipt": {"record": {"verified": payload["stage"] == "running"}}}
+        )
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account._market_api_base_url", lambda: "http://market.test"
+    )
+
+    async def runtime(request, row):
+        return dict(row["payload"], stage="running", receipt_id="original-runtime-receipt")
+
+    monkeypatch.setattr(outbox, "_runtime_payload", runtime)
+    first = await outbox.retry_delivery_receipts(request, "current-token")
+    assert first == {
+        "installed_reported": int(failed_stage == "running"),
+        "runtime_reported": 0,
+        "pending": 1,
+    }
+    path = next(root.glob("mod-delivery-receipts/*/*.json"))
+    row = json.loads(path.read_text())
+    assert row["last_error"] == "DeliveryRemoteError"
+    assert row["installed_reported"] is (failed_stage == "running")
+    assert row["runtime_reported"] is False
+
+    second = await outbox.retry_delivery_receipts(request, "current-token")
+    assert second == {
+        "installed_reported": int(failed_stage == "installed"),
+        "runtime_reported": 1,
+        "pending": 0,
+    }
+    retried = [payload for payload in sent if payload["stage"] == failed_stage]
+    assert len(retried) == 2 and retried[0] == retried[1]
+    row = json.loads(path.read_text())
+    assert row["runtime_reported"] is True
+    assert "last_error" not in row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["send", "probe"])
+@pytest.mark.parametrize("best_effort", [False, True])
+async def test_programming_error_propagates_without_rewriting_receipt(
+    pending, monkeypatch, boundary, best_effort
+):
+    request, root = pending
+    path = next(root.glob("mod-delivery-receipts/*/*.json"))
+    if boundary == "probe":
+        row = json.loads(path.read_text())
+        row["installed_reported"] = True
+        outbox._save(path, row)
+    original = path.read_bytes()
+    error = RuntimeError("unexpected implementation failure")
+    calls = []
+
+    async def post(*args, **kwargs):
+        calls.append("send")
+        raise error
+
+    async def runtime(*args):
+        calls.append("probe")
+        raise error
+
+    monkeypatch.setattr(
+        "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", post
+    )
+    monkeypatch.setattr(outbox, "_runtime_payload", runtime)
+    retry = (
+        outbox.retry_delivery_receipts_best_effort
+        if best_effort
+        else outbox.retry_delivery_receipts
+    )
+    with pytest.raises(RuntimeError) as failure:
+        await retry(request, "current-token")
+    assert failure.value is error
+    assert calls == [boundary]
+    assert path.read_bytes() == original
+
+
+@pytest.mark.asyncio
 async def test_unverified_server_runtime_stays_pending_until_verified(pending, monkeypatch):
     request, _ = pending
     verified = False

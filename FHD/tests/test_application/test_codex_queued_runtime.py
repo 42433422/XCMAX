@@ -96,7 +96,7 @@ def test_queue_admission_needs_no_qualification_but_worker_still_requires_it(
 
 @pytest.mark.parametrize("programming_error", [False, True])
 def test_failed_queue_insert_rolls_back_the_parent_admission(
-    runtime_entry, monkeypatch, programming_error
+    runtime_entry, monkeypatch, caplog, programming_error
 ):
     state = runtime_entry
     error = (
@@ -110,14 +110,48 @@ def test_failed_queue_insert_rolls_back_the_parent_admission(
 
     monkeypatch.setattr(state.queue, "enqueue_in_session", fail)
     payload = {"message": "解释库存含义", "request_id": "failed-insert"}
+    response = state.client.post("/api/agent/runs", json=payload)
     if programming_error:
-        with pytest.raises(RuntimeError) as raised:
-            state.client.post("/api/agent/runs", json=payload)
-        assert raised.value is error
+        assert response.status_code == 500
+        assert response.json() == {
+            "success": False,
+            "message": "Agent 服务暂时不可用，请稍后重试",
+        }
+        assert any(record.exc_info and record.exc_info[1] is error for record in caplog.records)
     else:
-        response = state.client.post("/api/agent/runs", json=payload)
         assert response.status_code == 409
     assert state.repository.list_recent() == []
+    assert state.calls == state.servers == []
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyError])
+def test_unexpected_queue_failure_reaches_http_boundary_and_rolls_back(
+    runtime_entry, monkeypatch, caplog, error_type
+):
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    state = runtime_entry
+    error = error_type("synthetic internal queue failure")
+    enqueue = state.queue.enqueue_in_session
+
+    def fail_after_staging(*args, **kwargs):
+        enqueue(*args, **kwargs)
+        raise error
+
+    monkeypatch.setattr(state.queue, "enqueue_in_session", fail_after_staging)
+    response = state.client.post(
+        "/api/agent/runs", json={"message": "解释库存含义", "request_id": "unexpected-insert"}
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "success": False,
+        "message": "Agent 服务暂时不可用，请稍后重试",
+    }
+    assert any(record.exc_info and record.exc_info[1] is error for record in caplog.records)
+    assert state.repository.list_recent() == []
+    with state.actor.factory() as db:
+        assert db.query(AgentTaskExecutionRecord).count() == 0
     assert state.calls == state.servers == []
 
 

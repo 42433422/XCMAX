@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import os
 from collections.abc import Callable
+from contextlib import ExitStack
 from typing import Any, Literal
 
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +24,7 @@ from app.application.agent_orchestrator.run_repository import get_agent_run_repo
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_context import apply_task_context
+from app.application.agent_orchestrator.task_execution_models import TaskQueueCapacityError
 from app.application.agent_orchestrator.tool_permission import redact
 from app.application.agent_runtime.codex_runtime import run_codex_agent
 from app.application.agent_runtime.configuration import (
@@ -44,7 +47,9 @@ from app.infrastructure.codex.policy import (
     runtime_settings,
 )
 from app.infrastructure.codex.tools import CodexToolBridge
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _PRIVATE_KEYS = frozenset(
     {
@@ -665,7 +670,31 @@ async def run_runtime_task_async(
         app.state.codex_model_route = route
         app.include_router(model_router)
         app.include_router(mcp_router)
-        with LocalRuntimeServer(app) as server:
+        with ExitStack() as resources:
+            try:
+                server = resources.enter_context(LocalRuntimeServer(app))
+            except RECOVERABLE_ERRORS:
+                raise  # The existing operational failure path persists its receipt below.
+            except BOUNDARY_ERRORS:
+                # This boundary precedes native execution. Preserve its original
+                # exception after recording a safe, non-replayable startup result.
+                try:
+                    _record_request_result(
+                        store,
+                        resolved_id,
+                        request_key,
+                        _failure(
+                            "runtime_unavailable",
+                            "运行未能完成，原任务状态与回执已保留",
+                            run_id=resolved_id,
+                        ),
+                        failed_before_execution=True,
+                    )
+                except BOUNDARY_ERRORS:
+                    logger.warning(
+                        "Codex startup failure receipt remains unconfirmed", exc_info=True
+                    )
+                raise
             config = CodexTransportConfig(
                 runtime_root=settings.runtime_root,
                 scope_id=resolved_id,
@@ -713,6 +742,9 @@ async def run_runtime_task_async(
             except RECOVERABLE_ERRORS:
                 pass  # Preserve cancellation; durable coordinator receipts remain authoritative.
         raise
+    except TaskQueueCapacityError as exc:
+        result = _failure(exc.code, str(exc), run_id=resolved_id)
+        result.update(exc.result(), failure_stage="queue_admission", execution_state="blocked")
     except (AgentModAuthorizationError, RuntimePolicyError, CodexBindingError) as exc:
         result = _failure(
             getattr(exc, "code", "runtime_policy_blocked"), str(exc), run_id=resolved_id

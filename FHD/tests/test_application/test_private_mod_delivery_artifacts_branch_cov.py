@@ -384,6 +384,38 @@ def delivery(tmp_path, monkeypatch):
     )
 
 
+def _assert_pending_receipt(delivery, digest):
+    rows = delivery.outbox_rows()
+    _assert_pending(rows)
+    row = rows[0]
+    assert row["owner"] == "tenant:1"
+    assert row["payload"]["stage"] == "installed"
+    assert row["payload"]["package_sha256"] == digest
+    return row
+
+
+def _assert_signed_module_install(delivery, raw):
+    """Read durable package proof without treating installation as running evidence."""
+    from app.infrastructure.mods.install_receipts import read_verified_install
+
+    receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
+    assert receipt["signature_verified"] is True
+    assert receipt["owner_scope"] == "tenant:1"
+    assert receipt["runtime_status"] == "installed"
+    assert receipt["package_sha256"] == hashlib.sha256(raw).hexdigest()
+    archive = (
+        delivery.root / "mods/.install-receipts/fixture-mod" / (receipt["package_sha256"] + ".zip")
+    )
+    assert archive.read_bytes() == raw
+    assert delivery.install.call_count == 1
+    assert delivery.install.call_args.kwargs == {
+        "verify_signature": True,
+        "activate": True,
+        "owner_scope": "tenant:1",
+    }
+    return receipt, archive
+
+
 class TestInstallCustomDeliveryArtifact:
     async def test_invalid_kind(self):
         with pytest.raises(ValueError, match="artifact_kind"):
@@ -477,34 +509,14 @@ class TestInstallCustomDeliveryArtifact:
         assert result["installed_version"] == "2.0.0"
         assert result["package_sha256"] == hashlib.sha256(raw).hexdigest()
         assert result["runtime_verified"] is False
-        (row,) = delivery.outbox_rows()
-        assert row["owner"] == "tenant:1"
-        assert row["payload"]["stage"] == "installed"
-        assert row["payload"]["package_sha256"] == result["package_sha256"]
-        assert row["installed_reported"] is False
-        assert row["runtime_reported"] is False
+        row = _assert_pending_receipt(delivery, result["package_sha256"])
         assert row["payload"]["receipt_id"] == result["receipt_id"] + ":installed"
         delivery.client.request.assert_not_awaited()
         if kind == "module":
-            from app.infrastructure.mods.install_receipts import read_verified_install
-
-            receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
-            assert receipt["owner_scope"] == "tenant:1"
-            assert receipt["signature_verified"] is True
+            receipt, archive = _assert_signed_module_install(delivery, raw)
             assert receipt["package_sha256"] == result["package_sha256"]
-            archive = (
-                delivery.root
-                / "mods/.install-receipts/fixture-mod"
-                / (result["package_sha256"] + ".zip")
-            )
-            assert archive.read_bytes() == raw
             with zipfile.ZipFile(archive) as stored:
                 assert "META-INF/signature.json" in stored.namelist()
-            assert delivery.install.call_args.kwargs == {
-                "verify_signature": True,
-                "activate": True,
-                "owner_scope": "tenant:1",
-            }
         else:
             receipt = json.loads(
                 (
@@ -524,18 +536,18 @@ class TestInstallCustomDeliveryArtifact:
     async def test_install_failure_keeps_module_grant_pending_without_claiming_installed(
         self, delivery, kind
     ):
-        delivery.client.get.return_value = delivery.response(delivery.package(kind=kind))
+        raw = delivery.package(kind=kind)
+        delivery.client.get.return_value = delivery.response(raw)
         if kind == "module":
             delivery.install.return_value = (False, "install boom", None)
         else:
             delivery.employee_install.return_value = (False, "install boom")
         with pytest.raises(RuntimeError, match="install boom"):
             await _install(7, kind)
-        rows = delivery.outbox_rows()
         if kind == "module":
-            _assert_pending(rows)
+            _assert_pending_receipt(delivery, hashlib.sha256(raw).hexdigest())
         else:
-            assert rows == []
+            assert delivery.outbox_rows() == []
 
     @pytest.mark.parametrize("signed", [False, True])
     async def test_unsigned_or_wrong_key_never_installs(self, delivery, monkeypatch, signed):
@@ -557,20 +569,22 @@ class TestInstallCustomDeliveryArtifact:
 
     @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
     async def test_module_api_ready_failure_does_not_claim_running(self, delivery, error_type):
-        delivery.client.get.return_value = delivery.response(delivery.package())
+        raw = delivery.package()
+        delivery.client.get.return_value = delivery.response(raw)
         error = error_type("flush failed")
         delivery.api_ready.side_effect = error
+        install = _install(9, "module")
         if error_type is RuntimeError:
-            with pytest.raises(RuntimeError, match="flush failed") as raised:
-                await _install(9, "module")
-            assert raised.value is error
+            with pytest.raises(RuntimeError) as failure:
+                await install
+            assert failure.value is error
         else:
-            result = await _install(9, "module")
+            result = await install
             assert result["success"] is True
             assert result["runtime_verified"] is False
-        delivery.install.assert_called_once()
-        rows = delivery.outbox_rows()
-        _assert_pending(rows)
+        receipt, _ = _assert_signed_module_install(delivery, raw)
+        _assert_pending_receipt(delivery, receipt["package_sha256"])
+        delivery.api_ready.assert_called_once_with("fixture-mod")
 
     async def test_download_response_loss_retries_without_duplicate_activation(self, delivery):
         raw = delivery.package()
@@ -798,35 +812,15 @@ class TestUpdatePrivateModFromLibrary:
         delivery.install.assert_not_called()
 
     async def test_successful_update_preserves_signed_bytes_and_owner(self, delivery, library):
-        from app.infrastructure.mods.install_receipts import read_verified_install
-
         result = await _update()
         assert result["success"] is True
         assert result["updated"] is True
         assert result["current_version"] == "2.0.0"
-        receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
-        assert receipt["signature_verified"] is True
-        assert receipt["owner_scope"] == "tenant:1"
-        assert receipt["package_sha256"] == hashlib.sha256(library.raw).hexdigest()
-        archive = (
-            delivery.root
-            / "mods/.install-receipts/fixture-mod"
-            / (receipt["package_sha256"] + ".zip")
-        )
-        assert archive.read_bytes() == library.raw
-        (row,) = delivery.outbox_rows()
+        receipt, _ = _assert_signed_module_install(delivery, library.raw)
+        row = _assert_pending_receipt(delivery, receipt["package_sha256"])
         assert row["ticket_id"] == result["delivery_ticket_id"] == 9
         assert row["payload"]["receipt_id"] == result["receipt_id"] + ":installed"
-        assert row["owner"] == "tenant:1"
-        assert row["payload"]["stage"] == "installed"
         assert row["payload"]["receipt_token"] == library.headers["x-delivery-receipt-token"]
-        assert row["payload"]["package_sha256"] == receipt["package_sha256"]
-        assert row["runtime_reported"] is False
-        assert delivery.install.call_args.kwargs == {
-            "verify_signature": True,
-            "activate": True,
-            "owner_scope": "tenant:1",
-        }
 
     @pytest.mark.parametrize(
         "header,value",
@@ -873,29 +867,32 @@ class TestUpdatePrivateModFromLibrary:
         with pytest.raises(RuntimeError, match="boom") as raised:
             await _update()
         assert isinstance(raised.value, mod.DeliveryInstallError)
-        rows = delivery.outbox_rows()
-        _assert_pending(rows)
+        row = _assert_pending_receipt(delivery, hashlib.sha256(library.raw).hexdigest())
         delivery.install.return_value = DEFAULT
         result = await _update()
         assert result["updated"] is True
-        assert result["receipt_id"] + ":installed" == rows[0]["payload"]["receipt_id"]
-        assert delivery.outbox_rows() == rows
+        assert result["receipt_id"] + ":installed" == row["payload"]["receipt_id"]
+        assert delivery.outbox_rows() == [row]
         assert delivery.install.call_count == 2
 
     @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
-    async def test_api_ready_failure_preserves_pending_receipt(self, delivery, library, error_type):
+    async def test_api_ready_failure_preserves_install_and_error_contract(
+        self, delivery, library, error_type
+    ):
         error = error_type("flush failed")
         delivery.api_ready.side_effect = error
+        update = _update()
         if error_type is RuntimeError:
-            with pytest.raises(RuntimeError, match="flush failed") as raised:
-                await _update()
-            assert raised.value is error
+            with pytest.raises(RuntimeError) as failure:
+                await update
+            assert failure.value is error
         else:
-            result = await _update()
+            result = await update
             assert result["updated"] is True
-        delivery.install.assert_called_once()
-        rows = delivery.outbox_rows()
-        _assert_pending(rows)
+            assert result["runtime_status"] == "installed"
+        receipt, _ = _assert_signed_module_install(delivery, library.raw)
+        _assert_pending_receipt(delivery, receipt["package_sha256"])
+        delivery.api_ready.assert_called_once_with("fixture-mod")
 
     async def test_previous_version_from_local(self, delivery, library):
         old = delivery.package(version="1.0.0", content="old")

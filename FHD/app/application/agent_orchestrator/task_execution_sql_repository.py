@@ -9,15 +9,24 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Table, and_, or_
+from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.task_dispatch_sql_policy import (
+    admit_in_session,
+    queue_admission_lock,
+    recheck_dispatch_policy,
+    select_dispatch_candidates,
+)
 from app.application.agent_orchestrator.task_execution_models import (
     AgentTaskExecution,
     ExecutionState,
+    TaskDispatchLimits,
     _deadline,
     _task_id_of,
+    dispatch_capacity_allows,
+    freeze_dispatch_policy,
 )
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.domain.task_lifecycle.adapters import (
@@ -52,6 +61,12 @@ class SQLAlchemyTaskExecutionRepository:
         self._schema_ready = False
         self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
+
+    def _model_with_policy(self, db: Session, record: Any) -> AgentTaskExecution:
+        from app.domain.task_lifecycle.control import SessionBook
+
+        body = SessionBook(db).get("agent", str(record.tenant_id or ""), str(record.run_id))
+        return self._to_model(record, body.get("dispatch_policy"))
 
     def enqueue(
         self,
@@ -90,10 +105,14 @@ class SQLAlchemyTaskExecutionRepository:
     ) -> None:
         """Stage queue state in the caller's transaction; never publish it early."""
         now = utc_now_iso()
+        from app.application.agent_orchestrator.tool_spec import snapshot_tool_specs_v2
         from app.db.models.agent import AgentTaskExecutionRecord
 
+        policy = freeze_dispatch_policy(run, snapshot_tool_specs_v2())
+        queue_admission_lock(db)
         record = db.get(AgentTaskExecutionRecord, run.run_id)
         if record is None:
+            admit_in_session(db, run, record)
             record = AgentTaskExecutionRecord(
                 run_id=run.run_id,
                 task_id=_task_id_of(run),
@@ -114,6 +133,7 @@ class SQLAlchemyTaskExecutionRepository:
             ):
                 return
             if record.state not in LEASED_STATES:
+                admit_in_session(db, run, record)
                 record.state = "queued"
                 record.lease_owner = None
                 record.lease_expires_at = None
@@ -124,6 +144,13 @@ class SQLAlchemyTaskExecutionRepository:
         record.requested_by = str(requested_by or "") or None
         record.last_error_code = None
         record.updated_at = now
+        if record.state not in LEASED_STATES:
+            from app.domain.task_lifecycle.control import SessionBook
+
+            book = SessionBook(db)
+            body = book.get("agent", str(record.tenant_id or ""), run.run_id)
+            body["dispatch_policy"] = policy
+            book.put("agent", str(record.tenant_id or ""), run.run_id, body)
 
     def get(self, run_id: str) -> AgentTaskExecution | None:
         self._ensure_schema()
@@ -131,7 +158,7 @@ class SQLAlchemyTaskExecutionRepository:
             from app.db.models.agent import AgentTaskExecutionRecord
 
             record = db.get(AgentTaskExecutionRecord, str(run_id or ""))
-            return self._to_model(record) if record is not None else None
+            return self._model_with_policy(db, record) if record is not None else None
 
     def list_for_run_ids(self, run_ids: list[str]) -> dict[str, AgentTaskExecution]:
         self._ensure_schema()
@@ -146,7 +173,7 @@ class SQLAlchemyTaskExecutionRepository:
                 .filter(AgentTaskExecutionRecord.run_id.in_(wanted))
                 .all()
             )
-            return {str(record.run_id): self._to_model(record) for record in records}
+            return {str(record.run_id): self._model_with_policy(db, record) for record in records}
 
     def enqueue_waiting_approval(
         self,
@@ -206,44 +233,50 @@ class SQLAlchemyTaskExecutionRepository:
         now: str | None = None,
         run_id: str | None = None,
         tenant_id: str | None = None,
+        interactive_only: bool = False,
     ) -> AgentTaskExecution | None:
         self._ensure_schema()
         current = str(now or utc_now_iso())
         expires = _deadline(current, lease_seconds)
+        from app.application.agent_orchestrator.tool_spec import snapshot_tool_specs_v2
+
+        specs = snapshot_tool_specs_v2()
         with self._session_scope() as db:
             from app.db.models.agent import AgentTaskExecutionRecord
 
-            eligible = or_(
-                AgentTaskExecutionRecord.state == "queued",
-                and_(
-                    AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),
-                    AgentTaskExecutionRecord.lease_expires_at.is_not(None),
-                    AgentTaskExecutionRecord.lease_expires_at <= current,
-                ),
-            )
-            candidate_filter = [AgentTaskExecutionRecord.available_at <= current, eligible]
-            wanted = str(run_id or "")
-            if wanted:
-                candidate_filter.append(AgentTaskExecutionRecord.run_id == wanted)
-            if tenant_id is not None:
-                candidate_filter.append(AgentTaskExecutionRecord.tenant_id == str(tenant_id))
-            candidates = (
-                db.query(AgentTaskExecutionRecord)
-                .filter(*candidate_filter)
-                .order_by(
-                    AgentTaskExecutionRecord.priority.asc(),
-                    AgentTaskExecutionRecord.available_at.asc(),
-                    AgentTaskExecutionRecord.created_at.asc(),
-                    AgentTaskExecutionRecord.run_id.asc(),
+            queue_admission_lock(db)
+            limits = TaskDispatchLimits.configured()
+            active = [
+                self._model_with_policy(db, record)
+                for record in db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.state.in_(LEASED_STATES),
+                    AgentTaskExecutionRecord.lease_expires_at > current,
                 )
-                .limit(8)
                 .all()
+            ]
+            if len(active) >= limits.running:
+                return None
+            candidates, eligible = select_dispatch_candidates(
+                db,
+                current=current,
+                active=active,
+                limits=limits,
+                run_id=run_id,
+                tenant_id=tenant_id,
+                interactive_only=interactive_only,
             )
             from app.domain.task_lifecycle.control import SessionBook
 
             book = SessionBook(db)
             self._expire_approvals(db, book, current)
             for candidate in candidates:
+                policy = recheck_dispatch_policy(db, candidate, book, specs)
+                model = self._to_model(candidate, policy)
+                if (
+                    interactive_only and model.dispatch_class != "interactive"
+                ) or not dispatch_capacity_allows(active, model, limits):
+                    continue
                 recovered = candidate.state in LEASED_STATES
                 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
@@ -362,7 +395,7 @@ class SQLAlchemyTaskExecutionRepository:
                 record = db.get(AgentTaskExecutionRecord, candidate.run_id)
                 if record is not None:
                     db.refresh(record)
-                    return self._to_model(record)
+                    return self._to_model(record, policy)
         return None
 
     def heartbeat(
@@ -839,7 +872,12 @@ class SQLAlchemyTaskExecutionRepository:
             self._schema_ready = True
 
     @staticmethod
-    def _to_model(record) -> AgentTaskExecution:
+    def _to_model(record, policy: Any = None) -> AgentTaskExecution:
+        policy = policy if isinstance(policy, dict) else {}
+        deadline = policy.get("deadline_seconds")
+        interactive = (
+            policy.get("class") == "interactive" and type(deadline) is int and deadline > 0
+        )
         return AgentTaskExecution(
             run_id=str(record.run_id),
             task_id=str(record.task_id),
@@ -858,6 +896,8 @@ class SQLAlchemyTaskExecutionRepository:
             created_at=str(record.created_at or ""),
             updated_at=str(record.updated_at or ""),
             finished_at=str(record.finished_at or ""),
+            dispatch_class="interactive" if interactive else "background",
+            dispatch_deadline_seconds=deadline if interactive else 0,
         )
 
 

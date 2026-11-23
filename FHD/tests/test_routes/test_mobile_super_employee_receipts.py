@@ -233,6 +233,7 @@ async def test_stream_exception_stays_unknown_and_is_never_redispatched(
     again = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)
     assert (await _events(again))[-1]["result"]["execution_state"] == "unknown"
     service.invoke_stream.assert_called_once()
+    assert any(record.exc_info and record.exc_info[1] is error for record in caplog.records)
 
 
 @pytest.mark.asyncio

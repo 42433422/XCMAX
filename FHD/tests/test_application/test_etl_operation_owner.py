@@ -159,13 +159,12 @@ def test_owner_finishes_business_write_and_releases_in_one_transaction(store):
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
-def test_expired_external_batch_is_not_automatically_reclaimed(store):
+@pytest.mark.parametrize("kind", ["batch_execute", "owned_execute"])
+def test_expired_external_batch_is_not_automatically_reclaimed(store, kind):
     _engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
-        owner = claim_operation(
-            db, db.get(EltRun, run_id), "batch_execute", allowed_statuses={"completed"}
-        )
+        owner = claim_operation(db, db.get(EltRun, run_id), kind, allowed_statuses={"completed"})
         db.commit()
         db.execute(
             update(EltRun)
@@ -303,6 +302,34 @@ def test_active_rollback_owner_blocks_forward_entry_points(store, action, status
     with factory() as db:
         assert db.get(EltRun, run_id).operation_token == owner.token
         assert db.get(EltRun, run_id).status == status
+
+
+@pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
+def test_background_dispatch_freezes_the_original_token_only_once(store):
+    _engine, factory, _ids = store
+    run_id = make_run(store)
+    with factory() as db:
+        owner = claim_operation(
+            db, db.get(EltRun, run_id), "execute_queue", allowed_statuses={"completed"}
+        )
+        db.commit()
+    with factory() as first:
+        frozen = operation_owner.freeze_background_operation(first, owner)
+        first.commit()
+    with factory() as second:
+        with pytest.raises(EltError, match="停止重复提交"):
+            operation_owner.freeze_background_operation(second, owner)
+        second.rollback()
+        active = operation_owner.activate_operation(
+            second, second.get(EltRun, run_id), "owned_execute", frozen.token
+        )
+        second.commit()
+        assert active.token == owner.token
+    with factory() as duplicate:
+        with pytest.raises(EltError):
+            operation_owner.activate_operation(
+                duplicate, duplicate.get(EltRun, run_id), "owned_execute", frozen.token
+            )
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)

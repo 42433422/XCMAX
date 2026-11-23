@@ -77,6 +77,7 @@ def test_preview_revalidation_and_execution_keep_mod_scope_without_worker_leak(
             "service_draft",
             "service_execution",
         )
+        for _parent_capture_or_worker in range(2)
     ]
     assert store.executor.submit(get_request_active_mod_id).result(timeout=10) == ""
     assert store.executor.submit(current_tenant_id).result(timeout=10) is None

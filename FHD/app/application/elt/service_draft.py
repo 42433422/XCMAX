@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from contextvars import copy_context
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
@@ -24,8 +23,6 @@ from app.application.elt.product_identity import provenance_validation_issues
 from app.application.elt.service_support import (
     ALLOWED_VALIDATION_OPS,
     EXECUTOR,
-    SUBMITTED,
-    SUBMITTED_LOCK,
     apply_validation_rules,
     dump_json,
     load_json,
@@ -37,7 +34,7 @@ from app.application.elt.targets.helpers import degraded_header_master
 from app.application.elt.transforms import ALLOWED_TRANSFORMS
 from app.application.elt.transforms import map_row_with_issues as _map_row_with_issues
 from app.db.models.elt import EltRun, EltRunRow
-from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -173,62 +170,72 @@ class DraftServiceMixin:
         *,
         operation_token: str | None = None,
     ) -> None:
-        with SUBMITTED_LOCK:
-            if run_id in SUBMITTED and operation_token is None:
-                return
-            SUBMITTED.add(run_id)
+        from app.application.elt.service_background import submit_background
 
-        def work() -> None:
-            from app.application.elt.llm_session_provider import (
-                bind_elt_llm_owner,
-                reset_elt_llm_owner,
+        submit_background(
+            self,
+            kind="revalidate",
+            run_id=run_id,
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+            operation_token=operation_token,
+            options={"overrides": overrides},
+            executor=EXECUTOR,
+            session_factory=new_session,
+        )
+
+    def _revalidation_worker(
+        self,
+        run_id: str,
+        owner_user_id: int,
+        overrides: dict[str, Any] | None = None,
+        *,
+        operation_token: str | None = None,
+    ) -> None:
+        from app.application.elt.llm_session_provider import (
+            bind_elt_llm_owner,
+            reset_elt_llm_owner,
+        )
+
+        llm_owner_token = bind_elt_llm_owner(owner_user_id)
+        db = new_session()
+        operation = None
+        try:
+            run = self._owned_run(db, run_id, owner_user_id)
+            operation = (
+                activate_operation(db, run, "preview", operation_token)
+                if operation_token
+                else claim_operation(
+                    db,
+                    run,
+                    "preview",
+                    allowed_statuses={"previewing", "preview_ready"},
+                    require_unrolled_back=True,
+                )
             )
-
-            llm_owner_token = bind_elt_llm_owner(owner_user_id)
-            db = new_session()
-            operation = None
+            bind_owner(db, operation)
+            db.commit()
+            self._revalidate_existing_rows(db, run_id, owner_user_id, publish=False)
+            if overrides:
+                self._apply_row_overrides(db, run_id, owner_user_id, overrides)
+            run.status = run.stage = "preview_ready"
+            run.progress = 100
+            publish_preview(db, self._owned_run(db, run_id, owner_user_id))
+            finish_operation(db, operation)
+            db.commit()
+        except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.
+            db.rollback()
+            code, message = safe_error(exc)
             try:
-                with tenant_scope(tenant_id):
-                    run = self._owned_run(db, run_id, owner_user_id)
-                    operation = (
-                        activate_operation(db, run, "preview", operation_token)
-                        if operation_token
-                        else claim_operation(
-                            db,
-                            run,
-                            "preview",
-                            allowed_statuses={"previewing", "preview_ready"},
-                            require_unrolled_back=True,
-                        )
-                    )
-                    bind_owner(db, operation)
-                    db.commit()
-                    self._revalidate_existing_rows(db, run_id, owner_user_id, publish=False)
-                    if overrides:
-                        self._apply_row_overrides(db, run_id, owner_user_id, overrides)
-                    run.status = run.stage = "preview_ready"
-                    run.progress = 100
-                    publish_preview(db, self._owned_run(db, run_id, owner_user_id))
-                    finish_operation(db, operation)
-                    db.commit()
-            except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.
+                if operation is not None:
+                    fail_operation(db, operation, code=code, message=message)
+            except RECOVERABLE_ERRORS:
                 db.rollback()
-                code, message = safe_error(exc)
-                try:
-                    with tenant_scope(tenant_id):
-                        if operation is not None:
-                            fail_operation(db, operation, code=code, message=message)
-                except RECOVERABLE_ERRORS:
-                    db.rollback()
-                    logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
-            finally:
-                unbind_owner(db)
-                db.close()
-                reset_elt_llm_owner(llm_owner_token)
-                with SUBMITTED_LOCK:
-                    SUBMITTED.discard(run_id)
-
-        EXECUTOR.submit(copy_context().run, work)
+                logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
+        finally:
+            unbind_owner(db)
+            db.close()
+            reset_elt_llm_owner(llm_owner_token)
 
     def _validate_draft(self, draft: dict[str, Any], adapter: TargetAdapter) -> None:
         mappings = draft.get("field_mappings")

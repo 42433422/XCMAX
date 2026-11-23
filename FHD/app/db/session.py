@@ -2,14 +2,19 @@ import hashlib
 import logging
 import os
 import time
-from contextlib import closing, contextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import wraps
+
+from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.db.session_cache import ThreadSafeLRUCache
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+# This lifecycle boundary cleans up cancellation and programming errors, then re-raises them.
+_SESSION_EXIT_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
 
 _query_cache = ThreadSafeLRUCache(max_size=128, ttl_seconds=300.0)
 _CACHE_MAX_SIZE = 128
@@ -94,6 +99,30 @@ def timed_query(query_name: str):
     return decorator
 
 
+def _owned_session_scope(db: Session, *, failure_message: str) -> Iterator[Session]:
+    original_error: BaseException | None = None
+    try:
+        yield db
+        db.commit()
+    except _SESSION_EXIT_ERRORS as exc:
+        original_error = exc
+        try:
+            # after_commit failures and partial rollbacks must only close.
+            if db.is_active:
+                db.rollback()
+                logger.error("%s", failure_message)
+        except _SESSION_EXIT_ERRORS as cleanup_error:
+            exc.add_note(f"SQL session rollback failed: {cleanup_error!r}")
+        raise
+    finally:
+        try:
+            db.close()
+        except _SESSION_EXIT_ERRORS as cleanup_error:
+            if original_error is None:
+                raise
+            original_error.add_note(f"SQL session close failed: {cleanup_error!r}")
+
+
 def _db_session_scope():
     """共享的 DB 会话生命周期（提交/回滚/关闭）。
 
@@ -101,17 +130,7 @@ def _db_session_scope():
     前者是 ``contextmanager``（``with get_db() as db:``），后者是 FastAPI
     依赖用的裸生成器（``Depends(get_db_dependency)``）。
     """
-    with closing(SessionLocal()) as db:
-        completed = False
-        try:
-            yield db
-            db.commit()
-            completed = True
-        finally:
-            # A failed after_commit hook must keep its original error.
-            if not completed and db.is_active:
-                db.rollback()
-                logger.error("数据库事务失败，已回滚")
+    yield from _owned_session_scope(SessionLocal(), failure_message="数据库事务失败，已回滚")
 
 
 get_db = contextmanager(_db_session_scope)
@@ -122,16 +141,7 @@ def get_host_db():
     """宿主基库事务：users/sessions 等，不受 Active-Mod 分库影响。"""
     from app.db import HostSessionLocal
 
-    with closing(HostSessionLocal()) as db:
-        completed = False
-        try:
-            yield db
-            db.commit()
-            completed = True
-        finally:
-            if not completed and db.is_active:
-                db.rollback()
-                logger.error("宿主库事务失败，已回滚")
+    yield from _owned_session_scope(HostSessionLocal(), failure_message="宿主库事务失败，已回滚")
 
 
 def get_db_dependency():

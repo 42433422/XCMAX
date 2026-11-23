@@ -847,9 +847,10 @@ describe('useXcmaxSync - coverage ramp', () => {
       sync.start()
       const es1 = TestEventSource.instances[0]
 
+      const staleError = es1.onerror!
       sync.stop()
       // 此时 streamActive=false
-      es1.onerror!(new Event('error'))
+      staleError(new Event('error'))
 
       vi.advanceTimersByTime(3000)
       // 不应创建新的 EventSource

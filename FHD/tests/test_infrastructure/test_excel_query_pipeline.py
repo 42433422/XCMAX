@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pandas as pd
 import pytest
 
@@ -106,8 +107,11 @@ def test_unreadable_workbook_returns_no_header_without_model_call(tmp_path, monk
     with ZipFile(path, "w") as archive:
         archive.writestr("unrelated.txt", "not a workbook")
     provider = MagicMock(side_effect=AssertionError("unreadable bytes cannot reach a model"))
+    reader = MagicMock(side_effect=AssertionError("incomplete XLSX cannot reach the reader"))
     monkeypatch.setattr("app.infrastructure.excel.header_detection.get_active_provider", provider)
+    monkeypatch.setattr("openpyxl.load_workbook", reader)
     assert detect_header_row_1based(path) is None
+    reader.assert_not_called()
     provider.assert_not_called()
 
 
@@ -208,7 +212,7 @@ def test_ambiguous_header_requires_confirmation_before_reading_or_querying(
         assert schema_read.call_args.kwargs == {"sheet_name": None, "header_row_1based": header}
 
 
-@pytest.mark.parametrize("decision", ["failure", "unknown"])
+@pytest.mark.parametrize("decision", ["failure", "unknown", "programming"])
 @pytest.mark.parametrize("scoped", [True, False])
 def test_real_sdk_header_failure_does_not_become_no_model_fallback(
     tmp_path, monkeypatch, unconfigured_header_registry, decision, scoped
@@ -218,10 +222,13 @@ def test_real_sdk_header_failure_does_not_become_no_model_fallback(
 
     path = tmp_path / "ledger.xlsx"
     _write_workbook(path)
+    error = (
+        RuntimeError("provider authorization denied")
+        if decision == "programming"
+        else httpx.ReadError("provider response unavailable")
+    )
     create = MagicMock(
-        side_effect=RuntimeError("provider authorization denied")
-        if decision == "failure"
-        else None,
+        side_effect=error if decision != "unknown" else None,
         return_value={"choices": [{"message": {"content": '{"header_row": 0}'}}]},
     )
     sdk_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
@@ -234,17 +241,27 @@ def test_real_sdk_header_failure_does_not_become_no_model_fallback(
         patch(
             "app.infrastructure.excel.header_detection._row_score",
             side_effect=AssertionError("configured provider cannot fall back to rules"),
-        ),
+        ) as heuristic,
     ):
         provider = unconfigured_header_registry.get_active_provider(profile="excel_header")
         assert provider is not None and provider.provider_id == "openai_sdk"
         assert provider.is_configured is True
+        if decision == "programming":
+            with pytest.raises(RuntimeError) as raised:
+                handle_excel_analysis(
+                    {"file_path": str(path), "action": "structure"}, workspace_root=str(tmp_path)
+                )
+            assert raised.value is error
+            create.assert_called_once()
+            heuristic.assert_not_called()
+            return
         result = handle_excel_analysis(
             {"file_path": str(path), "action": "structure"}, workspace_root=str(tmp_path)
         )
     assert result["success"] is False and result["error"] == "read_excel_failed"
     assert "columns" not in result
     assert create.call_count == (2 if decision == "failure" else 1)
+    heuristic.assert_not_called()
 
 
 def test_read_dataframe_fills_merged_header_columns(tmp_path: Path) -> None:

@@ -189,7 +189,7 @@ def test_recovery_quarantines_crashed_wal_before_restoring_backup(tmp_path, monk
         stream.write(b"corrupt sqlite!!")
     corrupt_bytes = db.read_bytes()
     sidecars = {}
-    original_check = migrate._quick_check_ok
+    original_check = migrate._check_database
 
     def capture_checked_image(path):
         valid = original_check(path)
@@ -198,7 +198,7 @@ def test_recovery_quarantines_crashed_wal_before_restoring_backup(tmp_path, monk
         sidecars.update({suffix: Path(f"{db}{suffix}").read_bytes() for suffix in ("-wal", "-shm")})
         return valid
 
-    monkeypatch.setattr(migrate, "_quick_check_ok", capture_checked_image)
+    monkeypatch.setattr(migrate, "_check_database", capture_checked_image)
 
     result = recover_if_corrupt(tmp_path)
 
@@ -221,6 +221,22 @@ def test_recovery_quarantines_crashed_wal_before_restoring_backup(tmp_path, monk
         assert not Path(f"{db}{suffix}").exists()
 
 
+def _journal_after_corruption_check(db, content, monkeypatch):
+    from app.desktop_runtime import migrate
+
+    original_check = migrate._check_database
+
+    def checked(path):
+        result = original_check(path)
+        assert result.state == "corrupt"
+        # A pre-existing rollback journal can require a write even for a read-only
+        # check. Exercise quarantine only after SQLite has established corruption.
+        Path(f"{db}-journal").write_bytes(content)
+        return result
+
+    monkeypatch.setattr(migrate, "_check_database", checked)
+
+
 @pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
 def test_recovery_stops_when_corrupt_sidecar_cannot_be_quarantined(tmp_path, monkeypatch, suffix):
     _reset_desktop_env(monkeypatch)
@@ -231,7 +247,10 @@ def test_recovery_stops_when_corrupt_sidecar_cannot_be_quarantined(tmp_path, mon
     assert backup is not None
     db.write_bytes(b"corrupt original")
     sidecar = Path(f"{db}{suffix}")
-    sidecar.write_bytes(b"original journal evidence")
+    if suffix == "-journal":
+        _journal_after_corruption_check(db, b"original journal evidence", monkeypatch)
+    else:
+        sidecar.write_bytes(b"original journal evidence")
     original_rename = Path.rename
 
     def fail_sidecar_rename(path, target):
@@ -257,7 +276,10 @@ def test_recovery_preserves_previous_sidecar_evidence(tmp_path, monkeypatch, suf
     _reset_desktop_env(monkeypatch)
     db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
     db.write_bytes(b"corrupt original")
-    Path(f"{db}{suffix}").write_bytes(b"current journal")
+    if suffix == "-journal":
+        _journal_after_corruption_check(db, b"current journal", monkeypatch)
+    else:
+        Path(f"{db}{suffix}").write_bytes(b"current journal")
     monkeypatch.setattr(migrate, "utc_now_naive", lambda: datetime(2026, 11, 24, 0, 0, 0))
     earlier = db.with_name(f"xcagi.db.corrupt-20261124000000{suffix}")
     earlier.write_bytes(b"previous journal")

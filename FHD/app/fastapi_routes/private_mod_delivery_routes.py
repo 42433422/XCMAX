@@ -22,6 +22,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 router: APIRouter = APIRouter(tags=["mod-store", "private-delivery"])
+_DELIVERY_SYNC_ERRORS: tuple[type[Exception], ...] = (DeliveryRemoteError, *RECOVERABLE_ERRORS)
 
 
 async def _market_token(request: Request) -> str:
@@ -82,7 +83,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
             custom_requests = [
                 dict(row) for row in (request_rows.get("items") or []) if isinstance(row, dict)
             ]
-        except (DeliveryRemoteError,) + RECOVERABLE_ERRORS as exc:
+        except _DELIVERY_SYNC_ERRORS as exc:
             request_error = str(exc)[:240]
             logger.warning("custom delivery request sync failed: %s", exc)
     remote_by_id = {

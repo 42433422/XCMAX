@@ -27,6 +27,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_TRANSLATION_ERRORS: tuple[type[Exception], ...] = (*RECOVERABLE_ERRORS, TtsUpstreamResponseError)
 
 
 def _trace(payload: dict[str, Any], *, route: str, action: str, body: dict[str, Any]):
@@ -81,7 +82,7 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
                 body=payload,
             )
         )
-    except RECOVERABLE_ERRORS + (TtsUpstreamResponseError,) as error:
+    except _TRANSLATION_ERRORS as error:
         logger.warning("TTS translate unavailable: %s", error)
         return JSONResponse(
             {"success": False, "message": "翻译暂不可用", "data": {}}, status_code=503

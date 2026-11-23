@@ -419,6 +419,10 @@ def verify_independent_result(
         "correct",
         "delete",
     }
+    mcp_action = bool(
+        step.tool_id.startswith("mcp__")
+        and (call.metadata.get("verification_contract") or {}).get("mcp_acceptance")
+    )
     if not (
         action == ("customers", "create")
         or catalog_action
@@ -444,6 +448,7 @@ def verify_independent_result(
         or elt_preview
         or elt_execution
         or memory_action
+        or mcp_action
     ):
         return _report("inconclusive", "result_verifier_unavailable", "host_registry")
     if not _scope_matches(run, step, call, context):
@@ -463,6 +468,10 @@ def verify_independent_result(
             actor = _bound_actor(context)
         except AgentModAuthorizationError:
             return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
+        if mcp_action:
+            from app.application.tools.mcp.verification import verify_readback
+
+            return verify_readback(run, step, call, context)
         if surface_action:
             from app.application.agent_orchestrator.verification_surface import (
                 verify_surface_result,

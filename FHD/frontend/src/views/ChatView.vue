@@ -30,9 +30,12 @@
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :has-earlier="messagesHaveEarlier"
+        :has-later="messagesHaveLater"
         :loading-earlier="earlierMessagesLoading"
         :earlier-error="earlierMessagesError"
         :load-earlier="loadEarlierMessages"
+        :load-newer="loadNewerMessages"
+        :load-latest="loadLatestMessages"
         :proactive-suggestions="proactiveSuggestionsByMessage"
         @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
@@ -409,7 +412,8 @@ const chatRefBag = {
 
 const {
   messages,
-  messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+  messagesHaveEarlier, messagesHaveLater, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+  loadNewerMessages, loadLatestMessages,
   cacheError,
   retryMessagesCache,
   retryMessageSave,
@@ -838,8 +842,13 @@ const sendMessage = async () => {
   const message = raw.trim()
   if (!message) return
   restoreGeneration += 1
+  const generation = restoreGeneration, scope = messageSessionKey.value
   messageInput.value = ''
-  await chatSendMessage(message)
+  try { await chatSendMessage(message) }
+  catch (error) {
+    if (generation === restoreGeneration && scope === messageSessionKey.value && !messageInput.value) messageInput.value = raw
+    showAppToast(error instanceof Error ? error.message : '消息未发送，请重试。', 'error')
+  }
 }
 
 const {

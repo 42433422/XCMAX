@@ -26,6 +26,7 @@ const {
   attachAgentRunTraceToLastAiMessage,
   queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
+  historyState, loadLatestMessages, assertHistoryCapacity,
 } = vi.hoisted(() => ({
   applyPlainTextToMessageIndex: vi.fn(),
   pushStreamingAiShell: vi.fn(() => 0),
@@ -45,6 +46,7 @@ const {
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
   getRun: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
   approvalGetMyRequests: vi.fn(), approvalApprove: vi.fn(),
+  historyState: { later: false }, loadLatestMessages: vi.fn(), assertHistoryCapacity: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -52,6 +54,8 @@ vi.mock('./useChatMessages', async () => {
   return {
     useChatMessages: () => ({
       messages: ref([]),
+      messagesHaveLater: { get value() { return historyState.later } },
+      loadLatestMessages, assertHistoryCapacity,
       addMessage,
       addAndSaveMessage,
       saveMessage,
@@ -247,6 +251,9 @@ describe('useChatOrchestration stream', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     vi.clearAllMocks()
+    historyState.later = false
+    loadLatestMessages.mockReset().mockResolvedValue(undefined)
+    assertHistoryCapacity.mockReset()
     productReadAccountEpoch.value++
     streamMode.enabled = true
     streamMode.realShipment = false
@@ -273,6 +280,33 @@ describe('useChatOrchestration stream', () => {
     expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('restores latest history before appending a user turn or starting the stream', async () => {
+    historyState.later = true
+    let finish!: () => void
+    loadLatestMessages.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    const api = useChatOrchestration({ sessionId: ref('latest-before-send') })
+    const sending = api.sendMessage('continue from the latest reply')
+    expect(addMessage).not.toHaveBeenCalled()
+    expect(sendChatStream).not.toHaveBeenCalled()
+    finish()
+    await sending
+    expect(loadLatestMessages).toHaveBeenCalledOnce()
+    expect(addMessage).toHaveBeenCalled()
+    expect(sendChatStream).toHaveBeenCalled()
+  })
+
+  it.each(['history', 'capacity'])('does not append or execute a turn when %s is unavailable', async reason => {
+    if (reason === 'history') {
+      historyState.later = true
+      loadLatestMessages.mockRejectedValueOnce(new Error('history unavailable'))
+    } else assertHistoryCapacity.mockImplementationOnce(() => { throw new Error('capacity unavailable') })
+    const api = useChatOrchestration({ sessionId: ref('blocked-before-send') })
+    await expect(api.sendMessage('preserve this input')).rejects.toThrow('unavailable')
+    expect(addMessage).not.toHaveBeenCalled()
+    expect(sendChatStream).not.toHaveBeenCalled()
+    expect(api.isLoading.value).toBe(false)
   })
 
   it('renders a Codex input wait as waiting despite success=false and keeps its continuation', async () => {

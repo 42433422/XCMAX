@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -54,6 +54,62 @@ def test_run_repository_closes_and_rolls_back_failed_session(failure, during_com
     session.rollback.assert_called_once_with()
     session.close.assert_called_once_with()
     assert session.commit.call_count == int(during_commit)
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyError, CancelledError])
+def test_run_repository_rolls_back_real_transaction_and_preserves_error(tmp_path, error_type):
+    engine = create_engine(f"sqlite:///{tmp_path / 'rollback.db'}")
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE writes (value INTEGER)"))
+        repo = SQLAlchemyAgentRunRepository(
+            session_factory=sessionmaker(bind=engine), auto_create=False
+        )
+        error = error_type("original task failure")
+        with pytest.raises(error_type) as raised:
+            with repo._session_scope() as session:
+                session.execute(text("INSERT INTO writes VALUES (1)"))
+                raise error
+        assert raised.value is error
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM writes")).scalar_one() == 0
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("error_type", [RuntimeError, CancelledError])
+def test_run_repository_cleanup_failure_preserves_original_error(error_type, read_only):
+    session = Mock()
+    session.rollback.side_effect = OSError("rollback unavailable")
+    session.close.side_effect = OSError("close unavailable")
+    repo = SQLAlchemyAgentRunRepository(session_factory=lambda: session, auto_create=False)
+    error = error_type("original task failure")
+    with pytest.raises(error_type) as raised:
+        with repo._session_scope(read_only=read_only):
+            raise error
+    assert raised.value is error
+    assert error.__notes__ == [
+        "SQL session rollback failed: OSError('rollback unavailable')",
+        "SQL session close failed: OSError('close unavailable')",
+    ]
+    session.rollback.assert_called_once_with()
+    session.close.assert_called_once_with()
+    session.commit.assert_not_called()
+
+
+def test_run_repository_propagates_close_failure_without_original_error():
+    session = Mock()
+    error = OSError("close unavailable")
+    session.close.side_effect = error
+    repo = SQLAlchemyAgentRunRepository(session_factory=lambda: session, auto_create=False)
+    with pytest.raises(OSError) as raised:
+        with repo._session_scope():
+            pass
+    assert raised.value is error
+    session.commit.assert_called_once_with()
+    session.rollback.assert_not_called()
+    session.close.assert_called_once_with()
 
 
 @pytest.fixture
@@ -145,6 +201,7 @@ def test_run_repository_commit_hook_failure_preserves_error_and_closes(sql_run_r
         with repo._session_scope() as db:
             db.execute(text("INSERT INTO entries VALUES ('uncommitted')"))
     assert caught.value is error
+    assert getattr(error, "__notes__", []) == []
     assert session.in_transaction() is False
     assert engine.pool.checkedout() == 0
     with closing(sqlite3.connect(database)) as reader:

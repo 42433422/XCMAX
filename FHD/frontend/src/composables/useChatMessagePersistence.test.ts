@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
-import { boundedChatMessageCache, localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
+import { boundedChatMessageCache, CHAT_CACHE_MESSAGES, localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
 const { save, retryTurn } = vi.hoisted(() => ({ save: vi.fn(), retryTurn: vi.fn() }))
 vi.mock('@/api/chat', () => ({ default: { saveMessage: save, retryTurnPersistence: retryTurn } }))
 beforeEach(() => save.mockReset())
@@ -11,7 +11,7 @@ it.each(['submitted', 'streaming'] as const)('retains active %s rows even with a
     serverMessageId: index + 1, persistence: { id: `server:${index + 1}`, status: 'saved', durable: true } }))
   rows[0].streamStatus = streamStatus
   const cached = boundedChatMessageCache(rows)
-  expect(cached).toHaveLength(81)
+  expect(cached).toHaveLength(CHAT_CACHE_MESSAGES + 1)
   expect(cached[0]).toBe(rows[0])
   expect(cached.at(-1)).toBe(rows.at(-1))
   expect(rows).toHaveLength(100)

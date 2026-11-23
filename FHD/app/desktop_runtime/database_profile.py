@@ -18,6 +18,27 @@ DEFAULT_PROFILE: dict[str, Any] = {
 }
 
 _REMOTE_SCHEMES = {"postgresql", "postgresql+psycopg", "postgres"}
+# Cache only a selection validated from this data root's profile, never inherited
+# DATABASE_URL / KEEP_DATABASE_URL flags. New spawned interpreters hydrate it
+# without running desktop recovery or migration. Profile changes need a restart.
+_active_remote_profile: tuple[Path, str | None] | None = None
+
+
+def configured_remote_database_url(
+    data_root: str | os.PathLike[str] | None = None,
+) -> str | None:
+    from .desktop_runtime_paths import get_desktop_data_dir
+
+    global _active_remote_profile
+    root = get_desktop_data_dir(data_root)
+    selected = _active_remote_profile
+    if selected is not None and selected[0] == root:
+        return selected[1]
+    # Permission/I/O failures must propagate: selecting a fresh local database
+    # when the explicit profile cannot be read could split business writes.
+    remote_url = _remote_database_url(_read_profile(profile_path(root)) or DEFAULT_PROFILE)
+    _active_remote_profile = (root, remote_url)
+    return remote_url
 
 
 def _as_bool(value: Any) -> bool:
@@ -54,17 +75,35 @@ def _normalize_profile(raw: dict[str, Any] | None) -> dict[str, Any]:
 
 def load_or_create_profile(data_root: str | os.PathLike[str]) -> tuple[Path, dict[str, Any]]:
     path = profile_path(data_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_file():
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            raw = None
-        profile = _normalize_profile(raw if isinstance(raw, dict) else None)
+    profile = _read_profile(path)
+    if profile is not None:
         return path, profile
+    path.parent.mkdir(parents=True, exist_ok=True)
     profile = dict(DEFAULT_PROFILE)
-    path.write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(profile, ensure_ascii=False, indent=2) + "\n")
+    except FileExistsError:
+        profile = _read_profile(path)
+        if profile is None:
+            raise RuntimeError("desktop database profile is unavailable") from None
     return path, profile
+
+
+def _read_profile(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        raise RuntimeError("desktop database profile is invalid") from exc
+    if not isinstance(raw, dict) or (
+        "mode" in raw and str(raw["mode"]).strip().lower() not in {"local", "remote"}
+    ):
+        raise RuntimeError("desktop database profile is invalid")
+    if "remote" in raw and not isinstance(raw["remote"], dict):
+        raise RuntimeError("desktop database profile is invalid")
+    return _normalize_profile(raw)
 
 
 def save_profile(
@@ -90,22 +129,32 @@ def is_valid_remote_database_url(url: str) -> bool:
     return parsed.scheme in _REMOTE_SCHEMES and bool(parsed.hostname)
 
 
+def _remote_database_url(profile: dict[str, Any]) -> str | None:
+    remote = profile.get("remote")
+    if not isinstance(remote, dict):
+        return None
+    url = str(remote.get("database_url") or "").strip()
+    if not _as_bool(remote.get("enabled")):
+        return None
+    if not is_valid_remote_database_url(url):
+        raise RuntimeError("desktop remote database profile is invalid")
+    return url
+
+
 def apply_database_profile_to_env(
     data_root: str | os.PathLike[str],
     *,
     local_sqlite_url: str,
 ) -> tuple[Path, dict[str, Any]]:
     """Apply profile to process env. Default is local SQLite; remote only when explicitly enabled."""
+    global _active_remote_profile
     path, profile = load_or_create_profile(data_root)
     os.environ["XCAGI_MOD_ISOLATED_DATABASES"] = "0"
 
-    remote = profile.get("remote") if isinstance(profile.get("remote"), dict) else {}
-    if not isinstance(remote, dict):
-        remote = {}
-    remote_url = str(remote.get("database_url") or "").strip()
-    use_remote = _as_bool(remote.get("enabled")) and is_valid_remote_database_url(remote_url)
+    remote_url = _remote_database_url(profile)
+    _active_remote_profile = (Path(data_root).expanduser().resolve(), remote_url)
 
-    if use_remote:
+    if remote_url is not None:
         os.environ["XCAGI_DESKTOP_KEEP_DATABASE_URL"] = "1"
         os.environ["DATABASE_URL"] = remote_url
         os.environ["VECTOR_DB_URL"] = os.environ.get("XCAGI_DESKTOP_VECTOR_DB_URL") or remote_url

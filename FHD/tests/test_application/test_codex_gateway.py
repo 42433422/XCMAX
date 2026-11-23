@@ -589,6 +589,53 @@ def test_missing_deployment_config_preserves_original_run_pointer_without_replan
     assert state.repository.get(first["run_id"]).status == "waiting_user"
 
 
+@pytest.mark.parametrize("failure_at", ["constructor", "enter"])
+def test_unclassified_startup_failure_has_durable_blocked_parent_and_no_replay(
+    setup_gateway, monkeypatch, failure_at
+):
+    state = setup_gateway
+    error = RuntimeError("private server failed with a secret")
+
+    class FailedServer(gateway.LocalRuntimeServer):
+        def __enter__(self):
+            raise error
+
+    start = Mock(side_effect=error if failure_at == "constructor" else FailedServer)
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", start)
+    with pytest.raises(RuntimeError) as raised:
+        asyncio.run(state.invoke())
+    assert raised.value is error
+    parent = state.repository.list_recent()[0]
+    result = parent.final_output["codex_result"]
+    assert result["error_code"] == "runtime_unavailable" and "secret" not in json.dumps(result)
+    assert parent.status == "blocked"
+    duplicate = asyncio.run(state.invoke())
+    assert duplicate["deduplicated"] is True and state.calls == []
+    assert start.call_count == 1
+
+
+def test_startup_receipt_failure_preserves_original_error_and_admission(
+    setup_gateway, monkeypatch, caplog
+):
+    state = setup_gateway
+    error = RuntimeError("private startup failure")
+    receipt_error = KeyError("failure receipt unavailable")
+    start = Mock(side_effect=error)
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", start)
+    monkeypatch.setattr(gateway, "_record_request_result", Mock(side_effect=receipt_error))
+
+    with pytest.raises(RuntimeError) as raised:
+        asyncio.run(state.invoke())
+
+    assert raised.value is error
+    assert any(record.exc_info and record.exc_info[1] is receipt_error for record in caplog.records)
+    assert len(state.repository.list_recent()) == 1
+    duplicate = asyncio.run(state.invoke())
+    assert duplicate["error_code"] == "runtime_request_in_progress"
+    assert duplicate["deduplicated"] is True and duplicate["retryable"] is False
+    assert start.call_count == 1 and state.calls == []
+
+
 def test_startup_failure_has_durable_blocked_parent_and_no_replay(setup_gateway, monkeypatch):
     state = setup_gateway
 

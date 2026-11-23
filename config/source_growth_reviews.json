@@ -28,13 +28,13 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "b252e6ff3dc6721108a39f5c4785541702699d01",
-      "head_blob": "0ded2ed2e0133c366cb71093e5d3eff48b40ef2d",
+      "head_blob": "22dd4361ebae0f4cd59d96d50af9faa9187c66d8",
       "before_lines": 1310,
-      "after_lines": 1318,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮合解复用contextlib.closing与ExitStack覆盖读写scope的失败清理，并按SQLAlchemy实际状态保留已提交或已回滚事实。",
-      "boundary": "保持原SQLAlchemy事务、租约及CAS。清理不依赖可恢复异常集合；退出时读取公开is_active状态，成功后移除回滚callback，不将普通RuntimeError重新纳入恢复集合。",
-      "validation": "原CI未改测试先复现rollback=0。本轮将peer三个scope原样装入独立进程，63项中6项失败：只读外部事务、提交后hook原异常保留及共享会话回滚；合解后两会话模块与完整run repository模块90项通过、零跳过。此前e14753a事务/DI/contexts/异常分类190项通过，包含SQLite外部事务、提交前后hook和flush约束失败。完整mutmut杀死率和PostgreSQL服务仍由最终正式CI验证，本地通过不替代这些门禁。 本轮合解公共975后，原事务/仓库/回执组合及完整Session模块118项通过、零跳过；原正式失败修复组44项在975合解树上再次通过。真实SQLAlchemy2.0.51的before_commit、after_commit、flush失败和外层事务参与均覆盖：已提交内容不宣称可撤销，原异常身份、连接释放及原回执字节保留。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "after_lines": 1336,
+      "reason": "全局恢复异常收紧后，原事务在未分类错误或取消时跳过显式回滚；原会话所有权边界按SQLAlchemy is_active完成回滚和关闭，保留原异常身份，避免清理错误覆盖真正失败，以及只读外部事务泄漏或已提交事务再次回滚。",
+      "boundary": "局部具名_SESSION_EXIT_ERRORS只用于原SQLAlchemy会话生命周期；活动事务失败时回滚，包括只读会话；已提交或非活动事务只关闭。异常继续原样传播，次级回滚或关闭错误留在原异常注记中。不新增会话服务、队列或可恢复异常类别。",
+      "validation": "最新public975交集原mutation基线105项及原会话生命周期50项共155项通过、零跳过；新增真实SQLite的RuntimeError、KeyError和取消回滚、只读外部事务、after_commit、双重清理失败及成功路径关闭失败回归。修前8项失败保留记录。PostgreSQL和完整mutation仍由原CI验证。 历史公开ac3登记：本轮合解公共975后，原事务/仓库/回执组合及完整Session模块118项通过、零跳过；原正式失败修复组44项在975合解树上再次通过。真实SQLAlchemy2.0.51的before_commit、after_commit、flush失败和外层事务参与均覆盖：已提交内容不宣称可撤销，原异常身份、连接释放及原回执字节保留。",
+      "follow_up": "请求@42433422按精确base/head/blob复核事务收尾和原异常保真；后续沿原SQLAlchemy仓储演进，不扩大业务恢复范围。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_permission.py": {
@@ -52,13 +52,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec.py",
       "base_blob": "cc057c6dfcfeb9a9a1e272797ca084e36f170e37",
-      "head_blob": "ec5e75d92ca0bfe5bbd05a1ce356d56fd9d7b278",
+      "head_blob": "307029703385492f4478f7fd5d830ddd5bdc6461",
       "before_lines": 940,
-      "after_lines": 949,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。从唯一风险目录生成统一能力契约，保留新增动作、条件只读、输入schema、输出核验和当前主线ELT/工作簿约束。",
-      "boundary": "ToolSpec只投影现役目录；删除旧ImportExecutor入口，不引入并行目录或新的任意代码入口。",
-      "validation": "ToolSpec与目录权限、跨模块字段投影和注册表一致性专项已运行；最终SSOT及CI继续核验。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "after_lines": 955,
+      "reason": "动态MCP写入需把独立核验能力纳入原审批摘要；持久队列需要无网络的宿主目录快照来冻结短只读调度资格。",
+      "boundary": "仅扩展原ToolActionSpec策略字段并读取原缓存，不建立第二份工具目录或自行批准快车道；实际执行仍核对原审批和当前权限。",
+      "validation": "合并后MCP与核验五文件193 passed，含实际分派配置及读写Schema竞态；队列233 passed且锁内目录发现被回归禁止；全量mypy和Ruff通过。",
+      "follow_up": "请求负责人核对目录摘要与现有审批契约的兼容性；保留原来源与权限门禁，本记录是精确源码增长请求而非批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
@@ -388,13 +388,13 @@
     "FHD/frontend/src/components/chat/ChatMessageList.vue": {
       "base_file": "FHD/frontend/src/components/chat/ChatMessageList.vue",
       "base_blob": "a16edc069eb54140a2a8892d1a5ce59a8ef36598",
-      "head_blob": "39a81473f085d9fbaf5a810cfffee47d44baac5e",
+      "head_blob": "33fbd6d51c108b4aa5ef238c804b1a458b575251",
       "before_lines": 1001,
-      "after_lines": 1014,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。把不确定执行回执和原任务核对入口合入当前聊天消息显示，保持主线身份与状态投影。",
-      "boundary": "仅消费原消息和任务数据，不能把过时缓存或未独立核验结果显示为成功。",
-      "validation": "前端37套件977项及全类型检查已通过；新侧栏49项也通过，最终浏览器CI仍须运行。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "after_lines": 1028,
+      "reason": "常驻历史有界后需要提供更早、较新与最新消息的连续翻页入口，并展示原加载和容量错误，避免只显示DOM窗口却保留全部历史。",
+      "boundary": "页面继续消费原会话SQL游标及共享消息store，不另建历史仓库；未确认、待审批与未知执行不会因窗口淘汰而丢失。",
+      "validation": "正式f6eb合并后的11文件587项前端定向回归通过，含650条双向无遗漏、超大行边界和原分页UI；生产TypeScript及ESLint通过。",
+      "follow_up": "请求负责人审查分页交互与长会话边界；单条超预算与未决状态明确保留，不据此宣称整个进程绝对内存有界。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
@@ -436,13 +436,13 @@
     "FHD/frontend/src/composables/useChatMessages.ts": {
       "base_file": "FHD/frontend/src/composables/useChatMessages.ts",
       "base_blob": "17a45947801017562cbbad7a6046dbfc8d83edc8",
-      "head_blob": "9c5ab1cb819b2999c60ebe77642aea663b6bd659",
+      "head_blob": "bd2496a232bb96fa49df9e202e4831897fac4eed",
       "before_lines": 824,
-      "after_lines": 867,
-      "reason": "仅为架构评审请求，非批准；用户要求从代码层解决成熟度问题闭环。本轮复用原消息身份、分页和持久化组件，修复最新页刷新丢失旧页及分页边界，按明确durable回执限制可回取的本机正文副本，并保留原会话标题、总数与删除版本。 同时保留本轮historyEpoch与Vue生命周期修复，拒绝同会话往返、卸载后与无重叠分页窗口的旧响应。",
-      "boundary": "保留原runtimeContinuation与任务审批凭据；仅裁剪已确认且可由服务端回取的本机正文副本，未确认消息和活动流完整保留，配额失败不覆盖已有缓存。不新增权限判断或后台执行入口。 retain持有的原任务继续完成和保存，读取失效不等同于取消实际业务任务。",
-      "validation": "最终语义合解的原 useChatMessages 模块118项通过、0跳过；生产和测试 ESLint 通过。保留durable预算、原标题/总数、连续历史页、最早游标与historyEpoch迟到响应隔离。最终远端CI另验。",
-      "follow_up": "精确base为main@38b03d2c15391109bb1380b914b2e28cd769c5c0；本记录仅是评审请求，最终head仍需完整CI及架构审查。活动内存数组和跨会话总缓存预算不在本次完成范围；未确认内容优先保留，空间不足继续明确提示。",
+      "after_lines": 991,
+      "reason": "合并两批正式修复，统一带durable证据的历史窗口、双向快照游标、缓存预算和未决状态背压，修复旧页刷新游标倒退及迟到请求。 保留4da82da的Vue卸载代次失效及连续历史窗口核对，迟到读取不得改写共享状态。",
+      "boundary": "复用原SQL历史与useChatMessagePersistence单一缓存入口，保留client_message_id、服务端总数标题及未确认原请求；流释放前不移动引用下标。 retain中的真实任务继续完成保存，读取失效不取消业务任务。",
+      "validation": "候选f6eb合解时11文件587项通过；最终4da语义合并后的原history与bounds两文件141项通过，包含多视图共享、session/Mod往返、旧请求错误隔离、连续快照与durable缓存；两文件ESLint通过。最新完整类型与运行性能仍须正式CI，前次本机vue-tsc退出137不计通过。",
+      "follow_up": "请求负责人审查共享store的代次与持久证据边界；继续原任务核对而不重放，原生长时运行与客户数据规模仍需真实验收。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
@@ -483,14 +483,14 @@
     },
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
-      "base_blob": "a40988dab3daffb819bdf2c9c3bdf7799d7dd90b",
-      "head_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
-      "before_lines": 1021,
-      "after_lines": 1036,
-      "reason": "管理端手机聊天接通原任务与历史抽屉的窄屏入口，在停用时关闭；页面增量为模板与显示状态。",
-      "boundary": "复用 ChatSidePanel、原会话和任务事件。抽屉内部留在现有组件，样式留在 chat.css；不增加数据访问或权限。",
-      "validation": "锁定 npm 依赖；Vitest 三文件 70 项通过。两项 Chromium E2E 因容器拒绝 Unix socket 未进入断言，需精确远端 CI 和真机软键盘确认。",
-      "follow_up": "由仓库维护者核对页面职责和实测手机回归。本条仅申请架构审查，不代表获批。",
+      "base_blob": "6f4c6461ec3b24f9df424949ca2f29015d009ec0",
+      "head_blob": "45a17fd53f14c5277bf6911b6a5356f628bac599",
+      "before_lines": 1036,
+      "after_lines": 1045,
+      "reason": "将较新及最新分页操作接入原聊天页，使用户浏览旧历史后可以回到真实最新上下文并保持失败时的原输入。",
+      "boundary": "只接线原消息组件和composable的受控分页动作，不绕过账号代次、任务审批、保存确认或原发送状态机。",
+      "validation": "正式f6eb合并后前端11文件587 passed，原ChatView输入恢复与分页UI在内；生产构建TypeScript、相关ESLint和diff空白检查通过。",
+      "follow_up": "请求负责人审查实际长会话交互；最终以本PR原前端分片和真实应用门禁核验，已有局部回归不冒充客户或原生验收。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
@@ -735,14 +735,14 @@
     },
     "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py",
-      "base_blob": "60010c5bdf835e1c0dcd1480626c8f6ec2f6a674",
-      "head_blob": "a59f01c03dceb8f6ee48a5233125f39d3c72ad60",
-      "before_lines": 737,
-      "after_lines": 864,
-      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。增加受限回执对账，在原子事务内将已独立核验的原子任务结果投影到父 Run、Task 与无租约等待队列，解决父状态滞留。",
-      "boundary": "只处理原目标、原子任务快照与父状态 CAS；调用者不能指定目标状态，活租约或待核对副作用拒绝收口，仍复用原队列与 SessionBook。",
-      "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 receipt_projection 15 项、queued_runtime 19 项，覆盖跨账号、活租约、未知结果及等待队列扫描；全 app mypy 2272 源文件通过。",
-      "follow_up": "语义投影继续归 receipt_projection，仓储仅承担同库事务与 CAS；最终提交需重测 blob，并由责任人复核受限对账边界，本请求不替代实际审查。",
+      "base_blob": "a59f01c03dceb8f6ee48a5233125f39d3c72ad60",
+      "head_blob": "2cb428e35b96dcd9cf456ebcf3b2c58756d5672e",
+      "before_lines": 864,
+      "after_lines": 904,
+      "reason": "在原持久队列补全跨进程受理配额、租户公平与可信短只读任务保留容量，并按职责将SQL准入/公平策略提取到206行模块；原仓库38965字节，遵守原40000字节门禁。",
+      "boundary": "原仓库保留公开API、同Session事务、审批、租约、CAS及unknown；SQL策略只接收原Session和目录快照，不创建表、线程或新队列，不在数据库锁内刷新目录。独立规范化AST核对迁出函数、候选SQL及保留状态尾段一致。",
+      "validation": "最终原8文件同树234 passed/15 PostgreSQL条件skip；四独立SQLite进程竞争、429原事务回滚与实际工具超时回收通过。原结构门禁181/181、0错误警告；全量Ruff和mypy通过，PostgreSQL仍须当前head原CI执行。",
+      "follow_up": "请求仓库负责人审查查询与容量边界；保留原PostgreSQL和架构门禁，按实际生产负载调整现有配额参数，不视为人工批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
@@ -915,14 +915,14 @@
     },
     "FHD/app/fastapi_routes/domains/agent/agent_routes.py": {
       "base_file": "FHD/app/fastapi_routes/domains/agent/agent_routes.py",
-      "base_blob": "0f033e40571933b37ea30a1e10902a9ac03e6fbc",
-      "head_blob": "121953fbbf3b8a711c4a456aebd036c5bef4cb11",
-      "before_lines": 727,
-      "after_lines": 826,
-      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。自然语言 Agent Run 创建和控制接入固定 Codex 父任务，校验请求身份与会话版本，并保留原 SQL 队列受理和 HTTP 202 语义。",
-      "boundary": "路由仅认证、校验、封存输入并调用 gateway/route_support；明确工具任务仍走原确定性图，子任务 resume/retry 受父控制约束，未知效果不重放。",
-      "validation": "源码 8544418d 的完整 Codex 集合 802 项通过，含 runs_entry 13 项、control 10 项、queued_runtime 19 项，覆盖即时受理、原父续接、会话删除、撤权和幂等；71 文件迁移集 1546 项另行通过，不合并计数。",
-      "follow_up": "新增运行控制继续收敛到已有 route_support 与 gateway；最终提交验证原 API 状态及错误码，按最新用户授权与实际 CI、审查结果合入；本请求不代表部署验收。",
+      "base_blob": "121953fbbf3b8a711c4a456aebd036c5bef4cb11",
+      "head_blob": "377ac3b01f8bf87c1d37fb8ac51a73bd63e739e5",
+      "before_lines": 826,
+      "after_lines": 858,
+      "reason": "容量拒绝需要保留原429未开始合同；异常分类收紧后POST任务入口还须保留稳定500 JSON和完整内部日志，避免已回滚任务返回无结构错误。",
+      "boundary": "容量异常继续映射Retry-After并回滚父任务；HTTPException原样抛出。只在原POST请求边界转换其他异常，原logger保留异常对象，未分类错误不进入重试或worker。",
+      "validation": "阶段原八文件236项通过、15项需要CI PostgreSQL；新增真实暂存后RuntimeError/KeyError验证父行与队列行全部回滚、日志原异常身份和零worker调用。后续queued/binding/tools交集74项通过。",
+      "follow_up": "请求@42433422复核API错误与原客户端重试合同；原CI继续核对同提交状态码、权限和覆盖率，登记不表示人工审批，不能替代PostgreSQL结果。",
       "review_owner": "@42433422"
     },
     "FHD/app/infrastructure/codex/model_gateway.py": {
@@ -1000,13 +1000,13 @@
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
       "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
       "base_blob": "243f7d384f14c665b901478807c9a176ee683177",
-      "head_blob": "52ced26bb85639773c46fb82246e5dcab84bf680",
+      "head_blob": "ab02d13f79d8816b0a211ba0ffe0b24c3a5a8a01",
       "before_lines": 2193,
-      "after_lines": 2194,
-      "reason": "原后端烟测的并发导入终结场景暴露：EltConflict 为既有业务冲突类型，但异常集合收紧后未在原终结边界接住。本次仅显式纳入该类型，复用原事务收尾路径，生产代码净增1行。 后续同一公开head的mypy拒绝异常tuple星号展开，等价改为tuple相加，捕获类型与生产行数均不变。",
-      "boundary": "保持现役SQLAlchemy事务、原任务和执行证据归属；不恢复通用RuntimeError捕获，不重放未知或已部分写入的业务，不增加执行入口。",
-      "validation": "原真实SQL并发终结回归未改断言，修前失败；修后五个相关原完整模块共454项通过、零跳过。正式公开集成head仍须通过原后端、覆盖率与mutation门禁，历史运行不替代最终CI。",
-      "follow_up": "由 @42433422 结合本次精确base/head/blob和最终CI评审；此记录只登记实际增长的架构评审请求，不代表人工批准。",
+      "after_lines": 2196,
+      "reason": "真实CI发现两个最终回执处理者同时读取旧状态后争抢原SQL执行权，已知EltConflict穿透使原待核对回执丢失；只显式处理这一既有领域冲突。",
+      "boundary": "原_finalize_import继续使用同一operation_owner、事务与回执；第二个处理者保持unknown而不再写入，不新增执行路径，也不重新允许未分类RuntimeError。",
+      "validation": "将原并发Barrier放在双方读完原回执、实际SQL claim之前，验证仅一次业务写入、活动owner排斥回滚及结束后token清理；含Para原恢复的45项定向组通过。",
+      "follow_up": "请求@42433422复核三行增长对应的具名冲突映射；后续按原ELT事务边界整理职责，不以此登记代替人工架构审批或真实PostgreSQL门禁。",
       "review_owner": "@42433422"
     }
   }

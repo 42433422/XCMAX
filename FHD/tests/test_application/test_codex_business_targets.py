@@ -840,6 +840,13 @@ def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, 
     current = _execute_elt_business(state, preview)
     arrived, writing, release = Barrier(2), Event(), Event()
     original_ingest = state.knowledge.ingest_document
+    original_claim = operation_owner.claim_operation
+
+    def claim_after_read(db, run, kind, **kwargs):
+        if kind == "batch_execute":
+            # Both callers saw the old receipt; exercise the actual SQL claim race.
+            arrived.wait(timeout=10)
+        return original_claim(db, run, kind, **kwargs)
 
     def pause_writer(*args, **kwargs):
         writing.set()
@@ -848,14 +855,7 @@ def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, 
 
     ingest = Mock(side_effect=pause_writer)
     monkeypatch.setattr(state.knowledge, "ingest_document", ingest)
-    claim = operation_owner.claim_operation
-
-    def simultaneous_claim(db, run, kind, **kwargs):
-        if kind == "batch_execute":
-            arrived.wait(timeout=10)
-        return claim(db, run, kind, **kwargs)
-
-    monkeypatch.setattr(operation_owner, "claim_operation", simultaneous_claim)
+    monkeypatch.setattr(operation_owner, "claim_operation", claim_after_read)
 
     def finalize():
         with tenant_scope(state.actor.tenant_id):

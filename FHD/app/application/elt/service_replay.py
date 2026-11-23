@@ -11,7 +11,7 @@ from app.application.elt.service_support import dump_json, load_json, new_id, sa
 from app.application.elt.targets import get_adapter
 from app.db.models.elt import EltRun
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 class ReplayServiceMixin:
@@ -90,7 +90,9 @@ class ReplayServiceMixin:
             dataset.close()
         try:
             self._submit_preview(run.id, tenant_id_for_write(), owner_user_id)
-        except RECOVERABLE_ERRORS as exc:
+        except BOUNDARY_ERRORS as exc:
+            # Submission owns this new run's lifecycle. Settle it, then propagate
+            # the original exception, including programming and executor failures.
             run.status = run.stage = "failed"
             run.error_code, run.error_message = safe_error(exc)
             db.commit()

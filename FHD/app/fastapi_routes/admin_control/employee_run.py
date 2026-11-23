@@ -466,8 +466,7 @@ def execute_admitted_employee(
         if isinstance(result.get("run_id"), int):
             result["employee_run_id"] = result.pop("run_id")
     except BOUNDARY_ERRORS:
-        # The admitted invocation may already have committed an external effect.
-        logger.exception("admin employee invocation interrupted; original task %s", run.run_id)
+        logger.exception("admin employee execution interrupted run_id=%s", run.run_id)
         result = {
             "success": False,
             "execution_state": "unknown",

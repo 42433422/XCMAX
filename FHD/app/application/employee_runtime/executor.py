@@ -338,11 +338,11 @@ def _cognition_fhd(
         logger.exception("employee cognition failed")
         return {"reasoning": "", "error": "员工推理暂不可用", "input": normalized, "memory": memory}
     if raw.get("error"):
+        from app.application.employee_runtime.result_builders import cognition_failure_fields
+
         return {
             "reasoning": "",
-            "error": "员工推理暂不可用",
-            "error_code": raw.get("error_code"),
-            "retryable": raw.get("retryable"),
+            **cognition_failure_fields(raw),
             "input": normalized,
             "memory": memory,
         }

@@ -684,7 +684,9 @@ def test_admin_safe_retry_still_dispatches_one_effect(admin_employee, monkeypatc
 
 
 @pytest.mark.parametrize("error_type", [OSError, RuntimeError, TypeError])
-def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_employee, error_type):
+def test_admin_unknown_exception_and_missing_key_read_never_dispatch(
+    admin_employee, caplog, error_type
+):
     entry = admin_employee
     entry.state.error = error_type("receipt unavailable")
     with entry.client() as client:
@@ -695,6 +697,15 @@ def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_emplo
     assert first["execution_state"] == repeated["execution_state"] == "unknown"
     assert first["run_id"] == repeated["run_id"]
     assert entry.invocation.call_count == 1
+    errors = [
+        record
+        for record in caplog.records
+        if record.name == employee_run.__name__ and record.exc_info
+    ]
+    assert len(errors) == 1
+    assert errors[0].exc_info[1] is entry.state.error
+    assert str(errors[0].exc_info[1]) == "receipt unavailable"
+    assert first["run_id"] in errors[0].getMessage()
     with entry.factory() as db:
         assert (
             db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()

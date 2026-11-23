@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import timedelta
 from pathlib import Path
 
@@ -29,20 +29,42 @@ from app.middleware.industry_context import IndustryContextMiddleware
 from app.utils.time import utc_now_naive
 
 
+def _legacy_proposal_table(engine):
+    import sqlalchemy as sa
+
+    metadata = sa.MetaData()
+    sa.Table("users", metadata, autoload_with=engine)
+    return sa.Table(
+        "code_edit_proposals",
+        metadata,
+        sa.Column("edit_id", sa.String(40), primary_key=True),
+        sa.Column(
+            "owner_user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("tenant_id", sa.Integer(), nullable=True),
+        sa.Column("workspace_root", sa.Text(), nullable=False),
+        sa.Column("payload_json", sa.Text(), nullable=False),
+        sa.Column("apply_state", sa.String(16), nullable=False, server_default="pending"),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Index("ix_code_edit_proposals_owner", "owner_user_id", "tenant_id"),
+    )
+
+
 @pytest.fixture
-def editor_http(monkeypatch, tmp_path):
+def editor_http(monkeypatch, tmp_path, request):
     database_url = f"sqlite:///{tmp_path / 'editor.sqlite3'}"
     monkeypatch.setenv("DATABASE_URL", database_url)
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(
-        engine,
-        tables=[
-            Tenant.__table__,
-            User.__table__,
-            UserSession.__table__,
-            CodeEditProposal.__table__,
-        ],
-    )
+    legacy_proposals = getattr(request, "param", None) == "legacy_proposals"
+    tables = [Tenant.__table__, User.__table__, UserSession.__table__]
+    if not legacy_proposals:
+        tables.append(CodeEditProposal.__table__)
+    Base.metadata.create_all(engine, tables=tables)
+    if legacy_proposals:
+        _legacy_proposal_table(engine).create(engine)
     with Session(engine) as db:
         db.add_all([Tenant(id=tid, code=f"editor-fixture-{tid}") for tid in (10, 20)])
         for uid, tenant, active in ((1, 10, True), (2, 10, True), (3, 20, True), (4, 10, False)):
@@ -693,6 +715,17 @@ def test_noop_proposal_consumes_without_touching_file(editor_http):
     _assert_receipt(client, engine, edit_id, "applied", "private fixture\n")
 
 
+def _reap_editor_worker(worker):
+    try:
+        if worker.poll() is None:
+            worker.kill()
+        worker.communicate(timeout=10)
+    finally:
+        for stream in (worker.stdout, worker.stderr):
+            if stream is not None:
+                stream.close()
+
+
 def test_competing_processes_cannot_publish_two_proposals_for_the_same_file(editor_http):
     client, root, _ = editor_http
     ids = [_stage(client), _stage(client)]
@@ -715,24 +748,25 @@ while not (Path(sys.argv[2]) / 'go').exists():
     time.sleep(0.02)
 """,
     )
-    workers = [
-        subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                script,
-                json.dumps([("POST", f"/apply/{edit_id}", {}, 1)]),
-                str(root),
-                str(index),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=os.environ.copy(),
-        )
-        for index, edit_id in enumerate(ids)
-    ]
-    try:
+    with ExitStack() as cleanup:
+        workers = []
+        for index, edit_id in enumerate(ids):
+            worker = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    script,
+                    json.dumps([("POST", f"/apply/{edit_id}", {}, 1)]),
+                    str(root),
+                    str(index),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=os.environ.copy(),
+            )
+            cleanup.callback(_reap_editor_worker, worker)
+            workers.append(worker)
         deadline = time.monotonic() + 60
         while not all((root / f"ready-{index}").exists() for index in range(2)):
             assert time.monotonic() < deadline, "HTTP workers did not reach the start barrier"
@@ -746,11 +780,28 @@ while not (Path(sys.argv[2]) / 'go').exists():
         assert sorted(results) == [200, 409]
         assert (root / "published").read_text() == "write\n"
         assert (root / "note.txt").read_text() == "approved fixture\n"
-    finally:
-        for worker in workers:
-            if worker.poll() is None:
-                worker.kill()
-                worker.communicate()
+
+
+def test_partial_editor_worker_start_preserves_failure_and_reaps_first_process(
+    editor_http, monkeypatch
+):
+    start = subprocess.Popen
+    workers = []
+    failure = OSError("second editor worker did not start")
+
+    def partial_start(*args, **kwargs):
+        if workers:
+            raise failure
+        worker = start(*args, **kwargs)
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr(subprocess, "Popen", partial_start)
+    with pytest.raises(OSError) as raised:
+        test_competing_processes_cannot_publish_two_proposals_for_the_same_file(editor_http)
+    assert raised.value is failure
+    assert len(workers) == 1 and workers[0].poll() is not None
+    assert workers[0].stdout.closed and workers[0].stderr.closed
 
 
 @pytest.mark.parametrize("restore_prior_snapshot", [False, True])

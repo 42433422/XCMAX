@@ -65,7 +65,11 @@ def detect_header_row_1based(
         return None
     try:
         from openpyxl import load_workbook
+        from openpyxl.xml.constants import ARC_CONTENT_TYPES
 
+        with zipfile.ZipFile(path) as archive:
+            if ARC_CONTENT_TYPES not in archive.namelist():
+                return None
         workbook = load_workbook(str(path), data_only=True, read_only=True)
     except _OPENPYXL_ERRORS + RECOVERABLE_ERRORS:
         logger.debug("header detection skipped: workbook unreadable", exc_info=True)

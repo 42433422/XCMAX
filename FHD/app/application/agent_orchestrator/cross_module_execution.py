@@ -272,6 +272,7 @@ def _execute_claimed_cross_module(
     original_hash = str(checkpoint["original_sha256"])
     user_id = int(checkpoint["user_id"])
     tenant_text = str(checkpoint["tenant_id"])
+    execution_errors: tuple[type[Exception], ...] = (EltError, *chain._IMPORT_ERRORS)
     try:
         raise_if_tx_fault("crash_before_import")
         with get_db() as db, tenant_scope(int(tenant_text)):
@@ -397,7 +398,7 @@ def _execute_claimed_cross_module(
         return receipt
     except InjectedTransactionFault:
         raise
-    except (EltError,) + chain._IMPORT_ERRORS as exc:
+    except execution_errors as exc:
         if finish:
             queue.finish(
                 run.run_id,

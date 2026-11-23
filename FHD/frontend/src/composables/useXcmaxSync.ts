@@ -40,6 +40,20 @@ let reconnectAttempt = 0
 let streamActive = false
 let streamCreatedAt = 0
 const MAX_SSE_RECONNECTS = 12
+const RECOVERY_COOLDOWN_MS = 60_000
+
+function recoverConnection(): void {
+  if (!streamActive || eventSource) return
+  if (reconnectTimer != null) clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  reconnectAttempt = 0
+  reconnectDelayMs = 3000
+  openEventSource()
+}
+
+function onVisibility(): void {
+  if (document.visibilityState === 'visible') recoverConnection()
+}
 
 function readStoredCursor(): number {
   if (typeof window === 'undefined') return 0
@@ -155,12 +169,13 @@ function handleSseData(raw: string): void {
 
 function scheduleReconnect(): void {
   if (!streamActive || reconnectTimer != null) return
-  if (reconnectAttempt >= MAX_SSE_RECONNECTS) return
-  reconnectAttempt += 1
+  const coolingDown = reconnectAttempt >= MAX_SSE_RECONNECTS
+  if (!coolingDown) reconnectAttempt += 1
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
+    if (coolingDown) { reconnectAttempt = 0; reconnectDelayMs = 3000 }
     if (streamActive) openEventSource()
-  }, reconnectDelayMs)
+  }, coolingDown ? RECOVERY_COOLDOWN_MS : reconnectDelayMs)
   reconnectDelayMs = Math.min(reconnectDelayMs * 2, 30_000)
 }
 
@@ -168,11 +183,16 @@ function openEventSource(): void {
   if (typeof window === 'undefined' || typeof EventSource === 'undefined' || eventSource) return
   const cursor = readStoredCursor()
   const url = `/api/xcmax/sync/stream?since_cursor=${cursor}`
-  eventSource = new EventSource(url)
+  try { eventSource = new EventSource(url) }
+  catch { scheduleReconnect(); return }
+  const owner = eventSource
   streamCreatedAt = Date.now()
-  eventSource.onmessage = (e) => handleSseData(String(e.data ?? ''))
+  eventSource.onmessage = (e) => {
+    if (streamActive && eventSource === owner) handleSseData(String(e.data ?? ''))
+  }
   eventSource.onerror = () => {
-    const es = eventSource
+    if (eventSource !== owner) return
+    const es = owner
     eventSource = null
     if (es) {
       try {
@@ -193,6 +213,7 @@ function closeEventSource(): void {
   }
   reconnectDelayMs = 3000
   reconnectAttempt = 0
+  if (eventSource) { eventSource.onmessage = null; eventSource.onerror = null }
   const age = Date.now() - streamCreatedAt
   if (age < 2000 && eventSource) {
     const es = eventSource
@@ -218,13 +239,23 @@ function closeEventSource(): void {
 
 export function useXcmaxSync() {
   function start(): void {
-    if (streamActive) return
-    streamActive = true
-    openEventSource()
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    if (!streamActive) {
+      streamActive = true
+      window.addEventListener('online', recoverConnection)
+      window.addEventListener('xcagi:backend-ready', recoverConnection)
+      document.addEventListener('visibilitychange', onVisibility)
+    }
+    if (!eventSource && reconnectTimer == null) openEventSource()
   }
 
   function stop(): void {
     streamActive = false
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', recoverConnection)
+      window.removeEventListener('xcagi:backend-ready', recoverConnection)
+    }
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
     closeEventSource()
   }
 

@@ -6,7 +6,7 @@ import copy
 import json
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import asdict
 from typing import cast
 
@@ -42,6 +42,9 @@ from app.application.agent_orchestrator.task_models import (
 _TASK_ID_PATH = "$.metadata.task_context.task_id"
 _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
 _MOD_PATH = "$.metadata.runtime_context._mod_authorization.mod_id"
+# A transaction owner must clean up every exceptional exit, including cancellation.
+# This boundary never turns programming errors into recoverable task outcomes.
+_SESSION_EXIT_ERRORS: tuple[type[BaseException], ...] = (BaseException,)
 
 
 def _sqlite_identity_columns(column, *paths: str):
@@ -1191,13 +1194,28 @@ class SQLAlchemyAgentRunRepository:
 
             # Scheduling state must be visible outside the originating Mod request.
             session_factory = HostSessionLocal
-        with closing(session_factory()) as db, ExitStack() as rollback:
-            # Failed reads also roll back; inactive sessions only need closing.
-            rollback.callback(lambda: db.rollback() if db.is_active else None)
+        db = session_factory()
+        original_error: BaseException | None = None
+        try:
             yield db
             if not read_only:
                 db.commit()
-            rollback.pop_all()
+        except _SESSION_EXIT_ERRORS as exc:
+            original_error = exc
+            try:
+                # Failed reads also own rollback; committed/inactive sessions only close.
+                if db.is_active:
+                    db.rollback()
+            except _SESSION_EXIT_ERRORS as cleanup_error:
+                exc.add_note(f"SQL session rollback failed: {cleanup_error!r}")
+            raise
+        finally:
+            try:
+                db.close()
+            except _SESSION_EXIT_ERRORS as cleanup_error:
+                if original_error is None:
+                    raise
+                original_error.add_note(f"SQL session close failed: {cleanup_error!r}")
 
     def _ensure_schema(self) -> None:
         # 就绪状态按 bind（引擎实例）键控：引擎缓存按 URL 解析，测试/多库环境下

@@ -440,6 +440,7 @@ def control_codex_run(
     body: dict[str, Any] | None = None,
 ) -> JSONResponse:
     """Called only after the normal route's authenticated ownership check."""
+    from app.application.agent_orchestrator.task_execution_models import TaskQueueCapacityError
     from app.application.agent_runtime.gateway import run_runtime_task
 
     store = CodexBindingStore(orchestrator._repo)
@@ -599,6 +600,12 @@ def control_codex_run(
         )
         response = run_response(store.repository.get(run.run_id), principal=principal)
         response["runtime_result"] = result
+        if result.get("error_code") == TaskQueueCapacityError.code:
+            return JSONResponse(
+                {**response, **result},
+                status_code=429,
+                headers={"Retry-After": str(result["retry_after"])},
+            )
         code = (
             202
             if result.get("execution_state") in {"queued", "running", "waiting_user"}
@@ -607,6 +614,12 @@ def control_codex_run(
             else 409
         )
         return JSONResponse(response, status_code=code)
+    except TaskQueueCapacityError as exc:
+        return JSONResponse(
+            exc.result(),
+            status_code=429,
+            headers={"Retry-After": str(exc.retry_after)},
+        )
     except (CodexBindingError, ValueError) as exc:
         logger.warning(
             "Codex run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True

@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from contextlib import closing
+from contextlib import ExitStack, closing
 from decimal import Decimal
 from pathlib import Path
 
@@ -419,14 +419,15 @@ def _spawn(
     env["PYTHONPATH"] = os.pathsep.join(
         [str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH", "")]
     )
-    log = db_path.with_name(f"{phase}.log").open("w", encoding="utf-8")
-    process = subprocess.Popen(
-        [sys.executable, __file__, phase],
-        env=env,
-        cwd=str(Path(__file__).resolve().parents[2]),
-        stdout=log,
-        stderr=subprocess.STDOUT,
-    )
+    with db_path.with_name(f"{phase}.log").open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(
+            [sys.executable, __file__, phase],
+            env=env,
+            cwd=str(Path(__file__).resolve().parents[2]),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+    # Popen owns the child's stdout; the parent only needs this path for diagnostics.
     process.log_handle = log
     return process
 
@@ -504,15 +505,75 @@ def _sale_snapshot(db_path: Path, *, completed: bool) -> None:
             ).fetchone() == (-10,)
 
 
+def _close_sale_process(proc: subprocess.Popen) -> None:
+    try:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+    finally:
+        proc.log_handle.close()
+
+
 def _finish_sale_process(proc: subprocess.Popen) -> None:
     try:
         proc.wait(timeout=60)
         assert proc.returncode == 0, Path(proc.log_handle.name).read_text(encoding="utf-8")[-6000:]
     finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait(timeout=10)
-        proc.log_handle.close()
+        _close_sale_process(proc)
+
+
+def _run_sale_retries(db_path: Path, marker: Path) -> None:
+    with ExitStack() as cleanup:
+        retries = []
+        for phase in ("sale_repeat", "sale_duplicate"):
+            retry = _spawn(phase, db_path, marker, db_path.parent / f"{phase}.json", wait=False)
+            cleanup.callback(_close_sale_process, retry)
+            retries.append(retry)
+        for retry in retries:
+            _finish_sale_process(retry)
+
+
+@pytest.mark.parametrize("fault", ["second_spawn", "first_cleanup"])
+def test_sale_retry_failures_reap_started_workers_and_close_logs(tmp_path, monkeypatch, fault):
+    popen, close = subprocess.Popen, _close_sale_process
+    processes, logs, cleaned = [], [], []
+    failure = OSError(f"injected {fault} failure")
+
+    def controlled_popen(_command, **kwargs):
+        logs.append(kwargs["stdout"])
+        if fault == "second_spawn" and len(logs) == 2:
+            assert processes[0].poll() is None
+            raise failure
+        process = popen(
+            [sys.executable, "-c", "import threading; threading.Event().wait(60)"], **kwargs
+        )
+        processes.append(process)
+        return process
+
+    def observed_cleanup(process):
+        close(process)
+        cleaned.append(process.pid)
+        if fault == "first_cleanup" and len(cleaned) == 1:
+            raise failure
+
+    monkeypatch.setattr(subprocess, "Popen", controlled_popen)
+    monkeypatch.setitem(globals(), "_close_sale_process", observed_cleanup)
+    if fault == "first_cleanup":
+        monkeypatch.setitem(globals(), "_finish_sale_process", lambda process: None)
+    try:
+        with pytest.raises(OSError) as raised:
+            _run_sale_retries(tmp_path / "sales.db", tmp_path / "marker")
+        assert raised.value is failure
+        assert len(processes) == len(cleaned) == (1 if fault == "second_spawn" else 2)
+        assert len(logs) == 2 and all(log.closed for log in logs)
+        assert all(process.poll() is not None and process.returncode != 0 for process in processes)
+    finally:
+        # Independent cleanup keeps this negative control safe if the owner regresses.
+        with ExitStack() as cleanup:
+            for process in processes:
+                cleanup.callback(close, process)
+            for log in logs:
+                cleanup.callback(log.close)
 
 
 @pytest.mark.parametrize("interrupt_point", ["stock_written", "committed"])
@@ -535,10 +596,7 @@ def test_sale_process_loss_and_backup_restore_preserve_one_original_effect(
         interrupted.wait(timeout=10)
         assert interrupted.returncode != 0
     finally:
-        if interrupted.poll() is None:
-            interrupted.kill()
-            interrupted.wait(timeout=10)
-        interrupted.log_handle.close()
+        _close_sale_process(interrupted)
     assert not result_path.exists(), "the client must not have received a success response"
     _sale_snapshot(db_path, completed=interrupt_point == "committed")
     _finish_sale_process(_spawn("sale_retry", db_path, marker, result_path, wait=False))
@@ -561,19 +619,7 @@ def test_sale_process_loss_and_backup_restore_preserve_one_original_effect(
     _sale_snapshot(db_path, completed=True)
 
     # Two fresh workers receive retries after the lost response and real restore.
-    retries = [
-        _spawn(phase, db_path, marker, tmp_path / f"{phase}.json", wait=False)
-        for phase in ("sale_repeat", "sale_duplicate")
-    ]
-    try:
-        for retry in retries:
-            _finish_sale_process(retry)
-    finally:
-        for retry in retries:
-            if retry.poll() is None:
-                retry.kill()
-                retry.wait(timeout=10)
-            retry.log_handle.close()
+    _run_sale_retries(db_path, marker)
     for phase in ("sale_repeat", "sale_duplicate"):
         result = json.loads((tmp_path / f"{phase}.json").read_text())
         assert result["success"] is True and result["replayed"] is True
@@ -602,10 +648,7 @@ def test_persisted_sales_plan_survives_restart_and_exports_once(
                 encoding="utf-8"
             )
     finally:
-        if confirm.poll() is None:
-            confirm.kill()
-            confirm.wait(timeout=10)
-        confirm.log_handle.close()
+        _close_sale_process(confirm)
     before = json.loads(marker.read_text(encoding="utf-8"))
     assert before["orders"] == 0
     if invalidate:
@@ -616,13 +659,12 @@ def test_persisted_sales_plan_survives_restart_and_exports_once(
                 encoding="utf-8"
             )
         finally:
-            if changed.poll() is None:
-                changed.kill()
-                changed.wait(timeout=10)
-            changed.log_handle.close()
+            _close_sale_process(changed)
     approve = _spawn("approve", db_path, marker, result_path, wait=False)
-    approve.wait(timeout=90)
-    approve.log_handle.close()
+    try:
+        approve.wait(timeout=90)
+    finally:
+        _close_sale_process(approve)
     if invalidate:
         assert approve.returncode != 0
         engine = create_engine(f"sqlite:///{db_path}")
@@ -677,8 +719,10 @@ def test_persisted_sales_plan_survives_restart_and_exports_once(
     ]
     assert len(evidence["export_sha256"]) == 64
     replay = _spawn("replay", db_path, marker, result_path, wait=False)
-    replay.wait(timeout=60)
-    replay.log_handle.close()
+    try:
+        replay.wait(timeout=60)
+    finally:
+        _close_sale_process(replay)
     assert replay.returncode != 0
     assert "当前状态不可审批：approved" in db_path.with_name("replay.log").read_text(
         encoding="utf-8"

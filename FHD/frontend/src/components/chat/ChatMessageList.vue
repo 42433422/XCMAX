@@ -1,11 +1,11 @@
 <template>
   <div class="chat-messages-shell">
     <Teleport :to="historyNavTarget || '#chat-history-nav-slot'" :disabled="!historyNavTarget">
-      <nav v-if="hasEarlier || messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
+      <nav v-if="hasEarlier || hasLater || messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
         <button type="button" :disabled="loadingEarlier || (windowStart === 0 && !hasEarlier)" @click="showEarlier">{{ loadingEarlier ? '正在加载…' : '更早消息' }}</button>
         <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，已载入 {{ messages.length }} 条</span>
-        <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
-        <button type="button" @click="showLatest">最新消息</button>
+        <button type="button" :disabled="loadingEarlier || (windowEnd === messages.length && !hasLater)" @click="showNewer">较新消息</button>
+        <button type="button" :disabled="loadingEarlier" @click="showLatest">最新消息</button>
       </nav>
     </Teleport>
     <p v-if="earlierError" role="alert">{{ earlierError }}</p>
@@ -279,9 +279,12 @@ const props = defineProps<{
   messages: ChatMessage[]
   sessionKey?: string
   hasEarlier?: boolean
+  hasLater?: boolean
   loadingEarlier?: boolean
   earlierError?: string
   loadEarlier?: () => Promise<void>
+  loadNewer?: () => Promise<void>
+  loadLatest?: () => Promise<void>
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
   isStreamingReply: boolean
@@ -490,13 +493,24 @@ onMounted(() => {
   historyNavTarget.value = document.getElementById('chat-history-nav-slot')
 })
 const copyLabels = ref(new Map<ChatMessage, string>())
-const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
+const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest: showLoadedLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
 async function showEarlier() {
   if (windowStart.value > 0 || !props.loadEarlier) { await moveWindow(-1); return }
   const count = props.messages.length
   await props.loadEarlier()
   await moveWindow(-1, Math.max(0, props.messages.length - count - 60))
+}
+async function showNewer() {
+  if (windowEnd.value < props.messages.length || !props.loadNewer) { await moveWindow(1); return }
+  try { await props.loadNewer() } catch { return }
+  await moveWindow(1, Math.max(0, props.messages.length - CHAT_HISTORY_WINDOW))
+}
+async function showLatest() {
+  if (props.hasLater && props.loadLatest) {
+    try { await props.loadLatest() } catch { return }
+  }
+  showLoadedLatest()
 }
 
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })

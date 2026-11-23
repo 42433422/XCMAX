@@ -133,6 +133,7 @@ def test_session_commit_hook_failure_preserves_error_and_closes(sql_session_scop
         with scope() as db:
             db.execute(text("INSERT INTO entries VALUES ('uncommitted')"))
     assert caught.value is error
+    assert getattr(error, "__notes__", []) == []
     assert session.in_transaction() is False
     assert engine.pool.checkedout() == 0
     with closing(sqlite3.connect(database)) as reader:
@@ -185,3 +186,55 @@ def test_session_failure_rolls_back_a_joined_transaction(sql_session_scope, monk
     assert engine.pool.checkedout() == 0
     with closing(sqlite3.connect(database)) as reader:
         assert reader.execute("SELECT count(*) FROM entries").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+def test_session_cleanup_failure_preserves_original_error(sql_session_scope, failure):
+    scope, session, engine, _ = sql_session_scope
+    error = failure("original task failure")
+    original_close = session.close
+
+    def close_then_fail():
+        original_close()
+        raise OSError("close unavailable")
+
+    with (
+        patch.object(session, "rollback", side_effect=OSError("rollback unavailable")) as rollback,
+        patch.object(session, "close", side_effect=close_then_fail) as close,
+        patch.object(session, "commit", wraps=session.commit) as commit,
+    ):
+        with pytest.raises(failure) as caught:
+            with scope() as db:
+                db.execute(text("INSERT INTO entries VALUES ('uncommitted')"))
+                raise error
+        assert caught.value is error
+        assert error.__notes__ == [
+            "SQL session rollback failed: OSError('rollback unavailable')",
+            "SQL session close failed: OSError('close unavailable')",
+        ]
+        rollback.assert_called_once_with()
+        close.assert_called_once_with()
+        commit.assert_not_called()
+    assert session.in_transaction() is False
+    assert engine.pool.checkedout() == 0
+
+
+def test_session_close_failure_without_original_error_propagates(sql_session_scope):
+    scope, session, engine, database = sql_session_scope
+    error = OSError("close unavailable")
+    original_close = session.close
+
+    def close_then_fail():
+        original_close()
+        raise error
+
+    with patch.object(session, "close", side_effect=close_then_fail) as close:
+        with pytest.raises(OSError) as caught:
+            with scope() as db:
+                db.execute(text("INSERT INTO entries VALUES ('committed')"))
+        assert caught.value is error
+        close.assert_called_once_with()
+    assert session.in_transaction() is False
+    assert engine.pool.checkedout() == 0
+    with closing(sqlite3.connect(database)) as reader:
+        assert reader.execute("SELECT value FROM entries").fetchall() == [("committed",)]

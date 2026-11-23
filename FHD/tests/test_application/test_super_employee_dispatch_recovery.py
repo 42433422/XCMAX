@@ -270,6 +270,111 @@ def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeyp
     assert effects == ["created"]
 
 
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyError])
+def test_unexpected_readback_error_propagates_without_new_dispatch(
+    tmp_path, monkeypatch, error_type
+):
+    error = error_type("unexpected receipt decoder failure")
+
+    def submit(request):
+        raise httpx.ReadTimeout("ack lost", request=request)
+
+    def readback(request):
+        raise error
+
+    create, requests = _service(tmp_path, monkeypatch, submit, receipt_handler=readback)
+    context = {"request_id": "broken-readback", "mode": "code"}
+    for _ in range(2):
+        with pytest.raises(error_type) as raised:
+            create().invoke(user_id=7, message="修复登录问题", context=context)
+        assert raised.value is error
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+def test_unexpected_submit_error_propagates_after_persisting_unknown(
+    tmp_path, monkeypatch, error_type
+):
+    error = error_type("unexpected acknowledgement decoder failure")
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        raise error
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    service = create()
+    context = {"request_id": "broken-submit", "mode": "code"}
+    with pytest.raises(error_type) as raised:
+        service.invoke(user_id=7, message="修复登录问题", context=context)
+    assert raised.value is error
+    saved = service._messages.read_dispatch_request(7, "broken-submit")
+    assert saved is not None
+    assert saved["request_id"] == "broken-submit"
+    receipt = saved["dispatch_receipt"]
+    assert receipt["status"] == "dispatch_unknown"
+    assert receipt["reconciliation_required"] is True
+    assert receipt["safe_to_fallback"] is False
+    assert receipt["accepted"] is False and receipt["queued"] is False
+    assert receipt["reason"] == str(error)
+    assert receipt["pending_request_id"] == effects[0]["client_request_id"]
+
+    recovered = create().invoke(user_id=7, message="修复登录问题", context=context)["dispatch"]
+    assert recovered["request_id"] == "broken-submit"
+    assert recovered["status"] == "dispatch_unknown"
+    assert recovered["pending_request_id"] == receipt["pending_request_id"]
+    assert recovered["plan_sha256"] == receipt["plan_sha256"]
+    assert len(effects) == 1
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+def test_unknown_receipt_write_failure_keeps_submit_error_and_pre_send_intent(
+    tmp_path, monkeypatch
+):
+    error = RuntimeError("unexpected acknowledgement decoder failure")
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        raise error
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    service = create()
+    write_outbox = service._write_outbox
+
+    def fail_unknown_write(request, **kwargs):
+        if kwargs["status"] == "dispatch_unknown":
+            raise OSError("outbox update unavailable")
+        return write_outbox(request, **kwargs)
+
+    monkeypatch.setattr(service, "_write_outbox", fail_unknown_write)
+    context = {"request_id": "failed-unknown-write", "mode": "code"}
+    with pytest.raises(RuntimeError) as raised:
+        service.invoke(user_id=7, message="修复登录问题", context=context)
+    assert raised.value is error
+    assert error.__notes__ == [
+        "Para unknown dispatch receipt persistence failed: OSError('outbox update unavailable')"
+    ]
+    saved = create()._messages.read_dispatch_request(7, "failed-unknown-write")
+    assert saved is not None
+    assert saved["request_id"] == "failed-unknown-write"
+    receipt = saved["dispatch_receipt"]
+    assert receipt["status"] == "dispatching"
+    assert receipt["safe_to_fallback"] is False
+    assert receipt["pending_request_id"] == effects[0]["client_request_id"]
+
+    recovered = create().invoke(user_id=7, message="修复登录问题", context=context)["dispatch"]
+    assert recovered["request_id"] == "failed-unknown-write"
+    assert recovered["status"] == "dispatch_unknown"
+    assert recovered["pending_request_id"] == receipt["pending_request_id"]
+    assert recovered["plan_sha256"] == receipt["plan_sha256"]
+    assert len(effects) == 1
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
 @pytest.mark.parametrize("error_type", [httpx.ReadTimeout, httpx.ConnectError])
 def test_partial_fleet_dispatch_keeps_task_and_device_receipts(tmp_path, monkeypatch, error_type):
     effects = []

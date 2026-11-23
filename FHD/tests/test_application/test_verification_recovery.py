@@ -216,8 +216,11 @@ def readback(monkeypatch):
 
 
 def test_reopen_sqlite_receipt_and_reverify_without_execution(tmp_path, readback):
+    from app.db.models.agent import AgentTaskExecutionRecord
+
     path = f"sqlite:///{tmp_path / 'runs.sqlite'}"
     engine = create_engine(path)
+    AgentTaskExecutionRecord.__table__.create(engine)
     original = _run()
     SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine)).save(original)
     engine.dispose()

@@ -12,7 +12,7 @@ from urllib.parse import quote
 import httpx
 
 from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 from .common import _SUBTASK_LABELS
 from .devices import DeviceSelection
@@ -21,7 +21,7 @@ from .profiles import SuperEmployeeToolProfile
 from .protocols import ExecutionContext, OutboxWriter, ParaPorts
 
 _NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
-_PARA_ERRORS = RECOVERABLE_ERRORS + (ParaRemoteError,)
+_PARA_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (ParaRemoteError,)
 
 
 def _digest(value: Any) -> str:
@@ -638,6 +638,16 @@ class EmployeeDispatcher:
                 return self._unknown_dispatch(request, str(exc))
             except _PARA_ERRORS as exc:
                 return self._unknown_dispatch(request, str(exc))
+            except BOUNDARY_ERRORS as exc:
+                # POST may have taken effect; record uncertainty without hiding programming errors.
+                try:
+                    self._unknown_dispatch(request, str(exc))
+                except BOUNDARY_ERRORS as persistence_error:
+                    # The durable pre-send intent still prevents replay after this write fails.
+                    exc.add_note(
+                        f"Para unknown dispatch receipt persistence failed: {persistence_error!r}"
+                    )
+                raise
             result_task = result.get("task")
             result_task_id = (
                 str(result_task.get("id") or "") if isinstance(result_task, dict) else ""

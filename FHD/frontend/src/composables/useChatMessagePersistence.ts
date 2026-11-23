@@ -4,29 +4,66 @@ import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { restoreRuntimeContinuation } from '@/utils/chatRuntimeContinuation'
+import { activeChatTurnStatus } from '@/utils/droppedRoundPresentation'
+import { chatExecutionOutcome } from '@/components/chat/chatFailureRecovery'
+import { asString } from '@/utils/typeGuards'
 
 export const CHAT_HISTORY_PAGE_SIZE = 80
-const CONFIRMED_CACHE_CHARS = 256 * 1024 // Serialized UTF-16 code units, excluding unconfirmed rows.
+export const CHAT_RESIDENT_MESSAGES = 160
+export const CHAT_RESIDENT_BYTES = 512 * 1024
+export const CHAT_CACHE_MESSAGES = 40
+export const CHAT_CACHE_BYTES = 128 * 1024
 
-/** Keep one server page locally; pending/legacy/live rows remain complete regardless of budget. */
-export function boundedChatMessageCache(messages: UiChatMessage[]): UiChatMessage[] {
-  const retained: UiChatMessage[] = []
-  let confirmed = 0, chars = 2
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index], persistence = message.persistence
-    const recoverable = persistence?.status === 'saved' && persistence.durable === true
-      && !persistence.request && Number.isSafeInteger(message.serverMessageId) && Number(message.serverMessageId) > 0
-      && !message.streamingShell && !['submitted', 'streaming'].includes(message.streamStatus || '')
-    if (recoverable) {
-      if (confirmed >= CHAT_HISTORY_PAGE_SIZE) continue
-      const size = JSON.stringify(message).length + 1
-      if (chars + size > CONFIRMED_CACHE_CHARS) { confirmed = CHAT_HISTORY_PAGE_SIZE; continue }
-      chars += size
-      confirmed += 1
+export function serverId(message?: UiChatMessage): number | undefined {
+  const id = message?.serverMessageId ?? Number(/^server:(\d+)$/.exec(message?.persistence?.id || '')?.[1])
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+}
+
+/** Only acknowledged, settled SQL history may be evicted. Work still needing a decision stays resident. */
+export function pinnedMessage(message: UiChatMessage): boolean {
+  const active = (status?: string) => !!status && activeChatTurnStatus(status) !== undefined
+  const result = message.businessResult
+  return message.persistence?.status !== 'saved' || message.persistence.durable !== true || !serverId(message) || !!message.persistence.request
+    || !!message.streamingShell || active(message.streamStatus)
+    || !!message.approvalCard && (!message.approvalCard.status || message.approvalCard.status === 'pending' || !!message.approvalCard.submitting)
+    || active(message.runtimeContinuation?.status) || message.agentRunTrace?.terminal !== true && active(message.agentRunTrace?.status)
+    || active(message.workflowAction) || !!message.execution && ['unknown', 'partial'].includes(chatExecutionOutcome(message.execution))
+    || message.agentRunTrace?.terminal !== true && active(message.executionProgress?.at(-1)?.status)
+    || active(asString(result?.status)) || result?.pending_approval === true || result?.requires_reconciliation === true
+    || result?.reconciliation_required === true || result?.outcome_unknown === true
+}
+
+export const serializedBytes = (message: UiChatMessage, budget = CHAT_RESIDENT_BYTES) =>
+  message.content.length > budget ? budget + 1 : new TextEncoder().encode(JSON.stringify(message)).length
+
+/** A contiguous SQL window, plus separately pinned work. One explicitly read row may exceed the resident budget. */
+export function historyWindow(list: UiChatMessage[], newer = true, limit = CHAT_RESIDENT_MESSAGES,
+  budget = CHAT_RESIDENT_BYTES, allowOversized = true): UiChatMessage[] {
+  let count = 0, bytes = 2, edge = newer ? list.length : 0
+  for (let i = newer ? list.length - 1 : 0; newer ? i >= 0 : i < list.length; i += newer ? -1 : 1) {
+    const message = list[i]
+    if (!pinnedMessage(message)) {
+      const size = serializedBytes(message, budget) + 1
+      if (count >= limit || bytes + size > budget && !(allowOversized && count === 0)) break
+      count++
+      bytes += size
     }
-    retained.push(message)
+    edge = newer ? i : i + 1
   }
-  return retained.reverse()
+  return newer ? list.slice(edge) : list.slice(0, edge)
+}
+
+export function withPinned(window: UiChatMessage[], all: UiChatMessage[]): UiChatMessage[] {
+  const retained = [...window]
+  for (const message of all) if (pinnedMessage(message) && !retained.some(row =>
+    row === message || row.uiKey && row.uiKey === message.uiKey
+    || row.persistence?.id && row.persistence.id === message.persistence?.id)) retained.push(message)
+  return retained.sort((a, b) => (serverId(a) ?? Number.MAX_SAFE_INTEGER) - (serverId(b) ?? Number.MAX_SAFE_INTEGER))
+}
+
+/** The single bootstrap-cache policy; durable SQL pages remain the history source of truth. */
+export function boundedChatMessageCache(messages: UiChatMessage[]): UiChatMessage[] {
+  return withPinned(historyWindow(messages, true, CHAT_CACHE_MESSAGES, CHAT_CACHE_BYTES, false), messages)
 }
 
 export function localMessagePersistence(): NonNullable<UiChatMessage['persistence']> {

@@ -533,7 +533,6 @@ class SuperEmployeeRoutes:
                                 with suppress(asyncio.CancelledError):
                                     await reader
                 except BOUNDARY_ERRORS as exc:
-                    # The stream boundary reports the original task's unknown receipt.
                     logger.exception("mobile_super_employee_stream failed: %s", exc)
                     yield ports.sse_line(
                         {"type": "error", "message": "原任务回执待核对，请读取原任务。"}
