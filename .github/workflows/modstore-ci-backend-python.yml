@@ -90,7 +90,7 @@ jobs:
         run: python -m pytest -m release_gate -q --tb=short
 
   modstore-backend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [release-gate]
     services:
       postgres:
@@ -143,10 +143,14 @@ jobs:
 
       - name: Install the pinned experiment evaluator
         run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
           mkdir -p "$RUNNER_TEMP/xcagi-promptfoo"
           cp "$GITHUB_WORKSPACE/FHD/scripts/autonomy/runtime_tools/capability_trainer_deps/"{package.json,package-lock.json} "$RUNNER_TEMP/xcagi-promptfoo/"
           bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$RUNNER_TEMP/xcagi-promptfoo" --ignore-scripts --no-audit --no-fund
           echo "PROMPTFOO_CLI=$RUNNER_TEMP/xcagi-promptfoo/node_modules/.bin/promptfoo" >> "$GITHUB_ENV"
+          printf 'PROMPTFOO_SANDBOX_ENTRY=%s\n' "$RUNNER_TEMP/xcagi-promptfoo/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" >> "$GITHUB_ENV"
 
       - name: Install the pinned native report consumer
         run: |

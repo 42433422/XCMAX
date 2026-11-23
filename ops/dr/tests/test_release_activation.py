@@ -367,6 +367,44 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertEqual(self.observed[-1], self.old_sha)
         self.assert_old_markers()
         self.assertFalse(self.pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
+
+    def test_failed_candidate_restores_verified_previous_release_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        before = self.run_function("verify_current_release_pair")
+        self.assertEqual(before.returncode, 0, before.stderr + before.stdout)
+        self.bad_sha.add(self.new_sha)
+        result = self.activate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assert_old_markers()
+        self.assertFalse(self.pending.exists())
+        after = self.run_function("verify_current_release_pair")
+        self.assertEqual(after.returncode, 0, after.stderr + after.stdout)
+
+    def test_failed_candidate_does_not_commit_a_mixed_previous_pair(self) -> None:
+        self.add_fhd_release("c" * 40)
+        self.bad_sha.add(self.new_sha)
+        result = self.activate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
+        self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
+
+    def test_failed_candidate_does_not_commit_an_unverified_partner(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        manifest = self.old / "fhd-manifest.json"
+        payload = json.loads(manifest.read_text())
+        payload["git_sha"] = "c" * 40
+        manifest.write_text(json.dumps(payload))
+        self.bad_sha.add(self.new_sha)
+        result = self.activate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse((self.state / "release_applied_sha").exists())
+        self.assertNotEqual(self.run_function("verify_current_release_pair").returncode, 0)
 
     def test_prepare_failure_restores_without_accepting_candidate(self) -> None:
         self.env["PREPARE_FAIL_SHA"] = self.new_sha

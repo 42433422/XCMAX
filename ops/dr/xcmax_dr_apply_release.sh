@@ -126,11 +126,17 @@ verify_current_component() {
 
 # Call only while the release lock is held. Component health is not pair evidence.
 verify_applied_release_pair() {
-  local aggregate component applied
+  local aggregate
   aggregate="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
     [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || {
     log "ERROR: 缺少有效整组发布 SHA，不能确认运行验收"; return 1;
   }
+  verify_component_release_pair "$aggregate"
+}
+
+verify_component_release_pair() {
+  local aggregate="$1" component applied
+  [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || return 1
   # Independent healthy components can belong to different releases after a
   # partial apply/rollback. Require the committed pair before any live checks.
   for component in modstore fhd; do
@@ -153,6 +159,19 @@ verify_current_release_pair() {
   verify_applied_release_pair
 }
 
+# Recommit only the pre-switch pair, while the caller still owns the release lock.
+restore_previous_release_pair() {
+  local previous_pair="$1" component temporary="$STATE/.release_applied_sha.$$"
+  [[ -n "$previous_pair" ]] || return 0
+  verify_component_release_pair "$previous_pair" || return 1
+  for component in modstore fhd; do
+    verify_current_component "$component" || return 1
+  done
+  verify_component_release_pair "$previous_pair" || return 1
+  printf '%s\n' "$previous_pair" >"$temporary" &&
+    mv -f -- "$temporary" "$STATE/release_applied_sha"
+}
+
 acquire_release_lock() {
   exec 9>"$LOCK"
   if ! flock -n 9; then
@@ -170,7 +189,7 @@ activate_component() (
   local name=source port=19999 service="xcmax-dr-$1" previous_manifest previous_sha
   [[ "$component" == modstore ]] || { name=fhd; port=15100; }
   local current="$RUNTIME/$name" pending="$STATE/release_apply_${component}.pending"
-  local previous="" was_active=0 touched=0 moved_directory=0
+  local previous="" previous_pair="" was_active=0 touched=0 moved_directory=0
   [[ ! -e "$pending" ]] || { log "ERROR: 原 $component 切换尚待核对: $pending"; exit 1; }
   if [[ -L "$current" || -d "$current" ]]; then
     previous="$(readlink -f "$current")"
@@ -192,6 +211,9 @@ IDENTITY
   [[ -n "$previous" || "$was_active" == 0 ]] || {
     log "ERROR: 运行中服务缺少原发布路径，拒绝不可恢复的切换"; exit 1;
   }
+  if verify_applied_release_pair >/dev/null 2>&1; then
+    previous_pair="$(cat "$STATE/release_applied_sha")"
+  fi
   mkdir -m 0700 "$pending"
   printf '%s\n' "$previous" "$target" "$was_active" >"$pending/targets"
   for suffix in sha created_at; do
@@ -207,6 +229,8 @@ IDENTITY
     fi
     if [[ "$touched" == 0 ]]; then
       rm -rf -- "$pending"
+      restore_previous_release_pair "$previous_pair" ||
+        log "ERROR: 原整组运行身份未核实，保持发布回执缺失"
       return "$code"
     fi
     # A competing pointer is never overwritten by this attempt's compensation.
@@ -240,6 +264,8 @@ IDENTITY
     if [[ "$restored" == 1 ]]; then
       log "ERROR: $component 候选未通过，已恢复原版本及原运行状态"
       rm -rf -- "$pending"
+      restore_previous_release_pair "$previous_pair" ||
+        log "ERROR: 原整组运行身份未核实，保持发布回执缺失"
     else
       log "ERROR: $component 恢复结果未核实，保留原切换证据: $pending"
     fi

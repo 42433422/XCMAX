@@ -228,9 +228,23 @@ def prepare_customer_delivery(
         if len(frozen_nodes) == 1
         else {**common, "nodes": frozen_nodes}
     )
-    from modstore_server.workflow_training_replay import capture_business_replay
+    from modstore_server.workflow_training_replay import _bytes, capture_business_replay
 
-    replay = capture_business_replay(db, contract, inputs)
+    if "customer_delivery" in binding:
+        # Revalidation preserves the optional snapshot frozen at admission.
+        replay = deepcopy(binding["customer_delivery"].get("business_replay"))
+        if replay and replay.get("replay_ready") is True:
+            for source in replay["assets"]["input_files"]:
+                read_artifact_bytes(
+                    frozen_nodes[0],
+                    {
+                        "output_path": source["path"],
+                        "artifact_sha256": source["sha256"],
+                        "size_bytes": len(_bytes(source)),
+                    },
+                )
+    else:
+        replay = capture_business_replay(db, contract, inputs)
     if replay is not None:
         contract["business_replay"] = replay
     return {**contract, "contract_sha256": digest(contract)}

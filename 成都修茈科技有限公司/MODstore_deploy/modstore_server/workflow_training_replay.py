@@ -13,8 +13,10 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import zipfile
 from copy import deepcopy
@@ -527,19 +529,164 @@ def _remap(value, original, workspace):
     return value
 
 
+def _sandbox_command(directory, env, settings):
+    """Use the pinned native boundary; an unavailable host never runs the employee."""
+    project = Path(__file__).resolve().parents[1]
+    tools = project.parents[1] / "FHD/scripts/autonomy/runtime_tools"
+    configured = os.environ.get("PROMPTFOO_SANDBOX_ENTRY") or str(
+        tools / "capability_trainer_deps/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js"
+    )
+    entry = Path(configured).expanduser().resolve(strict=True)
+    if entry.name not in {"cli.js", "index.js"} or entry.parent.name != "dist":
+        raise ValueError("training_replay_sandbox_required")
+    entry = entry.with_name("cli.js").resolve(strict=True)
+    node = shutil.which("node", path=env.get("PATH", os.defpath))
+    if not node:
+        raise ValueError("training_replay_sandbox_required")
+    node = str(Path(node).resolve(strict=True))
+    # Reuse the product's exact package, Node and supported-host admission rules.
+    # This runs trusted configuration code only, before the employee can start.
+    checked = subprocess.run(
+        [
+            node,
+            "--input-type=module",
+            "--eval",
+            "const {openCodeSandboxEntry}=await import(process.argv[1]);"
+            "const entry=openCodeSandboxEntry({DEVFLEET_OPENCODE_SANDBOX_ENTRY:process.argv[2]});"
+            "if(!entry)process.exit(1);"
+            "process.stdout.write(JSON.stringify({entry,arch:process.arch}));",
+            (tools / "opencode_agent.mjs").as_uri(),
+            str(entry),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if checked.returncode:
+        raise ValueError("training_replay_sandbox_unavailable")
+    runtime = json.loads(checked.stdout)
+    if runtime["entry"] != str(entry):
+        raise ValueError("training_replay_sandbox_identity_changed")
+    system = (
+        [
+            "/System",
+            "/usr/lib",
+            "/usr/share",
+            "/usr/bin",
+            "/bin",
+            "/private/etc/ssl",
+            "/private/etc/hosts",
+            "/private/var/db/timezone",
+            "/Library/Preferences/SystemConfiguration",
+            "/dev/null",
+            "/dev/urandom",
+        ]
+        if sys.platform == "darwin"
+        else [
+            "/usr",
+            "/lib",
+            "/lib64",
+            "/bin",
+            "/dev/null",
+            "/dev/urandom",
+            "/etc/ssl",
+            "/etc/hosts",
+            "/etc/resolv.conf",
+            "/etc/nsswitch.conf",
+            "/etc/ld.so.cache",
+        ]
+    )
+    readable = [
+        *system,
+        str(directory),
+        sys.executable,
+        str(Path(sys.executable).resolve()),
+        str(Path(sys.prefix) / "pyvenv.cfg"),
+        *(sysconfig.get_path(key) for key in ("stdlib", "platstdlib", "purelib", "platlib")),
+        str(project / "modstore_server"),
+        str(project / "modman"),
+        str(project.parents[1] / "FHD/app"),
+    ]
+    # setup-python and framework builds can load shared runtimes outside /usr.
+    # Allow the installed library files, never the surrounding customer directory.
+    for parent in (sysconfig.get_config_var("LIBDIR"), str(Path(sys.base_prefix) / "lib")):
+        if parent:
+            for name in (
+                sysconfig.get_config_var("LDLIBRARY"),
+                sysconfig.get_config_var("INSTSONAME"),
+            ):
+                if name:
+                    library = Path(parent) / name
+                    if library.is_file():
+                        readable.extend((str(library), str(library.resolve())))
+    framework = sysconfig.get_config_var("PYTHONFRAMEWORK")
+    if framework:
+        library = Path(sys.base_prefix) / framework
+        if library.is_file():
+            readable.extend((str(library), str(library.resolve())))
+    policy = {
+        "network": {
+            "allowedDomains": [],
+            "deniedDomains": ["*"],
+            "strictAllowlist": True,
+            "allowUnixSockets": [],
+            "allowAllUnixSockets": False,
+            "allowLocalBinding": False,
+        },
+        "filesystem": {
+            "denyRead": [
+                "/",
+                *(
+                    str(project / "modstore_server" / name)
+                    for name in ("data", "catalog_data", "market_files", "tests")
+                ),
+            ],
+            "allowRead": sorted({path for path in readable if path and Path(path).exists()}),
+            "allowWrite": [str(directory)],
+            "denyWrite": [],
+        },
+        "allowNestedUserNamespaces": False,
+        "enableWeakerNestedSandbox": False,
+        "enableWeakerNetworkIsolation": False,
+    }
+    if sys.platform == "linux":
+        seccomp = entry.parents[1] / "vendor/seccomp" / runtime["arch"] / "apply-seccomp"
+        if not seccomp.is_file() or not os.access(seccomp, os.X_OK):
+            raise ValueError("training_replay_sandbox_unavailable")
+        policy["seccomp"] = {"applyPath": str(seccomp)}
+        policy["filesystem"]["allowRead"].append(str(seccomp))
+    settings.write_text(json.dumps(policy), encoding="utf-8")
+    return [
+        node,
+        str(entry),
+        "--settings",
+        str(settings),
+        "--",
+        sys.executable,
+        "-m",
+        __name__,
+        "--worker",
+    ]
+
+
 def _run_worker(request, directory, env, *, timeout=60):
     from modstore_server.self_maintenance_subprocess import terminate_subprocess
 
-    with subprocess.Popen(
-        [sys.executable, "-m", __name__, "--worker"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=directory,
-        env=env,
-        start_new_session=os.name == "posix",
-    ) as proc:
+    with (
+        tempfile.TemporaryDirectory(prefix="workflow-replay-policy-") as control,
+        subprocess.Popen(
+            _sandbox_command(directory, env, Path(control) / "settings.json"),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=directory,
+            env=env,
+            start_new_session=os.name == "posix",
+        ) as proc,
+    ):
         try:
             stdout, stderr = proc.communicate(json.dumps(request), timeout=timeout)
             return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
@@ -593,6 +740,8 @@ def evaluate_business_replay(output, source):
             }
             env.update(
                 PYTHONPATH=os.pathsep.join((str(project), str(repository / "FHD"))),
+                PYTHONDONTWRITEBYTECODE="1",
+                PYTHONNOUSERSITE="1",
                 HOME=str(root),
                 TMPDIR=str(root),
                 DATABASE_URL=f"sqlite:///{root / 'replay.db'}",
@@ -661,6 +810,25 @@ def evaluate_business_replay(output, source):
 
 def _worker(request):
     """Restore the frozen native packages and call the existing product runtime."""
+    if sys.platform == "linux":
+        status = dict(
+            line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
+        )
+        namespace_pid = status.get("NSpid", "").strip()
+        if (
+            any(
+                int(status.get(name, "1").strip(), 16)
+                for name in ("CapEff", "CapPrm", "CapAmb", "CapInh")
+            )
+            or status.get("NoNewPrivs", "").strip() != "1"
+            or status.get("Seccomp", "").strip() != "2"
+            or not namespace_pid.isdecimal()
+            or int(namespace_pid) < 1
+        ):
+            raise ValueError("training_replay_workload_isolation_required")
+    elif sys.platform != "darwin":
+        raise ValueError("training_replay_sandbox_unavailable")
+
     from cryptography.fernet import Fernet
     from sqlalchemy import select
 

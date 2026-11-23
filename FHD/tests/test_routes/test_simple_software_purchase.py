@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from importlib import reload
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
@@ -182,6 +182,7 @@ def test_legacy_orders_fulfill_but_cannot_be_newly_purchased(purchase, plan_id, 
         assert db.get(Tenant, 1).plan_id == plan_id
         assert db.get(Tenant, 1).trial_expires_at is None
         assert db.get(User, 1).account_tier == plan["account_tier"]
+    assert subscriptions.subscription_status_for_user(1)["plan_id"] == plan_id
 
 
 def test_trial_sync_never_restarts_the_paid_thirty_day_period(purchase, monkeypatch):
@@ -215,6 +216,146 @@ def test_trial_sync_never_restarts_the_paid_thirty_day_period(purchase, monkeypa
     )
     assert subscriptions.apply_paid_plan_for_user(user_id=1, plan_id="saas-personal-free")
     assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+
+
+@pytest.fixture
+def market_login(purchase, monkeypatch):
+    from app.application.enterprise_login_finalize import finalize_enterprise_login
+    from app.fastapi_routes import market_account
+
+    monkeypatch.setattr(
+        market_account, "fetch_market_membership_tier", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr("app.application.enterprise_login_flow._is_desktop_runtime", lambda: False)
+
+    async def login(plan_id, **overrides):
+        profile = {
+            "id": 41,
+            "username": "buyer",
+            "account_state": "active",
+            "active_plan_id": plan_id,
+            "account_tier": saas_plans.plan_by_id(plan_id)["account_tier"],
+            "desktop_access": plan_id != saas_plans.PERSONAL_PLAN_ID,
+        }
+        proxy = AsyncMock(return_value=profile)
+        monkeypatch.setattr(market_account, "_proxy_json", proxy)
+        market = await market_account._normalize_market_auth_payload({"access_token": "live-token"})
+        proxy.assert_awaited_once_with(
+            "GET", "/api/auth/me", authorization="Bearer live-token", return_error_payload=True
+        )
+        market.update(overrides)
+        return await finalize_enterprise_login(
+            result={"success": True, "user": {"id": 1}},
+            session_id="purchase-session",
+            market_result=market,
+            account_kind="enterprise",
+            username="buyer",
+            sku="personal",
+        )
+
+    return login
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("plan_id", ["saas-permanent-starter", "saas-permanent-ultra"])
+async def test_verified_market_free_login_reclaims_refunded_permanent_access(
+    purchase, market_login, plan_id
+):
+    _, sessions, _ = purchase
+    assert (await market_login(plan_id))["success"]
+    assert subscriptions.subscription_status_for_user(1)["plan_id"] == plan_id
+    assert not subscriptions.apply_paid_plan_for_user(user_id=1, plan_id="saas-personal-free")
+    with sessions() as db:
+        assert db.get(User, 1).market_user_id == 41
+        assert db.get(User, 1).account_tier == saas_plans.plan_by_id(plan_id)["account_tier"]
+
+    # The market grants free only after the paid UserPlan has been revoked;
+    # its authenticated /me projection is the authority for subsequent logins.
+    for _ in range(2):
+        result = await market_login(saas_plans.PERSONAL_PLAN_ID)
+        assert result["success"]
+        with sessions() as db:
+            assert db.get(User, 1).account_tier == "personal"
+            assert (
+                db.query(Session).filter_by(session_id="purchase-session").one().market_user_id
+                == 41
+            )
+        assert subscriptions.subscription_status_for_user(1) == {
+            "active": True,
+            "reason": "personal_plan",
+            "plan_id": saas_plans.PERSONAL_PLAN_ID,
+        }
+        assert result["personal_plan"] is True
+        assert result["account_license_plan_id"] == saas_plans.PERSONAL_PLAN_ID
+        assert result["account_tier"] == "personal"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shared_tenant", [False, True])
+@pytest.mark.parametrize("purchase_source", ["market", "payment"])
+async def test_refunded_ultra_repurchase_keeps_account_and_tenant_rights_separate(
+    purchase, market_login, shared_tenant, purchase_source
+):
+    client, sessions, _ = purchase
+    ultra = "saas-permanent-ultra"
+    assert (await market_login(ultra))["success"]
+    if shared_tenant:
+        with sessions.begin() as db:
+            db.add(User(id=2, username="colleague", password="unused", tenant_id=1))
+        assert subscriptions.apply_paid_plan_for_user(user_id=2, plan_id=ultra)
+
+    assert (await market_login(saas_plans.PERSONAL_PLAN_ID))["success"]
+    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+    if shared_tenant:
+        assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+
+    order_id = ""
+    if purchase_source == "payment":
+        response = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD})
+        assert response.status_code == 200, response.text
+        order_id = response.json()["data"]["order_id"]
+    for _ in range(2):
+        if purchase_source == "market":
+            assert (await market_login(STANDARD))["success"]
+        else:
+            assert notify(client, order_id).text == "success"
+        with sessions() as db:
+            assert db.get(User, 1).account_tier == "normal"
+            assert db.get(User, 1).market_user_id == 41
+            if shared_tenant:
+                assert db.get(User, 2).account_tier == "ultra"
+                assert db.get(Tenant, 1).plan_id == ultra
+        assert subscriptions.subscription_status_for_user(1)["plan_id"] == STANDARD
+        if shared_tenant:
+            assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+    assert client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"token": ""},
+        {"token": "xcagi-local-surface-audit-demo"},
+        {"account_state": "pending_plan"},
+        {"desktop_access": False},
+        {"raw": {"user": {"username": "buyer"}}},
+        {"raw": {"user": {"id": 42, "username": "buyer"}}},
+    ],
+)
+async def test_unverified_free_login_cannot_reclaim_paid_access(purchase, market_login, overrides):
+    _, sessions, _ = purchase
+    plan_id = "saas-permanent-ultra"
+    assert (await market_login(plan_id))["success"]
+    result = await market_login(saas_plans.PERSONAL_PLAN_ID, **overrides)
+    with sessions() as db:
+        assert db.get(User, 1).account_tier == "ultra"
+        assert db.get(User, 1).market_user_id == 41
+        assert db.get(Tenant, 1).plan_id == plan_id
+    assert subscriptions.subscription_status_for_user(1)["plan_id"] == plan_id
+    if "raw" in overrides and overrides["raw"]["user"].get("id") == 42:
+        assert result["success"] is False
+        assert result["error"]["code"] == "TENANT_IDENTITY_REJECTED"
 
 
 def test_free_profile_budget_never_becomes_enterprise_authorization(purchase):
