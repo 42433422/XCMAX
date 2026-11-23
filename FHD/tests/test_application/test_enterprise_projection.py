@@ -451,3 +451,63 @@ async def test_committed_orm_change_reaches_running_neurobus_and_refreshes(world
             ("after_soft_rollback", source_events._rolled_back),
         ):
             event.remove(Session, name, handler)
+
+
+def test_world_history_replays_only_authorized_observations(world):
+    service, sessions, clock, permissions = world
+    before = get(service)
+    assert before["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        db.get(SalesOrderItem, 401).delivered_quantity = Decimal(5)
+    clock[0] += 31
+    after = get(service)
+    assert after["state"]["remaining_quantity"] == "5.0000"
+    historical = get(service, as_of=before["observed_at"])
+    assert historical["observation"]["state"]["remaining_quantity"] == "8.0000"
+    assert historical["observation"]["source_version"] == before["source_version"]
+    assert historical["observation"]["freshness"] == "historical"
+    assert historical["business_validity_verified"] is False
+    assert historical["current_state_verified"] is False
+    assert get(service, as_of="2000-01-01T00:00:00+00:00")["knowledge_kind"] == "unknown"
+    other = service.get("order", "101", tenant_id=11, actor_id="3", as_of=after["observed_at"])
+    assert other["knowledge_kind"] == "unknown"
+    permissions.remove("tool.sales.query")
+    with pytest.raises(PermissionError):
+        get(service, as_of=before["observed_at"])
+
+
+def test_conflicting_observations_are_retained_not_last_writer_wins(world):
+    service, sessions, clock, _ = world
+    first = get(service)
+    with sessions.begin() as db:
+        db.get(SalesOrderItem, 401).delivered_quantity = Decimal(5)
+    conflict = get(service, force_refresh=True)
+    assert conflict["knowledge_kind"] == "unknown"
+    assert conflict["reason_code"] == "conflicting_observation_order"
+    history = get(service, as_of=first["observed_at"])
+    assert history["knowledge_kind"] == "unknown"
+    assert history["reason_code"] == "conflicting_observations"
+    assert {x["state"]["remaining_quantity"] for x in history["conflict_evidence"]} == {
+        "8.0000",
+        "5.0000",
+    }
+    clock[0] += 1
+    assert get(service)["state"]["remaining_quantity"] == "5.0000"
+    assert get(service, as_of=first["observed_at"])["knowledge_kind"] == "unknown"
+
+
+def test_conditional_delivery_scenario_does_not_modify_authority(world):
+    from app.domain.enterprise_cognition.world_observation import delivery_scenario
+
+    service, sessions, *_ = world
+    before = get(service)
+    scenario = delivery_scenario(before, "3")
+    assert scenario["knowledge_kind"] == "prediction"
+    assert Decimal(scenario["value"]) == 5
+    assert scenario["probability"] is None
+    assert scenario["causal_effect_verified"] is False
+    assert scenario["baseline_source_version"] == before["source_version"]
+    assert delivery_scenario(before, "99")["knowledge_kind"] == "unknown"
+    assert delivery_scenario({"freshness": "unknown"}, "3")["knowledge_kind"] == "unknown"
+    with sessions() as db:
+        assert db.get(SalesOrderItem, 401).delivered_quantity == 2
