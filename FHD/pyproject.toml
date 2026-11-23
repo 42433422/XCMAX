@@ -554,7 +554,11 @@ id = "no-langgraph-outside-infra-workflow"
 name = "Only workflow infrastructure imports the LangGraph runtime"
 type = "protected"
 protected_modules = ["langgraph"]
-allowed_importers = ["app.infrastructure.workflow"]
+allowed_importers = [
+    "app.infrastructure.workflow.checkpoint_bridge",
+    "app.infrastructure.workflow.langgraph_execution",
+    "app.infrastructure.workflow.langgraph_runtime",
+]
 
 [[tool.importlinter.contracts]]
 id = "host-does-not-use-remote-langgraph-sdk"

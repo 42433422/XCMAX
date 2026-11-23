@@ -130,15 +130,19 @@ def test_domain_and_port_contracts_reject_reverse_dependencies(
 
 @pytest.mark.parametrize("sdk", ["langgraph", "langgraph_sdk"])
 @pytest.mark.parametrize(
-    "importer",
+    "importer, allowed",
     [
-        "app.infrastructure.workflow.langgraph_execution",
-        "app.application.controller",
-        "app.di.registry",
+        ("app.infrastructure.workflow.checkpoint_bridge", True),
+        ("app.infrastructure.workflow.langgraph_execution", True),
+        ("app.infrastructure.workflow.langgraph_runtime", True),
+        ("app.infrastructure.workflow.unrelated_worker", False),
+        ("app.application.controller", False),
+        ("app.di.registry", False),
     ],
 )
-def test_langgraph_sdk_stays_in_workflow_infrastructure(tmp_path, sdk, importer):
-    _package(tmp_path, "app.infrastructure.workflow")
+def test_langgraph_imports_require_an_explicit_workflow_module(tmp_path, sdk, importer, allowed):
+    for module in ("checkpoint_bridge", "langgraph_execution", "langgraph_runtime"):
+        _package(tmp_path, f"app.infrastructure.workflow.{module}")
     _package(tmp_path, importer, f"from {sdk}.types import Runtime\n")
     contract = (
         "no-langgraph-outside-infra-workflow"
@@ -146,10 +150,9 @@ def test_langgraph_sdk_stays_in_workflow_infrastructure(tmp_path, sdk, importer)
         else "host-does-not-use-remote-langgraph-sdk"
     )
     result = _lint(tmp_path, contract)
-    expected = (
-        0 if sdk == "langgraph" and importer.startswith("app.infrastructure.workflow.") else 1
-    )
+    expected = 0 if sdk == "langgraph" and allowed else 1
     assert result.returncode == expected, result.stdout + result.stderr
+    assert ("1 kept, 0 broken" if expected == 0 else "0 kept, 1 broken") in result.stdout
 
 
 @pytest.mark.parametrize("violation", [None, "outside_bridge", "stale_exception"])
