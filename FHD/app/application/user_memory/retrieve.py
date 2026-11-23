@@ -241,7 +241,8 @@ def merge_relation_hits(
     if not extra or bounded == 1:
         return (direct or extra)[:bounded]
     # Reserve at most one graph-only slot rather than pretending its score is vector cosine.
-    return [*direct[:bounded - 1], *extra[:max(1, bounded - len(direct[:bounded - 1]))]][:bounded]
+    primary = direct[: bounded - 1]
+    return [*primary, *extra[: bounded - len(primary)]]
 
 
 def format_relation_evidence(hit: dict[str, Any]) -> str:

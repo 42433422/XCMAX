@@ -265,6 +265,8 @@ class UserMemoryRagApplicationService:
         if not hits:
             message = "【UserMemoryRAG】未召回用户记忆片段。"
             return message if len(message) <= budget else ""
+        from app.application.user_memory.retrieve import format_relation_evidence
+
         footer = "优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。"
         lines: list[str] = ["【UserMemoryRAG】召回到以下用户记忆片段（用于辅助决策）:"]
         for idx, hit in enumerate(hits[:max_hits], start=1):
@@ -287,8 +289,6 @@ class UserMemoryRagApplicationService:
             preview = str(preview or "").strip()
             if len(preview) > 240:
                 preview = preview[:240] + "…"
-
-            from app.application.user_memory.retrieve import format_relation_evidence
 
             preview += format_relation_evidence({**hit, "metadata": md})
             line = (

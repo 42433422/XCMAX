@@ -643,6 +643,8 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
     budget = (
         int(_env_float(_ENV_MAX_CHARS, _DEFAULT_PROMPT_CHARS)) if max_chars is None else max_chars
     )
+    from app.application.user_memory.retrieve import format_relation_evidence
+
     lines = ["【长期记忆】以下为历史会话中可能相关的片段，仅作参考，不要当成本轮已核实的事实："]
     for index, hit in enumerate(hits, start=1):
         if not isinstance(hit, dict):
@@ -653,8 +655,6 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
         metadata = hit.get("metadata")
         meta: dict[str, Any] = metadata if isinstance(metadata, dict) else {}
         prefix = "事实：" if str(meta.get("memory_type") or "") == "fact" else ""
-        from app.application.user_memory.retrieve import format_relation_evidence
-
         line = f"{index}. {prefix}{content}{format_relation_evidence(hit)}"
         if len("\n".join([*lines, line])) > budget:
             break
