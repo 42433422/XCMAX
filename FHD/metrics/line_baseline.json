@@ -1,5 +1,5 @@
 {
-  "lines": 2681762,
+  "lines": 2681779,
   "updated": "2026-11-23",
-  "note": "用户授权复用成熟组件收敛生产可靠性。相对 main f006985 共净增220维护行：SLO采集+17、Sloth v0.16.0规则源+75、确定性反例测试+102、CI源+23、README+1、CHANGELOG+2。保留现有 Prometheus/Alertmanager 运行配置，不以候选规则、模拟测试或缺失指标宣布已达标；需要 CI 审查及独立生产部署与告警演练。按 check_net_deletion.py --update --force --reason 的规则显式登记，不删除无关代码抵数。"
+  "note": "用户授权复用成熟组件收敛生产可靠性。相对 main f006985 共净增237维护行：SLO采集+17、Sloth v0.16.0规则源+75、确定性反例测试+102、CI源+40、README+1、CHANGELOG+2。保留现有 Prometheus/Alertmanager 运行配置，不以候选规则、模拟测试或缺失指标宣布已达标；需要 CI 审查及独立生产部署与告警演练。按 check_net_deletion.py --update --force --reason 的规则显式登记，不删除无关代码抵数。"
 }
