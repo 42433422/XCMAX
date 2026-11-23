@@ -28,7 +28,6 @@ def _allow(name, arguments):
 @pytest.fixture
 def runtime_boundary(monkeypatch):
     captured = []
-    settings = policy.RuntimeSettings(engine="codex")
 
     def runtime(**kwargs):
         inspect.signature(gateway.run_runtime_task_async).bind(**kwargs)
@@ -47,7 +46,6 @@ def runtime_boundary(monkeypatch):
     def forbid_legacy(*args, **kwargs):
         raise AssertionError("Selected Codex must not contact the native model")
 
-    monkeypatch.setattr(policy, "runtime_settings", lambda: settings)
     monkeypatch.setattr(gateway, "run_runtime_task", runtime)
     monkeypatch.setattr("app.infrastructure.llm.client.require_api_key", forbid_legacy)
     monkeypatch.setattr(agent_runner, "_chat_completion", forbid_legacy)
@@ -225,22 +223,21 @@ def test_codex_preserves_the_inherited_employee_deadline(runtime_boundary, monke
     ],
 )
 def test_retired_engine_and_unselected_surface_fail_without_native_fallback(
-    monkeypatch, runtime_boundary, settings
+    runtime_boundary, settings
 ):
-    monkeypatch.setattr(policy, "runtime_settings", lambda: settings)
-    result = _run(tools=[])
+    result = _run(tools=[], settings=settings)
     assert result["error_code"] == "runtime_configuration_invalid"
     assert result["legacy_fallback_allowed"] is False
     assert runtime_boundary == []
 
 
-def test_invalid_deployment_config_never_falls_through_to_native(monkeypatch, runtime_boundary):
+def test_default_configuration_is_deferred_to_authenticated_gateway(monkeypatch, runtime_boundary):
     def invalid():
         raise policy.RuntimePolicyError("bad deployment")
 
     monkeypatch.setattr(policy, "runtime_settings", invalid)
-    assert _run(tools=[], gate=_allow)["error_code"] == "runtime_configuration_invalid"
-    assert runtime_boundary == []
+    assert _run(tools=[], gate=_allow)["ok"] is True
+    assert runtime_boundary[0]["settings"] is None
 
 
 @pytest.fixture
@@ -408,13 +405,20 @@ def test_handler_delegation_keeps_trusted_history_and_context_outside_input(
     assert submitted["input_data"] == {"user_id": "forged"}
 
 
-def test_retired_engine_is_rejected_before_employee_cognition(
+def test_employee_keeps_sole_runtime_when_account_configuration_is_unavailable(
     employee, runtime_boundary, monkeypatch
 ):
     actor, _ = employee
-    monkeypatch.setattr(policy, "runtime_settings", lambda: policy.RuntimeSettings(engine="native"))
+    monkeypatch.setattr(
+        gateway,
+        "run_runtime_task",
+        lambda **_: agent_runner._runtime_entry_error(
+            "runtime_configuration_required", "请核对当前账号的模型设置"
+        ),
+    )
     result = actor.run("read")
-    assert result["error_code"] == "runtime_configuration_invalid"
+    assert result["success"] is False
+    assert "模型设置" in str(result)
     assert runtime_boundary == []
 
 

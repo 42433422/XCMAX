@@ -374,6 +374,7 @@ class ChatRouteSnapshot:
     config_revision: str
     api_key: str = field(repr=False)
     base_url: str | None = field(repr=False)
+    runtime_contract: dict[str, Any] | None = field(default=None, repr=False)
 
     def public_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
@@ -443,7 +444,12 @@ def resolve_chat_route_snapshot(
     return chat_route_snapshot(provider, model, key, base, source, route_source)
 
 
-def chat_route_token(snapshot: ChatRouteSnapshot, user_id: int) -> str | None:
+def chat_route_token(
+    snapshot: ChatRouteSnapshot,
+    user_id: int,
+    *,
+    runtime_contract: dict[str, Any] | None = None,
+) -> str | None:
     """Carry an encrypted, user-bound route across a single tool round; never log it."""
     from modstore_server.llm_crypto import encrypt_secret
 
@@ -459,6 +465,7 @@ def chat_route_token(snapshot: ChatRouteSnapshot, user_id: int) -> str | None:
                 "base_url": snapshot.base_url,
                 "user_id": int(user_id),
                 "expires": int(time.time()) + 600,
+                "runtime_contract": runtime_contract,
                 "platform_source": (
                     snapshot.api_key.configuration["source"]
                     if isinstance(snapshot.api_key, PlatformApiKey)
@@ -490,6 +497,7 @@ def read_chat_route_token(token: str, user_id: int, provider: str, model: str) -
             or not payload["route_source"]
             or not isinstance(payload["api_key"], str)
             or not payload["api_key"]
+            or not isinstance(payload.get("runtime_contract"), (dict, type(None)))
         ):
             raise ValueError("route mismatch")
         key = payload["api_key"]
@@ -513,6 +521,7 @@ def read_chat_route_token(token: str, user_id: int, provider: str, model: str) -
             payload["config_revision"],
             key,
             payload["base_url"],
+            payload.get("runtime_contract"),
         )
     except (ValueError, RuntimeError, KeyError, TypeError):
         raise HTTPException(

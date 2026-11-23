@@ -125,6 +125,7 @@ async def recover_receipt(
     if not isinstance(receipt, dict) or receipt.get("operation") not in {
         "chat",
         "image_generation",
+        "responses",
     }:
         return None
     if operation is not None and receipt["operation"] != operation:
@@ -133,6 +134,14 @@ async def recover_receipt(
     is_pat = pat_user_id is not None
     if is_pat and pat_user_id != user_id:
         return None
+    # BYOK Responses have exact provider usage but no platform wallet charge.
+    # The pending receipt was persisted only after the original stream ended.
+    if receipt["operation"] == "responses" and receipt.get("key_source") == "user_override":
+        if receipt.get("billed") is not False or receipt.get("charge_amount") != "0.00":
+            return None
+        if is_pat:
+            JavaWalletClient(request=request).validate_pat(authorization)
+        return complete_receipt(db, row, receipt)
     wallet = JavaWalletClient(request=request) if is_pat else JavaWalletClient()
     if is_pat:
         hold = await wallet.read_hold(

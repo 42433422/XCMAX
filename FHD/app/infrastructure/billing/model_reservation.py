@@ -114,3 +114,122 @@ def settle_model_usage(usage_key: str, usage: dict[str, int]) -> dict[str, Any]:
                 }
                 ledger._save_entry(db, entry, previous=previous, storage_key=usage_key)
         return dict(entry)
+
+
+def record_platform_model_usage(
+    *,
+    usage_key: str,
+    run_id: str,
+    user_id: str,
+    request_id: str,
+    route: Any,
+    usage: dict[str, int],
+    receipt: Any,
+) -> dict[str, Any]:
+    """Audit an authenticated platform settlement without debiting either wallet."""
+    if (
+        any(
+            type(usage.get(k)) is not int or usage[k] < 0
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens")
+        )
+        or usage["total_tokens"] < usage["prompt_tokens"] + usage["completion_tokens"]
+    ):
+        raise ModelReservationError("Platform response usage is invalid")
+    cost = ledger.estimate_llm_cost_units(**usage)
+    if receipt is None and any(usage.values()):
+        raise ModelReservationError("Platform settlement receipt is missing")
+    if receipt is not None:
+        expected = {
+            "schema": "xcmax.responses-billing.v1",
+            "provider": route.provider_id,
+            "model": route.model.removeprefix(route.provider_id + "/"),
+            "key_source": route.key_source,
+            "config_revision": route.config_revision,
+            "client_request_id": request_id,
+        }
+        if not isinstance(receipt, dict) or any(receipt.get(k) != v for k, v in expected.items()):
+            raise ModelReservationError("Platform settlement does not match the authorized request")
+        raw = receipt.get("usage")
+        if (
+            not isinstance(raw, dict)
+            or any(
+                type(raw.get(k)) is not int or raw[k] != usage[v]
+                for k, v in (
+                    ("input_tokens", "prompt_tokens"),
+                    ("output_tokens", "completion_tokens"),
+                )
+            )
+            or (
+                type(raw.get("total_tokens")) is not int
+                or raw["total_tokens"] != usage["total_tokens"]
+            )
+        ):
+            raise ModelReservationError("Platform settlement usage does not match the response")
+        byok = route.key_source in {"byok", "user", "user_override"}
+        if (
+            receipt.get("billing_status") != ("byok" if byok else "settled")
+            or type(receipt.get("billed")) is not bool
+            or (byok and receipt["billed"])
+            or not isinstance(receipt.get("request_id"), str)
+            or not receipt["request_id"]
+            or (receipt["billed"] and not receipt.get("hold_no"))
+        ):
+            raise ModelReservationError("Platform billing has not completed")
+        from decimal import InvalidOperation
+
+        try:
+            amount = Decimal(str(receipt.get("charge_amount")))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ModelReservationError("Platform billing amount is invalid") from exc
+        if (
+            not amount.is_finite()
+            or amount < 0
+            or (byok and amount != 0)
+            or (amount > 0 and not receipt["billed"])
+        ):
+            raise ModelReservationError("Platform billing amount is invalid")
+        receipt = {
+            **expected,
+            "request_id": receipt["request_id"],
+            "hold_no": str(receipt.get("hold_no") or ""),
+            "billed": receipt["billed"],
+            "charge_amount": str(amount),
+            "billing_status": receipt["billing_status"],
+            "usage": dict(usage),
+        }
+    entry = {
+        "usage_id": usage_key,
+        "usage_key": usage_key,
+        "entry_type": "model_call",
+        "run_id": run_id,
+        "user_id": user_id,
+        "provider_id": route.provider_id,
+        "provider": route.provider_id,
+        "model": route.model,
+        **usage,
+        "cost_units": cost,
+        "billing_status": "metered" if cost else "unmetered",
+        "billing_source": "platform_xcagi",
+        "source": "codex.model_gateway",
+        "metadata": {"platform_receipt": receipt, "usage_status": "settled"},
+        "wallet_backend": "audit",
+        "created_at": ledger._utc_iso(),
+    }
+    recorded = ledger._record_usage_entry(entry)
+    if any(
+        recorded.get(k) != entry[k]
+        for k in (
+            "run_id",
+            "user_id",
+            "provider_id",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "cost_units",
+            "metadata",
+            "wallet_backend",
+        )
+    ):
+        raise ModelReservationError("Existing platform settlement cannot be rebound")
+    return recorded

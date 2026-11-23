@@ -531,6 +531,60 @@ class CodexTransport:
                 self._client.turn_interrupt, self.thread_id, self.turn_id, outcome_unknown=True
             )
 
+    @property
+    def process_id(self) -> int | None:
+        process = getattr(self._client, "_proc", None)
+        return process.pid if process is not None and process.poll() is None else None
+
+    async def compact_thread(self) -> dict[str, str]:
+        """Force SDK-owned compaction and observe completion, not merely its ACK."""
+        if self._client is None or not self.thread_id or self._streaming:
+            raise CodexTransportError("codex_session_invalid", "No idle scoped thread")
+        self._streaming = True
+        compact_turn = ""
+        client = self._client
+        completed = False
+        # 0.171 routes every turn-scoped notice away from next_notification().
+        # Its thread subscription API captures the server-generated compact
+        # turn before we know its id. This registers only a local SDK route;
+        # it sends no goal RPC and enables no autonomous goal feature.
+        subscription = client.register_goal_operation(self.thread_id)
+        try:
+            async with asyncio.timeout(self.config.turn_timeout_seconds):
+                await self._call(client.thread_compact, self.thread_id)
+                while True:
+                    notice = await self._call(client.next_goal_notification, subscription)
+                    payload = notice.payload
+                    if hasattr(payload, "model_dump"):
+                        payload = payload.model_dump(by_alias=True, mode="json")
+                    else:
+                        payload = dict(payload.params)
+                    if payload.get("threadId") != self.thread_id:
+                        continue
+                    if (
+                        notice.method == "item/completed"
+                        and payload.get("item", {}).get("type") == "contextCompaction"
+                    ):
+                        compact_turn = payload.get("turnId", "")
+                    if notice.method == "turn/completed":
+                        turn = payload.get("turn", {})
+                        if turn.get("status") != "completed":
+                            raise CodexTransportError(
+                                "codex_compaction_failed", "Runtime compaction did not complete"
+                            )
+                        if compact_turn and turn.get("id") == compact_turn:
+                            completed = True
+                            return {"thread_id": self.thread_id, "turn_id": compact_turn}
+        except TimeoutError:
+            raise CodexTransportError(
+                "codex_timeout", "Runtime compaction completion was not observed"
+            ) from None
+        finally:
+            self._streaming = False
+            if not completed:
+                await self.close()  # Wake the SDK subscriber before removing its route.
+            client.unregister_goal_operation(subscription)
+
     async def close(self) -> None:
         client, self._client = self._client, None
         job, self._job = self._job, None

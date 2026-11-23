@@ -157,7 +157,7 @@ def test_unqualified_fixed_runtime_never_falls_back_to_local_reply_or_tool(messa
     service = _make_service()
     with (
         patch(
-            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+            "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()
         ),
         patch.object(service, "_persist_chat_turn"),
         patch.object(service, "_persist_recallable_chat_turn"),
@@ -206,7 +206,7 @@ def test_file_context_reaches_model_without_direct_import(file_context):
     service = _make_service()
     with (
         patch(
-            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+            "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()
         ),
         patch(
             "app.application.agent_runtime.gateway.run_runtime_task",
@@ -245,7 +245,7 @@ def test_runtime_policy_failure_is_safe_and_does_not_call_legacy_chat(reason):
     service = _make_service()
     with (
         patch(
-            "app.application.agent_runtime.chat.runtime_settings",
+            "app.application.agent_runtime.gateway.run_runtime_task",
             side_effect=RuntimePolicyError(reason),
         ),
         patch.object(service, "_persist_chat_turn"),
@@ -269,7 +269,7 @@ def test_all_source_labels_execute_the_same_fixed_runtime(source):
     service = _make_service()
     with (
         patch(
-            "app.application.agent_runtime.chat.runtime_settings", return_value=RuntimeSettings()
+            "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()
         ),
         patch(
             "app.application.agent_runtime.gateway.run_runtime_task",

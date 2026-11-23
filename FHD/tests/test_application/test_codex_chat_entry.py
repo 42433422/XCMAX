@@ -7,20 +7,16 @@ from unittest.mock import Mock
 import pytest
 
 from app.application.agent_runtime import chat
-from app.infrastructure.codex.policy import RuntimePolicyError, RuntimeSettings
+from app.infrastructure.codex.policy import RuntimePolicyError
 
 
 @pytest.fixture
 def entry(monkeypatch):
-    selected = RuntimeSettings()
-    monkeypatch.setattr(chat, "runtime_settings", lambda: selected)
     execute = Mock(return_value={"ok": True, "run_id": "parent", "exit_status": "reply_completed"})
     monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", execute)
     service = SimpleNamespace(_pending_workflows={}, _hydrate_pending_workflow=Mock())
 
-    def invoke(context=None, engine="codex"):
-        nonlocal selected
-        selected = RuntimeSettings(engine=engine)
+    def invoke(context=None):
         return chat.run_runtime_chat(
             user_id="owner",
             message="补充原任务",
@@ -37,6 +33,7 @@ def test_new_chat_uses_fixed_executor_and_host_goal_admission(entry):
     execute.assert_called_once()
     assert execute.call_args.kwargs["completion_mode"] == "auto"
     assert "admit_goal" not in execute.call_args.kwargs
+    assert "settings" not in execute.call_args.kwargs
 
 
 def test_retired_pending_plan_cannot_select_another_executor(entry):
@@ -63,7 +60,7 @@ def test_explicit_continuation_is_not_silently_replanned_after_switch_off(entry)
 def test_invalid_qualification_never_falls_back_or_creates_an_approval(entry):
     invoke, execute, _ = entry
     execute.side_effect = RuntimePolicyError("qualification missing")
-    reply = invoke({"session_id": "original"}, "codex")
+    reply = invoke({"session_id": "original"})
     assert reply["success"] is False
     assert reply["data"]["error_code"] == "runtime_not_qualified"
     assert reply["requires_confirmation"] is False
@@ -78,7 +75,7 @@ def test_waiting_input_and_terminal_receipts_update_same_conversation(entry):
         "needs_user_input": True,
         "output": "请提供日期",
     }
-    waiting = invoke({"session_id": "original"}, "codex")
+    waiting = invoke({"session_id": "original"})
     assert waiting["needs_user_input"] is True
     assert waiting["requires_confirmation"] is False
     assert waiting["runtime_context_update"] == {
@@ -87,7 +84,7 @@ def test_waiting_input_and_terminal_receipts_update_same_conversation(entry):
         "status": "waiting_user",
     }
     execute.return_value = {"ok": True, "run_id": "parent", "execution_state": "completed"}
-    terminal = invoke({"session_id": "original", "agent_runtime_run_id": "parent"}, "codex")
+    terminal = invoke({"session_id": "original", "agent_runtime_run_id": "parent"})
     assert terminal["runtime_context_update"]["agent_runtime_run_id"] is None
     assert terminal["business_completed"] is False
 

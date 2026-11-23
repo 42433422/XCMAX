@@ -7,6 +7,7 @@ import copy
 import json
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -191,6 +192,85 @@ def test_creates_independent_parent_with_private_resume_contract(setup_gateway):
     )
     assert str(state.servers[0].url_path_for("codex_mcp")) == "/api/agent-runtime/codex/mcp"
     assert state.servers[0].state.codex_run_id == parent.run_id
+
+
+def test_account_configuration_is_resolved_only_after_trusted_identity(setup_gateway, monkeypatch):
+    state = setup_gateway
+    monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+    monkeypatch.setattr(gateway, "runtime_settings", RuntimeSettings)
+    configure = Mock(return_value=state.settings)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", configure)
+    denied = asyncio.run(
+        state.invoke(settings=None, runtime_context={"user_id": state.actor.user_id})
+    )
+    assert denied["ok"] is False
+    configure.assert_not_called()
+    result = asyncio.run(state.invoke(settings=None))
+    configure.assert_called_once_with(str(state.actor.user_id), previous=None)
+    parent = state.repository.get(result["run_id"])
+    assert parent.metadata["runtime_route"] == state.settings.route.runtime_identity()
+
+
+def test_explicit_runtime_settings_never_fall_through_to_account_configuration(
+    setup_gateway, monkeypatch
+):
+    configure = Mock(side_effect=AssertionError("explicit settings must be authoritative"))
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", configure)
+    result = asyncio.run(setup_gateway.invoke(settings=RuntimeSettings()))
+    assert result["error_code"] == "runtime_policy_blocked"
+    configure.assert_not_called()
+
+
+def test_account_resume_refreshes_only_the_original_public_route(setup_gateway, monkeypatch):
+    state = setup_gateway
+    original = asyncio.run(state.invoke())
+    monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+    monkeypatch.setattr(gateway, "runtime_settings", RuntimeSettings)
+    configure = Mock(return_value=state.settings)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", configure)
+    resumed = asyncio.run(
+        state.invoke(
+            settings=None,
+            run_id=original["run_id"],
+            runtime_context={**state.context, "turn_id": "resume-account-config"},
+        )
+    )
+    assert resumed["run_id"] == original["run_id"]
+    configure.assert_called_once_with(
+        str(state.actor.user_id), previous=state.settings.route.runtime_identity()
+    )
+
+
+@pytest.mark.parametrize(
+    "code", ["runtime_billing_evidence_missing", "runtime_model_identity_mismatch"]
+)
+def test_detailed_setup_failure_retains_original_chat_task(setup_gateway, monkeypatch, code):
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+
+    state = setup_gateway
+    original = asyncio.run(state.invoke())
+    monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+    monkeypatch.setattr(gateway, "runtime_settings", RuntimeSettings)
+    monkeypatch.setattr(
+        gateway,
+        "get_account_runtime_settings",
+        Mock(side_effect=RuntimeSetupError(code, "验收未通过")),
+    )
+    blocked = asyncio.run(
+        state.invoke(
+            settings=None,
+            run_id=original["run_id"],
+            runtime_context={**state.context, "turn_id": "failed-resume"},
+        )
+    )
+    assert blocked["error_code"] == code
+    assert blocked["failure_stage"] == "runtime_setup"
+    assert (
+        runtime_chat_payload(blocked)["runtime_context_update"]["agent_runtime_run_id"]
+        == original["run_id"]
+    )
+    assert len(state.calls) == 1
 
 
 def test_staging_persists_paused_parent_without_grant_server_or_execution(setup_gateway):
