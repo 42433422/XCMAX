@@ -402,6 +402,100 @@ def test_customer_feedback_resume_never_starts_or_redispatches_a_model(
         assert db.get(RetortEvolutionRun, request_id).event_id is None
 
 
+def test_failed_independent_report_is_archived_but_not_accepted(monkeypatch):
+    import hashlib
+
+    from retort_engine.evolution_contract import digest
+
+    request_id = str(uuid4())
+    protocol = {
+        "request_id": request_id,
+        "repository": "example/product",
+        "source_sha": "a" * 40,
+        "criterion_ids": ["shared-engine-B2"],
+        "checks": [{"id": "restore", "criterion_ids": ["shared-engine-B2"]}],
+    }
+    protocol["protocol_digest"] = digest(protocol)
+    target = "d" * 40
+    run = {
+        "id": 41,
+        "status": "completed",
+        "conclusion": "failure",
+        "run_attempt": 1,
+        "head_sha": protocol["source_sha"],
+        "path": f".github/workflows/{workspace.WORKFLOW}",
+    }
+    effects = {"run_id": 41}
+    artifact = {
+        "id": 1,
+        "digest": "sha256:" + "b" * 64,
+        "name": f"retort-verification-{request_id}",
+        "expired": False,
+    }
+    monkeypatch.setattr(
+        workspace,
+        "worker_status",
+        lambda _: {
+            "finished": True,
+            "conclusion": "success",
+            "request_id": request_id,
+            "run_id": 41,
+            "target_sha": target,
+        },
+    )
+    calls = []
+
+    def github(method, path):
+        calls.append((method, path))
+        assert method == "GET"
+        assert path == "/repos/example/product/actions/runs/41/artifacts"
+        return {"artifacts": [artifact]}
+
+    def download(repo, artifact_id, root, artifact_digest):
+        assert (repo, artifact_id, artifact_digest) == (
+            "example/product", 1, artifact["digest"]
+        )
+        row = {"id": "restore", "check_digest": digest(protocol["checks"][0])}
+        for phase, code in (("before", 0), ("after", 1)):
+            path = root / f"{phase}.log"
+            path.write_bytes(phase.encode())
+            row[phase] = {
+                "returncode": code,
+                "timed_out": False,
+                "log_path": path.name,
+                "log_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        bundle = {
+            "request_id": request_id,
+            "protocol_digest": protocol["protocol_digest"],
+            "repository": protocol["repository"],
+            "source_sha": protocol["source_sha"],
+            "target_sha": target,
+            "run_id": "41",
+            "run_attempt": 1,
+            "isolation": "docker",
+            "checks": [row],
+        }
+        (root / "verification.json").write_text(json.dumps(bundle))
+
+    monkeypatch.setattr(workspace, "github", github)
+    monkeypatch.setattr(workspace, "_download_artifact", download)
+    monkeypatch.setattr(workspace, "_retain_artifact", lambda *_: "encrypted-reference")
+    monkeypatch.setattr(workspace, "_save", lambda _, **updates: effects.update(updates))
+
+    assert workspace.archive_failed_verification(
+        request_id, protocol, effects, {**run, "conclusion": "success"}
+    ) is None
+    report = workspace.archive_failed_verification(request_id, protocol, effects, run)
+    assert report["status"] == "workflow_failed"
+    assert report["comparison"]["candidate_passed"] == 0
+    assert report["comparison"]["baseline_passed"] == 1
+    assert effects["failed_verification"] == report
+    assert "verification" not in effects
+    assert workspace.archive_failed_verification(request_id, protocol, effects, run) == report
+    assert len(calls) == 1
+
+
 def test_verified_logs_are_retained_with_existing_retort_encryption(tmp_path, monkeypatch):
     import base64
 
