@@ -155,6 +155,81 @@ def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -
     assert "evaluation-owner" not in original_owners
 
 
+@pytest.mark.parametrize("fail_task", [False, True])
+@pytest.mark.parametrize("existing_store", [False, True])
+def test_eval_drains_owned_traces_before_removing_storage(
+    monkeypatch, tmp_path, fail_task, existing_store
+) -> None:
+    import os
+    import threading
+    from pathlib import Path
+
+    from app.infrastructure.llm import trace_store
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "")
+    caller_path = tmp_path / "caller-traces"
+    previous = trace_store.TraceStore(base_dir=caller_path) if existing_store else None
+    if previous is not None:
+        previous.start()
+    monkeypatch.setattr(trace_store, "_store", previous)
+    monkeypatch.setenv("XCAGI_GENAI_TRACE_DIR", str(caller_path))
+    observed = {}
+    failure = RuntimeError("evaluation task failed")
+    span_ids = {f"evaluation-{index}" for index in range(101)}
+
+    def run_task(_task):
+        before = set(threading.enumerate())
+        store = trace_store.get_trace_store()
+        observed.update(store=store, threads=set(threading.enumerate()) - before)
+        for span_id in span_ids:
+            store.record({"span_id": span_id, "name": "evaluation resource"})
+        if fail_task:
+            raise failure
+        return {"passed": True}
+
+    cleanup = eval_module.tempfile.TemporaryDirectory.cleanup
+
+    def check_cleanup(directory):
+        root = Path(directory.name)
+        if not root.name.startswith("xcagi-agent-eval-"):
+            return cleanup(directory)
+        store = observed["store"]
+        try:
+            assert store is not previous
+            assert store._base_dir.is_relative_to(root)
+            assert store._closed and store._log_provider is None
+            assert not any(thread.is_alive() for thread in observed["threads"])
+            assert {row["span_id"] for row in store.query(limit=200)} == span_ids
+            assert trace_store._store is previous
+            assert os.environ["XCAGI_GENAI_TRACE_DIR"] == str(caller_path)
+            observed["cleaned"] = root
+        finally:
+            if store is not previous:
+                store.stop()
+            cleanup(directory)
+
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [{}])
+    monkeypatch.setattr(eval_module, "run_task", run_task)
+    monkeypatch.setattr(eval_module.tempfile.TemporaryDirectory, "cleanup", check_cleanup)
+    try:
+        if fail_task:
+            with pytest.raises(RuntimeError) as raised:
+                run_eval()
+            assert raised.value is failure
+        else:
+            assert run_eval()["passed"] == 1
+        assert not observed["cleaned"].exists()
+        assert trace_store._store is previous
+        if previous is not None:
+            assert not previous._closed
+            previous.record({"span_id": "caller-after-evaluation"})
+            previous.flush()
+            assert [row["span_id"] for row in previous.query()] == ["caller-after-evaluation"]
+    finally:
+        if previous is not None:
+            previous.stop()
+
+
 def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
     result = {
         "total": 1,
