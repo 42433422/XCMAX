@@ -6,6 +6,8 @@ are not capability proofs; the independent identity check is deliberately narrow
 
 from __future__ import annotations
 
+import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -15,6 +17,7 @@ import sys
 import uuid
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -52,7 +55,9 @@ def release_identity() -> dict[str, str | None]:
     }
 
 
-def execution_scope(state: dict[str, Any], *, now: datetime | None = None) -> str | None:
+def execution_scope(
+    state: dict[str, Any], *, now: datetime | None = None, owner_active: bool | None = None
+) -> str | None:
     """Bind observations to a release, observed host and authorization revision.
 
     This is not an attestation of every dependency or of model/employee competence.
@@ -62,6 +67,10 @@ def execution_scope(state: dict[str, Any], *, now: datetime | None = None) -> st
     if not release["git_sha"] or not release["artifact_sha256"]:
         return None
     if state.get("identity_id") != IDENTITY_ID or type(state.get("revision")) is not int:
+        return None
+    if owner_active is None:
+        owner_active = state.get("self_authority_active")
+    if state.get("owner_user_id") is not None and type(owner_active) is not bool:
         return None
     policy = state.get("policy") or {}
     expiry = policy.get("authorization_expires_at")
@@ -80,6 +89,7 @@ def execution_scope(state: dict[str, Any], *, now: datetime | None = None) -> st
             state["identity_id"],
             state["revision"],
             state.get("owner_user_id"),
+            bool(owner_active),
             state.get("level"),
             state.get("paused"),
             expiry,
@@ -93,7 +103,11 @@ def current_identity_evidence(
 ) -> dict[str, Any]:
     now = now or utcnow()
     for event in events:
-        if event.get("kind") != "self_identity_check":
+        if (
+            event.get("kind") != "self_identity_check"
+            or not isinstance(event.get("id"), str)
+            or not event["id"].startswith("self-check:")
+        ):
             continue
         try:
             proof = IdentityProof.model_validate(event["details"]["identity_proof"])
@@ -186,6 +200,7 @@ def project(state: dict[str, Any]) -> dict[str, Any]:
         "execution_scope": scope,
         "identity_readback": current_identity_evidence(scope, proof_events),
         "self_assessment": {"status": "hypothesis_not_capability_proof"},
+        "historical_evaluations": historical_evaluations(state.get("self_promptfoo_checks", [])),
         "performance": performance(scope, events),
         "resources": {
             "daily_token_limit": policy.get("daily_token_limit"),
@@ -308,7 +323,7 @@ async def model_inventory() -> dict[str, Any]:
     from modstore_server.llm_runtime_route import platform_model_catalog
 
     try:
-        catalog = await platform_model_catalog(refresh=False)
+        catalog = await asyncio.wait_for(platform_model_catalog(refresh=False), timeout=10)
     except (SQLAlchemyError, OSError, HTTPException, TimeoutError):
         return {"status": "unknown", "reason": "model_catalog_unavailable"}
     if not catalog.get("ok"):
@@ -333,11 +348,13 @@ async def model_inventory() -> dict[str, Any]:
 def record_identity_check() -> dict[str, Any]:
     """Explicit operator-side independent SQL check; never a model/API write path."""
     from modstore_server.db.xiaoc_life import XiaoCLifeState
-    from modstore_server.xiaoc_life_store import _event, _mutate
+    from modstore_server.xiaoc_life_store import _active_principal, _event, _mutate
 
     def check(data: dict[str, Any], session: Any) -> dict[str, Any]:
         now = utcnow()
-        scope = execution_scope(data, now=now)
+        scope = execution_scope(
+            data, now=now, owner_active=_active_principal(session, data.get("owner_user_id"))
+        )
         if not scope:
             return {"status": "unverified", "reason": "immutable_release_identity_missing"}
         actual = session.execute(
@@ -372,5 +389,85 @@ def record_identity_check() -> dict[str, Any]:
     return _mutate(check)
 
 
+def historical_evaluations(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Offline training outputs have no immutable deployment identity in the
+    # existing bundle schema. They remain historical even if imported today.
+    return [
+        {
+            "status": "historical_measurement_not_current_capability",
+            "evidence_ref": row["id"],
+            **{k: row["details"][k] for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256")},
+        }
+        for row in events
+        if row.get("kind") == "self_promptfoo_check"
+        and row.get("status") == "historical_measurement"
+        and isinstance(row.get("details"), dict)
+        and all(k in row["details"] for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256"))
+    ][:20]
+
+
+def record_promptfoo_measurement(bundle_path: Path, result_path: Path) -> dict[str, Any]:
+    """Operator-only import of a sealed offline employee prompt comparison.
+
+    Never promote a candidate, run a task or label it a current capability.
+    Structured/business replay is intentionally excluded from this read-only import.
+    """
+    from modstore_server.capability_trainer import seal_evaluation
+    from modstore_server.db.xiaoc_life import XiaoCLifeEvent
+    from modstore_server.xiaoc_life_store import _event, _mutate
+
+    bundle = json.loads(bundle_path.read_bytes())
+    if bundle.get("surface", "employee_prompt") != "employee_prompt":
+        raise ValueError("self_model_requires_offline_employee_prompt_comparison")
+    sealed = seal_evaluation(bundle_path, result_path)
+    metrics = {}
+    for arm in ("baseline", "candidate"):
+        row = sealed.get(arm)
+        if (
+            not isinstance(row, dict)
+            or type(row.get("pass")) is not int
+            or type(row.get("total")) is not int
+            or not 0 <= row["pass"] <= row["total"]
+            or row["total"] <= 0
+        ):
+            raise ValueError("self_model_promptfoo_measurement_incomplete")
+        metrics[arm] = {"pass": row["pass"], "total": row["total"]}
+    if metrics["baseline"]["total"] != metrics["candidate"]["total"]:
+        raise ValueError("self_model_promptfoo_measurement_unpaired")
+    details = {
+        **metrics,
+        **{k: sealed[k] for k in ("engine", "bundle_sha256", "results_sha256")},
+        "evaluation_release_status": "unbound_historical_only",
+    }
+    event_id = "self-promptfoo:" + _digest(details)
+
+    def record(_data: dict[str, Any], session: Any) -> dict[str, Any]:
+        if session.get(XiaoCLifeEvent, event_id) is None:
+            _event(
+                session,
+                event_id,
+                kind="self_promptfoo_check",
+                status="historical_measurement",
+                summary="离线成对回归测量，不能证明当前版本能力或授权上线。",
+                evidence_refs=["sha256:" + details["bundle_sha256"], "sha256:" + details["results_sha256"]],
+                details=details,
+            )
+        return {"status": "historical_measurement", "evidence_ref": event_id}
+
+    return _mutate(record)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--promptfoo", nargs=2, type=Path, metavar=("BUNDLE", "RESULT"))
+    args = parser.parse_args()
+    result = (
+        record_promptfoo_measurement(*args.promptfoo)
+        if args.promptfoo
+        else record_identity_check()
+    )
+    print(json.dumps(result, ensure_ascii=False))
+
+
 if __name__ == "__main__":
-    print(json.dumps(record_identity_check(), ensure_ascii=False))
+    main()
