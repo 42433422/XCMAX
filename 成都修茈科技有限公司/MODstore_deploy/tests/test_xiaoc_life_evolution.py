@@ -391,7 +391,28 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
             "protocol_digest": protocol["protocol_digest"],
             "run_id": "41",
             "target_sha": "d" * 40,
-            "evidence_archive": {"sha256": "b" * 64},
+            "artifact_digest": "sha256:" + "b" * 64,
+            "evidence_archive": f"retort-evidence/{row.id}/" + "b" * 64 + ".json",
+            "evidence_digest": "c" * 64,
+            "comparison": {
+                "schema": "retort.paired-checks/v1",
+                "scope": "independent_check_exit_codes_not_capability_score",
+                "baseline_sha": protocol["source_sha"],
+                "candidate_sha": "d" * 40,
+                "protocol_digest": protocol["protocol_digest"],
+                "bundle_digest": "c" * 64,
+                "run_id": "41",
+                "checks": [
+                    {
+                        "id": "restore",
+                        "baseline_returncode": 1,
+                        "candidate_returncode": 0,
+                    }
+                ],
+                "baseline_passed": 0,
+                "candidate_passed": 1,
+                "total": 1,
+            },
         }
         from modstore_server.integrations.repository_packages import load_repository_module
 
@@ -427,7 +448,20 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
     assert audit["candidate_sha"] == "d" * 40
     assert audit["verification_archive_sha256"] == "b" * 64
     assert audit["acceptance_approval_digest"] == contract.digest(verification)
-    assert audit["comparison_status"] == "paired_measurement_not_established"
+    assert audit["comparison_status"] == "paired_exit_codes_verified"
+    assert audit["comparison"]["baseline_passed"] == 0
+    assert audit["comparison"]["candidate_passed"] == 1
+    assert audit["comparison"]["scope"] == "independent_check_exit_codes_not_capability_score"
+    assert audit["proposal_sha256"] == linked["evolution_source_sha256"]
+
+    # A report not bound to the original persisted verifier result is unknown.
+    with factory() as session:
+        row = session.get(RetortEvolutionRun, linked["retort_request_id"])
+        from modstore_server.strategic_workspace_receipts import _evidence
+
+        original_evidence = _evidence(row)
+        original_evidence["snapshot"]["verification"]["comparison"]["baseline_sha"] = "f" * 40
+        assert evolution._comparison_receipt(row.id, protocol, original_evidence) is None
     assert any(ref.startswith("evolution-outcome:") for ref in refs)
     assert not [call for call in calls if call[0] == "POST"]
     # An unchanged original receipt must still restore its stronger status after
