@@ -17,6 +17,8 @@ class Store:
     def __init__(self):
         self.state = {
             "identity_id": "enterprise:xiaoc",
+            "revision": 1,
+            "owner_user_id": 17,
             "level": 5,
             "paused": False,
             "mission": "改善产品与持续学习",
