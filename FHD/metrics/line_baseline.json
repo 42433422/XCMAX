@@ -1,5 +1,5 @@
 {
-  "lines": 2681581,
+  "lines": 2681668,
   "updated": "2026-11-23",
-  "note": "Bind the production-line business evidence to the delivered artifact and reject nonfinite KPI to preserve original completion semantics; include deterministic SQLite regression coverage"
+  "note": "Preserve same-delivery identity in production-line and six-stage evidence consumers; fail closed on ambiguous or nonfinite KPI with original-reader regression"
 }
