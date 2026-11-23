@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from app.infrastructure.codex.policy import RuntimePolicyError
@@ -99,7 +100,50 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
     }
 
 
+_ACTIVE_SLOTS: dict[str, threading.Lock] = {}
+_ACTIVE_SLOTS_GUARD = threading.Lock()
+
+
+def _chat_slot(user_id: str) -> threading.Lock:
+    with _ACTIVE_SLOTS_GUARD:
+        return _ACTIVE_SLOTS.setdefault(str(user_id), threading.Lock())
+
+
 def run_runtime_chat(
+    *,
+    user_id: str,
+    message: str,
+    context: dict[str, Any],
+    file_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Admit one chat turn per account; a second concurrent turn must not race a runtime."""
+    session = str(context.get("session_id") or context.get("conversation_id") or "")
+    slot = _chat_slot(user_id)
+    if not slot.acquire(blocking=False):
+        # Two Codex runtimes for one account used to fail as an unexplained
+        # `unknown` state; report an explicit, retryable admission result instead.
+        return runtime_chat_payload(
+            {
+                "ok": False,
+                "error": "当前账号已有任务正在执行，请稍后重试。",
+                "error_code": "runtime_busy",
+                "execution_state": "blocked",
+                "retryable": True,
+            },
+            conversation_id=session,
+        )
+    try:
+        return _run_runtime_chat(
+            user_id=user_id,
+            message=message,
+            context=context,
+            file_context=file_context,
+        )
+    finally:
+        slot.release()
+
+
+def _run_runtime_chat(
     *,
     user_id: str,
     message: str,
