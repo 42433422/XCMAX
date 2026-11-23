@@ -240,7 +240,13 @@ def test_approved_long_task_survives_queue_and_renews_only_the_original_native_p
     finish_original(state)
     assert short.saved_task(state)["status"] == "completed"
     assert reconciliation.reconcile_usage()["resolved"] == 1
-    assert life.read_state()["budget"]["used_tokens"] == 26
+    # The immutable original ledger settles even if this test crosses Shanghai midnight.
+    with state.factory() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, life.IDENTITY_ID).state_json)
+    assert persisted["budget"]["used_tokens"] == 26
+    assert life.read_state()["budget"]["used_tokens"] == (
+        26 if persisted["budget"]["date"] == life._day() else 0
+    )
     assert life.read_state()["budget"]["reserved_tokens"] == 0
 
 

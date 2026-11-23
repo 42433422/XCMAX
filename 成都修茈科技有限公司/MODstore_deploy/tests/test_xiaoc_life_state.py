@@ -335,8 +335,13 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(data
         session.commit()
     assert reconcile.reconcile_usage()["resolved"] == 1
     assert reconcile.reconcile_usage()["resolved"] == 0
+    with database() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, store.IDENTITY_ID).state_json)
+    assert persisted["budget"]["used_tokens"] == 63
     state = store.read_state()
-    assert state["budget"]["used_tokens"] == 63
+    assert state["budget"]["used_tokens"] == (
+        63 if persisted["budget"]["date"] == store._day() else 0
+    )
     assert state["budget"]["reserved_tokens"] == 0
     assert state["unknown_usage"] is False
     assert state["events"][0]["kind"] == "reconciliation"
