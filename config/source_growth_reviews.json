@@ -19,10 +19,10 @@
       "head_blob": "286040ae67fb3e92704b38845b1e61e21bc84af8",
       "before_lines": 1748,
       "after_lines": 1765,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。 显式工作台审批同样核对持久原run、step及完整plan摘要，不再因动态计划缺少静态节点列表而跳过证明。 本轮复用既有服务注册表创建同一 LangGraph runtime/checkpointer，保留原停止传播、租户、审批和持久回执。",
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。将最终状态、下游步骤输入和反馈写回建立在当前独立核验回执上，保留已知pending状态和已保存终态，防止旧分支自报成功覆盖主线证据。 本轮还修复已授权屏幕动作在执行前和持久恢复审核中被默认目录遗漏的问题，显式使用同一能力目录的屏幕动作投影。 显式工作台审批同样核对持久原run、step及完整plan摘要，不再因动态计划缺少静态节点列表而跳过证明。 本轮按业务、Runtime、交付顺序合解后，将同一 LangGraph 与 checkpoint 的构造统一委托既有 registry，保留原 dispatch 与持久审批读回，较上一集成删除6行。",
       "boundary": "仍使用原LangGraph、持久计划和现有审批；未知结果不重放，不增加第二执行入口。 普通目录仍不含 AIOPEN；执行审核仅纳入现有 supports_aiopen_step 支持的屏幕动作，继续排除 chat/API 递归入口，账号、租户及原签名审批校验保持。",
-      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。 本轮完整动态屏幕原场景和ELT checkpoint两支共11项通过；缺失工作台凭据不签发原审批回执。 最终三组组合的真实 Import Linter 图为 2411 文件、18683 依赖，12 个合同全部通过；原核心运行时目录与已测分组逐 blob 相同。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。 本轮已按 main 34937513 与最终合解源码重新测量上述精确 blob 和行数；此登记仍是评审请求，不是批准。",
+      "validation": "原审批、ELT原回执续跑、pending核对、真实业务SQL和公开隐私专项已运行；最终提交仍需必需CI。 CI 原三个屏幕失败场景已在本地定向运行中通过；目录撤权、工作台恢复及最终 CI 仍分别核对实际结果。 本轮完整动态屏幕原场景和ELT checkpoint两支共11项通过；缺失工作台凭据不签发原审批回执。 新组合继续核验真实销售审批与文件对账、原目标完成、摘要覆盖和产品路由合同；独立分支通过不代替组合 head 的 required checks。",
+      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
@@ -795,14 +795,14 @@
     },
     "FHD/app/application/workflow/approval_persistence.py": {
       "base_file": "FHD/app/application/workflow/approval_persistence.py",
-      "base_blob": "9fe7dcd285e449b704204c8335329ba0c6565e6d",
-      "head_blob": "7e33e7978e6a92675a0978179a8a79943d1b75ca",
-      "before_lines": 749,
-      "after_lines": 896,
-      "reason": "本记录是评审请求，不是审批证据。identity 已按当前 main@d5184dad4897a30ec6b010264ad4cd1269c00a8a 与本集成 head 的精确 blob 重算。仅描述已纳入来源在本文件上的独特合并结果；不把任一来源评审请求或本记录视为已批准，也不合成新的批准记录。 本轮安全修复仅将持久快照读取失败日志改为固定提示，禁止原认证请求标识进入日志。",
-      "boundary": "仅保留已纳入来源对审批持久化的独特合并：审批仍绑定被审查计划的精确指纹与步骤边，不把已拒绝状态写回等待用户，不放宽可信审批或历史触发。不引入未批准来源或 draft。",
-      "validation": "真实 SQLite 删除快照表后，固定日志提示与原 None/raise_storage_errors 两种合同均通过，相关租户保护共6项通过；最终 head CodeQL 和远端完整 CI 另行核验，不把此记录视为审批。",
-      "follow_up": "由 @42433422 按本记录精确 identity 复核后再决定是否合入；本记录只请求架构评审，不表示评审已批准。未纳入项（含未批准的旧727、#3398/+18 及 drafts）见集成 PR 正文。",
+      "base_blob": "7e33e7978e6a92675a0978179a8a79943d1b75ca",
+      "head_blob": "fc0f564467fa4d6c006c259151e979ea141e433d",
+      "before_lines": 896,
+      "after_lines": 911,
+      "reason": "本记录是精确源码增长的评审请求，不是审批证据。按用户开始实现真实闭环的授权，原 AgentRun 审批领取 CAS 同一事务保存真实审批人及时间，关闭领取已提交但决策身份尚未保存的中断窗口。",
+      "boundary": "复用既有 SQLAlchemy 条件更新、原审批快照与原 agent_execution_claim；保留租户、计划、步骤和历史状态限制，领取后未知结果继续禁止重放，不新增任务账本或恢复引擎。",
+      "validation": "真实隔离 SQL 回归覆盖领取前后中断、原审批人恢复、撤权与跨租户拒绝、配置节点实际交付及详情完整计划核对；以本 PR 最终文件树的集成回归与必需 CI 结果为准。",
+      "follow_up": "精确基线为 main@34937513017cd6cb9380ad6690b7267ef7c3834f，由 @42433422 复核同一事务的决策身份、未知结果边界及最终 CI；本记录和 AI 代码复核不替代实际人工审批。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py": {
@@ -984,6 +984,18 @@
       "validation": "原生 CSV/XLSX、执行前 capture、来源与路径漂移、进程回收回归已通过；新增独立 CSV 参考方言 12 项通过，拒绝错误单列并保留空白/转义。最终完整应用 HTTP + 原生 CSV + 原 SQL 到待审批/幂等回读再次通过；最终 CI 另验。",
       "follow_up": "由指定 reviewer 核对 877 行适配边界与安全负控；后续格式或并行业务扩展仍接原组件合同，此记录不替代原客户原件、独立基准和生产验收。",
       "review_owner": "@42433422"
+    },
+    "FHD/app/application/agent_orchestrator/verification_transactions.py": {
+      "reason": "在原 #3513 只读发票历史核验中复用 SQLAlchemy 查询和已有分录合同，支持 finance.journal_entry_reverse 生成的原生冲销，并发现同租户同单原票状态变化后的孤儿冲销；这属于既有财务语义接线，不新增账本或执行器。",
+      "boundary": "扩大发现范围以捕获不合法历史，但有效配对仍只接受已过账原票；保留同租户客户、原引用双字段、金额和借贷方向、唯一配对、贷项规则及唯一当前票。核验不得改写账簿或重派业务动作。",
+      "validation": "真实原会计服务的开票→通用冲销→再开票先复现误拒绝，草稿原票关联已过账冲销先复现漏检；严格修复后8个业务完整模块217 passed，包含错误引用、客户、金额、重复与孤儿反例，独立复核通过。合成隔离数据不替代客户B31原件或生产验收。",
+      "follow_up": "请求 @42433422 基于本次精确源码身份与最终受保护CI审查既有核验边界；继续按业务职责复用原模块，不为行数拆出重复核验器。本登记不代表人工架构批准。",
+      "review_owner": "@42433422",
+      "base_file": "FHD/app/application/agent_orchestrator/verification_transactions.py",
+      "base_blob": "5c165e9f6621d67e5ad425a5d6fb37db045ce271",
+      "head_blob": "3337b2c888ba8fdcf6d094c55caeec35fe6d2ff9",
+      "before_lines": 757,
+      "after_lines": 828
     }
   }
 }

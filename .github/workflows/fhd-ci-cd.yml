@@ -365,10 +365,10 @@ jobs:
         if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin" 'openai-codex==0.171.0'
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}" 'openai-codex==0.171.0'
           uv pip check --system --python "$(command -v python)"
 
       - name: Set up the real private Mod frontend compiler
@@ -491,10 +491,10 @@ jobs:
       - name: Install dependencies
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
           uv pip check --system --python "$(command -v python)"
           python -m pip list --format=json > dependency-versions.json
 
@@ -1594,10 +1594,10 @@ jobs:
       - name: Install backend test deps
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
           uv pip check --system --python "$(command -v python)"
 
       - name: Install frontend deps

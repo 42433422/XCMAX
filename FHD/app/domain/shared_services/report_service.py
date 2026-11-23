@@ -111,7 +111,7 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(SalesOrder.created_at >= start_date)
             if end_date:
                 query = query.filter(SalesOrder.created_at <= end_date)
-            if customer_id:
+            if customer_id is not None:
                 query = query.filter(SalesOrder.customer_id == customer_id)
             if customer_name:
                 query = query.filter(SalesOrder.customer_name == customer_name)
@@ -211,7 +211,7 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(ShipmentRecord.created_at >= start_date)
             if end_date:
                 query = query.filter(ShipmentRecord.created_at <= end_date)
-            if customer_id:
+            if customer_id is not None:
                 query = query.filter(ShipmentRecord.unit_id == customer_id)
 
             records = query.group_by(ShipmentRecord.id).all()
@@ -283,7 +283,7 @@ class ReportService(NeuroEventPublisherMixin):
         with get_db() as db:
             query = db.query(InventoryLedger, Product).join(Product)
 
-            if warehouse_id:
+            if warehouse_id is not None:
                 query = query.filter(InventoryLedger.warehouse_id == warehouse_id)
             if category:
                 query = query.filter(Product.category == category)

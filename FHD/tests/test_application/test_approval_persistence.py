@@ -975,6 +975,7 @@ def test_full_plan_survives_restart_between_two_approvals(
     from app.db.models import User
     from app.infrastructure.tenant_scope import tenant_scope
 
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     with db() as session:
         session.add(User(id=41, username="synthetic-approval-user", password="test", tenant_id=1))
         session.commit()

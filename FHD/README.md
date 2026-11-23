@@ -38,7 +38,7 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责唯一通用模型工具循环、会话与事件；XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
 
-CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
+CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。后端质量检查、全部分片和发布验证从现有 `uv.lock` 同时读取 pytest、pytest-cov、coverage 的精确版本；锁缺失或歧义时在安装前停止，避免排队期间工具发版造成报告工具链漂移。
 
 Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-sh/setup-uv/tree/d0cc045d04ccac9d8b7881df0226f9e82c39688e)（MIT）缓存依赖下载，每次仍从当前检出源码安装并校验依赖；离线 Agent 评测通过 Python 标准库输出脱敏 JUnit，由官方 [upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)（MIT）按源码、运行和重试身份保存。过期 CI 清理复用官方 [github-script 9.0.0](https://github.com/actions/github-script/tree/3a2844b7e9c422d3c10d287c895573f7108da1b3)（MIT，Node 24）；清理调用 GitHub REST 2022-11-28 的 [force-cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#force-cancel-a-workflow-run)，本仓只增加 PR、运行和提交身份核验。可信主线的 `pull_request_target` 不检出或执行 PR 内容，仅在普通取消已有证据且同 PR 旧运行仍未结束时调用；当前提交的 `always()` 门禁保留。新增 Action 引用固定完整提交。真实 API E2E 的随机端口是构建输入，因此仍独立严格构建。
 
@@ -241,6 +241,10 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 复用现有成熟组件，产品侧仅补业务身份、证据适配和完成门禁；通用编排或评测库不掌握 XCMax 的原事务事实，不能直接替代这些适配。
 
 全链路回归沿原审批工作台/队列、SQLAlchemy 会话、报告服务和下载路由执行：不同用户申请与审批，实际写入订单/库存/会计，按原订单导出并经认证 HTTP 下载，然后只读独立核对。`test_business_full_chain_acceptance.py` 还验证越权拒绝、重复审批、重启恢复、无关订单隔离和有效格式但错误金额的文件不能完成任务。此处使用合成输入，B31 仍要求客户原件与人工对账基线，缺失时为 BLOCKED。
+
+审批恢复沿原 SQL 领取事务保存审批人与任务身份；领取前中断可从原审批重试，领取后结果未知则保留待核对并禁止重放。领取与拒绝、撤回使用原审批行的条件更新互斥，已领取的执行不能被并发决定或旧状态读取覆盖。配置审批节点的最后一步先完成原任务领取，再保存原节点决定与审计，避免外层写事务阻塞 SQLite 领取。完成后的审批详情仅允许依据原任务已完成的直接依赖输出展开冻结参数，仍核对完整计划，参数或依赖被改动不能冒充原批准任务。
+
+收款与原幂等请求回读都先核对整组付款及退款凭证；额外凭证、缺失分录或余额不符时拒绝新增业务记录。发票核验同时检查当前有效发票及全部历史发票与贷项或原财务冲销的唯一配对、原客户、科目和借贷金额，两种冲销不能重复抵销同一原凭证。报表显式传入客户或仓库编号 `0` 仍按该范围查询，不扩大为全部业务数据。以上复用既有 SQLAlchemy 事务、凭证明细合同和参数解析器，无新增账本、依赖或通用执行引擎。
 
 | 来源与固定版本 | 许可证 | 复用决策 |
 |---|---|---|

@@ -394,7 +394,6 @@ def test_rerun_during_readback_and_unsafe_archive_are_rejected(tmp_path):
     assert not (tmp_path / "outside.json").exists()
 
 
-
 def test_native_job_readback_cannot_race_into_another_attempt(tmp_path):
     mod = _module()
     records, collect = _actions_fixture(mod)

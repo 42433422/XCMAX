@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
@@ -143,6 +143,98 @@ def _matching_claim(data: dict, actual: dict) -> bool:
     return True
 
 
+def _journal_lines_match(row, tenant, customer_id, kind, amount) -> bool:
+    expected = {
+        "sale": {("1122", amount, Decimal(0)), ("6001", Decimal(0), amount)},
+        "payment": {("1001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
+        "credit-note": {("6001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
+        "refund": {("1122", amount, Decimal(0)), ("1001", Decimal(0), amount)},
+    }[kind]
+    return (
+        len(row.lines) == 2
+        and _decimal(row.debit_total) == amount
+        and _decimal(row.credit_total) == amount
+        and all(
+            line.tenant_id == tenant
+            and line.partner_id == (customer_id if line.account_code == "1122" else None)
+            for line in row.lines
+        )
+        and {(line.account_code, _decimal(line.debit), _decimal(line.credit)) for line in row.lines}
+        == expected
+    )
+
+
+def _invoice_journals_match(db, tenant, order, current) -> bool:
+    """Reconcile active invoices with their original posted credit/reversal pairs."""
+    posted = list(
+        db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == tenant,
+                JournalEntry.reference_id == order.id,
+                JournalEntry.reference_type.in_({"sale", "credit-note"}),
+                JournalEntry.status == "posted",
+            )
+        )
+    )
+    invoices = {row.id: row for row in posted if row.reference_type == "sale"}
+    credits = {row.reversed_of_id: row for row in posted if row.reference_type == "credit-note"}
+    if len(invoices) + len(credits) != len(posted):
+        return False
+    invoice_ids = (
+        select(JournalEntry.id)
+        .where(
+            JournalEntry.tenant_id == tenant,
+            JournalEntry.reference_id == order.id,
+            JournalEntry.reference_type == "sale",
+        )
+        .correlate(None)
+    )
+    reversals = db.scalars(
+        select(JournalEntry).where(
+            JournalEntry.tenant_id == tenant,
+            JournalEntry.reference_type == "reversal",
+            JournalEntry.status == "posted",
+            or_(
+                JournalEntry.reference_id.in_(invoice_ids),
+                JournalEntry.reversed_of_id.in_(invoice_ids),
+            ),
+        )
+    )
+    for reversal in reversals:
+        if (
+            reversal.reversed_of_id not in invoices
+            or reversal.reference_id != reversal.reversed_of_id
+            or reversal.is_credit_note != 0
+            or reversal.credit_note_of_id is not None
+            or reversal.reversed_of_id in credits
+        ):
+            return False
+        credits[reversal.reversed_of_id] = reversal
+    active = set()
+    for original in invoices.values():
+        if original.is_credit_note or original.reversed_of_id is not None:
+            return False
+        if original.reversed_at is None:
+            active.add(original.id)
+            continue
+        credit = credits.pop(original.id, None)
+        if (
+            credit is None
+            or (credit.reference_type == "credit-note" and credit.is_credit_note != 1)
+            or credit.reversed_at is not None
+            or credit.credit_note_of_id not in {None, original.id}
+            or not _journal_lines_match(
+                original, tenant, order.customer_id, "sale", _decimal(original.debit_total)
+            )
+            or not _journal_lines_match(
+                credit, tenant, order.customer_id, "credit-note", _decimal(original.debit_total)
+            )
+        ):
+            return False
+    expected = {current.id} if current.reference_type == "sale" else set()
+    return not credits and active == expected
+
+
 def _journal(db, tenant, entry_id, order_id, kind, amount, *, reference_id=None):
     order = _order(db, tenant, order_id, SalesOrder)
     row = db.scalar(
@@ -163,26 +255,12 @@ def _journal(db, tenant, entry_id, order_id, kind, amount, *, reference_id=None)
         or row.status != "posted"
         or row.reversed_at is not None
         or (kind != "credit-note" and (row.reversed_of_id is not None or row.is_credit_note))
-        or not row.lines
-        or any(line.tenant_id != tenant for line in row.lines)
-        or _decimal(row.debit_total) != amount
-        or _decimal(row.credit_total) != amount
-        or not row.is_balanced()
+        or not _journal_lines_match(row, tenant, order.customer_id, kind, amount)
     ):
         return None
-    expected = {
-        "sale": {("1122", amount, Decimal(0)), ("6001", Decimal(0), amount)},
-        "payment": {("1001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
-        "credit-note": {("6001", amount, Decimal(0)), ("1122", Decimal(0), amount)},
-        "refund": {("1122", amount, Decimal(0)), ("1001", Decimal(0), amount)},
-    }[kind]
-    if any(
-        line.partner_id != (order.customer_id if line.account_code == "1122" else None)
-        for line in row.lines
-    ):
+    if kind in {"sale", "credit-note"} and not _invoice_journals_match(db, tenant, order, row):
         return None
-    lines = {(line.account_code, _decimal(line.debit), _decimal(line.credit)) for line in row.lines}
-    return row if len(row.lines) == 2 and lines == expected else None
+    return row
 
 
 def _delivery(db, tenant, order, step, data, before):
@@ -327,27 +405,12 @@ def _accounting(db, tenant, order, step, data, before):
     if action == "invoice":
         if order.invoice_status != "invoiced" or entry.is_credit_note or entry.reversed_of_id:
             return None
-    else:
-        original = db.scalar(
-            select(JournalEntry).where(
-                JournalEntry.tenant_id == tenant,
-                JournalEntry.id == entry.reversed_of_id,
-                JournalEntry.reference_id == order.id,
-                JournalEntry.reference_type == "sale",
-            )
-        )
-        if (
-            order.invoice_status != "credit_note"
-            or entry.is_credit_note != 1
-            or entry.id <= before["journal_cursor"]
-            or original is None
-            or original.reversed_at is None
-            or _decimal(original.debit_total) != amount
-            or _decimal(original.credit_total) != amount
-            or not original.is_balanced()
-            or any(line.tenant_id != tenant for line in original.lines)
-        ):
-            return None
+    elif (
+        order.invoice_status != "credit_note"
+        or entry.is_credit_note != 1
+        or entry.id <= before["journal_cursor"]
+    ):
+        return None
     return {
         "journal_entry_id": entry.id,
         "reversed_of_id": entry.reversed_of_id,

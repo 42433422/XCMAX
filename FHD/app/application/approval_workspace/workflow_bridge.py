@@ -335,7 +335,10 @@ class WorkflowApprovalBridge:
             from app.application.workflow.approval_persistence import claim_agent_approval
 
             if not claim_agent_approval(
-                request_id=request_id, agent_run_id=run_id, approved_step_id=step_id
+                request_id=request_id,
+                agent_run_id=run_id,
+                approved_step_id=step_id,
+                approved_by=approved_by,
             ):
                 return {
                     **self.failure(request_id, AGENT_RUN_UNAVAILABLE_CODE, agent_run_id=run_id),

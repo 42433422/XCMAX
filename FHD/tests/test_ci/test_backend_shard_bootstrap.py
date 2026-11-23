@@ -62,8 +62,8 @@ def test_downloaded_artifacts_bootstrap_without_pytest_or_coverage(tmp_path):
     assert all(item["report_toolchain"]["coverage"] == version for item in summaries)
 
 
-def rebind_toolchain(root, coverage_version):
-    directory = root / "shard-1"
+def rebind_toolchain(root, coverage_version, index=1):
+    directory = root / f"shard-{index}"
     toolchain = directory / "report-toolchain.json"
     data = json.loads(toolchain.read_text())
     data["coverage"] = coverage_version
@@ -73,6 +73,18 @@ def rebind_toolchain(root, coverage_version):
         data = json.loads(manifest.read_text())
         data["report_toolchain_sha256"] = digest(toolchain)
         manifest.write_text(json.dumps(data))
+
+
+def test_patch_release_drift_cannot_publish_a_report_install_version(tmp_path):
+    root = make_artifacts(tmp_path / "shards", 4)
+    for index in range(1, 5):
+        rebind_toolchain(root, "7.17.4", index)
+    rebind_toolchain(root, "7.17.5")
+    output = tmp_path / "outputs"
+    result = cli(["verify", root], output, cwd=artifact_source(root))
+    assert result.returncode != 0
+    assert "Different report toolchains across shards" in result.stderr
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

@@ -709,7 +709,7 @@ def test_observation_rejects_unproven_scrape_coverage(tmp_path, monkeypatch, mut
 
 
 @pytest.mark.parametrize(
-    "mutation", ["unknown_metric", "sample_count", "reading", "declared_retention"]
+    "mutation", ["unknown_metric", "sample_count", "sample_floor", "reading", "declared_retention"]
 )
 def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, mutation):
     collector = _complete_observation(tmp_path, monkeypatch)
@@ -718,16 +718,25 @@ def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, muta
             {"wrong": p["readings"].pop("SLO-BIZ-05")}
         ),
         "sample_count": lambda p: p["readings"]["SLO-BIZ-05"].update(sample_count=0),
+        "sample_floor": lambda p: p["readings"]["SLO-BIZ-05"].update(
+            sample_count=collector.SAMPLE_MINIMUMS["SLO-BIZ-05"] - 1
+        ),
         "reading": lambda p: p["readings"]["SLO-API-01"].update(reading_numeric=0.5, reading="0.5"),
         "declared_retention": lambda p: p.update(raw_metric_retention_source="declared"),
     }
     _rewrite_record(tmp_path / "000.json", collector, mutations[mutation])
     result = _verifier_module().verify_window(
-        tmp_path, release_id="release-a", required_days=1,
+        tmp_path,
+        release_id="release-a",
+        required_days=1,
         now=datetime(2026, 11, 1, 12, tzinfo=UTC),
     )
     assert result["passed"] is False
     assert result["blockers"]
+    assert "latest_formal_sample_stale_or_missing" not in result["blockers"]
+    if mutation in {"reading", "sample_floor"}:
+        slo_id = "SLO-API-01" if mutation == "reading" else "SLO-BIZ-05"
+        assert f"{slo_id}:target_or_sample_failed" in result["blockers"]
 
 
 def test_concurrent_collections_keep_one_chain_independent_of_filenames(tmp_path, monkeypatch):
@@ -760,9 +769,12 @@ def test_concurrent_collections_keep_one_chain_independent_of_filenames(tmp_path
     )
     assert (
         verifier.verify_window(
-            tmp_path, release_id="release-a", required_days=1,
+            tmp_path,
+            release_id="release-a",
+            required_days=1,
             now=datetime(2026, 11, 1, 12, tzinfo=UTC),
-        )["passed"] is True
+        )["passed"]
+        is True
     )
 
 

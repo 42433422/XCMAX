@@ -105,8 +105,13 @@ def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> 
     """Bind reports to the actual registered-device jobs in this exact attempt."""
     data = api(f"{route}/attempts/{run['run_attempt']}/jobs?per_page=100&page=1")
     rows, count = data.get("jobs"), data.get("total_count")
-    if (not isinstance(rows, list) or type(count) is not int or not 1 <= count <= 100
-            or len(rows) != count or len({row.get("id") for row in rows}) != count):
+    if (
+        not isinstance(rows, list)
+        or type(count) is not int
+        or not 1 <= count <= 100
+        or len(rows) != count
+        or len({row.get("id") for row in rows}) != count
+    ):
         raise ValueError("desktop_soak: incomplete original native job listing")
     jobs = {}
     for platform in ("windows", "macos"):
@@ -116,18 +121,32 @@ def _native_jobs(api, route: str, run: dict, start: datetime, end: datetime) -> 
         row = matches[0]
         labels = row.get("labels") if isinstance(row.get("labels"), list) else []
         if not (
-            type(row.get("id")) is int and row["id"] > 0
-            and row.get("run_id") == run["id"] and row.get("head_sha") == run["head_sha"]
-            and row.get("status") == "completed" and row.get("conclusion") == "success"
-            and type(row.get("runner_id")) is int and row["runner_id"] > 0
-            and isinstance(row.get("runner_name"), str) and row["runner_name"]
-            and {"self-hosted", "xcagi-physical", platform} <= {str(label).lower() for label in labels}
+            type(row.get("id")) is int
+            and row["id"] > 0
+            and row.get("run_id") == run["id"]
+            and row.get("head_sha") == run["head_sha"]
+            and row.get("status") == "completed"
+            and row.get("conclusion") == "success"
+            and type(row.get("runner_id")) is int
+            and row["runner_id"] > 0
+            and isinstance(row.get("runner_name"), str)
+            and row["runner_name"]
+            and {"self-hosted", "xcagi-physical", platform}
+            <= {str(label).lower() for label in labels}
             and start <= _stamp(row.get("started_at")) <= _stamp(row.get("completed_at")) <= end
         ):
             raise ValueError(f"desktop_soak: {platform} original registered-device job mismatch")
-        jobs[platform] = {key: row[key] for key in (
-            "id", "runner_id", "runner_name", "labels", "started_at", "completed_at",
-        )}
+        jobs[platform] = {
+            key: row[key]
+            for key in (
+                "id",
+                "runner_id",
+                "runner_name",
+                "labels",
+                "started_at",
+                "completed_at",
+            )
+        }
     if jobs["windows"]["runner_id"] == jobs["macos"]["runner_id"]:
         raise ValueError("desktop_soak: two distinct registered native runners are required")
     return jobs
@@ -402,7 +421,9 @@ def build_reports(
     slo = _load(slo_path)
     rollback = _load(rollback_path)
     desktop_soak = verify_bundle(
-        desktop_soak_dir, release_sha=release_sha, product_version=product_version,
+        desktop_soak_dir,
+        release_sha=release_sha,
+        product_version=product_version,
         provenance=_load(provenance_path) if provenance_path else None,
     )
     customer = _load(customer_path)
@@ -497,9 +518,13 @@ def build_reports(
         "source_evidence": [
             _source("production_slo_window", slo_path, slo),
             _source("upgrade_rollback", rollback_path, rollback),
-        ] + [
-            _source(f"desktop_soak_{platform}", desktop_soak_dir / f"{platform}.json",
-                    {"schema": "xcagi.desktop_soak/v1"})
+        ]
+        + [
+            _source(
+                f"desktop_soak_{platform}",
+                desktop_soak_dir / f"{platform}.json",
+                {"schema": "xcagi.desktop_soak/v1"},
+            )
             for platform in ("windows", "macos")
             if desktop_soak_dir and (desktop_soak_dir / f"{platform}.json").is_file()
         ],

@@ -188,7 +188,7 @@ PR Fast CI
 | 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据，仅对同 PR、同主 CI、旧 head、已有 cancelled job 且仍未完成的运行使用官方 force-cancel；取消前复查事件 head、live PR、run/attempt 和完整 jobs，身份缺失或漂移即停止。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
 | 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
-| 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
+| 后端安装 | uv 使用同一 Python 安装现有 requirements，并从同一 uv.lock 同时固定 pytest、pytest-cov、coverage；锁缺失或歧义时在安装前停止。缓存绑定 requirements、uv.lock 及本地包声明，安装后校验依赖一致性，每片保存解析版本。其余间接依赖仍以实际清单和回归为准。 |
 | 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
 | 前端分片 | 全集只运行 4 片 Vitest，合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。源码与测试 ESLint、stub/any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
