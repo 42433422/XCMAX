@@ -14,7 +14,9 @@ class EmptyInput(BaseModel):
 
 
 class StateQuery(EmptyInput):
-    entity_type: Literal["order", "customer", "employee", "task", "fund"] = "order"
+    entity_type: Literal["order", "customer", "employee", "task", "fund", "inventory", "production"] = (
+        "order"
+    )
     entity_id: str | None = Field(default=None, min_length=1, max_length=160)
     limit: int = Field(default=10, ge=1, le=20, strict=True)
     force_refresh: bool = False
