@@ -122,7 +122,10 @@ def build_pricing(plans_cfg: dict) -> dict:
     if not plans:
         die("saas_plans.json 缺少 plans")
     out = []
+    public_ids = ["saas-personal-free", "saas-trial-30", "saas-permanent-standard"]
     for p in plans:
+        if p["id"] not in public_ids:
+            continue
         out.append(
             {
                 "id": p["id"],
@@ -138,18 +141,23 @@ def build_pricing(plans_cfg: dict) -> dict:
             }
         )
     by_id = {p["id"]: p for p in out}
-    homepage_ids = ["saas-trial-30", "saas-permanent-starter", "saas-permanent-growth"]
-    extended_ids = ["saas-permanent-max", "saas-permanent-ultra"]
-    missing = [i for i in homepage_ids + extended_ids if i not in by_id]
+    missing = [i for i in public_ids if i not in by_id]
     if missing:
         die(f"saas_plans.json 缺少方案: {missing}")
     trial = by_id["saas-trial-30"]
+    customization_from = plans_cfg.get("commercial_terms", {}).get("customization_from_cents")
+    if type(customization_from) is not int or customization_from <= 0:
+        die("saas_plans.json 缺少有效的定制起价")
     return {
         "trial": trial,
         "trial_days": plans_cfg.get("trial_days"),
         "currency": plans_cfg.get("currency", "CNY"),
-        "homepage_plans": [by_id[i] for i in homepage_ids],
-        "extended_plans": [by_id[i] for i in extended_ids],
+        "homepage_plans": [by_id["saas-permanent-standard"]],
+        "extended_plans": [],
+        "commercial_terms": {
+            "customization_from_cents": customization_from,
+            "customization_from_display": format_cents(customization_from),
+        },
         "all_plans": out,
         "purchase_url_tpl": "/market/account-plans?plan={plan_id}&source=official-site",
     }
@@ -538,9 +546,12 @@ def build() -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="fail-closed：生成结果与磁盘不一致则退出码 1")
+    ap.add_argument("--pricing-only", action="store_true", help="仅从价格 SSOT 更新价格，不重新生成能力与验收证据")
     args = ap.parse_args()
 
-    data = build()
+    data = read_json(OUTPUT) if args.pricing_only else build()
+    if args.pricing_only:
+        data["pricing"] = build_pricing(read_json(FHD_ROOT / "config" / "saas_plans.json"))
     payload = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
 
     if args.check:

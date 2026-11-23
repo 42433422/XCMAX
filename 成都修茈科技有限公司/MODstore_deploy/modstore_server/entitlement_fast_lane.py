@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.account_license_plans import (
     ACCOUNT_LICENSE_PLANS,
+    LEGACY_ACCOUNT_LICENSE_PLANS,
     account_license_plan,
     is_account_license_plan_id,
 )
@@ -109,7 +110,10 @@ def list_fast_lane_plans(db: Session) -> list[dict[str, Any]]:
             }
         )
     catalog_rank = {"account_license": 0, "membership": 1}
-    license_rank = {str(plan["id"]): index for index, plan in enumerate(ACCOUNT_LICENSE_PLANS)}
+    license_rank = {
+        str(plan["id"]): index
+        for index, plan in enumerate((*ACCOUNT_LICENSE_PLANS, *LEGACY_ACCOUNT_LICENSE_PLANS))
+    }
     return sorted(
         result,
         key=lambda item: (

@@ -25,8 +25,10 @@ from app.infrastructure.codex.policy import (
     QUALIFICATION_CHECKS,
     ModelRoute,
     RuntimeSettings,
+    qualification_host_identity,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_qualification import synthetic_qualification
 from tests.test_application.test_codex_gateway_integration import _events
 
 
@@ -219,16 +221,7 @@ def test_real_cli_corrects_missing_goal_in_original_thread_and_settles_parent(
         # Synthetic receipt for contract tests, never evidence of real route qualification.
         qualification = tmp_path / "test-only-qualification.json"
         qualification.write_text(
-            json.dumps(
-                {
-                    "schema": "xcmax.runtime-qualification.v1",
-                    "route_identity": route.identity,
-                    "codex_version": CODEX_VERSION,
-                    "model_kind": "real",
-                    "evidence_refs": ["synthetic-goal-protocol-fixture-only"],
-                    "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-                }
-            ),
+            json.dumps(synthetic_qualification(route, qualification.parent)),
             encoding="utf-8",
         )
         settings = RuntimeSettings(

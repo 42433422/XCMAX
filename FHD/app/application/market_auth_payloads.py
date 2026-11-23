@@ -117,6 +117,7 @@ def market_lifecycle_from_payloads(*payloads: Any) -> dict[str, Any]:
                 ("account_state", "account_state"),
                 ("next_action", "next_action"),
                 ("active_plan_id", "active_plan_id"),
+                ("active_plan_expires_at", "active_plan_expires_at"),
             ):
                 value = str(source.get(source_key) or "").strip()
                 if value:

@@ -13,6 +13,7 @@ import copy
 import hashlib
 import inspect
 import json
+import logging
 import math
 import time
 from collections.abc import Callable
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
 
 _CONTROL_POLL_SECONDS = 0.5
 _TERMINAL = frozenset({"completed", "failed", "cancelled", "rejected"})
+logger = logging.getLogger(__name__)
 
 
 def _input_text(
@@ -278,17 +280,35 @@ async def run_codex_agent(
         mutate(reserve)
         return consumed
 
+    def revoke(reason: str, *, release_coordinator: bool = False) -> None:
+        if grant is None:
+            return
+        try:
+            store.close(
+                run_id,
+                reason=reason,
+                generation=generation,
+                release_coordinator=release_coordinator,
+            )
+        except RECOVERABLE_ERRORS:
+            if cancelled is None:
+                raise
+            logger.warning(
+                "Codex cancellation retained after revocation storage failure", exc_info=True
+            )
+
     async def stop(reason: str) -> None:
-        # Revoke callback authority before asking the runtime to stop. A stopped
-        # process does not prove that a previously submitted child was rolled back.
-        if grant is not None:
-            store.close(run_id, reason=reason, generation=generation, release_coordinator=False)
-        if transport is not None:
-            try:
-                async with asyncio.timeout(min(float(config.timeout_seconds), 5.0)):
-                    await transport.interrupt()
-            except RECOVERABLE_ERRORS:
-                pass  # Revocation and durable receipts remain authoritative.
+        # Attempt durable revocation first, but a storage failure must not keep
+        # the native runtime alive. Existing receipts still own unknown effects.
+        try:
+            revoke(reason)
+        finally:
+            if transport is not None:
+                try:
+                    async with asyncio.timeout(min(float(config.timeout_seconds), 5.0)):
+                        await transport.interrupt()
+                except RECOVERABLE_ERRORS:
+                    pass  # Transport context exit also closes the native process.
 
     try:
         try:
@@ -627,7 +647,8 @@ async def run_codex_agent(
                     if runtime_status != "completed":
                         await stop(runtime_status)
 
-                except asyncio.CancelledError:
+                except asyncio.CancelledError as exc:
+                    cancelled = exc
                     await stop("cancelled")
                     raise
                 except RECOVERABLE_ERRORS:
@@ -654,10 +675,7 @@ async def run_codex_agent(
             }
         await stop(runtime_status)
     finally:
-        if grant is not None:
-            store.close(
-                run_id, reason=runtime_status, generation=generation, release_coordinator=False
-            )
+        revoke(runtime_status)
 
     try:
         rows = store.receipt_snapshot(run_id)
@@ -750,9 +768,11 @@ async def run_codex_agent(
                 error=saved.run.error or "业务结果未通过核验",
             )
     finally:
-        store.close(run_id, reason=runtime_status, generation=generation)
-    if cancelled is not None:
-        raise cancelled
+        try:
+            revoke(runtime_status, release_coordinator=True)
+        finally:
+            if cancelled is not None:
+                raise cancelled
     return result
 
 

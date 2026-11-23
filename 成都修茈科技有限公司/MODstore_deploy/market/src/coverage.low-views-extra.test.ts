@@ -254,6 +254,24 @@ describe('low coverage view business branches', () => {
     wrapper.unmount()
   })
 
+  it.each([['precreate', '支付宝'], ['wechat_native', '微信']])('loads the original %s checkout QR without creating a second software order', async (payType, channel) => {
+    vi.useFakeTimers()
+    lowMocks.api.paymentQuery.mockResolvedValueOnce({
+      ...pendingOrder, pay_type: payType, plan_id: 'saas-permanent-standard',
+      qr_code: 'pay://original-order', total_amount: '6800.00',
+    })
+    const { default: PaymentCheckoutView } = await import('./views/PaymentCheckoutView.vue')
+    const wrapper = mount(PaymentCheckoutView, { global: globalOptions })
+    await flushPromises()
+    expect(lowMocks.api.paymentQuery).toHaveBeenCalledExactlyOnceWith('ord_1', { reconcile: true })
+    expect(lowMocks.api.paymentCheckout).not.toHaveBeenCalled()
+    expect(wrapper.get('.qr-hint').text()).toBe(`使用${channel}扫码付款`)
+    expect(wrapper.get('.qr-img').attributes('src')).toContain(encodeURIComponent('pay://original-order'))
+    expect(wrapper.get('.qr-img').attributes('alt')).toBe(`${channel}支付二维码`)
+    expect(wrapper.find('.success-section').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows desktop authorization completion only for an account-license order', async () => {
     lowMocks.api.paymentQuery.mockResolvedValueOnce({
       ...pendingOrder,

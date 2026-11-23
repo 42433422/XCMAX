@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import time
 import uuid
-from contextlib import ExitStack
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AsyncExitStack, ExitStack, aclosing
 from types import SimpleNamespace
 from typing import Any
 
@@ -19,6 +21,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from httpx_sse import EventSource
+from starlette.types import Receive, Scope, Send
 
 from app.infrastructure.codex.policy import ModelRoute
 
@@ -257,11 +260,20 @@ def _finish(
 
     def finish(run: Any, metadata: dict[str, Any]) -> None:
         call = metadata["model_requests"][request_id]
-        if call.get("state") in {"completed", "failed"}:
-            return
-        call.update(state=state if settled else "unknown", usage_key=usage_key)
+        terminal = call.get("state") in {"completed", "failed"}
+        if not terminal:
+            call.update(state=state if settled else "unknown", usage_key=usage_key)
         if settled is None or usage is None:
-            metadata["model_reconciliation_required"] = True
+            if not terminal:
+                metadata["model_reconciliation_required"] = True
+            return
+        # A late receipt for this exact request can resolve its model hold. It
+        # cannot clear another request's uncertainty or any business-effect gate.
+        metadata["model_reconciliation_required"] = any(
+            item.get("state") in {"reserved", "unknown"}
+            for item in metadata["model_requests"].values()
+        )
+        if terminal:
             return
         call.update(usage=usage, cost_units=settled["cost_units"])
         if state == "completed":
@@ -352,6 +364,7 @@ async def forward_responses(request: Request):
     network_started = False
     finished = False
     streaming_handoff = False
+    cleanup_started = False
     slot_failure: BaseException | None = None
     platform_receipt: Any = None
 
@@ -373,6 +386,31 @@ async def forward_responses(request: Request):
     def mark_unknown() -> None:
         if claimed:
             finish_usage(store, binding.run_id, request_id, usage=None, usage_key=usage_key)
+
+    async def close_resources(
+        error: BaseException | None, settle: Callable[[], None] | None = None
+    ) -> None:
+        nonlocal cleanup_started
+        if cleanup_started:
+            return
+        cleanup_started = True
+        interrupted = sys.exception()
+        try:
+            with anyio.CancelScope(shield=True):
+                async with AsyncExitStack() as cleanup:
+                    cleanup.callback(close_slot, error)
+                    if client is not None:
+                        cleanup.push_async_callback(client.aclose)
+                    if upstream is not None:
+                        cleanup.push_async_callback(upstream.aclose)
+                    if settle is not None:
+                        await anyio.to_thread.run_sync(settle)
+        except BOUNDARY_ERRORS:
+            # Request cancellation remains authoritative even if receipt storage
+            # or a transport close fails; every registered cleanup still runs.
+            if isinstance(interrupted, anyio.get_cancelled_exc_class()):
+                raise interrupted
+            raise
 
     try:
         with model_rate_limit_scope(binding.context):
@@ -642,7 +680,7 @@ async def forward_responses(request: Request):
                     raise error
             return JSONResponse(response)
 
-        async def events():
+        async def events() -> AsyncGenerator[bytes, None]:
             completed = False
             terminal = False
             failure = None
@@ -747,7 +785,7 @@ async def forward_responses(request: Request):
             except BOUNDARY_ERRORS as exc:
                 failure = exc
                 await record_failure(exc, output_started=output_visible)
-                error = {
+                error_payload = {
                     "code": getattr(exc, "code", "model_stream_error"),
                     "message": (
                         "Model stream output was rejected"
@@ -755,19 +793,30 @@ async def forward_responses(request: Request):
                         else "Model stream requires reconciliation"
                     ),
                 }
-                yield f"data: {json.dumps({'type': 'error', 'error': error})}\n\n".encode()
+                yield f"data: {json.dumps({'type': 'error', 'error': error_payload})}\n\n".encode()
             finally:
-                with anyio.CancelScope(shield=True):
-                    if not terminal:
-                        await anyio.to_thread.run_sync(mark_unknown)
-                    await upstream.aclose()
-                    await client.aclose()
-                    close_slot(failure)
+                await close_resources(failure, mark_unknown if not terminal else None)
 
         finished = True  # Streaming iterator now owns cleanup and settlement.
         streaming_handoff = True
-        return StreamingResponse(
-            events(), media_type="text/event-stream", headers={"Cache-Control": "no-store"}
+        event_stream = events()
+
+        class ModelStreamingResponse(StreamingResponse):
+            async def stream_response(self, send: Send) -> None:
+                # The generator owns an AnyIO deadline scope; close it in the
+                # same streaming task even when the downstream send fails.
+                async with aclosing(event_stream):
+                    await super().stream_response(send)
+
+            async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                try:
+                    await super().__call__(scope, receive, send)
+                finally:
+                    # A failed response start never enters the body generator.
+                    await close_resources(None, mark_unknown)
+
+        return ModelStreamingResponse(
+            event_stream, media_type="text/event-stream", headers={"Cache-Control": "no-store"}
         )
     except ModelReservationError as exc:
         if claimed and not reserved and not exc.reconciliation_required:
@@ -806,23 +855,18 @@ async def forward_responses(request: Request):
         raise HTTPException(502, "Qualified model gateway returned an invalid response") from exc
     finally:
         if not streaming_handoff:
+            settle = None
             if claimed and not finished:
                 if reserved and not network_started:
-                    await anyio.to_thread.run_sync(
-                        lambda: finish_usage(
-                            store,
-                            binding.run_id,
-                            request_id,
-                            usage=_ZERO_USAGE,
-                            usage_key=usage_key,
-                            state="failed",
-                        )
+                    settle = lambda: finish_usage(
+                        store,
+                        binding.run_id,
+                        request_id,
+                        usage=_ZERO_USAGE,
+                        usage_key=usage_key,
+                        state="failed",
                     )
                 else:
                     # A reservation failure can itself be an uncertain remote wallet operation.
-                    await anyio.to_thread.run_sync(mark_unknown)
-            if upstream is not None:
-                await upstream.aclose()
-            if client is not None:
-                await client.aclose()
-            close_slot(slot_failure)
+                    settle = mark_unknown
+            await close_resources(slot_failure, settle)

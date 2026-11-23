@@ -14,9 +14,10 @@ from app.fastapi_routes.model_payment import router
 
 
 @pytest.fixture
-def app_mp():
+def app_mp(monkeypatch):
     """Create a FastAPI app with the model_payment router mounted."""
     _app = FastAPI()
+    monkeypatch.setenv("FHD_DEMO_PAYMENT", "1")
     _app.include_router(router)
 
     # Register AppError handler so PaymentError returns correct status code
@@ -392,8 +393,9 @@ class TestCheckout:
             }
             mock_orders.record_checkout_pending.side_effect = OSError("disk full")
             r = client_mp.post("/api/model-payment/checkout", json={"plan_id": "demo-starter"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
+            assert r.status_code == 503
+            assert r.json()["success"] is False
+            assert "redirect_url" not in r.json().get("data", {})
 
 
 # ========================= POST /api/model-payment/notify/alipay =========

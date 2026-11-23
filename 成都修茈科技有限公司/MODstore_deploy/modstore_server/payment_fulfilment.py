@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from modstore_server.account_license_plans import (
     account_license_plan,
+    account_license_priority,
     is_account_license_plan_id,
 )
 from modstore_server.models import (
@@ -240,8 +241,10 @@ def credit_plan_allowance(
 
 
 class PlanFulfilStrategy(FulfilStrategy):
-    """套餐购买：撤销旧 active UserPlan、写新 UserPlan + Entitlement(plan) +
-    重置配额，并按实付价取整元给钱包加 LLM 余额（与 java_payment_service 对齐）。
+    """Fulfil the purchased plan while retaining permanent software grants.
+
+    Only usage memberships receive paid-price wallet credit; software uses
+    its explicitly published allowance (zero for permanent licenses).
     """
 
     name = "plan"
@@ -287,6 +290,8 @@ class PlanFulfilStrategy(FulfilStrategy):
         )
         for active_row in active_rows:
             if is_account_license_plan_id(active_row.plan_id) is is_license:
+                if is_license and account_license_priority(active_row.plan_id)[0] == 2:
+                    continue
                 active_row.is_active = False
                 session.add(active_row)
         license_meta = account_license_plan(plan.id) or {}

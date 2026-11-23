@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -106,7 +106,7 @@ def apply_notify_paid(
     验签通过后调用：金额一致则置为 paid，重复通知幂等。
 
     返回 (reason, order_snapshot)；reason 取值：
-    marked_paid | already_paid | unknown_order | amount_mismatch
+    marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch
     """
     with _lock:
         data = _load()
@@ -139,11 +139,19 @@ def apply_notify_paid(
 
         o["notify_count"] = int(o.get("notify_count") or 0) + 1
         o["last_notify_at"] = now
-        o["status"] = "paid"
+        o["status"] = "paid_pending_fulfillment"
         o["trade_no"] = trade_no
-        o["paid_at"] = now
+        o["paid_at"] = o.get("paid_at") or now
+        # Freeze the verified payment before applying the existing license. A
+        # retry after a process/write failure keeps the original trial deadline.
+        _atomic_write(order_store_path(), data)
 
         plan_id = str(o.get("plan_id") or "")
+        if not _apply_saas_subscription_if_needed(
+            plan_id=plan_id, local_user_id=o.get("local_user_id"), paid_at=o["paid_at"]
+        ):
+            return "fulfillment_pending", dict(o)
+        o["status"] = "paid"
         ent_snapshot: dict[str, Any] | None = None
         if plan_id:
             ent_snapshot = _grant_entitlement_inplace(
@@ -151,11 +159,7 @@ def apply_notify_paid(
                 plan_id=plan_id,
                 out_trade_no=out_trade_no,
                 trade_no=trade_no,
-                paid_at=now,
-            )
-            _apply_saas_subscription_if_needed(
-                plan_id=plan_id,
-                local_user_id=o.get("local_user_id"),
+                paid_at=o["paid_at"],
             )
 
         snap = dict(o)
@@ -172,33 +176,48 @@ def apply_notify_paid(
         return "marked_paid", snap
 
 
-def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any) -> None:
+def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any, paid_at: str) -> bool:
     """SaaS 套餐支付成功后绑定 tenants.plan_id。"""
     if not str(plan_id or "").startswith("saas-"):
-        return
+        return True
     try:
         uid = int(local_user_id)
     except (TypeError, ValueError):
         logger.warning("[model-payment] saas plan paid but no local_user_id plan_id=%s", plan_id)
-        return
+        return False
     try:
         from app.application.tenant_subscription_app_service import apply_paid_plan_for_user
-        from app.infrastructure.billing.saas_plans import is_saas_plan_id
+        from app.infrastructure.billing.saas_plans import is_saas_plan_id, plan_by_id, trial_days
 
         if not is_saas_plan_id(plan_id):
-            return
-        if apply_paid_plan_for_user(user_id=uid, plan_id=plan_id):
+            return False
+        plan = plan_by_id(plan_id) or {}
+        if plan.get("license_type") == "trial":
+            expires = datetime.fromisoformat(paid_at) + timedelta(
+                days=max(1, int(plan.get("duration_days") or trial_days()))
+            )
+            applied = apply_paid_plan_for_user(
+                user_id=uid,
+                plan_id=plan_id,
+                sync_from_market=True,
+                active_plan_expires_at=expires.isoformat(),
+            )
+        else:
+            applied = apply_paid_plan_for_user(user_id=uid, plan_id=plan_id)
+        if applied:
             logger.info(
                 "[model-payment] saas subscription applied user_id=%s plan_id=%s",
                 uid,
                 plan_id,
             )
+        return bool(applied)
     except RECOVERABLE_ERRORS:
         logger.exception(
             "[model-payment] saas subscription apply failed user_id=%s plan_id=%s",
             local_user_id,
             plan_id,
         )
+        return False
 
 
 def _grant_entitlement_inplace(

@@ -99,6 +99,7 @@ public class EntitlementService {
         userPlanRepository.findByUserAndActiveTrue(user).stream()
                 .filter(row -> row.getPlan() != null)
                 .filter(row -> AccountLicensePlans.isAccountLicense(row.getPlan().getId()) == accountLicense)
+                .filter(row -> !accountLicense || !AccountLicensePlans.isPermanent(row.getPlan().getId()))
                 .forEach(row -> {
                     row.setActive(false);
                     userPlanRepository.save(row);
@@ -131,6 +132,14 @@ public class EntitlementService {
         }
 
         applyPlanQuotas(user, plan);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasPermanentLicense(User user) {
+        return userPlanRepository.findByUserAndActiveTrue(user).stream()
+                .filter(row -> row.getPlan() != null)
+                .filter(row -> row.getExpiresAt() == null || row.getExpiresAt().isAfter(LocalDateTime.now()))
+                .anyMatch(row -> AccountLicensePlans.isPermanent(row.getPlan().getId()));
     }
 
     private void applyPlanQuotas(User user, PlanTemplate plan) {

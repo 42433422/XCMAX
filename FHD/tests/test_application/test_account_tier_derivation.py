@@ -15,26 +15,26 @@ from app.domain.app_pure.account_tier_derivation import (
 
 class TestDeriveAccountTier:
     @pytest.mark.parametrize(
-        "budget,expected",
+        "budget",
         [
-            ("1–5 万", "normal"),  # 中文长连字符 U+2013
-            ("5–10 万", "pro"),
-            ("10–50 万", "max"),
-            ("50–100 万", "ultra"),
-            ("5-10万", "pro"),  # 短横变体
-            ("10-50万", "max"),
-            ("5 万以内", "normal"),  # 旧档位兼容
-            ("5–20 万", "pro"),
-            ("20–50 万", "max"),
-            ("50 万以上", "ultra"),
-            ("", "normal"),
-            (None, "normal"),
-            ("暂未确定", "normal"),
-            ("随便写的", "normal"),
+            "1–5 万",
+            "5–10 万",
+            "10–50 万",
+            "50–100 万",
+            "5-10万",
+            "10-50万",
+            "5 万以内",
+            "5–20 万",
+            "20–50 万",
+            "50 万以上",
+            "",
+            None,
+            "暂未确定",
+            "ultra",
         ],
     )
-    def test_derive(self, budget, expected):
-        assert derive_account_tier(budget) == expected
+    def test_budget_cannot_grant_higher_account_tier(self, budget):
+        assert derive_account_tier(budget) == "normal"
 
     def test_all_outputs_valid(self):
         for b in ("1–5 万", "5–10 万", "10–50 万", "50–100 万", None):

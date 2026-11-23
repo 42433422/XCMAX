@@ -29,8 +29,10 @@ from app.infrastructure.codex.policy import (
     QUALIFICATION_CHECKS,
     ModelRoute,
     RuntimeSettings,
+    qualification_host_identity,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.codex_qualification import synthetic_qualification
 
 
 @pytest.fixture
@@ -52,18 +54,7 @@ def runtime_entry(trusted_actor, tmp_path, monkeypatch):
     )
     # Synthetic receipt for contract tests, never evidence of real route qualification.
     qualification = tmp_path / "fixture-qualification.json"
-    qualification.write_text(
-        json.dumps(
-            {
-                "schema": "xcmax.runtime-qualification.v1",
-                "route_identity": route.identity,
-                "codex_version": CODEX_VERSION,
-                "model_kind": "real",
-                "evidence_refs": ["synthetic-http-runtime-test-only"],
-                "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
-            }
-        )
-    )
+    qualification.write_text(json.dumps(synthetic_qualification(route, qualification.parent)))
     state = SimpleNamespace(
         actor=actor,
         repository=repository,

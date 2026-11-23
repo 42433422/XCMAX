@@ -82,7 +82,7 @@ def test_account_system_uses_registration_handoff_and_license_catalog():
     ("source_name", "required", "message"),
     [
         ("LOGIN_ACTIONS", "marketRegisterUrl", "缺少市场注册入口"),
-        ("MARKET_REGISTER_VIEW", "选择适合的 XCAGI 方案", "缺少注册流程文案"),
+        ("MARKET_REGISTER_VIEW", "创建 XCAGI 账号", "缺少注册流程文案"),
         ("ACCOUNT_LICENSE_CATALOG", "个人使用版", "缺少方案名称"),
     ],
 )

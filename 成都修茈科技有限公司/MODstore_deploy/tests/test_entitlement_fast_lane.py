@@ -46,6 +46,7 @@ def test_fast_lane_lists_every_account_tier_and_registers_admin_routes(client):
     expected = {
         "saas-personal-free",
         "saas-trial-30",
+        "saas-permanent-standard",
         "saas-permanent-starter",
         "saas-permanent-growth",
         "saas-permanent-max",
@@ -71,6 +72,7 @@ def test_fast_lane_lists_every_account_tier_and_registers_admin_routes(client):
     assert [item["id"] for item in items if item["catalog"] == "account_license"] == [
         "saas-personal-free",
         "saas-trial-30",
+        "saas-permanent-standard",
         "saas-permanent-starter",
         "saas-permanent-growth",
         "saas-permanent-max",
