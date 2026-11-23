@@ -132,7 +132,7 @@ def get(service, kind="order", entity_id="101", **kwargs):
 
 def test_catalog_names_existing_authorities():
     catalog = {row["entity_type"]: row for row in entity_catalog()}
-    assert set(catalog) == {"order", "customer", "employee", "task", "fund"}
+    assert set(catalog) == {"order", "customer", "employee", "task", "fund", "inventory", "production"}
     assert catalog["task"]["id_field"] == "task_id"
     assert all(row["read_only"] for row in catalog.values())
 
