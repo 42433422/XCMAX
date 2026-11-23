@@ -5,6 +5,17 @@ import MessageBody from './MessageBody.vue'
 enableAutoUnmount(afterEach)
 
 describe('MessageBody with the real Markdown renderer', () => {
+  it('displays original JSON code and notes without creating HTML elements', () => {
+    const code = 'if a < b:\n    print("<script>literal()</script> &lt;entity&gt; A&B")'
+    const note = '客户备注 <img src=x onerror="literal()"> &lt;原实体&gt; A&B'
+    const content = `\`\`\`text\n${code}\n\`\`\`\n\n${note}`
+    const wrapper = mount(MessageBody, { props: { content } })
+    expect(wrapper.get('.md-code__body').element.textContent).toBe(code)
+    expect(wrapper.text()).toContain(note)
+    expect(wrapper.find('script, img, [onerror]').exists()).toBe(false)
+    expect(wrapper.props('content')).toBe(content)
+  })
+
   it.each(['png', 'jpeg', 'webp'])('renders generated %s bitmap receipts during and after streaming', async (format) => {
     const src = `data:image/${format};base64,AA==`
     const wrapper = mount(MessageBody, { props: { content: `![生成图片](${src})\n\nimage-model`, streaming: true } })

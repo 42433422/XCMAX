@@ -11,20 +11,18 @@ import uuid
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from filelock import FileLock, Timeout
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.db.models.code_edit import CodeEditProposal
+from app.db.models.local_file import CodeEditProposal
 from app.db.session import get_host_db
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
-from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/code-editor", tags=["code-editor"])
@@ -98,19 +96,28 @@ def _sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="replace")).hexdigest()
 
 
-def _proposal_scope(user: Any) -> tuple[int, int | None, str]:
-    return int(user.id), user.tenant_id, str(_workspace_root())
-
-
-def _owned_edit(edit_id: str, user: Any, db: Session) -> CodeEditProposal:
-    row = (
-        db.query(CodeEditProposal)
-        .filter_by(edit_id=edit_id, owner_user_id=int(user.id), tenant_id=user.tenant_id)
-        .first()
+def _proposal_scope(user: Any) -> str:
+    return json.dumps(
+        {
+            "user_id": int(user.id),
+            "tenant_id": user.tenant_id,
+            "workspace_root": str(_workspace_root()),
+        },
+        sort_keys=True,
     )
-    if row is None or row.workspace_root != str(_workspace_root()):
-        raise HTTPException(status_code=404, detail="unknown edit_id")
-    return row
+
+
+def _owned_edit(edit_id: str, user: Any) -> dict[str, Any]:
+    with get_host_db() as db:
+        row = (
+            db.query(CodeEditProposal)
+            .filter_by(edit_id=edit_id, user_id=int(user.id))
+            .filter(CodeEditProposal.state != "applied")
+            .first()
+        )
+        if row is None or row.scope_json != _proposal_scope(user):
+            raise HTTPException(status_code=404, detail="unknown edit_id")
+        return {**json.loads(row.payload_json), "state": row.state}
 
 
 @router.get("/status")
@@ -185,16 +192,13 @@ def code_editor_edit(body: EditBody, user: Any = Depends(get_logged_in_user)) ->
         "is_new_file": is_new,
         "old_sha256": _sha256_text(old),
     }
-    owner, tenant, workspace = _proposal_scope(user)
     with get_host_db() as db:
         db.add(
             CodeEditProposal(
                 edit_id=edit_id,
-                owner_user_id=owner,
-                tenant_id=tenant,
-                workspace_root=workspace,
-                payload_json=json.dumps(payload, ensure_ascii=False),
-                created_at=utc_now_naive(),
+                user_id=int(user.id),
+                scope_json=_proposal_scope(user),
+                payload_json=json.dumps(payload),
             )
         )
     return {
@@ -207,8 +211,7 @@ def code_editor_edit(body: EditBody, user: Any = Depends(get_logged_in_user)) ->
 
 @router.get("/diff/{edit_id}")
 def code_editor_diff(edit_id: str, user: Any = Depends(get_logged_in_user)) -> dict:
-    with get_host_db() as db:
-        row = json.loads(_owned_edit(edit_id, user, db).payload_json)
+    row = _owned_edit(edit_id, user)
     return {"success": True, "unified_diff": row.get("unified_diff") or ""}
 
 
@@ -220,79 +223,74 @@ def code_editor_apply(
         raise HTTPException(status_code=403, detail="p2 required")
     assert_p2_elevated_claim_or_raise(request)
 
-    with get_host_db() as db:
-        row = json.loads(_owned_edit(edit_id, user, db).payload_json)
-    # All workers serving this local workspace share the configured data directory.
-    # Lock the target, not the edit ID: two different proposals may edit the same file.
-    lock_root = Path(get_app_data_dir()) / "code-editor-locks"
+    row = _owned_edit(edit_id, user)
+    lock_root = Path(get_app_data_dir()) / "code-editor"
     lock_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    lock_path = lock_root / f"{_sha256_text(row['path'])}.lock"
+    # Lock the canonical resource, not the proposal or owner: two accounts can
+    # have valid proposals for the same file, but only one original version wins.
+    lock_key = _sha256_text(os.path.normcase(row["path"]))
     try:
-        with FileLock(lock_path, timeout=0, mode=0o600):
-            with get_host_db() as db:
-                proposal = _owned_edit(edit_id, user, db)
-                if proposal.apply_state != "pending":
-                    raise HTTPException(status_code=409, detail="edit outcome requires review")
-                row = json.loads(proposal.payload_json)
+        with FileLock(lock_root / f"{lock_key}.lock", timeout=30, mode=0o600):
+            row = _owned_edit(edit_id, user)
+            if row["state"] != "pending":
+                raise HTTPException(status_code=409, detail="edit outcome requires verification")
             path = _safe_rel_path(row["rel"])
             if str(path) != row["path"]:
                 raise HTTPException(status_code=409, detail="file path changed")
-            if row["is_new_file"]:
-                if path.exists():
-                    raise HTTPException(status_code=409, detail="file already exists")
-            elif not path.is_file():
-                raise HTTPException(status_code=404, detail="file missing")
-            elif (
-                _sha256_text(path.read_text(encoding="utf-8", errors="replace"))
-                != row["old_sha256"]
-            ):
-                raise HTTPException(status_code=409, detail="file changed on disk")
+            created = bool(row["is_new_file"])
+            if created and path.exists():
+                raise HTTPException(status_code=409, detail="file already exists")
+            if not created:
+                if not path.is_file():
+                    raise HTTPException(status_code=404, detail="file missing")
+                old_disk = path.read_text(encoding="utf-8", errors="replace")
+                if _sha256_text(old_disk) != row["old_sha256"]:
+                    raise HTTPException(status_code=409, detail="file changed on disk")
             prepared = (
-                _staged_edit(path, row["new"], create=row["is_new_file"])
-                if row["is_new_file"] or row["new"] != row["old"]
+                _staged_edit(path, row["new"], create=created)
+                if created or row["new"] != row["old"]
                 else nullcontext(None)
             )
             with prepared as staged:
-                # Commit the claim before attempting publication. A later rollback of
-                # the target file cannot reactivate an edit with an uncertain outcome.
-                owner, tenant, workspace = _proposal_scope(user)
+                # Commit before publication. Failed/uncertain writes stay blocked;
+                # successful claims remain applied across the original restore flow.
                 with get_host_db() as db:
                     claimed = (
                         db.query(CodeEditProposal)
                         .filter_by(
                             edit_id=edit_id,
-                            owner_user_id=owner,
-                            tenant_id=tenant,
-                            workspace_root=workspace,
-                            apply_state="pending",
+                            user_id=int(user.id),
+                            scope_json=_proposal_scope(user),
+                            state="pending",
                         )
-                        .update({"apply_state": "applying"}, synchronize_session=False)
+                        .update({"state": "applying"}, synchronize_session=False)
                     )
                     if claimed != 1:
-                        raise HTTPException(status_code=409, detail="edit outcome requires review")
+                        raise HTTPException(status_code=409, detail="edit already claimed")
                 if staged is not None:
-                    _publish_edit(path, staged, create=row["is_new_file"])
+                    _publish_edit(path, staged, create=created)
                 with get_host_db() as db:
                     consumed = (
                         db.query(CodeEditProposal)
                         .filter_by(
                             edit_id=edit_id,
-                            owner_user_id=owner,
-                            tenant_id=tenant,
-                            workspace_root=workspace,
-                            apply_state="applying",
+                            user_id=int(user.id),
+                            scope_json=_proposal_scope(user),
+                            state="applying",
                         )
-                        .delete(synchronize_session=False)
+                        .update({"state": "applied"}, synchronize_session=False)
                     )
                     if consumed != 1:
-                        raise HTTPException(status_code=409, detail="edit outcome requires review")
+                        raise HTTPException(
+                            status_code=409, detail="edit outcome requires verification"
+                        )
+            return {"success": True, "created": created}
     except Timeout as exc:
-        raise HTTPException(status_code=409, detail="file edit in progress") from exc
-    return {"success": True, "created": row["is_new_file"]}
+        raise HTTPException(status_code=409, detail="file is being edited") from exc
 
 
 @contextmanager
-def _staged_edit(path: Path, content: str, *, create: bool):
+def _staged_edit(path: Path, content: str, *, create: bool) -> Iterator[Path]:
     """Prepare bytes before claiming the edit; failure here cannot change the target."""
     staged = None
     try:

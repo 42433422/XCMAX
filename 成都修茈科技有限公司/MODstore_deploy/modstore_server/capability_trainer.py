@@ -440,6 +440,9 @@ def _workflow_validation_hashes(*, business=False):
     if business:
         support = "FHD/app/mod_sdk/file_employee_support.py"
         hashes[support] = _file_hash(Path(__file__).resolve().parents[3] / support)
+        for name in ("promptfoo_sandbox.mjs", "opencode_agent.mjs"):
+            wrapper = f"FHD/scripts/autonomy/runtime_tools/{name}"
+            hashes[wrapper] = _file_hash(Path(__file__).resolve().parents[3] / wrapper)
     return hashes
 
 
@@ -826,7 +829,7 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
                 assertion = evaluate_business_replay(output, variables["generation_context"])
             else:
                 assertion = get_assert(output, {"vars": variables})
-            if not deferred and assertion["pass"] is not row.get("success"):
+            if not business and assertion["pass"] is not row.get("success"):
                 raise ValueError("training_workflow_result_unverified")
             if business:
                 verified[arm, index] = assertion

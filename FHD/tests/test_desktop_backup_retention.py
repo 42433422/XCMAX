@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -10,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from app.desktop_runtime.backup_retention import cleanup_local_backups
+from app.desktop_runtime.backup_scheduler import _has_backup_today, _make_weekly_copy
 from app.desktop_runtime.desktop_runtime_paths import ensure_desktop_dirs
 from app.desktop_runtime.migrate import backup_database
 
@@ -114,3 +116,33 @@ def test_backup_database_prunes_immediately_and_protects_new_backup(
     assert result is not None
     assert result.exists()
     cleanup.assert_called_once_with(dirs["backups"], protected=(result,))
+
+
+def test_same_second_backups_preserve_versions_and_retention(tmp_path, monkeypatch):
+    dirs = ensure_desktop_dirs(tmp_path)
+    live = dirs["data"] / "xcagi.db"
+    _database(live)
+    now = datetime.now()
+    monkeypatch.setenv("XCAGI_LOCAL_BACKUP_KEEP", "2")
+    with patch("app.desktop_runtime.migrate.utc_now_naive", return_value=now):
+        before = backup_database(tmp_path, version="1.0.0.7")
+        assert before is not None
+        receipt = {
+            "databaseBackupPath": str(before),
+            "expectedDatabaseSha256": hashlib.sha256(before.read_bytes()).hexdigest(),
+        }
+        (dirs["root"] / "rollback-marker.json").write_text(json.dumps(receipt))
+        with sqlite3.connect(live) as db:
+            db.execute("INSERT INTO proof DEFAULT VALUES")
+        after = backup_database(tmp_path, version="1.0.0.7")
+    assert before and after and before != after
+    for path, expected in ((before, 1), (after, 2)):
+        with sqlite3.connect(path) as db:
+            assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert db.execute("SELECT count(*) FROM proof").fetchone() == (expected,)
+    assert _has_backup_today(dirs["backups"])
+    weekly = _make_weekly_copy(after)
+    assert weekly and weekly.read_bytes() == after.read_bytes()
+    cleanup_local_backups(dirs["backups"], keep=1)
+    assert before.exists() and weekly.exists() and not after.exists()
+    assert hashlib.sha256(before.read_bytes()).hexdigest() == receipt["expectedDatabaseSha256"]

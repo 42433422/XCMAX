@@ -1,9 +1,9 @@
 /** Fixed promptfoo CLI inside the repository's official SRT network/filesystem boundary. */
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { assertLinuxWorkloadIsolation, assertOpenCodeHost,
@@ -13,6 +13,67 @@ const entry = fileURLToPath(import.meta.url);
 const placeholder = 'xcmax-training-provider-placeholder';
 const deny = () => ({ action: 'deny', reason: 'training_model_request_not_admitted' });
 const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
+
+// Reuse the pinned SRT CLI for a single product-owned entry. No command, policy
+// or network allowance is accepted from the replay's model/package payload.
+export function replaySpec({ directory, python }, env = process.env) {
+  const runtime = pinnedPackage(env.PROMPTFOO_SANDBOX_ENTRY,
+    '@anthropic-ai/sandbox-runtime', '0.0.83');
+  const root = realpathSync(directory);
+  if (!python || !statSync(python).isFile() || !statSync(root).isDirectory()) {
+    throw new Error('training_replay_runtime_required');
+  }
+  return { runtime, directory: root, python: resolve(python),
+    project: realpathSync(resolve(dirname(entry), '../../../../成都修茈科技有限公司/MODstore_deploy')) };
+}
+
+export function replayPolicy(spec) {
+  const settings = sandboxSettings(spec.directory, spec.directory, spec.python,
+    process.execPath, new URL('https://replay.invalid'), false, spec.runtime.path);
+  const programs = [join(spec.project, 'modstore_server'), join(spec.project, 'modman'),
+    resolve(dirname(entry), '../../../app')];
+  const resource = join(spec.project, 'modstore_server/data/commerce_terms.generated.json');
+  if ([...programs, resource].some(path => realpathSync(path) !== path)
+      || !statSync(resource).isFile()) throw new Error('training_replay_source_boundary_changed');
+  // One read-only mount per program tree avoids SRT's 9000-argument limit.
+  // Deny every adjacent non-source entry, including unknown extensions and
+  // symlinks; inspect the declared resource's directory without denying it.
+  const nonPrograms = directory => readdirSync(directory, { withFileTypes: true }).flatMap(item => {
+    const path = join(directory, item.name);
+    if (item.isDirectory() && (existsSync(join(path, '__init__.py'))
+        || resource.startsWith(path + sep))) return nonPrograms(path);
+    return item.isFile() && (item.name.endsWith('.py') || path === resource) ? [] : [path];
+  });
+  settings.filesystem.allowRead.push(entry, spec.runtime.root,
+    dirname(dirname(spec.python)), dirname(dirname(realpathSync(spec.python))),
+    ...programs, resource,
+    realpathSync(resolve(dirname(entry), '../../../packages')),
+    realpathSync(resolve(dirname(entry), '../../../../packages')));
+  settings.filesystem.denyRead.push(...programs.flatMap(nonPrograms));
+  settings.filesystem.allowWrite = [spec.directory];
+  return { ...settings, enableWeakerNestedSandbox: false,
+    network: { allowedDomains: [], deniedDomains: [], strictAllowlist: true,
+      allowAllUnixSockets: false, allowLocalBinding: false } };
+}
+
+async function runReplaySandbox(options) {
+  // This offline boundary requires a private network namespace. Do not claim
+  // that other platforms' system DNS/service mediation is an offline replay.
+  if (process.platform !== 'linux') throw new Error('training_replay_linux_namespace_required');
+  assertOpenCodeHost();
+  const spec = replaySpec(options);
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 22 || (major === 22 && minor < 12)) throw new Error('training_node_22_12_required');
+  const settings = join(spec.directory, 'sandbox-settings.json');
+  writeFileSync(settings, JSON.stringify(replayPolicy(spec)), { flag: 'wx', mode: 0o600 });
+  process.env.MODSTORE_REPLAY_PYTHON = spec.python;
+  process.env.PYTHONDONTWRITEBYTECODE = '1';
+  process.argv = [process.execPath, spec.runtime.path, '--settings', settings,
+    '--', process.execPath, entry, '--replay-worker'];
+  // SRT owns native setup/cleanup; all descendants stay in the Python caller's
+  // owned process group, which is reaped on timeout as well as normal exit.
+  await import(pathToFileURL(spec.runtime.path));
+}
 
 function pinnedPackage(executable, name, version) {
   const path = realpathSync(executable || '');
@@ -206,7 +267,13 @@ export async function runTrainerSandbox(options, env = process.env) {
 
 if (process.argv[1] && resolve(process.argv[1]) === entry) {
   try {
-    if (process.argv[2] === '--sandbox-worker') {
+    if (process.argv[2] === '--replay-worker') {
+      if (process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
+      const child = spawn(process.env.MODSTORE_REPLAY_PYTHON,
+        ['-B', '-m', 'modstore_server.workflow_training_replay', '--worker'], { stdio: 'inherit' });
+      child.once('error', () => { process.exitCode = 1; });
+      child.once('close', code => { process.exitCode = code ?? 1; });
+    } else if (process.argv[2] === '--sandbox-worker') {
       if (process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
       const chunks = [];
       for await (const chunk of process.stdin) chunks.push(chunk);
@@ -218,8 +285,10 @@ if (process.argv[1] && resolve(process.argv[1]) === entry) {
       process.argv = [process.execPath, workload.cli, ...workload.args];
       await import(pathToFileURL(workload.cli));
     } else {
-      const { values } = parseArgs({ options: { config: { type: 'string' }, output: { type: 'string' } } });
-      process.exitCode = await runTrainerSandbox(values);
+      const { values } = parseArgs({ options: { config: { type: 'string' }, output: { type: 'string' },
+        replay: { type: 'boolean' }, directory: { type: 'string' }, python: { type: 'string' } } });
+      if (values.replay) await runReplaySandbox(values);
+      else process.exitCode = await runTrainerSandbox(values);
     }
   } catch {
     process.stderr.write('training_sandbox_failed; no unsandboxed evaluation fallback\n');

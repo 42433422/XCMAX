@@ -304,7 +304,7 @@ def test_native_replay_without_sandbox_cannot_be_verified(tmp_path, monkeypatch)
     result = get_assert(json.dumps(graph), {"vars": {"generation_context": source}})
     assert result["pass"] is False
     assert result["runtime_verified"] is False
-    assert result["reason"] == "training_business_replay_blocked"
+    assert result["reason"] == "training_replay_sandbox_execution_failed"
 
 
 def test_missing_original_snapshot_cannot_be_provider_verified():
@@ -485,6 +485,9 @@ def test_csv_existing_native_fixture_keeps_its_content_comparison():
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process group contract")
 def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
+    # This fixture tests owned-process cleanup only; native isolation is covered
+    # by the original employee tests on the supported, provisioned CI runner.
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "unused-srt"))
     original = subprocess.Popen
     pid_file = tmp_path / "descendant.pid"
     script = (
@@ -497,26 +500,34 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
         return original([sys.executable, "-c", script], **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", start)
-    # This test owns a real timed-out process tree; the native sandbox boundary is
-    # exercised separately above, so its configuration helper creates no child here.
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args,
-            0,
-            json.dumps(
-                {
-                    "node": sys.executable,
-                    "runtime": "fixture-cli.js",
-                    "policy": {"filesystem": {"allowRead": []}},
-                }
-            ),
-            "",
-        ),
-    )
     with pytest.raises(subprocess.TimeoutExpired):
         replay._run_worker({}, tmp_path, dict(os.environ), timeout=1)
     child = int(pid_file.read_text())
     state = Path(f"/proc/{child}/stat")
     assert not state.exists() or state.read_text().split()[2] == "Z"
+
+
+def test_missing_sandbox_blocks_the_original_employee_before_start(monkeypatch):
+    source, graph, _ = _fixture()
+    monkeypatch.delenv("PROMPTFOO_SANDBOX_ENTRY", raising=False)
+
+    def unexpected_start(*_args, **_kwargs):
+        pytest.fail("a missing native sandbox must not start any replay worker")
+
+    monkeypatch.setattr(subprocess, "Popen", unexpected_start)
+    result = get_assert(json.dumps(graph), {"vars": {"generation_context": source}})
+    assert result["pass"] is False and result["runtime_verified"] is False
+    assert result["reason"] == "training_replay_sandbox_unavailable"
+
+
+def test_generation_stage_defers_business_grading_without_executing(monkeypatch):
+    source, graph, _ = _fixture()
+    monkeypatch.setenv("XCAGI_TRAINING_DEFER_NATIVE_REPLAY", "1")
+
+    def unexpected_run(*_args, **_kwargs):
+        pytest.fail("the model sandbox must not start an unsafe nested worker")
+
+    monkeypatch.setattr(replay, "evaluate_business_replay", unexpected_run)
+    result = get_assert(json.dumps(graph), {"vars": {"generation_context": source}})
+    assert result["pass"] is False and result["runtime_verified"] is False
+    assert result["reason"] == "training_business_replay_requires_host_verification"

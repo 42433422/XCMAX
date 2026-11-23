@@ -73,8 +73,10 @@ def backup_database(
 
         version = build_identity().get("product_version") or version or "unknown"
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
-    target = dirs["backups"] / f"xcagi-{version}-{stamp}.db"
-    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        dir=dirs["backups"], prefix=f"xcagi-{version}-{stamp}-", suffix=".db", delete=False
+    ) as snapshot:
+        target = Path(snapshot.name)
 
     src_conn = None
     dst_conn = None

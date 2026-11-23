@@ -357,6 +357,12 @@ cd XCMAX/FHD
 
 ## 许可证与安全
 
+代码编辑提案复用现有 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT、`uv.lock`）宿主会话与条件更新，文件版本比较和写入复用 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）。多个 worker 必须使用同一宿主数据库、工作区和应用数据目录。提案绑定真实账号、租户与规范化工作区；P2 授权、原文件 SHA 和路径复核仍必需，提交领取后才写文件，中断留下待核验状态，已消费提案不能重复应用。新增提案表沿既有启动建表和 Alembic 迁移管理，没有新增状态服务。
+
+认证及全局限流共用既有 `LAN_TRUSTED_PROXIES` 地址/CIDR 配置与 `lan_ip.get_client_ip`。只有 socket peer 命中配置时才解析转发链，取从右向左遇到的首个不可信地址；直连或未配置代理时忽略转发头。仅配置实际代理网段，代理应规范追加客户端地址。原限额、Redis 分布式后端及不可用时的拒绝策略保持。
+
+JSON 请求和签名 Webhook 保留原始字节及备注、代码、特殊字符的原意，身份、租户、类型、长度和业务约束仍由原入口校验。HTML 显示沿已有 Vue 文本插值、DOMPurify 和 Markdown 渲染器处理输出，不把转义后的展示文本写回输入数据。对应回归同时检查实际 HTTP 中间件栈、原始字节验签和真实前端渲染结果。
+
 ### 工具调用、权限与重试
 
 公共工具和技能 API、模型工具桥、已登记 ERP 能力统一经过原 `AgentOrchestrator` / `AgentToolExecutor`，沿用风险动作目录、会话 RBAC、审批事务、LangGraph 检查点和工具回执。员工子工具从宿主显式接收可信身份；模型参数不能注入授权。MODstore 是独立服务，继续使用原员工执行器，通过既有结果契约遵守同样的未知结果禁重放规则。AIOPEN 的 API Key 配额、屏幕身份与主进程会话由原授权入口和 ToolDispatcher 执行；受控单动作适配复核原屏幕身份、审批参数和独立 UI 读回，ACK 不等于界面已改变。只有 Schema 而没有实际适配器的其他动作仍返回 not_started。

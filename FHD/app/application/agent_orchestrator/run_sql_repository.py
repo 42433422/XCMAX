@@ -6,7 +6,7 @@ import copy
 import json
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import asdict
 from typing import cast
 
@@ -38,7 +38,6 @@ from app.application.agent_orchestrator.task_models import (
     task_from_run,
     tenant_id_of_run,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _TASK_ID_PATH = "$.metadata.task_context.task_id"
 _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
@@ -1192,17 +1191,13 @@ class SQLAlchemyAgentRunRepository:
 
             # Scheduling state must be visible outside the originating Mod request.
             session_factory = HostSessionLocal
-        db = session_factory()
-        try:
+        with closing(session_factory()) as db, ExitStack() as rollback:
+            if not read_only:
+                rollback.callback(db.rollback)
             yield db
             if not read_only:
                 db.commit()
-        except RECOVERABLE_ERRORS:
-            if not read_only:
-                db.rollback()
-            raise
-        finally:
-            db.close()
+            rollback.pop_all()
 
     def _ensure_schema(self) -> None:
         # 就绪状态按 bind（引擎实例）键控：引擎缓存按 URL 解析，测试/多库环境下

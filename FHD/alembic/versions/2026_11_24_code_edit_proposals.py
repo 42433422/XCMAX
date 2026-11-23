@@ -1,4 +1,4 @@
-"""Persist existing code-editor proposals across workers and process restarts."""
+"""Persist owner-scoped code proposals in the existing host database."""
 
 import sqlalchemy as sa
 
@@ -11,27 +11,22 @@ depends_on = None
 
 
 def upgrade() -> None:
-    if "code_edit_proposals" not in sa.inspect(op.get_bind()).get_table_names():
+    if not sa.inspect(op.get_bind()).has_table("code_edit_proposals"):
         op.create_table(
             "code_edit_proposals",
-            sa.Column("edit_id", sa.String(40), primary_key=True),
+            sa.Column("edit_id", sa.String(64), primary_key=True),
             sa.Column(
-                "owner_user_id",
+                "user_id",
                 sa.Integer(),
                 sa.ForeignKey("users.id", ondelete="CASCADE"),
                 nullable=False,
             ),
-            sa.Column("tenant_id", sa.Integer(), nullable=True),
-            sa.Column("workspace_root", sa.Text(), nullable=False),
+            sa.Column("scope_json", sa.Text(), nullable=False),
             sa.Column("payload_json", sa.Text(), nullable=False),
-            sa.Column("apply_state", sa.String(16), nullable=False, server_default="pending"),
-            sa.Column("created_at", sa.DateTime(), nullable=False),
-        )
-        op.create_index(
-            "ix_code_edit_proposals_owner", "code_edit_proposals", ["owner_user_id", "tenant_id"]
+            sa.Column("state", sa.String(16), nullable=False),
         )
 
 
 def downgrade() -> None:
-    # Retain pending work. Alembic invokes earlier revisions' own downgrade guards.
+    # Retain proposals and uncertain claims; rollback must not make them replayable.
     pass

@@ -92,6 +92,9 @@ domains:
       - FHD/CHANGELOG.md
       - FHD/docs/architecture/AIOPEN_FULL_SURFACE.md
       - FHD/docs/architecture/PROCESS_FLOW_SSOT.md
+      - FHD/docs/architecture/PRODUCT_VERSION_SSOT.md
+      - FHD/docs/e2e/desktop-real-machine-acceptance-protocol.md
+      - FHD/docs/e2e/templates/desktop-acceptance-template.md
       - FHD/docs/aiopen.md
       - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
       - FHD/XCAGI/README.md
@@ -355,6 +358,7 @@ domains:
     ssot: FHD/docs/WINDOWS_RELEASE_SSOT.md
     derived:
       - FHD/scripts/package/build-installer.ps1
+      - FHD/scripts/package/acceptance-windows.ps1
     mode: lint
     check: python scripts/dev/ssot_plugins/windows_release.py check
     sync: null
