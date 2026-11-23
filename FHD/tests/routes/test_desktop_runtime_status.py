@@ -186,6 +186,25 @@ def test_runtime_qualification_failure_remains_actionable(client):
     }
 
 
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_runtime_qualification_keeps_internal_policy_diagnostics_private(
+    client, monkeypatch, method
+):
+    from app.infrastructure.codex.policy import RuntimePolicyError
+
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "/fixture/operator-runtime.json")
+    diagnostic = "internal runtime diagnostic: /fixture/private/account-state.json"
+    with patch(
+        "app.infrastructure.codex.policy.runtime_settings",
+        side_effect=RuntimePolicyError(diagnostic),
+    ):
+        response = client.request(method, "/api/desktop/agent-runtime/qualification", json={})
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "runtime_not_qualified"
+    assert response.json()["message"] == "运行配置尚未通过核验，请检查模型设置或联系部署管理员。"
+    assert diagnostic not in response.text
+
+
 @pytest.mark.parametrize(
     "mode", ["qualified", "single_step_receipt", "missing_receipt", "invalid_config"]
 )

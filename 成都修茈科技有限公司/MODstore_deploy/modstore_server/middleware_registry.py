@@ -85,11 +85,9 @@ def register_all_middleware(app: FastAPI) -> None:
     from modstore_server.api.csrf import CSRFMiddleware
     from modstore_server.api.rate_limiter import RateLimiterMiddleware
     from modstore_server.api.security_headers import SecurityHeadersMiddleware
-    from modstore_server.api.xss_sanitizer import XSSSanitizerMiddleware
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
-    app.add_middleware(XSSSanitizerMiddleware)
     app.add_middleware(RateLimiterMiddleware)
 
     @app.middleware("http")

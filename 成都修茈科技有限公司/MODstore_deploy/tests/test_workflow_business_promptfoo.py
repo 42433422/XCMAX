@@ -76,7 +76,10 @@ def test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout(
     monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://unused.invalid/v1")
     cases, graph = _cases()
     baseline_graph = deepcopy(graph)
-    baseline_graph["nodes"][1]["config"]["input_mapping"]["output_relpath"] = "outputs/wrong.xlsx"
+    baseline_graph["nodes"][1]["config"]["input_mapping"]["table_json"] = {
+        "columns": ["order", "quantity"],
+        "rows": [{"order": "incorrect-fixture-order", "quantity": 99}],
+    }
     marker = "Business fixture candidate: preserve the required output path."
     built = trainer.build_config(
         out_dir=tmp_path,
@@ -161,3 +164,131 @@ def test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout(
         set(item["output_sha256"]) == {"outputs/output.xlsx"}
         for item in evidence["business_evidence"].values()
     )
+    # The public CLI uses the same native sealing path, outside the model sandbox.
+    command = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "modstore_server.capability_trainer",
+            "decide",
+            "--bundle",
+            str(bundle_path),
+            "--result",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert command.returncode == 0, command.stderr[-4000:]
+    assert json.loads(command.stdout)["verdict"] == "candidate_for_approval"
+    from modstore_server.retort_training_candidates import _candidate
+
+    proposal = _candidate(
+        {
+            "bundle_json": bundle_path.read_text(),
+            "result_json": output.read_text(),
+            "files": {name: Path(built[name]).read_text() for name in bundle["files"]},
+        }
+    )
+    assert proposal["offline_evidence"]["runtime_verified"] is True
+
+
+def _claimed_pass_bundle(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "unused-fixture")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://unused.invalid/v1")
+    cases, graph = _cases()
+    built = trainer.build_config(
+        out_dir=tmp_path,
+        baseline_prompt=SYSTEM_PROMPT,
+        candidate_prompt=SYSTEM_PROMPT + "\nCandidate fixture",
+        cases=cases,
+        surface="workflow_nl_prompt",
+    )
+    bundle_path = Path(built["bundle"])
+    bundle = json.loads(bundle_path.read_bytes())
+    tests = json.loads(Path(built["tests"]).read_bytes())
+    # A fixed benign graph writes an in-workspace workbook with the wrong cells.
+    graph["nodes"][1]["config"]["input_mapping"]["table_json"] = {
+        "columns": ["order", "quantity"],
+        "rows": [{"order": "wrong", "quantity": 99}],
+    }
+    output = tmp_path / "claimed-pass.json"
+    output.write_text(
+        json.dumps(
+            {
+                "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+                "results": {
+                    "prompts": [
+                        {"raw": Path(built[key]).read_text()} for key in ("baseline", "candidate")
+                    ],
+                    "results": [
+                        {
+                            "promptIdx": arm,
+                            "testIdx": index,
+                            "success": True,
+                            "failureReason": 0,
+                            "provider": {"id": bundle["provider_id"]},
+                            "vars": test["vars"],
+                            "response": {"output": json.dumps(graph)},
+                        }
+                        for arm in (0, 1)
+                        for index, test in enumerate(tests)
+                    ],
+                },
+            }
+        )
+    )
+    return built, bundle_path, output
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_claimed_pass_cannot_seal_without_native_isolation(tmp_path, monkeypatch, missing):
+    built, bundle_path, output = _claimed_pass_bundle(tmp_path, monkeypatch)
+    if missing:
+        monkeypatch.delenv("PROMPTFOO_SANDBOX_ENTRY", raising=False)
+    else:
+        monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "missing-srt"))
+    evidence = trainer.seal_evaluation(bundle_path, output)
+    assert evidence["verdict"] == "keep_baseline"
+    assert evidence["runtime_verified"] is False and evidence["holdout_verified"] is False
+    from modstore_server.retort_training_candidates import _candidate
+
+    bundle = json.loads(bundle_path.read_bytes())
+    with pytest.raises(ValueError, match="training_candidate_not_improved"):
+        _candidate(
+            {
+                "bundle_json": bundle_path.read_text(),
+                "result_json": output.read_text(),
+                "files": {name: Path(built[name]).read_text() for name in bundle["files"]},
+            }
+        )
+    command = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "modstore_server.capability_trainer",
+            "decide",
+            "--bundle",
+            str(bundle_path),
+            "--result",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert command.returncode == 0, command.stderr[-4000:]
+    result = json.loads(command.stdout)
+    assert result["verdict"] == "keep_baseline" and result["runtime_verified"] is False
+
+
+def test_claimed_all_pass_is_overruled_by_real_native_wrong_cells(tmp_path, monkeypatch):
+    _built, bundle_path, output = _claimed_pass_bundle(tmp_path, monkeypatch)
+    evidence = trainer.seal_evaluation(bundle_path, output)
+    assert evidence["runtime_verified"] is True
+    assert evidence["verdict"] == "keep_baseline" and evidence["holdout_verified"] is False
+    assert evidence["baseline"] == {"pass": 0, "total": 2}
+    assert evidence["candidate"] == {"pass": 0, "total": 2}

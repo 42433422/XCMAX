@@ -13,10 +13,14 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from app.application.private_mod_delivery_artifacts import DeliveryRemoteError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_iso_z
 
-_DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
+_DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+    HTTPException,
+    DeliveryRemoteError,
+)
 
 
 def _digest(value: Any) -> str:

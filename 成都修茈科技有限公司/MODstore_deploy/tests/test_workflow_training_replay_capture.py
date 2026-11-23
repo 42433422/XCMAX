@@ -6,9 +6,11 @@ import json
 from copy import deepcopy
 
 import pytest
+from sqlalchemy import select
 
 from modstore_server import workflow_nl_training as training
 from modstore_server import workflow_training_replay as replay
+from modstore_server.models import OutboxEvent, WorkflowExecution, get_session_factory
 from tests import test_workflow_customer_delivery as customer_tests
 
 experiment_run = customer_tests.experiment_run
@@ -91,6 +93,70 @@ def test_changed_reference_does_not_block_customer_delivery_but_cannot_train(
     captured = env["binding"]["customer_delivery"]["business_replay"]
     assert captured["replay_ready"] is False
     assert captured["reason"] == "training_replay_capture_unavailable"
+
+
+@pytest.mark.parametrize("change", ["reference_deleted", "reference_changed", "business_input"])
+def test_running_delivery_reuses_training_snapshot_but_rechecks_business_input(
+    customer_workflow, monkeypatch, change
+):
+    env = customer_workflow
+    source = _oracle(env, monkeypatch)
+    reference = env["workspace"] / "references/verified.csv"
+    original_reference = reference.read_bytes()
+    capture = replay.capture_business_replay
+    captured = []
+
+    def capture_then_change(*args, **kwargs):
+        frozen = capture(*args, **kwargs)
+        captured.append(deepcopy(frozen))
+        if len(captured) == 1:
+            assert frozen["replay_ready"] is True
+            if change == "reference_deleted":
+                reference.unlink()
+            elif change == "reference_changed":
+                reference.write_text("order,quantity\nchanged-reference,999\n")
+            else:
+                payload = json.loads(source.read_bytes())
+                payload["rows"][0]["quantity"] = 99
+                source.write_text(json.dumps(payload))
+        return frozen
+
+    monkeypatch.setattr(replay, "capture_business_replay", capture_then_change)
+    response = env["execute"]()
+    if change == "business_input":
+        assert response.status_code == 500, response.text
+        assert not (env["workspace"] / "outputs/output.csv").exists()
+        with get_session_factory()() as db:
+            execution = db.scalar(
+                select(WorkflowExecution)
+                .where(WorkflowExecution.workflow_id == env["run"]["workflows"][env["customer_id"]])
+                .order_by(WorkflowExecution.id.desc())
+            )
+            assert execution.status == "failed"
+            assert not db.scalar(
+                select(OutboxEvent).where(
+                    OutboxEvent.aggregate_id == str(execution.id),
+                    OutboxEvent.event_name == customer_tests.delivery.PRODUCED_EVENT,
+                )
+            )
+    else:
+        assert response.status_code == 200, response.text
+        assert env["binding"]["customer_delivery"]["business_replay"] == captured[0]
+        manifest = replay.export_customer_replay(
+            env["binding"], captured[0]["assets"]["input_data"], "e" * 64
+        )
+        assert replay._bytes(manifest["assets"]["expected_files"][0]) == original_reference
+        listing = env["http"].get(
+            "/api/customer-value/deliveries", params=customer_tests._query(env)
+        )
+        assert listing.status_code == 200 and len(listing.json()["items"]) == 1, listing.text
+        received = env["http"].get(listing.json()["items"][0]["download_url"])
+        assert received.status_code == 200, received.text
+        assert (
+            received.content.decode("utf-8-sig").replace("\r\n", "\n")
+            == original_reference.decode()
+        )
+        assert len(captured) == 1
 
 
 @pytest.mark.parametrize("change", ["delete", "replace", "disable_policy"])

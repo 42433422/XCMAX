@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.db_base import Base
-from app.db.models.code_edit import CodeEditProposal
+from app.db.models.local_file import CodeEditProposal
 from app.db.models.user import User
 
 
@@ -13,6 +13,7 @@ from app.db.models.user import User
 def editor_database(monkeypatch, tmp_path):
     url = f"sqlite:///{tmp_path / 'route-editor.sqlite3'}"
     monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
     engine = create_engine(url)
     Base.metadata.create_all(engine, tables=[User.__table__, CodeEditProposal.__table__])
     with Session(engine) as db:

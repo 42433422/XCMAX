@@ -90,7 +90,7 @@ jobs:
         run: python -m pytest -m release_gate -q --tb=short
 
   modstore-backend-test:
-    # Native replay shares the existing SRT host admission boundary.
+    # The pinned SRT namespace/seccomp chain has this explicit Linux host contract.
     runs-on: ubuntu-22.04
     needs: [release-gate]
     services:

@@ -95,7 +95,7 @@ async def account_runtime_qualification_status(request: Request, user=Depends(ge
                 "qualification": "blocked",
                 "managed_by": managed_by,
                 "error_code": getattr(exc, "code", "runtime_not_qualified"),
-                "message": str(exc),
+                "message": exc.public_message,
                 "checks": getattr(exc, "checks", {}),
             },
             status_code=409,
@@ -137,7 +137,7 @@ async def qualify_account_runtime(
             {
                 "success": False,
                 "error_code": getattr(exc, "code", "runtime_not_qualified"),
-                "message": str(exc),
+                "message": exc.public_message,
                 "checks": getattr(exc, "checks", {}),
             },
             status_code=409,

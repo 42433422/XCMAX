@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.security.lan_ip import get_client_ip
 from app.utils.resilience.rate_limiter import check_rate_limit
 
 _AUTH_PREFIXES = (
@@ -66,7 +67,10 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
         if not _is_auth_path(path):
             return await call_next(request)
 
-        client = request.client.host if request.client else "unknown"
+        client = (
+            get_client_ip(request.scope, os.environ.get("LAN_TRUSTED_PROXIES", "").split(","))
+            or "unknown"
+        )
         endpoint = f"auth:{path.rstrip('/')}"
         key = f"{client}:{endpoint}"
 

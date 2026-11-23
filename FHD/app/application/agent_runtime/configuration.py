@@ -60,6 +60,7 @@ class RuntimeSetupError(RuntimePolicyError):
     def __init__(self, code: str, message: str, *, checks: dict | None = None):
         self.code = code
         self.checks = checks or {}
+        self.public_message = message
         super().__init__(message)
 
 

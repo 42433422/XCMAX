@@ -8,37 +8,10 @@ import pytest
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
-from modstore_server.api.xss_sanitizer import (
-    XSSSanitizerMiddleware,
-    _sanitize_value,
-    _strip_script_elements,
-)
+from modstore_server.middleware_registry import register_all_middleware
 
 _CANDIDATE_PATH = "/api/service/mac-control/training/candidates"
 _SERVICE_TOKEN = "synthetic-candidate-transport-token-" + "t" * 32
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        "before<script>alert(1)</script>after",
-        "before<ScRiPt src=x>ignored</sCrIpT>after",
-        "before<script>alert(1)</script\t\n ignored>after",
-    ],
-)
-def test_strip_script_elements_handles_browser_end_tag_variants(payload: str) -> None:
-    assert _strip_script_elements(payload) == "beforeafter"
-
-
-def test_sanitize_value_recurses_without_html_escaping_legitimate_text() -> None:
-    value = {
-        "nested": [
-            "a & b",
-            "<!DOCTYPE html><b>kept</b><script>removed</script>",
-        ],
-    }
-
-    assert _sanitize_value(value) == {"nested": ["a & b", "<!DOCTYPE html><b>kept</b>"]}
 
 
 def _candidate_body() -> dict:
@@ -77,12 +50,13 @@ def candidate_transport(monkeypatch):
         received.append(await request.body())
 
     async def echo(request: Request):
-        return await request.json()
+        return {"raw": (await request.body()).decode("utf-8")}
 
     app = FastAPI()
     app.include_router(dispatch.router, dependencies=[Depends(capture_body)])
-    app.add_api_route("/api/{rest:path}", echo, methods=["POST", "PUT"])
-    app.add_middleware(XSSSanitizerMiddleware)
+    for path in ("/api/{rest:path}", "/v1/{rest:path}", "/admin/{rest:path}"):
+        app.add_api_route(path, echo, methods=["POST", "PUT", "PATCH", "DELETE"])
+    register_all_middleware(app)
     with TestClient(app) as client:
         yield client, submit, received
 
@@ -142,18 +116,25 @@ def test_training_candidate_opaque_transport_keeps_gate_rejection(candidate_tran
         ("POST", _CANDIDATE_PATH + "/other"),
         ("POST", _CANDIDATE_PATH + "-other"),
         ("PUT", _CANDIDATE_PATH),
+        ("PATCH", "/admin/input-integrity"),
+        ("DELETE", "/v1/input-integrity"),
     ],
 )
-def test_candidate_exception_does_not_expand_to_other_json_requests(
-    candidate_transport, method, path
-):
+def test_all_json_inputs_preserve_original_values_and_bytes(candidate_transport, method, path):
     client, submit, _ = candidate_transport
+    payload = {
+        "备注": '  原意 A&B <原样> &lt;原实体&gt; "引号" ',
+        "code": "if a < b:\n    print('<script>literal()</script>')",
+        "nested": [None, False, 0, {"<&key>": "<!DOCTYPE html><FIELD>中文</FIELD>"}],
+    }
+    raw = (" \n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n ").encode()
     response = client.request(
-        method,
-        path,
-        json={"nested": ["before<script>literal()</script>after"]},
+        method, path, content=raw, headers={"Content-Type": "application/json"}
     )
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"nested": ["beforeafter"]}
+    assert response.json()["raw"].encode() == raw
+    assert json.loads(response.json()["raw"]) == payload
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["x-content-type-options"] == "nosniff"
     submit.assert_not_called()

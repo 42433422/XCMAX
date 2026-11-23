@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 _VERSION_TOKEN = re.compile(r"\d+|[A-Za-z]+")
 
 
+class DeliveryRemoteError(RuntimeError):
+    """The delivery control plane returned an unsuccessful or invalid response."""
+
+
 def version_key(value: str) -> tuple[tuple[int, int | str], ...]:
     """比较常见的 semver/内部版本，不依赖额外包。"""
     raw = str(value or "").strip().lstrip("vV")
@@ -72,9 +76,9 @@ async def custom_delivery_remote_json(
         detail = ""
         if isinstance(body, dict):
             detail = str(body.get("detail") or body.get("message") or "").strip()
-        raise RuntimeError(detail or f"MODstore 返回 HTTP {response.status_code}")
+        raise DeliveryRemoteError(detail or f"MODstore 返回 HTTP {response.status_code}")
     if not isinstance(body, dict):
-        raise RuntimeError("MODstore 定制交付返回格式无效")
+        raise DeliveryRemoteError("MODstore 定制交付返回格式无效")
     return body
 
 

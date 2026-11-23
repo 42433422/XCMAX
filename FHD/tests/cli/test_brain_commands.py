@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.cli import brain
 from app.cli.brain_client import BrainClient
 from app.cli.brain_session import BrainError, SessionStore
-from app.db.models.code_edit import CodeEditProposal
+from app.db.models.local_file import CodeEditProposal
 
 
 def run(client, *args):
@@ -152,8 +152,13 @@ def test_editor_persistent_owner_scope_after_account_switch(
     edit_id = run(brain_client, "edit", "note.txt", "--stdin")["edit_id"]
     with Session(brain_server.database) as db:
         proposal = db.get(CodeEditProposal, edit_id)
-        assert (proposal.owner_user_id, proposal.tenant_id) == (1, 10)
-        assert proposal.apply_state == "pending"
+        assert proposal.user_id == 1
+        assert json.loads(proposal.scope_json) == {
+            "user_id": 1,
+            "tenant_id": 10,
+            "workspace_root": str(brain_server.workspace.resolve()),
+        }
+        assert proposal.state == "pending"
         assert json.loads(proposal.payload_json)["new"] == content
 
     brain_client.login(other_user, "fixture-password", "enterprise")
@@ -173,7 +178,7 @@ def test_editor_persistent_owner_scope_after_account_switch(
     assert run(reloaded, "apply", edit_id, "--confirm")["success"] is True
     assert (brain_server.workspace / "note.txt").read_text(encoding="utf-8") == content
     with Session(brain_server.database) as db:
-        assert db.get(CodeEditProposal, edit_id) is None
+        assert db.get(CodeEditProposal, edit_id).state == "applied"
 
 
 def test_write_timeout_is_unknown_result_without_retry(brain_client, brain_server, monkeypatch):

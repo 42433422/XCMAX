@@ -1,5 +1,5 @@
 {
-  "lines": 2709858,
+  "lines": 2711040,
   "updated": "2026-11-24",
-  "note": "sanitizer fixture correction: use a detached DOM with explicit handler-presence preconditions, then preserve every original sanitizer output assertion; add eight measured test lines while leaving production sanitizer and original AI review rules unchanged"
+  "note": "2026-11-24用户要求闭环PR阻塞及六项交付缺口，完整保留公开955220d和22个冻结来源。删除FHD与MODstore全局输入HTML改写，复用原SQLAlchemy/FileLock持久提案、原子文件发布及可信代理解析；保留applying/applied跨恢复防重放与账号删除CASCADE；真实发货中断重启恢复纳入原必需业务验收。训练复用固定SRT0.0.83单一入口，维持完整矩阵、独立回放和helper摘要封印；SLO夹具压缩保留全部原断言，未抬结构阈值。另修复本轮CI实际发现的事务回滚和503回执重试；前者净减5行，后者仅明确具体远端异常，未放宽全局恢复集合。所有维护行由原脚本实测，不预留额度或删除无关代码抵数；本地代码验证、原生CI、主线、安装包和客户验收分别记录，缺失证据不计通过。源码增长登记仍为评审请求，不代表人工批准。 保留最新交付文档和工作流注释同步，全部冲突已合解暂存后再按原脚本实测，排除合并中索引多阶段重复计数。 保留最新惰性DOM夹具与原全部输出断言，新增8行均为验证输入前置条件。"
 }

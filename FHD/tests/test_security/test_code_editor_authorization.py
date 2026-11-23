@@ -7,6 +7,7 @@ import sys
 import time
 from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.application.facades import session_facade
 from app.db.db_base import Base
-from app.db.models.code_edit import CodeEditProposal
+from app.db.models.local_file import CodeEditProposal
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.fastapi_routes import code_editor
@@ -66,6 +67,7 @@ def editor_http(monkeypatch, tmp_path):
     def database():
         with Session(engine) as db:
             yield db
+            db.commit()
 
     monkeypatch.setattr(session_manager, "get_host_db", database)
     monkeypatch.setattr(session_facade, "get_session_service", session_manager.SessionManager)
@@ -87,6 +89,216 @@ def editor_http(monkeypatch, tmp_path):
         engine.dispose()
 
 
+def _editor_worker(
+    root, database_url, edit_id, session_id, method, results, barrier=None, written=None
+):
+    """Each spawn imports the production router and reloads the real SQL session."""
+    import os
+
+    os.environ["DATABASE_URL"] = database_url
+    os.environ["WORKSPACE_ROOT"] = root
+    os.environ["FHD_AI_ELEVATED_TOKEN"] = "editor-fixture-p2"
+    os.environ.pop("XCAGI_DESKTOP_MODE", None)
+    if written is not None:
+        publish = code_editor._publish_edit
+
+        def pause_after_effect(path, *args, **kwargs):
+            result = publish(path, *args, **kwargs)
+            written.set()
+            barrier.wait(timeout=30)
+            return result
+
+        code_editor._publish_edit = pause_after_effect
+    app = FastAPI()
+    app.include_router(code_editor.router)
+    headers = {
+        "X-Session-ID": session_id,
+        "X-XCAGI-AI-Tier": "p2",
+        "X-XCAGI-Elevated-Token": "editor-fixture-p2",
+    }
+    if barrier is not None and written is None:
+        barrier.wait(timeout=30)
+    with TestClient(app) as client:
+        endpoint = "diff" if method == "GET" else "apply"
+        response = client.request(method, f"/api/code-editor/{endpoint}/{edit_id}", headers=headers)
+        results.put((response.status_code, response.json()))
+
+
+def _worker_response(spawn_context, root, engine, edit_id, *, owner=1, method="GET"):
+    results = spawn_context.Queue()
+    worker = spawn_context.Process(
+        target=_editor_worker,
+        args=(str(root), str(engine.url), edit_id, f"editor-session-{owner}", method, results),
+    )
+    worker.start()
+    try:
+        response = results.get(timeout=40)
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+        return response
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=10)
+
+
+def test_proposal_survives_worker_restart_and_preserves_owner(editor_http, spawn_context):
+    client, root, engine = editor_http
+    edit_id = _stage(client)
+    for owner in (2, 3):
+        assert _worker_response(spawn_context, root, engine, edit_id, owner=owner)[0] == 404
+    status, body = _worker_response(spawn_context, root, engine, edit_id)
+    assert status == 200
+    assert "approved fixture" in body["unified_diff"]
+    assert _worker_response(spawn_context, root, engine, edit_id, method="POST")[0] == 200
+    assert (root / "note.txt").read_text() == "approved fixture\n"
+    assert client.get(f"/api/code-editor/diff/{edit_id}").status_code == 404
+    with Session(engine) as db:
+        assert db.get(CodeEditProposal, edit_id).state == "applied"
+
+
+@pytest.mark.parametrize("mode", ["existing", "new", "same_proposal"])
+def test_concurrent_process_apply_preserves_original_version(editor_http, spawn_context, mode):
+    client, root, engine = editor_http
+    client.headers["X-Session-ID"] = "editor-session-1"
+    path = "new.txt" if mode == "new" else "note.txt"
+    proposals = []
+    for content in ("first worker\n", "second worker\n"):
+        response = client.post(
+            "/api/code-editor/edit",
+            json={"path": path, "new_content": content, "create_if_missing": mode == "new"},
+        )
+        assert response.status_code == 200
+        proposals.append(response.json()["edit_id"])
+    if mode == "same_proposal":
+        proposals[1] = proposals[0]
+    results = spawn_context.Queue()
+    barrier = spawn_context.Barrier(2)
+    workers = [
+        spawn_context.Process(
+            target=_editor_worker,
+            args=(
+                str(root),
+                str(engine.url),
+                edit_id,
+                "editor-session-1",
+                "POST",
+                results,
+                barrier,
+            ),
+        )
+        for edit_id in proposals
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        outcomes = [results.get(timeout=40), results.get(timeout=40)]
+        for worker in workers:
+            worker.join(timeout=10)
+            assert worker.exitcode == 0
+        assert sorted(status for status, _ in outcomes) == [
+            200,
+            404 if mode == "same_proposal" else 409,
+        ]
+        assert (root / path).read_text() in {"first worker\n", "second worker\n"}
+        with Session(engine) as db:
+            rows = db.query(CodeEditProposal).filter(CodeEditProposal.edit_id.in_(proposals)).all()
+            assert sum(row.state == "applied" for row in rows) == 1
+            assert sum(row.state == "pending" for row in rows) == (mode != "same_proposal")
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=10)
+
+
+def test_process_death_after_write_keeps_original_claim_blocked(editor_http, spawn_context):
+    client, root, engine = editor_http
+    edit_id = _stage(client)
+    results, written, hold = spawn_context.Queue(), spawn_context.Event(), spawn_context.Barrier(2)
+    worker = spawn_context.Process(
+        target=_editor_worker,
+        args=(
+            str(root),
+            str(engine.url),
+            edit_id,
+            "editor-session-1",
+            "POST",
+            results,
+            hold,
+            written,
+        ),
+    )
+    worker.start()
+    try:
+        assert written.wait(timeout=40)
+        worker.terminate()
+        worker.join(timeout=10)
+        assert worker.exitcode is not None and worker.exitcode != 0
+        assert (root / "note.txt").read_text() == "approved fixture\n"
+        # Even restoring the original bytes cannot turn an uncertain write into
+        # a new attempt: the committed claim, rather than content alone, fences it.
+        (root / "note.txt").write_text("private fixture\n")
+        status, body = _worker_response(spawn_context, root, engine, edit_id, method="POST")
+        assert status == 409 and "verification" in body["detail"]
+        assert (root / "note.txt").read_text() == "private fixture\n"
+        with Session(engine) as db:
+            assert db.get(CodeEditProposal, edit_id).state == "applying"
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=10)
+
+
+def test_proposal_migration_preserves_claims_on_rollback(tmp_path):
+    import importlib.util
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import inspect
+
+    migration_path = (
+        Path(__file__).resolve().parents[2] / "alembic/versions/2026_11_24_code_edit_proposals.py"
+    )
+    spec = importlib.util.spec_from_file_location("code_edit_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine(f"sqlite:///{tmp_path / 'migration.sqlite'}")
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+                connection.execute(
+                    User.__table__.insert(),
+                    {"id": 1, "username": "original-owner", "password": "fixture-only"},
+                )
+                for state in ("pending", "applying", "applied"):
+                    connection.execute(
+                        CodeEditProposal.__table__.insert(),
+                        {
+                            "edit_id": f"edit_{state}",
+                            "user_id": 1,
+                            "scope_json": "{}",
+                            "payload_json": "{}",
+                            "state": state,
+                        },
+                    )
+                migration.downgrade()
+                migration.upgrade()
+                assert {
+                    row.edit_id: row.state
+                    for row in connection.execute(CodeEditProposal.__table__.select())
+                } == {f"edit_{state}": state for state in ("pending", "applying", "applied")}
+                assert (
+                    inspect(connection).get_foreign_keys("code_edit_proposals")[0]["referred_table"]
+                    == "users"
+                )
+    finally:
+        engine.dispose()
+
+
 def _p2(client):
     client.headers.update({"X-XCAGI-AI-Tier": "p2", "X-XCAGI-Elevated-Token": "editor-fixture-p2"})
 
@@ -104,7 +316,7 @@ def _stage(client):
     "identity,status", [(None, 401), ("forged", 401), ("expired", 401), (4, 403)]
 )
 def test_file_routes_require_active_session_even_with_p2(editor_http, identity, status):
-    client, root, _ = editor_http
+    client, root, engine = editor_http
     if identity is not None:
         client.headers["X-Session-ID"] = f"editor-session-{identity}"
     client.headers["X-User-ID"] = "1"
@@ -120,7 +332,7 @@ def test_file_routes_require_active_session_even_with_p2(editor_http, identity, 
         response = client.request(method, "/api/code-editor" + path, json=body)
         assert response.status_code == status, (path, response.status_code)
     assert not (root / "new").exists()
-    with Session(editor_http[2]) as db:
+    with Session(engine) as db:
         assert db.query(CodeEditProposal).count() == 0
     assert (root / "note.txt").read_text() == "private fixture\n"
 
@@ -185,6 +397,63 @@ def test_apply_revalidates_the_staged_path(editor_http):
     _p2(client)
     assert client.post(f"/api/code-editor/apply/{edit_id}", json={}).status_code == 400
     assert outside.read_text() == "private fixture\n"
+
+
+def test_installed_http_stack_preserves_code_bytes_and_sql_scope(editor_http, monkeypatch):
+    import hashlib
+    import json
+
+    from app.config import TestingConfig
+    from app.fastapi_app import factory
+
+    _, root, engine = editor_http
+    original = "title = '<原文> &lt; &amp; \"quoted\"'\n"
+    proposed = (
+        "if total < limit and name == '<script>literal()</script>':\n"
+        '    print("A&B \\"quoted\\" \'single\' &lt; &amp; \\\\literal\\\\")\n'
+    )
+    (root / "note.txt").write_text(original, encoding="utf-8")
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
+    monkeypatch.setattr(factory, "_app_singleton", None)
+    app = factory.create_fastapi_app(TestingConfig, enable_cors=False, enable_docs=False)
+    with TestClient(app) as client:
+        client.cookies.set("csrf_token", "editor-input-integrity")
+        client.headers["X-CSRF-Token"] = "editor-input-integrity"
+        raw = json.dumps({"path": "note.txt", "new_content": proposed}, ensure_ascii=False)
+        assert (
+            client.post(
+                "/api/code-editor/edit", content=raw, headers={"Content-Type": "application/json"}
+            ).status_code
+            == 401
+        )
+        client.headers["X-Session-ID"] = "editor-session-1"
+        response = client.post(
+            "/api/code-editor/edit", content=raw, headers={"Content-Type": "application/json"}
+        )
+        assert response.status_code == 200, response.text
+        edit_id = response.json()["edit_id"]
+        with Session(engine) as db:
+            row = db.get(CodeEditProposal, edit_id)
+            payload = json.loads(row.payload_json)
+            assert payload["new"] == proposed
+            assert payload["old_sha256"] == hashlib.sha256(original.encode("utf-8")).hexdigest()
+            assert row.user_id == 1
+            assert json.loads(row.scope_json) == {
+                "user_id": 1,
+                "tenant_id": 10,
+                "workspace_root": str(root.resolve()),
+            }
+        assert client.post(f"/api/code-editor/apply/{edit_id}").status_code == 403
+        _p2(client)
+        client.headers["X-Session-ID"] = "editor-session-2"
+        assert client.get(f"/api/code-editor/diff/{edit_id}").status_code == 404
+        assert client.post(f"/api/code-editor/apply/{edit_id}").status_code == 404
+        assert (root / "note.txt").read_bytes() == original.encode("utf-8")
+        client.headers["X-Session-ID"] = "editor-session-1"
+        assert client.get(f"/api/code-editor/diff/{edit_id}").status_code == 200
+        assert client.post(f"/api/code-editor/apply/{edit_id}").status_code == 200
+        assert (root / "note.txt").read_bytes() == proposed.encode("utf-8")
+        assert client.post(f"/api/code-editor/apply/{edit_id}").status_code == 404
 
 
 _PROCESS_REQUEST = r"""
@@ -289,7 +558,7 @@ def test_publication_exception_keeps_durable_claim_for_review(editor_http, monke
         with pytest.raises(OSError, match="synthetic uncertain publication"):
             client.post(f"/api/code-editor/apply/{edit_id}", json={})
     with Session(engine) as db:
-        assert db.get(CodeEditProposal, edit_id).apply_state == "applying"
+        assert db.get(CodeEditProposal, edit_id).state == "applying"
     # Even the original bytes, either unchanged or restored by a later operation,
     # cannot prove the previous edit did not publish.
     (root / "note.txt").write_text("private fixture\n")
@@ -330,7 +599,7 @@ def test_uncertain_commit_never_republishes_the_file(
         with pytest.raises(OSError, match="synthetic commit confirmation failure"):
             client.post(f"/api/code-editor/apply/{edit_id}", json={})
     with Session(engine) as db:
-        assert (db.get(CodeEditProposal, edit_id) is None) is committed
+        assert db.get(CodeEditProposal, edit_id).state == ("applied" if committed else "applying")
     assert (root / "note.txt").read_text() == "approved fixture\n"
     if restore_old:
         # A later legitimate rollback must not reactivate the uncertain old edit ID.
@@ -419,17 +688,49 @@ while not (Path(sys.argv[2]) / 'go').exists():
                 worker.communicate()
 
 
-def test_deleting_the_owner_also_removes_saved_proposal_content(editor_http):
+@pytest.mark.parametrize("restore_prior_snapshot", [False, True])
+def test_deleting_the_owner_also_removes_saved_proposal_content(
+    editor_http, monkeypatch, restore_prior_snapshot
+):
+    import sqlite3
+    from contextlib import closing
+
     from sqlalchemy import delete
 
-    client, _, engine = editor_http
+    from app.domain.shared_services.database_service import DatabaseService
+
+    client, root, engine = editor_http
     edit_id = _stage(client)
+    if restore_prior_snapshot:
+        service = DatabaseService()
+        backups = root / "backups"
+        backups.mkdir()
+        monkeypatch.setattr(service, "_get_backup_dir", lambda: str(backups))
+        snapshot = service.backup_database()
+        assert snapshot["success"] is True, snapshot
+        with closing(sqlite3.connect(snapshot["file_path"])) as backup:
+            assert backup.execute(
+                "SELECT state FROM code_edit_proposals WHERE edit_id = ?", (edit_id,)
+            ).fetchone() == ("pending",)
     with Session(engine) as db:
         assert db.get(CodeEditProposal, edit_id) is not None
         db.execute(delete(User).where(User.id == 1))
         db.commit()
     with Session(engine) as db:
+        assert db.get(User, 1) is None
         assert db.get(CodeEditProposal, edit_id) is None
+    if restore_prior_snapshot:
+        restored = service.restore_database(snapshot["file_path"])
+        assert restored["success"] is True, restored
+        with Session(engine) as db:
+            assert db.get(User, 1) is not None
+            assert db.get(CodeEditProposal, edit_id) is None
+        # Restoring the earlier account/session must not restore the deleted
+        # proposal bytes or allow its formerly pending edit ID to publish.
+        _p2(client)
+        assert client.get(f"/api/code-editor/diff/{edit_id}").status_code == 404
+        assert client.post(f"/api/code-editor/apply/{edit_id}", json={}).status_code == 404
+        assert (root / "note.txt").read_text() == "private fixture\n"
 
 
 def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(tmp_path, monkeypatch):

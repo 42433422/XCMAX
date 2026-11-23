@@ -42,6 +42,24 @@
 
 当前 `deliveries` 校验是目录录入门禁，尚未强制所有桌面发布器消费它。后续须以同一纯生成器输出 OTA/GitHub notes，并让现有晋级入口共用逐制品验收门禁；不新增平行台账。服务器 fresh/reuse/activation/rollback 已增加当前公开指针字节与缺省集合校验，stale immutable 目标必须显式对账，不能偷偷改写；网站复制/激活与 Windows interim 指针晋级共用服务器 publication 锁；interim 另以归档原字节作 CAS、失败只恢复自身替换。其他 stable/OTA 晋级与跨作业回滚仍有独立入口，未宣称全部发布器已收敛。
 
+## 当前版本证据与恢复验收
+
+每轮证据先绑定完整源码 SHA、原构建 run/attempt、原安装器 SHA256、平台/架构/渠道和实际运行身份；未解风险也绑定同一对象。源码合并后须在最终 head 重跑相关验证；原包改变则重新验收。复用[实机协议](../e2e/desktop-real-machine-acceptance-protocol.md)和[空白模板](../e2e/templates/desktop-acceptance-template.md)，不从历史报告复制 PASS，不以未执行项“无 FAIL”放行。
+
+| 检查 | 当前可执行入口（路径相对 `FHD/`） | 证明范围及交付前仍需完成的观察 |
+|---|---|---|
+| 原包、提交、验收、风险一致 | `tests/release_gate/test_build_closure_reports.py`、`tests/release_gate/test_upgrade_rollback_evidence.py`；`scripts/release/build_closure_reports.py` | 验证器拒绝旧 SHA、错 attempt/字节与自报通过；测试本身不是当前包的验收回执。须保留原构建、签名、公证、已安装后端与 UI 身份及本轮未解风险。 |
+| 备份与真实恢复 | `tests/test_services/test_database_service.py`、`tests/test_desktop_backup_retention.py`、`tests/test_desktop_backup_scheduler.py` | 临时 SQLite 原生备份/恢复、同秒恢复点、WAL、审计及主体校验；交付机还须对授权旧数据副本执行备份→写入→恢复→回读，对账订单、金额、库存、附件和 Mod，记录两份原始摘要。 |
+| 中断、重启、重试唯一效果 | `tests/test_application/test_sales_closed_loop_restart.py::test_sale_process_loss_and_backup_restore_preserve_one_original_effect`、`test_persisted_sales_plan_survives_restart_and_exports_once`（同文件） | 源码+隔离数据：真实业务服务提交前/提交后杀子进程、独立 SQL 核对、新进程原请求重试、真实备份恢复和多进程回读；另一租户不变。最终 head 重跑后仍需在同一安装包做对应业务观察。 |
+| 编辑提案多进程与恢复 | `tests/test_security/test_code_editor_authorization.py` | 原 SQL 提案迁移、主体与工作区隔离、并发领取及应用后重试；恢复旧快照保留 `applying/applied` 消费状态。中断中的提案保持待核验，不据旧文件自动重放；仍须以同一安装包核验客户工作区。 |
+| 旧 schema 与失败升级 | `tests/test_desktop/test_startup_schema_migration_real_db.py`、`tests/test_desktop/test_startup_schema_migration.py`、`tests/test_desktop/test_run_fastapi_migrate_backup_gate.py`；`tests/test_infrastructure/test_packaged_desktop_runtime_recovery.py` | 真实 SQLite/Alembic 旧 schema 与哨兵数据；磁盘不足/中断是受控注入，不能称真实断电。安装机需保存旧 schema、升级前备份及差异，验证恢复后业务可继续、再次启动无重复迁移。 |
+| 离线与诊断 | `tests/test_application/test_offline_login.py`、`tests/test_desktop/test_desktop_runtime_cov.py` | 本地认证和诊断代码回归不能证明整机断网可用；实机断网后核对已授权本地数据、云能力的明确不可用状态，再联网重试无重复执行，并保存脱敏诊断包及失败→恢复日志。 |
+| 服务器恢复 | `tests/release_gate/test_postgres_backup_snapshot.py`、`scripts/deploy/fhd-restore-drill.sh` | 原生 PG16 用例仅使用 CI 的显式 disposable 服务 ID；缺服务必须记录 SKIP。COS 命令夹具只验证摘要与失败退出合同；dry-run 不执行恢复。实际恢复需隔离库的原生 `pg_restore`、同快照精确行数与摘要对账，不能拿命令桩或生产库试错代替。 |
+
+源码阶段在最终候选 `FHD/` 运行 `uv run --frozen python -m pytest <上表对应测试路径> --junitxml=<本轮输出路径>`，同时保存 `git rev-parse HEAD` 和测试原日志。原生 PostgreSQL 行需配置 `.github/workflows/` 中现有测试作业的 `FHD_TEST_PG_CONTAINER=job.services.postgres.id`；不得填生产容器。安装阶段按实机协议采集原始文件，交由既有原生验收验证器和闭环报告流程核对来源，而非手填 `passed=true`。
+
+没有本轮冻结安装包、客户授权原件、目标 Windows/macOS 实机或独立恢复环境时，相应项保持 UNKNOWN/SKIP，列出所缺对象和上述补测入口；源码结果只登记源码范围。缺证据不能更改 `release_ready`、把 `candidate` 晋级为 `accepted/published`，也不能关闭客户尚未复验的风险。
+
 ## 每次贡献与发布
 
 - 修改版本、发布脚本、下载 UI、客户端更新或历史说明时，先核对本目录与原制品证据；只改源，重生成视图，不维护第二份版本表。仓库不保留旧公共指针副本；离线站点聚合只展示发布意图，不能代替线上读回。历史 kind / publication_state 是历史分类，不是当前平台可下载状态。

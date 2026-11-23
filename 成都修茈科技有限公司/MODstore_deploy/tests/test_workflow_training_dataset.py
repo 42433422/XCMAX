@@ -352,7 +352,7 @@ def test_deferred_result_requires_host_measurement_without_rewriting_raw_report(
 
 
 @pytest.mark.parametrize("mutation", ["claimed_success", "missing_marker"])
-def test_non_deferred_results_keep_the_original_success_consistency_check(
+def test_non_deferred_provider_markers_cannot_supply_runtime_evidence(
     monkeypatch, business_report, mutation
 ):
     from modstore_server import workflow_nl_training, workflow_training_replay
@@ -376,8 +376,9 @@ def test_non_deferred_results_keep_the_original_success_consistency_check(
         "get_assert",
         lambda *_args: {"pass": mutation == "missing_marker"},
     )
-    with pytest.raises(ValueError, match="training_workflow_result_unverified"):
-        trainer.seal_evaluation(bundle, output)
+    evidence = trainer.seal_evaluation(bundle, output)
+    assert evidence["verdict"] == "keep_baseline"
+    assert evidence["runtime_verified"] is False and evidence["holdout_verified"] is False
 
 
 @pytest.mark.parametrize("deferred", [False, True])
@@ -416,3 +417,63 @@ def test_invalid_result_matrix_never_starts_native_execution(
         ValueError, match="training_(business_results_incomplete|workflow_result_unverified)"
     ):
         trainer.seal_evaluation(bundle, output)
+
+
+@pytest.mark.parametrize("reported_pass", [False, True])
+def test_business_sealing_scores_independent_reports_not_raw_model_grades(
+    tmp_path, monkeypatch, cases, reported_pass
+):
+    from modstore_server import workflow_nl_training
+
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    built = trainer.build_config(
+        out_dir=tmp_path,
+        baseline_prompt="baseline",
+        candidate_prompt="candidate",
+        cases=cases,
+        surface="workflow_nl_prompt",
+    )
+    bundle = json.loads(Path(built["bundle"]).read_bytes())
+    tests = json.loads(Path(built["tests"]).read_bytes())
+    result = {
+        "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+        "results": {
+            "prompts": [{"raw": Path(built[key]).read_text()} for key in ("baseline", "candidate")],
+            "results": [
+                {
+                    "promptIdx": arm,
+                    "testIdx": index,
+                    "success": reported_pass,
+                    "failureReason": 0 if reported_pass else 1,
+                    "gradingResult": {"pass": reported_pass},
+                    "error": None if reported_pass else "business replay deferred",
+                    "provider": {"id": bundle["provider_id"]},
+                    "vars": test["vars"],
+                    "response": {"output": "candidate" if arm else "baseline"},
+                }
+                for arm in (0, 1)
+                for index, test in enumerate(tests)
+            ],
+        },
+    }
+    output = tmp_path / "grades.json"
+    output.write_text(json.dumps(result))
+    reports = []
+
+    def independent_report(value, context):
+        # Scoring contract only: actual SRT/employee execution has separate gates.
+        reports.append((value, context["vars"]["case_id"]))
+        return {
+            "pass": value == "candidate",
+            "runtime_verified": True,
+            "measurement_scope": datasets.BUSINESS_SCOPE,
+            "business_evidence": {"fixture": True},
+        }
+
+    monkeypatch.setattr(workflow_nl_training, "get_assert", independent_report)
+    evidence = trainer.seal_evaluation(Path(built["bundle"]), output)
+    assert len(reports) == 4
+    assert evidence["baseline"] == {"pass": 0, "total": 2}
+    assert evidence["candidate"] == {"pass": 2, "total": 2}
+    assert evidence["verdict"] == "candidate_for_approval" and evidence["holdout_verified"] is True

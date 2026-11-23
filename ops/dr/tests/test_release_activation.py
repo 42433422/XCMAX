@@ -194,6 +194,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
             "RUNTIME": self.runtime,
             "INCOMING": self.root / "incoming",
             "LOG": self.root / "apply.log",
+            "LOCK": self.root / "release.lock",
             "PREPARE_RUNTIME": self.bin / "prepare",
             "RELEASE_ORDER": self.order,
         }
@@ -218,6 +219,7 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
             str(self.manifest(self.new)),
             self.new_sha,
             "200",
+            extra="VERIFY_CURRENT=0\nacquire_release_lock",
         )
 
     @property
@@ -514,6 +516,81 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertEqual(self.observed, [self.old_sha])
         self.assert_old_markers()
         self.assertFalse(self.pending.exists())
+
+    def test_failed_candidate_restores_verified_release_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        for failure in ("identity", "prepare"):
+            with self.subTest(failure=failure):
+                self.bad_sha.clear()
+                self.env.pop("PREPARE_FAIL_SHA", None)
+                if failure == "identity":
+                    self.bad_sha.add(self.new_sha)
+                else:
+                    self.env["PREPARE_FAIL_SHA"] = self.new_sha
+                result = self.activate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.current.resolve(), self.old)
+                self.assert_old_markers()
+                self.assertFalse(self.pending.exists())
+                verified = self.run_function("verify_current_release_pair")
+                self.assertEqual(
+                    verified.returncode, 0, verified.stdout + verified.stderr
+                )
+                self.assertEqual(
+                    (self.state / "release_applied_sha").read_text().strip(),
+                    self.old_sha,
+                )
+
+    def test_compensation_does_not_certify_an_unverified_or_mixed_pair(self) -> None:
+        self.add_fhd_release(self.old_sha)
+        aggregate = self.state / "release_applied_sha"
+        other = self.state / "release_applied_fhd_sha"
+        pending = self.state / "release_apply_fhd.pending"
+        for case in ("missing", "invalid", "mixed", "pending", "unhealthy"):
+            with self.subTest(case=case):
+                aggregate.write_text(self.old_sha + "\n")
+                other.write_text(self.old_sha + "\n")
+                if pending.exists():
+                    pending.rmdir()
+                self.bad_components.clear()
+                if case == "missing":
+                    aggregate.unlink()
+                elif case == "invalid":
+                    aggregate.write_text("unknown\n")
+                elif case == "mixed":
+                    other.write_text(self.new_sha + "\n")
+                elif case == "pending":
+                    pending.mkdir()
+                else:
+                    self.bad_components.add("fhd")
+                self.bad_sha.add(self.new_sha)
+                result = self.activate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.current.resolve(), self.old)
+                self.assertFalse(aggregate.exists())
+                self.assertNotEqual(
+                    self.run_function("verify_current_release_pair").returncode, 0
+                )
+
+    def test_pair_receipt_replacement_failure_leaves_no_unverified_receipt(
+        self,
+    ) -> None:
+        self.add_fhd_release(self.old_sha)
+        self.bad_sha.add(self.new_sha)
+        real_mv = shutil.which("mv")
+        self.assertIsNotNone(real_mv)
+        self.executable(
+            "mv",
+            "#!/bin/bash\n"
+            '[[ "${!#}" != "$FIXTURE_ROOT/state/release_applied_sha" ]] || exit 23\n'
+            f'exec {shlex.quote(real_mv)} "$@"\n',
+        )
+        result = self.activate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.current.resolve(), self.old)
+        self.assert_old_markers()
+        self.assertFalse((self.state / "release_applied_sha").exists())
+        self.assertEqual(list(self.state.glob(".release_applied_sha.*")), [])
 
     def test_unverified_previous_retains_pending_and_rejects_retry(self) -> None:
         self.bad_sha.update((self.old_sha, self.new_sha))

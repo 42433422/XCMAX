@@ -28,7 +28,13 @@
     "R10-recovery-tenant",
     "R05-approved-sales-full-chain",
     "R07-approved-sales-worker-restart",
-    "R04-corrupt-sales-report-rejected"
+    "R04-corrupt-sales-report-rejected",
+    "R07-sales-stock-written-restore",
+    "R07-sales-committed-restore",
+    "R07-sales-approval-restart",
+    "R07-sales-approval-kill",
+    "R07-sales-session-deleted",
+    "R07-sales-message-withdrawn"
   ],
   "required_tests": {
     "R01-elt-row-accounting": "tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out",
@@ -59,6 +65,12 @@
     "R10-recovery-tenant": "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant",
     "R05-approved-sales-full-chain": "tests/test_application/test_business_full_chain_acceptance.py::test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order",
     "R07-approved-sales-worker-restart": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[False]",
-    "R04-corrupt-sales-report-rejected": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[True]"
+    "R04-corrupt-sales-report-rejected": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[True]",
+    "R07-sales-stock-written-restore": "tests/test_application/test_sales_closed_loop_restart.py::test_sale_process_loss_and_backup_restore_preserve_one_original_effect[stock_written]",
+    "R07-sales-committed-restore": "tests/test_application/test_sales_closed_loop_restart.py::test_sale_process_loss_and_backup_restore_preserve_one_original_effect[committed]",
+    "R07-sales-approval-restart": "tests/test_application/test_sales_closed_loop_restart.py::test_persisted_sales_plan_survives_restart_and_exports_once[False-None]",
+    "R07-sales-approval-kill": "tests/test_application/test_sales_closed_loop_restart.py::test_persisted_sales_plan_survives_restart_and_exports_once[True-None]",
+    "R07-sales-session-deleted": "tests/test_application/test_sales_closed_loop_restart.py::test_persisted_sales_plan_survives_restart_and_exports_once[False-delete]",
+    "R07-sales-message-withdrawn": "tests/test_application/test_sales_closed_loop_restart.py::test_persisted_sales_plan_survives_restart_and_exports_once[False-withdraw]"
   }
 }

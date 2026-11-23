@@ -1,4 +1,4 @@
-"""The production middleware stack must preserve business request bytes."""
+"""The installed HTTP stack preserves JSON data; HTML escaping belongs to rendering."""
 
 from __future__ import annotations
 
@@ -8,6 +8,70 @@ import pytest
 from fastapi import Request
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+
+from app.config import TestingConfig
+from app.fastapi_app import factory
+
+
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "1")
+    monkeypatch.setattr(factory, "_app_singleton", None)
+    app = factory.create_fastapi_app(TestingConfig, enable_cors=False, enable_docs=False)
+
+    async def echo(request: Request):
+        return {"raw": (await request.body()).decode("utf-8")}
+
+    app.router.routes.insert(
+        0, APIRoute("/api/input-integrity", echo, methods=["POST", "PUT", "PATCH", "DELETE"])
+    )
+    client = TestClient(app)
+    client.cookies.set("csrf_token", "input-integrity-fixture")
+    client.headers["X-CSRF-Token"] = "input-integrity-fixture"
+    yield client
+    client.close()
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+@pytest.mark.parametrize("content_type", ["application/json", "application/merge-patch+json"])
+def test_json_values_and_original_bytes_reach_the_route_unchanged(client, method, content_type):
+    payload = {
+        "备注": "  客户 A&B <原样> \"双引号\" '单引号' &lt;原有实体&gt;\n下一行  ",
+        "code": "if total < limit and name == '<script>literal()</script>':\n    print('a & b')",
+        "nested": [None, False, 0, 1.25, {"<&key>": ['<script type="text/plain">示例</script>']}],
+    }
+    raw = (" \n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n ").encode("utf-8")
+    response = client.request(
+        method, "/api/input-integrity", content=raw, headers={"Content-Type": content_type}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["raw"].encode("utf-8") == raw
+    assert json.loads(response.json()["raw"]) == payload
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.parametrize(
+    "raw,content_type",
+    [
+        (b"{invalid", "application/json"),
+        (b"", "application/json"),
+        (b"raw <data> & text", "text/plain"),
+    ],
+)
+def test_raw_request_bodies_reach_the_route_without_reinterpretation(client, raw, content_type):
+    response = client.post(
+        "/api/input-integrity", content=raw, headers={"Content-Type": content_type}
+    )
+    assert response.status_code == 200
+    assert response.json()["raw"].encode() == raw
+
+
+def test_preserving_json_does_not_remove_browser_csrf_validation(client):
+    del client.headers["X-CSRF-Token"]
+    response = client.post("/api/input-integrity", json={"备注": "原样 < & >"})
+    assert response.status_code == 403
+    assert "CSRF" in response.json()["message"]
 
 
 @pytest.fixture

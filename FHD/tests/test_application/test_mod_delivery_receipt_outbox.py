@@ -8,6 +8,7 @@ import pytest
 from fastapi import Request
 
 from app.application import mod_delivery_receipt_outbox as outbox
+from app.application.private_mod_delivery_artifacts import DeliveryRemoteError
 
 
 @pytest.fixture
@@ -47,14 +48,15 @@ def pending(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_response_loss_retries_same_install_id_and_body(pending, monkeypatch):
+@pytest.mark.parametrize("failure", [ConnectionError, DeliveryRemoteError])
+async def test_response_loss_retries_same_install_id_and_body(pending, monkeypatch, failure):
     request, root = pending
     sent = []
 
     async def post(token, path, *, method, payload):
         sent.append(copy.deepcopy(payload))
         if len(sent) == 1:
-            raise ConnectionError("response lost")
+            raise failure("response lost")
         return {"receipt": {"record": {"verified": False}}}
 
     async def no_runtime(request, row):
@@ -72,6 +74,24 @@ async def test_response_loss_retries_same_install_id_and_body(pending, monkeypat
     row = json.loads(next(root.glob("mod-delivery-receipts/*/*.json")).read_text())
     assert row["installed_reported"] is True
     assert row["runtime_reported"] is False
+
+
+@pytest.mark.asyncio
+async def test_programming_failure_propagates_without_reporting_install(pending, monkeypatch):
+    request, root = pending
+    error = RuntimeError("invalid internal contract")
+
+    async def post(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(
+        "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", post
+    )
+    with pytest.raises(RuntimeError) as caught:
+        await outbox.retry_delivery_receipts(request, "current-token")
+    assert caught.value is error
+    row = json.loads(next(root.glob("mod-delivery-receipts/*/*.json")).read_text())
+    assert row["installed_reported"] is row["runtime_reported"] is False
 
 
 @pytest.mark.asyncio
