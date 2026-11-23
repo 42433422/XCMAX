@@ -37,7 +37,9 @@ jobs:
       - name: Reject customer data and embedded runtime snapshots
         run: python scripts/ci/check_private_data.py
       - name: Check operational exception boundaries
-        run: python scripts/ci/check_operational_errors_gate.py
+        run: |
+          python scripts/ci/check_operational_errors_gate.py
+          python FHD/scripts/ci/check_operational_errors_gate.py
       - name: Check broad exception ratchet
         run: python scripts/ci/check_broad_except_gate.py
 

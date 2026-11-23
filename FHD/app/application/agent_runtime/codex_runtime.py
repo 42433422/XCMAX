@@ -38,6 +38,7 @@ from app.infrastructure.codex.binding import (
     CodexBindingStore,
 )
 from app.infrastructure.codex.receipts import project_child_calls, resume_error
+from app.infrastructure.codex.transport import CodexTransportError
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -191,7 +192,7 @@ async def run_codex_agent(
                 generation=generation,
                 release_coordinator=release_coordinator,
             )
-        except RECOVERABLE_ERRORS:
+        except BOUNDARY_ERRORS:
             if cancelled is None and fatal_error is None:
                 raise
             logger.warning(
@@ -208,8 +209,16 @@ async def run_codex_agent(
                 try:
                     async with asyncio.timeout(min(float(config.timeout_seconds), 5.0)):
                         await transport.interrupt()
-                except RECOVERABLE_ERRORS:
-                    pass  # Transport context exit also closes the native process.
+                except BOUNDARY_ERRORS as exc:
+                    # Preserve the original cancellation/failure across a secondary
+                    # shutdown bug. Without one, unexpected errors still propagate.
+                    if (
+                        cancelled is None
+                        and fatal_error is None
+                        and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError))
+                    ):
+                        raise
+                    logger.warning("Codex runtime interrupt failed during shutdown", exc_info=True)
 
     async def finalize() -> None:
         nonlocal cancelled
@@ -663,7 +672,7 @@ async def run_codex_agent(
                     await stop("cancelled")
                     raise
                 except BOUNDARY_ERRORS as exc:
-                    if not isinstance(exc, RECOVERABLE_ERRORS):
+                    if not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
                         fatal_error = exc
                     await stop("interrupted")
                     raise
@@ -676,7 +685,7 @@ async def run_codex_agent(
         # This task boundary must finalize ownership even for a programming bug.
         # Preserve that exception for the HTTP/task caller after durable cleanup;
         # do not translate it into a successful or retriable business result.
-        if fatal_error is None and not isinstance(exc, RECOVERABLE_ERRORS):
+        if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
             fatal_error = exc
         result.update(
             error_code=getattr(exc, "code", "codex_runtime_failed"),

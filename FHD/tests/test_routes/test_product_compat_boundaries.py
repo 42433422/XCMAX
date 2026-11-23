@@ -84,7 +84,7 @@ def test_query_fallback_order_preserves_arguments_and_read_gate(product_client, 
 
     def dispatch(*args, **kwargs):
         calls.append(("mod", args, kwargs["keyword"], kwargs["unit"]))
-        raise RuntimeError("Mod temporarily unavailable")
+        raise ConnectionError("Mod temporarily unavailable")
 
     def enabled():
         calls.append("flag")
@@ -92,7 +92,7 @@ def test_query_fallback_order_preserves_arguments_and_read_gate(product_client, 
 
     def service(request, **kwargs):
         calls.append(("service", kwargs))
-        raise RuntimeError("service temporarily unavailable")
+        raise ConnectionError("service temporarily unavailable")
 
     def legacy(*args):
         calls.append(("legacy", args))
@@ -144,10 +144,11 @@ def test_query_http_denial_does_not_fall_back(product_client, monkeypatch, statu
     legacy.assert_not_called()
 
 
-def test_query_programming_error_does_not_fall_back(product_client, monkeypatch):
+@pytest.mark.parametrize("error", [TypeError, KeyError, IndexError, AttributeError, RuntimeError])
+def test_query_programming_error_does_not_fall_back(product_client, monkeypatch, error):
     monkeypatch.setattr(
         "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
-        Mock(side_effect=TypeError("invalid adapter contract")),
+        Mock(side_effect=error("invalid adapter contract")),
     )
     legacy = Mock()
     monkeypatch.setattr(routes, "_load_products_list_impl_pg", legacy)

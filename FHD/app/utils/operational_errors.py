@@ -3,31 +3,15 @@
 Route-level catch-all lives in ``app.middleware.error_handler``; inner code should
 only handle operational failures and let unexpected errors propagate.
 
-Programming bugs (``TypeError``, ``KeyError``, ``AttributeError``) are intentionally
-excluded — they should bubble to the HTTP boundary as 500s.
+Type, attribute and lookup failures, and unclassified ``RuntimeError``, are not
+recoverable. They must reach the HTTP boundary as 500s; a caller that handles a
+known domain failure must name that exception explicitly at its boundary.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-
-# Legacy alias for im-sync-backend compatibility
-OPERATIONAL_ERRORS: tuple[type[Exception], ...] = (
-    OSError,
-    ValueError,
-    TypeError,
-    KeyError,
-    AttributeError,
-    RuntimeError,
-    ImportError,
-    LookupError,
-    ConnectionError,
-    TimeoutError,
-    json.JSONDecodeError,
-    ArithmeticError,
-    UnicodeError,
-)
 
 _operational_extra: tuple[type[Exception], ...] = ()
 try:
@@ -74,7 +58,6 @@ INFRA_TRANSIENT: tuple[type[Exception], ...] = (
     sqlite3.DatabaseError,
     ConnectionError,
     TimeoutError,
-    RuntimeError,
     ImportError,
     ArithmeticError,
     *_operational_extra,
@@ -88,11 +71,14 @@ DATA_SHAPE: tuple[type[Exception], ...] = (
     ValueError,
     json.JSONDecodeError,
     UnicodeError,
-    LookupError,
 )
 
 # Union of recoverable operational failures (default inner catch tuple)
 RECOVERABLE_ERRORS: tuple[type[Exception], ...] = INFRA_TRANSIENT + DATA_SHAPE
+
+# Compatibility name; it must not reintroduce programming exceptions excluded
+# from the active contract.
+OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 # Only process, request, task, adapter, and plugin-isolation boundaries may
 # translate an otherwise unexpected application exception. Keeping this

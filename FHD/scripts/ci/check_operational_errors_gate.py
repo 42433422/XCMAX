@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI gate: 守护异常处理 SSOT（2026-06-13 技术债清偿）。
 
-校验两件事：
+校验异常分类及其使用：
 
 1. 旧符号 ``OPERATIONAL_ERRORS`` 不得在 ``app/`` 中复活。它已拆分为
    ``INFRA_TRANSIENT`` / ``DATA_SHAPE`` / ``RECOVERABLE_ERRORS``
@@ -9,6 +9,8 @@
 
 2. ``app/utils/operational_errors.py`` 仍导出三个 SSOT 名称，避免
    被误删导致全仓 ``except RECOVERABLE_ERRORS`` 崩塌。
+
+3. 恢复异常元组不得通过 LookupError 等父类间接吞掉编程错误。
 
 非零退出即代表门禁失败。CI 与本地均可运行：
 
@@ -18,6 +20,7 @@
 from __future__ import annotations
 
 import re
+import runpy
 import sys
 from pathlib import Path
 
@@ -63,9 +66,28 @@ def check_ssot_exports() -> list[str]:
     return problems
 
 
+def check_programming_errors_excluded() -> list[str]:
+    if not SSOT_MODULE.exists():
+        return []  # The export check reports the missing module.
+    namespace = runpy.run_path(str(SSOT_MODULE))
+    bugs = (LookupError, KeyError, IndexError, TypeError, AttributeError, RuntimeError)
+    problems = []
+    for name in (*REQUIRED_EXPORTS, "OPERATIONAL_ERRORS"):
+        errors = namespace.get(name, ())
+        if not isinstance(errors, tuple) or any(
+            not isinstance(error, type) or not issubclass(error, Exception) for error in errors
+        ):
+            problems.append(f"{name} 必须为异常类型元组")
+            continue
+        for bug in bugs:
+            if issubclass(bug, errors):
+                problems.append(f"{name} 不得捕获编程错误 {bug.__name__}")
+    return problems
+
+
 def main() -> int:
     offenders = check_no_legacy_symbol()
-    export_problems = check_ssot_exports()
+    export_problems = check_ssot_exports() + check_programming_errors_excluded()
 
     if not offenders and not export_problems:
         print("[operational-errors-gate] OK：异常 SSOT 完整，无旧符号复活。")

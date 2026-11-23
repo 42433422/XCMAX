@@ -130,7 +130,7 @@ def test_finalization_storage_failure_still_releases_owned_coordinator(
         assert len(browsers) == 1 and browsers[0]["run_id"] == store.run.run_id
 
 
-@pytest.mark.parametrize("failure_stage", ["revocation", "snapshot", "terminal_write"])
+@pytest.mark.parametrize("failure_stage", ["revocation", "snapshot", "terminal_write", "interrupt"])
 def test_original_callback_error_survives_finalization_storage_failure(
     setup_runtime, monkeypatch, failure_stage
 ):
@@ -146,6 +146,13 @@ def test_original_callback_error_survives_finalization_storage_failure(
         monkeypatch.setattr(store, "close", unavailable)
     elif failure_stage == "snapshot":
         monkeypatch.setattr(store, "receipt_snapshot", unavailable)
+    elif failure_stage == "interrupt":
+
+        async def broken_interrupt():
+            store.log.append("interrupt")
+            unavailable()
+
+        monkeypatch.setattr(transport, "interrupt", broken_interrupt)
     else:
         update = store.update
 
@@ -230,6 +237,55 @@ def test_failed_revocation_still_interrupts_the_runtime(setup_runtime, monkeypat
     assert store.log.index("interrupt") < store.log.index("exit")
 
 
+@pytest.mark.parametrize("failure", [RuntimeError, TypeError])
+def test_cancellation_survives_secondary_interrupt_error(setup_runtime, monkeypatch, failure):
+    invoke, _ = setup_runtime
+    store = Store(rows=[receipt(status="unknown", verified=False, success=False)])
+    transport = ShutdownTransport(store, events=completed()[:1], hang=True)
+
+    async def broken_interrupt():
+        store.log.append("interrupt")
+        raise failure("secondary interrupt failure")
+
+    monkeypatch.setattr(transport, "interrupt", broken_interrupt)
+
+    async def cancel():
+        task = asyncio.create_task(invoke(store, transport))
+        await transport.active.wait()
+        task.cancel("original request cancellation")
+        with pytest.raises(asyncio.CancelledError, match="original request cancellation"):
+            await task
+
+    asyncio.run(cancel())
+    assert store.log.index("interrupt") < store.log.index("exit")
+    metadata = store.run.metadata["codex_runtime"]
+    assert metadata["coordinator_active"] is False and metadata["revoked"] is True
+    assert metadata["runtime_status"] == store.run.status == "cancelled"
+    assert store.run.metadata["non_retryable"] is True
+    assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+
+
+def test_interrupt_programming_error_propagates_without_prior_failure(setup_runtime, monkeypatch):
+    invoke, _ = setup_runtime
+    store = Store()
+    events = completed()
+    events[-1]["payload"]["turn"]["status"] = "failed"
+    transport = ShutdownTransport(store, events=events)
+    failure = RuntimeError("original interrupt programming error")
+
+    async def broken_interrupt():
+        store.log.append("interrupt")
+        raise failure
+
+    monkeypatch.setattr(transport, "interrupt", broken_interrupt)
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(invoke(store, transport))
+    assert caught.value is failure
+    assert "exit" in store.log
+    assert store.run.status == "failed"
+    assert store.run.metadata["codex_runtime"]["coordinator_active"] is False
+
+
 @pytest.mark.parametrize("fail_terminal_write", [False, True])
 def test_cancellation_survives_revocation_and_terminal_write_failure(
     setup_runtime, monkeypatch, fail_terminal_write
@@ -309,7 +365,7 @@ def test_request_receipt_loss_never_replaces_the_original_outcome(
         attempted.append(run_id)
         if commit_before_loss:
             update(store, run_id, mutation, **options)
-        raise RuntimeError("injected original-request receipt loss")
+        raise OSError("injected original-request receipt loss")
 
     monkeypatch.setattr(CodexBindingStore, "update", lose_receipt)
     result = asyncio.run(state.invoke())
@@ -328,6 +384,21 @@ def test_request_receipt_loss_never_replaces_the_original_outcome(
         assert result["reconciliation_required"] is True and result["retryable"] is False
         assert "result" not in request
         assert duplicate["error_code"] == "runtime_request_in_progress"
+
+
+@pytest.mark.parametrize("failure", [KeyError, IndexError, TypeError, AttributeError, RuntimeError])
+def test_unexpected_runtime_failure_propagates_after_cleanup(setup_runtime, failure):
+    invoke, _ = setup_runtime
+    store = Store()
+    error = failure("invalid internal runtime contract")
+    transport = ShutdownTransport(store, events=completed()[:1], error=error)
+
+    with pytest.raises(failure) as caught:
+        asyncio.run(invoke(store, transport))
+
+    assert caught.value is error
+    assert "interrupt" in store.log and "exit" in store.log
+    assert store.log.index("interrupt") < store.log.index("exit")
 
 
 @pytest.mark.parametrize("lost_certificate_ack", [False, True])

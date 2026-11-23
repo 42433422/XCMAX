@@ -119,27 +119,6 @@ const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
   ],
 }
 
-function salesContractInteractiveAttrHook(currentNode: Element, hookEvent: UponSanitizeAttributeHookEvent, _config: Config) {
-  const name = String(hookEvent.attrName || '')
-  if (!name.startsWith('on')) return
-  const tag = currentNode.tagName
-  const inPreview = currentNode.closest?.('.sales-contract-excel-preview')
-  if (!inPreview) return
-  const el = currentNode as HTMLElement
-  if (tag === 'BUTTON' && name === 'onclick' && el.classList.contains('sales-contract-row-action-btn')) {
-    hookEvent.forceKeepAttr = true
-    return
-  }
-  if (tag === 'INPUT' && name === 'onchange') {
-    if (
-      el.classList.contains('sales-contract-excel-preview__model-input') ||
-      el.classList.contains('sales-contract-excel-preview__qty-input')
-    ) {
-      hookEvent.forceKeepAttr = true
-    }
-  }
-}
-
 export function sanitizeChatBubbleHtml(raw: string | undefined | null): string {
   const dirty = String(raw ?? '')
   if (!dirty) return ''
@@ -192,12 +171,7 @@ export function sanitizeTaskSummaryHtml(task: TaskSummarySanitizeInput): string 
   if (!dirty) return ''
   const t = String(task.type || '')
   if (t === 'sales_contract' && dirty.includes('sales-contract-excel-preview')) {
-    DOMPurify.addHook('uponSanitizeAttribute', salesContractInteractiveAttrHook)
-    try {
-      return DOMPurify.sanitize(dirty, SALES_CONTRACT_SANITIZE_CONFIG)
-    } finally {
-      DOMPurify.removeHook('uponSanitizeAttribute', salesContractInteractiveAttrHook)
-    }
+    return DOMPurify.sanitize(dirty, SALES_CONTRACT_SANITIZE_CONFIG)
   }
   return DOMPurify.sanitize(dirty, CHAT_BUBBLE_CONFIG)
 }
