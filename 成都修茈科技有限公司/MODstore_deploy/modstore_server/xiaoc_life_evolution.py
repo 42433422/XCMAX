@@ -516,7 +516,9 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         terminal = None
     # Do not re-hash a negative event merely because it has just been persisted.
     historical_rejection = (
-        None if current_rejection else _historical_rejection(session, row.id, candidate_identity)
+        None
+        if current_rejection
+        else _historical_rejection(session, cast(str, row.id), candidate_identity)
     )
     if historical_rejection:
         status = "evolution_evidence_incomplete"
@@ -537,7 +539,7 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         and impact.get("verified_at")
     ):
         effect_verdict = "impact_receipt_verified"
-    comparison = _comparison_receipt(row.id, protocol, evidence)
+    comparison = _comparison_receipt(cast(str, row.id), protocol, evidence)
     audit = {
         "proposal_sha256": digest(source),
         "baseline_sha": protocol.get("source_sha", ""),
