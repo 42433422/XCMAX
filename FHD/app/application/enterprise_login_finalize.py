@@ -143,7 +143,20 @@ async def finalize_enterprise_login(
                         apply_paid_plan_for_user,
                     )
 
-                    if apply_paid_plan_for_user(user_id=int(user_id), plan_id=active_plan_id):
+                    if active_plan_id == "saas-trial-30":
+                        applied = apply_paid_plan_for_user(
+                            user_id=int(user_id),
+                            plan_id=active_plan_id,
+                            sync_from_market=True,
+                            active_plan_expires_at=market_result.get("active_plan_expires_at"),
+                        )
+                        if not applied:
+                            raise TenantIdentityError("体验授权的到期信息未同步，请重新登录后重试")
+                    else:
+                        applied = apply_paid_plan_for_user(
+                            user_id=int(user_id), plan_id=active_plan_id
+                        )
+                    if applied:
                         result["personal_plan"] = personal_plan
                         result["account_license_plan_id"] = active_plan_id
                         result["account_tier"] = str(market_result.get("account_tier") or "normal")

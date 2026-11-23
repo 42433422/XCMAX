@@ -542,9 +542,7 @@ def test_formal_publication_requires_complete_native_jobs_and_rechecks_original_
             )
             clauses = [part.strip() for part in condition.split("&&")]
             assert all(clause in {"True", "False"} for clause in clauses), condition
-            assert all(clause == "True" for clause in clauses) is (
-                status == "success"
-            ), status
+            assert all(clause == "True" for clause in clauses) is (status == "success"), status
     steps = job["steps"]
     verify = next(
         step

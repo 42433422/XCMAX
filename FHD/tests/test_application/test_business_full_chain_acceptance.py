@@ -43,7 +43,7 @@ from app.application.workflow.workflow_types import (
     plan_from_dict,
 )
 from app.db.models import SalesOrder, SalesOrderItem
-from app.db.models.approval import ApprovalRecord, ApprovalRequest
+from app.db.models.approval import ApprovalFlowNode, ApprovalRecord, ApprovalRequest
 from app.domain.shared_services.report_service import ReportService
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -180,6 +180,40 @@ def _no_effect(business):
             assert db.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
 
 
+def _workspace_approval(business, run, *, configured=False):
+    actor = business.requester
+    plan = plan_from_dict(run.metadata["plan"])
+    assert plan is not None
+    approvals = ApprovalService()
+    with tenant_scope(actor.tenant_id):
+        request = approvals.create_approval_request(
+            plan_id=plan.plan_id,
+            node=plan.nodes[0],
+            plan=plan,
+            runtime_context={**actor.context, "_approval_agent_run_required": True},
+            require_persistence=True,
+        )
+        assert approvals.attach_pending_agent_run(
+            request.request_id, agent_run_id=run.run_id, approved_step_id="sale"
+        )
+        with actor.factory.begin() as db:
+            stored = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one()
+            request_id = stored.id
+            if configured:
+                node = ApprovalFlowNode(
+                    flow_id=stored.flow_id,
+                    node_name="Independent business reviewer",
+                    node_order=100,
+                    approver_type="user",
+                    approver_ids=json.dumps([business.reviewer.user_id]),
+                )
+                db.add(node)
+                db.flush()
+                stored.current_node_id = node.id
+                stored.current_node_order = node.node_order
+    return request_id, request.request_id
+
+
 def _reconcile_sql_and_download(business, run):
     from app.application.agent_orchestrator.result_verification import verify_step_result
     from app.application.agent_orchestrator.task_background import task_execution_context
@@ -283,28 +317,13 @@ def _reconcile_sql_and_download(business, run):
     return artifact
 
 
-def test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order(
-    business, monkeypatch
-):
+def _assert_workspace_approval_delivery(business, monkeypatch, *, configured):
     actor = business.requester
     run = _start(business, workspace=True)
     plan = plan_from_dict(run.metadata["plan"])
     assert plan is not None
     frozen = deepcopy(run.metadata["plan"])
-    approvals = ApprovalService()
-    with tenant_scope(actor.tenant_id):
-        request = approvals.create_approval_request(
-            plan_id=plan.plan_id,
-            node=plan.nodes[0],
-            plan=plan,
-            runtime_context={**actor.context, "_approval_agent_run_required": True},
-            require_persistence=True,
-        )
-        assert approvals.attach_pending_agent_run(
-            request.request_id, agent_run_id=run.run_id, approved_step_id="sale"
-        )
-        with actor.factory() as db:
-            request_id = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one().id
+    request_id, _ = _workspace_approval(business, run, configured=configured)
     # Fresh service and repository force reads of the original durable snapshots.
     monkeypatch.setattr(
         "app.application.workflow.approval_service._approval_service", ApprovalService()
@@ -320,6 +339,7 @@ def test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_or
             _no_effect(business)
         response = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
     assert isinstance(response, dict) and response["success"] is True, response
+    assert response["data"]["workflow_execution"]["success"] is True, response
     completed = fresh.get(run.run_id)
     resolved = deepcopy(frozen)
     resolved["nodes"][2]["params"]["order_no"] = completed.steps[0].output["data"]["order_no"]
@@ -338,12 +358,240 @@ def test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_or
         assert snapshot["plan_sha256"] == plan_fingerprint(plan)
         assert completed.metadata["approval_receipt"]["plan_sha256"] == snapshot["plan_sha256"]
         assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == 1
+        assert json.loads(stored.business_data)["agent_execution_claim"] == {
+            "agent_run_id": run.run_id,
+            "approved_step_id": "sale",
+            "approved_by": str(business.reviewer.user_id),
+        }
+        from app.application.approval_workspace_app_service import _request_to_dict
+
+        current = _request_to_dict(stored)["workflow_execution"]
+        assert current["success"] is True, current
     original_calls = [call.to_dict() for call in fresh.get(run.run_id).tool_calls]
     with tenant_scope(actor.tenant_id):
         duplicate = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
     assert duplicate.status_code == 400
     assert [call.to_dict() for call in fresh.get(run.run_id).tool_calls] == original_calls
     _reconcile_sql_and_download(business, fresh.get(run.run_id))
+    return request_id, completed
+
+
+def test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order(
+    business, monkeypatch
+):
+    from app.application.approval_workspace_app_service import _request_to_dict
+    from app.db.models.agent import AgentRunRecord
+
+    request_id, completed = _assert_workspace_approval_delivery(
+        business, monkeypatch, configured=False
+    )
+    actor = business.requester
+    with actor.factory() as db:
+        original = db.get(AgentRunRecord, completed.run_id).payload_json
+    # Preserve the run identity while corrupting both its graph and step. Only
+    # references resolved from the original approved plan may change parameters.
+    changes = (
+        ("params", {**completed.steps[2].params, "order_no": "UNRELATED-ORDER"}),
+        ("depends_on", ["sale"]),
+    )
+    try:
+        for field, value in changes:
+            tampered = json.loads(original)
+            tampered["metadata"]["plan"]["nodes"][2][field] = value
+            tampered["steps"][2][field] = value
+            with actor.factory.begin() as db:
+                db.get(AgentRunRecord, completed.run_id).payload_json = json.dumps(tampered)
+            with tenant_scope(actor.tenant_id), actor.factory() as db:
+                receipt = _request_to_dict(db.get(ApprovalRequest, request_id))[
+                    "workflow_execution"
+                ]
+                assert receipt["success"] is False, receipt
+                assert receipt["code"] == "outcome_unknown", receipt
+                assert receipt["requires_reconciliation"] is True
+                assert receipt["retryable"] is False
+    finally:
+        with actor.factory.begin() as db:
+            db.get(AgentRunRecord, completed.run_id).payload_json = original
+    _reconcile_sql_and_download(business, business.repository.get(completed.run_id))
+
+
+def test_configured_reviewer_delivers_original_order_without_database_lock(business, monkeypatch):
+    _assert_workspace_approval_delivery(business, monkeypatch, configured=True)
+
+
+def test_execution_claim_blocks_opposite_decision_before_business_write(
+    business, monkeypatch, trusted_actor
+):
+    from app.application.approval_workspace_app_service import reject_request
+
+    actor = business.requester
+    rejector = trusted_actor(role="admin")
+    run = _start(business, workspace=True)
+    request_id, _ = _workspace_approval(business, run)
+    original_execute = business.executor.execute
+    rejected = []
+
+    def reject_during_execution(*args, **kwargs):
+        if not rejected:
+            with actor.factory() as db:
+                stored = db.get(ApprovalRequest, request_id)
+                assert json.loads(stored.business_data)["agent_execution_claim"]
+            _no_effect(business)
+            rejected.append(
+                reject_request(
+                    request_id,
+                    rejector.request,
+                    body={
+                        "reason": "A later opposite decision must not change a consumed approval"
+                    },
+                    x_user_id=None,
+                )
+            )
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(business.executor, "execute", reject_during_execution)
+    with tenant_scope(actor.tenant_id):
+        response = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    assert len(rejected) == 1
+    assert getattr(rejected[0], "status_code", 200) == 409, rejected[0]
+    assert isinstance(response, dict) and response["success"] is True, response
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        stored = db.get(ApprovalRequest, request_id)
+        assert stored.status == "approved"
+        assert stored.approved_by == business.reviewer.user_id
+        assert (
+            db.query(ApprovalRecord).filter_by(request_id=request_id, action="reject").count() == 0
+        )
+    _reconcile_sql_and_download(business, business.repository.get(run.run_id))
+
+
+@pytest.mark.parametrize("claim_after_read", [False, True])
+def test_rejection_and_execution_claim_are_mutually_exclusive(
+    business, monkeypatch, trusted_actor, claim_after_read
+):
+    from app.application import approval_workspace_app_service as workspace
+    from app.application.workflow.approval_persistence import claim_agent_approval
+
+    actor = business.requester
+    rejector = trusted_actor(role="admin")
+    run = _start(business, workspace=True)
+    request_id, request_no = _workspace_approval(business, run)
+    authorize = workspace._can_review_ai_workflow_request
+    claimed = []
+
+    def interrupted(*_args, **_kwargs):
+        raise SystemExit("claim committed while the opposite reviewer holds an older request")
+
+    def authorize_then_claim(db, req, reviewer):
+        allowed = authorize(db, req, reviewer)
+        if allowed and reviewer == rejector.user_id and claim_after_read:
+            assert req.status == "pending"
+            assert "agent_execution_claim" not in json.loads(req.business_data)
+            with monkeypatch.context() as patch:
+                patch.setattr(AgentOrchestrator, "continue_run", interrupted)
+                with pytest.raises(SystemExit):
+                    approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+            claimed.append(True)
+        return allowed
+
+    monkeypatch.setattr(workspace, "_can_review_ai_workflow_request", authorize_then_claim)
+    with tenant_scope(actor.tenant_id):
+        rejected = workspace.reject_request(
+            request_id, rejector.request, body={"reason": "Opposite decision"}, x_user_id=None
+        )
+        assert not claim_agent_approval(
+            request_no,
+            agent_run_id=run.run_id,
+            approved_step_id="sale",
+            approved_by=str(business.reviewer.user_id),
+        )
+        retry = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    if claim_after_read:
+        assert claimed == [True]
+        assert getattr(rejected, "status_code", 200) == 409, rejected
+        assert retry.status_code == 409
+        assert business.repository.get(run.run_id).to_dict() == run.to_dict()
+    else:
+        assert isinstance(rejected, dict) and rejected["success"] is True
+        assert retry.status_code == 400
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        stored = db.get(ApprovalRequest, request_id)
+        assert stored.status == ("pending" if claim_after_read else "rejected")
+        assert ("agent_execution_claim" in json.loads(stored.business_data)) is claim_after_read
+        assert stored.approved_by == (
+            business.reviewer.user_id if claim_after_read else rejector.user_id
+        )
+        assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == (
+            0 if claim_after_read else 1
+        )
+    _no_effect(business)
+
+
+@pytest.mark.parametrize("after_claim", [False, True])
+def test_workspace_approval_interruption_preserves_original_plan_and_decision(
+    business, monkeypatch, after_claim
+):
+    from app.db.models.user import User
+
+    actor = business.requester
+    run = _start(business, workspace=True)
+    original = deepcopy(run.to_dict())
+    request_id, _ = _workspace_approval(business, run)
+
+    def interrupted(*_args, **_kwargs):
+        raise SystemExit("approval process interrupted before business execution")
+
+    with tenant_scope(actor.tenant_id), monkeypatch.context() as patch:
+        if after_claim:
+            patch.setattr(AgentOrchestrator, "continue_run", interrupted)
+        else:
+            patch.setattr(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+                interrupted,
+            )
+        with pytest.raises(SystemExit):
+            approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    _no_effect(business)
+    assert business.repository.get(run.run_id).to_dict() == original
+    assert business.queue.get(run.run_id) is None
+    with tenant_scope(actor.tenant_id), actor.factory() as db:
+        stored = db.get(ApprovalRequest, request_id)
+        assert stored.status == "pending"
+        assert stored.approved_by == (business.reviewer.user_id if after_claim else None)
+        assert bool(stored.approved_at) is after_claim
+        assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == 0
+        data = json.loads(stored.business_data)
+        assert data["durable_workflow_snapshot"]["plan"] == original["metadata"]["plan"]
+        assert ("agent_execution_claim" in data) is after_claim
+        if after_claim:
+            assert data["agent_execution_claim"]["approved_by"] == str(business.reviewer.user_id)
+    monkeypatch.setattr(
+        "app.application.workflow.approval_service._approval_service", ApprovalService()
+    )
+    with tenant_scope(actor.tenant_id):
+        for denied in (business.unauthorized, business.foreign_reviewer):
+            response = approve_request(request_id, denied.request, body={}, x_user_id=None)
+            assert response.status_code == 403
+            _no_effect(business)
+        with actor.factory.begin() as db:
+            db.get(User, business.reviewer.user_id).role = "user"
+        response = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+        assert response.status_code == 403
+        _no_effect(business)
+        with actor.factory.begin() as db:
+            db.get(User, business.reviewer.user_id).role = "admin"
+        retry = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+    if after_claim:
+        assert retry.status_code == 409
+        assert business.repository.get(run.run_id).to_dict() == original
+        _no_effect(business)
+    else:
+        assert isinstance(retry, dict) and retry["success"] is True
+        completed = business.repository.get(run.run_id)
+        assert completed.metadata["approval_receipt"]["approved_by"] == str(
+            business.reviewer.user_id
+        )
+        _reconcile_sql_and_download(business, completed)
 
 
 @pytest.mark.parametrize("corrupt", [False, True])

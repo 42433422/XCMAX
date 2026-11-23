@@ -45,7 +45,7 @@
 ### 0.3 注册入口契约
 
 - 网页、桌面和手机共用市场 `/market/register`，填用户名和密码。邮箱选填，填写时需要验证码。
-- 注册后进入同一方案页。来源 `xcagi-desktop` 或 `xcagi-mobile` 仅用于页面交接，授权由服务端校验。
+- 注册后继续原来选择的方案；未选择时进入同一购买页。来源 `xcagi-desktop` 或 `xcagi-mobile` 仅用于页面交接，授权由服务端校验，回跳只允许站内路径。
 - XCAGI 统一分发。个人使用版是同一客户端的免费档，无 Mod 权限。免费档开通不要求领取赠额；验证当前账号的邮箱且活动预算可用时，可领取 5 元 AI 额度，钱包确认入账后才显示领取成功。旧个人 SKU 和本地账户继续兼容既有安装。
 - 免费档在宿主中持久化 `User.account_tier=personal`。这不是企业预算等级，而是基础聊天、本人私人记忆的能力上限；即使兼容路径保留企业身份或租户绑定，也不能取得行业 Mod、ERP、财务或 ELT 写入权限。既有业务 API、Agent 工具和持久任务执行均须复核该上限。
 
@@ -64,7 +64,7 @@
 | 1 账号身份 | `User.tier` | personal / enterprise / admin | 注册（按 SKU）/ 管理端 / 登录时按市场身份提升 | `Session.account_kind`（登录派生） |
 | 2 行业 | `User.industry_id` + `User.entitled_industries` | 通用/饰品包装/涂料/考勤/批发/电商/餐饮/物流/管理端 | 注册 / 管理端 | `request.state.industry_id` → Persona 身份 |
 | 3 会员体系 | 修茈市场会员等级（外部，`user_plans`） | free/vip/vip_plus/svip/svip2..svip8 | 市场侧月计划购买 | `Session.market_membership_tier`（登录同步） |
-| 4 账号等级 | `User.account_tier`（派生来源 `User.budget_range`） | normal / pro / max / ultra | 注册时按预算派生 / 管理端 | `/api/auth/me` 返回；仅 enterprise 有意义 |
+| 4 账号等级 | `User.account_tier`（已确认的软件授权） | personal / normal / 历史 pro / max / ultra | 付款履约 / 管理端；免费档受 §0.3 上限约束 | `/api/auth/me` 返回；预算不授予权限 |
 
 ## 二、派生规则（运行时计算）
 
@@ -77,39 +77,27 @@
 - 实现：[app/application/session_account_meta.py](../app/application/session_account_meta.py) `derive_account_kind_from_user`；
   [app/application/enterprise_login_flow.py](../app/application/enterprise_login_flow.py) `_derive_and_heal_account_kind` / `finalize_enterprise_login`。
 
-### 2.2 预算 → 账号等级
-`User.account_tier ← derive_account_tier(User.budget_range)`（注册时派生；仅 enterprise 有意义）
+### 2.2 购买记录 → 账号等级
 
-| budget_range | account_tier |
-|--------------|--------------|
-| 1–5 万 | normal |
-| 5–10 万 | pro |
-| 10–50 万 | max |
-| 50–100 万 | ultra |
-| 空 / 暂未确定 / 未知 | normal（默认） |
+新购软件只有 `normal` 一个标准档；免费个人档仍遵守 §0.3。预算只保存为需求线索，不能获得或升级软件权限。兼容函数 `derive_account_tier` 对任何预算返回 `normal`，既有 `pro` / `max` / `ultra` 按已购记录保留，不用预算重新计算或降级。
 
-> 旧值 `5 万以内` / `5–20 万` / `20–50 万` / `50 万以上` 作为兼容别名保留。匹配时对连字符（`–`/`-`/`—`）与空格做归一化。实现：[app/application/account_tier_derivation.py](../app/application/account_tier_derivation.py)。
+历史预算选项和别名继续可读，用于管理旧线索；新的永久软件推荐统一返回 `saas-permanent-standard`。用户不能通过填写预算、购买 AI 额度或选择前端页面改变授权。
 
 ### 2.2.1 企业购买形态
 
-| 购买形态 | 价格/额度 | 到期规则 | 账号等级 |
-|----------|-----------|----------|----------|
-| 体验账户 | 99 元购买，含 100 元额度 | 30 天到期后冻结 | normal |
-| 永久账户 · normal | 1–5 万 | 永久 | normal |
-| 永久账户 · pro | 5–10 万 | 永久 | pro |
-| 永久账户 · max | 10–50 万 | 永久 | max |
-| 永久账户 · ultra | 50–100 万 | 永久 | ultra |
+| 收费项目 | 价格（CNY） | 购买与交付 |
+|----------|-------------|------------|
+| XCAGI 软件买断 | **6,800，一次付款** | `saas-permanent-standard`；标准软件永久使用，`normal`，无需软件续租 |
+| 定制 | **2,980 起** | 先确认需求、交付清单、验收标准和最终报价，再走既有定制订单；起价不是可直接购买的通用定制 SKU |
+| AI 调用 | **按实际用量** | 复用钱包、模型价格与用量账单；独立计费，不改变软件授权期限 |
 
-企业 SaaS 定价的机器配置为 [config/saas_plans.json](../config/saas_plans.json)。`account_tier` 只表达企业授权档位，不根据 AI 额度消耗动态升降。
+机器真相源为 [config/saas_plans.json](../config/saas_plans.json)：`plans` 只列新售项目，`commercial_terms` 提供定制起价和 AI 说明，`legacy_plans` 仅供历史履约。官网由生成脚本派生价格，独立支付服务的条款镜像受 account-system 漂移检查约束。
 
-| 套餐 ID | 价格（CNY） | account_tier |
-|---------|-------------|--------------|
-| `saas-personal-free` | 免费；验证邮箱且活动预算可用时可领取 5 元 AI 额度 | 无 Mod |
-| `saas-trial-30` | 99（含 100 元额度，30 天） | normal |
-| `saas-permanent-starter` | 49,999 | normal |
-| `saas-permanent-growth` | 99,999 | pro |
-| `saas-permanent-max` | 499,999 | max |
-| `saas-permanent-ultra` | 999,999 | ultra |
+次级入口保留 `saas-personal-free`（基础聊天与本人记忆，无 Mod；赠额规则见 §0.3）和 `saas-trial-30`（**99 元 / 30 天，含 100 元模型额度**）。试用到期取服务端原始授权时间，重复登录不能重新获得 30 天；已有永久授权不被试用覆盖。
+
+历史 `saas-permanent-starter` / `growth` / `max` / `ultra` 停止新购，但保留原订单金额、授权档位与履约查找。支付回调核验原订单及金额，重复回调不得重复开通或充值；不能用新售价重算旧账。已有永久软件的账号不能再次购买同一永久软件或试用。
+
+技术测试价只在既有测试开关开启时可创建新订单，默认不出现在正式购买列表；已生成测试订单仍按原记录核对。测试支付或本地测试通过不代表真实支付渠道、生产部署和客户交付已验收。
 
 ### 2.3 行业授权初始化
 `User.entitled_industries ← init_entitled_industries_for_user(tier, industry_id)`
@@ -123,7 +111,7 @@
 `Session.market_membership_tier ← 修茈市场 GET /api/payment/my-plan 的 membership.tier`
 - 登录响应不含会员等级，登录 finalize 时用市场 token 单独拉取。
 - 套餐列表由后端 `GET /api/market/membership-plans` 代理市场 `GET /api/payment/plans`，前端 `ModelPaymentView` 读取（失败回退本地 FALLBACK）。
-- VIP 是月计划权益层（vip / vip_plus / svip / svip2..svip8），与企业永久授权档位并列存在；AI 额度消耗不反向决定 VIP 或 `account_tier`。
+- VIP 是可选的月计划权益层（vip / vip_plus / svip / svip2..svip8），与软件永久授权独立；软件买断不要求订阅 AI 会员，余额耗尽不取消软件授权，AI 额度消耗不反向决定 VIP 或 `account_tier`。
 - 会员套餐机器配置：MODstore `PlanTemplate`（种子 [`init_default_plan_templates`](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py)）；当前档：**VIP ¥9.9** → **SVIP8 ¥4,999**。
 - 实现：[app/fastapi_routes/market_account.py](../app/fastapi_routes/market_account.py) `fetch_market_membership_tier` / `market_membership_plans`。
 
@@ -289,7 +277,7 @@ persona = apply_task_context(base, current_task)
 | `User.tier` | 注册时按 SKU | ✅ | 登录时按市场身份向上提升 |
 | `User.industry_id` | ✅（注册） | ✅ | — |
 | `User.entitled_industries` | 注册时初始化 | ✅ | 注册时按 tier 初始化 |
-| `User.account_tier` | — | ✅（仅 enterprise） | ✅（注册时从 budget 派生） |
+| `User.account_tier` | — | ✅（仅 enterprise） | ✅（按已确认的软件授权；预算不授予权限） |
 | `User.budget_range` | ✅（注册） | ✅ | — |
 | `Session.account_kind` | ❌ | ❌（除 impersonation） | ✅（登录时从 `User.tier`） |
 | `Session.market_membership_tier` | ❌ | ❌ | ✅（登录时从市场） |
@@ -309,8 +297,8 @@ persona = apply_task_context(base, current_task)
 
 ## 六、注意事项
 
-- 会员体系（维度 3，VIP/SVIP，AI 调用额度）与账号等级（维度 4，普通/Pro/Max/Ultra，SaaS 平台套餐）**两套并存**，互不派生。
-- `contact.html` 的预算下拉仅作销售线索（提交进 message 文本发往市场），**不**作为 FHD `account_tier` 的派生来源；account_tier 仅在 `RegisterView` 注册时由 budget 派生。
+- 会员体系（维度 3，AI 调用额度）与软件授权（维度 4，标准软件及历史档位）独立，互不派生。
+- `contact.html` 和注册信息中的预算都只作销售线索，不作为 `account_tier` 的派生来源，也不参与新软件报价。
 - DB 列由 [app/db/init_db.py](../app/db/init_db.py) 的 `ensure_user_profile_columns` / `ensure_sessions_account_meta_columns` 在启动时幂等补齐；alembic 迁移 `2026_06_22_add_account_tier_to_users.py` 为对照。
 
 ## 七、多租户数据隔离

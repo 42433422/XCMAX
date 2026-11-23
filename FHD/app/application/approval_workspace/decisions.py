@@ -111,27 +111,43 @@ class ApprovalDecisions:
                 business = json.loads(req.business_data or "{}")
             except (ValueError, TypeError):
                 business = {}
-            restore_execution = None
+            final_workflow = self.access.is_workflow(req) and (
+                self.nodes.next_node(nodes, req.current_node_order or 0) is None
+            )
+            workflow_execution = None
             final_restore = (
-                self.access.is_workflow(req)
+                final_workflow
                 and isinstance(business, dict)
                 and (
                     (business.get("tool_id"), business.get("action"))
                     == ("system_maintenance", "restore_database")
                 )
-                and (self.nodes.next_node(nodes, req.current_node_order or 0) is None)
             )
-            if final_restore:
-                # Restore before any destination write; then reattach the request and history.
-                list(req.records)
-                restore_execution = self.workflows.resume(
+            if final_workflow:
+                # Claim before any outer write: SQLite cannot grant the inner
+                # approval CAS while this session holds an audit/decision lock.
+                if final_restore:
+                    list(req.records)
+                workflow_execution = self.workflows.resume(
                     request_no=str(req.request_no or ""),
                     opinion=opinion,
                     approved_by=str(actor),
                 )
-                if execution_outcome(restore_execution)["success"]:
+                if (workflow_execution or {}).get("approval_claim_conflict"):
+                    db.rollback()
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "message": "该审批正在处理或结果待核对，请刷新任务状态。",
+                        },
+                        status_code=409,
+                    )
+                if final_restore and execution_outcome(workflow_execution)["success"]:
+                    # Restore may replace the destination database entirely.
                     db.expunge_all()
                     req = db.merge(req)
+                elif not final_restore:
+                    db.refresh(req, attribute_names=["business_data"])
             record = ApprovalRecord(
                 request_id=req.id,
                 node_id=current_node.id,
@@ -162,28 +178,8 @@ class ApprovalDecisions:
                     "opinion": opinion,
                 },
             )
-            workflow_execution = None
-            final_workflow = (
-                new_status == ApprovalStatus.APPROVED.value and self.access.is_workflow(req)
-            )
             outcome = execution_outcome(None)
             if final_workflow:
-                workflow_execution = restore_execution
-                if not final_restore:
-                    workflow_execution = self.workflows.resume(
-                        request_no=str(req.request_no or ""),
-                        opinion=opinion,
-                        approved_by=str(actor),
-                    )
-                if (workflow_execution or {}).get("approval_claim_conflict"):
-                    db.rollback()
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "message": "该审批正在处理或结果待核对，请刷新任务状态。",
-                        },
-                        status_code=409,
-                    )
                 outcome = execution_outcome(workflow_execution)
                 handed_off = execution_handed_off(workflow_execution)
                 persist_outcome(req, **outcome)
@@ -292,6 +288,39 @@ class ApprovalDecisions:
                     status_code=403,
                 )
             status_before = req.status
+            if self.access.is_workflow(req):
+                try:
+                    business = json.loads(req.business_data or "{}")
+                except (ValueError, TypeError):
+                    business = {}
+                snapshot = (
+                    business.get("durable_workflow_snapshot")
+                    if isinstance(business, dict)
+                    else None
+                )
+                conflict = isinstance(business, dict) and "agent_execution_claim" in business
+                if not conflict and isinstance(snapshot, dict) and snapshot.get("agent_run_id"):
+                    # Compete with the original execution claim before writing
+                    # history or cancelling its run, including stale readers.
+                    conflict = (
+                        db.query(ApprovalRequest)
+                        .filter(
+                            ApprovalRequest.id == req.id,
+                            ApprovalRequest.status == status_before,
+                            ApprovalRequest.business_data == req.business_data,
+                        )
+                        .update(
+                            {ApprovalRequest.status: ApprovalStatus.REJECTED.value},
+                            synchronize_session=False,
+                        )
+                        != 1
+                    )
+                if conflict:
+                    db.rollback()
+                    return JSONResponse(
+                        {"success": False, "message": "该审批已被领取或状态已变更，请核对原任务。"},
+                        status_code=409,
+                    )
             db.add(
                 ApprovalRecord(
                     request_id=req.id,
@@ -459,7 +488,24 @@ class ApprovalDecisions:
             mark_durable_request_approved_and_load,
         )
 
-        if load_durable_workflow_snapshot(request_no, allow_terminal=False) is not None:
+        snapshot = load_durable_workflow_snapshot(request_no, allow_terminal=False)
+        uses_agent_claim = bool(
+            snapshot
+            and snapshot.get("agent_run_id")
+            and isinstance(business, dict)
+            and snapshot.get("runtime_context", {}).get("_approval_agent_run_required") is True
+            and snapshot.get("runtime_context", {}).get("cross_module_http") is not True
+            and not restore_approval
+            and (business.get("tool_id"), business.get("action"))
+            not in {
+                ("customers", "batch_delete"),
+                ("products", "batch_delete"),
+                ("data_docking", "auto_ingest"),
+            }
+        )
+        # Agent continuation first commits its exact execution claim. A separate
+        # approved state here would strand an unclaimed run after process exit.
+        if snapshot is not None and not uses_agent_claim:
             if mark_durable_request_approved_and_load(request_no) is None:
                 return JSONResponse(
                     {"success": False, "message": "审批决定未能先于执行落库"},
@@ -480,14 +526,17 @@ class ApprovalDecisions:
                 },
                 status_code=409,
             )
-        if isinstance(business, dict) and (
-            business.get("tool_id"),
-            business.get("action"),
-        ) in {
-            ("customers", "batch_delete"),
-            ("products", "batch_delete"),
-            ("data_docking", "auto_ingest"),
-        }:
+        if uses_agent_claim or (
+            isinstance(business, dict)
+            and (business.get("tool_id"), business.get("action"))
+            in {
+                ("customers", "batch_delete"),
+                ("products", "batch_delete"),
+                ("data_docking", "auto_ingest"),
+            }
+        ):
+            # Preserve the committed claim and its decision actor in the final
+            # outcome, instead of overwriting them with this session's old JSON.
             db.refresh(req)
         bounded_outcome = execution_outcome(workflow_execution)
         _execution_success = bounded_outcome["success"]

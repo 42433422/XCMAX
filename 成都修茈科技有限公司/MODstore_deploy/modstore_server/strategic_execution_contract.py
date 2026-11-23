@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
+from os.path import expanduser
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -104,13 +105,11 @@ def _workspace_file(path: str, workspace: str, user_id: int, *, exists: bool) ->
         root = ensure_within_workspace(workspace, user_id=user_id)
         if not root.is_dir():
             raise PortfolioError("strategy workspace is not a directory")
-        target = Path(path.strip()).expanduser()
-        target = (target if target.is_absolute() else root / target).resolve()
-        target.relative_to(root)
-        if exists:
-            target = ensure_within_workspace(target, user_id=user_id)
-            if not target.is_file():
-                raise PortfolioError("strategy file is not a regular file")
+        target = ensure_within_workspace(
+            expanduser(path.strip()), user_id=user_id, within=root, must_exist=exists
+        )
+        if exists and not target.is_file():
+            raise PortfolioError("strategy file is not a regular file")
     except (VibePathError, ValueError) as exc:
         raise PortfolioError(
             "strategy file is outside the selected workspace or unavailable"

@@ -1255,6 +1255,7 @@ class TestApproveRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
+        req.current_node_order = node.node_order
         mock_query.first.return_value = req
 
         with (
@@ -1512,6 +1513,7 @@ class TestApproveRequest:
         node.node_order = 1
         node.approver_ids = "[1]"
         req.current_node = node
+        req.current_node_order = node.node_order
         mock_query.first.return_value = req
 
         with (

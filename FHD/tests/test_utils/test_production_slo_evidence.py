@@ -723,7 +723,9 @@ def test_formal_window_recomputes_actual_slo_results(tmp_path, monkeypatch, muta
     }
     _rewrite_record(tmp_path / "000.json", collector, mutations[mutation])
     result = _verifier_module().verify_window(
-        tmp_path, release_id="release-a", required_days=1,
+        tmp_path,
+        release_id="release-a",
+        required_days=1,
         now=datetime(2026, 11, 1, 12, tzinfo=UTC),
     )
     assert result["passed"] is False
@@ -760,9 +762,12 @@ def test_concurrent_collections_keep_one_chain_independent_of_filenames(tmp_path
     )
     assert (
         verifier.verify_window(
-            tmp_path, release_id="release-a", required_days=1,
+            tmp_path,
+            release_id="release-a",
+            required_days=1,
             now=datetime(2026, 11, 1, 12, tzinfo=UTC),
-        )["passed"] is True
+        )["passed"]
+        is True
     )
 
 

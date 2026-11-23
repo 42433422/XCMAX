@@ -824,7 +824,9 @@ def claim_batch_dispatch(request_id: str, plan: PlanGraph, context: dict[str, An
         return False
 
 
-def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id: str) -> bool:
+def claim_agent_approval(
+    request_id: str, *, agent_run_id: str, approved_step_id: str, approved_by: str = ""
+) -> bool:
     """Atomically consume the exact durable approval before any business effect.
 
     A crashed claimant remains claimed and requires reconciliation instead of replay.
@@ -832,6 +834,13 @@ def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id
     from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
     from app.db.session import get_db
 
+    if not isinstance(approved_by, str) or (
+        approved_by
+        and (
+            not approved_by.isascii() or not approved_by.isdecimal() or approved_by.startswith("0")
+        )
+    ):
+        return False
     try:
         with get_db() as db:
             row = db.query(ApprovalRequestModel).filter_by(request_no=request_id).first()
@@ -856,6 +865,20 @@ def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id
                 "agent_run_id": agent_run_id,
                 "approved_step_id": approved_step_id,
             }
+            if approved_by:
+                data["agent_execution_claim"]["approved_by"] = approved_by
+            values: dict[Any, Any] = {
+                ApprovalRequestModel.business_data: json.dumps(
+                    data, ensure_ascii=False, default=str
+                )
+            }
+            if approved_by:
+                values.update(
+                    {
+                        ApprovalRequestModel.approved_by: int(approved_by),
+                        ApprovalRequestModel.approved_at: datetime.now(),
+                    }
+                )
             changed = (
                 db.query(ApprovalRequestModel)
                 .filter(
@@ -863,14 +886,7 @@ def claim_agent_approval(request_id: str, *, agent_run_id: str, approved_step_id
                     ApprovalRequestModel.status.in_(["pending", "in_progress", "approved"]),
                     ApprovalRequestModel.business_data == saved,
                 )
-                .update(
-                    {
-                        ApprovalRequestModel.business_data: json.dumps(
-                            data, ensure_ascii=False, default=str
-                        )
-                    },
-                    synchronize_session=False,
-                )
+                .update(values, synchronize_session=False)
             )
             db.commit()
             return int(changed) == 1

@@ -45,6 +45,7 @@ test.describe('Measured performance budgets', () => {
       await expect(page.locator('#messageInput')).toHaveValue('SLA readiness probe')
       elapsed = performance.now() - started
       expect(rendererErrors, 'Vue updates must complete without a renderer failure').toEqual([])
+      if (!isFullStack()) expect(failedReads, 'Synthetic account startup reads must stay isolated').toEqual([])
     } finally {
       const state = await page.evaluate(() => ({
         path: location.pathname,

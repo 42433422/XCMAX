@@ -43,6 +43,11 @@ const actions = {
   },
   listWorkflowRuns: endpoint('runs'),
   listJobsForWorkflowRunAttempt: endpoint('jobs'),
+  cancelWorkflowRun: async params => {
+    calls.push({api: 'cancel', params});
+    response(fixture.cancel_response || {});
+    return {status: 202};
+  },
   forceCancelWorkflowRun: async params => {
     calls.push({api: 'force', params});
     response(fixture.force_response || {});
@@ -157,7 +162,7 @@ def execute(scenario):
 
 
 def writes(result):
-    return [call for call in result["calls"] if call["api"] == "force"]
+    return [call for call in result["calls"] if call["api"] in {"cancel", "force"}]
 
 
 def replace_path(value, path, replacement):
@@ -179,7 +184,6 @@ def test_trusted_trigger_has_no_pr_code_execution_or_broad_write_permissions():
     assert step["uses"] == "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
     assert step["with"]["retries"] == "0"
     assert "${{" not in step["with"]["script"]
-    assert "cancelWorkflowRun" not in step["with"]["script"]
     assert "run" not in step and "env" not in step and "secrets" not in job
 
 
@@ -282,15 +286,21 @@ def test_untrusted_event_stops_before_any_api_request(scenario, path, value):
     assert result["calls"] == [] and result["timers"] == []
 
 
-@pytest.mark.parametrize("read", range(4))
-def test_live_head_change_at_any_check_stops_cleanup(scenario, read):
+@pytest.mark.parametrize(
+    "ordinary,read", [(False, read) for read in range(4)] + [(True, read) for read in range(6)]
+)
+def test_live_head_change_at_any_check_stops_cleanup(scenario, ordinary, read):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     changed = copy.deepcopy(scenario["live_pr"])
     changed["head"]["sha"] = "c" * 40
     scenario["pr_reads"] = [scenario["live_pr"]] * read + [changed]
     assert writes(execute(scenario)) == []
 
 
-@pytest.mark.parametrize("read", range(3))
+@pytest.mark.parametrize(
+    "ordinary,read", [(False, read) for read in range(3)] + [(True, read) for read in range(5)]
+)
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -300,7 +310,11 @@ def test_live_head_change_at_any_check_stops_cleanup(scenario, read):
         ("status", "completed"),
     ],
 )
-def test_run_attempt_or_identity_change_at_any_recheck_stops_force(scenario, read, field, value):
+def test_run_attempt_or_identity_change_at_any_recheck_stops_write(
+    scenario, ordinary, read, field, value
+):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     changed = copy.deepcopy(scenario["runs"]["100"])
     changed[field] = value
     scenario["run_reads"] = {"100": [scenario["runs"]["100"]] * read + [changed]}
@@ -310,19 +324,48 @@ def test_run_attempt_or_identity_change_at_any_recheck_stops_force(scenario, rea
 @pytest.mark.parametrize(
     "field,value", [("run_id", 9), ("run_attempt", 2), ("head_sha", CURRENT), ("head_sha", None)]
 )
-@pytest.mark.parametrize("read", [0, 1])
-def test_job_proof_must_belong_to_the_same_run_sha_and_attempt(scenario, field, value, read):
+@pytest.mark.parametrize(
+    "ordinary,read", [(False, read) for read in range(2)] + [(True, read) for read in range(4)]
+)
+def test_job_proof_must_belong_to_the_same_run_sha_and_attempt(
+    scenario, field, value, ordinary, read
+):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     changed = copy.deepcopy(scenario["job_pages"]["100"])
     changed[0]["items"][0][field] = value
     scenario["job_reads"] = {"100": [scenario["job_pages"]["100"]] * read + [changed]}
     assert writes(execute(scenario)) == []
 
 
-def test_no_ordinary_cancellation_proof_only_waits_twice(scenario):
+def test_conflicting_new_head_requests_ordinary_cancellation_after_wait(scenario):
+    scenario["live_pr"]["mergeable"] = False
     scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     result = execute(scenario)
-    assert writes(result) == [] and result["timers"] == [5000, 5000]
-    assert sum(call["api"] == "jobs" for call in result["calls"]) == 3
+    assert result["error"] is None and result["timers"] == [5000, 5000]
+    assert len(writes(result)) == 1 and writes(result)[0]["api"] == "cancel"
+    assert writes(result)[0]["params"]["run_id"] == 100
+    calls = [call["api"] for call in result["calls"] if call["api"] != "page"]
+    assert calls[-6:] == ["pr", "run", "jobs", "pr", "run", "cancel"]
+    assert sum(call["api"] == "jobs" for call in result["calls"]) == 4
+
+
+def test_empty_job_queue_never_authorizes_force(scenario):
+    scenario["job_pages"]["100"] = pages([])
+    result = execute(scenario)
+    assert result["error"] is None and len(writes(result)) == 1
+    assert writes(result)[0]["api"] == "cancel"
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_only_existing_cancelled_proof_authorizes_cleanup_of_a_rerun(scenario, cancelled):
+    scenario["runs"]["100"]["run_attempt"] = 2
+    scenario["job_pages"]["100"][0]["items"][0].update(
+        run_attempt=2, conclusion="cancelled" if cancelled else "success"
+    )
+    result = execute(scenario)
+    assert result["error"] is None
+    assert [call["api"] for call in writes(result)] == (["force"] if cancelled else [])
 
 
 def test_normal_cancellation_arriving_after_synchronize_is_observed(scenario):
@@ -344,26 +387,34 @@ def test_attempt_change_during_read_only_wait_is_not_cancelled(scenario):
 
 
 @pytest.mark.parametrize("status", ["completed", "in_progress"])
-def test_force_409_gets_one_read_without_another_write(scenario, status):
+@pytest.mark.parametrize("ordinary", [False, True])
+def test_cancel_409_gets_one_read_without_another_write(scenario, status, ordinary):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     after = copy.deepcopy(scenario["runs"]["100"])
     after.update(status=status, run_attempt=2)
-    scenario["force_response"] = {"error": 409}
-    scenario["run_reads"] = {"100": [scenario["runs"]["100"]] * 3 + [after]}
+    scenario["cancel_response" if ordinary else "force_response"] = {"error": 409}
+    scenario["run_reads"] = {"100": [scenario["runs"]["100"]] * (5 if ordinary else 3) + [after]}
     result = execute(scenario)
     assert result["error"] is None and len(writes(result)) == 1
-    force_index = next(i for i, call in enumerate(result["calls"]) if call["api"] == "force")
-    assert [call["api"] for call in result["calls"][force_index + 1 :]] == ["run"]
-    assert result["timers"] == []
+    method = "cancel" if ordinary else "force"
+    write_index = next(i for i, call in enumerate(result["calls"]) if call["api"] == method)
+    assert [call["api"] for call in result["calls"][write_index + 1 :]] == ["run"]
+    assert result["timers"] == ([5000, 5000] if ordinary else [])
 
 
-def test_other_api_write_error_is_not_retried_or_hidden(scenario):
-    scenario["force_response"] = {"error": 403}
+@pytest.mark.parametrize("ordinary", [False, True])
+def test_other_api_write_error_is_not_retried_or_hidden(scenario, ordinary):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
+    scenario["cancel_response" if ordinary else "force_response"] = {"error": 403}
     result = execute(scenario)
     assert len(writes(result)) == 1 and result["error"]["status"] == 403
-    assert result["calls"][-1]["api"] == "force"
+    assert result["calls"][-1]["api"] == ("cancel" if ordinary else "force")
 
 
 @pytest.mark.parametrize("collection", ["run_pages", "job_pages"])
+@pytest.mark.parametrize("ordinary", [False, True])
 @pytest.mark.parametrize(
     "fault",
     [
@@ -376,7 +427,9 @@ def test_other_api_write_error_is_not_retried_or_hidden(scenario):
         "read_error",
     ],
 )
-def test_incomplete_pagination_never_authorizes_a_write(scenario, collection, fault):
+def test_incomplete_pagination_never_authorizes_a_write(scenario, collection, fault, ordinary):
+    if ordinary:
+        scenario["job_pages"]["100"][0]["items"][0]["conclusion"] = "success"
     selected = scenario["run_pages"] if collection == "run_pages" else scenario["job_pages"]["100"]
     first = selected[0]
     if fault == "missing_count":
@@ -406,7 +459,8 @@ def test_workflow_search_limit_is_fail_closed(scenario, count):
     assert writes(result) == [] and result["error"] is not None
 
 
-def test_all_candidate_and_job_pages_are_read_before_the_first_write(scenario):
+@pytest.mark.parametrize("ordinary", [False, True])
+def test_all_candidate_and_job_pages_are_read_before_the_first_write(scenario, ordinary):
     second = copy.deepcopy(scenario["runs"]["100"])
     second.update(id=101, head_sha="c" * 40)
     scenario["runs"]["101"] = second
@@ -420,7 +474,7 @@ def test_all_candidate_and_job_pages_are_read_before_the_first_write(scenario):
             id=run_id * 10,
             run_id=run_id,
             head_sha=scenario["runs"][str(run_id)]["head_sha"],
-            conclusion="cancelled",
+            conclusion="success" if ordinary else "cancelled",
         )
         finished = {**cancelled, "id": run_id * 10 + 1, "conclusion": "success"}
         scenario["job_pages"][str(run_id)] = [
@@ -429,7 +483,9 @@ def test_all_candidate_and_job_pages_are_read_before_the_first_write(scenario):
         ]
     result = execute(scenario)
     assert result["error"] is None and len(writes(result)) == 2
-    first_write = next(i for i, call in enumerate(result["calls"]) if call["api"] == "force")
+    method = "cancel" if ordinary else "force"
+    assert all(call["api"] == method for call in writes(result))
+    first_write = next(i for i, call in enumerate(result["calls"]) if call["api"] == method)
     before_write = result["calls"][:first_write]
     assert sum(call["api"] == "page" and call["kind"] == "runs" for call in before_write) == 2
     assert any(

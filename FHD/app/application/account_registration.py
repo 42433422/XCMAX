@@ -3,8 +3,8 @@
 写入 ``User``：
 - ``tier``               账号身份（enterprise SKU → enterprise，否则 personal）
 - ``industry_id``        当前行业（注册表单选择，可空则保持默认）
-- ``budget_range``       预算区间（account_tier 派生来源）
-- ``account_tier``       由 budget_range 派生（仅 enterprise）
+- ``budget_range``       销售线索，不授予授权或账号等级
+- ``account_tier``       保留已有授权；新企业账号为 normal
 - ``entitled_industries``按 tier + industry_id 初始化
 """
 
@@ -14,9 +14,13 @@ import logging
 
 from app.domain.app_pure.account_tier_derivation import (
     derive_account_tier,
+    normalize_account_tier,
     should_have_account_tier,
 )
-from app.domain.app_pure.entitled_industries_init import init_entitled_industries_for_user
+from app.domain.app_pure.entitled_industries_init import (
+    init_entitled_industries_for_user,
+    merge_entitled_industries,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -44,14 +48,21 @@ def apply_account_profile_on_register(
             user = db.query(User).filter(User.username == uname).first()
             if user is None:
                 return
-            user.tier = t
+            if user.tier not in {"enterprise", "admin"}:
+                user.tier = t
             if iid:
                 user.industry_id = iid
             if budget:
                 user.budget_range = budget
-            user.account_tier = derive_account_tier(budget) if should_have_account_tier(t) else None
-            user.entitled_industries = init_entitled_industries_for_user(
-                t, iid or str(getattr(user, "industry_id", "") or "")
+            if user.account_tier != "personal" and not normalize_account_tier(user.account_tier):
+                user.account_tier = (
+                    derive_account_tier(budget) if should_have_account_tier(user.tier) else None
+                )
+            user.entitled_industries = merge_entitled_industries(
+                user.entitled_industries,
+                init_entitled_industries_for_user(
+                    user.tier, iid or str(getattr(user, "industry_id", "") or "")
+                ),
             )
             db.commit()
     except RECOVERABLE_ERRORS:

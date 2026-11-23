@@ -91,6 +91,28 @@ class EntitlementServiceTest {
     }
 
     @Test
+    void incomingTrialOrStandardCannotRevokeHistoricalPermanentLicense() {
+        PlanTemplate historical = new PlanTemplate();
+        historical.setId("saas-permanent-ultra");
+        UserPlan existing = new UserPlan();
+        existing.setPlan(historical);
+        existing.setActive(true);
+        when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of(existing));
+        for (String id : List.of("saas-trial-30", AccountLicensePlans.STANDARD_PLAN_ID)) {
+            PlanTemplate incoming = new PlanTemplate();
+            incoming.setId(id);
+            incoming.setQuotasJson("{}");
+            entitlementService.activatePlan(user, incoming, "OT-" + id);
+        }
+        assertThat(existing.isActive()).isTrue();
+        assertThat(entitlementService.hasPermanentLicense(user)).isTrue();
+        verify(userPlanRepository, never()).save(existing);
+        verify(userPlanRepository).save(argThat(grant ->
+                AccountLicensePlans.STANDARD_PLAN_ID.equals(grant.getPlan().getId())
+                        && grant.getExpiresAt() == null));
+    }
+
+    @Test
     void trialLicenseReceivesPublishedThirtyDayExpiry() {
         PlanTemplate trial = new PlanTemplate();
         trial.setId("saas-trial-30");

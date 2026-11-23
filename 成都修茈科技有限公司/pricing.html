@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>价格 · XCAGI 企业方案 | 成都修茈科技有限公司</title>
+    <title>价格 · XCAGI 软件买断 | 成都修茈科技有限公司</title>
     <meta
       name="description"
-      content="XCAGI 企业方案价格与交付范围：按体验与交付范围选择企业业务自动化方案，价格与版本信息以成都修茈科技有限公司官网为准。"
+      content="XCAGI 软件永久买断、业务定制与 AI 使用费说明，价格与版本信息以成都修茈科技有限公司官网为准。"
     />
     <link rel="stylesheet" href="./styles.css?v=20260925a" />
     <link rel="stylesheet" href="/assets/site-v2.css?v=20260926a" />
@@ -20,6 +20,7 @@
         gap: 20px;
         margin-top: 20px;
       }
+      #plan-permanent { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .xc-faq {
         max-width: 720px;
         margin: 0 auto;
@@ -42,7 +43,7 @@
         margin: 10px 0 0;
       }
       @media (max-width: 860px) {
-        .xc-plan-grid4 {
+        .xc-plan-grid4, #plan-permanent {
           grid-template-columns: 1fr;
         }
       }
@@ -74,7 +75,7 @@
       "@id": "https://xiu-ci.com/pricing.html#webpage",
       "url": "https://xiu-ci.com/pricing.html",
       "name": "价格",
-      "description": "XCAGI 企业方案价格与交付范围：按体验与交付范围选择企业业务自动化方案，价格与版本信息以成都修茈科技有限公司官网为准。",
+      "description": "XCAGI 软件永久买断、业务定制与 AI 使用费说明，价格与版本信息以成都修茈科技有限公司官网为准。",
       "isPartOf": {
         "@id": "https://xiu-ci.com/#website"
       },
@@ -93,14 +94,14 @@
 <meta name="author" content="成都修茈科技有限公司" />
 <meta property="og:site_name" content="XCAGI｜成都修茈科技有限公司" />
 <meta property="og:locale" content="zh_CN" />
-<meta property="og:title" content="价格 · XCAGI 企业方案 | 成都修茈科技有限公司" />
-<meta property="og:description" content="XCAGI 企业方案价格与交付范围：按体验与交付范围选择企业业务自动化方案，价格与版本信息以成都修茈科技有限公司官网为准。" />
+<meta property="og:title" content="价格 · XCAGI 软件买断 | 成都修茈科技有限公司" />
+<meta property="og:description" content="XCAGI 软件永久买断、业务定制与 AI 使用费说明，价格与版本信息以成都修茈科技有限公司官网为准。" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://xiu-ci.com/pricing.html" />
 <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="价格 · XCAGI 企业方案 | 成都修茈科技有限公司" />
-<meta name="twitter:description" content="XCAGI 企业方案价格与交付范围：按体验与交付范围选择企业业务自动化方案，价格与版本信息以成都修茈科技有限公司官网为准。" />
+<meta name="twitter:title" content="价格 · XCAGI 软件买断 | 成都修茈科技有限公司" />
+<meta name="twitter:description" content="XCAGI 软件永久买断、业务定制与 AI 使用费说明，价格与版本信息以成都修茈科技有限公司官网为准。" />
 <link rel="alternate" type="text/plain" href="https://xiu-ci.com/llms.txt" title="XCAGI 官网内容摘要（LLM/GEO）" />
 <link rel="canonical" href="https://xiu-ci.com/pricing.html" />
 <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
@@ -154,103 +155,64 @@
       <section class="xc-price-hero">
         <div class="xc2-container xc2-center">
           <p class="xc2-eyebrow" style="justify-content: center">价格</p>
-          <h1 class="xc2-h1" style="font-size: clamp(34px, 4.6vw, 54px)">先体验，再选择</h1>
-          <p class="xc2-lead" style="margin-left: auto; margin-right: auto">
-            个人使用可免费开通，企业方案包含桌面应用、私有部署与上线服务。数据留在你自己的电脑里。
-          </p>
+          <h1 class="xc2-h1">软件一次买断，按需定制</h1>
+          <p class="xc2-lead" style="margin-left: auto; margin-right: auto">标准功能永久使用。定制按确认需求报价，AI 调用按量付费。</p>
         </div>
       </section>
-
-      <section class="xc2-section" style="padding-top: clamp(32px, 4vw, 56px)">
+      <section class="xc2-section">
         <div class="xc2-container">
-          <h2 class="xc2-h3" style="text-align: center">个人使用与企业体验</h2>
-          <div class="xc-plan-grid4" id="plan-trial">
-            <article class="xc2-plan">
-              <span class="xc2-badge xc2-badge--muted">免费</span>
-              <div class="name">个人使用版</div>
-              <div class="price"><span data-ssot-price="saas-personal-free">¥0</span><small>基础功能</small></div>
-              <p class="desc">免费使用 XCAGI 基础聊天与记忆，不含 Mod 或企业业务权限。与企业方案使用同一个客户端。</p>
-              <div class="quota">验证邮箱且活动预算可用时，可领取 <span data-ssot-quota="saas-personal-free">5 元</span> AI 使用额度</div>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-personal-free&amp;source=official-pricing-page">开通个人使用版</a>
-            </article>
-            <article class="xc2-plan xc2-plan--hl">
-              <span class="xc2-badge xc2-badge--info">体验</span>
-              <div class="name">30 天全功能体验</div>
-              <div class="price"><span data-ssot-price="saas-trial-30">¥99</span><small>/ 30 天</small></div>
-              <p class="desc">用 30 天完整体验 XCAGI，包含 AI 使用额度。到期后账号冻结、数据保留。</p>
-              <div class="quota">含 <span data-ssot-quota="saas-trial-30">100 元</span> AI 使用额度</div>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--primary" href="/market/account-plans?plan=saas-trial-30&amp;source=official-pricing-page">开始 30 天体验</a>
-            </article>
-          </div>
-
-          <h2 class="xc2-h3" style="text-align: center; margin-top: 64px">永久授权</h2>
           <div class="xc-plan-grid4" id="plan-permanent">
-            <article class="xc2-plan">
-              <span class="xc2-badge xc2-badge--muted">永久使用</span>
-              <div class="name">企业启航版</div>
-              <div class="price"><span data-ssot-price="saas-permanent-starter">¥49,999</span><small>永久使用</small></div>
-              <p class="desc">适合首次部署 XCAGI 的企业，包含 1 个行业 Mod、四部门 AI 员工配置、上线交付与 1 年维护。</p>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-permanent-starter&amp;source=official-pricing-page">查看企业启航方案</a>
+            <article class="xc2-plan xc2-plan--hl">
+              <span class="xc2-badge xc2-badge--info">永久买断</span>
+              <div class="name">XCAGI 软件买断</div>
+              <div class="price"><span data-ssot-price="saas-permanent-standard">¥6,800</span><small>一次付费</small></div>
+              <p class="desc">标准功能永久使用，包括客户、商品、订单出货等标准业务功能与 AI 操作入口。AI 使用费和专属定制另计。</p>
+              <a class="xc2-btn xc2-btn--sm xc2-btn--primary" href="/market/account-plans?plan=saas-permanent-standard&amp;source=official-pricing-page">立即购买 <span data-ssot-price="saas-permanent-standard">¥6,800</span></a>
             </article>
             <article class="xc2-plan">
-              <span class="xc2-badge xc2-badge--muted">永久使用</span>
-              <div class="name">企业成长版</div>
-              <div class="price"><span data-ssot-price="saas-permanent-growth">¥99,999</span><small>永久使用</small></div>
-              <p class="desc">适合需要多业务协同或现有系统对接的企业，包含专属 AI 员工训练与 2 年维护。</p>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-permanent-growth&amp;source=official-pricing-page">查看企业成长方案</a>
+              <span class="xc2-badge xc2-badge--muted">按需定制</span>
+              <div class="name">业务定制</div>
+              <div class="price"><span data-ssot="customization-from">¥2,980</span><small>起</small></div>
+              <p class="desc">先确认需求、交付内容和验收方式，再确认报价并下定制订单。起价不是全部需求的总价。</p>
+              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/contact.html#quick-inquiry">咨询定制</a>
             </article>
             <article class="xc2-plan">
-              <span class="xc2-badge xc2-badge--muted">永久使用</span>
-              <div class="name">集团协同版</div>
-              <div class="price"><span data-ssot-price="saas-permanent-max">¥499,999</span><small>永久使用</small></div>
-              <p class="desc">适合多组织、多分支机构协同的集团企业，包含集团架构支持与 3 年维护。</p>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-permanent-max&amp;source=official-pricing-page">查看集团协同方案</a>
-            </article>
-            <article class="xc2-plan">
-              <span class="xc2-badge xc2-badge--muted">永久使用</span>
-              <div class="name">企业旗舰版</div>
-              <div class="price"><span data-ssot-price="saas-permanent-ultra">¥999,999</span><small>永久使用</small></div>
-              <p class="desc">适合需要深度定制与长期技术保障的企业，包含源码托管、二次开发授权与 99.9% SLA。</p>
-              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-permanent-ultra&amp;source=official-pricing-page">查看企业旗舰方案</a>
+              <span class="xc2-badge xc2-badge--muted">按实际用量</span>
+              <div class="name">AI 使用费</div>
+              <div class="price">按量付费</div>
+              <p class="desc">AI 调用费用与软件买断费用分开。调用价格、账户余额和使用记录以费用页为准。</p>
+              <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/recharge">查看 AI 费用与充值</a>
             </article>
           </div>
-
           <p class="xc2-center xc2-updated xc2-mt40" data-ssot="pricing-updated"></p>
-          <p class="xc2-center xc2-mt24">
-            <a class="xc2-btn xc2-btn--ghost" href="/contact.html">联系我们对齐方案</a>
-          </p>
+          <details class="xc-faq" id="plan-trial">
+            <summary>先体验再决定</summary>
+            <div class="xc-plan-grid4">
+              <article class="xc2-plan">
+                <div class="name">个人免费体验</div>
+                <div class="price"><span data-ssot-price="saas-personal-free">¥0</span><small>个人基础功能</small></div>
+                <p class="desc">免费使用基础聊天与记忆，不含企业业务模块或 Mod。</p>
+                <p class="quota">验证邮箱且活动预算可用时，可申请 <span data-ssot-quota="saas-personal-free">5 元</span> AI 活动赠额，以实际领取结果为准。</p>
+                <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-personal-free&amp;source=official-pricing-page">免费体验</a>
+              </article>
+              <article class="xc2-plan">
+                <div class="name">企业功能体验</div>
+                <div class="price"><span data-ssot-price="saas-trial-30">¥99</span><small>/ 30 天</small></div>
+                <p class="desc">用于验证标准企业功能；定制开发另行确认。到期后的权益与数据规则以体验说明为准。</p>
+                <p class="quota">含 <span data-ssot-quota="saas-trial-30">100 元</span> AI 使用额度。</p>
+                <a class="xc2-btn xc2-btn--sm xc2-btn--ghost" href="/market/account-plans?plan=saas-trial-30&amp;source=official-pricing-page">购买体验</a>
+              </article>
+            </div>
+          </details>
         </div>
       </section>
-
       <section class="xc2-section xc2-section--soft">
         <div class="xc2-container xc-faq">
-          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px); text-align: center">常见问题</h2>
-          <details>
-            <summary>体验版包含什么？到期后会怎样？</summary>
-            <p>体验版为 30 天全功能体验，包含 AI 使用额度（额度以购买页实时显示为准）。到期后账号冻结，数据保留，不影响后续购买或导出。</p>
-          </details>
-          <details>
-            <summary>永久版和订阅的区别？</summary>
-            <p>永久版为一次买断，按方案包含 1–3 年维护；维护期外软件继续可用，可选续购维护。集团协同版及以上支持多组织架构，企业旗舰版包含源码托管与二次开发授权。</p>
-          </details>
-          <details>
-            <summary>数据归谁？部署在哪里？</summary>
-            <p>数据归客户所有，默认安装并保存在企业自己的电脑（支持绝对安全内网模式）。我们提供上线交付服务，但不托管你的业务数据。</p>
-          </details>
-          <details>
-            <summary>价格里包含行业 Mod 吗？</summary>
-            <p>企业启航版包含 1 个行业 Mod；更多行业 Mod 可在 AI 市场按需安装。具体以购买页方案说明为准。</p>
-          </details>
-        </div>
-      </section>
-
-      <section class="xc2-section xc-final">
-        <div class="xc2-container xc2-center">
-          <h2 class="xc2-h2" style="font-size: clamp(24px, 3vw, 32px)">先选一个最浪费时间的业务流程。<br />让 XCAGI 跑一次给你看。</h2>
-          <div class="xc2-btn-row xc-final-cta">
-            <a class="xc2-btn xc2-btn--primary" id="trial-cta" href="/market/account-plans?plan=saas-trial-30&amp;source=official-pricing-page">前往体验</a>
-            <a class="xc2-btn xc2-btn--ghost" href="/contact.html">联系我们</a>
-          </div>
+          <h2 class="xc2-h2">购买前你可能想知道</h2>
+          <details><summary>永久买断包含什么？</summary><p>已购买的标准功能永久使用。专属定制、AI 调用与另行约定的服务分别计费；具体标准功能以购买页说明为准。</p></details>
+          <details><summary>定制起价就是总价吗？</summary><p>不是。先提交需求，确认交付内容、验收方式和总报价，再下定制订单。</p></details>
+          <details><summary>AI 使用费怎么查看？</summary><p>AI 调用按实际用量计费，账户费用页可以查看价格、余额和消费记录。</p></details>
+          <details><summary>免费体验能使用企业业务功能吗？</summary><p>个人免费体验提供基础聊天与记忆，不含企业业务模块或 Mod。需要验证标准企业功能，可选择 30 天体验。</p></details>
         </div>
       </section>
     </main>
@@ -293,6 +255,10 @@
             document.querySelectorAll('[data-ssot-quota]').forEach(function (el) {
               var plan = plans[el.getAttribute('data-ssot-quota')]
               if (plan && plan.quota_display) el.textContent = plan.quota_display.replace('¥', '') + '元'
+            })
+            document.querySelectorAll('[data-ssot="customization-from"]').forEach(function (el) {
+              var terms = (data.pricing || {}).commercial_terms
+              if (terms && terms.customization_from_display) el.textContent = terms.customization_from_display
             })
             var up = document.querySelector('[data-ssot="pricing-updated"]')
             if (up) {
