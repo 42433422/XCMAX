@@ -261,7 +261,16 @@ class CyclePorts:
         from modstore_server.strategy_planner import collect_context
 
         context = await asyncio.to_thread(collect_context)
-        facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        from modstore_server.xiaoc_self_model import cognition_projection
+
+        facts = [
+            _fact(
+                "functional_self",
+                cognition_projection(self.state),
+                functional_self_projection=True,
+            )
+        ]
+        facts.extend(feedback_facts(self.state) + evolution.feedback_facts(self.state))
         facts.extend(cognitive_review_facts(self.state))
         facts.extend(reflection_facts(self.state))
         for key in ("customer_value", "assets", "repo", "domains"):
@@ -563,8 +572,22 @@ class CyclePorts:
                 from modstore_server.strategic_portfolio import (
                     create_portfolio_proposal,
                 )
+                from modstore_server.xiaoc_self_model import employee_preflight
 
                 self.active()
+                preflight = await asyncio.to_thread(
+                    employee_preflight, employee, self.claim["owner_user_id"]
+                )
+                self.active()
+                self.details["employee_capability_preflight"] = preflight
+                if preflight["status"] != "registered_unverified":
+                    goal["blocked_reason"] = preflight["reason"]
+                    goals.append(goal)
+                    return {
+                        "goals": goals,
+                        "status": "blocked",
+                        "summary": "员工能力来源不可用或未知，未创建执行提案。",
+                    }
                 proposal = create_portfolio_proposal(
                     owner_user_id=self.claim["owner_user_id"],
                     goal=goal["title"],
@@ -910,6 +933,7 @@ async def tick_async() -> dict[str, Any]:
         claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
         if claim is not None:
             claim["state"]["events"] = state.get("events", [])
+            claim["state"]["self_identity_checks"] = state.get("self_identity_checks", [])
             return await run_claimed_cycle(claim)
     return {"status": "idle", "identity_id": state["identity_id"]}
 
