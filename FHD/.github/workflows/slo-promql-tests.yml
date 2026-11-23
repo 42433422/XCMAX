@@ -6,6 +6,8 @@ on:
     paths:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - "FHD/scripts/observability/sloth.production.yml"
+      - "FHD/tests/test_application/test_sloth_production_slo.py"
       - ".github/workflows/slo-promql-tests.yml"
       - "FHD/.github/workflows/slo-promql-tests.yml"
       - "scripts/dev/publish_ci_workflows_to_root.py"
@@ -14,6 +16,8 @@ on:
     paths:
       - "FHD/scripts/observability/collect_slo_metrics.py"
       - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - "FHD/scripts/observability/sloth.production.yml"
+      - "FHD/tests/test_application/test_sloth_production_slo.py"
       - ".github/workflows/slo-promql-tests.yml"
       - "FHD/.github/workflows/slo-promql-tests.yml"
       - "scripts/dev/publish_ci_workflows_to_root.py"
@@ -39,6 +43,19 @@ jobs:
         run: |
           python scripts/observability/build_slo_promql_tests.py \
             --output "${RUNNER_TEMP}/slo-promql-tests.json"
+      - name: Render Sloth v0.16.0 and validate generated rules with promtool
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            -v "${PWD}/scripts/observability:/source:ro" \
+            -v "${RUNNER_TEMP}:/out" \
+            ghcr.io/slok/sloth:v0.16.0 \
+            generate -i /source/sloth.production.yml -o /out/sloth-generated.yml
+          test -s "${RUNNER_TEMP}/sloth-generated.yml"
+          docker run --rm --network none \
+            -v "${RUNNER_TEMP}/sloth-generated.yml:/rules.yml:ro" \
+            --entrypoint /bin/promtool prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0 \
+            check rules /rules.yml
       - name: Evaluate expressions with Prometheus (no production network)
         run: |
           docker run --rm --network none \
