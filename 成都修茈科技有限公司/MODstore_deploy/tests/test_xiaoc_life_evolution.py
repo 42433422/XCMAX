@@ -480,12 +480,24 @@ def test_failed_request_cannot_be_promoted_by_late_receipt(reflection):
     with factory() as session:
         row = session.get(RetortEvolutionRun, request_id)
         row.status = "failed"
-        row.snapshot_json = json.dumps({"status": "failed"})
+        row.snapshot_json = json.dumps(
+            {"status": "failed", "execution": {"target_sha": "d" * 40}}
+        )
         session.commit()
     assert evolution.reconcile() == 1
     failed = life.read_state()["goals"][0]["evolution_outcome"]
     assert failed["status"] == "evolution_failed"
     assert failed["metrics"]["effect_verdict"] == "rejected"
+    candidate_identity = failed["candidate_audit"]["candidate_identity"]
+    assert candidate_identity
+    with factory() as session:
+        # A duplicate submission with a new request ID still has the exact
+        # rejected commit identity; an unrelated candidate does not.
+        assert (
+            evolution._historical_rejection(session, "duplicate-request", candidate_identity)
+            == failed["evidence_ref"]
+        )
+        assert evolution._historical_rejection(session, "other-request", "f" * 64) is None
     assert evolution.reconcile() == 0
 
     # Remove the bounded projection, but retain the original append-only event.
