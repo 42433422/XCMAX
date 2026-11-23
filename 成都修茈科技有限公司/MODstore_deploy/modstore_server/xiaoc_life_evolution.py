@@ -338,16 +338,17 @@ def _historical_rejection(
     refs = {f"retort:{request_id}"}
     if candidate_identity:
         refs.add(f"retort-candidate:{candidate_identity}")
+    conditions = [
+        XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True)
+        for ref in sorted(refs)
+    ]
     events = session.scalars(
         select(XiaoCLifeEvent)
         .where(
             XiaoCLifeEvent.identity_id == IDENTITY_ID,
             XiaoCLifeEvent.kind == "reflection",
             XiaoCLifeEvent.status.in_(("evolution_failed", "waiting_recovery")),
-            or_(*(
-                XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True)
-                for ref in sorted(refs)
-            )),
+            or_(*conditions),
         )
         .order_by(XiaoCLifeEvent.created_at, XiaoCLifeEvent.id)
     )
@@ -398,9 +399,9 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     delivery = state.get("delivery") or {}
     impact = state.get("impact") or {}
     verification = state.get("verification") or {}
-    candidate_sha = verification.get("target_sha") or (state.get("execution") or {}).get(
-        "target_sha"
-    ) or ""
+    candidate_sha = (
+        verification.get("target_sha") or (state.get("execution") or {}).get("target_sha") or ""
+    )
     candidate_identity = (
         digest({"owner": owner, "repository": protocol["repository"], "candidate": candidate_sha})
         if isinstance(candidate_sha, str)
@@ -419,9 +420,7 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         terminal = None
     # Do not re-hash a negative event merely because it has just been persisted.
     historical_rejection = (
-        None
-        if current_rejection
-        else _historical_rejection(session, row.id, candidate_identity)
+        None if current_rejection else _historical_rejection(session, row.id, candidate_identity)
     )
     if historical_rejection:
         status = "evolution_evidence_incomplete"
@@ -479,8 +478,9 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "summary": summary,
         "metrics": metrics,
         "candidate_audit": audit,
-        "evidence_ref": "evolution-outcome:" + row.id + ":"
-        + digest({"metrics": metrics, "audit": audit})[:24],
+        "evidence_ref": (
+            "evolution-outcome:" + row.id + ":" + digest({"metrics": metrics, "audit": audit})[:24]
+        ),
     }
 
 
