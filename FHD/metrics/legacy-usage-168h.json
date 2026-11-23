@@ -1,5 +1,5 @@
 {
-  "log_path": "logs/legacy_usage.log",
+  "log_path": "legacy_usage.log",
   "since_hours": 168,
   "total_events": null,
   "legacy_ratio": null,
