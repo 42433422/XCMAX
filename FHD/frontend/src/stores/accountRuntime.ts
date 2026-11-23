@@ -16,7 +16,7 @@ interface RuntimeStatus {
   error_code?: string
   checks?: Record<string, 'PASS' | 'FAIL'>
 }
-type ReadMode = 'read' | 'prepare' | 'retry'
+type ReadMode = 'read' | 'retry'
 const path = '/api/desktop/agent-runtime/qualification'
 const states = new Set<Qualification>(['passed', 'required', 'failed', 'interrupted', 'in_progress', 'blocked'])
 const unavailable = '运行状态未能确认，请检查登录状态、模型配置和本机运行环境后重试。'
@@ -36,7 +36,7 @@ function failureMessage(error: unknown): string {
 }
 
 // This is a read-through view of the server's qualification, never a saved readiness flag.
-// Boot and settings share the same operation so opening settings cannot start another probe.
+// Lifecycle events only read; a shared operation may post only after an explicit user check.
 export const useAccountRuntimeStore = defineStore('accountRuntime', () => {
   const account = useAccountProfileStore()
   const status = ref<RuntimeStatus | null>(null)
@@ -79,7 +79,7 @@ export const useAccountRuntimeStore = defineStore('accountRuntime', () => {
   function read(mode: ReadMode, polling = false): Promise<void> {
     if (!eligible()) return Promise.resolve()
     if (operation) {
-      if (mode === 'retry' || (mode === 'prepare' && operation.mode === 'read')) operation.mode = mode
+      if (mode === 'retry') operation.mode = mode
       return operation.promise!
     }
     clearTimeout(timer); timer = undefined
@@ -107,14 +107,13 @@ export const useAccountRuntimeStore = defineStore('accountRuntime', () => {
       try {
         const initial = await readStatus()
         if (!current()) return
-        const needsAttempt = initial.qualification === 'required' ||
-          (request.mode === 'retry' && ['failed', 'interrupted'].includes(initial.qualification))
-        if (request.mode !== 'read' && initial.managed_by === 'account' && needsAttempt) {
+        const needsAttempt = ['required', 'failed', 'interrupted'].includes(initial.qualification)
+        if (request.mode === 'retry' && initial.managed_by === 'account' && needsAttempt) {
           loading.value = false
           checking.value = true
           let postFailure = ''
           try {
-            await api.post(path, { retry: request.mode === 'retry' }, { signal: request.controller.signal, timeoutMs: 600_000, retry: false, quiet: true })
+            await api.post(path, { retry: true }, { signal: request.controller.signal, timeoutMs: 600_000, retry: false, quiet: true })
           } catch (error) { postFailure = failureMessage(error) }
           if (!current()) return
           // Read the persisted result even after a lost POST response. It may be
@@ -139,13 +138,13 @@ export const useAccountRuntimeStore = defineStore('accountRuntime', () => {
 
   const refresh = () => read('read')
   const retry = () => read('retry')
-  const start = () => { started = true; return read('prepare') }
+  const start = () => { started = true; return read('read') }
   function stop() { started = false; invalidate() }
-  function modelChanged() { invalidate(); if (started) void read('prepare') }
+  function modelChanged() { invalidate(); if (started) void read('read') }
   const storageChanged = (event: StorageEvent) => { if (event.key === PLATFORM_MODEL_CHANGED_KEY) modelChanged() }
   watch(() => [getAuthSessionEpoch(), productReadAccountEpoch.value, account.localUserId, account.isImpersonating], modelChanged, { flush: 'sync' })
   watch(() => account.workspaceReady && account.workspaceHydrationReady, ready => {
-    if (ready && started && !status.value) void read('prepare')
+    if (ready && started && !status.value) void read('read')
   })
   window.addEventListener(PLATFORM_MODEL_CHANGED_EVENT, modelChanged)
   window.addEventListener('storage', storageChanged)

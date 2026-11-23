@@ -157,7 +157,7 @@
                 <div v-if="isLoggedIn && !accountProfile.isImpersonating" class="settings-model-service-empty" :aria-busy="accountRuntime.busy">
                   <p class="settings-model-service-empty__title">当前账号运行验收</p>
                   <p v-if="accountRuntime.status?.managed_by === 'deployment'" class="muted">当前运行配置由部署方管理，此处会检查已有验收结果。配置或安装版本变化后，请由部署方重新完成验收。</p>
-                  <p v-else class="muted">登录后会自动检查并验收已保存的模型，过程可能产生模型用量。相同配置与安装版本的有效结果会复用；失败或中断后可在这里重新验收。</p>
+                  <p v-else class="muted">登录和恢复窗口只读取验收状态。首次主动执行任务前，或点击“运行验收”时按需验收，过程可能产生模型用量。相同配置与安装版本的有效结果会复用；失败或中断后可在这里重新验收。</p>
                   <button type="button" class="btn btn-sm btn-secondary" data-testid="runtime-check" :disabled="accountRuntime.loading || accountRuntime.checking" @click="accountRuntime.retry()">{{ accountRuntime.checking ? '验收中…' : accountRuntime.loading ? '读取中…' : accountRuntime.status?.qualification === 'in_progress' || accountRuntime.status?.managed_by === 'deployment' ? '刷新状态' : '运行验收' }}</button>
                   <p v-if="accountRuntime.message" :role="accountRuntime.failed ? 'alert' : 'status'">{{ accountRuntime.message }}</p>
                 </div>

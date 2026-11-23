@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, inject, nextTick, ref, type Ref } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, disposePinia, type Pinia } from 'pinia'
 
 const state = await vi.hoisted(async () => {
   const vue = await import('vue')
@@ -10,6 +11,7 @@ const state = await vi.hoisted(async () => {
     accountEpoch: vue.ref(0),
     account: vue.reactive({
       workspaceReady: true, workspaceHydrationReady: true, sessionCheckUnavailable: false, loaded: true,
+      localUserId: 41, isImpersonating: false,
       refreshFromServer: vi.fn(async () => undefined),
     }),
     mods: vue.reactive({ isLoaded: false, clientModsUiOff: false, loadError: null as string | null, initialize: vi.fn() }),
@@ -21,6 +23,7 @@ const state = await vi.hoisted(async () => {
     },
     sync: { start: vi.fn(), stop: vi.fn() },
     runtime: { start: vi.fn(), stop: vi.fn() },
+    actualRuntime: false, runtimeGet: vi.fn(), runtimePost: vi.fn(),
     stripModKeys: vi.fn(),
     loadFont: vi.fn(),
   }
@@ -28,7 +31,11 @@ const state = await vi.hoisted(async () => {
 vi.mock('vue-router', () => ({ useRoute: () => state.route, useRouter: () => state.router }))
 vi.mock('@/stores/mods', () => ({ useModsStore: () => state.mods }))
 vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => state.account }))
-vi.mock('@/stores/accountRuntime', () => ({ useAccountRuntimeStore: () => state.runtime }))
+vi.mock('@/stores/accountRuntime', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/stores/accountRuntime')>()
+  return { useAccountRuntimeStore: () => state.actualRuntime ? actual.useAccountRuntimeStore() : state.runtime }
+})
+vi.mock('@/api/core', () => ({ api: { get: state.runtimeGet, post: state.runtimePost } }))
 vi.mock('@/stores/workflowAiEmployees', () => ({ useWorkflowAiEmployeesStore: () => ({ stripModWorkflowEmployeeKeys: state.stripModKeys }) }))
 vi.mock('@/utils/authSessionCache', () => ({
   getAuthSessionEpoch: () => state.authEpoch.value,
@@ -57,9 +64,12 @@ async function settle() {
   for (let i = 0; i < 25; i++) { await Promise.resolve(); await nextTick() }
 }
 let wrapper: VueWrapper | undefined
+let runtimePinia: Pinia | undefined
 function mountBoot(viewPending?: Ref<boolean>) {
   let boot!: ReturnType<typeof useAppBoot>
-  wrapper = mount(defineComponent({ setup() { boot = useAppBoot(viewPending); return () => h('div') } }))
+  wrapper = mount(defineComponent({ setup() { boot = useAppBoot(viewPending); return () => h('div') } }), {
+    global: { plugins: runtimePinia ? [runtimePinia] : [] },
+  })
   return boot
 }
 function mountBootWithPage(prepare: (signal: AbortSignal) => Promise<void>) {
@@ -85,6 +95,13 @@ beforeEach(() => {
   state.authEpoch.value = 0; state.accountEpoch.value = 0
   state.account.workspaceReady = true; state.account.sessionCheckUnavailable = false
   state.account.workspaceHydrationReady = true
+  state.account.localUserId = 41; state.account.isImpersonating = false
+  state.actualRuntime = false
+  state.runtimeGet.mockReset().mockResolvedValue({
+    success: true, managed_by: 'account', qualification: 'required',
+    route: { model: 'saved-model', route_identity: 'saved-route' },
+  })
+  state.runtimePost.mockReset().mockResolvedValue({ success: true })
   state.account.refreshFromServer.mockReset().mockImplementation(async () => undefined)
   state.mods.isLoaded = false; state.mods.clientModsUiOff = false; state.mods.loadError = null
   state.ensureAuth.mockReset().mockResolvedValue({ ok: true, entitledModIds: ['owned-mod'], accountUsername: 'synthetic-user' })
@@ -97,13 +114,34 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount(); wrapper = undefined
+  if (runtimePinia) disposePinia(runtimePinia)
+  runtimePinia = undefined
   vi.useRealTimers()
   if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts)
   else Reflect.deleteProperty(document, 'fonts')
 })
 
 describe('workspace startup readiness', () => {
-  it('prepares runtime after authenticated hydration without blocking the usable workspace', async () => {
+  it.each(['open', 'visibility', 'bfcache'])('never purchases runtime qualification on workspace %s', async event => {
+    state.actualRuntime = true
+    runtimePinia = createPinia()
+    const boot = mountBoot()
+    await settle()
+    expect(boot.appReady.value).toBe(true)
+    if (event !== 'open') {
+      state.runtimeGet.mockClear(); state.runtimePost.mockClear()
+      if (event === 'visibility') {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+        document.dispatchEvent(new Event('visibilitychange'))
+      } else window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+      await settle()
+    }
+    expect(state.runtimeGet).toHaveBeenCalledWith('/api/desktop/agent-runtime/qualification', {}, expect.objectContaining({ cache: 'no-store', retry: false }))
+    expect(state.runtimePost).not.toHaveBeenCalled()
+    expect(boot.appReady.value).toBe(true)
+  })
+
+  it('reads runtime status after authenticated hydration without blocking the usable workspace', async () => {
     const qualification = deferred()
     state.runtime.start.mockReturnValue(qualification.promise)
     state.account.workspaceHydrationReady = false

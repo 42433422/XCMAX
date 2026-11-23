@@ -46,13 +46,17 @@ beforeEach(() => {
 afterEach(() => { disposePinia(pinia); vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('account runtime lifecycle', () => {
-  it('prepares a required account route once and reads back its persisted qualification', async () => {
-    boundary.get.mockResolvedValueOnce(snapshot('required'))
+  it('checks a required route only on an explicit action and reads back its persisted qualification', async () => {
+    boundary.get.mockResolvedValue(snapshot('required'))
+    boundary.post.mockImplementation(async () => { boundary.get.mockResolvedValue(snapshot()); return { success: true } })
     const persistedFlag = vi.spyOn(Storage.prototype, 'setItem')
     const runtime = useAccountRuntimeStore()
     await runtime.start()
-    expect(boundary.post).toHaveBeenCalledExactlyOnceWith(endpoint, { retry: false }, expect.objectContaining({ timeoutMs: 600_000, retry: false, signal: expect.any(AbortSignal) }))
-    expect(boundary.get).toHaveBeenCalledTimes(2)
+    expect(runtime.status?.qualification).toBe('required')
+    expect(boundary.post).not.toHaveBeenCalled()
+    await runtime.retry()
+    expect(boundary.post).toHaveBeenCalledExactlyOnceWith(endpoint, { retry: true }, expect.objectContaining({ timeoutMs: 600_000, retry: false, signal: expect.any(AbortSignal) }))
+    expect(boundary.get).toHaveBeenCalledTimes(3)
     expect(boundary.get).toHaveBeenCalledWith(endpoint, {}, expect.objectContaining({ cache: 'no-store', retry: false }))
     expect(runtime.status?.qualification).toBe('passed')
     expect(runtime.message).toContain('account-model')
@@ -79,9 +83,36 @@ describe('account runtime lifecycle', () => {
     expect(boundary.get).toHaveBeenCalledOnce()
     first.resolve(snapshot('required'))
     await Promise.all([settings, startup, again])
-    expect(boundary.post).toHaveBeenCalledOnce()
-    expect(boundary.post.mock.calls[0][1]).toEqual({ retry: false })
+    expect(boundary.post).not.toHaveBeenCalled()
+    expect(boundary.get).toHaveBeenCalledOnce()
+    expect(runtime.status?.qualification).toBe('required')
+  })
+
+  it('coalesces an explicit check with an in-flight status read without replaying the attempt', async () => {
+    const first = deferred()
+    boundary.get.mockReturnValueOnce(first.promise)
+    const runtime = useAccountRuntimeStore()
+    const startup = runtime.start(), click = runtime.retry(), repeatedClick = runtime.retry()
+    expect(boundary.post).not.toHaveBeenCalled()
+    first.resolve(snapshot('required'))
+    await Promise.all([startup, click, repeatedClick])
+    expect(boundary.post).toHaveBeenCalledExactlyOnceWith(endpoint, { retry: true }, expect.objectContaining({ retry: false }))
     expect(runtime.status?.qualification).toBe('passed')
+  })
+
+  it.each(['same-tab', 'other-tab', 'account', 'auth'])('only refreshes missing qualification after an automatic %s change', async cause => {
+    boundary.get.mockResolvedValue(snapshot('required'))
+    const runtime = useAccountRuntimeStore()
+    await runtime.start()
+    boundary.get.mockClear()
+    if (cause === 'same-tab') window.dispatchEvent(new Event(PLATFORM_MODEL_CHANGED_EVENT))
+    else if (cause === 'other-tab') window.dispatchEvent(new StorageEvent('storage', { key: PLATFORM_MODEL_CHANGED_KEY, newValue: 'changed' }))
+    else if (cause === 'account') { boundary.accountEpoch.value++; boundary.account.localUserId = 42 }
+    else boundary.authEpoch.value++
+    await settle()
+    expect(boundary.get).toHaveBeenCalled()
+    expect(runtime.status?.qualification).toBe('required')
+    expect(boundary.post).not.toHaveBeenCalled()
   })
 
   it.each(['failed', 'interrupted'])('requires an explicit retry for a previous %s attempt', async qualification => {
@@ -111,10 +142,11 @@ describe('account runtime lifecycle', () => {
   })
 
   it('reads back a lost POST response and polls the original attempt without posting again', async () => {
-    boundary.get.mockResolvedValueOnce(snapshot('required')).mockResolvedValue(snapshot('in_progress'))
+    boundary.get.mockResolvedValueOnce(snapshot('required')).mockResolvedValueOnce(snapshot('required')).mockResolvedValue(snapshot('in_progress'))
     boundary.post.mockRejectedValue({ status: 0, message: 'transport acknowledgement lost' })
     const runtime = useAccountRuntimeStore()
     await runtime.start()
+    await runtime.retry()
     expect(runtime.status?.qualification).toBe('in_progress')
     expect(runtime.failed).toBe(false)
     boundary.get.mockResolvedValue(snapshot())
@@ -127,6 +159,7 @@ describe('account runtime lifecycle', () => {
     boundary.get.mockResolvedValue(snapshot('required'))
     const runtime = useAccountRuntimeStore()
     await runtime.start()
+    await runtime.retry()
     expect(runtime.status?.qualification).toBe('required')
     expect(runtime.message).not.toContain('运行验收已通过')
     expect(boundary.post).toHaveBeenCalledOnce()
@@ -134,10 +167,11 @@ describe('account runtime lifecycle', () => {
 
   it.each(['same-tab', 'other-tab'])('retires a stale POST after a %s model change', async source => {
     const old = deferred()
-    boundary.get.mockResolvedValueOnce(snapshot('required', 'old-model')).mockResolvedValue(snapshot('passed', 'new-model'))
+    boundary.get.mockResolvedValueOnce(snapshot('required', 'old-model')).mockResolvedValueOnce(snapshot('required', 'old-model')).mockResolvedValue(snapshot('passed', 'new-model'))
     boundary.post.mockReturnValueOnce(old.promise)
     const runtime = useAccountRuntimeStore()
-    const first = runtime.start()
+    await runtime.start()
+    const first = runtime.retry()
     await settle()
     const signal = boundary.post.mock.calls[0][2].signal as AbortSignal
     if (source === 'same-tab') window.dispatchEvent(new Event(PLATFORM_MODEL_CHANGED_EVENT))
@@ -149,7 +183,7 @@ describe('account runtime lifecycle', () => {
     await first
     expect(runtime.message).toContain('new-model')
     expect(runtime.message).not.toContain('old-model')
-    expect(boundary.get).toHaveBeenCalledTimes(2)
+    expect(boundary.get).toHaveBeenCalledTimes(3)
   })
 
   it.each(['account', 'auth', 'impersonation'])('immediately retires a late result after %s changes', async cause => {
@@ -176,6 +210,7 @@ describe('account runtime lifecycle', () => {
   })
 
   it('waits for an authenticated hydrated account and never probes an impersonated account', async () => {
+    boundary.get.mockResolvedValue(snapshot('required'))
     boundary.account.localUserId = null
     const runtime = useAccountRuntimeStore()
     await runtime.start()
@@ -191,6 +226,8 @@ describe('account runtime lifecycle', () => {
     boundary.account.workspaceHydrationReady = true
     await settle()
     expect(boundary.get).toHaveBeenCalledOnce()
+    expect(runtime.status?.qualification).toBe('required')
+    expect(boundary.post).not.toHaveBeenCalled()
   })
 
   it('keeps deployment-owned configuration read-only on startup and on a user check', async () => {

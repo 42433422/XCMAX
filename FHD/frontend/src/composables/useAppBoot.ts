@@ -130,8 +130,8 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
         catch (error) { if (pagePreparations.has(prepare)) throw error }
       }
       if (!await waitForWorkspace(current, signal)) return
-      // Qualification may take minutes. It runs behind the usable workspace;
-      // the server remains the gate for every actual task.
+      // Read qualification behind the usable workspace; opening it never starts
+      // a model check. The server remains the gate for every actual task.
       void accountRuntime.start()
       await nextTick()
     })
