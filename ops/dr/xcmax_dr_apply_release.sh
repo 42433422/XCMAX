@@ -352,7 +352,7 @@ STATIC
       "$target/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" \
       "$target/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" \
       "$target/FHD/packages/xcagi_langgraph_prebuilt" "$target/FHD/packages/xcagi_langgraph_sdk" \
-      -e "$target/$mod_rel[web,knowledge,evolution-metrics,governance,llm-router]"
+      -e "$target/${mod_rel}[web,knowledge,evolution-metrics,governance,llm-router]"
     "$target/$mod_rel/.venv/bin/python" -m compileall -q "$target/$mod_rel/modstore_server"
   else
     manifest="$target/fhd-manifest.json"
