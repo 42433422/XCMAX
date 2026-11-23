@@ -321,7 +321,8 @@ async def run_billed_responses(
             truncation="disabled",
             extra_body=gateway_body(provider),
         )
-        await asyncio.wait_for(transport.open(body), timeout=timeout)
+        async with asyncio.timeout(timeout):
+            await transport.open(body)
         source = transport.source
         headers = transport.headers
         if body.get("stream"):
@@ -337,7 +338,8 @@ async def run_billed_responses(
                         if remaining <= 0:
                             raise TimeoutError("Responses deadline expired")
                         try:
-                            event = await asyncio.wait_for(anext(source), timeout=remaining)
+                            async with asyncio.timeout(remaining):
+                                event = await anext(source)
                         except StopAsyncIteration:
                             break
                         data = redact_key(
