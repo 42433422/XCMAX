@@ -217,8 +217,7 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
 
 
 @pytest.mark.parametrize(
-    "outcome,committed",
-    [("partial", True), ("unknown", False), ("not_executed", False)],
+    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
 )
 def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(
     outcome, committed
