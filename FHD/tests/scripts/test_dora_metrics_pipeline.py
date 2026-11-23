@@ -276,9 +276,7 @@ def test_product_view_separates_recorded_gate_from_current_verification(monkeypa
     assert "c" * 40 in rendered and "2026-07-25T11:34:00Z" in rendered
 
 
-def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(
-    tmp_path, monkeypatch
-):
+def test_benchmark_marker_refresh_requires_regenerated_claimed_vs_actual(tmp_path, monkeypatch):
     """Marker refresh must invalidate and then regenerate the derived SSOT."""
     marker_path = tmp_path / "benchmark_run_mode.json"
     output = tmp_path / "CLAIMED_VS_ACTUAL.md"
