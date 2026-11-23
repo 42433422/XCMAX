@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/admin/customer-value", tags=["admin-customer-val
 @router.get("/evidence")
 def customer_value_evidence(
     window_days: int = Query(90, ge=1, le=3650),
+    release_sha: str | None = Query(None, pattern=r"^[0-9a-f]{40}$"),
     _admin_user: User = Depends(require_admin),
 ) -> dict[str, Any]:
     """Return aggregate proof only; no customer, order or payment identifiers."""
@@ -23,7 +24,9 @@ def customer_value_evidence(
     _ = _admin_user
     return {
         "ok": True,
-        "data": build_customer_value_evidence(window_days=window_days),
+        "data": build_customer_value_evidence(
+            window_days=window_days, **({"release_sha": release_sha} if release_sha else {})
+        ),
     }
 
 

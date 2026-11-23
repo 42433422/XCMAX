@@ -54,7 +54,10 @@ def resolve_product_version(value: str | None = None) -> str:
 
 def _github_api(path: str) -> dict:
     response = subprocess.run(
-        ["gh", "api", path], capture_output=True, check=True, timeout=60,
+        ["gh", "api", path],
+        capture_output=True,
+        check=True,
+        timeout=60,
     )
     if len(response.stdout) > MAX_ARCHIVE_BYTES:
         raise ValueError("GitHub response exceeds the evidence limit")
@@ -67,16 +70,24 @@ def _github_api(path: str) -> dict:
 def _download(path: str, destination: Path) -> None:
     with destination.open("xb") as stream:
         subprocess.run(
-            ["gh", "api", path], stdout=stream, stderr=subprocess.PIPE,
-            check=True, timeout=180,
+            ["gh", "api", path],
+            stdout=stream,
+            stderr=subprocess.PIPE,
+            check=True,
+            timeout=180,
         )
 
 
 def _ancestor(sha: str) -> bool:
-    return subprocess.run(
-        ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
-        capture_output=True, check=False, timeout=15,
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        ).returncode
+        == 0
+    )
 
 
 def _stamp(value: Any) -> datetime:
@@ -86,9 +97,153 @@ def _stamp(value: Any) -> datetime:
     return result.astimezone(UTC)
 
 
+def collect_source_artifact(
+    *,
+    repository: str,
+    run: dict,
+    name: str,
+    label: str,
+    output_dir: Path,
+    api=_github_api,
+    download=_download,
+    current_run_attempt: tuple[int, int] | None = None,
+    max_archive_bytes: int = MAX_ARCHIVE_BYTES,
+) -> dict[str, Any]:
+    """Read immutable original bytes for an already authenticated workflow run.
+
+    The ordinary collector only calls this for completed successful runs. Native
+    pre-publication consumers may bind the current in-progress run and attempt;
+    only that bounded path uses observation time instead of a completion time.
+    """
+    attempt = run.get("run_attempt")
+    controller = run["head_sha"]
+    if type(max_archive_bytes) is not int or not 0 < max_archive_bytes <= 512 * 1024 * 1024:
+        raise ValueError("invalid bounded evidence archive limit")
+    if current_run_attempt is None and (
+        run.get("status") != "completed" or run.get("conclusion") != "success"
+    ):
+        raise ValueError("complete successful original artifact source required")
+    if current_run_attempt and (
+        current_run_attempt != (run.get("id"), attempt)
+        or run.get("status") != "in_progress"
+        or run.get("conclusion") is not None
+    ):
+        raise ValueError("current native acceptance run/attempt mismatch")
+    route = f"repos/{repository}/actions/runs/{run['id']}"
+    workflow = str(run["path"]).removeprefix(".github/workflows/")
+    original = api(f"{route}/attempts/{attempt}")
+    if any(
+        original.get(key) != run.get(key)
+        for key in (
+            "id",
+            "run_attempt",
+            "head_sha",
+            "path",
+            "status",
+            "conclusion",
+        )
+    ):
+        raise ValueError(f"{label}: original attempt changed")
+    start = _stamp(original["run_started_at"])
+    end = datetime.now(UTC) if current_run_attempt else _stamp(original["updated_at"])
+    artifacts: list[dict] = []
+    total: int | None = None
+    for page in range(1, 101):
+        data = api(f"{route}/artifacts?per_page=100&page={page}")
+        count, rows = data.get("total_count"), data.get("artifacts")
+        if (
+            type(count) is not int
+            or count < 0
+            or count > 10000
+            or not isinstance(rows, list)
+            or (total is not None and count != total)
+        ):
+            raise ValueError(f"{label}: incomplete artifact listing")
+        total = count
+        artifacts.extend(rows)
+        if len(artifacts) == total:
+            break
+        if not rows or len(artifacts) > total:
+            raise ValueError(f"{label}: incomplete artifact listing")
+    else:
+        raise ValueError(f"{label}: artifact listing limit exceeded")
+    ids = [row.get("id") for row in artifacts]
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"{label}: duplicate artifact IDs")
+    matches = [row for row in artifacts if row.get("name") == name]
+    if len(matches) != 1:
+        raise ValueError(f"{label}: original artifact missing or ambiguous")
+    artifact = matches[0]
+    identity = artifact.get("workflow_run", {})
+    artifact_id, size = artifact.get("id"), artifact.get("size_in_bytes")
+    if not (
+        type(artifact_id) is int
+        and artifact_id > 0
+        and artifact.get("expired") is False
+        and type(size) is int
+        and 0 < size <= max_archive_bytes
+        and identity.get("id") == run["id"]
+        and identity.get("head_sha") == controller
+        and start <= _stamp(artifact.get("created_at")) <= end
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("digest", ""))
+    ):
+        raise ValueError(f"{label}: original artifact/attempt identity mismatch")
+    archive = output_dir / (label.replace("/", "-") + ".zip")
+    download(f"repos/{repository}/actions/artifacts/{artifact_id}/zip", archive)
+    if archive.stat().st_size != size or "sha256:" + _digest(archive) != artifact["digest"]:
+        raise ValueError(f"{label}: original artifact byte digest mismatch")
+    with zipfile.ZipFile(archive) as bundle:
+        members = bundle.infolist()
+        names = [member.filename for member in members]
+        if (
+            len(names) != len(set(names))
+            or len(members) > 1000
+            or sum(member.file_size for member in members) > max_archive_bytes
+            or any(
+                Path(name).is_absolute()
+                or ".." in Path(name).parts
+                or "\\" in name
+                or Path(name).as_posix() != name.rstrip("/")
+                for name in names
+            )
+            or any(stat.S_ISLNK(member.external_attr >> 16) for member in members)
+        ):
+            raise ValueError(f"{label}: unsafe artifact contents")
+        bundle.extractall(output_dir / label)
+    latest = api(route)
+    if any(
+        latest.get(key) != run.get(key)
+        for key in (
+            "id",
+            "run_attempt",
+            "head_sha",
+            "status",
+            "conclusion",
+            *(() if current_run_attempt else ("updated_at",)),
+        )
+    ):
+        raise ValueError(f"{label}: run changed during evidence readback")
+    return {
+        "run_id": run["id"],
+        "run_attempt": attempt,
+        "controller_sha": controller,
+        "workflow": workflow,
+        "artifact_id": artifact_id,
+        "artifact_digest": artifact["digest"],
+        "run_started_at": original["run_started_at"],
+        "artifact_created_at": artifact["created_at"],
+    }
+
+
 def collect_sources(
-    *, repository: str, release_sha: str, runs: dict[str, str], output_dir: Path,
-    api=_github_api, download=_download, ancestor=_ancestor,
+    *,
+    repository: str,
+    release_sha: str,
+    runs: dict[str, str],
+    output_dir: Path,
+    api=_github_api,
+    download=_download,
+    ancestor=_ancestor,
 ) -> dict[str, Any]:
     """Read original Actions artifacts; never trust a downloaded PASS by name alone.
 
@@ -97,8 +252,11 @@ def collect_sources(
     Artifact creation is bounded by the exact current run attempt, so evidence
     from a previous attempt cannot satisfy a successful rerun.
     """
-    if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
-            or not FULL_SHA.fullmatch(release_sha) or not ancestor(release_sha)):
+    if (
+        not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+        or not FULL_SHA.fullmatch(release_sha)
+        or not ancestor(release_sha)
+    ):
         raise ValueError("invalid repository or release outside main")
     if set(runs) != set(SOURCE_WORKFLOWS):
         raise ValueError("all original closure evidence sources are required")
@@ -114,80 +272,28 @@ def collect_sources(
         controller = run.get("head_sha", "")
         if not (
             str(run.get("id")) == run_id
-            and type(attempt) is int and attempt > 0
+            and type(attempt) is int
+            and attempt > 0
             and run.get("repository", {}).get("full_name") == repository
             and run.get("head_repository", {}).get("full_name") == repository
             and run.get("path") == f".github/workflows/{workflow}"
             and run.get("head_branch") == "main"
             and run.get("event") == "workflow_dispatch"
-            and run.get("status") == "completed" and run.get("conclusion") == "success"
-            and FULL_SHA.fullmatch(controller) and ancestor(controller)
+            and run.get("status") == "completed"
+            and run.get("conclusion") == "success"
+            and FULL_SHA.fullmatch(controller)
+            and ancestor(controller)
         ):
             raise ValueError(f"{label}: original workflow provenance mismatch")
-        original = api(f"{route}/attempts/{attempt}")
-        if any(original.get(key) != run.get(key) for key in (
-            "id", "run_attempt", "head_sha", "path", "status", "conclusion",
-        )):
-            raise ValueError(f"{label}: original attempt changed")
-        start, end = _stamp(original["run_started_at"]), _stamp(original["updated_at"])
-        artifacts: list[dict] = []
-        total: int | None = None
-        for page in range(1, 101):
-            data = api(f"{route}/artifacts?per_page=100&page={page}")
-            count, rows = data.get("total_count"), data.get("artifacts")
-            if (type(count) is not int or count < 0 or count > 10000
-                    or not isinstance(rows, list) or (total is not None and count != total)):
-                raise ValueError(f"{label}: incomplete artifact listing")
-            total = count
-            artifacts.extend(rows)
-            if len(artifacts) == total:
-                break
-            if not rows or len(artifacts) > total:
-                raise ValueError(f"{label}: incomplete artifact listing")
-        else:
-            raise ValueError(f"{label}: artifact listing limit exceeded")
-        ids = [row.get("id") for row in artifacts]
-        if len(ids) != len(set(ids)):
-            raise ValueError(f"{label}: duplicate artifact IDs")
-        matches = [row for row in artifacts if row.get("name") == name]
-        if len(matches) != 1:
-            raise ValueError(f"{label}: original artifact missing or ambiguous")
-        artifact = matches[0]
-        identity = artifact.get("workflow_run", {})
-        artifact_id, size = artifact.get("id"), artifact.get("size_in_bytes")
-        if not (
-            type(artifact_id) is int and artifact_id > 0
-            and artifact.get("expired") is False
-            and type(size) is int and 0 < size <= MAX_ARCHIVE_BYTES
-            and identity.get("id") == run["id"] and identity.get("head_sha") == controller
-            and start <= _stamp(artifact.get("created_at")) <= end
-            and re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("digest", ""))
-        ):
-            raise ValueError(f"{label}: original artifact/attempt identity mismatch")
-        archive = output_dir / (label.replace("/", "-") + ".zip")
-        download(f"repos/{repository}/actions/artifacts/{artifact_id}/zip", archive)
-        if archive.stat().st_size != size or "sha256:" + _digest(archive) != artifact["digest"]:
-            raise ValueError(f"{label}: original artifact byte digest mismatch")
-        with zipfile.ZipFile(archive) as bundle:
-            members = bundle.infolist()
-            names = [member.filename for member in members]
-            if (len(names) != len(set(names)) or len(members) > 1000
-                    or sum(member.file_size for member in members) > MAX_ARCHIVE_BYTES
-                    or any(Path(name).is_absolute() or ".." in Path(name).parts
-                           or "\\" in name or Path(name).as_posix() != name.rstrip("/")
-                           for name in names)
-                    or any(stat.S_ISLNK(member.external_attr >> 16) for member in members)):
-                raise ValueError(f"{label}: unsafe artifact contents")
-            bundle.extractall(output_dir / label)
-        latest = api(route)
-        if any(latest.get(key) != run.get(key) for key in (
-            "id", "run_attempt", "head_sha", "status", "conclusion", "updated_at",
-        )):
-            raise ValueError(f"{label}: run changed during evidence readback")
-        proof["sources"][label] = {
-            "run_id": run["id"], "run_attempt": attempt, "controller_sha": controller,
-            "workflow": workflow, "artifact_id": artifact_id, "artifact_digest": artifact["digest"],
-        }
+        proof["sources"][label] = collect_source_artifact(
+            repository=repository,
+            run=run,
+            name=name,
+            label=label,
+            output_dir=output_dir,
+            api=api,
+            download=download,
+        )
     (output_dir / "provenance.json").write_bytes(_canonical(proof))
     return proof
 
@@ -305,8 +411,10 @@ def build_reports(
 
     slo_blockers = list(slo.get("blockers") or [])
     rollback_blockers = list(rollback.get("blockers") or [])
-    if (rollback.get("verification_scope") != "measured_native_acceptance"
-            and "independent_native_measurements_missing" not in rollback_blockers):
+    if (
+        rollback.get("verification_scope") != "measured_native_acceptance"
+        and "independent_native_measurements_missing" not in rollback_blockers
+    ):
         rollback_blockers.append("independent_native_measurements_missing")
     reliability_passed = bool(
         slo.get("passed") is True
@@ -354,11 +462,32 @@ def build_reports(
             }
         )
     customer_count = int(customer.get("complete_customer_count") or 0)
+    complete_customers = {
+        row["customer_alias"]
+        for row in public_customers
+        if re.fullmatch(r"customer-[0-9a-f]{12}", row["customer_alias"])
+        and row["ordered"]
+        and row["complete"]
+        and all(row["stages"].values())
+        and not row["gaps"]
+    }
+    customer_blockers = []
+    if (
+        customer.get("schema") != "customer_value_evidence.v1"
+        or customer.get("verification_scope") != "native_customer_release"
+        or customer.get("release_binding_source") != "original_workflow_and_published_desktop"
+        or customer.get("release_sha") != release_sha
+    ):
+        customer_blockers.append("original_customer_release_binding_missing")
+    if customer_count != len(complete_customers) or customer_count < 3:
+        customer_blockers.append("three_distinct_complete_customers_missing")
+    if customer.get("value_ledger_ready") is not True:
+        customer_blockers.append("authoritative_customer_ledger_unavailable")
     customer_passed = bool(
         customer.get("value_ledger_ready") is True
         and customer.get("three_customer_loop_verified") is True
         and customer_count >= 3
-        and customer.get("release_sha") == release_sha
+        and not customer_blockers
     )
     customer_report = {
         **common,
@@ -371,6 +500,7 @@ def build_reports(
             "lifecycle_gaps": customer.get("lifecycle_gaps", {}),
             "excluded": customer.get("excluded", {}),
             "customers": public_customers,
+            "blockers": customer_blockers,
         },
         "source_evidence": [_source("customer_value", customer_path, customer)],
     }
@@ -410,10 +540,17 @@ def main() -> int:
         if args.command == "version":
             print(resolve_product_version(args.product_version))
         else:
-            print(json.dumps(collect_sources(
-                repository=os.environ["GITHUB_REPOSITORY"], release_sha=args.release_sha,
-                runs=json.loads(os.environ["SOURCE_RUNS_JSON"]), output_dir=args.output_dir,
-            ), indent=2))
+            print(
+                json.dumps(
+                    collect_sources(
+                        repository=os.environ["GITHUB_REPOSITORY"],
+                        release_sha=args.release_sha,
+                        runs=json.loads(os.environ["SOURCE_RUNS_JSON"]),
+                        output_dir=args.output_dir,
+                    ),
+                    indent=2,
+                )
+            )
         return 0
     parser = argparse.ArgumentParser()
     parser.add_argument("--release-convergence", type=Path, required=True)

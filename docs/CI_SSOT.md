@@ -494,6 +494,12 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
 手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
 
+发布消费者同时传入仓库与原始扫描 run ID，复用 `verify_modstore_release_approval` 回读成功的主线手动扫描、当前 attempt、原始 artifact 元数据及归档摘要，再逐文件比较下载内容。读取期间 attempt 变化、旧尝试制品、错误工作流、跨仓来源或扫描报告结构异常均阻断。扫描生产者在上传前可做本地自检；本地自检结果本身不能代替消费者的来源核验。
+
+正式 orchestrator 复用 `measure_required_checks.py --repository … --release-sha …` 读取当前 main 的完整 App 绑定规则、checks 和最新 workflow/jobs。保留真实事件及 run/attempt，拒绝同名工作流歧义、非成功的最新尝试和读取期间身份变化；历史 commit status 不能覆盖失败的 required check。该结果仅证明检查身份与状态，实际测试源码、安装包及生产读回由各自原有门禁核对。
+
+macOS 冻结双架构修复保留原发布开关和精确 SHA 授权：由主线控制器传 `--authorized-frozen-sha`，核对该 SHA 是当前 main 祖先，并执行相同的完整检查。门禁代码从控制器提交独立检出；原安装包、产品源及版本仍来自已授权的冻结提交。该参数携带原授权身份，不授予发布权限，也不适用于普通 orchestrator。
+
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
 ## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）

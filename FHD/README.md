@@ -261,6 +261,10 @@ Codex 在同一 thread 内发现能力、读取完整 JSON Schema 和 `schema_di
 
 产品修复通过审查和必需检查后合入 `main`。交付包须来自明确的主线 SHA；包内身份、运行后台与业务验收记录必须一致。分支测试、demo 和历史包不证明新候选通过。
 
+交付验收复用现有成熟组件：安装与更新沿用 `electron-builder 26.18.0`、`electron-updater 6.8.11`（[electron-builder](https://github.com/electron-userland/electron-builder)，MIT），安装后的 UI 与进程测量沿用 lockfile 固定的 [Playwright 1.65.1](https://github.com/microsoft/playwright/tree/v1.65.1)（Apache-2.0）。构建来源复用上文已固定的 GitHub artifact attestations、GitHub REST 与原 `verify_modstore_release_approval`，工作流检查复用 `measure_required_checks`，客户交付复用原 SQLAlchemy 工作流、Outbox、订单及制品读取器。通用组件负责构建、传输、签名、浏览器操作和事务；产品适配只核对发布 SHA、原始 run/attempt、制品摘要、原订单和客户目标，不新建证据账本或自行实现更新器。
+
+正式报告按实际测量范围给结果：GitHub Windows runner 五模式记录只证明该 runner 的安装、业务和恢复；macOS 签名 DMG 的安装启动测量只证明该包能启动且身份一致。客户 Windows 10/11、真实 macOS OTA 恢复、客户原件对账和生产长期 SLO 各自需要原始证据，不能由这些局部成功推导通过。按 `release_sha` 查询客户价值时，服务端会回查已完成原工作流、同版实际安装及交付文件字节；普通历史汇总继续保留原口径。
+
 | 验收 | 入口 |
 |---|---|
 | 同版双端发布原则 | [desktop_platform_parity_ssot](docs/desktop_platform_parity_ssot.md) |

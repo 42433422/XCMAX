@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import io
+import json
 import sqlite3
+import zipfile
+
+import pytest
 
 from scripts.dev.check_release_scope_evidence import (
     release_gate,
@@ -120,11 +127,15 @@ def test_release_gate_reads_installer_files(tmp_path):
     code, report = release_gate(tmp_path, sha)
     assert code == 1
     assert report["release_pass"] is False
-    assert report["upgrade_rollback"] == "NOT RUN"
+    assert report["upgrade_rollback"] == "BLOCKED"
     same = tmp_path / "upgrade-snapshot.sqlite"
     _db(same, 1)
     (tmp_path / "upgrade-current.sqlite").write_bytes(same.read_bytes())
-    assert release_gate(tmp_path, sha)[0] == 1
+    code, equal = release_gate(tmp_path, sha)
+    assert code == 1
+    assert equal["database_comparison_diagnostic"] == "PASS"
+    assert equal["upgrade_rollback"] == "BLOCKED"
+    assert set(equal["upgrade_rollback_gaps"]) >= {"macos", "windows10", "windows11"}
     assert release_gate(tmp_path, "not-a-sha")[0] == 1
     wrong = dict(report)
     swapped = rollup(list(reversed(report["rows"])))
@@ -203,3 +214,206 @@ def test_failed_upgrade_cannot_leave_release_pass_true(tmp_path, monkeypatch):
     assert code == 1
     assert report["release_pass"] is False
     assert report["upgrade_rollback"] == "FAIL"
+
+
+def _native_scope(tmp_path, monkeypatch):
+    """Exercise real readers with synthetic copies of the existing native schemas."""
+    from tests.release_gate.test_upgrade_rollback_evidence import _native_mac, _native_windows
+
+    sha, version, repo = "a" * 40, "1.0.0.7", "fixture/product"
+    packages = tmp_path / "release"
+    packages.mkdir()
+    exe = packages / f"XCAGI-Enterprise-Setup-{version}-x64.exe"
+    dmg = packages / f"XCAGI-Enterprise-{version}-mac-arm64.dmg"
+    exe.write_bytes(b"synthetic Windows installer bytes")
+    dmg.write_bytes(b"synthetic macOS package bytes")
+    native = tmp_path / "native"
+    _native_windows(native, sha)
+    for path in native.glob("*/acceptance.json"):
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        payload["candidate_sha256"] = hashlib.sha256(exe.read_bytes()).hexdigest()
+        path.write_text(json.dumps(payload))
+    startup = native / "xcagi-macos-installed-startup" / dmg.name
+    startup.mkdir(parents=True)
+    mac = _native_mac(sha)
+    mac["packageSha"] = hashlib.sha256(dmg.read_bytes()).hexdigest()
+    (startup / "installed-startup.json").write_text(json.dumps(mac))
+    signatures = native / "xcagi-mac-release-signatures"
+    signatures.mkdir()
+    (signatures / "mac-signatures.jsonl").write_text(
+        json.dumps(
+            {
+                "filename": dmg.name,
+                "sha256": mac["packageSha"],
+                "size": dmg.stat().st_size,
+                "version": version,
+                "git_sha": sha,
+                "build_workflow_run_id": "50",
+                "verifier": "codesign_stapler",
+            }
+        )
+        + "\n"
+    )
+    run = {
+        "id": 50,
+        "run_attempt": 2,
+        "head_sha": sha,
+        "head_branch": "main",
+        "path": ".github/workflows/fhd-release-desktop.yml",
+        "event": "workflow_dispatch",
+        "status": "in_progress",
+        "conclusion": None,
+        "run_started_at": "2026-09-04T00:00:00Z",
+        "updated_at": "2026-09-04T01:00:00Z",
+        "repository": {"full_name": repo},
+        "head_repository": {"full_name": repo},
+    }
+    artifacts, archives = [], {}
+    for index, directory in enumerate(sorted(native.iterdir()), 1):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as bundle:
+            for path in sorted(directory.rglob("*")):
+                if path.is_file():
+                    bundle.write(path, path.relative_to(directory).as_posix())
+        raw = stream.getvalue()
+        archives[index] = raw
+        artifacts.append(
+            {
+                "id": index,
+                "name": directory.name,
+                "expired": False,
+                "size_in_bytes": len(raw),
+                "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                "created_at": "2026-09-04T00:30:00Z",
+                "workflow_run": {"id": 50, "head_sha": sha},
+            }
+        )
+
+    def api(route):
+        return copy.deepcopy(
+            {"total_count": len(artifacts), "artifacts": artifacts}
+            if "/artifacts?" in route
+            else run
+        )
+
+    def download(route, destination):
+        destination.write_bytes(archives[int(route.split("/")[-2])])
+
+    monkeypatch.setenv("GITHUB_RUN_ID", "50")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv(
+        "GITHUB_WORKFLOW_REF", f"{repo}/.github/workflows/fhd-release-desktop.yml@refs/heads/main"
+    )
+    kwargs = {
+        "version": version,
+        "repository": repo,
+        "run_id": "50",
+        "run_attempt": 2,
+        "api": api,
+        "download": download,
+    }
+    return packages, sha, kwargs, run, artifacts, archives
+
+
+def test_native_installers_have_real_passes_without_claiming_full_release(tmp_path, monkeypatch):
+    packages, sha, kwargs, *_ = _native_scope(tmp_path, monkeypatch)
+    code, report = release_gate(packages, sha, **kwargs)
+    assert report["scopes"] == {
+        "windows-installer": "PASS",
+        "macos-installer": "PASS",
+        "upgrade-rollback": "BLOCKED",
+    }
+    assert code == 1 and report["release_pass"] is False
+    assert len(report["sources"]) == 7
+    assert all(row["customer_acceptance"] == "not_verified" for row in report["rows"])
+    assert set(report["upgrade_rollback_gaps"]) == {"macos", "windows10", "windows11"}
+    assert report["native_measurements"]["windows"]["modes"] == [
+        "Clean",
+        "Gui",
+        "Recovery",
+        "Rollback",
+        "Upgrade",
+    ]
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "wrong_attempt",
+        "wrong_workflow",
+        "wrong_repo",
+        "wrong_head_repository",
+        "failed_run",
+        "other_event",
+        "absent_context",
+    ],
+)
+def test_native_scope_rejects_unauthenticated_workflow_source(tmp_path, monkeypatch, corruption):
+    packages, sha, kwargs, run, *_ = _native_scope(tmp_path, monkeypatch)
+    if corruption == "wrong_attempt":
+        run["run_attempt"] = 1
+    if corruption == "wrong_workflow":
+        run["path"] = ".github/workflows/unrelated.yml"
+    if corruption == "wrong_repo":
+        run["repository"]["full_name"] = "another/repo"
+    if corruption == "wrong_head_repository":
+        run["head_repository"]["full_name"] = "another/repo"
+    if corruption == "failed_run":
+        run.update(status="completed", conclusion="failure")
+    if corruption == "other_event":
+        run["event"] = "pull_request"
+    if corruption == "absent_context":
+        monkeypatch.delenv("GITHUB_WORKFLOW_REF")
+    code, report = release_gate(packages, sha, **kwargs)
+    assert code == 1 and not report["sources"]
+    assert report["platforms"] == {"windows": "FAIL", "macos": "FAIL"}
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing_mode",
+        "old_attempt_artifact",
+        "wrong_digest",
+        "wrong_exe",
+        "wrong_dmg",
+        "extra_dmg",
+        "run_changed",
+    ],
+)
+def test_native_scope_rechecks_original_artifacts_and_published_bytes(
+    tmp_path, monkeypatch, corruption
+):
+    packages, sha, kwargs, run, artifacts, _ = _native_scope(tmp_path, monkeypatch)
+    windows = next(row for row in artifacts if "-Clean-" in row["name"])
+    if corruption == "missing_mode":
+        artifacts.remove(windows)
+    if corruption == "old_attempt_artifact":
+        windows["created_at"] = "2026-09-03T00:00:00Z"
+    if corruption == "wrong_digest":
+        windows["digest"] = "sha256:" + "f" * 64
+    if corruption == "wrong_exe":
+        next(packages.glob("*.exe")).write_bytes(b"replaced EXE")
+    if corruption == "wrong_dmg":
+        next(packages.glob("*.dmg")).write_bytes(b"replaced DMG")
+    if corruption == "extra_dmg":
+        (packages / "unverified.dmg").write_bytes(b"other DMG")
+    if corruption == "run_changed":
+        api = kwargs["api"]
+        reads = 0
+
+        def changed(route):
+            nonlocal reads
+            result = api(route)
+            if route.endswith("/runs/50"):
+                reads += 1
+                if reads > 1:
+                    result["run_attempt"] = 3
+            return result
+
+        kwargs["api"] = changed
+    code, report = release_gate(packages, sha, **kwargs)
+    assert code == 1
+    failed = "macos" if corruption in {"wrong_dmg", "extra_dmg"} else "windows"
+    assert report["platforms"][failed] == "FAIL"
+    assert report["upgrade_rollback"] == "BLOCKED"

@@ -6,6 +6,7 @@ unresolved secrets, freshness and timestamp validity are still enforced.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -209,6 +210,133 @@ def test_cli_has_no_skip_switch() -> None:
     lowered = proc.stdout.lower()
     for word in ("skip", "bypass", "override", "force"):
         assert word not in lowered
+
+
+def _source_case(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("verify_security_scan_pair", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    start = _fresh_start()
+    directory = tmp_path / "current"
+    _write_scan(directory, start)
+    files = {p.name: p.read_bytes() for p in directory.iterdir()}
+    repo = "owner/product"
+    run = {
+        "id": 23,
+        "head_sha": RELEASE_SHA,
+        "run_attempt": 2,
+        "event": "workflow_dispatch",
+        "head_branch": "main",
+        "path": ".github/workflows/fhd-security-full-scan.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "repository": {"full_name": repo},
+        "head_repository": {"full_name": repo},
+        "run_started_at": (start - timedelta(minutes=1)).isoformat(),
+        "updated_at": (start + timedelta(minutes=1)).isoformat(),
+    }
+    artifact = {
+        "id": 24,
+        "name": "xcagi-security-release-reports",
+        "expired": False,
+        "size_in_bytes": 1024,
+        "digest": "sha256:" + "b" * 64,
+        "workflow_run": {"id": 23, "head_sha": RELEASE_SHA},
+        "created_at": start.isoformat(),
+    }
+
+    def api(route):
+        if "/artifacts?" in route:
+            return {"total_count": 1, "artifacts": [artifact]}
+        if "/compare/" in route:
+            return {"status": "ahead"}
+        return dict(run)
+
+    return module, directory, repo, run, artifact, api, files
+
+
+def test_original_manual_scan_bytes_are_bound_to_current_attempt(tmp_path, monkeypatch):
+    mod, directory, repo, run, artifact, api, files = _source_case(tmp_path, monkeypatch)
+    proof = mod.verify_source(
+        directory, repo, "23", RELEASE_SHA, api=api, read_archive=lambda _: files
+    )
+    assert proof["run_id"] == 23 and proof["run_attempt"] == 2
+    assert proof["files"]["codeql.json"] == hashlib.sha256(files["codeql.json"]).hexdigest()
+    (directory / "codeql.json").write_text("{}")
+    with pytest.raises(ValueError, match="differs from the original"):
+        mod.verify_source(directory, repo, "23", RELEASE_SHA, api=api, read_archive=lambda _: files)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("event", "schedule"),
+        ("head_branch", "feature"),
+        ("path", ".github/workflows/untrusted.yml"),
+        ("status", "in_progress"),
+        ("conclusion", "failure"),
+        ("head_repository", {"full_name": "fork/product"}),
+    ],
+)
+def test_wrong_scan_origin_cannot_satisfy_release(tmp_path, monkeypatch, field, value):
+    mod, directory, repo, run, artifact, api, files = _source_case(tmp_path, monkeypatch)
+    run[field] = value
+    with pytest.raises(ValueError):
+        mod.verify_source(directory, repo, "23", RELEASE_SHA, api=api, read_archive=lambda _: files)
+
+
+def test_prior_attempt_artifact_cannot_certify_successful_rerun(tmp_path, monkeypatch):
+    mod, directory, repo, run, artifact, api, files = _source_case(tmp_path, monkeypatch)
+    artifact["created_at"] = (
+        datetime.fromisoformat(run["run_started_at"]) - timedelta(seconds=1)
+    ).isoformat()
+    with pytest.raises(ValueError, match="artifact/attempt mismatch"):
+        mod.verify_source(directory, repo, "23", RELEASE_SHA, api=api, read_archive=lambda _: files)
+
+
+def test_new_controller_needs_original_source_and_main_ancestry(tmp_path, monkeypatch):
+    mod, directory, repo, run, artifact, api, files = _source_case(tmp_path, monkeypatch)
+    run["head_sha"] = artifact["workflow_run"]["head_sha"] = "c" * 40
+    proof = mod.verify_source(
+        directory, repo, "23", RELEASE_SHA, api=api, read_archive=lambda _: files
+    )
+    assert proof["source_sha"] == RELEASE_SHA and proof["controller_sha"] == "c" * 40
+    with pytest.raises(ValueError, match="unconfirmed"):
+        mod.verify_source(
+            directory,
+            repo,
+            "23",
+            RELEASE_SHA,
+            api=lambda route: {"status": "diverged"} if "/compare/" in route else api(route),
+            read_archive=lambda _: files,
+        )
+
+
+def test_publication_workflows_require_original_security_source():
+    consumers = [
+        "FHD/.github/workflows/release-orchestrator.yml",
+        "FHD/.github/workflows/release-desktop.yml",
+        "FHD/.github/workflows/ci-cd.yml",
+        "FHD/.github/workflows/windows-macalign-hotfix.yml",
+        "FHD/.github/workflows/fix-mac-update-feed.yml",
+        ".github/workflows/fhd-deploy.yml",
+        "成都修茈科技有限公司/MODstore_deploy/.github/workflows/prod-deploy.yml",
+    ]
+    for path in consumers:
+        workflow = yaml.safe_load((ROOT / path).read_text())
+        steps = [
+            step
+            for job in workflow["jobs"].values()
+            for step in job.get("steps", [])
+            if "verify_security_scan_pair.py" in step.get("run", "")
+        ]
+        assert len(steps) == 1, path
+        command = steps[0]["run"]
+        assert "--repository" in command and "--current-run-id" in command, path
+        assert steps[0]["env"]["GH_TOKEN"] == "${{ github.token }}", path
+        if "--previous-dir" in command:
+            assert "--previous-run-id" in command, path
 
 
 def _run_scan_gate(tmp_path: Path, *, event: str = "workflow_dispatch") -> tuple[int, dict]:

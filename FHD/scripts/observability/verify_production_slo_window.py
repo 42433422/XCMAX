@@ -7,7 +7,7 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,11 +25,17 @@ def _record_hash_is_valid(payload: dict[str, Any]) -> bool:
     return bool(expected and expected == actual)
 
 
-def _day(payload: dict[str, Any]) -> date | None:
+def _timestamp(value: Any) -> datetime | None:
     try:
-        return datetime.fromisoformat(str(payload["generated_at"]).replace("Z", "+00:00")).date()
-    except (KeyError, TypeError, ValueError):
+        stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return stamp.astimezone(UTC) if stamp.tzinfo is not None else None
+    except (TypeError, ValueError):
         return None
+
+
+def _day(payload: dict[str, Any]) -> date | None:
+    stamp = _timestamp(payload.get("generated_at"))
+    return stamp.date() if stamp is not None else None
 
 
 def verify_window(
@@ -37,7 +43,14 @@ def verify_window(
     *,
     release_id: str,
     required_days: int = 90,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
+    observed_at = now or datetime.now(UTC)
+    if observed_at.tzinfo is None:
+        raise ValueError("verification time must include a timezone")
+    if required_days <= 0 or not release_id:
+        raise ValueError("a release identity and positive observation length are required")
+    observed_at = observed_at.astimezone(UTC)
     blockers: list[str] = []
     records: list[dict[str, Any]] = []
     previous_hash = "0" * 64
@@ -60,35 +73,56 @@ def verify_window(
         previous_hash = str(payload.get("chain_hash") or "")
         records.append(payload)
 
-    formal_by_day: dict[date, dict[str, Any]] = {}
+    latest_by_day: dict[date, dict[str, Any]] = {}
     for payload in records:
-        day = _day(payload)
+        if payload.get("mode") != "formal" or payload.get("release_id") != release_id:
+            continue
+        stamp = _timestamp(payload.get("generated_at"))
+        recorded_at = _timestamp(payload.get("recorded_at"))
+        if stamp is None or recorded_at is None or recorded_at < stamp:
+            blockers.append("invalid_collection_timestamp")
+            continue
+        if stamp > observed_at or recorded_at > observed_at:
+            blockers.append("future_collection_record")
+            continue
+        day = stamp.date()
+        previous = latest_by_day.get(day)
+        # Backfills are committed later but must not supersede a newer sample.
+        if previous is None or (stamp, recorded_at) >= (
+            _timestamp(previous.get("generated_at")),
+            _timestamp(previous.get("recorded_at")),
+        ):
+            latest_by_day[day] = payload
+
+    formal_by_day: dict[date, dict[str, Any]] = {}
+    for day, payload in latest_by_day.items():
         if (
-            day is not None
-            and payload.get("mode") == "formal"
-            and payload.get("release_id") == release_id
-            and payload.get("source_status") == "available"
-            and float(payload.get("coverage") or 0) >= 0.99
-            and float(payload.get("scrape_coverage") or 0) >= 0.99
+            payload.get("source_status") == "available"
+            and all(
+                isinstance(payload.get(key), (int, float))
+                and not isinstance(payload[key], bool)
+                and 0.99 <= payload[key] <= 1.0
+                for key in ("coverage", "scrape_coverage")
+            )
             and payload.get("day0_eligible") is True
         ):
             formal_by_day[day] = payload
-    days = sorted(formal_by_day)
-    longest: list[date] = []
-    current: list[date] = []
-    for day in days:
-        if not current or day == current[-1] + timedelta(days=1):
-            current.append(day)
-        else:
-            if len(current) > len(longest):
-                longest = current
-            current = [day]
-    if len(current) > len(longest):
-        longest = current
-    if len(longest) < required_days:
-        blockers.append(f"formal_continuous_days:{len(longest)}/{required_days}")
+    end = max(latest_by_day, default=None)
+    latest_at = _timestamp(latest_by_day[end].get("generated_at")) if end is not None else None
+    # Collection runs daily. Closure must use telemetry no older than one full
+    # sampling period, measured from the sample instant, never the file mtime.
+    if latest_at is None or observed_at - latest_at > timedelta(hours=24):
+        blockers.append("latest_formal_sample_stale_or_missing")
+    continuous: list[date] = []
+    day = end
+    while day is not None and day in formal_by_day:
+        continuous.append(day)
+        day -= timedelta(days=1)
+    continuous.reverse()
+    if len(continuous) < required_days:
+        blockers.append(f"formal_continuous_days:{len(continuous)}/{required_days}")
 
-    final = formal_by_day.get(longest[-1]) if longest else None
+    final = formal_by_day.get(end) if end is not None else None
     if final is None or final.get("window") != "90d":
         blockers.append("final_90d_sample_evidence_missing")
     else:
@@ -102,9 +136,12 @@ def verify_window(
         "schema": "xcagi.production_slo_window_verification/v1",
         "passed": not blockers,
         "release_id": release_id,
-        "continuous_days": len(longest),
-        "day_0": longest[0].isoformat() if longest else "",
-        "day_n": longest[-1].isoformat() if longest else "",
+        "verified_at": observed_at.isoformat(),
+        "latest_sample_at": latest_at.isoformat() if latest_at is not None else "",
+        "max_sample_age_hours": 24,
+        "continuous_days": len(continuous),
+        "day_0": continuous[0].isoformat() if continuous else "",
+        "day_n": continuous[-1].isoformat() if continuous else "",
         "blockers": blockers,
         "chain_tip": previous_hash,
     }

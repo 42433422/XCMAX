@@ -100,6 +100,65 @@ def test_high_and_secret_findings_block(tmp_path: Path) -> None:
     assert any("unresolved_secret" in blocker for blocker in failed["blockers"])
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        None,
+        "error",
+        {"available": True},
+        {"available": True, "findings": None},
+        {"available": True, "findings": {"error": "unavailable"}},
+    ],
+)
+def test_malformed_normalized_report_never_means_zero_findings(tmp_path, payload):
+    mod = _module()
+    now = datetime(2026, 11, 23, tzinfo=UTC)
+    _write_reports(tmp_path, mod, now)
+    (tmp_path / "codeql.json").write_text(json.dumps(payload))
+    result = mod.evaluate(tmp_path, now=now)
+    assert result["passed"] is False
+    assert "codeql:report_invalid" in result["blockers"]
+
+
+@pytest.mark.parametrize(
+    "finding",
+    [
+        None,
+        [],
+        "error",
+        {},
+        {"id": "CVE-X", "severity": "high", "status": "unavailable"},
+        {"id": "CVE-X", "severity": "HIGH", "secret": "true"},
+        {"id": "CVE-X", "severity": "high", "applicable": "false"},
+    ],
+)
+def test_malformed_finding_cannot_disappear_from_release_gate(tmp_path, finding):
+    mod = _module()
+    now = datetime(2026, 11, 23, tzinfo=UTC)
+    _write_reports(tmp_path, mod, now)
+    path = tmp_path / "codeql.json"
+    payload = json.loads(path.read_text())
+    payload["findings"] = [finding]
+    path.write_text(json.dumps(payload))
+    result = mod.evaluate(tmp_path, now=now)
+    assert result["passed"] is False
+    assert "codeql:finding_invalid:0" in result["blockers"]
+
+
+def test_scanner_timestamp_requires_explicit_timezone(tmp_path):
+    mod = _module()
+    now = datetime(2026, 11, 23, tzinfo=UTC)
+    _write_reports(tmp_path, mod, now)
+    path = tmp_path / "codeql.json"
+    payload = json.loads(path.read_text())
+    payload["scanned_at"] = now.replace(tzinfo=None).isoformat()
+    path.write_text(json.dumps(payload))
+    result = mod.evaluate(tmp_path, now=now)
+    assert result["passed"] is False
+    assert "codeql:report_stale" in result["blockers"]
+
+
 def test_scanner_error_json_cannot_be_normalized_as_zero_findings() -> None:
     mod = _normalizer_module()
 

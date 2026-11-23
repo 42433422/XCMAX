@@ -79,13 +79,16 @@ def test_four_reports_are_redacted_hashed_and_fail_closed(tmp_path: Path) -> Non
     customer = _write(
         inputs / "customer.json",
         {
+            "schema": "customer_value_evidence.v1",
             "value_ledger_ready": True,
             "three_customer_loop_verified": True,
             "complete_customer_count": 3,
             "release_sha": sha,
+            "verification_scope": "native_customer_release",
+            "release_binding_source": "original_workflow_and_published_desktop",
             "customers": [
                 {
-                    "customer_alias": "customer-abc",
+                    "customer_alias": f"customer-{index:012x}",
                     "enterprise_name": "must-not-leak",
                     "order_no": "must-not-leak",
                     "device_id": "must-not-leak",
@@ -94,6 +97,7 @@ def test_four_reports_are_redacted_hashed_and_fail_closed(tmp_path: Path) -> Non
                     "complete": True,
                     "gaps": [],
                 }
+                for index in range(3)
             ],
         },
     )
@@ -120,6 +124,29 @@ def test_four_reports_are_redacted_hashed_and_fail_closed(tmp_path: Path) -> Non
         report = output / row["file"]
         assert hashlib.sha256(report.read_bytes()).hexdigest() == row["sha256"]
         assert (output / f"{row['file']}.sha256").is_file()
+
+    original = json.loads(customer.read_text())
+    for mutation in (
+        {"verification_scope": "aggregate"},
+        {"release_binding_source": "submitted_sha"},
+        {"customers": original["customers"][:1]},
+        {"customers": [original["customers"][0]] * 3},
+    ):
+        _write(customer, {**original, **mutation})
+        refused = mod.build_reports(
+            convergence_path=convergence,
+            security_path=security,
+            slo_path=slo,
+            rollback_path=rollback,
+            customer_path=customer,
+            output_dir=output,
+            release_sha=sha,
+            product_version="1.0.0.1",
+        )
+        assert refused["passed"] is False
+        report = json.loads((output / "customer-value-report.json").read_text())
+        assert report["summary"]["blockers"]
+    _write(customer, original)
 
     _write(security, {"passed": False, "release_sha": sha, "blockers": ["high"]})
     failed = mod.build_reports(

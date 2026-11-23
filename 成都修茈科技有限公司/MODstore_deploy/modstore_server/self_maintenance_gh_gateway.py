@@ -527,6 +527,10 @@ class GhActionsDeploymentGateway:
                     directory,
                     "--release-sha",
                     merge_sha,
+                    "--repository",
+                    self.repository,
+                    "--current-run-id",
+                    scan_id,
                 ]
             )
             if (

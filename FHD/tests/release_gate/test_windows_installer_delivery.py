@@ -97,7 +97,8 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "needs.notice-publication-policy.result == 'success'" in publish["if"]
     runs = "\n".join(step.get("run", "") for step in publish["steps"])
     assert '($unsigned != "true" or .signature_status == "unsigned")' in runs
-    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
+    assert "verify_upgrade_rollback_evidence.py" in runs
+    assert "--windows-native-dir" in runs
     acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
     assert "windows-acceptance-accounts.mjs" in acceptance
     assert "max-parallel: ${{ fromJson(needs.select-modes.outputs.parallel) }}" in acceptance
@@ -210,7 +211,7 @@ def test_standard_installer_refuses_customer_seed_before_building():
     assert "-p:SunbirdSeedZipPath=" not in script
 
 
-def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_path):
+def test_frozen_promotion_rejects_result_only_claims_without_raw_measurements(tmp_path):
     workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
     steps = workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
     script = next(
@@ -219,6 +220,9 @@ def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_pat
         if s.get("name") == "Verify all five frozen candidate acceptance modes"
     )
     script = script.replace("${{ inputs.release_sha }}", "a" * 40)
+    script = script.replace("${{ github.repository }}", "fixture/repo").replace(
+        "${{ inputs.acceptance_run_id }}", "123"
+    )
     (tmp_path / "delivery").mkdir()
     (tmp_path / "delivery/delivery-receipt.json").write_text(json.dumps({"sha256": "b" * 64}))
     results = {
@@ -242,12 +246,21 @@ def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_pat
                 }
             )
         )
-    command = f'export RUNNER_TEMP="{tmp_path}";\n{script}'
-    assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode == 0
+    command = f'export RUNNER_TEMP="{tmp_path}" XCAGI_BUILD_SHA="{"a" * 40}" DELIVERY_VERSION="1.0.0.7";\n{script}'
+    result = subprocess.run(["bash", "-eu", "-c", command], cwd=ROOT.parent, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    proof = json.loads((tmp_path / "windows-lifecycle-verification.json").read_text())
+    assert proof["passed"] is False
+    assert "windows_rollback_native_evidence_invalid" in proof["blockers"]
     for path in (tmp_path / "acceptance").glob("*/acceptance.json"):
         original = path.read_text()
         path.write_text(original.replace('"passed": true', '"passed": false'))
-        assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode != 0
+        assert (
+            subprocess.run(
+                ["bash", "-eu", "-c", command], cwd=ROOT.parent, capture_output=True
+            ).returncode
+            != 0
+        )
         path.write_text(original)
 
 

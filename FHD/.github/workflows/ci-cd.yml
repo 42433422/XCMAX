@@ -1441,10 +1441,15 @@ jobs:
       - name: Enforce exact-SHA security clearance for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
           --previous-dir "${RUNNER_TEMP}/security-reports/previous"
           --current-dir "${RUNNER_TEMP}/security-reports/current"
+          --repository "${{ github.repository }}"
+          --current-run-id "${{ inputs.security_scan_run_id }}"
+          --previous-run-id "${{ inputs.previous_security_scan_run_id }}"
           --release-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Download release artifacts

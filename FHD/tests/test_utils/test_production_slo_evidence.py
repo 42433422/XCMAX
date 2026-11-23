@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -243,9 +244,8 @@ def test_backfill_requires_reason_and_stays_within_24_hours(tmp_path: Path) -> N
             raise AssertionError("invalid backfill was accepted")
 
 
-def test_verifier_requires_90_continuous_hash_chained_formal_days(
-    tmp_path: Path, monkeypatch
-) -> None:
+@pytest.fixture
+def formal_slo_window(tmp_path: Path, monkeypatch):
     collector = _module()
     verifier = _verifier_module()
     release_id = "xcagi-1.0.0.1-" + "a" * 40
@@ -275,19 +275,29 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
 
     monkeypatch.setattr(collector, "prom_query", fake_query)
     start = datetime(2026, 9, 4, 12, tzinfo=UTC)
-    for offset in range(90):
-        collector.collect(
-            prom_url="https://prometheus.example.invalid",
+
+    def collect(offset, *, available=True, evidence_at=None, identity=release_id):
+        return collector.collect(
+            prom_url="https://prometheus.example.invalid" if available else "",
             prom_token="prod-token",
             window="90d",
             mode="formal",
-            release_id=release_id,
+            release_id=identity,
             raw_retention_days=120,
-            out_path=tmp_path / f"{offset:03d}.json",
+            out_path=tmp_path / f"{len(list(tmp_path.glob('*.json'))):03d}.json",
             now=start + timedelta(days=offset),
+            evidence_at=evidence_at,
+            backfill_reason="recover raw telemetry" if evidence_at is not None else "",
         )
 
-    passed = verifier.verify_window(tmp_path, release_id=release_id)
+    for offset in range(90):
+        collect(offset)
+    return verifier, release_id, start + timedelta(days=89), collect
+
+
+def test_verifier_requires_90_continuous_hash_chained_formal_days(tmp_path, formal_slo_window):
+    verifier, release_id, now, _collect = formal_slo_window
+    passed = verifier.verify_window(tmp_path, release_id=release_id, now=now)
     assert passed["passed"] is True
     assert passed["continuous_days"] == 90
 
@@ -295,9 +305,87 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
     tampered = json.loads(tampered_path.read_text())
     tampered["coverage"] = 0
     tampered_path.write_text(json.dumps(tampered))
-    failed = verifier.verify_window(tmp_path, release_id=release_id)
+    failed = verifier.verify_window(tmp_path, release_id=release_id, now=now)
     assert failed["passed"] is False
     assert any("invalid_evidence_hash" in item for item in failed["blockers"])
+
+
+@pytest.mark.parametrize(
+    "offset,blocker",
+    [
+        (timedelta(), ""),
+        (timedelta(hours=24), ""),
+        (timedelta(microseconds=-1), "future_collection_record"),
+        (timedelta(hours=24, microseconds=1), "latest_formal_sample_stale_or_missing"),
+    ],
+)
+def test_formal_window_freshness_has_exact_daily_boundary(
+    tmp_path, formal_slo_window, offset, blocker
+):
+    verifier, release_id, end, _collect = formal_slo_window
+    result = verifier.verify_window(tmp_path, release_id=release_id, now=end + offset)
+    assert result["passed"] is (not blocker)
+    assert result["latest_sample_at"] <= result["verified_at"]
+    if blocker:
+        assert blocker in result["blockers"]
+
+
+@pytest.mark.parametrize("offset,available,expected_days", [(89.25, False, 0), (91, True, 1)])
+def test_historical_pass_cannot_hide_newer_failure_or_collection_gap(
+    tmp_path, formal_slo_window, offset, available, expected_days
+):
+    verifier, release_id, end, collect = formal_slo_window
+    collect(offset, available=available)
+    result = verifier.verify_window(
+        tmp_path, release_id=release_id, now=end + timedelta(days=offset - 89)
+    )
+    assert result["passed"] is False
+    assert result["continuous_days"] == expected_days
+    assert f"formal_continuous_days:{expected_days}/90" in result["blockers"]
+
+
+def test_formal_window_uses_utc_instants_and_not_backfill_commit_order(tmp_path, formal_slo_window):
+    verifier, release_id, end, collect = formal_slo_window
+    collect(89.125, available=False, evidence_at=end - timedelta(hours=1))
+    observed = (end + timedelta(hours=3)).astimezone(timezone(timedelta(hours=14)))
+    result = verifier.verify_window(tmp_path, release_id=release_id, now=observed)
+    assert result["passed"] is True
+    assert result["day_n"] == end.date().isoformat()
+    assert result["verified_at"] == (end + timedelta(hours=3)).isoformat()
+    with pytest.raises(ValueError, match="timezone"):
+        verifier.verify_window(tmp_path, release_id=release_id, now=end.replace(tzinfo=None))
+
+
+def test_other_release_cannot_refresh_or_extend_formal_window(tmp_path, formal_slo_window):
+    verifier, release_id, end, collect = formal_slo_window
+    collect(91, identity="xcagi-1.0.0.1-" + "b" * 40)
+    result = verifier.verify_window(tmp_path, release_id=release_id, now=end + timedelta(days=2))
+    assert result["passed"] is False
+    assert result["continuous_days"] == 90
+    assert result["day_n"] == end.date().isoformat()
+    assert "latest_formal_sample_stale_or_missing" in result["blockers"]
+
+
+@pytest.mark.parametrize("key", ["coverage", "scrape_coverage"])
+@pytest.mark.parametrize("value", [float("inf"), float("nan"), "invalid", True, None, 1.01, 0.98])
+def test_invalid_coverage_cannot_qualify_a_hash_valid_record(
+    tmp_path, formal_slo_window, key, value
+):
+    verifier, release_id, end, _collect = formal_slo_window
+    path = tmp_path / "089.json"
+    record = json.loads(path.read_text())
+    record[key] = value
+    for excluded in ("evidence_hash", "chain_hash", "all_pass"):
+        record.pop(excluded, None)
+    record["evidence_hash"] = hashlib.sha256(verifier._canonical(record).encode()).hexdigest()
+    record["chain_hash"] = hashlib.sha256(
+        f"{record['previous_chain_hash']}:{record['evidence_hash']}".encode()
+    ).hexdigest()
+    path.write_text(json.dumps(record))
+    result = verifier.verify_window(tmp_path, release_id=release_id, now=end)
+    assert result["passed"] is False
+    assert result["continuous_days"] == 0
+    assert not any("hash" in blocker for blocker in result["blockers"])
 
 
 def test_scrape_inventory_matches_production_configuration():
@@ -322,7 +410,8 @@ def test_scrape_inventory_matches_production_configuration():
 
 
 @pytest.mark.parametrize(
-    "scrapes,eligible", [(None, False), (0, False), (5000, False), (5760, True), (11520, False)]
+    "scrapes,eligible",
+    [(None, False), (0, False), (5000, False), (5760, True), (11520, False)],
 )
 def test_metric_presence_cannot_replace_real_per_target_scrape_coverage(
     tmp_path, monkeypatch, scrapes, eligible

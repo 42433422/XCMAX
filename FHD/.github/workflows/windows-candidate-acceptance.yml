@@ -2,6 +2,27 @@ name: Windows Candidate Acceptance
 run-name: "Windows candidate ${{ inputs.candidate_sha }} · isolated lifecycle"
 
 on:
+  workflow_call:
+    inputs:
+      candidate_run_id:
+        required: true
+        type: string
+      candidate_sha:
+        required: true
+        type: string
+      baseline_version:
+        default: "1.0.0.6"
+        type: string
+      only:
+        default: ""
+        type: string
+      account_mode:
+        default: shared-serial
+        type: string
+      current_release_attempt:
+        description: "Only the formal Release Desktop caller may consume its completed build in the same run"
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       candidate_run_id:
@@ -56,7 +77,7 @@ jobs:
       - id: set
         working-directory: ${{ github.workspace }}
         env:
-          ONLY: ${{ github.event.inputs.only }}
+          ONLY: ${{ inputs.only }}
           ACCOUNT_MODE: ${{ inputs.account_mode }}
           XCAGI_TEST_USER: ${{ secrets.XCAGI_TEST_USER }}
           XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
@@ -90,6 +111,8 @@ jobs:
     defaults:
       run:
         working-directory: FHD
+    env:
+      CANDIDATE_ARTIFACT: ${{ inputs.candidate_run_id == format('{0}', github.run_id) && 'xcagi-desktop-windows-enterprise' || format('xcagi-windows-installer-{0}', inputs.candidate_sha) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,15 +129,23 @@ jobs:
         env:
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          CURRENT_RELEASE_ATTEMPT: ${{ inputs.current_release_attempt }}
         with:
           script: |
             const { CANDIDATE_RUN_ID: runId, CANDIDATE_SHA: sha } = process.env;
             if (!/^\d+$/.test(runId) || !/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid candidate identity');
             const run = (await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: runId })).data;
-            if (run.head_sha !== sha || run.conclusion !== 'success' || run.path !== '.github/workflows/fhd-release-desktop.yml' || run.head_branch !== 'main') throw new Error('Candidate run provenance mismatch');
+            // The reusable formal-release job depends on the completed Windows build
+            // in this same run. Waiting for the entire run would be a dependency cycle.
+            const sameRun = runId === String(context.runId);
+            const attempt = process.env.CURRENT_RELEASE_ATTEMPT || '';
+            const formalCall = /^[1-9]\d*$/.test(attempt) && attempt === process.env.GITHUB_RUN_ATTEMPT && Number(attempt) === run.run_attempt && process.env.CANDIDATE_ARTIFACT === 'xcagi-desktop-windows-enterprise';
+            const completed = sameRun ? formalCall && run.status === 'in_progress' && run.conclusion == null : !attempt && run.status === 'completed' && run.conclusion === 'success';
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            if (run.repository?.full_name !== repository || run.head_repository?.full_name !== repository || run.head_sha !== sha || !completed || run.path !== '.github/workflows/fhd-release-desktop.yml' || run.head_branch !== 'main' || run.event !== 'workflow_dispatch') throw new Error('Candidate run provenance mismatch');
       - uses: actions/download-artifact@v8
         with:
-          name: xcagi-windows-installer-${{ inputs.candidate_sha }}
+          name: ${{ env.CANDIDATE_ARTIFACT }}
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ github.token }}
           path: FHD/candidate
@@ -184,6 +215,7 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           MODE: ${{ matrix.mode }}
           BASELINE_VERSION: ${{ inputs.baseline_version }}
+          CURRENT_RELEASE_ATTEMPT: ${{ inputs.current_release_attempt }}
         run: |
           $ErrorActionPreference = 'Stop'
           $receipt = Get-Content candidate/delivery-receipt.json -Raw | ConvertFrom-Json
@@ -192,6 +224,10 @@ jobs:
           if (-not $installer) { throw 'Candidate installer missing' }
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne $receipt.sha256) { throw 'Candidate file SHA-256 mismatch' }
+          if ($env:CURRENT_RELEASE_ATTEMPT) {
+            if ($receipt.build_workflow_run_id -ne $env:GITHUB_RUN_ID -or $receipt.build_workflow_run_attempt -ne $env:CURRENT_RELEASE_ATTEMPT -or $receipt.size -ne $installer.Length -or $receipt.filename -ne $installer.Name) { throw 'Formal candidate build run/attempt or original bytes mismatch' }
+            if ((Get-AuthenticodeSignature -LiteralPath $installer.FullName).Status -ne 'Valid') { throw 'Formal lifecycle acceptance requires signed bytes' }
+          }
           $args = @{
             Mode = $env:MODE
             CandidatePath = $installer.FullName
