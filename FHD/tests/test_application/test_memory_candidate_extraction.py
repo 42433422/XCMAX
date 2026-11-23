@@ -102,3 +102,17 @@ def test_provider_failure_allows_only_explicit_offline_fallback(completion, monk
 
     monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_text_sync", unavailable)
     assert extract_candidates("记住我的报告偏好") is None
+
+
+def test_model_relations_are_structured_only_when_both_names_are_in_source(completion):
+    completion["raw"] = json.dumps({"memory": [{
+        "text": "Acme Corp employs Alice Example",
+        "subject": "Acme Corp", "predicate": "employs", "object": "Alice Example",
+        "subject_type": "organization", "object_type": "person",
+    }]})
+    result = extract_candidates("Acme Corp employs Alice Example")
+    assert result[0]["value"]["entities"] == [
+        {"name": "Acme Corp", "type": "organization", "role": "subject"},
+        {"name": "Alice Example", "type": "person", "role": "object"},
+    ]
+    assert "entities" not in extract_candidates("Acme Corp employs someone")[0]["value"]

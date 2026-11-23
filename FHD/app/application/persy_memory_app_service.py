@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import UTC, datetime
 from typing import Any
 
 from app.application.dataset_rag_app_service import (
@@ -52,6 +53,12 @@ from app.application.persy_memory_utils import (
     merge_memory_graph as merge_memory_graph,
 )
 from app.application.user_memory.policy import is_recallable_memory
+from app.application.user_memory.relation_retrieval import (
+    parse_as_of,
+    record_key,
+    relation_paths,
+    snapshot_at,
+)
 from app.domain.shared_services.user_memory_service import (
     UserMemoryService,
     get_user_memory_service,
@@ -372,6 +379,8 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         query: str,
         top_k: int = 5,
         reinforce: bool = True,
+        max_hops: int = 2,
+        as_of: str | None = None,
     ) -> dict[str, Any]:
         access = _coerce_access_context(access_context)
         if access is None or not access.actor_id or not access.tenant_id:
@@ -388,14 +397,51 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 "memories": [],
                 "chunks": [],
             }
-        # Pending remains reviewable in list/graph, but can never supply model facts.
-        listed = self.list_memories(access_context=access, limit=1000)
+        instant = None
+        if as_of is not None:
+            try:
+                instant = parse_as_of(as_of)
+                if instant > datetime.now(UTC):
+                    raise ValueError("future as_of")
+            except ValueError:
+                return {
+                    "success": False,
+                    "error_code": "persy_memory_invalid_as_of",
+                    "message": "as_of requires a non-future ISO timestamp with UTC offset",
+                    "memories": [],
+                    "chunks": [],
+                }
+        # Pending, revoked and blocked records never supply recall facts.
+        listed = self.list_memories(access_context=access, status="active", limit=1000)
+        if not listed.get("success"):
+            return {**listed, "memories": [], "chunks": []}
         listed_memories = listed.get("memories")
         rows = [
             row
             for row in (listed_memories if isinstance(listed_memories, list) else [])
             if is_recallable_memory(row)
         ]
+        unavailable = 0
+        if instant is not None:
+            historical = []
+            for row in rows:
+                snapshot, unknown = snapshot_at(row, instant)
+                unavailable += int(unknown)
+                if snapshot is None:
+                    continue
+                scope = str(row.get("scope") or "")
+                if scope == "global_preference" and not _personal_preference(snapshot):
+                    continue
+                public = _public_memory_record(snapshot, scope)
+                public.update(
+                    recorded_from=snapshot["recorded_from"],
+                    recorded_until=snapshot["recorded_until"],
+                    strength=0.0,
+                )
+                public.pop("history", None)
+                historical.append(public)
+            rows = historical
+        paths, traversal_truncated = relation_paths(query_text, rows, max_hops=max_hops)
         scored: list[tuple[float, dict[str, Any]]] = []
         query_tokens = _search_tokens(query_text)
         for row in rows or []:
@@ -403,14 +449,20 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 continue
             statement = str(row.get("statement") or row.get("value") or "")
             lexical = _lexical_score(query_text, query_tokens, statement)
-            if lexical <= 0:
+            path = paths.get(record_key(row))
+            if lexical <= 0 and not path:
                 continue
-            score = min(1.0, lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28)
+            lexical_rank = (
+                lexical if instant is not None else
+                lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28
+            ) if lexical > 0 else 0.0
+            relation_rank = 0.68 / len(path) ** 0.5 if path else 0.0
+            score = min(1.0, max(lexical_rank, relation_rank))
             scored.append((score, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         selected = scored[: max(1, min(int(top_k or 5), 20))]
 
-        if reinforce and selected:
+        if instant is None and reinforce and selected:
             with self._lock:
                 for _score, row in selected:
                     owner_id = _memory_owner_id(access, str(row.get("scope") or "user"))
@@ -424,7 +476,15 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         for score, row in selected:
             public = dict(row)
             public["score"] = score
+            if paths.get(record_key(row)):
+                public["relation_path"] = paths[record_key(row)]
+            if instant is not None:
+                # Historical records are for explicit review, not model/tool authority.
+                public["eligible_for_planner"] = False
+                public["historical"] = True
             memories.append(public)
+            if instant is not None:
+                continue
             chunks.append(
                 {
                     "text": str(public.get("statement") or ""),
@@ -444,6 +504,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         ),
                         "source": "对话记忆",
                         "updated_at": public.get("updated_at"),
+                        "relation_path": public.get("relation_path", []),
                     },
                 }
             )
@@ -452,7 +513,17 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "query": query_text,
             "memories": memories,
             "chunks": chunks,
-            "retriever": "persy_memory_lexical_strength_v1",
+            "retriever": "persy_memory_relation_v2" if max_hops > 0 else "persy_memory_lexical_strength_v1",
+            "as_of": instant.isoformat() if instant is not None else None,
+            "historical_review_only": instant is not None,
+            "temporal_unavailable_count": unavailable,
+            "coverage_complete": (
+                not traversal_truncated
+                and unavailable == 0
+                and int((listed.get("summary") or {}).get("total") or 0)
+                <= len(listed_memories or [])
+            ),
+            "relation_traversal_truncated": traversal_truncated,
         }
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from app.application.user_memory.preferences import sync_preference_projection
@@ -22,6 +23,7 @@ from app.domain.user_memory.records import UserMemory
 def _advance_revision(record: JsonObject, updated: JsonObject, *, action: str, at: str) -> None:
     previous = {key: deepcopy(value) for key, value in record.items() if key != "history"}
     updated["revision"] = int(record.get("revision") or 1) + 1
+    updated["recorded_at_utc"] = datetime.now(UTC).isoformat()
     updated["history"] = [
         *record.get("history", []),
         {"action": action, "at": at, "previous": previous},
@@ -113,6 +115,7 @@ class CandidateMemory:
             "created_at": now,
             "updated_at": now,
             "revision": 1,
+            "recorded_at_utc": datetime.now(UTC).isoformat(),
             "history": [],
         }
         if candidate["status"] == "rejected":

@@ -376,3 +376,69 @@ def test_invalid_memory_listing_never_deletes_or_returns_records(memories):
         assert service.clear_memories(access_context=_access())["deleted_memories"] == 0
         assert service.query(access_context=_access(), query="missing")["memories"] == []
         mutate.assert_not_called()
+
+
+def test_graph_recall_and_historical_review_use_existing_authority() -> None:
+    from app.application.persy_memory_utils import _memory_owner_id
+
+    service = _service()
+    access = _access()
+    owner = _memory_owner_id(access, "user")
+
+    def fact(subject, object_text, subject_type, object_type, predicate):
+        return {
+            "subject": subject,
+            "predicate": predicate,
+            "object": object_text,
+            "statement": f"{subject} {predicate} {object_text}",
+            "entities": [
+                {"name": subject, "type": subject_type, "role": "subject"},
+                {"name": object_text, "type": object_type, "role": "object"},
+            ],
+        }
+
+    def add(value, *, scope="user", confirm=True):
+        target = owner if scope == "user" else _memory_owner_id(access, scope)
+        proposed = service.memory_service.propose_memory_candidate(
+            target, "entity", value["statement"], value,
+            source="chat_trace", evidence=[{"kind": "conversation_turn"}],
+        )
+        memory_id = proposed["candidate"]["memory_id"]
+        if confirm:
+            assert service.mutate(
+                access_context=access, memory_id=memory_id, action="confirm",
+            )["success"]
+        return memory_id
+
+    first = add(fact("Acme Corp", "Alice Example", "organization", "person", "employs"))
+    second = add(fact("Alice Example", "Phoenix Project", "person", "project", "leads"))
+    pending = add(fact("Alice Example", "Hidden Project", "person", "project", "reviews"),
+                  confirm=False)
+    other_scope = add(fact("Alice Example", "Tenant Project", "person", "project", "reviews"),
+                      scope="tenant")
+    one = service.query(access_context=access, query="Acme Corp", max_hops=1, reinforce=False)
+    two = service.query(access_context=access, query="Acme Corp", max_hops=2, reinforce=False)
+    assert second not in {row["memory_id"] for row in one["memories"]}
+    assert {first, second} <= {row["memory_id"] for row in two["memories"]}
+    assert not {pending, other_scope} & {row["memory_id"] for row in two["memories"]}
+    related = next(row for row in two["memories"] if row["memory_id"] == second)
+    assert [step["memory_id"] for step in related["relation_path"]] == [first, second]
+
+    active = next(row for row in two["memories"] if row["memory_id"] == first)
+    instant = active["recorded_at_utc"]
+    changed = service.mutate(
+        access_context=access, memory_id=first, action="correct",
+        patch={"value": fact("Acme Corp", "Bob Example", "organization", "person", "employs")},
+    )
+    assert changed["success"]
+    historical = service.query(access_context=access, query="Acme Corp", as_of=instant)
+    old = next(row for row in historical["memories"] if row["memory_id"] == first)
+    assert old["value"]["object"] == "Alice Example"
+    assert old["historical"] and not old["eligible_for_planner"]
+    assert historical["chunks"] == []
+    assert service.mutate(access_context=access, memory_id=first, action="delete")["success"]
+    after_delete = service.query(access_context=access, query="Acme Corp", as_of=instant)
+    assert first not in {row["memory_id"] for row in after_delete["memories"]}
+    assert not service.query(
+        access_context=access, query="Acme Corp", as_of="2026-01-01T12:00:00",
+    )["success"]
