@@ -272,6 +272,9 @@ class CyclePorts:
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
+        from modstore_server.xiaoc_life_reflection import experience_candidate_facts
+
+        facts.extend(experience_candidate_facts(self.state))
         facts.extend(reflection_facts(self.state))
         facts.extend(goal_review_facts(self.state))
         if self.domain == "reflection" and self.state["level"] >= 6:
@@ -714,7 +717,10 @@ class CyclePorts:
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
+        from modstore_server.xiaoc_life_reflection import review_experiences
+
         feedback = portfolio_feedback(after)
+        self.details["business_reflection"], _ = review_experiences(after)
         self.details["outcome_feedback"] = feedback
         self.evidence = [f"strategic_portfolio:{decision_id}", feedback["evidence_ref"]]
         self.details["portfolio_receipt"] = {

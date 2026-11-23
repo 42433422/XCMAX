@@ -171,6 +171,11 @@ def reconcile_usage() -> dict[str, int]:
 
 def reconcile_goals() -> dict[str, Any]:
     from modstore_server.xiaoc_life_cognition import goal_review_projection, portfolio_feedback
+    from modstore_server.xiaoc_life_reflection import (
+        candidate_id,
+        candidate_refs,
+        review_experiences,
+    )
 
     snapshot = read_state()
     updates = []
@@ -215,7 +220,8 @@ def reconcile_goals() -> dict[str, Any]:
             status=status,
             feedback=feedback,
         )
-        if goal.get("execution_receipt") != receipt or goal.get("goal_review") != review:
+        reflection, candidates = review_experiences(record)
+        if goal.get("execution_receipt") != receipt or goal.get("goal_review") != review or candidates:
             previous = (
                 goal.get("execution_receipt"),
                 goal.get("outcome_ref"),
@@ -223,14 +229,18 @@ def reconcile_goals() -> dict[str, Any]:
                 goal.get("goal_review"),
             )
             updates.append(
-                (goal["id"], decision_id, status, label, receipt, feedback, previous, review)
+                (goal["id"], decision_id, status, label, receipt, feedback, previous, review,
+                 reflection, candidates)
             )
 
     def apply(data: dict[str, Any], session: Any) -> int:
         if data.get("owner_user_id") != snapshot.get("owner_user_id"):
             return 0
         changed = 0
-        for goal_id, decision_id, status, label, receipt, feedback, previous, review in updates:
+        for (
+            goal_id, decision_id, status, label, receipt, feedback, previous, review,
+            reflection, candidates,
+        ) in updates:
             target = next(
                 (
                     goal
@@ -239,9 +249,7 @@ def reconcile_goals() -> dict[str, Any]:
                 ),
                 None,
             )
-            if target is None or (
-                target.get("execution_receipt") == receipt and target.get("goal_review") == review
-            ):
+            if target is None:
                 continue
             if previous != (
                 target.get("execution_receipt"),
@@ -250,6 +258,25 @@ def reconcile_goals() -> dict[str, Any]:
                 target.get("goal_review"),
             ):
                 continue  # A newer reconciliation or live cycle already changed this goal.
+            for candidate in candidates:
+                experience_id = candidate_id(candidate)
+                if session.get(XiaoCLifeEvent, experience_id) is None:
+                    _event(
+                        session,
+                        experience_id,
+                        kind="experience_candidate",
+                        status="pending_review",
+                        summary="原任务独立测量形成待审核经验；未采纳。",
+                        evidence_refs=candidate_refs(candidate),
+                        details={
+                            "owner_user_id": snapshot["owner_user_id"],
+                            "goal_id": goal_id,
+                            "candidate": candidate,
+                            "candidate_sha256": digest(candidate),
+                        },
+                    )
+            if target.get("execution_receipt") == receipt and target.get("goal_review") == review:
+                continue
             target.update(
                 status=status,
                 execution_receipt=receipt,
@@ -273,6 +300,7 @@ def reconcile_goals() -> dict[str, Any]:
                     ],
                     details={
                         "outcome_feedback": feedback,
+                        "business_reflection": reflection,
                         "owner_user_id": snapshot["owner_user_id"],
                         "goal_id": goal_id,
                         "decision_id": decision_id,
