@@ -540,7 +540,9 @@ def test_formal_publication_requires_complete_native_jobs_and_rechecks_original_
                 lambda match: str(results[match[1]] == "success"),
                 condition,
             )
-            assert eval(condition.replace("&&", "and"), {"__builtins__": {}}, {}) is (
+            clauses = [part.strip() for part in condition.split("&&")]
+            assert all(clause in {"True", "False"} for clause in clauses), condition
+            assert all(clause == "True" for clause in clauses) is (
                 status == "success"
             ), status
     steps = job["steps"]
