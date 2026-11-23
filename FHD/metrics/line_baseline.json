@@ -1,5 +1,5 @@
 {
-  "lines": 2679939,
-  "updated": "2026-11-23",
-  "note": "按用户修复配置并提PR合入的授权，修复最终CI原设置页E2E暴露的历史导航竞态。实际生产同步器与vue-router createWebHistory诊断确认：前进已换entry、异步guard未完成时，旧40ms定时器以旧route覆盖新entry。仅让成功导航持有position/fullPath/generation一致的同步权，新导航/reset撤销旧timer，保留同entry地址纠正。生产净增16行、4项真实webHistory回归新增148行；旧3失败1正控通过，新4全过，相关48项及类型/ESLint通过。原Playwright断言未改，固定浏览器仍由最终CI验收；未删除无关功能或降低门禁。"
+  "lines": 2684717,
+  "updated": "2026-11-24",
+  "note": "按用户检查并修复PR阻塞的授权处理草稿#3525：相对main 38b03d2c，保留作者目标核验JSON单层代码块处理与提示词净增22行、Codex回环NO_PROXY净增5行；本次Ruff仅改引号格式净增0行，Unreleased说明净增2行，共净增29行。能力页面由原生成器更新日期，不计人工维护行数。未修改生产语义、测试断言或门禁阈值，未删除无关代码凑数；仍为草稿，此登记不代表真实模型或本机资格已由本次CI修复验证。"
 }

@@ -71,6 +71,10 @@ COPY --chown=appuser:appuser gunicorn_config.py /app/gunicorn_config.py
 COPY --chown=appuser:appuser ops/docker/docker-entrypoint-fhd-api.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Record the build argument inside this image; runtime environment overrides
+# cannot make an upgraded host reuse another source commit's qualification.
+RUN python3.11 -c 'import json, os, pathlib, re; sha=os.environ["XCAGI_GIT_SHA"]; assert not sha or re.fullmatch(r"[0-9a-f]{40}", sha), "invalid build source SHA"; pathlib.Path("/app/.build-identity.json").write_text(json.dumps({"git_sha": sha}), encoding="utf-8")'
+
 RUN mkdir -p /app/data /app/uploads /app/logs /app/config /app/templates /app/XCAGI/mods \
     && chown -R appuser:appuser /app
 

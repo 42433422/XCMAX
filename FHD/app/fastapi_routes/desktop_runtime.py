@@ -66,6 +66,43 @@ class RuntimeQualificationRequest(BaseModel):
     retry: bool = False
 
 
+@router.get("/agent-runtime/qualification")
+async def account_runtime_qualification_status(request: Request, user=Depends(get_logged_in_user)):
+    """Read the current account/route receipt without starting a model attempt."""
+    from app.application.agent_runtime.configuration import (
+        get_account_runtime_status,
+        runtime_qualification_status,
+    )
+    from app.application.modstore_conversation_app import request_model_scope
+    from app.infrastructure.codex.policy import RuntimePolicyError, runtime_settings
+
+    managed_by = (
+        "deployment" if os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip() else "account"
+    )
+    try:
+        if managed_by == "deployment":
+            status = await asyncio.to_thread(runtime_qualification_status, runtime_settings())
+        else:
+            with request_model_scope(request):
+                status = await asyncio.to_thread(get_account_runtime_status, str(user.id))
+        return JSONResponse(
+            {**status, "managed_by": managed_by}, headers={"Cache-Control": "no-store"}
+        )
+    except RuntimePolicyError as exc:
+        return JSONResponse(
+            {
+                "success": False,
+                "qualification": "blocked",
+                "managed_by": managed_by,
+                "error_code": getattr(exc, "code", "runtime_not_qualified"),
+                "message": str(exc),
+                "checks": getattr(exc, "checks", {}),
+            },
+            status_code=409,
+            headers={"Cache-Control": "no-store"},
+        )
+
+
 @router.post("/agent-runtime/qualification")
 async def qualify_account_runtime(
     body: RuntimeQualificationRequest, request: Request, user=Depends(get_logged_in_user)

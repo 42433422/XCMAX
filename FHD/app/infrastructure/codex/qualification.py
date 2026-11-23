@@ -24,6 +24,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from httpx_sse import EventSource
 
+from app.build_identity import build_identity
 from app.infrastructure.codex.launcher import verify_installation
 from app.infrastructure.codex.local_server import LocalRuntimeServer
 from app.infrastructure.codex.policy import (
@@ -33,6 +34,7 @@ from app.infrastructure.codex.policy import (
     RuntimePolicyError,
     RuntimeSettings,
     independent_gateway_url,
+    qualification_host_identity,
 )
 from app.infrastructure.codex.transport import (
     CodexTransport,
@@ -99,40 +101,75 @@ class _Probe:
 
     def initialize(self) -> None:
         with sqlite3.connect(self.database) as db:
-            db.execute("CREATE TABLE receipt (nonce TEXT PRIMARY KEY)")
-            db.execute("CREATE TABLE calls (tool TEXT, phase TEXT, accepted INTEGER)")
+            db.execute("CREATE TABLE receipt (nonce TEXT, step INTEGER PRIMARY KEY)")
+            db.execute("CREATE TABLE calls (tool TEXT, phase TEXT, step INTEGER, accepted INTEGER)")
         self.database.chmod(0o600)
 
     def invoke(self, name: str, arguments: dict) -> dict:
         # No SQL, file paths, capability names or production identifiers are
         # accepted from the model. Even a repeated rejected write is audited.
-        valid = arguments == {"nonce": self.nonce}
+        step = arguments.get("step")
+        valid = (
+            type(step) is int
+            and step in (1, 2)
+            and arguments == {"nonce": self.nonce, "step": step}
+        )
         with sqlite3.connect(self.database) as db:
-            exists = db.execute("SELECT nonce FROM receipt LIMIT 2").fetchmany(2) == [(self.nonce,)]
+            # Serialize the observation and commit so concurrent rejected calls
+            # remain in the audit instead of rolling back on a duplicate insert.
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute("SELECT nonce, step FROM receipt ORDER BY step LIMIT 3").fetchmany(3)
+            existing = rows in ([], [(self.nonce, 1)], [(self.nonce, 1), (self.nonce, 2)])
+            observed_first = db.execute(
+                "SELECT 1 FROM calls WHERE tool = 'task_evidence' AND phase = 'resumed' "
+                "AND step = 1 AND accepted = 1 LIMIT 1"
+            ).fetchone()
             accepted = valid and (
                 name == "task_evidence"
-                and exists
+                and existing
+                and (self.nonce, step) in rows
                 or name == "execute_action"
-                and self.phase == "initial"
-                and not exists
+                and (
+                    step == 1
+                    and self.phase == "initial"
+                    and not rows
+                    or step == 2
+                    and self.phase == "resumed"
+                    and rows == [(self.nonce, 1)]
+                    and observed_first is not None
+                )
             )
-            db.execute("INSERT INTO calls VALUES (?, ?, ?)", (name, self.phase, int(accepted)))
+            db.execute(
+                "INSERT INTO calls VALUES (?, ?, ?, ?)",
+                (
+                    name,
+                    self.phase,
+                    step if type(step) is int and step in (1, 2) else 0,
+                    int(accepted),
+                ),
+            )
             if accepted and name == "execute_action":
-                db.execute("INSERT INTO receipt VALUES (?)", (self.nonce,))
-        return {"success": accepted, "verified": accepted, "nonce": self.nonce if accepted else ""}
+                db.execute("INSERT INTO receipt VALUES (?, ?)", (self.nonce, step))
+        return {
+            "success": accepted,
+            "verified": accepted,
+            "nonce": self.nonce if accepted else "",
+            "step": step if accepted else None,
+        }
 
     def snapshot(self) -> dict:
         # Independent, read-only connection; an MCP success string is not proof.
         with sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True) as db:
-            rows = db.execute("SELECT nonce FROM receipt LIMIT 2").fetchmany(2)
+            rows = db.execute("SELECT nonce, step FROM receipt ORDER BY step LIMIT 3").fetchmany(3)
             calls = db.execute(
-                "SELECT tool, phase, accepted FROM calls ORDER BY rowid LIMIT ?",
+                "SELECT tool, phase, step, accepted FROM calls ORDER BY rowid LIMIT ?",
                 (_MAX_PROBE_CALLS + 1,),
             ).fetchmany(_MAX_PROBE_CALLS + 1)
         # The extra row detects overflow; a truncated ledger is never proof that
         # no replay or rejected action occurred after the visible prefix.
         return {
-            "row_verified": rows == [(self.nonce,)],
+            "row_verified": rows == [(self.nonce, 1), (self.nonce, 2)],
+            "first_step_verified": rows == [(self.nonce, 1)],
             "calls": calls,
             "calls_complete": len(calls) <= _MAX_PROBE_CALLS,
         }
@@ -156,17 +193,20 @@ class _ProbeMcpResponse(Response):
                         description=description,
                         inputSchema={
                             "type": "object",
-                            "properties": {"nonce": {"type": "string"}},
-                            "required": ["nonce"],
+                            "properties": {
+                                "nonce": {"type": "string"},
+                                "step": {"type": "integer", "enum": [1, 2]},
+                            },
+                            "required": ["nonce", "step"],
                             "additionalProperties": False,
                         },
                     )
                     for name, description in (
                         (
                             "execute_action",
-                            "Commit the isolated qualification receipt exactly once.",
+                            "Commit the requested isolated qualification step exactly once.",
                         ),
-                        ("task_evidence", "Read the already committed qualification receipt."),
+                        ("task_evidence", "Read the already committed qualification step."),
                     )
                 ]
             )
@@ -254,7 +294,11 @@ async def _forward_model(request: Request, route: ModelRoute, probe: _Probe) -> 
     if body.get("stream") is not True:
         raise _QualificationError("runtime_stream_evidence_missing")
     request_id = uuid.uuid4().hex
-    observation: dict[str, Any] = {"request_id": request_id, "completed": False}
+    observation: dict[str, Any] = {
+        "request_id": request_id,
+        "phase": probe.phase,
+        "completed": False,
+    }
     probe.models.append(observation)
     transport = IndependentModelTransport(route)
     async with httpx.AsyncClient(
@@ -403,14 +447,20 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
             first_pid = runtime.process_id
             await _completed_turn(
                 runtime,
-                f"Call execute_action exactly once with nonce {probe.nonce}. "
-                "Then call task_evidence with the same nonce. Finish only after its receipt "
-                "is verified. Do not repeat execute_action.",
+                f"This task has two dependent steps using nonce {probe.nonce}. "
+                "In this turn, call execute_action exactly once with step 1, then call "
+                "task_evidence with the same nonce and step 1. Finish this turn only after "
+                "its receipt is verified. Step 2 must wait for the next turn. "
+                "Do not repeat execute_action for step 1.",
             )
             first = probe.snapshot()
             if not first["calls_complete"]:
                 raise _QualificationError("runtime_qualification_limit")
-            if not first["row_verified"]:
+            if (
+                not first["first_step_verified"]
+                or ("task_evidence", "initial", 1, 1) not in first["calls"]
+                or any(call[3] != 1 for call in first["calls"])
+            ):
                 raise _QualificationError("runtime_probe_receipt_missing")
             probe.phase = "compact"
             compact = await runtime.compact_thread()
@@ -422,9 +472,12 @@ async def _run_probe(settings: RuntimeSettings, owner_scope: str, probe: _Probe)
             second_pid = resumed.process_id
             await _completed_turn(
                 resumed,
-                f"Continue this same task: call only task_evidence with nonce "
-                f"{probe.nonce}, verify the existing receipt, then finish. The action already "
-                "committed; do not execute_action again.",
+                "Continue this same task using its original nonce from the persisted context. "
+                "First call task_evidence with step 1 and verify its existing receipt; step 1 "
+                "already committed and must never execute again. Then call execute_action "
+                "exactly once with step 2, followed by task_evidence with step 2. Finish only "
+                "after both steps' receipts are verified. Always include that original nonce; "
+                "never invent or replace it.",
             )
         probe.recovery = {
             "thread_id": thread_id,
@@ -439,27 +492,29 @@ def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
     snapshot, recovery = probe.snapshot(), probe.recovery
     calls = snapshot["calls"]
     writes = [call for call in calls if call[0] == "execute_action"]
-    read_phases = {call[1] for call in calls if call[0] == "task_evidence" and call[2] == 1}
+    reads = {(call[1], call[2]) for call in calls if call[0] == "task_evidence" and call[3] == 1}
+    continued = (
+        snapshot["calls_complete"]
+        and snapshot["row_verified"]
+        and writes == [("execute_action", "initial", 1, 1), ("execute_action", "resumed", 2, 1)]
+        and {("initial", 1), ("resumed", 1), ("resumed", 2)} <= reads
+        and all(call[3] == 1 for call in calls)
+    )
     models_complete = bool(probe.models) and all(item.get("completed") for item in probe.models)
     facts = {
         "responses_stream": models_complete
         and all(item.get("stream_deltas", 0) > 0 for item in probe.models),
-        "multi_turn_tools": snapshot["calls_complete"]
-        and {"initial", "resumed"} <= read_phases
-        and len(writes) == 1,
+        "multi_turn_tools": continued,
         "openai_network_denied": probe.network.get("denied_before_connect") is True,
         "business_receipt_verified": snapshot["calls_complete"]
         and snapshot["row_verified"]
-        and all(call[2] == 1 for call in calls),
+        and all(call[3] == 1 for call in calls),
         "upstream_failover_disabled": models_complete
         and all(item.get("single_attempt") for item in probe.models),
         "response_model_identity": models_complete
         and all(item.get("model") == route.response_model for item in probe.models),
         "forced_compaction_restart_same_task_no_replay": (
-            snapshot["calls_complete"]
-            and len(writes) == 1
-            and writes[0] == ("execute_action", "initial", 1)
-            and "resumed" in read_phases
+            continued
             and bool(recovery.get("thread_id"))
             and recovery.get("thread_id") == recovery.get("resumed_thread_id")
             and recovery.get("compaction", {}).get("thread_id") == recovery.get("thread_id")
@@ -469,6 +524,9 @@ def _checks(probe: _Probe, route: ModelRoute) -> dict[str, str]:
             and recovery["first_process_id"] != recovery["second_process_id"]
         ),
     }
+    facts["multi_step_restart_continuation"] = facts[
+        "forced_compaction_restart_same_task_no_replay"
+    ]
     return {name: "PASS" if facts[name] else "FAIL" for name in QUALIFICATION_CHECKS}
 
 
@@ -492,6 +550,7 @@ def qualify_runtime(
         "message": "运行环境资格验证未通过，请检查模型配置与验收证据后重试。",
     }
     probe = None
+    host_identity: dict[str, str] = {}
     try:
         if (
             not owner_scope
@@ -505,6 +564,7 @@ def qualify_runtime(
             or not destination.resolve().is_relative_to(root.resolve())
         ):
             raise _QualificationError("runtime_qualification_config_invalid")
+        host_identity = qualification_host_identity()
         verify_installation()
         destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         directory = destination.parent / ("attempt-" + uuid.uuid4().hex)
@@ -514,6 +574,8 @@ def qualify_runtime(
         probe = candidate
         owner_hash = hashlib.sha256(owner_scope.encode()).hexdigest()
         asyncio.run(_run_probe(settings, owner_hash, probe))
+        if qualification_host_identity() != host_identity:
+            raise _QualificationError("runtime_host_changed")
         result["checks"] = _checks(probe, route)
         if any(status != "PASS" for status in result["checks"].values()):
             raise _QualificationError("runtime_qualification_evidence_missing")
@@ -534,9 +596,17 @@ def qualify_runtime(
         assert route is not None and destination is not None
         evidence = {
             "schema": "xcmax.runtime-qualification-evidence.v1",
+            "scenario": "two_step_compaction_restart_continuation",
             "created_at": datetime.now(UTC).isoformat(),
+            "host_build": build_identity(),
             "codex_version": CODEX_VERSION,
+            "host_identity": host_identity,
             "route_identity": route.identity,
+            "route": route.runtime_identity(),
+            "limits": {
+                "model_calls": min(route.max_model_calls, 12),
+                "max_output_tokens": min(route.max_output_tokens, 2048),
+            },
             "ok": result["ok"],
             "checks": result["checks"],
             "models": probe.models,
@@ -546,7 +616,8 @@ def qualify_runtime(
             "error_code": result.get("error_code"),
         }
         evidence_path = probe.directory / "evidence.json"
-        _write_private(evidence_path, json.dumps(evidence, ensure_ascii=False, indent=2))
+        evidence_text = json.dumps(evidence, ensure_ascii=False, indent=2)
+        _write_private(evidence_path, evidence_text)
         result["evidence_refs"] = [str(evidence_path)]
         if result["ok"]:
             _write_private(
@@ -556,12 +627,19 @@ def qualify_runtime(
                         "schema": "xcmax.runtime-qualification.v1",
                         "model_kind": "real",
                         "codex_version": CODEX_VERSION,
+                        "host_identity": host_identity,
                         "route_identity": route.identity,
                         "checks": result["checks"],
                         "evidence_refs": result["evidence_refs"],
+                        "evidence_sha256": {
+                            str(evidence_path): hashlib.sha256(evidence_text.encode()).hexdigest()
+                        },
                     },
                     ensure_ascii=False,
                     indent=2,
                 ),
             )
+    # A missing probe proves the preflight stopped before any upstream call.
+    # Once a probe starts, even a lost response must never trigger silent retries.
+    result["model_attempted"] = probe is not None
     return result

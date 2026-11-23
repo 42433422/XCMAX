@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from typing import Any
+from mimetypes import guess_type
+from typing import IO, Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from starlette.background import BackgroundTask
+from starlette.types import Receive, Scope, Send
 
 from app.application.elt.errors import EltError
 from app.application.elt.service import get_elt_service
@@ -88,11 +89,15 @@ def get_run(
 @router.get("/runs/{run_id}/download")
 def download_run_export(
     run_id: str,
-    db: Session = Depends(get_db_dependency),
+    db: Session = Depends(get_db_dependency, scope="function"),
     user: Any = Depends(_read),
 ):
-    path = get_elt_service().download_path(db, run_id=run_id, owner_user_id=_user_id(user))
-    return FileResponse(path, filename=path.name)
+    content, file_name = get_elt_service().download_content(
+        db, run_id=run_id, owner_user_id=_user_id(user)
+    )
+    return _attachment_response(
+        content, file_name, guess_type(file_name)[0] or "application/octet-stream"
+    )
 
 
 sources_router = APIRouter(
@@ -187,20 +192,32 @@ def get_source_content(
     content, file_name = get_elt_service().get_source_content(
         db, asset_id=asset_id, revision_id=revision_id, owner_user_id=_user_id(user)
     )
+    return _attachment_response(content, file_name)
+
+
+def _attachment_response(
+    content: IO[bytes], file_name: str, media_type: str = "application/octet-stream"
+) -> StreamingResponse:
+    size = content.seek(0, 2)
+    content.seek(0)
 
     def chunks() -> Iterator[bytes]:
-        try:
-            yield from iter(lambda: content.read(64 * 1024), b"")
-        finally:
-            content.close()
+        yield from iter(lambda: content.read(64 * 1024), b"")
 
-    return StreamingResponse(
+    class ClosingResponse(StreamingResponse):
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                content.close()
+
+    return ClosingResponse(
         chunks(),
-        media_type="application/octet-stream",
+        media_type=media_type,
         headers={
+            "Content-Length": str(size),
             "Content-Disposition": f"attachment; filename*=utf-8''{quote(file_name, safe='')}",
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
         },
-        background=BackgroundTask(content.close),
     )
