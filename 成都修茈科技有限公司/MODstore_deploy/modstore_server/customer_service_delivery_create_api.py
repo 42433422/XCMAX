@@ -11,7 +11,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from modstore_server.account_license_plans import account_license_plan
+from modstore_server.account_license_plans import (
+    account_license_plan,
+    account_license_priority,
+    is_legacy_account_license_plan_id,
+)
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_delivery_failure import start_failure_message
 from modstore_server.customer_service_api import _schedule_customer_ticket_incident
@@ -50,6 +54,7 @@ def _active_permanent_purchase(db: Session, user_id: int) -> dict[str, Any] | No
         .order_by(UserPlan.id.desc())
         .all()
     )
+    plan_rows.sort(key=lambda row: account_license_priority(row.plan_id), reverse=True)
     for plan_row in plan_rows:
         plan_id = str(plan_row.plan_id or "")
         plan = account_license_plan(plan_id) or {}
@@ -109,7 +114,10 @@ async def create_custom_delivery(
 ):
     purchase = _active_permanent_purchase(db, int(user.id))
     if purchase is None:
-        raise HTTPException(403, "定制交付仅对已购买四个永久账户档位的客户开放")
+        raise HTTPException(403, "请先开通软件永久授权，再提交独立定制需求")
+    # Only the retired account bundles include the original first delivery.
+    # The software-only SKU must use the existing quoted-payment workflow.
+    includes_initial = is_legacy_account_license_plan_id(purchase["plan_id"])
     prospect_binding = None
     if body.landing_contact_id:
         from modstore_server.production_line_business import (
@@ -171,7 +179,7 @@ async def create_custom_delivery(
         None,
     )
     now_iso = datetime.now(UTC).isoformat()
-    if active_initial is not None:
+    if includes_initial and active_initial is not None:
         active_evidence = _custom_delivery_evidence(active_initial)
         if prospect_binding:
             previous = active_evidence.get("prospect_binding")
@@ -284,7 +292,7 @@ async def create_custom_delivery(
     )
     pricing_mode = (
         "post_delivery_addon"
-        if initial_delivery_consumed or legacy_delivered
+        if not includes_initial or initial_delivery_consumed or legacy_delivered
         else "initial_included"
     )
     crm = custom_delivery_crm({})

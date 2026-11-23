@@ -54,6 +54,10 @@ async def _custom_delivery_payload(
 
     evidence = _custom_delivery_evidence(ticket)
     run_rows = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
+    generation = str(evidence.get("delivery_generation") or "")
+    start_unconfirmed = bool(generation) and not any(
+        row.get("session_id") == generation for row in run_rows
+    )
     if not include_run_history:
         current = current_delivery_run(evidence)
         run_rows = [current] if current else []
@@ -118,9 +122,11 @@ async def _custom_delivery_payload(
     elif (evidence.get("resolution") or {}).get("state") == "awaiting_runtime":
         stage, label = "delivering", "业务验证失败，等待宿主发行身份核验"
     elif pricing_mode == "post_delivery_addon" and not run_rows and commerce_blockers:
-        stage, label = "commerce", "交付后新增，待报价付款"
+        stage, label = "commerce", "独立定制，待报价付款"
     elif accepted and commerce_blockers:
         stage, label = "commerce", "商务条件待完成"
+    elif start_unconfirmed:
+        stage, label = "production", "原生产结果尚待确认，请刷新原工单"
     elif accepted:
         stage, label = (
             "delivering",
@@ -198,6 +204,7 @@ async def _custom_delivery_payload(
             "acceptance_criteria": str(evidence.get("acceptance_criteria") or ""),
             "stage": stage,
             "stage_label": label,
+            "start_unconfirmed": start_unconfirmed,
             "gate_ok": gate_ok,
             "gate_message": gate_message,
             "runs": runs,
@@ -208,7 +215,7 @@ async def _custom_delivery_payload(
                 "首次交付内含，交付前开发免费"
                 if pricing_mode == "initial_included"
                 else (
-                    "交付后新增，报价付款后生产"
+                    "独立定制，报价付款后生产"
                     if pricing_mode == "post_delivery_addon"
                     else "历史交付规则"
                 )
@@ -268,6 +275,16 @@ async def decide_custom_delivery(
     if ticket.intent != "custom_delivery":
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
+    if body.action == "rework":
+        blockers = custom_delivery_commerce_blockers(evidence)
+        if blockers:
+            raise HTTPException(409, f"商务交付条件未完成：{'、'.join(blockers)}")
+        generation = str(evidence.get("delivery_generation") or "")
+        if generation and not any(
+            isinstance(run, dict) and run.get("session_id") == generation
+            for run in evidence.get("runs", [])
+        ):
+            raise HTTPException(409, "原生产结果尚待回读，请刷新原工单后再返工")
     if body.source_mode:
         from modstore_server.customer_delivery_versioned import (
             select_main_rework_source,

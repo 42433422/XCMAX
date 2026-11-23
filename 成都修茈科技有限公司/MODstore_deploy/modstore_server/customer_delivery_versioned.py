@@ -150,7 +150,7 @@ def _copy_validated_source(library: Path, provenance: dict[str, str]) -> Path:
 
 
 async def start_versioned_main_run(
-    *, user_id: int, ticket_id: int, evidence: dict[str, Any], attempt: int
+    *, user_id: int, ticket_id: int, evidence: dict[str, Any], attempt: int, session_id: str = ""
 ) -> dict[str, Any]:
     from modstore_server import workbench_api as workbench
     from modstore_server.customer_delivery_sources import (
@@ -161,7 +161,7 @@ async def start_versioned_main_run(
 
     assert_owner_source(user_id, str(evidence.get("suggested_id") or ""))
     _, provenance = release_source()
-    session_id = uuid.uuid4().hex[:24]
+    session_id = session_id or uuid.uuid4().hex[:24]
     from modstore_server.customer_delivery_build import (
         versioned_sunbird_probe_runtime_identity,
     )

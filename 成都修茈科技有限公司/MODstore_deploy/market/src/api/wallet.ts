@@ -63,6 +63,7 @@ export interface PaymentPlansResponse extends Record<string, unknown> {
 
 export interface AccountLicensePlansResponse extends Record<string, unknown> {
   plans?: AccountLicensePlan[]
+  commercial_terms?: { customization_from_cents?: number }
 }
 
 export interface PaymentQueryResponse extends Record<string, unknown> {

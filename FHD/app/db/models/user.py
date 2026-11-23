@@ -58,11 +58,11 @@ class User(Base):
     entitled_industries: Mapped[Optional[list]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True, default=list
     )
-    # 账号等级（普通/Pro/Max/Ultra）：注册时由 budget_range 自动派生；仅 tier=enterprise 有意义，否则 NULL
+    # 已授予的账号等级；保留历史 Pro/Max/Ultra，注册预算不授予等级。
     account_tier: Mapped[Optional[str]] = mapped_column(
         String(32), nullable=True, comment="账号等级: normal|pro|max|ultra（仅 enterprise）"
     )
-    # 注册/联系表单填写的预算区间（account_tier 的派生来源）
+    # 注册/联系表单填写的预算区间，仅作销售线索。
     budget_range: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # 安全：登录失败计数与账户锁定
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

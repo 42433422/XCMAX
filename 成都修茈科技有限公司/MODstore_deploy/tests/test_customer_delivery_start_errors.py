@@ -110,7 +110,12 @@ def test_start_failure_remains_private_through_saved_ticket_and_http(
     assert start.await_count == 1
     payload = detail.json()
     assert payload["ticket"]["status"] == "processing"
-    assert payload["custom_delivery"]["stage"] == "rework"
+    if entry in {"payment", "crm"}:
+        assert payload["custom_delivery"]["stage"] == "production"
+        assert payload["custom_delivery"]["start_unconfirmed"] is True
+        assert "尚待确认" in payload["custom_delivery"]["stage_label"]
+    else:
+        assert payload["custom_delivery"]["stage"] == "rework"
     assert payload["custom_delivery"]["runs"] == []
     if entry in {"payment", "crm"}:
         assert payload["custom_delivery"]["crm"]["payment"]["status"] == "paid"

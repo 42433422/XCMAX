@@ -232,6 +232,25 @@ class Registration:
                 sku=sku,
                 company_brand=email or username,
             )
+        if sku == "enterprise":
+            active_plan_id = str(market_reg.get("active_plan_id") or "").strip()
+            local_user_id = (result.get("user") or {}).get("id")
+            if active_plan_id and local_user_id is not None:
+                from app.application.tenant_subscription_app_service import apply_paid_plan_for_user
+
+                applied = apply_paid_plan_for_user(
+                    user_id=int(local_user_id),
+                    plan_id=active_plan_id,
+                    sync_from_market=True,
+                    active_plan_expires_at=market_reg.get("active_plan_expires_at"),
+                )
+                if active_plan_id == "saas-trial-30" and not applied:
+                    return JSONResponse(
+                        error_envelope(
+                            MARKET_REGISTER_FAILED, "体验授权到期信息未同步，请重新登录"
+                        ),
+                        status_code=503,
+                    )
         self.apply_profile(
             username, "enterprise" if sku == "enterprise" else "personal", industry_id, budget_range
         )

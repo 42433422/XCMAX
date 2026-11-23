@@ -60,7 +60,6 @@ def test_workbench_sessions_survive_release_directory_change(tmp_path, monkeypat
 @pytest.fixture
 def legacy_delivery_state(tmp_path, monkeypatch):
     from modman.repo_config import RepoConfig
-    from modstore_server import customer_delivery_sources as sources
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import mod_scaffold_runner, workbench_api
     from tests.customer_delivery_fixture import signed_artifact
@@ -527,7 +526,11 @@ def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch
         acceptance_criteria="客户安装后转换并导出真实结果",
         suggested_id=versioned.MOD_ID,
     )
-    monkeypatch.setattr(create_api, "_active_permanent_purchase", lambda *_: {"plan": "paid"})
+    monkeypatch.setattr(
+        create_api,
+        "_active_permanent_purchase",
+        lambda *_: {"plan_id": "saas-permanent-ultra"},
+    )
     user = types.SimpleNamespace(id=81)
 
     def forbidden(*_args):
@@ -564,8 +567,9 @@ def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(pinned_sour
         _copy_validated_source(tmp_path / "other-library", provenance)
 
 
+@pytest.mark.parametrize("session_id", ["", "a1" * 12])
 def test_versioned_run_reaches_quality_gate_through_real_snapshot(
-    tmp_path, monkeypatch, pinned_source
+    tmp_path, monkeypatch, pinned_source, session_id
 ):
     import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
     from modstore_server import customer_delivery_versioned as versioned
@@ -617,9 +621,11 @@ def test_versioned_run_reaches_quality_gate_through_real_snapshot(
 
         monkeypatch.setattr(workbench_api, "_set_step", observe_step)
         run = await versioned.start_versioned_main_run(
-            user_id=81, ticket_id=82, evidence=evidence, attempt=1
+            user_id=81, ticket_id=82, evidence=evidence, attempt=1, session_id=session_id
         )
         sid = run["session_id"]
+        if session_id:
+            assert sid == session_id
         ticket = CustomerServiceTicket(
             id=82,
             user_id=81,
@@ -1255,7 +1261,11 @@ def test_original_ticket_main_rework_rejects_before_start_or_commit(monkeypatch,
         CustomDeliveryDecisionBody,
     )
 
-    evidence = {"kind": "module", "suggested_id": versioned.MOD_ID}
+    evidence = {
+        "kind": "module",
+        "suggested_id": versioned.MOD_ID,
+        "delivery_terms": {"pricing_mode": "initial_included"},
+    }
     ticket = types.SimpleNamespace(id=34, user_id=29, intent="custom_delivery")
     monkeypatch.setattr(api, "_visible_ticket_or_404", lambda *_: ticket)
     monkeypatch.setattr(api, "_custom_delivery_evidence", lambda *_: dict(evidence))
@@ -1307,6 +1317,7 @@ def test_original_ticket_rework_preserves_identity_and_source_choice(
         "kind": "module",
         "suggested_id": versioned.MOD_ID,
         "source_mode": previous,
+        "delivery_terms": {"pricing_mode": "initial_included"},
         "runs": [{"session_id": "old-generation"}],
         "delivery_artifacts": [{"id": "old"}],
         "acceptance_status": "accepted",

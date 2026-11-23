@@ -24,6 +24,7 @@ pytestmark = pytest.mark.release_gate
 def payment_client(request, tmp_path, monkeypatch):
     import app.db as database
 
+    monkeypatch.setenv("FHD_DEMO_PAYMENT", "1")
     engine = create_engine(f"sqlite:///{tmp_path / 'checkout.sqlite3'}")
     sessions = sessionmaker(bind=engine)
     Base.metadata.create_all(engine)

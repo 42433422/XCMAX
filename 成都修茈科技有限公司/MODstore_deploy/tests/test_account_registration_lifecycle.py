@@ -339,7 +339,9 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
 
 def test_account_license_catalog_is_separate_from_usage_memberships(client):
     memberships = client.get("/api/payment/plans").json()["plans"]
-    licenses = client.get("/api/payment/account-plans").json()["plans"]
+    account_catalog = client.get("/api/payment/account-plans").json()
+    licenses = account_catalog["plans"]
+    assert account_catalog["commercial_terms"]["customization_from_cents"] == 298000
     membership_ids = {row["id"] for row in memberships}
     license_ids = {row["id"] for row in licenses}
     expected_license_ids = {str(row["id"]) for row in ACCOUNT_LICENSE_PLANS}
@@ -352,18 +354,12 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
     expected_titles = {
         "saas-personal-free": "个人使用版",
         "saas-trial-30": "30 天全功能体验",
-        "saas-permanent-starter": "企业启航版",
-        "saas-permanent-growth": "企业成长版",
-        "saas-permanent-max": "集团协同版",
-        "saas-permanent-ultra": "企业旗舰版",
+        "saas-permanent-standard": "XCAGI 软件买断",
     }
     expected_prices = {
         "saas-personal-free": 0.0,
         "saas-trial-30": 99.0,
-        "saas-permanent-starter": 49999.0,
-        "saas-permanent-growth": 99999.0,
-        "saas-permanent-max": 499999.0,
-        "saas-permanent-ultra": 999999.0,
+        "saas-permanent-standard": 6800.0,
     }
     by_id = {row["id"]: row for row in licenses}
     assert {plan_id: by_id[plan_id]["name"] for plan_id in expected_titles} == expected_titles
@@ -399,18 +395,14 @@ def test_java_plan_copy_migration_matches_public_catalog():
         / "resources"
         / "db"
         / "migration"
-        / "V15__refresh_xcagi_account_plan_copy.sql"
+        / "V19__simple_software_buyout.sql"
     ).read_text(encoding="utf-8")
 
-    for plan_id, title in (
-        ("saas-trial-30", "30 天全功能体验"),
-        ("saas-permanent-starter", "企业启航版"),
-        ("saas-permanent-growth", "企业成长版"),
-        ("saas-permanent-max", "集团协同版"),
-        ("saas-permanent-ultra", "企业旗舰版"),
-    ):
-        assert plan_id in migration
-        assert title in migration
+    assert "saas-permanent-standard" in migration
+    assert "XCAGI 软件买断" in migration
+    assert "6800.00" in migration
+    assert "DELETE" not in migration
+    assert "UPDATE orders" not in migration
     assert "ON CONFLICT (id) DO UPDATE" in migration
     assert "永久授权 ·" not in migration
     assert "VIP / SVIP" not in migration
