@@ -80,12 +80,12 @@ describe('packaged backend build identity resource handoff', () => {
         pid: 123, exitCode: null as number | null, signalCode: null,
       })
       child.kill.mockImplementation(() => {
-        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null) })
+        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null); child.emit('close', 0, null) })
         return true
       })
       if (args.includes('--migrate-only')) {
         state.lifecycle.push('spawn')
-        queueMicrotask(() => child.emit('exit', 0))
+        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0); child.emit('close', 0) })
       }
       return child
     })
@@ -477,7 +477,7 @@ describe('packaged backend build identity resource handoff', () => {
 
   it('hands the same Resources to the actual migration spawn', async () => {
     await runBackendMigrationWithRollback('1.0.0.1')
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32' || process.platform === 'darwin') {
       expect(markPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
       expect(clearPreparedRollbackRecoveryRequired).toHaveBeenCalledOnce()
       expect(state.lifecycle).toEqual(['intent', 'spawn', 'clear'])

@@ -402,6 +402,7 @@ describe('rollback — attachDatabaseBackupToRollback', () => {
       const marker = checkPendingRollback()
       expect(marker?.databaseBackupPath).toBe(backupPath)
       expect(marker?.databasePath).toBe(path.join(electronMocks.__userDataDir, 'data', 'xcagi.db'))
+      expect(marker?.expectedDatabaseSha256).toBe(createHash('sha256').update('db-snapshot').digest('hex'))
     } finally {
       cleanup()
     }
@@ -422,6 +423,68 @@ describe('rollback — attachDatabaseBackupToRollback', () => {
 })
 
 describe('rollback — cancelPreparedRollback', () => {
+  it('preserves the durable recovery marker when atomic database receipt replacement fails', async () => {
+    const cleanup = setupPackagedBackend()
+    const markerPath = path.join(electronMocks.__userDataDir, 'rollback-marker.json')
+    const before = JSON.stringify({ mode: 'macos-full', backendPath: 'backend', recoveryRequired: true })
+    const backup = path.join(electronMocks.__userDataDir, 'database-before.db')
+    fs.writeFileSync(backup, 'original database bytes')
+    fs.writeFileSync(markerPath, before)
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('injected database receipt replace failure') })
+    try {
+      const { attachDatabaseBackupToRollback, cancelPreparedRollback, checkPendingRollback } = await import('./rollback.js')
+      expect(() => attachDatabaseBackupToRollback(backup)).toThrow('injected database receipt replace failure')
+      cancelPreparedRollback()
+      expect(fs.readFileSync(markerPath, 'utf8')).toBe(before)
+      expect(checkPendingRollback()?.recoveryRequired).toBe(true)
+      expect(fs.readFileSync(backup, 'utf8')).toBe('original database bytes')
+    } finally { rename.mockRestore(); cleanup() }
+  })
+
+  it.each<[string, boolean]>([['darwin', true], ['win32', true], ['darwin', false], ['win32', false]])('refuses %s app-only recovery without a database receipt (recoveryRequired=%s)', async (platformName, recoveryRequired) => {
+    const cleanup = setupPackagedBackend()
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    const markerPath = path.join(electronMocks.__userDataDir, 'rollback-marker.json')
+    const appPath = platformName === 'win32'
+      ? path.join(electronMocks.__userDataDir, 'installation', 'XCAGI.exe')
+      : path.join(electronMocks.__userDataDir, 'active.app')
+    const databasePath = path.join(electronMocks.__userDataDir, 'data', 'xcagi.db')
+    fs.mkdirSync(path.join(electronMocks.__userDataDir, 'rollback', 'app-before', 'Contents'), { recursive: true })
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true })
+    fs.writeFileSync(databasePath, 'database may already be migrated')
+    const marker = JSON.stringify({
+      mode: platformName === 'win32' ? 'windows-full' : 'macos-full', recoveryRequired,
+      fromVersion: 'old', toVersion: 'new', backendPath: path.join(appPath, 'backend'),
+      appPath, appBundlePath: appPath, appBackupRelPath: 'app-before',
+    })
+    fs.writeFileSync(markerPath, marker)
+    const handoff = vi.fn()
+    try {
+      Object.defineProperty(process, 'platform', { ...platform, value: platformName })
+      const { triggerRollback, attachDatabaseBackupToRollback } = await import('./rollback.js')
+      await expect(triggerRollback('missing migration receipt', handoff)).rejects.toThrow('数据库恢复凭据')
+      expect(handoff).not.toHaveBeenCalled()
+      expect(windowsRollbackMocks.launchWindowsFullRollback).not.toHaveBeenCalled()
+      expect(macosRollbackMocks.launchMacOSFullRollback).not.toHaveBeenCalled()
+      expect(fs.readFileSync(markerPath, 'utf8')).toBe(marker)
+      expect(fs.readFileSync(databasePath, 'utf8')).toBe('database may already be migrated')
+      expect(fs.existsSync(path.join(electronMocks.__userDataDir, 'rollback-applied.json'))).toBe(false)
+      const databaseBackup = path.join(electronMocks.__userDataDir, 'database-before.db')
+      fs.writeFileSync(databaseBackup, 'original database bytes')
+      attachDatabaseBackupToRollback(databaseBackup)
+      await expect(triggerRollback('verified database receipt', handoff)).resolves.toEqual({
+        mode: platformName === 'win32' ? 'windows-full' : 'macos-full', scheduled: true,
+      })
+      expect(handoff).toHaveBeenCalledOnce()
+      const boundMarker = fs.readFileSync(markerPath, 'utf8')
+      fs.writeFileSync(databaseBackup, 'different database snapshot')
+      await expect(triggerRollback('tampered database receipt', handoff)).rejects.toThrow('摘要不一致')
+      expect(handoff).toHaveBeenCalledOnce()
+      expect(fs.readFileSync(markerPath, 'utf8')).toBe(boundMarker)
+      expect(fs.readFileSync(databasePath, 'utf8')).toBe('database may already be migrated')
+    } finally { Object.defineProperty(process, 'platform', platform); cleanup(); fs.rmSync(path.dirname(databasePath), { recursive: true, force: true }) }
+  })
+
   it('removes a prepared marker and is idempotent without one', async () => {
     const cleanup = setupPackagedBackend()
     try {
@@ -438,11 +501,11 @@ describe('rollback — cancelPreparedRollback', () => {
     }
   })
 
-  it('keeps a Windows recovery-required marker durable when updater cleanup runs', async () => {
+  it.each(['windows-full', 'macos-full'])('keeps a %s recovery-required marker durable when updater cleanup runs', async mode => {
     const cleanup = setupPackagedBackend()
     try {
       const markerPath = path.join(electronMocks.__userDataDir, 'rollback-marker.json')
-      fs.writeFileSync(markerPath, JSON.stringify({ mode: 'windows-full', fromVersion: 'old', toVersion: 'candidate', preparedAt: '2026-10-12T00:00:00.000Z', backendPath: 'backend.exe', recoveryRequired: false }))
+      fs.writeFileSync(markerPath, JSON.stringify({ mode, fromVersion: 'old', toVersion: 'candidate', preparedAt: '2026-10-12T00:00:00.000Z', backendPath: 'backend.exe', recoveryRequired: false }))
       const { markPreparedRollbackRecoveryRequired, clearPreparedRollbackRecoveryRequired, cancelPreparedRollback, commitRollback, checkPendingRollback } = await import('./rollback.js')
       markPreparedRollbackRecoveryRequired()
       cancelPreparedRollback()
@@ -459,10 +522,10 @@ describe('rollback — cancelPreparedRollback', () => {
     }
   })
 
-  it('preserves the complete prepared marker and refuses cancellation when durable replacement fails', async () => {
+  it.each(['windows-full', 'macos-full'])('preserves the %s marker and refuses cancellation when durable replacement fails', async mode => {
     const cleanup = setupPackagedBackend()
     const markerPath = path.join(electronMocks.__userDataDir, 'rollback-marker.json')
-    const before = JSON.stringify({ mode: 'windows-full', fromVersion: '1.0.0+' + 'a'.repeat(40), toVersion: '1.0.0.5', preparedAt: '2026-10-12T00:00:00.000Z', backendPath: 'backend.exe', recoveryRequired: false }, null, 2)
+    const before = JSON.stringify({ mode, fromVersion: '1.0.0+' + 'a'.repeat(40), toVersion: '1.0.0.5', preparedAt: '2026-10-12T00:00:00.000Z', backendPath: 'backend.exe', recoveryRequired: false }, null, 2)
     fs.writeFileSync(markerPath, before, 'utf8')
     const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('injected atomic replace failure') })
     try {

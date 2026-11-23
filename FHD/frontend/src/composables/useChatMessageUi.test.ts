@@ -141,6 +141,28 @@ describe('useChatMessageUi', () => {
     expect(ui.isMessageCollapsed(shifted, 2)).toBe(false)
   })
 
+  it('keeps separate expansion state for legacy replies with the same time and prefix', () => {
+    messages.value = [
+      { role: 'ai', content: '共同前缀'.repeat(400) + 'first' },
+      { role: 'ai', content: '共同前缀'.repeat(400) + 'second' },
+      { role: 'ai', content: 'latest' },
+    ]
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    ui.expandMessage(0)
+    expect(ui.isMessageCollapsed(messages.value[0], 0)).toBe(false)
+    expect(ui.isMessageCollapsed(messages.value[1], 1)).toBe(true)
+  })
+
+  it('keeps an expanded reply open when persistence acknowledges it with a server identity', () => {
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    const message = messages.value[1] as typeof messages.value[number] & { persistence?: { id: string; status: 'saved' } }
+    ui.expandMessage(1)
+    message.persistence = { id: 'server:80', status: 'saved' }
+    expect(ui.isMessageCollapsed(message, 1)).toBe(false)
+    ui.collapseMessage(1)
+    expect(ui.isMessageCollapsed(message, 1)).toBe(true)
+  })
+
   it('canSpeakMessage returns true for speakable content', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })
     expect(ui.canSpeakMessage({ content: 'Hello world' })).toBe(true)

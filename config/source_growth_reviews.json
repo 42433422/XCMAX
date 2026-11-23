@@ -435,14 +435,14 @@
     },
     "FHD/frontend/src/composables/useChatMessages.ts": {
       "base_file": "FHD/frontend/src/composables/useChatMessages.ts",
-      "base_blob": "efd44150d10a56d9399361b9708acd4b734e07a8",
-      "head_blob": "17a45947801017562cbbad7a6046dbfc8d83edc8",
-      "before_lines": 817,
-      "after_lines": 824,
-      "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。从服务端非用户消息恢复 runtimeContinuation，并在本地消息缓存中持久保存，避免刷新后丢失原父任务的补充和审批续接引用。",
-      "boundary": "仅恢复和保存消息元数据；拒绝把用户消息作为任务续接凭据，不新增权限判断或后台执行入口。",
-      "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。",
-      "follow_up": "本记录仅是评审请求，不是批准；最终head仍需前端质量、完整CI及架构审查。后续续接状态继续由现有helper和服务端原任务共同校验，按最新授权在完整检查后合入。",
+      "base_blob": "17a45947801017562cbbad7a6046dbfc8d83edc8",
+      "head_blob": "a1d7f1f62d2fac9e63a7cee11762a516f9fc7892",
+      "before_lines": 824,
+      "after_lines": 857,
+      "reason": "仅为架构评审请求，非批准；用户要求从代码层解决成熟度问题闭环。本轮复用原消息身份、分页和持久化组件，修复最新页刷新丢失旧页及分页边界，按明确durable回执限制可回取的本机正文副本，并保留原会话标题、总数与删除版本。",
+      "boundary": "保留原runtimeContinuation与任务审批凭据；仅裁剪已确认且可由服务端回取的本机正文副本，未确认消息和活动流完整保留，配额失败不覆盖已有缓存。不新增权限判断或后台执行入口。",
+      "validation": "本轮8个前端模块459 passed、0 skipped，原SQL会话模块31 passed；已复现原分页、相似回复身份和缓存预算失败，再验证修复。原npm run type-check:build与修改范围ESLint通过，未改编译配置、断言或门禁；最终head完整CI另行核验。",
+      "follow_up": "精确base为main@38b03d2c15391109bb1380b914b2e28cd769c5c0；本记录仅是评审请求，最终head仍需完整CI及架构审查。活动内存数组和跨会话总缓存预算不在本次完成范围；未确认内容优先保留，空间不足继续明确提示。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
