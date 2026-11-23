@@ -143,6 +143,15 @@ def relationship_references(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
         ):
             if state.get(field) is not None:
                 refs.append({"relation": relation, "entity_type": kind, "entity_id": str(state[field])})
+    elif snapshot.get("entity_type") in {"inventory", "production"}:
+        for field, kind in (
+            ("product_id", "product"),
+            ("warehouse_id", "warehouse"),
+            ("sales_order_id", "order"),
+            ("bom_id", "bom"),
+        ):
+            if state.get(field) is not None:
+                refs.append({"relation": field, "entity_type": kind, "entity_id": str(state[field])})
     return [
         {
             **ref,
