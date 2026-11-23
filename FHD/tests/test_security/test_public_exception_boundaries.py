@@ -255,3 +255,71 @@ def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outc
         assert result["_http_status"] == 409
         assert result["requires_reconciliation"] is True
         assert result["retryable"] is False
+
+def test_shared_chat_actual_workflow_builder_partial_write_requires_reconciliation():
+    """A completed write followed by a failed step is not a safe voice retry."""
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
+
+    class Formatter(AIChatWorkflowResponseMixin):
+        @staticmethod
+        def _format_workflow_tool_success_line(_step, _params):
+            return ["- 写入完成"]
+
+        @staticmethod
+        def _workflow_output_message(_output):
+            return "写入完成"
+
+    plan = SimpleNamespace(
+        intent="materials_shipment",
+        plan_id="original-plan",
+        todo_steps=[],
+        nodes=[],
+        metadata={},
+    )
+    run = SimpleNamespace(
+        run_id="original-run",
+        status="failed",
+        metadata={},
+        artifacts=[],
+        tool_calls=[],
+        steps=[
+            SimpleNamespace(
+                node_id="write-material",
+                status="completed",
+                tool_id="materials",
+                action="create",
+                output={"success": True, "material_id": 17},
+                duration_ms=1,
+            ),
+            SimpleNamespace(
+                node_id="failed-shipment",
+                status="failed",
+                tool_id="shipment_records",
+                action="create",
+                output={"success": False, "error": PRIVATE},
+                duration_ms=1,
+            ),
+        ],
+    )
+    raw = Formatter()._format_agent_run_response(plan, run)
+    assert raw["success"] is False
+    assert raw["execution"]["committed"] is True
+    assert raw["execution"]["effect"] == "partial"
+    assert raw["execution"]["outcome"] == "partial"
+    assert "execution" not in raw["data"]["data"]
+
+    public = _public_unified_chat_payload(raw)
+    assert public["success"] is False
+    assert public["run_id"] == "original-run"
+    assert public["plan_id"] == "original-plan"
+    assert public["execution"] == {
+        "committed": True,
+        "effect": "partial",
+        "outcome": "partial",
+    }
+    assert public["requires_reconciliation"] is True
+    assert public["retryable"] is False
+    assert public["_http_status"] == 409
+    assert "勿重复提交" in public["message"]
+    assert PRIVATE not in json.dumps(public, ensure_ascii=False)
