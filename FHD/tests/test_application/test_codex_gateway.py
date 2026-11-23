@@ -559,9 +559,11 @@ def test_unqualified_or_changed_route_never_starts_runtime(setup_gateway):
     assert rejected["error_code"] == "runtime_policy_blocked" and state.calls == []
     first = asyncio.run(state.invoke())
     changed_route = replace(state.settings.route, model="other-model")
-    receipt = json.loads(state.settings.qualification_file.read_text())
-    receipt["route_identity"] = changed_route.identity
-    state.settings.qualification_file.write_text(json.dumps(receipt))
+    # A changed route must carry its own complete evidence binding.
+    # Rewriting just route_identity would rightfully fail the qualification gate.
+    state.settings.qualification_file.write_text(
+        json.dumps(synthetic_qualification(changed_route, state.settings.qualification_file.parent))
+    )
     result = asyncio.run(
         state.invoke(
             run_id=first["run_id"],
