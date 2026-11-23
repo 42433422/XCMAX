@@ -18,9 +18,13 @@ from modstore_server import xiaoc_life_store as life
 from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.xiaoc_life_cognition import (
     SYSTEM_PROMPT,
+    CognitionContextError,
     cognition_messages,
     feedback_facts,
+    parse_decision,
     portfolio_feedback,
+    reflection_facts,
+    reflection_receipt,
 )
 from modstore_server.xiaoc_life_policy import LifeUpdate
 from tests.test_strategic_portfolio import database as database  # noqa: PLC0414
@@ -529,3 +533,121 @@ def test_blocked_reason_is_actionable_without_exposing_arbitrary_text(
     result = asyncio.run(runtime.tick_async())
     assert expected in result["summary"]
     assert result["details"]["reason"] == reason
+
+def test_cognition_deduplicates_and_bounds_attention():
+    state = {"identity_id": "test", "level": 6}
+    facts = [{"ref": "observed:1", "text": "original"}] * 15
+    facts.append({"ref": "observed:2", "text": "second"})
+    messages, refs = cognition_messages(state, "enterprise", facts)
+    payload = json.loads(messages[1]["content"])
+    assert refs == {"observed:1", "observed:2"}
+    assert len(payload["observations"]) == 2
+    assert payload["observations"][0]["evidence_status"] == "observed_source_not_verified_claim"
+    assert len(messages[1]["content"].encode()) <= 4200
+    with pytest.raises(CognitionContextError, match="no_observed_context"):
+        cognition_messages(state, "enterprise", [])
+    with pytest.raises(CognitionContextError, match="life_cycle_prompt_budget_exhausted"):
+        cognition_messages(
+            state,
+            "enterprise",
+            [{"ref": "observed:1", "text": "x", "metadata": "x" * 5000}],
+        )
+
+
+def test_alternatives_remain_distinct_cited_review_suggestions():
+    body = {
+        "action": "propose",
+        "summary": "review",
+        "evidence_refs": ["observed:1"],
+        "goal": {"title": "original", "description": "review", "evidence_refs": ["observed:1"]},
+        "alternatives": [
+            {"title": "other", "tradeoff": "uncertain", "evidence_refs": ["observed:1"]}
+        ],
+    }
+
+    def parse():
+        return parse_decision(json.dumps(body), refs={"observed:1"}, level=6, domain="enterprise")
+
+    assert parse().alternatives[0].title == "other"
+    body["alternatives"][0]["evidence_refs"] = ["invented:source"]
+    with pytest.raises(ValueError, match="unobserved"):
+        parse()
+    body["alternatives"][0]["evidence_refs"] = ["observed:1"]
+    body["alternatives"][0]["title"] = " ORIGINAL "
+    with pytest.raises(ValueError, match="distinct"):
+        parse()
+    body["alternatives"][0]["title"] = "other"
+    body["alternatives"][0]["approved"] = True
+    with pytest.raises(ValueError):
+        parse()
+
+
+@pytest.mark.parametrize(
+    "status,tokens,complete,expected",
+    [
+        ("completed", 50, True, "measurement_verified"),
+        ("completed", None, True, "measurement_pending"),
+        ("completed", 50, False, "measurement_pending"),
+        ("awaiting_worker", 50, True, "measurement_pending"),
+    ],
+)
+def test_reflection_keeps_measurement_and_completion_distinct(status, tokens, complete, expected):
+    feedback = {
+        "evidence_ref": "portfolio-outcome:p:receipt",
+        "outcome_status": "business_verified",
+        "metrics": {
+            "business_status": "verified",
+            "usage_complete": True,
+            "observation_complete": complete,
+            "hypotheses": [{"verdict": "miss"}],
+        },
+    }
+    refs = [feedback["evidence_ref"]]
+    receipt = reflection_receipt(
+        feedback, evidence_refs=refs, status=status, actual_tokens=tokens
+    )
+    assert receipt["status"] == expected
+    if expected == "measurement_verified":
+        assert receipt["hypothesis_verdicts"]["miss"] == 1
+    assert "success" not in receipt
+
+
+def test_reflection_recall_uses_same_owner_original_receipt_only():
+    feedback = {
+        "evidence_ref": "portfolio-outcome:p:receipt",
+        "outcome_status": "business_verified",
+        "metrics": {
+            "business_status": "verified",
+            "usage_complete": True,
+            "observation_complete": True,
+            "hypotheses": [{"verdict": "miss"}],
+        },
+    }
+    refs = [feedback["evidence_ref"]]
+    event = {
+        "id": "cycle:" + "a" * 32,
+        "status": "completed",
+        "actual_tokens": 50,
+        "evidence_refs": refs,
+        "summary": "private text",
+        "details": {
+            "owner_user_id": 7,
+            "learning_applied": True,
+            "outcome_feedback": feedback,
+            "reflection_receipt": reflection_receipt(
+                feedback, evidence_refs=refs, status="completed", actual_tokens=50
+            ),
+        },
+    }
+    state = {"owner_user_id": 7, "events": [event]}
+    facts = reflection_facts(state)
+    assert len(facts) == 1 and "private text" not in facts[0]["text"]
+    assert json.loads(facts[0]["text"])["hypothesis_verdicts"]["miss"] == 1
+    state["owner_user_id"] = 8
+    assert reflection_facts(state) == []
+    state["owner_user_id"] = 7
+    event["details"]["learning_applied"] = False
+    assert reflection_facts(state) == []
+    event["details"]["learning_applied"] = True
+    event["details"]["reflection_receipt"]["hypothesis_verdicts"]["miss"] = 0
+    assert reflection_facts(state) == []

@@ -16,10 +16,13 @@ from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
+    CognitionContextError,
     cognition_messages,
     feedback_facts,
     parse_decision,
     portfolio_feedback,
+    reflection_facts,
+    reflection_receipt,
 )
 
 
@@ -258,6 +261,7 @@ class CyclePorts:
 
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        facts.extend(reflection_facts(self.state))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -328,7 +332,7 @@ class CyclePorts:
                     )
                 )
         if self.domain == "exploration":
-            facts.extend(await self.research())
+            facts = await self.research() + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
         self.evidence = [row["ref"] for row in facts]
@@ -412,7 +416,15 @@ class CyclePorts:
         admission["max_total_tokens"] = min(
             admission["max_total_tokens"], self.claim["reserved_tokens"]
         )
-        messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        try:
+            messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        except CognitionContextError as exc:
+            raise LifeBlocked(str(exc)) from exc
+        self.details["attention"] = {
+            "selected_refs": sorted(refs),
+            "observations_considered": len(state["facts"]),
+            "status": "bounded_context_not_authorization",
+        }
         prompt_bound = (
             len(
                 json.dumps(
@@ -459,6 +471,11 @@ class CyclePorts:
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
+        if decision.alternatives:
+            self.details["proposal_review"] = {
+                "status": "unverified_options_not_execution_authority",
+                "alternatives": [item.model_dump() for item in decision.alternatives],
+            }
         return {"decision": decision.model_dump()}
 
     async def act(self, state: LifeCycle) -> LifeCycle:
@@ -796,8 +813,20 @@ class CyclePorts:
         return receipts
 
     async def reflect(self, state: LifeCycle) -> LifeCycle:
-        # Reflect only after actual ports have returned. Model suggestions never
-        # turn a research source, queued job or API acceptance into a completed goal.
+        # Preserve existing goal and budget authority; record only observed evidence.
+        receipt = reflection_receipt(
+            self.details.get("outcome_feedback"),
+            evidence_refs=self.evidence,
+            status=state.get("status", "failed"),
+            actual_tokens=self.actual_tokens,
+        )
+        if (
+            receipt["status"] == "unmeasured"
+            and state.get("decision")
+            and self.details.get("model_note_status") == "unverified_suggestion"
+        ):
+            receipt = {"status": "model_suggestion_only", "evidence_refs": list(self.evidence)}
+        self.details["reflection_receipt"] = receipt
         return state
 
     def finish(self, result: LifeCycle) -> dict[str, Any]:

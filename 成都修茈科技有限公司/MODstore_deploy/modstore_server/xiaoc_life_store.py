@@ -570,7 +570,8 @@ def finish_cycle(
             raise LifePolicyError("lifecycle receipt does not own this run")
         budget = data["budget"]
         reserved = active["reserved_tokens"]
-        fresh = data["revision"] == claim["policy_revision"] and not data["paused"]
+        # Late receipts still settle actual consumption, but cannot grant new learning.
+        fresh = _claim_active(data, session, claim)
         if actual_tokens is None:
             data["unknown_usage"] = True
         else:
@@ -582,7 +583,8 @@ def finish_cycle(
             if actual_tokens > reserved:
                 data["unknown_usage"] = True
         safe = fresh and actual_tokens is not None and actual_tokens <= reserved
-        _advance_goal_cursor(data, claim, details)
+        if fresh:
+            _advance_goal_cursor(data, claim, details)
         if safe:
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)

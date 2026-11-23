@@ -30,12 +30,22 @@ class InterestSuggestion(BaseModel):
     evidence_refs: list[str] = Field(min_length=1, max_length=6)
 
 
+class ProposalAlternative(BaseModel):
+    """Evidence-linked option for review, not an executable action."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    title: str = Field(min_length=1, max_length=120)
+    tradeoff: str = Field(min_length=1, max_length=200)
+    evidence_refs: list[str] = Field(min_length=1, max_length=4)
+
+
 class LifeDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     action: Literal["wait", "propose", "reflect"]
     summary: str = Field(min_length=1, max_length=600)
     evidence_refs: list[str] = Field(min_length=1, max_length=8)
     goal: CitedSuggestion | None = None
+    alternatives: list[ProposalAlternative] = Field(default_factory=list, max_length=2)
     interests: list[InterestSuggestion] = Field(default_factory=list, max_length=3)
     self_assessment: CitedSuggestion | None = None
 
@@ -52,10 +62,14 @@ Return ONLY a JSON object, in Chinese, matching this shape:
 "evidence_refs":["exact supplied ref"],
 "goal":null or {"title":"...","description":"testable proposed task, not a completed result",
 "evidence_refs":["exact supplied ref"]},
+"alternatives":[{"title":"...","tradeoff":"uncertain cost or benefit","evidence_refs":["exact supplied ref"]}],
 "interests":[{"topic":"...","reason":"...","confidence":0.5,"evidence_refs":["exact supplied ref"]}],
 "self_assessment":null or {"title":"...","description":"hypothesis about a limitation",
 "evidence_refs":["exact supplied ref"]}}.
 New goals remain proposals. Only use supplied refs, including on nested objects.
+Alternatives are optional, for propose only, and never authorize actions.
+Evidence status describes observations, not certainty about their contents.
+Historical measured outcomes do not establish success or subjective consciousness.
 Interests are allowed at levels 5 and 6; self_assessment only in reflection at level 6.
 The current domain limits this cycle: enterprise=business proposals;
 exploration=learning and research proposals; reflection=self-improvement proposals.
@@ -269,16 +283,140 @@ def feedback_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
     return list(facts.values())
 
 
+class CognitionContextError(ValueError):
+    """No citable observations fit the existing cognition budget."""
+
+
+def observation_status(row: dict[str, Any]) -> str:
+    """Project existing evidence stages without making a second truth store."""
+    business = row.get("business_feedback")
+    if isinstance(business, dict):
+        if (
+            business.get("outcome_status") == "business_verified"
+            and business.get("business_status") == "verified"
+            and business.get("usage_complete") is True
+            and business.get("observation_complete") is True
+        ):
+            return "historical_measurement_not_success"
+        return "measurement_pending"
+    evolution = row.get("evolution_feedback")
+    if isinstance(evolution, dict):
+        return (
+            "historical_delivery_receipt_not_impact"
+            if evolution.get("terminal_verified") is True
+            else "evolution_evidence_pending"
+        )
+    return "observed_source_not_verified_claim"
+
+
+def reflection_receipt(
+    feedback: Any, *, evidence_refs: list[str], status: str, actual_tokens: int | None
+) -> dict[str, Any]:
+    """Classify original measurements; neither model text nor dispatch is success."""
+    receipt: dict[str, Any] = {"status": "unmeasured", "evidence_refs": []}
+    if not isinstance(feedback, dict):
+        return receipt
+    ref = feedback.get("evidence_ref")
+    metrics = feedback.get("metrics")
+    if (
+        not isinstance(ref, str)
+        or not ref.startswith("portfolio-outcome:")
+        or ref not in evidence_refs
+        or not isinstance(metrics, dict)
+    ):
+        return receipt
+    receipt = {"status": "measurement_pending", "evidence_refs": [ref]}
+    if not (
+        type(actual_tokens) is int
+        and actual_tokens >= 0
+        and status == "completed"
+        and feedback.get("outcome_status") == "business_verified"
+        and metrics.get("business_status") == "verified"
+        and metrics.get("usage_complete") is True
+        and metrics.get("observation_complete") is True
+    ):
+        return receipt
+    counts = dict.fromkeys(("hit", "miss", "inconclusive", "pending"), 0)
+    hypotheses = metrics.get("hypotheses")
+    if isinstance(hypotheses, list):
+        for row in hypotheses[:4]:
+            verdict = row.get("verdict") if isinstance(row, dict) else None
+            if isinstance(verdict, str) and verdict in counts:
+                counts[verdict] += 1
+    return {**receipt, "status": "measurement_verified", "hypothesis_verdicts": counts}
+
+
+def reflection_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read the original same-owner, accepted event, never its free-form text."""
+    owner = state.get("owner_user_id")
+    if type(owner) is not int or owner <= 0:
+        return []
+    for event in state.get("events", [])[:20]:
+        if not isinstance(event, dict) or event.get("status") != "completed":
+            continue
+        event_id = event.get("id")
+        details = event.get("details")
+        evidence = event.get("evidence_refs")
+        if (
+            not isinstance(event_id, str)
+            or not event_id.startswith("cycle:")
+            or len(event_id) != 38
+            or any(char not in "0123456789abcdef" for char in event_id[6:])
+            or not isinstance(details, dict)
+            or type(details.get("owner_user_id")) is not int
+            or details["owner_user_id"] != owner
+            or details.get("learning_applied") is not True
+            or not isinstance(evidence, list)
+        ):
+            continue
+        receipt = reflection_receipt(
+            details.get("outcome_feedback"),
+            evidence_refs=evidence,
+            status=event["status"],
+            actual_tokens=event.get("actual_tokens"),
+        )
+        if receipt["status"] != "measurement_verified" or receipt != details.get(
+            "reflection_receipt"
+        ):
+            continue
+        return [
+            {
+                "ref": f"reflection:{event_id}",
+                "text": json.dumps(
+                    {
+                        "status": "historical_verified_measurement_not_success",
+                        "hypothesis_verdicts": receipt["hypothesis_verdicts"],
+                        "outcome_ref": receipt["evidence_refs"][0],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            }
+        ]
+    return []
+
+
 def cognition_messages(
     state: dict[str, Any], domain: str, facts: list[dict[str, Any]]
 ) -> tuple[list[dict[str, str]], set[str]]:
     """Keep the actual prompt below the existing conservative planning bound."""
+    selected: dict[str, dict[str, Any]] = {}
+    for row in facts:
+        if not isinstance(row, dict):
+            continue
+        ref = row.get("ref")
+        if isinstance(ref, str) and ref:
+            selected.setdefault(ref, {**row, "evidence_status": observation_status(row)})
+        if len(selected) == 12:
+            break
+    if not selected:
+        raise CognitionContextError("no_observed_context")
     payload: dict[str, Any] = {
         "identity": state["identity_id"],
         "level": state["level"],
         "domain": domain,
         "mission": str(state.get("mission") or "")[:250],
-        "observations": [dict(row) for row in facts[:12]],
+        "observations": list(selected.values()),
         "interests": [
             {
                 "topic": str(row.get("topic") or "")[:80],
@@ -324,17 +462,22 @@ def cognition_messages(
         else:
             payload["mission"] = payload["mission"][:50]
             break
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if len(serialized.encode()) > 4200:
+        raise CognitionContextError("life_cycle_prompt_budget_exhausted")
     refs = {row["ref"] for row in payload["observations"]}
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        {"role": "user", "content": serialized},
     ], refs
 
 
 def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> LifeDecision:
     decision = LifeDecision.model_validate_json(content)
     cited = list(decision.evidence_refs)
-    for item in [decision.goal, decision.self_assessment, *decision.interests]:
+    for item in [
+        decision.goal, decision.self_assessment, *decision.interests, *decision.alternatives
+    ]:
         if item is not None:
             cited.extend(item.evidence_refs)
     if not set(cited).issubset(refs):
@@ -345,6 +488,13 @@ def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> 
         raise ValueError("life_self_assessment_requires_reflection")
     if decision.action == "propose" and decision.goal is None:
         raise ValueError("life_proposal_requires_goal")
+    if decision.alternatives:
+        if decision.action != "propose" or decision.goal is None:
+            raise ValueError("life_alternatives_require_proposal")
+        names = [decision.goal.title, *(item.title for item in decision.alternatives)]
+        normalized = [" ".join(name.split()).casefold() for name in names]
+        if not all(normalized) or len(set(normalized)) != len(normalized):
+            raise ValueError("life_alternatives_require_distinct_titles")
     if decision.action == "wait" and (
         decision.goal or decision.interests or decision.self_assessment
     ):

@@ -220,6 +220,43 @@ def test_revoked_principal_and_expired_authorization_stop_next_model_call(databa
     assert not store.cycle_active(claim)
 
 
+@pytest.mark.parametrize("invalidate", ["revoked", "lease_expired", "authorization_expired"])
+def test_late_lifecycle_receipt_settles_without_adopting_new_learning(
+    database, monkeypatch, invalidate
+):
+    now = store.utcnow()
+    if invalidate == "authorization_expired":
+        configure(authorization_expires_at=(now + timedelta(minutes=1)).isoformat())
+    else:
+        configure()
+    claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
+    assert store.cycle_active(claim)
+    if invalidate == "revoked":
+        with database() as session:
+            session.get(User, 7).is_admin = False
+            session.commit()
+    else:
+        later = now + timedelta(minutes=2 if invalidate == "authorization_expired" else 6)
+        monkeypatch.setattr(store, "utcnow", lambda: later)
+    assert not store.cycle_active(claim)
+    result = finish(
+        claim,
+        goals=[{"id": "late", "title": "late", "evidence_refs": ["receipt:one"]}],
+        interests=[{"topic": "late", "evidence_refs": ["receipt:one"]}],
+        self_model={"title": "late", "evidence_refs": ["receipt:one"]},
+    )
+    finish(claim)
+    assert store.read_state()["budget"]["used_tokens"] == 50
+    assert result["budget"]["reserved_tokens"] == 0
+    assert result["goals"] == []
+    assert result["interests"] == []
+    assert result["self_model"] == {}
+    event = next(row for row in result["events"] if row["id"] == f"cycle:{claim['cycle_id']}")
+    assert event["status"] == "policy_changed"
+    assert event["actual_tokens"] == 50
+    assert event["details"]["learning_applied"] is False
+
+
 def test_experiences_accumulate_and_hypotheses_never_become_verified_capability(database):
     configure()
     for i in range(2):
