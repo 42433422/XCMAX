@@ -452,9 +452,7 @@ def test_failed_independent_report_is_archived_but_not_accepted(monkeypatch):
         return {"artifacts": [artifact]}
 
     def download(repo, artifact_id, root, artifact_digest):
-        assert (repo, artifact_id, artifact_digest) == (
-            "example/product", 1, artifact["digest"]
-        )
+        assert (repo, artifact_id, artifact_digest) == ("example/product", 1, artifact["digest"])
         row = {"id": "restore", "check_digest": digest(protocol["checks"][0])}
         for phase, code in (("before", 0), ("after", 1)):
             path = root / f"{phase}.log"
@@ -483,9 +481,12 @@ def test_failed_independent_report_is_archived_but_not_accepted(monkeypatch):
     monkeypatch.setattr(workspace, "_retain_artifact", lambda *_: "encrypted-reference")
     monkeypatch.setattr(workspace, "_save", lambda _, **updates: effects.update(updates))
 
-    assert workspace.archive_failed_verification(
-        request_id, protocol, effects, {**run, "conclusion": "success"}
-    ) is None
+    assert (
+        workspace.archive_failed_verification(
+            request_id, protocol, effects, {**run, "conclusion": "success"}
+        )
+        is None
+    )
     report = workspace.archive_failed_verification(request_id, protocol, effects, run)
     assert report["status"] == "workflow_failed"
     assert report["comparison"]["candidate_passed"] == 0

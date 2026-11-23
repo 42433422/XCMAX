@@ -339,8 +339,7 @@ def _historical_rejection(
     if candidate_identity:
         refs.add(f"retort-candidate:{candidate_identity}")
     conditions = [
-        XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True)
-        for ref in sorted(refs)
+        XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True) for ref in sorted(refs)
     ]
     events = session.scalars(
         select(XiaoCLifeEvent)
@@ -409,8 +408,7 @@ def _comparison_receipt(
     if failed_bound:
         verification = failed
     elif (
-        verification != effects.get("verification")
-        or verification.get("status") != "checks_passed"
+        verification != effects.get("verification") or verification.get("status") != "checks_passed"
     ):
         return None
     comparison = verification.get("comparison")
@@ -558,9 +556,7 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         # Preserve the measured comparison separately from verified delivery
         # and actual impact. Historical reports may not include paired results.
         "comparison_status": (
-            "paired_exit_codes_verified"
-            if comparison
-            else "paired_measurement_not_established"
+            "paired_exit_codes_verified" if comparison else "paired_measurement_not_established"
         ),
         "comparison": comparison,
         "historical_rejection_ref": historical_rejection,

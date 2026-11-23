@@ -425,11 +425,12 @@ def archive_failed_verification(request_id, protocol, effects, run):
         ):
             return None
         repo = protocol["repository"]
-        artifacts = github(
-            "GET", f"/repos/{repo}/actions/runs/{run['id']}/artifacts"
-        ).get("artifacts", [])
+        artifacts = github("GET", f"/repos/{repo}/actions/runs/{run['id']}/artifacts").get(
+            "artifacts", []
+        )
         matches = [
-            a for a in artifacts
+            a
+            for a in artifacts
             if a.get("name") == f"retort-verification-{request_id}" and not a.get("expired")
         ]
         if len(matches) != 1:

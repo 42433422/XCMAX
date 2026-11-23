@@ -514,9 +514,7 @@ def test_failed_request_cannot_be_promoted_by_late_receipt(reflection):
     with factory() as session:
         row = session.get(RetortEvolutionRun, request_id)
         row.status = "failed"
-        row.snapshot_json = json.dumps(
-            {"status": "failed", "execution": {"target_sha": "d" * 40}}
-        )
+        row.snapshot_json = json.dumps({"status": "failed", "execution": {"target_sha": "d" * 40}})
         session.commit()
     assert evolution.reconcile() == 1
     failed = life.read_state()["goals"][0]["evolution_outcome"]

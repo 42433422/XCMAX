@@ -13,7 +13,12 @@ from uuid import uuid4
 import pytest
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
-from retort_engine.evolution_contract import digest, freeze_request, inspect_bundle, verify_bundle
+from retort_engine.evolution_contract import (
+    digest,
+    freeze_request,
+    inspect_bundle,
+    verify_bundle,
+)
 from retort_engine.evolution_evidence import run_comparison
 from retort_engine.evolution_optimizer import CommandTrial, optimize_measured
 from retort_engine.evolution_workflow import build_evolution_graph
@@ -269,7 +274,11 @@ def test_comparison_uses_real_distinct_commits_and_keeps_domain_unrated(
     assert comparison_report["candidate_sha"] == target
     assert comparison_report["baseline_passed"] == 0
     assert comparison_report["candidate_passed"] == comparison_report["total"] == 1
-    assert comparison_report["bundle_digest"] == result["evidence_digest"] == digest(bundle)
+    assert (
+        comparison_report["bundle_digest"]
+        == result["evidence_digest"]
+        == digest(bundle)
+    )
     pair = comparison_report["checks"][0]
     assert pair["baseline_returncode"] == bundle["checks"][0]["before"]["returncode"]
     assert pair["candidate_log_sha256"] == bundle["checks"][0]["after"]["log_sha256"]
@@ -336,7 +345,12 @@ def test_paired_checks_pass_is_not_an_improvement_score(comparison):
     assert failed["domain_status"] == "UNRATED"
     with pytest.raises(ValueError, match="independent check failed"):
         verify_bundle(
-            protocol, bundle, output, run_id="43", target_sha=target, isolation="local_test"
+            protocol,
+            bundle,
+            output,
+            run_id="43",
+            target_sha=target,
+            isolation="local_test",
         )
 
 

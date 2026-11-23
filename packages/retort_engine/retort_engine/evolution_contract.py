@@ -255,7 +255,8 @@ def inspect_bundle(
     }
     return {
         "status": (
-            "checks_passed" if comparison["candidate_passed"] == comparison["total"]
+            "checks_passed"
+            if comparison["candidate_passed"] == comparison["total"]
             else "checks_failed"
         ),
         "request_id": protocol["request_id"],
@@ -282,7 +283,12 @@ def verify_bundle(
 ) -> dict[str, Any]:
     """Strict acceptance verifier: every candidate check must still succeed."""
     result = inspect_bundle(
-        protocol, bundle, root, run_id=run_id, target_sha=target_sha, isolation=isolation
+        protocol,
+        bundle,
+        root,
+        run_id=run_id,
+        target_sha=target_sha,
+        isolation=isolation,
     )
     for row in result["comparison"]["checks"]:
         if row["candidate_returncode"] != 0:
