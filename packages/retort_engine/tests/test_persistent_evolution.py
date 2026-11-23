@@ -289,6 +289,15 @@ def test_comparison_uses_real_distinct_commits_and_keeps_domain_unrated(
 
 def test_paired_checks_pass_is_not_an_improvement_score(comparison):
     protocol, before, after, output, target = comparison
+    git(before, "checkout", "--detach", target)
+    protocol["source_sha"] = target
+    protocol["protocol_digest"] = digest(
+        {k: v for k, v in protocol.items() if k != "protocol_digest"}
+    )
+    (after / "notes.txt").write_text("unrelated change")
+    git(after, "add", "notes.txt")
+    git(after, "commit", "-qm", "unrelated change")
+    target = git(after, "rev-parse", "HEAD")
     bundle = run_comparison(
         protocol,
         before=before,
@@ -298,19 +307,29 @@ def test_paired_checks_pass_is_not_an_improvement_score(comparison):
         target_sha=target,
         isolation="local_test",
     )
-    # Both successful checks are a valid comparison, not an improvement claim.
-    bundle["checks"][0]["before"]["returncode"] = 0
     report = verify_bundle(
         protocol, bundle, output, run_id="42", target_sha=target, isolation="local_test"
     )
-    assert report["comparison"]["baseline_passed"] == report["comparison"]["candidate_passed"]
+    assert report["comparison"]["baseline_passed"] == 1
+    assert report["comparison"]["candidate_passed"] == 1
     assert report["domain_status"] == "UNRATED"
     assert report["score"] is None
 
-    bundle["checks"][0]["after"]["returncode"] = 1
+    (after / "value").write_text("regressed")
+    git(after, "commit", "-qam", "regression")
+    target = git(after, "rev-parse", "HEAD")
+    bundle = run_comparison(
+        protocol,
+        before=before,
+        after=after,
+        output=output,
+        run_id="43",
+        target_sha=target,
+        isolation="local_test",
+    )
     with pytest.raises(ValueError, match="independent check failed"):
         verify_bundle(
-            protocol, bundle, output, run_id="42", target_sha=target, isolation="local_test"
+            protocol, bundle, output, run_id="43", target_sha=target, isolation="local_test"
         )
 
 
