@@ -63,7 +63,7 @@ def admin_employee(monkeypatch, trusted_actor):
                 (employee_id, context["run_id"]),
             )
         if state.error:
-            raise RuntimeError("receipt unavailable")
+            raise TimeoutError("receipt unavailable")
         return state.output
 
     invocation = Mock(side_effect=execute)

@@ -219,7 +219,7 @@ async def test_stream_exception_stays_unknown_and_is_never_redispatched(bound_su
 
     async def source(**kwargs):
         yield {"type": "token", "text": "partial"}
-        raise RuntimeError("lost execution acknowledgement")
+        raise TimeoutError("lost execution acknowledgement")
 
     service.invoke_stream.side_effect = source
     response = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)

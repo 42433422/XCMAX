@@ -14,6 +14,10 @@ from .profiles import SuperEmployeeToolProfile
 from .protocols import JsonObject, ParaPorts
 
 
+class ParaResponseError(httpx.HTTPError, RuntimeError):
+    """A rejected or invalid Para response, compatible with legacy callers."""
+
+
 class ParaClient:
     def __init__(
         self,
@@ -66,13 +70,13 @@ class ParaClient:
         body = self._decode(resp)
         if resp.status_code >= 400:
             self._token_cache.pop(cache_key, None)
-            raise RuntimeError(
+            raise ParaResponseError(
                 self.error_message(body, f"Para guest 登录失败 ({resp.status_code})")
             )
         token = str(body.get("token") or body.get("access_token") or "").strip()
         if not token:
             self._token_cache.pop(cache_key, None)
-            raise RuntimeError("Para guest 登录未返回 token")
+            raise ParaResponseError("Para guest 登录未返回 token")
         self._token_cache[cache_key] = (
             token,
             time.time() + self._token_ttl(),
@@ -97,7 +101,9 @@ class ParaClient:
         )
         body = self._decode(resp)
         if resp.status_code >= 400:
-            raise RuntimeError(self.error_message(body, f"Para API 请求失败 ({resp.status_code})"))
+            raise ParaResponseError(
+                self.error_message(body, f"Para API 请求失败 ({resp.status_code})")
+            )
         return body
 
     def json_response(self, resp: httpx.Response) -> dict[str, Any]:

@@ -46,7 +46,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DELIVERY_MODULE = "cross_module_import"
 _RESPONSE_MODULE = "cross_module_http_response"
-_IMPORT_ERRORS: tuple[type[Exception], ...] = (SQLAlchemyError, *RECOVERABLE_ERRORS)
+_IMPORT_ERRORS: tuple[type[Exception], ...] = (EltError, SQLAlchemyError, *RECOVERABLE_ERRORS)
 _QUEUE_OWNER = "agent-task-queue"
 
 

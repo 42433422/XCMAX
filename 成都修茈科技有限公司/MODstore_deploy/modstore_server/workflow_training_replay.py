@@ -523,23 +523,43 @@ def _run_worker(request, directory, env, *, timeout=60):
         Path(__file__).resolve().parents[3]
         / "FHD/scripts/autonomy/runtime_tools/promptfoo_sandbox.mjs"
     )
-    with subprocess.Popen(
-        [node, str(wrapper), "--replay", "--directory", str(directory), "--python", sys.executable],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=directory,
-        env={**env, "PROMPTFOO_SANDBOX_ENTRY": runtime},
-        start_new_session=os.name == "posix",
-    ) as proc:
+    with (
+        tempfile.TemporaryDirectory(
+            prefix="workflow-replay-policy-", dir=directory.parent
+        ) as control,
+        subprocess.Popen(
+            [
+                node,
+                str(wrapper),
+                "--replay",
+                "--directory",
+                str(directory),
+                "--python",
+                sys.executable,
+                "--control",
+                control,
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=directory,
+            env={
+                **env,
+                "PROMPTFOO_SANDBOX_ENTRY": runtime,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONNOUSERSITE": "1",
+            },
+            start_new_session=os.name == "posix",
+        ) as proc,
+    ):
         try:
             stdout, stderr = proc.communicate(
                 json.dumps(request), timeout=max(0, deadline - time.monotonic())
             )
             return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
         finally:
-            # Reap the owned group before Popen closes its pipes, including on timeout.
+            # Reap the owned group before removing its private control directory.
             terminate_subprocess(proc, process_group=True)
 
 

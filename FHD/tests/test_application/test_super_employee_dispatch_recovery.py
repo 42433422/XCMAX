@@ -231,13 +231,21 @@ def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_pat
     assert Path(first["dispatch"]["outbox_path"]).read_text() == original
 
 
+@pytest.mark.parametrize("receipt_status", [401, 404, 503])
 def test_readback_without_ack_queries_only_original_request_and_keeps_unknown(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, receipt_status
 ):
     def submit(request):
         raise httpx.ReadTimeout("first acknowledgement lost", request=request)
 
-    create, requests = _service(tmp_path, monkeypatch, submit)
+    create, requests = _service(
+        tmp_path,
+        monkeypatch,
+        submit,
+        receipt_handler=lambda request: httpx.Response(
+            receipt_status, json={"error": "request_not_found"}
+        ),
+    )
     first = create().invoke(
         user_id=7,
         message="修复登录问题",
