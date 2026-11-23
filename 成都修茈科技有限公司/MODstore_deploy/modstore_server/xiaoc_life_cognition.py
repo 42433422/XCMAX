@@ -102,6 +102,11 @@ def _timestamp(value: Any) -> str:
         return ""
 
 
+def _portfolio_outcome_ref(decision_id: str, metrics: dict[str, Any]) -> str:
+    fingerprint = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()[:24]
+    return f"portfolio-outcome:{decision_id}:{fingerprint}"
+
+
 def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     """Project original review evidence, never customer text or a model's verdict."""
     from modstore_server.strategic_customer_outcomes import KNOWN_DELIVERY_ATTRIBUTIONS
@@ -235,12 +240,11 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "stop_reason": stop,
         "hypotheses": hypotheses[:4],
     }
-    fingerprint = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()[:24]
     return {
         "outcome_status": status,
         "summary": summary,
         "metrics": metrics,
-        "evidence_ref": f"portfolio-outcome:{record['decision_id']}:{fingerprint}",
+        "evidence_ref": _portfolio_outcome_ref(record["decision_id"], metrics),
     }
 
 
@@ -314,10 +318,8 @@ def observation_status(row: dict[str, Any]) -> str:
     return "observed_source_not_verified_claim"
 
 
-def reflection_receipt(
-    feedback: Any, *, evidence_refs: list[str], status: str, actual_tokens: int | None
-) -> dict[str, Any]:
-    """Classify original measurements; neither model text nor dispatch is success."""
+def _measurement_receipt(feedback: Any, *, evidence_refs: list[str]) -> dict[str, Any]:
+    """Verify the original ledger projection, without implying new execution."""
     receipt: dict[str, Any] = {"status": "unmeasured", "evidence_refs": []}
     if not isinstance(feedback, dict):
         return receipt
@@ -330,12 +332,12 @@ def reflection_receipt(
         or not isinstance(metrics, dict)
     ):
         return receipt
+    decision_id, separator, _ = ref.removeprefix("portfolio-outcome:").rpartition(":")
+    if not separator or not decision_id or ref != _portfolio_outcome_ref(decision_id, metrics):
+        return receipt
     receipt = {"status": "measurement_pending", "evidence_refs": [ref]}
     if not (
-        type(actual_tokens) is int
-        and actual_tokens >= 0
-        and status == "completed"
-        and feedback.get("outcome_status") == "business_verified"
+        feedback.get("outcome_status") == "business_verified"
         and metrics.get("business_status") == "verified"
         and metrics.get("usage_complete") is True
         and metrics.get("observation_complete") is True
@@ -351,42 +353,104 @@ def reflection_receipt(
     return {**receipt, "status": "measurement_verified", "hypothesis_verdicts": counts}
 
 
+def reflection_receipt(
+    feedback: Any, *, evidence_refs: list[str], status: str, actual_tokens: int | None
+) -> dict[str, Any]:
+    """A live cycle also needs its own completion and consumption receipt."""
+    receipt = _measurement_receipt(feedback, evidence_refs=evidence_refs)
+    if receipt["status"] == "measurement_verified" and not (
+        status == "completed" and type(actual_tokens) is int and actual_tokens >= 0
+    ):
+        return {"status": "measurement_pending", "evidence_refs": receipt["evidence_refs"]}
+    return receipt
+
+
+def _readback_measurement(
+    state: dict[str, Any], event: dict[str, Any], details: dict[str, Any], evidence: list[str]
+) -> dict[str, Any] | None:
+    event_id = event["id"]
+    receipt_id = event_id.removeprefix("execution:")
+    goal_id, decision_id = details.get("goal_id"), details.get("decision_id")
+    if (
+        event.get("kind") != "execution"
+        or event.get("status") not in ("stopped", "execution_verified")
+        or not event_id.startswith("execution:")
+        or len(receipt_id) != 64
+        or any(char not in "0123456789abcdef" for char in receipt_id)
+        or not isinstance(goal_id, str)
+        or not isinstance(decision_id, str)
+        or not goal_id
+        or not decision_id
+        or f"portfolio:{decision_id}" not in evidence
+        or f"receipt:{receipt_id}" not in evidence
+    ):
+        return None
+    feedback = details.get("outcome_feedback")
+    measured = _measurement_receipt(feedback, evidence_refs=evidence)
+    if (
+        measured["status"] != "measurement_verified"
+        or feedback["evidence_ref"] != _portfolio_outcome_ref(decision_id, feedback["metrics"])
+    ):
+        return None
+    if not any(
+        isinstance(goal, dict)
+        and goal.get("id") == goal_id
+        and goal.get("decision_id") == decision_id
+        and goal.get("execution_receipt") == receipt_id
+        and goal.get("status") == event["status"]
+        and goal.get("outcome_ref") == feedback["evidence_ref"]
+        and goal.get("outcome_feedback") == feedback["metrics"]
+        and goal.get("outcome_status") == feedback["outcome_status"]
+        for goal in state.get("goals", [])
+    ):
+        return None
+    return measured
+
+
 def _settled_reflections(
     state: dict[str, Any],
 ) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    """Bounded read of same-owner accepted receipts, not another memory store."""
+    """Read accepted cycles and current reconciled results, not a new authority."""
     settled: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     owner = state.get("owner_user_id")
     if type(owner) is not int or owner <= 0:
         return []
     for event in state.get("events", [])[:20]:
-        if not isinstance(event, dict) or event.get("status") != "completed":
+        if not isinstance(event, dict):
             continue
         event_id = event.get("id")
         details = event.get("details")
         evidence = event.get("evidence_refs")
         if (
             not isinstance(event_id, str)
-            or not event_id.startswith("cycle:")
-            or len(event_id) != 38
-            or any(char not in "0123456789abcdef" for char in event_id[6:])
             or not isinstance(details, dict)
             or type(details.get("owner_user_id")) is not int
             or details["owner_user_id"] != owner
-            or details.get("learning_applied") is not True
             or not isinstance(evidence, list)
         ):
             continue
-        receipt = reflection_receipt(
-            details.get("outcome_feedback"),
-            evidence_refs=evidence,
-            status=event["status"],
-            actual_tokens=event.get("actual_tokens"),
-        )
-        if receipt["status"] != "measurement_verified" or receipt != details.get(
-            "reflection_receipt"
-        ):
-            continue
+        if event_id.startswith("cycle:"):
+            if (
+                event.get("status") != "completed"
+                or len(event_id) != 38
+                or any(char not in "0123456789abcdef" for char in event_id[6:])
+                or details.get("learning_applied") is not True
+            ):
+                continue
+            receipt = reflection_receipt(
+                details.get("outcome_feedback"),
+                evidence_refs=evidence,
+                status=event["status"],
+                actual_tokens=event.get("actual_tokens"),
+            )
+            if receipt["status"] != "measurement_verified" or receipt != details.get(
+                "reflection_receipt"
+            ):
+                continue
+        else:
+            receipt = _readback_measurement(state, event, details, evidence)
+            if receipt is None:
+                continue
         settled.append((event_id, details["outcome_feedback"], receipt))
     return settled
 
@@ -467,8 +531,7 @@ def cognitive_review_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
     for _, feedback, _ in _settled_reflections(state):
         metrics = feedback["metrics"]
         ref = feedback["evidence_ref"]
-        fingerprint = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()[:24]
-        if not ref.endswith(":" + fingerprint) or ref in sources:
+        if ref in sources:
             continue
         sources.append(ref)
         if not review:

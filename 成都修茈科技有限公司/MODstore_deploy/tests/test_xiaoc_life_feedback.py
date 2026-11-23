@@ -379,6 +379,45 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
         if completed_artifact
         else "unverified"
     )
+    reflected = reflection_facts(after)
+    reviewed = cognitive_review_facts(after)
+    if completed_artifact:
+        assert len(reflected) == len(reviewed) == 1
+        assert reflected[0]["ref"] == "reflection:execution:" + goal["execution_receipt"]
+        assert reviewed[0]["cognitive_review"]["latest_goal_review"]["recommendation"] == (
+            "respect_recorded_stop"
+        )
+        assert not cognitive_review_facts({**after, "owner_user_id": 8})
+        stale = copy.deepcopy(after)
+        stale["goals"][0]["execution_receipt"] = "newer-receipt"
+        assert not reflection_facts(stale)
+        assert life.read_state()["budget"] == after["budget"]
+    else:
+        assert not reflected and not reviewed
+
+
+def test_goal_reconciliation_does_not_overwrite_concurrent_newer_receipt(
+    approved_life_portfolio, monkeypatch
+):
+    original_mutate = reconciliation._mutate
+
+    def interleave(callback):
+        def newer(data, _session):
+            data["goals"][0].update(
+                status="stopped", execution_receipt="newer-receipt", outcome_ref="newer-outcome"
+            )
+
+        original_mutate(newer)
+        return original_mutate(callback)
+
+    monkeypatch.setattr(reconciliation, "_mutate", interleave)
+    assert reconciliation.reconcile_goals() == {"observed": 0}
+    goal = life.read_state()["goals"][0]
+    assert goal["decision_id"] == approved_life_portfolio
+    assert goal["status"] == "stopped"
+    assert goal["execution_receipt"] == "newer-receipt"
+    assert goal["outcome_ref"] == "newer-outcome"
+    assert not any(row["id"].startswith("execution:") for row in life.read_state()["events"])
 
 
 @pytest.mark.parametrize("raced_worker", [False, True])
@@ -594,16 +633,7 @@ def test_alternatives_remain_distinct_cited_review_suggestions():
     ],
 )
 def test_reflection_keeps_measurement_and_completion_distinct(status, tokens, complete, expected):
-    feedback = {
-        "evidence_ref": "portfolio-outcome:p:receipt",
-        "outcome_status": "business_verified",
-        "metrics": {
-            "business_status": "verified",
-            "usage_complete": True,
-            "observation_complete": complete,
-            "hypotheses": [{"verdict": "miss"}],
-        },
-    }
+    feedback = portfolio_feedback(reviewed_record(observation_complete=complete))
     refs = [feedback["evidence_ref"]]
     receipt = reflection_receipt(
         feedback, evidence_refs=refs, status=status, actual_tokens=tokens
@@ -615,16 +645,7 @@ def test_reflection_keeps_measurement_and_completion_distinct(status, tokens, co
 
 
 def test_reflection_recall_uses_same_owner_original_receipt_only():
-    feedback = {
-        "evidence_ref": "portfolio-outcome:p:receipt",
-        "outcome_status": "business_verified",
-        "metrics": {
-            "business_status": "verified",
-            "usage_complete": True,
-            "observation_complete": True,
-            "hypotheses": [{"verdict": "miss"}],
-        },
-    }
+    feedback = portfolio_feedback(reviewed_record())
     refs = [feedback["evidence_ref"]]
     event = {
         "id": "cycle:" + "a" * 32,
@@ -653,6 +674,7 @@ def test_reflection_recall_uses_same_owner_original_receipt_only():
     event["details"]["learning_applied"] = True
     event["details"]["reflection_receipt"]["hypothesis_verdicts"]["miss"] = 0
     assert reflection_facts(state) == []
+
 
 def _review_event(record, *, cycle="a", owner=17):
     feedback = portfolio_feedback(record)
@@ -719,7 +741,10 @@ def test_cognitive_review_rejects_unverified_calibration(change):
     event = _review_event(record, owner=8 if change == "wrong_owner" else 17)
     if change == "forged_fingerprint":
         event["details"]["outcome_feedback"]["metrics"]["revenue_cents"] = 999
-    assert cognitive_review_facts({"owner_user_id": 17, "events": [event]}) == []
+    state = {"owner_user_id": 17, "events": [event]}
+    assert cognitive_review_facts(state) == []
+    if change in ("wrong_owner", "forged_fingerprint"):
+        assert reflection_facts(state) == []
 
 
 def test_prior_self_assessment_is_scoped_and_never_a_verified_capability():

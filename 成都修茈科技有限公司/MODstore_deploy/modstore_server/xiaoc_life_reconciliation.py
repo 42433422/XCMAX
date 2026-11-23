@@ -209,12 +209,18 @@ def reconcile_goals() -> dict[str, Any]:
             ]
         )
         if goal.get("execution_receipt") != receipt:
-            updates.append((goal["id"], decision_id, status, label, receipt, feedback))
+            previous = (
+                goal.get("execution_receipt"),
+                goal.get("outcome_ref"),
+                goal.get("status"),
+            )
+            updates.append((goal["id"], decision_id, status, label, receipt, feedback, previous))
 
-    def apply(data: dict[str, Any], session: Any) -> None:
+    def apply(data: dict[str, Any], session: Any) -> int:
         if data.get("owner_user_id") != snapshot.get("owner_user_id"):
-            return
-        for goal_id, decision_id, status, label, receipt, feedback in updates:
+            return 0
+        changed = 0
+        for goal_id, decision_id, status, label, receipt, feedback, previous in updates:
             target = next(
                 (
                     goal
@@ -225,6 +231,12 @@ def reconcile_goals() -> dict[str, Any]:
             )
             if target is None or target.get("execution_receipt") == receipt:
                 continue
+            if previous != (
+                target.get("execution_receipt"),
+                target.get("outcome_ref"),
+                target.get("status"),
+            ):
+                continue  # A newer reconciliation or live cycle already changed this goal.
             target.update(
                 status=status,
                 execution_receipt=receipt,
@@ -245,11 +257,17 @@ def reconcile_goals() -> dict[str, Any]:
                         f"receipt:{receipt}",
                         feedback["evidence_ref"],
                     ],
-                    details={"outcome_feedback": feedback},
+                    details={
+                        "outcome_feedback": feedback,
+                        "owner_user_id": snapshot["owner_user_id"],
+                        "goal_id": goal_id,
+                        "decision_id": decision_id,
+                    },
                 )
+            changed += 1
+        return changed
 
-    if updates:
-        _mutate(apply)
+    observed = _mutate(apply) if updates else 0
     from modstore_server.xiaoc_life_evolution import reconcile
 
-    return {"observed": len(updates) + reconcile()}
+    return {"observed": observed + reconcile()}
