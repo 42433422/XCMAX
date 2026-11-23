@@ -1,0 +1,269 @@
+{
+  "domain": "04",
+  "title": "ETL 与业务文件处理：真实 Excel 分类/预演/入库前置校验/批次撤回/重启",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "652e4685bcc783314ee3dcb93e3dc013c6749e37",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "上传真实 xlsx → 分类 → 确认 → 预演 → auto-ingest（前置校验）→ 批次列表 → 撤回 → SIGKILL 重启 → 复核",
+    "negative": "缺少 source_path 必须 400/422；未完成业务预演必须 ELT_CANDIDATE_REQUIRED",
+    "concurrency": 1,
+    "data_volume": "2 data rows"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "auto-ingest without source_path",
+      "status": 400,
+      "rejected": true
+    },
+    {
+      "fault": "auto-ingest without business preview/plan",
+      "status": 409,
+      "rejected": true
+    },
+    {
+      "fault": "SIGKILL after ELT chain, then restart",
+      "mode": "kill9",
+      "pids_before": [
+        23640
+      ],
+      "pids_killed": [
+        23640
+      ],
+      "down_after_kill": true,
+      "pid_after": 23799,
+      "readiness": {
+        "liveness": true,
+        "routes_ready": true,
+        "wait_ms": 2670,
+        "pid": 23799
+      }
+    }
+  ],
+  "evidence_ids": [
+    "04-identity",
+    "04-classify",
+    "04-confirm",
+    "04-preview",
+    "04-upload",
+    "04-ingest-missing-path",
+    "04-ingest-without-preview",
+    "04-batch-list",
+    "04-withdraw",
+    "04-after-withdraw",
+    "04-after-restart"
+  ],
+  "observed_results": [
+    {
+      "step_id": "04-identity",
+      "method": "GET",
+      "path": "/api/templates/reviewed-excel/identity",
+      "status": 200,
+      "elapsed_ms": 10,
+      "response_sha256": "e0ea86bce2bcc67a46708587466cfeaad8732bc3152fe56cd7c6598cbe1003ec",
+      "response_excerpt": "{\"actor\":\"1:2\",\"model_access\":{\"status\":\"market_login_required\"}}"
+    },
+    {
+      "step_id": "04-classify",
+      "method": "POST",
+      "path": "/api/templates/reviewed-excel/classify",
+      "status": 200,
+      "elapsed_ms": 29,
+      "response_sha256": "8a5628a754a2ec013567897c5e0261e88c93eb019689bcb2d59cd86bd62ca5f5",
+      "response_excerpt": "{\"files\":[{\"name\":\"e3-elt-products-1124.xlsx\",\"sha256\":\"d4bf55fdfc294ec19f47d0529439ce6685b77d781cd69c1c5013734c99836a0b\",\"status\":\"classified\",\"sheets\":[{\"sheet\":\"products\",\"sheet_state\":\"visible\",\"blank\":false,\"processable\":true,\"processing_message\":\"\",\"labels\":[\"unknown\"],\"evidence\":[],\"checked_cells\":12,\"regions\":[{\"range\":\"A1:D3\",\"labels\":[\"unknown\"],\"label_source\":\"rule\",\"range_source\":\"rule\",\"evidence\":[],\"parent_heading\":\"\",\"header_cells\":[{\"cell\":\"A1\",\"value\":\"名称\"},{\"cell\":\"B1\",\"value\":\"单价\"},{\"cell\":\"C1\",\"value\":\"规格\"},{\"cell\":\"D1\",\"value\":\"单位\"}],\"header_rows\":[1],\"header_paths\":[[\"名称\"],[\"单价\"],[\"规格\"],[\"单位\"]],\"data_rows\":2,\"excluded_rows\":[],\"table_id\":\"products!T1\",\"table_group\":\"名称|单价|规格|单位\",\"repeated_header\":false,\"merged_ranges\":[],\"possible_shared_context\":[],\"checked_cells\":12,\"needs_confirmation\":true,\"dependency_status\":\"跨区图例和依赖未分析，边界需确认\",\"data_region\":true,\"anomaly\":\"\",\"anomaly_reason\":\"\"}],\"table_structure\":{\"tables\":[{\"table_id\":\"products!T1\",\"kind\":\"table\",\"range\":\"A1:D3\",\"title\":\"\",\"title_rows\":[],\"header_rows\":[1],\"headers\":[\"名称\",\"单价\",\"规格\",\"单位\"],\"header_paths\":[[\"名称\"],[\"单价\"],[\"规格\"],[\"单位\"]],\"data_rows\":2,\"group\":\"名称|单价|规格|单位\",\"repeated_header\":false}],\"cell_coverage\":{\"nonempty_cells\":12,\"assigned_cells\":12,\"unassigned_cells\":0,\"by_role\":{\"data\":8,\"header\":4}}}}],\"model_status\":\"not_called\",\"read_only_print_areas\":[],\"usage_restrictions\":[],\"fragment_links\":{\"items\":[],\"omitted\":0},\"classification_id\":\"235dc451-853b-42fa-8d74-958e8a4b289d\",\"version\":\"7e405f9f2ea94c1f8a344f6a1195513d6f4e031e2e49ee2b49aa2721b1423335\",\"confirmed\":false}],\"scope\":\"仅检查工作表非空单元格和公式表达式；不表示语义完整理解\"}"
+    },
+    {
+      "step_id": "04-confirm",
+      "method": "POST",
+      "path": "/api/templates/reviewed-excel/classifications/235dc451-853b-42fa-8d74-958e8a4b289d/confirm",
+      "status": 400,
+      "elapsed_ms": 17,
+      "response_sha256": "6061555429b0ed0b72f747a4a113b57441c0cbd6f8d3c90a6ac83ec8ffa17c23",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"http_400\",\"message\":\"分类区域不完整\",\"path\":\"/api/templates/reviewed-excel/classifications/235dc451-853b-42fa-8d74-958e8a4b289d/confirm\",\"request_id\":\"c1611d4349224b55b5fb6db50d517614\",\"stage\":\"confirm\",\"trace_id\":\"a57faf9c2aeb43ebb23d6c55996fb0c3\",\"span_id\":\"26b8531dc3684694\"}"
+    },
+    {
+      "step_id": "04-preview",
+      "method": "POST",
+      "path": "/api/templates/reviewed-excel/preview",
+      "status": 503,
+      "elapsed_ms": 13,
+      "response_sha256": "ec8f84e9d956fbb3377594685d9147bf8df9aee6f835c4b00ddd2cd524841cc0",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"model_configuration_error\",\"message\":\"当前账户的模型连接或配置不可用，未调用模型；请检查智能对话的模型设置。\",\"retryable\":true,\"outcome_unknown\":false,\"path\":\"/api/templates/reviewed-excel/preview\",\"request_id\":\"a043775fafbf4364bdd89851a517c2bd\",\"stage\":\"preview\",\"trace_id\":\"84c6a1c416d4432f8b4c7186f7f45ee4\",\"span_id\":\"5844a22e20d84d91\"}"
+    },
+    {
+      "step_id": "04-upload",
+      "method": "POST",
+      "path": "/api/excel/upload",
+      "status": 200,
+      "elapsed_ms": 7,
+      "response_sha256": "cb7a23a2f66471d175916f2492da7746360debbb754b8af9a9920cea1c1d4cd8",
+      "response_excerpt": "{\"success\":true,\"file_path\":\"/Users/Shared/XCMAX/.e3run/data/temp_excel/excel_20261124_015816_e3-elt-products-1124.xlsx\",\"filename\":\"e3-elt-products-1124.xlsx\",\"message\":\"文件上传成功\"}"
+    },
+    {
+      "step_id": "04-ingest-missing-path",
+      "method": "POST",
+      "path": "/api/elt/auto-ingest",
+      "status": 400,
+      "elapsed_ms": 10,
+      "response_sha256": "4872f08ab76bf4503cf24855cec3604b9fefd55dd7519586b30f1bb6e6bb8027",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"ELT_AUTO_INGEST_PATH_REQUIRED\",\"message\":\"source_path 必填\",\"path\":\"/api/elt/auto-ingest\",\"trace_id\":\"2c64961941c44e2092d577b1071fc780\",\"span_id\":\"ac913a0e108f4809\"}"
+    },
+    {
+      "step_id": "04-ingest-without-preview",
+      "method": "POST",
+      "path": "/api/elt/auto-ingest",
+      "status": 409,
+      "elapsed_ms": 28,
+      "response_sha256": "bbfebc77e33fde9b8a86942f5db4af4323317106cae52a9e26772f3f49606c28",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"ELT_CANDIDATE_REQUIRED\",\"message\":\"请先在数据对接中心选中候选并完成预演\",\"path\":\"/api/elt/auto-ingest\",\"trace_id\":\"fb8af872d5cd45eea0771edc0d9382cb\",\"span_id\":\"696268c235f64d09\"}"
+    },
+    {
+      "step_id": "04-batch-list",
+      "method": "GET",
+      "path": "/api/elt/auto-ingest/batches?limit=20",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "0e0d99da51c25fdf7ecdb3ca304ae1ab04d5cfb233e71f1dd9423a3f6496ab33",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"batch_id\":\"aib-e5f7ebf14ba449c7\",\"status\":\"failed\",\"created_at\":\"2026-11-23T17:58:16Z\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"tenant_id\":1,\"mod_id\":\"\",\"owner_user_id\":2,\"template_id\":\"\",\"review_id\":\"\",\"classification_id\":\"\",\"file_name\":\"e3-elt-products-1124.xlsx\",\"composer_note\":\"\",\"detection\":{\"target_type\":\"dynamic_table\",\"document_type\":\"header_table\",\"confidence\":0.6,\"reason\":\"header_fallback:\",\"confirmed\":true,\"dynamic_schema\":{\"table_name\":\"\",\"columns\":[{\"source\":\"名称\",\"name\":\"名称\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单价\",\"name\":\"单价\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"规格\",\"name\":\"规格\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单位\",\"name\":\"单位\",\"type\":\"text\",\"role\":\"value\"}],\"dedupe_keys\":[],\"headers\":[\"名称\",\"单价\",\"规格\",\"单位\"]}},\"knowledge\":{\"action\":\"skip\",\"reason\":\"duplicate_content_hash\",\"match_ref\":\"elt-8f95922cc33a623b9e0f89559a65637cedee984456be8be8e27777951911b973\",\"run_id\":\"auto-ingest:aib-e5f7ebf14ba449c7\",\"content_hash\":\"addf61efe93a445816c4cdc85c439e7210a20519be1483cecd76ddbb7b1aae98\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business\":{},\"kb_progress\":{\"stage\":\"skipped\",\"pct\":100,\"message\":\"duplicate_content_hash\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business_progress\":{\"stage\":\"failed\",\"pct\":0,\"message\":\"业务写入未完成，请核对已写入部分，勿重复提交\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"error\":\"EltError\"},\"withdrawn_at\":null,\"error\":\"EltError\"},{\"batch_id\":\"aib-e43f02b4d39b436c\",\"status\":\"failed\",\"created_at\":\"2026-11-23T17:55:43Z\",\"updated_at\":\"2026-11-23T17:55:43Z\",\"tenant_id\":1,\"mod_id\":\"\",\"owner_user_id\":2,\"template_id\":\"\",\"review_id\":\"\",\"classification_id\":\"\",\"file_name\":\"e3-elt-products-1124.xlsx\",\"composer_note\":\"\",\"detection\":{\"target_type\":\"dynamic_table\",\"document_type\":\"header_table\",\"confidence\":0.6,\"reason\":\"header_fallback:\",\"confirmed\":true,\"dynamic_schema\":{\"table_name\":\"\",\"columns\":[{\"source\":\"名称\",\"name\":\"名称\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单价\",\"name\":\"单价\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"规格\",\"name\":\"规格\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单位\",\"name\":\"单位\",\"type\":\"text\",\"role\":\"value\"}],\"dedupe_keys\":[],\"headers\":[\"名称\",\"单价\",\"规格\",\"单位\"]}},\"knowledge\":{\"action\":\"new\",\"reason\":\"content_not_found\",\"match_ref\":\"elt-8f95922cc33a623b9e0f89559a65637cedee984456be8be8e27777951911b973\",\"after\":{\"document_id\":\"elt-8f95922cc33a623b9e0f89559a65637cedee984456be8be8e27777951911b973\",\"content_hash\":\"addf61efe93a445816c4cdc85c439e7210a20519be1483cecd76ddbb7b1aae98\",\"source_key\":\"e3-elt-products-1124.xlsx\",\"version\":1},\"run_id\":\"auto-ingest:aib-e43f02b4d39b436c\",\"content_hash\":\"addf61efe93a445816c4cdc85c439e7210a20519be1483cecd76ddbb7b1aae98\",\"tenant_id\":\"1\",\"document_written\":true,\"rag_enabled\":true,\"embedding_count\":1},\"business\":{},\"kb_progress\":{\"stage\":\"done\",\"pct\":100,\"message\":\"文档已写入；向量索引已建立\",\"updated_at\":\"2026-11-23T17:55:43Z\",\"document_written\":true,\"rag_enabled\":true,\"embedding_count\":1},\"business_progress\":{\"sta"
+    },
+    {
+      "step_id": "04-withdraw",
+      "method": "POST",
+      "path": "/api/elt/auto-ingest/batches/aib-e5f7ebf14ba449c7/withdraw",
+      "status": 403,
+      "elapsed_ms": 10,
+      "response_sha256": "fd6430db0dd60eff2418626a3fac03064292ef4fd2535574a9dca2b5d6f98cf6",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"FORBIDDEN\",\"message\":\"权限不足\",\"path\":\"/api/elt/auto-ingest/batches/aib-e5f7ebf14ba449c7/withdraw\",\"trace_id\":\"75ff21fdbb4740608f00d73af16e218d\",\"span_id\":\"8b9c892aaf3d436b\"}"
+    },
+    {
+      "step_id": "04-after-withdraw",
+      "method": "GET",
+      "path": "/api/elt/auto-ingest/batches/aib-e5f7ebf14ba449c7",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "982a90f49dcbc7d76f81da382bdccd6f83feb6ed143c0b60ff0883842857b00f",
+      "response_excerpt": "{\"success\":true,\"data\":{\"batch_id\":\"aib-e5f7ebf14ba449c7\",\"status\":\"failed\",\"created_at\":\"2026-11-23T17:58:16Z\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"tenant_id\":1,\"mod_id\":\"\",\"owner_user_id\":2,\"template_id\":\"\",\"review_id\":\"\",\"classification_id\":\"\",\"file_name\":\"e3-elt-products-1124.xlsx\",\"composer_note\":\"\",\"detection\":{\"target_type\":\"dynamic_table\",\"document_type\":\"header_table\",\"confidence\":0.6,\"reason\":\"header_fallback:\",\"confirmed\":true,\"dynamic_schema\":{\"table_name\":\"\",\"columns\":[{\"source\":\"名称\",\"name\":\"名称\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单价\",\"name\":\"单价\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"规格\",\"name\":\"规格\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单位\",\"name\":\"单位\",\"type\":\"text\",\"role\":\"value\"}],\"dedupe_keys\":[],\"headers\":[\"名称\",\"单价\",\"规格\",\"单位\"]}},\"knowledge\":{\"action\":\"skip\",\"reason\":\"duplicate_content_hash\",\"match_ref\":\"elt-8f95922cc33a623b9e0f89559a65637cedee984456be8be8e27777951911b973\",\"run_id\":\"auto-ingest:aib-e5f7ebf14ba449c7\",\"content_hash\":\"addf61efe93a445816c4cdc85c439e7210a20519be1483cecd76ddbb7b1aae98\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business\":{},\"kb_progress\":{\"stage\":\"skipped\",\"pct\":100,\"message\":\"duplicate_content_hash\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business_progress\":{\"stage\":\"failed\",\"pct\":0,\"message\":\"业务写入未完成，请核对已写入部分，勿重复提交\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"error\":\"EltError\"},\"withdrawn_at\":null,\"error\":\"EltError\"}}"
+    },
+    {
+      "step_id": "04-after-restart",
+      "method": "GET",
+      "path": "/api/elt/auto-ingest/batches/aib-e5f7ebf14ba449c7",
+      "status": 200,
+      "elapsed_ms": 15,
+      "response_sha256": "982a90f49dcbc7d76f81da382bdccd6f83feb6ed143c0b60ff0883842857b00f",
+      "response_excerpt": "{\"success\":true,\"data\":{\"batch_id\":\"aib-e5f7ebf14ba449c7\",\"status\":\"failed\",\"created_at\":\"2026-11-23T17:58:16Z\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"tenant_id\":1,\"mod_id\":\"\",\"owner_user_id\":2,\"template_id\":\"\",\"review_id\":\"\",\"classification_id\":\"\",\"file_name\":\"e3-elt-products-1124.xlsx\",\"composer_note\":\"\",\"detection\":{\"target_type\":\"dynamic_table\",\"document_type\":\"header_table\",\"confidence\":0.6,\"reason\":\"header_fallback:\",\"confirmed\":true,\"dynamic_schema\":{\"table_name\":\"\",\"columns\":[{\"source\":\"名称\",\"name\":\"名称\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单价\",\"name\":\"单价\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"规格\",\"name\":\"规格\",\"type\":\"text\",\"role\":\"value\"},{\"source\":\"单位\",\"name\":\"单位\",\"type\":\"text\",\"role\":\"value\"}],\"dedupe_keys\":[],\"headers\":[\"名称\",\"单价\",\"规格\",\"单位\"]}},\"knowledge\":{\"action\":\"skip\",\"reason\":\"duplicate_content_hash\",\"match_ref\":\"elt-8f95922cc33a623b9e0f89559a65637cedee984456be8be8e27777951911b973\",\"run_id\":\"auto-ingest:aib-e5f7ebf14ba449c7\",\"content_hash\":\"addf61efe93a445816c4cdc85c439e7210a20519be1483cecd76ddbb7b1aae98\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business\":{},\"kb_progress\":{\"stage\":\"skipped\",\"pct\":100,\"message\":\"duplicate_content_hash\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"document_written\":false,\"rag_enabled\":true,\"embedding_count\":1},\"business_progress\":{\"stage\":\"failed\",\"pct\":0,\"message\":\"业务写入未完成，请核对已写入部分，勿重复提交\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"error\":\"EltError\"},\"withdrawn_at\":null,\"error\":\"EltError\"}}"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "04.identity",
+      "description": "可取得真实 tenant:owner 身份串",
+      "passed": true,
+      "detail": "actor=1:2"
+    },
+    {
+      "id": "04.classify",
+      "description": "真实 Excel 分类成功",
+      "passed": true,
+      "detail": "{\"files\":[{\"name\":\"e3-elt-products-1124.xlsx\",\"sha256\":\"d4bf55fdfc294ec19f47d0529439ce6685b77d781cd69c1c5013734c99836a0b\",\"status\":\"classified\",\"sheets\":[{\"sheet\":\"products\",\"sheet_state\":\"visible\",\"blank\":false,\"processable\":true,\"processing_message\":\"\",\"labels\":[\"unknown\"],\"evidence\":[],\"checked_c"
+    },
+    {
+      "id": "04.confirm",
+      "description": "分类确认成功",
+      "passed": false,
+      "detail": "{\"success\":false,\"error_code\":\"http_400\",\"message\":\"分类区域不完整\",\"path\":\"/api/templates/reviewed-excel/classifications/235dc451-853b-42fa-8d74-958e8a4b289d/confirm\",\"request_id\":\"c1611d4349224b55b5fb6db50d517614\",\"stage\":\"confirm\",\"trace_id\":\"a57faf9c2ae"
+    },
+    {
+      "id": "04.preview",
+      "description": "真实业务预演生成 review",
+      "passed": false,
+      "detail": "{\"success\":false,\"error_code\":\"model_configuration_error\",\"message\":\"当前账户的模型连接或配置不可用，未调用模型；请检查智能对话的模型设置。\",\"retryable\":true,\"outcome_unknown\":false,\"path\":\"/api/templates/reviewed-excel/preview\",\"request_id\":\"a043775fafbf4364bdd89851a517c2bd\",\"stage\":\"preview\",\"trace_id\":\"84c6a1c416d4432f8b4c7186f7f4"
+    },
+    {
+      "id": "04.review-id",
+      "description": "预演返回可用的 review_id",
+      "passed": false,
+      "detail": "review_id=None {\"success\":false,\"error_code\":\"model_configuration_error\",\"message\":\"当前账户的模型连接或配置不可用，未调用模型；请检查智能对话的模型设置。\",\"retryable\":true,\"outcome_unknown\":false,\"path\":\"/api/templates/reviewed-excel/preview\",\"reque"
+    },
+    {
+      "id": "04.upload",
+      "description": "真实 Excel 文件上传成功",
+      "passed": true,
+      "detail": "{\"success\":true,\"file_path\":\"/Users/Shared/XCMAX/.e3run/data/temp_excel/excel_20261124_015816_e3-elt-products-1124.xlsx\",\"filename\":\"e3-elt-products-1124.xlsx\",\"message\":\"文件上传成功\"}"
+    },
+    {
+      "id": "04.missing-path-rejected",
+      "description": "缺少源路径被拒绝",
+      "passed": true,
+      "detail": "status=400"
+    },
+    {
+      "id": "04.no-preview-rejected",
+      "description": "未完成业务预演的入库被拒绝",
+      "passed": true,
+      "detail": "{\"success\":false,\"error_code\":\"ELT_CANDIDATE_REQUIRED\",\"message\":\"请先在数据对接中心选中候选并完成预演\",\"path\":\"/api/elt/auto-ingest\",\"trace_id\":\"fb8af872d5cd45eea0771edc0d9382cb\",\"span_id\":\"696268c235f64d09\"}"
+    },
+    {
+      "id": "04.batch-visible",
+      "description": "入库批次在真实列表中可见（含失败批次留痕）",
+      "passed": true,
+      "detail": "batches=2"
+    },
+    {
+      "id": "04.withdraw",
+      "description": "入库批次撤回端点真实可调用",
+      "passed": false,
+      "detail": "{\"success\":false,\"error_code\":\"FORBIDDEN\",\"message\":\"权限不足\",\"path\":\"/api/elt/auto-ingest/batches/aib-e5f7ebf14ba449c7/withdraw\",\"trace_id\":\"75ff21fdbb4740608f00d73af16e218d\",\"span_id\":\"8b9c892aaf3d436b\"}"
+    },
+    {
+      "id": "04.withdraw-verified",
+      "description": "撤回后批次状态可读且可判定",
+      "passed": true,
+      "detail": "status=failed"
+    },
+    {
+      "id": "04.restart-persistence",
+      "description": "重启后批次状态仍可读取",
+      "passed": true,
+      "detail": "{\"success\":true,\"data\":{\"batch_id\":\"aib-e5f7ebf14ba449c7\",\"status\":\"failed\",\"created_at\":\"2026-11-23T17:58:16Z\",\"updated_at\":\"2026-11-23T17:58:16Z\",\"tenant_id\":1,\"mod_id\":\"\",\"owner_user_id\":2,\"templat"
+    }
+  ],
+  "assertions_passed": 8,
+  "assertions_total": 12,
+  "unknowns": [
+    "完整写库链路未完成：数据对接中心要求先完成业务预演并生成 prepared_plan（需走 reviewed-excel save + 审批中心释放）",
+    "大文件 / 多模板批量场景未执行",
+    "跨域 lineage（到业务单据）未做端到端血缘校验"
+  ],
+  "axis_levels": null,
+  "domain_status": "UNRATED",
+  "level": "UNRATED",
+  "score": null,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T17:58:19.257704+00:00",
+  "xlsx": "/Users/Shared/XCMAX/.e3run/inputs/e3-elt-products-1124.xlsx",
+  "xlsx_sha256": "d4bf55fdfc294ec19f47d0529439ce6685b77d781cd69c1c5013734c99836a0b",
+  "batch_id": "aib-e5f7ebf14ba449c7",
+  "classification_id": "235dc451-853b-42fa-8d74-958e8a4b289d",
+  "failed_batches": 2
+}

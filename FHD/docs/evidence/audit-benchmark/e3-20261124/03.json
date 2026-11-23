@@ -1,0 +1,57 @@
+{
+  "domain": "03",
+  "title": "Agent 编排与审批",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "652e4685bcc783314ee3dcb93e3dc013c6749e37",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "真实模型驱动多 Agent 任务编排 + 审批闸门 + 中断恢复",
+    "executed": false,
+    "reason": "环境/凭证缺失，未执行真实任务；按协议保持 UNRATED、score=null"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [],
+  "evidence_ids": [],
+  "observed_results": [],
+  "assertions": [],
+  "assertions_passed": 0,
+  "assertions_total": 0,
+  "unknowns": [
+    "本机无可用模型凭证：04 域真实请求 POST /api/templates/reviewed-excel/preview 返回 model_configuration_error（见 04.json），说明 require_model_session 无法建立真实模型会话",
+    "本域核心任务必须由真实模型产生工具调用与计划；用 Mock/无模型无法构成 E3 证据",
+    "未执行任何带模型的多 Agent 编排任务"
+  ],
+  "axis_levels": null,
+  "domain_status": "UNRATED",
+  "level": "UNRATED",
+  "score": null,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:05:09.862017+00:00",
+  "probe_facts": {
+    "scope": "FHD/app/application/agent_orchestrator",
+    "files": 177
+  },
+  "blocked_reasons": [
+    "本机无可用模型凭证：04 域真实请求 POST /api/templates/reviewed-excel/preview 返回 model_configuration_error（见 04.json），说明 require_model_session 无法建立真实模型会话",
+    "本域核心任务必须由真实模型产生工具调用与计划；用 Mock/无模型无法构成 E3 证据"
+  ]
+}

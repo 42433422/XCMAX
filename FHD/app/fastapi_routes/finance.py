@@ -56,7 +56,10 @@ def _run_finance_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
 
+    principal = require_agent_principal(request, x_user_id=None)
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("finance") or {}).get("actions") or {}).get(action)
     if not isinstance(action_meta, dict):
@@ -68,6 +71,12 @@ def _run_finance_agent(
 
     node_id = f"finance_{action}"
     user_id = _finance_agent_user_id(request, params)
+    # 租户归属来自已认证会话，不接受请求体里的 tenant_id 别名。
+    params = {
+        key: value
+        for key, value in params.items()
+        if key not in {"tenant_id", "tenantId", "user_id", "userId"}
+    }
     plan = PlanGraph(
         plan_id=node_id,
         intent=node_id,
@@ -94,6 +103,9 @@ def _run_finance_agent(
         "route_confirmed": True,
         "service_source": "fastapi_finance_route",
     }
+    # 与其他 agent 路由一致：由已认证 principal 注入 tenant_id/actor_id，
+    # 否则 SQL 租户作用域工具会因缺少 tenant 上下文拒绝写入。
+    runtime_context = authenticated_runtime_context(runtime_context, principal)
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,

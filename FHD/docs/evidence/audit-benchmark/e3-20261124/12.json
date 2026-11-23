@@ -1,0 +1,165 @@
+{
+  "domain": "12",
+  "title": "自治与维护执行：审批账本与鉴权真实运行",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "652e4685bcc783314ee3dcb93e3dc013c6749e37",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "健康检查 → 错误 token 负向 → 待办读取 → 风险评估 → 动作请求入账",
+    "note": "本机无 GitHub/CVM 执行器，动作未被实际执行",
+    "concurrency": 1
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "wrong autonomy token",
+      "status": 401,
+      "rejected": true
+    }
+  ],
+  "evidence_ids": [
+    "12-health",
+    "12-bad-token",
+    "12-pending",
+    "12-evaluate",
+    "12-request",
+    "12-request-auto",
+    "12-request-blocked"
+  ],
+  "observed_results": [
+    {
+      "step_id": "12-health",
+      "method": "GET",
+      "path": "/api/ops/autonomy/health",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "af8a2058f0fb643576f75faae43a6bae6d1e48759c0479332860d883385be643",
+      "response_excerpt": "{\"ok\":true,\"service\":\"ops-autonomy-approval\"}"
+    },
+    {
+      "step_id": "12-bad-token",
+      "method": "GET",
+      "path": "/api/ops/autonomy/actions/pending",
+      "status": 401,
+      "elapsed_ms": 6,
+      "response_sha256": "666b9cbe4fd5e8ac8fd7f9603a3465eceb02a9d09e2aca12e8e81adf75a83950",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"http_401\",\"message\":\"invalid autonomy webhook token\",\"path\":\"/api/ops/autonomy/actions/pending\",\"trace_id\":\"e60ad850295b46c4a31f6dc43bd722fa\",\"span_id\":\"a843cf0f36174bd8\"}"
+    },
+    {
+      "step_id": "12-pending",
+      "method": "GET",
+      "path": "/api/ops/autonomy/actions/pending",
+      "status": 200,
+      "elapsed_ms": 6,
+      "response_sha256": "d16cdbc63983f79872a57afd32ea873f686002ef22950dc18a0218ec62b06f1d",
+      "response_excerpt": "{\"ok\":true,\"count\":1,\"items\":[{\"action_id\":\"e3-1795456659\",\"action\":\"apply_release_to_cvm\",\"state\":\"pending_approval\",\"source\":\"ops_autonomy.request\",\"executor_name\":\"github_deploy\",\"payload\":{\"workflow_action\":\"apply-latest\"},\"risk_decision\":{\"action\":\"apply_release_to_cvm\",\"action_id\":\"e3-1795456659\",\"allowed\":false,\"approver\":null,\"blocking_nodes\":[],\"decision\":\"require_human\",\"denied_nodes\":[],\"policy\":\"\",\"prohibited\":false,\"reason\":\"HIGH risk requires human approval\",\"requires_confirmation\":true,\"risk_level\":\"high\",\"rollback_path\":\"rollback_release\"},\"timestamp\":\"2026-11-23T17:57:39.839492+00:00\",\"admin_execution_ready\":false,\"execution_mode\":\"external_dispatch_required\",\"execution_guidance\":\"该发布必须由正式发布工作流审批并执行，管理端不能直接放行。\"}]}"
+    },
+    {
+      "step_id": "12-evaluate",
+      "method": "POST",
+      "path": "/api/ops/autonomy/actions/evaluate",
+      "status": 200,
+      "elapsed_ms": 7,
+      "response_sha256": "eab69eb576720c225717432e71bdf959d0fc55aa262082a41d150143f2fa0e13",
+      "response_excerpt": "{\"ok\":true,\"decision\":{\"action\":\"apply_release_to_cvm\",\"action_id\":\"a0f190c7459946aa8e10f3d0054fc744\",\"allowed\":false,\"approver\":null,\"blocking_nodes\":[],\"decision\":\"require_human\",\"denied_nodes\":[],\"policy\":\"\",\"prohibited\":false,\"reason\":\"HIGH risk requires human approval\",\"requires_confirmation\":true,\"risk_level\":\"high\",\"rollback_path\":\"rollback_release\"}}"
+    },
+    {
+      "step_id": "12-request",
+      "method": "POST",
+      "path": "/api/ops/autonomy/actions/request",
+      "status": 200,
+      "elapsed_ms": 7,
+      "response_sha256": "c638fefe5a06a5e57cdedd17221d9832d34c3d132bc8675b6a5921093280aa3a",
+      "response_excerpt": "{\"ok\":true,\"state\":\"pending_approval\",\"action_id\":\"e3-1795456702\",\"workflow_action\":\"apply-latest\",\"decision\":{\"action\":\"apply_release_to_cvm\",\"action_id\":\"e3-1795456702\",\"allowed\":false,\"approver\":null,\"blocking_nodes\":[],\"decision\":\"require_human\",\"denied_nodes\":[],\"policy\":\"\",\"prohibited\":false,\"reason\":\"HIGH risk requires human approval\",\"requires_confirmation\":true,\"risk_level\":\"high\",\"rollback_path\":\"rollback_release\"}}"
+    },
+    {
+      "step_id": "12-request-auto",
+      "method": "POST",
+      "path": "/api/ops/autonomy/actions/request",
+      "status": 409,
+      "elapsed_ms": 7,
+      "response_sha256": "7b3e712a764b84d2e6b787673def986dc3678b73b877b219eebdf160f362b5fb",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"http_409\",\"message\":\"action does not require GitHub approval: allow\",\"path\":\"/api/ops/autonomy/actions/request\",\"trace_id\":\"cdcf7df2fb554e6b8008b8a61dd142e4\",\"span_id\":\"ef20b0424ee548c9\"}"
+    },
+    {
+      "step_id": "12-request-blocked",
+      "method": "POST",
+      "path": "/api/ops/autonomy/actions/request",
+      "status": 400,
+      "elapsed_ms": 5,
+      "response_sha256": "40d94da3ef295bc2e5e4c13b7608a23d85eb074882c7a43514f0163b4fcf6797",
+      "response_excerpt": "{\"success\":false,\"error_code\":\"http_400\",\"message\":\"action has no GitHub deploy executor\",\"path\":\"/api/ops/autonomy/actions/request\",\"trace_id\":\"09c3d709a685456b8821849dc3f9d20f\",\"span_id\":\"2dc0b7d7374d4355\"}"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "12.auth-negative",
+      "description": "错误 token 被拒绝",
+      "passed": true,
+      "detail": "401"
+    },
+    {
+      "id": "12.health",
+      "description": "审批健康与待办可读",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "id": "12.evaluate",
+      "description": "真实风险评估返回决策",
+      "passed": true,
+      "detail": "{\"ok\":true,\"decision\":{\"action\":\"apply_release_to_cvm\",\"action_id\":\"a0f190c7459946aa8e10f3d0054fc744\",\"allowed\":false,\"approver\":null,\"blocking_nodes\":[],\"decision\":\"require_human\",\"denied_nodes\":[],\"policy\":\"\",\"prohibited\":false,\"reason\":\"HIGH risk "
+    },
+    {
+      "id": "12.request",
+      "description": "高风险动作请求进入人工审批账本（pending_approval）",
+      "passed": true,
+      "detail": "state=pending_approval {\"ok\":true,\"state\":\"pending_approval\",\"action_id\":\"e3-1795456702\",\"workflow_action\":\"apply-latest\",\"decision\":{\"action\":\"apply_release_to_cvm\",\"action_id\":\"e3-1795456702\",\"allowed\":false,\"approver\":nu"
+    },
+    {
+      "id": "12.risk-grading",
+      "description": "低风险动作不进入人工审批（自动放行/无需审批）",
+      "passed": true,
+      "detail": "state=None status=409 {\"success\":false,\"error_code\":\"http_409\",\"message\":\"action does not require GitHub approval: allow\",\"path\":\"/api/ops/autonomy/actions/request\",\"trace_id\":\"cdcf7df2fb554e6b8008b8a61dd142e4\",\"span_id\":\""
+    },
+    {
+      "id": "12.blocked-action",
+      "description": "BLOCKED 级动作被拒绝执行",
+      "passed": true,
+      "detail": "{\"success\":false,\"error_code\":\"http_400\",\"message\":\"action has no GitHub deploy executor\",\"path\":\"/api/ops/autonomy/actions/request\",\"trace_id\":\"09c3d709a685456b8821849dc3f9d20f\",\"span_id\":\"2dc0b7d7374d4355\"}"
+    }
+  ],
+  "assertions_passed": 6,
+  "assertions_total": 6,
+  "unknowns": [
+    "无真实执行器（GitHub deploy / CVM），动作未被实际执行",
+    "超时强制中断与进程组回收无法在本环境验证",
+    "队列容量控制未验证"
+  ],
+  "axis_levels": null,
+  "domain_status": "UNRATED",
+  "level": "UNRATED",
+  "score": null,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T17:58:22.670737+00:00",
+  "request_state": "pending_approval"
+}
