@@ -90,7 +90,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
 | ELT 事务与提交恢复 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)，MIT；服务端与桌面锁 `2.0.52`，开发 `uv.lock` 为 `2.0.51` | 使用 `Session.begin_nested()` 保存点隔离失败行，既有租约 UPDATE 建立外层事务；提交应答丢失只在独立 Session 核对原行回执和计数。移除先回滚再重写已成功行的逻辑；知识库独立写入前释放 SQL 写锁，逐行记录回执。 |
 | ELT 归档并发 | [filelock 4.2.4](https://github.com/tox-dev/filelock)，MIT；[cryptography](https://github.com/pyca/cryptography)，Apache-2.0/BSD-3-Clause，`uv.lock` 为 `50.0.0`、桌面锁为 `50.0.1` | 复用跨进程文件锁与 Fernet；首次生成密钥互斥且独占创建，已有无效密钥拒绝替换；密文限额按编码开销计算，解密后核对原长度和摘要。 |
-| ELT 外部回执 | [Tenacity 9.1.4](https://github.com/jd/tenacity)，Apache-2.0；[jsonschema 4.26.0](https://github.com/python-jsonschema/jsonschema)，MIT；[HTTPX 0.28.1](https://github.com/encode/httpx)，BSD-3-Clause | 成熟重试器只处理连接建立或取得连接池失败；读写超时、协议错误和 HTTP 错误不重发。固定本地 Schema 核对原任务、分片、幂等键和明确提交行数，不远程解析 Schema。 |
+| ELT 外部回执 | [Tenacity 9.1.4](https://github.com/jd/tenacity)，Apache-2.0；[jsonschema 4.26.0](https://github.com/python-jsonschema/jsonschema)，MIT；[HTTPX 0.28.1](https://github.com/encode/httpx)，BSD-3-Clause | 成熟重试器只处理连接建立或取得连接池失败；读写超时、协议错误和 HTTP 错误不重发。固定本地 Schema 核对原任务、分片、幂等键和明确提交行数，不远程解析 Schema；每片已收到的回执写回原运行，保存成功后才发送下一片。 |
 | ELT 交付文件 | openpyxl `3.1.5`（MIT）与 Python 标准库 `csv`、`tempfile`、`os.replace`（PSF-2.0） | XLSX 逐格核对值、类型与格式，CSV 逐行回读；临时文件通过后原子发布。唯一下载入口发送有界、摘要已核验的字节快照，缺摘要或摘要失配不放行。 |
 
 ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行，不新增调度器或状态账本。重复表头和天然后缀碰撞由现有表头生成器消歧，原标签、列坐标和表头行保存在来源信息中，字段含义继续由模型判断。SQL 保存点、加密、文件锁、表格解析和重试均来自上述固定组件；保留的产品适配只负责原租户/账号、审批版本、行数守恒和业务回执，通用库不能替代这些产品事实。

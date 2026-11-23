@@ -424,8 +424,21 @@ class WebhookAdapter(TargetAdapter):
         total = int(context.get("row_count") or 0)
         chunk_count = max(1, (total + 499) // 500)
         iterator = iter(rows)
-        receipts = []
+        receipts: list[dict[str, Any]] = []
         executed = 0
+
+        def delivery_result() -> dict[str, Any]:
+            return {
+                "receipt": {
+                    "chunks": list(receipts),
+                    "reversible": False,
+                    "executed_rows": executed,
+                    # This is the receiver's bounded claim, not independent readback.
+                    "business_verified": False,
+                },
+                "executed": executed,
+            }
+
         with httpx.Client(timeout=10.0, follow_redirects=False) as client:
             for index in range(chunk_count):
                 chunk = list(itertools.islice(iterator, 500))
@@ -506,16 +519,12 @@ class WebhookAdapter(TargetAdapter):
                     receipt["receipt"] = {key: proof[key] for key in expected}
                 receipts.append(receipt)
                 executed += len(chunk)
+                receipt_callback = context.get("batch_receipt_callback")
+                if not context.get("connectivity_test") and callable(receipt_callback):
+                    # Persist this validated ACK before another external effect.
+                    # A failed save must stop here, without dispatching the next chunk.
+                    receipt_callback(delivery_result())
                 callback = context.get("progress_callback")
                 if callable(callback):
                     callback(executed, total)
-        return {
-            "receipt": {
-                "chunks": receipts,
-                "reversible": False,
-                "executed_rows": executed,
-                # This is the receiver's bounded claim, not independent readback.
-                "business_verified": False,
-            },
-            "executed": executed,
-        }
+        return delivery_result()

@@ -415,13 +415,20 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                                 }
                             yield payload
 
+                def persist_batch_receipt(result: dict[str, Any]) -> None:
+                    nonlocal pending_batch_receipt
+                    # Retain each acknowledgement through a failed first commit,
+                    # so the original operation's failure boundary can save it.
+                    pending_batch_receipt = dump_json({"batch_result": result})
+                    run.receipt_json = pending_batch_receipt
+                    db.commit()
+                    pending_batch_receipt = None
+
+                context["batch_receipt_callback"] = persist_batch_receipt
                 external_started = True
                 result = adapter.execute_batch(normalized_rows(), context)
                 # Preserve the original acknowledgement even when it fails validation.
-                pending_batch_receipt = dump_json({"batch_result": result})
-                run.receipt_json = pending_batch_receipt
-                db.commit()
-                pending_batch_receipt = None
+                persist_batch_receipt(result)
                 executed = _batch_executed(run.target_type, result, eligible_count)
                 db.query(EltRunRow).filter(*eligible_filters).update(
                     {
