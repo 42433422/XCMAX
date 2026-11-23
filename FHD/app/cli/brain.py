@@ -30,7 +30,12 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="xcagi-brain", description="智脑 HTTP 终端")
     result.add_argument("--origin", default=_default_origin())
     result.add_argument("--session-dir", type=Path, default=Path.home() / ".xcagi-brain")
-    result.add_argument("--timeout", type=float, default=30)
+    result.add_argument(
+        "--timeout",
+        type=float,
+        default=30,
+        help="HTTP 请求超时；本机 --deployment 验收使用运行配置的 turn_timeout_seconds",
+    )
     result.add_argument("--json", action="store_true", help="输出紧凑 JSON")
     commands = result.add_subparsers(dest="command", required=True)
     login = commands.add_parser("login", help="普通账号登录（密码不放在命令行）")
@@ -42,11 +47,14 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("status", help="真实运行时状态；不会探测执行 AI 草稿")
     models = commands.add_parser("models", help="分别列出本地模型目录及云模型目录")
     models.add_argument("--scope", choices=["all", "local", "cloud"], default="all")
-    runtime = commands.add_parser(
-        "runtime-check", help="验收当前账号模型的固定运行时（可能产生模型费用）"
-    )
+    runtime = commands.add_parser("runtime-check", help="验收模型的固定运行时（可能产生模型费用）")
     runtime.add_argument(
         "--retry", action="store_true", help="修复配置后，显式重试此前失败的运行验收"
+    )
+    runtime.add_argument(
+        "--deployment",
+        action="store_true",
+        help="在部署主机本地验收 XCAGI_AGENT_RUNTIME_CONFIG 的原模型；不使用账号 HTTP 会话",
     )
     openapi = commands.add_parser("openapi", help="查询服务端 OpenAPI 文档")
     openapi.add_argument("--filter", default="")
@@ -123,6 +131,8 @@ def _collect(client: BrainClient, endpoints: dict[str, str]) -> dict:
 
 def execute(args: argparse.Namespace, client: BrainClient) -> dict:
     command = args.command
+    if command == "runtime-check" and args.deployment:
+        return _deployment_runtime_check(retry=args.retry)
     if command in {"models", "runtime-check", "analyze", "draft", "edit", "diff", "apply"}:
         client.require_login()
     if command == "login":
@@ -243,6 +253,29 @@ def _emit(value: dict, compact: bool, command: str = "") -> int:
     return 1 if value.get("success") is False else 0
 
 
+def _deployment_runtime_check(*, retry: bool) -> dict:
+    from app.application.agent_runtime.configuration import get_deployment_runtime_settings
+    from app.infrastructure.codex.policy import CODEX_VERSION, RuntimePolicyError
+
+    try:
+        settings = get_deployment_runtime_settings(retry=retry)
+        return {
+            "success": True,
+            "runtime": "codex",
+            "codex_version": CODEX_VERSION,
+            "qualification": "passed",
+            "route": settings.require_qualified().runtime_identity(),
+            "turn_timeout_seconds": settings.turn_timeout_seconds,
+        }
+    except RuntimePolicyError as exc:
+        return {
+            "success": False,
+            "error_code": getattr(exc, "code", "runtime_not_qualified"),
+            "message": str(exc),
+            "checks": getattr(exc, "checks", {}),
+        }
+
+
 def shell(args: argparse.Namespace, client: BrainClient) -> int:
     print("智脑终端：输入文本聊天；/new 新会话；/help 命令；/exit 退出。", file=sys.stderr)
     failed = 0
@@ -283,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not math.isfinite(args.timeout) or args.timeout <= 0:
             raise BrainError("--timeout 必须大于 0")
+        if args.command == "runtime-check" and args.deployment:
+            return _emit(_deployment_runtime_check(retry=args.retry), args.json, args.command)
         client = BrainClient(SessionStore(args.origin, args.session_dir), args.timeout)
         if args.command == "shell":
             return shell(args, client)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
+from dataclasses import asdict
 
 import pytest
 
@@ -134,3 +136,105 @@ def test_request_receipt_loss_never_replaces_the_original_outcome(
         assert result["reconciliation_required"] is True and result["retryable"] is False
         assert "result" not in request
         assert duplicate["error_code"] == "runtime_request_in_progress"
+
+
+def test_deployment_upgrade_preserves_original_waiting_request_and_thread(
+    setup_gateway, monkeypatch, tmp_path
+):
+    """Synthetic probe I/O verifies admission/recovery, never live model acceptance."""
+    from app.application.agent_runtime.configuration import get_deployment_runtime_settings
+    from app.infrastructure.codex import qualification
+    from app.infrastructure.codex.policy import QUALIFICATION_CHECKS
+
+    state = setup_gateway
+    certificate = state.settings.qualification_file
+    config_path = tmp_path / "deployment.json"
+    deployment = {
+        "route": asdict(state.settings.route),
+        "runtime_root": str(tmp_path),
+        "qualification_file": str(certificate),
+    }
+    config_path.write_text(json.dumps(deployment))
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config_path))
+    first = asyncio.run(state.invoke(settings=None))
+    original = state.repository.get(first["run_id"])
+    original_requests = copy.deepcopy(original.metadata["runtime_requests"])
+    thread = original.metadata["codex_runtime"]["thread_id"]
+    old = json.loads(certificate.read_text())
+    old["checks"].pop("multi_step_restart_continuation")
+    certificate.write_text(json.dumps(old))
+    resume = {
+        "settings": None,
+        "run_id": first["run_id"],
+        "runtime_context": {**state.context, "turn_id": "continue-original"},
+    }
+    denied = asyncio.run(state.invoke(**resume))
+    assert denied["error_code"] == "runtime_policy_blocked"
+    assert len(state.calls) == 1
+    assert state.repository.get(first["run_id"]).to_dict() == original.to_dict()
+
+    probes = []
+
+    async def synthetic_probe(settings, owner_scope, probe):
+        probes.append((settings.route.identity, owner_scope))
+        # Only the external probe I/O is scripted. The actual qualifier must
+        # independently read SQLite, check the full protocol, publish, and reread.
+        first_step = {"nonce": probe.nonce, "step": 1}
+        second_step = {"nonce": probe.nonce, "step": 2}
+        assert probe.invoke("execute_action", first_step)["success"]
+        assert probe.invoke("task_evidence", first_step)["verified"]
+        probe.phase = "resumed"
+        assert probe.invoke("task_evidence", first_step)["verified"]
+        assert probe.invoke("execute_action", second_step)["success"]
+        assert probe.invoke("task_evidence", second_step)["verified"]
+        probe.models.append(
+            {
+                "completed": True,
+                "stream_deltas": 1,
+                "single_attempt": True,
+                "model": settings.route.response_model,
+            }
+        )
+        probe.network = {"denied_before_connect": True}
+        probe.recovery = {
+            "thread_id": "synthetic-probe-only",
+            "resumed_thread_id": "synthetic-probe-only",
+            "compaction": {"thread_id": "synthetic-probe-only", "turn_id": "compacted"},
+            "first_process_id": 1,
+            "second_process_id": 2,
+        }
+
+    monkeypatch.setattr(qualification, "_run_probe", synthetic_probe)
+    qualified = get_deployment_runtime_settings()
+    assert qualified.require_qualified().identity == original.metadata["runtime_route_identity"]
+    assert json.loads(certificate.read_text())["checks"] == dict.fromkeys(
+        QUALIFICATION_CHECKS, "PASS"
+    )
+    assert len(probes) == 1
+    assert state.repository.get(first["run_id"]).to_dict() == original.to_dict()
+    # Replaying the original request cannot invoke its runtime or effects again.
+    replay = asyncio.run(state.invoke(settings=None))
+    assert replay["deduplicated"] is True and len(state.calls) == 1
+    continued = asyncio.run(state.invoke(**resume))
+    saved = state.repository.get(first["run_id"])
+    assert continued["run_id"] == first["run_id"] and len(state.calls) == 2
+    assert saved.metadata["codex_runtime"]["thread_id"] == thread
+    for key in (
+        "runtime_goal_contract",
+        "runtime_goal_digest",
+        "runtime_context",
+        "runtime_route_identity",
+    ):
+        assert saved.metadata[key] == original.metadata[key]
+    assert all(
+        saved.metadata["runtime_requests"][key] == value for key, value in original_requests.items()
+    )
+
+    deployment["route"]["model"] = "changed-route-model"
+    config_path.write_text(json.dumps(deployment))
+    get_deployment_runtime_settings(retry=True)
+    rejected = asyncio.run(
+        state.invoke(**{**resume, "runtime_context": {**state.context, "turn_id": "route-changed"}})
+    )
+    assert rejected["error_code"] == "runtime_changed" and len(state.calls) == 2
+    assert len(state.repository.list_recent()) == 1

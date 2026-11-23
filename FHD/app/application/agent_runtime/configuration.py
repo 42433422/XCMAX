@@ -1,4 +1,4 @@
-"""Adapt the authenticated account's existing model selection to the fixed runtime.
+"""Qualify the existing account or deployment model route for the fixed runtime.
 
 The platform remains the model/credential source. Only public route identity and
 local qualification evidence are durable; account and route tokens stay in memory.
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from app.infrastructure.codex.policy import (
     QualificationUpgradeRequired,
     RuntimePolicyError,
     RuntimeSettings,
+    runtime_settings,
 )
 from app.infrastructure.modstore_transport import MarketModelError, httpx_sync_client
 from app.utils.path_io.path_utils import get_desktop_state_dir
@@ -55,7 +57,7 @@ class RuntimeSetupError(RuntimePolicyError):
         super().__init__(message)
 
 
-def _qualification_failure(result: dict) -> RuntimeSetupError:
+def _qualification_failure(result: dict, *, retry_hint: str | None = None) -> RuntimeSetupError:
     code = result.get("error_code")
     if not isinstance(code, str) or code not in _QUALIFICATION_ERRORS:
         code = "runtime_qualification_required"
@@ -68,7 +70,10 @@ def _qualification_failure(result: dict) -> RuntimeSetupError:
     return RuntimeSetupError(
         code,
         _QUALIFICATION_ERRORS[code]
-        + "修复后可在模型设置中重新运行验收，或使用 xcagi-brain --timeout 600 runtime-check --retry。",
+        + (
+            retry_hint
+            or "修复后可在模型设置中重新运行验收，或使用 xcagi-brain --timeout 600 runtime-check --retry。"
+        ),
         checks=checks,
     )
 
@@ -179,9 +184,14 @@ def _private_directory(path: Path) -> Path:
 
 
 def _qualified_settings(
-    settings: RuntimeSettings, *, owner_scope: str, evidence: dict, retry: bool = False
+    settings: RuntimeSettings,
+    *,
+    owner_scope: str,
+    evidence: dict,
+    retry: bool = False,
+    retry_hint: str | None = None,
 ) -> tuple[RuntimeSettings, bool]:
-    """One bounded attempt per exact account/route, serialized with existing filelock."""
+    """One bounded attempt per exact owner/route, serialized with existing filelock."""
     from app.infrastructure.codex.qualification import qualify_runtime
 
     qualification = settings.qualification_file
@@ -212,7 +222,9 @@ def _qualified_settings(
                     and previous.get("state") == "passed"
                     and previous.get("route_identity") == route.identity
                 ):
-                    raise _qualification_failure(previous if isinstance(previous, dict) else {})
+                    raise _qualification_failure(
+                        previous if isinstance(previous, dict) else {}, retry_hint=retry_hint
+                    )
             # Write before any model call, including process interruption or crash.
             attempt.write_text(
                 json.dumps({"state": "started", "route_identity": route.identity}),
@@ -222,10 +234,19 @@ def _qualified_settings(
             from app.infrastructure.chat_stream_lifetime import publish_stream_note
 
             publish_stream_note(
-                "正在验收当前账号的模型与本机执行器，首次验收可能需要数分钟；通过后继续处理本轮请求。"
+                "正在验收已配置的模型与本机执行器，首次验收可能需要数分钟；通过后继续处理本轮请求。"
             )
             result = qualify_runtime(settings, owner_scope=owner_scope, upstream_evidence=evidence)
-            failure = _qualification_failure(result)
+            if result.get("ok") is True:
+                try:
+                    settings.require_qualified()
+                except RuntimePolicyError:
+                    result = {
+                        **result,
+                        "ok": False,
+                        "error_code": "runtime_qualification_evidence_missing",
+                    }
+            failure = _qualification_failure(result, retry_hint=retry_hint)
             attempt.write_text(
                 json.dumps(
                     {
@@ -239,12 +260,77 @@ def _qualified_settings(
             )
             if result.get("ok") is not True:
                 raise failure
-            settings.require_qualified()
             return settings, True
     except Timeout as exc:
         raise RuntimeSetupError(
-            "runtime_qualification_in_progress", "当前账号的模型正在完成首次运行验收，请稍后继续。"
+            "runtime_qualification_in_progress", "当前模型正在完成运行验收，请稍后继续。"
         ) from exc
+
+
+def get_deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
+    """Local operator entry only; never resolves an account or starts a business task."""
+    settings = runtime_settings()
+    route, root, destination = settings.route, settings.runtime_root, settings.qualification_file
+    if route is None or root is None or destination is None:
+        raise RuntimeSetupError(
+            "runtime_configuration_required",
+            "请先设置有效的 XCAGI_AGENT_RUNTIME_CONFIG；本机部署验收不会改用账号默认模型。",
+        )
+    if (
+        not root.is_absolute()
+        or root.parent == root
+        or not destination.is_absolute()
+        or not destination.is_relative_to(root)
+        or not destination.relative_to(root).parts
+        or ".." in destination.relative_to(root).parts
+        or destination.exists()
+        and not destination.is_file()
+        or any(
+            path.is_symlink() or (path != destination and path.exists() and not path.is_dir())
+            for path in (root, destination, *destination.parents)
+            if path.is_relative_to(root)
+        )
+        or not destination.resolve().is_relative_to(root.resolve())
+    ):
+        raise RuntimeSetupError(
+            "runtime_storage_invalid",
+            "部署资格文件必须位于私有运行目录内，且不能通过符号链接访问。",
+        )
+    # Validate credentials and paths before any lock/attempt creation. Existing
+    # deployment roots are verified, never chmod'ed (they may be shared /tmp).
+    route.token()
+    root, destination = root.resolve(), destination.resolve()
+    if root.exists() and (
+        not root.is_dir()
+        or os.name == "posix"
+        and (root.stat().st_uid != os.geteuid() or root.stat().st_mode & 0o077)
+    ):
+        raise RuntimeSetupError(
+            "runtime_storage_invalid", "部署运行目录必须由当前用户拥有且仅该用户可访问。"
+        )
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    settings = replace(settings, runtime_root=root, qualification_file=destination)
+    _qualified_settings(
+        settings,
+        owner_scope="deployment:" + hashlib.sha256(str(root).encode()).hexdigest(),
+        evidence={},
+        retry=retry,
+        retry_hint="修复后请在部署主机执行 xcagi-brain --json runtime-check --deployment --retry。",
+    )
+    current = runtime_settings()
+    if current.runtime_root is not None and current.qualification_file is not None:
+        current = replace(
+            current,
+            runtime_root=current.runtime_root.resolve(),
+            qualification_file=current.qualification_file.resolve(),
+        )
+    if current != settings:
+        raise RuntimeSetupError(
+            "runtime_changed", "验收期间部署模型或运行目录已变化；请恢复原配置后重新检查。"
+        )
+    current.require_qualified().token()
+    return current
 
 
 def _prepared_route(connection: Connection, selected: tuple[str, str] | None) -> PreparedChatRoute:

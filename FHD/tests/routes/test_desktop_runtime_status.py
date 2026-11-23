@@ -111,7 +111,9 @@ def test_runtime_qualification_failure_remains_actionable(client):
     }
 
 
-@pytest.mark.parametrize("mode", ["qualified", "missing_receipt", "invalid_config"])
+@pytest.mark.parametrize(
+    "mode", ["qualified", "single_step_receipt", "missing_receipt", "invalid_config"]
+)
 def test_runtime_check_honors_explicit_deployment_without_qualifying_account_default(
     client,
     tmp_path,
@@ -124,7 +126,7 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
         "http://127.0.0.1:9876/v1", "operator-model", "enterprise", "local", 32000, 4000
     )
     receipt = tmp_path / "qualification.json"
-    if mode == "qualified":
+    if mode in {"qualified", "single_step_receipt"}:
         # Synthetic contract fixture; never a production qualification receipt.
         receipt.write_text(
             json.dumps(
@@ -134,7 +136,10 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
                     "codex_version": CODEX_VERSION,
                     "model_kind": "real",
                     "evidence_refs": ["synthetic-operator-test-only"],
-                    "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
+                    "checks": dict.fromkeys(
+                        QUALIFICATION_CHECKS if mode == "qualified" else QUALIFICATION_CHECKS[:-1],
+                        "PASS",
+                    ),
                 }
             )
         )
@@ -158,9 +163,20 @@ def test_runtime_check_honors_explicit_deployment_without_qualifying_account_def
         )
     )
     monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
-    with patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup:
+    original = receipt.read_bytes() if receipt.exists() else None
+    with (
+        patch("app.application.agent_runtime.configuration.get_account_runtime_settings") as setup,
+        patch(
+            "app.application.agent_runtime.configuration.get_deployment_runtime_settings"
+        ) as operator,
+        patch("app.infrastructure.codex.qualification.qualify_runtime") as producer,
+    ):
         response = client.post("/api/desktop/agent-runtime/qualification", json={"retry": True})
     setup.assert_not_called()
+    operator.assert_not_called()
+    producer.assert_not_called()
+    assert (receipt.read_bytes() if receipt.exists() else None) == original
+    assert not receipt.with_name("setup-attempt.json").exists()
     assert response.status_code == (200 if mode == "qualified" else 409)
     if mode == "qualified":
         assert response.json()["route"]["model"] == "operator-model"
