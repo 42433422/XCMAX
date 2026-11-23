@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -214,9 +215,7 @@ def test_architecture_job_runs_contracts_without_waiving_failures():
 
 
 @pytest.mark.parametrize("missing", [None, "dev_requirement", "import-linter", "grimp"])
-def test_architecture_installer_uses_frozen_versions_and_requires_evidence(
-    tmp_path, monkeypatch, missing
-):
+def test_architecture_installer_uses_frozen_versions_and_requires_evidence(tmp_path, missing):
     source = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())
     step = next(
         step
@@ -244,25 +243,38 @@ def test_architecture_installer_uses_frozen_versions_and_requires_evidence(
             if name != missing
         )
     )
-    monkeypatch.chdir(tmp_path)
-    calls = []
-    monkeypatch.setattr(subprocess, "check_call", calls.append)
-    code = compile("\n".join(lines[1:-1]), "architecture-installer", "exec")
+    installer = tmp_path / "architecture_installer.py"
+    installer.write_text("\n".join(lines[1:-1]) + "\n")
+    call_path = tmp_path / "pip-call.json"
+    (tmp_path / "pip.py").write_text(
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "Path('pip-call.json').write_text(json.dumps({"
+        "'executable': sys.executable, 'args': sys.argv[1:]}))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, str(installer)],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path), "PIP_NO_INDEX": "1"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     if missing:
-        with pytest.raises((AssertionError, StopIteration)):
-            exec(code, {})
-        assert calls == []
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert (
+            "AssertionError" if missing == "dev_requirement" else "StopIteration"
+        ) in result.stderr
+        assert not call_path.exists()
     else:
-        exec(code, {})
-        assert calls == [
-            [
-                sys.executable,
-                "-m",
-                "pip",
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(call_path.read_text()) == {
+            "executable": sys.executable,
+            "args": [
                 "install",
                 *(f"{name}=={versions[name]}" for name in ("import-linter", "grimp")),
-            ]
-        ]
+            ],
+        }
 
 
 def test_checker_is_present_in_both_dev_manifests_and_frozen_lock():
