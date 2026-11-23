@@ -1,0 +1,6 @@
+{
+  "customization_from_cents": 298000,
+  "customization_description": "定制服务独立报价，确认范围和验收标准后下单。",
+  "ai_billing": "usage",
+  "ai_description": "AI 按实际用量计费，软件买断费用不转为 AI 余额。"
+}

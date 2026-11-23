@@ -320,23 +320,52 @@ def _tenant_workspace_root(user_id: int) -> Path:
     return Path(base) / "workspaces" / str(user_id or 0)
 
 
-def ensure_within_workspace(root: str | Path, *, user_id: int) -> Path:
+def ensure_within_workspace(
+    root: str | Path,
+    *,
+    user_id: int,
+    within: Path | None = None,
+    must_exist: bool = True,
+) -> Path:
     """校验 ``root`` 落在用户工作区内,否则抛 :class:`VibePathError`。
 
-    放到本模块里以便所有 handler / adapter 复用同一边界。
+    ``within`` 可进一步限制到已解析的项目目录;相对路径从该目录解释。
+    ``must_exist=False`` 仅允许规划尚未落盘的输出,不扩大租户或项目边界。
     """
     if not root:
         raise VibePathError("缺少 root 参数")
-    target = Path(root).resolve()
-    workspace = _tenant_workspace_root(user_id).resolve()
-    workspace.mkdir(parents=True, exist_ok=True)
-    try:
-        target.relative_to(workspace)
-    except ValueError as exc:
-        raise VibePathError(f"root={target!s} 不在用户工作区 {workspace!s} 下;拒绝执行") from exc
-    if not target.exists():
-        raise VibePathError(f"root={target!s} 不存在")
-    return target
+    workspace_name = os.path.abspath(_tenant_workspace_root(user_id))
+    workspace = os.path.realpath(workspace_name)
+    scope_name, scope = workspace_name, workspace
+    if within is not None:
+        scope_name = os.path.abspath(within)
+        scope = os.fspath(ensure_within_workspace(within, user_id=user_id))
+        if scope != scope_name:
+            raise VibePathError("选定的项目工作区已改变;拒绝执行")
+    requested = os.fspath(root)
+    if within is not None:
+        requested = os.path.join(scope, requested)
+    lexical = os.path.abspath(requested)
+    scope_prefix = scope.rstrip(os.sep) + os.sep
+    declared_prefix = scope_name.rstrip(os.sep) + os.sep
+    # Reject lexical escapes before following any caller-selected symlink.
+    if (
+        lexical != scope_name
+        and not lexical.startswith(declared_prefix)
+        and lexical != scope
+        and not lexical.startswith(scope_prefix)
+    ):
+        raise VibePathError(f"root={lexical} 不在选定工作区 {scope} 下;拒绝执行")
+    target = os.path.realpath(requested)
+    workspace_prefix = workspace.rstrip(os.sep) + os.sep
+    if target != workspace and not target.startswith(workspace_prefix):
+        raise VibePathError(f"root={target} 不在用户工作区 {workspace} 下;拒绝执行")
+    if target != scope and not target.startswith(scope_prefix):
+        raise VibePathError(f"root={target} 不在选定工作区 {scope} 下;拒绝执行")
+    Path(workspace).mkdir(parents=True, exist_ok=True)
+    if must_exist and not os.path.exists(target):
+        raise VibePathError(f"root={target} 不存在")
+    return Path(target)
 
 
 # ---------------------------------------------------------------------------

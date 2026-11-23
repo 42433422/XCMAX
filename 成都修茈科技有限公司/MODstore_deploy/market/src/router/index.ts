@@ -126,8 +126,8 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/public/AccountLicensePlansView.vue'),
     meta: {
       layout: 'public',
-      pageTitle: 'XCAGI 使用方案',
-      pageDescription: '选择 30 天体验或适合企业的永久方案。',
+      pageTitle: 'XCAGI 购买与费用',
+      pageDescription: '软件永久买断，定制按需求报价，AI 按量付费。',
     },
   },
   {

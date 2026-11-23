@@ -9,7 +9,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
+import zipfile
 from typing import Any, Dict
 
 import pytest
@@ -33,6 +36,55 @@ def workspace(tmp_path, monkeypatch):
     (ws / "app").mkdir(parents=True)
     monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "ws" / "{user_id}"))
     return ws
+
+
+@pytest.fixture
+def authorized_employee(workspace, monkeypatch):
+    """Load a real owner-scoped employee archive without another test initializing SQL."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from modstore_server import employee_runtime
+    from modstore_server.integrations import vibe_action_handlers
+    from modstore_server.models import CatalogItem, User
+
+    archive = workspace / "emp.xcemp"
+    manifest = {
+        "id": "emp",
+        "employee_config_v2": {
+            "workspace_policy": {
+                "scope_globs": ["ws/1/app", "ws/1/app/**"],
+                "forbidden_globs": ["**/.env"],
+            }
+        },
+    }
+    with zipfile.ZipFile(archive, "w") as packed:
+        packed.writestr("emp/manifest.json", json.dumps(manifest))
+    engine = create_engine(f"sqlite:///{workspace / 'employee.sqlite'}")
+    User.__table__.create(engine)
+    CatalogItem.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as session:
+        session.add(
+            User(id=1, username="vibe-owner", password_hash="unused", account_state="active")
+        )
+        session.add(
+            CatalogItem(
+                pkg_id="emp",
+                version="1.0.0",
+                name="Scoped employee",
+                artifact="employee_pack",
+                author_id=1,
+                stored_filename=archive.name,
+                sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
+            )
+        )
+        session.commit()
+    monkeypatch.setenv("MODSTORE_REPO_ROOT", str(workspace.parent.parent))
+    monkeypatch.setattr(employee_runtime, "files_dir", lambda: workspace)
+    monkeypatch.setattr(vibe_action_handlers, "get_session_factory", lambda: factory)
+    yield
+    engine.dispose()
 
 
 def _patch_provider_resolver(monkeypatch, *, provider="openai", model="gpt-4o-mini"):
@@ -72,7 +124,7 @@ def test_vibe_edit_async_mode_short_circuits(monkeypatch, workspace):
     assert "async_mode" in out["error"]
 
 
-def test_vibe_edit_calls_apply_patch(monkeypatch, workspace):
+def test_vibe_edit_calls_apply_patch(monkeypatch, workspace, authorized_employee):
     _patch_provider_resolver(monkeypatch)
 
     class _StubApply:
@@ -114,7 +166,7 @@ def test_vibe_edit_calls_apply_patch(monkeypatch, workspace):
     assert out["apply"]["applied"] is True
 
 
-def test_vibe_heal_returns_ok(monkeypatch, workspace):
+def test_vibe_heal_returns_ok(monkeypatch, workspace, authorized_employee):
     _patch_provider_resolver(monkeypatch)
 
     class _Result:

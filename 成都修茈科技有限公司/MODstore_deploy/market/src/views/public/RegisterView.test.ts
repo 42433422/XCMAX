@@ -46,6 +46,17 @@ describe('RegisterView', () => {
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
   })
 
+  it.each(['/account-plans?plan=saas-permanent-standard&source=official-site', '/plans?plan=saas-permanent-standard&source=fhd'])('returns to the selected purchase after registration: %s', async (redirect) => {
+    await router.push({ name: 'register', query: { redirect } })
+    registerMock.mockResolvedValue({ ok: true })
+    const wrapper = mount(RegisterView, { global: { plugins: [router] } })
+    await wrapper.get('input[autocomplete="username"]').setValue('buyer')
+    await wrapper.get('input[type="password"]').setValue('secret123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe(redirect)
+  })
+
   it('renders login link', async () => {
     router.push('/register')
     await router.isReady()
@@ -90,7 +101,7 @@ describe('RegisterView', () => {
     expect(registerMock).toHaveBeenCalledWith('no-email-user', 'secret123', '', '')
     expect(replaceSpy).toHaveBeenCalledWith({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30' },
+      query: { plan: 'saas-personal-free' },
     })
   })
 
@@ -114,7 +125,7 @@ describe('RegisterView', () => {
       expect(registerMock).toHaveBeenCalledWith('xcagi-user', 'secret123', 'user@example.test', '123456')
       expect(replaceSpy).toHaveBeenCalledWith({
         name: 'account-plans',
-        query: { plan: 'saas-trial-30', ...(source ? { source } : {}) },
+        query: { plan: 'saas-personal-free', ...(source ? { source } : {}) },
       })
     },
   )

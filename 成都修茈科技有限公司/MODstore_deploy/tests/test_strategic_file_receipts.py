@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
@@ -25,6 +26,97 @@ from tests.test_strategic_portfolio import claim_proposal, opportunity, proposal
 
 database = fixtures.database
 archived_python = contracts.archived_python
+
+
+@pytest.mark.parametrize("case", ["absolute", "parent", "prefix", "missing_output"])
+def test_file_path_escape_is_rejected_before_filesystem_resolution(tmp_path, monkeypatch, case):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    workspace.mkdir(parents=True)
+    outside = tenant / ("project-copy" if case == "prefix" else "sibling") / "private.csv"
+    outside.parent.mkdir()
+    outside.write_text("outside the approved project")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    original = os.path.realpath
+
+    def guarded_realpath(value, *args, **kwargs):
+        assert os.path.abspath(value) != str(
+            outside
+        ), "unapproved path reached filesystem resolution"
+        return original(value, *args, **kwargs)
+
+    monkeypatch.setattr(os.path, "realpath", guarded_realpath)
+    value = str(outside) if case == "absolute" else os.path.relpath(outside, workspace)
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(value, str(workspace), 7, exists=case != "missing_output")
+
+
+def test_selected_project_is_rechecked_when_symlink_changes_at_tenant_validation(
+    tmp_path, monkeypatch
+):
+    from modstore_server.integrations import vibe_adapter
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    docs = workspace / "docs"
+    docs.mkdir(parents=True)
+    (docs / "source.csv").write_text("approved input")
+    sibling = tenant / "other-project"
+    sibling.mkdir()
+    (sibling / "source.csv").write_text("outside the approved project")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    original = vibe_adapter.ensure_within_workspace
+    swapped = False
+
+    def swap_before_validation(value, *, user_id, **kwargs):
+        nonlocal swapped
+        if Path(value).name == "source.csv" and not swapped:
+            docs.rename(workspace / "original-docs")
+            docs.symlink_to(sibling, target_is_directory=True)
+            swapped = True
+        return original(value, user_id=user_id, **kwargs)
+
+    monkeypatch.setattr(vibe_adapter, "ensure_within_workspace", swap_before_validation)
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file("docs/source.csv", str(workspace), 7, exists=True)
+    assert swapped
+    assert (sibling / "source.csv").read_text() == "outside the approved project"
+
+
+@pytest.mark.parametrize(
+    "case", ["absolute", "relative", "normalized", "internal_symlink", "output", "output_parents"]
+)
+def test_authorized_file_paths_preserve_original_resolution(tmp_path, monkeypatch, case):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    source = workspace / "docs/source.csv"
+    source.parent.mkdir(parents=True)
+    source.write_text("approved input")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    alias = workspace / "alias.csv"
+    alias.symlink_to(source)
+    output = case.startswith("output")
+    target = workspace / (
+        "new/nested/result.csv" if case == "output_parents" else "docs/result.csv"
+    )
+    values = {
+        "absolute": str(source),
+        "relative": "docs/source.csv",
+        "normalized": "docs/../docs/source.csv",
+        "internal_symlink": "alias.csv",
+        "output": str(target),
+        "output_parents": "new/nested/result.csv",
+    }
+    assert _workspace_file(f" {values[case]} ", str(workspace), 7, exists=not output) == (
+        target if output else source
+    )
+    if output:
+        assert not target.exists()
 
 
 @pytest.mark.parametrize(

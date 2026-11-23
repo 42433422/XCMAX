@@ -1,19 +1,11 @@
 {
   "trial_days": 30,
   "currency": "CNY",
-  "budget_permanent_map": {
-    "1–5 万": "saas-permanent-starter",
-    "5–10 万": "saas-permanent-growth",
-    "10–50 万": "saas-permanent-max",
-    "50–100 万": "saas-permanent-ultra",
-    "5 万以内": "saas-permanent-starter",
-    "5–20 万": "saas-permanent-growth",
-    "20–50 万": "saas-permanent-max",
-    "50 万以上": "saas-permanent-ultra",
-    "under-50k": "saas-permanent-starter",
-    "50k-200k": "saas-permanent-growth",
-    "200k-500k": "saas-permanent-max",
-    "500k-plus": "saas-permanent-ultra"
+  "commercial_terms": {
+    "customization_from_cents": 298000,
+    "customization_description": "定制服务独立报价，确认范围和验收标准后下单。",
+    "ai_billing": "usage",
+    "ai_description": "AI 按实际用量计费，软件买断费用不转为 AI 余额。"
   },
   "plans": [
     {
@@ -39,6 +31,19 @@
       "account_tier": "normal",
       "badge": "体验"
     },
+    {
+      "id": "saas-permanent-standard",
+      "title": "XCAGI 软件买断",
+      "description": "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+      "amount_cents": 680000,
+      "quota_cents": 0,
+      "license_type": "permanent",
+      "account_tier": "normal",
+      "badge": "一次购买",
+      "features": ["软件永久使用", "无软件续租费", "定制另行报价", "AI 调用按量付费"]
+    }
+  ],
+  "legacy_plans": [
     {
       "id": "saas-permanent-starter",
       "title": "企业启航版",

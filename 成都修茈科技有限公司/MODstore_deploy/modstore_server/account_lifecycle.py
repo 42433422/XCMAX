@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from modstore_server.account_license_plans import (
     PERSONAL_PLAN_ID,
     account_license_plan,
+    account_license_priority,
     is_account_license_plan_id,
 )
 from modstore_server.datetime_utils import as_utc_aware
@@ -38,6 +39,7 @@ class AccountLifecycle:
     active_plan_id: str
     account_tier: str
     activation_source: str
+    active_plan_expires_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -51,6 +53,8 @@ def _active_plan(session: Session, user_id: int, *, account_license: bool) -> Us
         .order_by(UserPlan.plan_id == PERSONAL_PLAN_ID, UserPlan.id.desc())
         .all()
     )
+    if account_license:
+        rows.sort(key=lambda row: account_license_priority(row.plan_id), reverse=True)
     for row in rows:
         if is_account_license_plan_id(row.plan_id) != account_license:
             continue
@@ -78,6 +82,7 @@ def lifecycle_for_user(session: Session, user: User) -> AccountLifecycle:
         return AccountLifecycle(ACCOUNT_ACTIVE, "open_workbench", True, "", "", "admin")
     if plan is not None:
         meta = account_license_plan(plan.plan_id) or {}
+        expiry = as_utc_aware(plan.expires_at) if plan.expires_at else None
         return AccountLifecycle(
             ACCOUNT_ACTIVE,
             "return_desktop_login",
@@ -85,6 +90,7 @@ def lifecycle_for_user(session: Session, user: User) -> AccountLifecycle:
             str(plan.plan_id or ""),
             str(meta.get("account_tier") or "normal"),
             "active_plan",
+            active_plan_expires_at=expiry.isoformat() if expiry else None,
         )
     if bool(getattr(user, "is_enterprise", False)):
         return AccountLifecycle(

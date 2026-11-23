@@ -185,7 +185,7 @@ PR Fast CI
 | 环节 | 执行与验证口径 |
 | --- | --- |
 | 事件去重 | Flutter、Android smoke、Market E2E 和 Retort 的分支 push 限定 main/develop/master，特性分支由 PR 验证；保留 tag、手动及既有定时入口。源 workflow 与根镜像的触发路径分别保留，生成器仅重写精确的根路径。 |
-| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据，仅对同 PR、同主 CI、旧 head、已有 cancelled job 且仍未完成的运行使用官方 force-cancel；取消前复查事件 head、live PR、run/attempt 和完整 jobs，身份缺失或漂移即停止。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
+| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据：新 head 冲突等原因未触发原生取消时，对同 PR、同主 CI、旧 head 的原始 attempt 请求官方普通 cancel；只有同 attempt 已有 cancelled job 且仍未完成时才使用 force-cancel 收尾。取消前复查事件 head、live PR、run/attempt、时间边界和完整 jobs，身份缺失或漂移即停止；没有取消证据的人工重跑不启动清理。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
 | 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
 | 后端安装 | uv 使用同一 Python 安装现有 requirements，并从同一 uv.lock 同时固定 pytest、pytest-cov、coverage；锁缺失或歧义时在安装前停止。缓存绑定 requirements、uv.lock 及本地包声明，安装后校验依赖一致性，每片保存解析版本。其余间接依赖仍以实际清单和回归为准。 |

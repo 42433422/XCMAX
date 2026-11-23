@@ -49,15 +49,17 @@ try {
   // SSOT 注入：hero CTA 价格 + 平台状态 + 数据戳
   await desktop.waitForTimeout(800)
   const heroCta = await desktop.locator('.home-actions .home-button--primary').textContent()
-  record('desktop: hero CTA 价格来自 SSOT', /¥99/.test(heroCta || ''), (heroCta || '').trim())
+  const standard = ssot.pricing.all_plans.find((plan) => plan.id === 'saas-permanent-standard')
+  record('desktop: hero 直接购买唯一买断商品', (heroCta || '').includes(standard.amount_display) && (await desktop.locator('.home-actions .home-button--primary').getAttribute('href')).includes('plan=saas-permanent-standard'), (heroCta || '').trim())
   const platText = await desktop.locator('[data-platform-status]').first().textContent()
   record('desktop: 平台状态槽位被 SSOT 校验', /签约级|实验|待验证/.test(platText || ''), (platText || '').trim())
 
   const trialDisplay = ssot.pricing.trial.amount_display
   const planText = await desktop.locator('#pricing').textContent()
   record('desktop: 定价含 SSOT 试用价', planText.includes(trialDisplay), `expect ${trialDisplay}`)
-  record('desktop: 首页价格区仅 3 档', (await desktop.locator('#pricing .home-price-card').count()) === 3, '集团/旗舰档下沉 pricing.html')
-  record('desktop: 首页不含集团/旗舰档价格', !planText.includes(ssot.pricing.extended_plans[0].amount_display), ssot.pricing.extended_plans[0].amount_display + ' 不在首页')
+  record('desktop: 首页三条收费说明', (await desktop.locator('#pricing .home-price-card').count()) === 3 && ['软件买断', '业务定制', 'AI 使用费'].every((label) => planText.includes(label)), '软件、定制、AI 分开说明')
+  record('desktop: 定制起价来自 SSOT', planText.includes(ssot.pricing.commercial_terms.customization_from_display), '定制按确认需求报价')
+  record('desktop: 体验入口为次级说明', (await desktop.locator('#pricing details a[href*="saas-trial-30"]').count()) === 1, '99元体验保留')
   const stampText = await desktop.locator('[data-ssot="home-updated"]').textContent()
   record('desktop: 数据更新时间戳注入', /数据更新：\d{4}-\d{2}-\d{2}/.test(stampText || ''), (stampText || '').trim().slice(0, 40))
 

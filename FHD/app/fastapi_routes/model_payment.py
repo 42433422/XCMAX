@@ -16,7 +16,9 @@ from app.fastapi_routes.model_payment_authorization import (
 )
 from app.fastapi_routes.model_payment_plans import DEMO_PLANS as _DEMO_PLANS
 from app.infrastructure.billing.saas_plans import (
+    _demo_payment_enabled,
     list_saas_plans,
+    load_saas_plans_config,
     plan_by_id,
     pricing_plans_for_budget,
 )
@@ -49,7 +51,7 @@ def _integration_flags() -> dict[str, Any]:
 
 
 def _all_plans() -> list[dict[str, Any]]:
-    return list(_DEMO_PLANS) + list_saas_plans()
+    return (list(_DEMO_PLANS) if _demo_payment_enabled() else []) + list_saas_plans()
 
 
 def _plan_by_id(plan_id: str) -> dict[str, Any] | None:
@@ -64,9 +66,10 @@ def get_plans(budget_range: str = ""):
         {
             "success": True,
             "data": {
-                "plans": list(_DEMO_PLANS) + saas_plans,
+                "plans": (list(_DEMO_PLANS) if _demo_payment_enabled() else []) + saas_plans,
                 "integration": _integration_flags(),
                 "budget_range": budget or None,
+                "commercial_terms": load_saas_plans_config().get("commercial_terms", {}),
             },
         }
     )
@@ -98,6 +101,14 @@ def checkout(
 
     checkout_user = get_logged_in_user(request)
     local_user_id = int(checkout_user.id)
+    plan_id = str(body.get("plan_id") or "").strip()
+    known_plan = _plan_by_id(plan_id)
+    if known_plan and plan_id not in {p["id"] for p in _all_plans()}:
+        raise PaymentError(
+            ErrorCode.PAYMENT_ORDER_NOT_FOUND,
+            message="该套餐已停止新购，历史订单和已购权益继续有效",
+            status_code=400,
+        )
     if is_modstore_payment_sot():
         from app.infrastructure.payment.modstore_payment_proxy import checkout_session_token
 
@@ -105,7 +116,6 @@ def checkout(
         if not market_token:
             raise HTTPException(status_code=401, detail="请先绑定当前会话的市场账号")
         channel = str(body.get("channel") or "alipay").strip().lower()
-        plan_id = str(body.get("plan_id") or "").strip()
         proxy_failed = False
         if plan_id:
             from app.infrastructure.payment.modstore_payment_proxy import proxy_checkout
@@ -147,7 +157,6 @@ def checkout(
                 },
                 status_code=409,
             )
-    plan_id = str(body.get("plan_id") or "").strip()
     legacy_channel = str(body.get("channel") or "").strip().lower()
     if legacy_channel and legacy_channel != "alipay":
         return JSONResponse(
@@ -161,11 +170,21 @@ def checkout(
             message=f"未知套餐: {plan_id}",
             status_code=400,
         )
+    if plan.get("license_type") in {"trial", "permanent"}:
+        from app.application.tenant_subscription_app_service import subscription_status_for_user
+
+        current = subscription_status_for_user(local_user_id)
+        existing = plan_by_id(str(current.get("plan_id") or "")) or {}
+        if existing.get("license_type") == "permanent":
+            return JSONResponse(
+                {"success": False, "message": "已拥有软件永久授权，无需重复购买"},
+                status_code=409,
+            )
 
     order_id = f"mp-{uuid.uuid4().hex[:18]}"
     channel = "alipay"
     amount_yuan = f"{int(plan['amount_cents']) / 100:.2f}"
-    subject = f"模型套餐-{plan['title']}"
+    subject = str(plan["title"])
 
     mp_ali.warn_notify_url_path_once()
 
@@ -237,6 +256,10 @@ def checkout(
         )
     except OSError as e:
         logger.exception("[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e)
+        return JSONResponse(
+            {"success": False, "message": "订单记录失败，尚未提供付款入口，请稍后重试"},
+            status_code=503,
+        )
 
     return JSONResponse(
         {
@@ -302,6 +325,8 @@ async def alipay_trade_notify(request: Request):
         )
         if reason == "amount_mismatch":
             return PlainTextResponse("fail", status_code=400)
+        if reason == "fulfillment_pending":
+            return PlainTextResponse("fail", status_code=503)
         if reason == "unknown_order":
             logger.warning(
                 "[model-payment] notify: 无本地订单仍返回 success，避免支付宝无限重试 out_trade_no=%s",

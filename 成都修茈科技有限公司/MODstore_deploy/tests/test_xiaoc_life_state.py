@@ -303,12 +303,13 @@ def test_authorization_expiry_is_checked_before_a_new_claim(database, monkeypatc
     assert store.read_state()["status"] == "blocked"
 
 
-def test_crash_reconciliation_uses_original_model_receipt_without_replaying(database, monkeypatch):
-    import json
-
-    from modstore_server import xiaoc_life_reconciliation as reconcile
-
-    monkeypatch.setattr(reconcile, "get_session_factory", lambda: database)
+@pytest.mark.parametrize("next_day", [False, True])
+def test_crash_reconciliation_uses_original_model_receipt_without_replaying(
+    database, monkeypatch, next_day
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: now)
     configure()
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
     store.record_cycle_step(claim, kind="model", details={"request_id": "original-paid-call"})
@@ -323,7 +324,7 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(data
             )
         )
         session.commit()
-    later = store.utcnow() + timedelta(minutes=6)
+    later = now + timedelta(days=int(next_day), minutes=6)
     monkeypatch.setattr(store, "utcnow", lambda: later)
     monkeypatch.setattr(reconcile, "utcnow", lambda: later)
     assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 1}
@@ -335,11 +336,15 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(data
         session.commit()
     assert reconcile.reconcile_usage()["resolved"] == 1
     assert reconcile.reconcile_usage()["resolved"] == 0
+    with database() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, store.IDENTITY_ID).state_json)
+    assert persisted["budget"]["used_tokens"] == 63
     state = store.read_state()
-    assert state["budget"]["used_tokens"] == 63
+    assert state["budget"]["used_tokens"] == (0 if next_day else 63)
     assert state["budget"]["reserved_tokens"] == 0
     assert state["unknown_usage"] is False
     assert state["events"][0]["kind"] == "reconciliation"
+    assert state["events"][0]["actual_tokens"] == 63
 
 
 def test_unknown_finished_cycle_reconciles_once_and_preserves_original_fact(database, monkeypatch):

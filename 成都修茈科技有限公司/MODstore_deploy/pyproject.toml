@@ -121,6 +121,7 @@ include = ["modman*", "modstore_server*"]
 
 [tool.setuptools.package-data]
 modman = ["data/*.json"]
+modstore_server = ["data/commerce_terms.generated.json"]
 
 [tool.black]
 line-length = 100

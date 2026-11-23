@@ -98,6 +98,11 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
   // The synthetic account must also own its background startup reads. Letting
   // these reach an unauthenticated API redirects the shell to the login page.
   const accountReads: Record<string, unknown> = {
+    '/api/system/workflow-employee-catalog': { success: true, data: { catalog: [], static_catalog: [], scope: 'tenant' } },
+    '/api/platform-shell/employee-directory': { success: true, data: { employees: [] } },
+    // Shell readiness never grants a synthetic model route or execution qualification.
+    '/api/conversation/model-status': { ok: false, provider: '', model: '' },
+    '/api/desktop/agent-runtime/qualification': { success: true, qualification: 'required', managed_by: 'account' },
     '/api/conversations/active': { success: true, conversation_id: '' },
     '/api/conversations/sessions': { success: true, sessions: [], has_more: false },
     '/api/agent/tasks': { success: true, data: [], count: 0 },
