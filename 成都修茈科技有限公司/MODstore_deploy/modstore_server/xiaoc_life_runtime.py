@@ -20,6 +20,8 @@ from modstore_server.xiaoc_life_cognition import (
     cognition_messages,
     cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
     parse_decision,
     portfolio_feedback,
     reflection_facts,
@@ -246,6 +248,13 @@ class CyclePorts:
 
     async def observe(self, _state: LifeCycle) -> LifeCycle:
         self.active()
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import read_samples
+
+            self.details["world_observations"] = await asyncio.to_thread(
+                read_samples, datetime.now(UTC)
+            )
+            self.active()
         portfolio = self.approved_portfolio()
         if portfolio is not None:
             self.details["portfolio_selection"] = {
@@ -264,6 +273,20 @@ class CyclePorts:
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
         facts.extend(reflection_facts(self.state))
+        facts.extend(goal_review_facts(self.state))
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import review_projection
+
+            try:
+                projection = review_projection(
+                    self.state.get("world_review"), self.claim["owner_user_id"]
+                )
+            except ValueError:
+                self.details["world_review_error"] = "invalid_persisted_review"
+                projection = {}
+            for metric, item in projection.items():
+                value = {"metric_id": metric, **item}
+                facts.append(_fact("world-review", value, world_forecast=value))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -724,6 +747,13 @@ class CyclePorts:
             "outcome_status": feedback["outcome_status"],
             "outcome_feedback": feedback["metrics"],
             "outcome_ref": feedback["evidence_ref"],
+            "goal_review": goal_review_projection(
+                owner=owner,
+                goal_id=binding["goal"]["id"],
+                decision_id=decision_id,
+                status=goal_status,
+                feedback=feedback,
+            ),
             "evidence_refs": list(
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),
