@@ -50,6 +50,46 @@ String _chatResultText(Object? result) {
   return '';
 }
 
+String chatReceiptText(Object? result, String turnId, String fallback) {
+  final receipt = _asObjectMap(result);
+  Iterable<Map<String, Object?>> envelopes(Object? value, [int depth = 0]) sync* {
+    final row = _asObjectMap(value);
+    if (row.isEmpty) return;
+    yield row;
+    if (depth >= 3) return;
+    for (final key in const ['data', 'result', 'payload', 'business_result']) {
+      yield* envelopes(row[key], depth + 1);
+    }
+  }
+  final rows = envelopes(receipt).toList();
+  final states = rows.map((row) => (row['execution_state'] ?? row['agent_status'] ?? row['run_status'] ?? row['status'] ?? '')
+      .toString().trim().toLowerCase()).where((state) => state.isNotEmpty).toList();
+  var state = states.isEmpty ? '' : states.first;
+  final hasExecution = rows.any((row) => const ['run_id', 'agent_run_id', 'task_id']
+      .any((key) => (row[key]?.toString().trim() ?? '').isNotEmpty));
+  final uncertain = rows.any((row) => row['requires_reconciliation'] == true ||
+      row['reconciliation_required'] == true || row['outcome_unknown'] == true ||
+      row['execution_outcome'] == 'unknown' || row['outcome'] == 'unknown') ||
+      states.any((state) => state == 'unknown' || state == 'outcome_unknown') ||
+      (state.isEmpty && hasExecution) ||
+      (state == 'completed' && (rows.any((row) => row['success'] == false || row['pending_approval'] == true || row['requires_token'] == true) ||
+          states.any((state) => state != 'completed')));
+  if (uncertain || state == 'outcome_unknown') state = 'unknown';
+  if (state.isNotEmpty && !const ['completed', 'failed', 'cancelled', 'interrupted', 'rejected'].contains(state)) {
+    throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
+        message: state == 'unknown' ? '原任务结果待核对，请读取原任务状态，勿重复提交。'
+            : _chatResultText(result).ifEmpty('原任务尚未完成，请核对原任务状态，勿重复提交。'),
+        body: {...receipt, 'turn_id': turnId, 'execution_state': state,
+          'requires_reconciliation': state == 'unknown'});
+  }
+  if (receipt['success'] == false || const ['failed', 'cancelled', 'interrupted', 'rejected'].contains(state)) {
+    throw MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_TERMINAL',
+        message: _chatResultText(result).ifEmpty('原任务未完成，请查看任务回执。'),
+        body: {...receipt, 'turn_id': turnId, 'execution_state': state});
+  }
+  return _chatResultText(result).ifEmpty(fallback);
+}
+
 String _readString(Map<String, Object?> json, List<String> keys) {
   for (final key in keys) {
     final value = json[key];

@@ -432,10 +432,10 @@ def build_self_evolution_context(
     proactive = _facade().collect_proactive_signals()
     fix_hits = _facade().search_fix_knowledge(query, limit=3)
     pattern_hits = _facade().search_code_patterns(query, limit=5)
-    from modstore_server.retort_evolution import accepted_knowledge
+    from modstore_server.retort_evolution import outcome_knowledge
 
-    accepted_improvements = (
-        accepted_knowledge(limit=3) if os.environ.get("MODSTORE_RETORT_CHECKPOINT_DSN") else []
+    improvement_outcomes = (
+        outcome_knowledge(limit=5) if os.environ.get("MODSTORE_RETORT_CHECKPOINT_DSN") else []
     )
     try:
         from modstore_server.self_evolution_kb_redisvl import status as redisvl_status
@@ -449,7 +449,8 @@ def build_self_evolution_context(
         }
     context = {
         "fix_knowledge_hits": fix_hits,
-        "accepted_improvements": accepted_improvements,
+        "accepted_improvements": [r for r in improvement_outcomes if r["outcome"] == "accepted"],
+        "improvement_outcomes": improvement_outcomes,
         "inventory": _facade().knowledge_inventory(),
         "kb_root": str(_facade().kb_root()),
         "kb_search": {
@@ -541,6 +542,7 @@ def record_loop_evolution_knowledge(
         "merge_commit_sha": merge_result.get("merge_commit_sha"),
         "para_task_id": final.get("para_task_id"),
         "run_id": final.get("run_id"),
+        "outcome_projection_id": final.get("outcome_projection_id"),
     }
     fix_doc = _facade().record_fix_knowledge(
         symptom=symptom,

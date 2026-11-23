@@ -34,16 +34,6 @@ def _svc():
     return PurchaseService()
 
 
-def _purchase_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "purchase-route"
-    ).strip()
-
-
 def _run_purchase_agent(
     *,
     request: Request,
@@ -54,6 +44,7 @@ def _run_purchase_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("purchase") or {}).get("actions") or {}).get(action)
@@ -66,7 +57,17 @@ def _run_purchase_agent(
 
     params = {key: value for key, value in params.items() if key not in {"tenant_id", "tenantId"}}
     node_id = f"purchase_{action}"
-    user_id = _purchase_agent_user_id(request, params)
+    runtime_context = request_runtime_context(
+        request,
+        {
+            "source": "purchase_route",
+            "route": route_path,
+            "request_path": str(request.url.path),
+            "route_confirmed": True,
+            "service_source": "fastapi_purchase_route",
+        },
+    )
+    user_id = str(runtime_context["user_id"])
     plan = PlanGraph(
         plan_id=node_id,
         intent=node_id,
@@ -85,15 +86,6 @@ def _run_purchase_agent(
         risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
         metadata={"source": "purchase_route", "route": route_path},
     )
-    runtime_context = {
-        "source": "purchase_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "tenant_id": getattr(request.state, "tenant_id", None),
-        "route_confirmed": True,
-        "service_source": "fastapi_purchase_route",
-    }
     orchestrator = AgentOrchestrator()
     run = orchestrator.start_run_from_plan(
         user_id=user_id,
@@ -104,7 +96,7 @@ def _run_purchase_agent(
     if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
-            approved_by=user_id or "purchase-route",
+            approved_by=user_id,
             approved_step_id=node_id,
             runtime_context=runtime_context,
         )

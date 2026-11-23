@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: "gha-force-realrun"
+      target_sha:
+        description: Optional exact 40-hex SHA the CVM runtime must already be serving
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: fhd-force-self-maintenance-${{ inputs.environment }}
@@ -53,9 +58,14 @@ jobs:
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           TARGET_ENV: ${{ inputs.environment }}
           LOOP_REASON: ${{ inputs.reason }}
+          TARGET_SHA: ${{ inputs.target_sha }}
           OPS_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -n "${TARGET_SHA}" ] && ! printf '%s' "${TARGET_SHA}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::target_sha must be an empty or full 40-character lowercase hex commit SHA."
+            exit 1
+          fi
           HOST="${FHD_PUSH_HOST:-119.27.178.147}"
           USER="${FHD_PUSH_USER:-root}"
           KEY_FILE="${RUNNER_TEMP}/fhd_force_loop_key"
@@ -90,6 +100,25 @@ jobs:
             "$LOCAL_REASON_FILE" "${USER}@${HOST}:${REMOTE_REASON_FILE}"
           scp "${SCP_OPTS[@]}" \
             "$LOCAL_TOKEN_FILE" "${USER}@${HOST}:${REMOTE_TOKEN_FILE}"
-          ssh "${SSH_OPTS[@]}" \
+          set +e
+          OUTPUT="$(ssh "${SSH_OPTS[@]}" \
             "${USER}@${HOST}" \
-            "set -euo pipefail; chmod 700 /tmp/force_loop_remote.sh; chmod 600 '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'; trap 'rm -f \"${REMOTE_REASON_FILE}\" \"${REMOTE_TOKEN_FILE}\"' EXIT; LOOP_PYTHONPATHS='${ROOTS}' /tmp/force_loop_remote.sh '${HEALTH_PORT}' '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'"
+            "set -euo pipefail; chmod 700 /tmp/force_loop_remote.sh; chmod 600 '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'; trap 'rm -f \"${REMOTE_REASON_FILE}\" \"${REMOTE_TOKEN_FILE}\"' EXIT; TARGET_SHA='${TARGET_SHA}' LOOP_PYTHONPATHS='${ROOTS}' /tmp/force_loop_remote.sh '${HEALTH_PORT}' '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'")"
+          SSH_STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          SUMMARY="$(printf '%s\n' "$OUTPUT" | sed -n 's/^LOOP_SUMMARY_JSON=//p' | tail -1)"
+          {
+            echo "### Self-maintenance loop ($TARGET_ENV)"
+            echo ""
+            if [ -n "$SUMMARY" ]; then
+              echo '```json'
+              printf '%s\n' "$SUMMARY"
+              echo '```'
+            else
+              echo "No machine-readable summary was emitted by the remote runner."
+            fi
+            echo ""
+            echo "Remote exit code: ${SSH_STATUS}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$SSH_STATUS"

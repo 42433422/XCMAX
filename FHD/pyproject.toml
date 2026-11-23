@@ -4,8 +4,10 @@ version = "1.0.0.7"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
 requires-python = ">=3.11.5"
-# 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
+# CI/生产安装：requirements-server-api.txt（基础运行时 + server-api extra）。
 dependencies = [
+    "openai-codex==0.171.0",
+    "openai-codex-cli-bin==0.171.0",
     "langchain-core==1.5.3",
     "langchain==1.3.14",
     "filelock==4.2.4",
@@ -21,6 +23,15 @@ dependencies = [
 xcagi-brain = "app.cli.brain:main"
 
 [project.optional-dependencies]
+# External browser execution, pinned to the existing frontend Playwright baseline.
+# Install on the task worker, then run `python -m playwright install --with-deps chromium`.
+browser = ["playwright==1.65.1"]
+# Computer Use 执行器；沿用 desktop_automation、Agent 审批和 run_id。
+computer-use = [
+    "playwright==1.65.1",
+    "PyAutoGUI==0.9.54",
+    "pyperclip==1.9.0",
+]
 # 可选：Docling 文档解析后端（PDF/DOCX/PPTX 的版面、表格与扫描件 OCR）。
 # 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
 doc-parsing = [
@@ -61,6 +72,7 @@ server-api = [
     "gevent>=25.4.2",
     "python-dotenv>=1.2.2",
     "httpx==0.28.1",
+    "httpx-sse==0.4.3",
     "socksio>=1.0.0",
     "requests>=2.33.0",
     "urllib3>=2.8.0",
@@ -291,6 +303,12 @@ ignore_missing_imports = true
 module = "apscheduler.schedulers.asyncio"
 ignore_missing_imports = true
 
+# Playwright is installed only by the computer-use extra, not core server CI.
+# When present, its published types still validate the adapter's SDK calls.
+[[tool.mypy.overrides]]
+module = "playwright.*"
+ignore_missing_imports = true
+
 # Optional heavyweight/platform adapters are imported behind runtime feature
 # probes.  Their availability is validated by the owning capability, while the
 # core type gate remains independent of platform-only or ML-only distributions.
@@ -314,6 +332,7 @@ module = [
     "paddleocr.*",
     "pandas.*",
     "pdf2image.*",
+    "playwright.*",
     "prophet.*",
     "pypdfium2.*",
     "pypinyin.*",

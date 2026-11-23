@@ -25,7 +25,6 @@ import {
 import { useModsStore } from '@/stores/mods'
 import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsoleHomeUrl } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
-import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { committedRouteTitle } from '@/utils/routeTitle'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
@@ -83,11 +82,6 @@ router.beforeEach(async (to, _from, finish) => {
   const refreshSignedInProfile = (profile: { refreshFromServer: () => Promise<unknown> }) => {
     // Background refresh must not race a valid session into the login page.
     void profile.refreshFromServer().catch(() => undefined)
-  }
-  if (to.name === 'local-workspace') {
-    if (hasLocalWorkspace()) next()
-    else next({ name: 'login', replace: true })
-    return
   }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {

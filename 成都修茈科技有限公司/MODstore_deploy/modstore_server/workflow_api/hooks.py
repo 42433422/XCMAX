@@ -63,4 +63,4 @@ async def public_webhook_run_workflow(
             input_data=payload or {},
         )
     except RECOVERABLE_ERRORS as e:
-        raise HTTPException(500, str(e)) from e
+        raise HTTPException(500, "工作流执行失败，请查看执行记录") from e

@@ -13,9 +13,15 @@ from app.domain.task_lifecycle.results import (
 
 
 def requires_retry_reconciliation(run: AgentRun) -> bool:
+    from app.application.agent_orchestrator.result_verification import verification_blocked
+
     recovery = run.metadata.get("recovery")
-    return bool(run.metadata.get("non_retryable")) or (
-        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    return (
+        verification_blocked(run)
+        or bool(run.metadata.get("non_retryable"))
+        or (
+            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+        )
     )
 
 
@@ -283,7 +289,9 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                     "waiting_user" if previous.status == "waiting_user" else "running"
                 )
             if self._repo.save_control_if_unchanged(run, previous):
-                return cast("AgentRun", self._repo.get(run.run_id))
+                stored = cast("AgentRun", self._repo.get(run.run_id))
+                self._release_browser_run_resources(stored)
+                return stored
         raise RuntimeError("agent run changed repeatedly while recording control")
 
     def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
@@ -393,6 +401,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
         authenticated_binding: dict[str, Any] | None = None,
+        authenticated_actor_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         previous = self._repo.get(run_id)
         if previous is None:
@@ -415,8 +424,18 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 principal_id=requested_by,
                 runtime_context=runtime_context or {},
                 authenticated_binding=authenticated_binding,
+                authenticated_actor_binding=authenticated_actor_binding,
             )
         run = copy.deepcopy(previous)
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run,
+            principal_id=requested_by,
+            authenticated_binding=authenticated_binding,
+            authenticated_actor_binding=authenticated_actor_binding,
+            operation="retry",
+        )
         run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
         prepare_safe_continuation(run, requested_by=requested_by, reason="explicit_retry")
         if not self._repo.save_retry_if_unchanged(run, previous):

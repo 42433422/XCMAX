@@ -18,23 +18,22 @@
  * - run.failed / run.continue_ignored / budget.exceeded / planner.blocked → 终态 failed
  */
 
-import type { AgentRunEvent } from '@/api/agentRuns'
+import type { AgentRunEvent, ExecutionObservation } from '@/api/agentRuns'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
-import { asString, asNumber, asRecord } from '@/utils/typeGuards'
+import { asString, asNonNegativeNumber, asRecord } from '@/utils/typeGuards'
 
 export type TracePhaseKind = 'planner' | 'tool' | 'run'
 
-export type TracePhaseStatus = 'running' | 'success' | 'failed' | 'waiting' | 'blocked'
+export type TracePhaseStatus = 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'paused' | 'cancelled'
 
-export interface TraceBasePhase {
+export interface TraceBasePhase extends ExecutionObservation {
   kind: TracePhaseKind
   status: TracePhaseStatus
   /** 起始事件 id（用于折叠详情 key） */
   started_event_id: string
   /** ISO 时间戳 */
   started_at?: string
-  /** 耗时毫秒（完成态才有） */
-  duration_ms?: number
+  error?: string
   /** 单行摘要（用于时间线主标题） */
   title: string
   /** 单行副标题（用于时间线副标题，可选） */
@@ -79,7 +78,7 @@ export interface TraceRunPhase extends TraceBasePhase {
 
 export type TracePhase = TracePlannerPhase | TraceToolPhase | TraceRunPhase
 
-export interface AgentRunTraceData {
+export interface AgentRunTraceData extends ExecutionObservation {
   run_id: string
   /** 用户消息意图（取自 events data.intent 或 run_id 缩写） */
   intent: string
@@ -87,6 +86,7 @@ export interface AgentRunTraceData {
   status: TracePhaseStatus
   /** 总耗时毫秒（完成态才有；running 时为已用时长大约值） */
   total_duration_ms?: number
+  duration_scope?: string
   /** 按时间顺序的 phase 列表 */
   phases: TracePhase[]
   /** 末次更新的 event_id（用于增量同步判断） */
@@ -96,6 +96,24 @@ export interface AgentRunTraceData {
 }
 
 const TOOL_TERMINAL_FAILED = new Set<string>(['tool.failed'])
+
+/** Keep only the shared observation contract, never arbitrary tool inputs. */
+export function readExecutionObservation(data: Record<string, unknown>): ExecutionObservation {
+  const result: ExecutionObservation = {}
+  for (const key of ['trace_id', 'span_id', 'parent_span_id', 'request_id', 'task_id', 'run_id', 'step_id', 'node_id', 'call_id', 'error_code', 'error_type'] as const) {
+    if (typeof data[key] === 'string' && data[key].trim()) result[key] = data[key].trim()
+  }
+  for (const key of ['duration_ms', 'attempt'] as const) {
+    const value = asNonNegativeNumber(data[key])
+    if (value !== undefined) result[key] = value
+  }
+  return result
+}
+
+export function executionObservationDetails(data: ExecutionObservation): string {
+  return Object.entries(readExecutionObservation(data as Record<string, unknown>))
+    .map(([key, value]) => `${key}: ${value}`).join('\n')
+}
 
 function pickString(data: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
@@ -107,8 +125,8 @@ function pickString(data: Record<string, unknown>, ...keys: string[]): string {
 
 function pickNumber(data: Record<string, unknown>, ...keys: string[]): number | undefined {
   for (const k of keys) {
-    const v = asNumber(data[k], -1)
-    if (v >= 0) return v
+    const v = asNonNegativeNumber(data[k])
+    if (v !== undefined) return v
   }
   return undefined
 }
@@ -183,7 +201,7 @@ export function isTrivialChatTrace(trace: AgentRunTraceData | null | undefined):
   const tools = toolPhasesOf(trace)
   if (tools.length === 0) return true
   if (tools.length > 1) return false
-  if (trace.status === 'failed' || trace.status === 'waiting' || trace.status === 'blocked') {
+  if (trace.status !== 'success' && trace.status !== 'running') {
     return false
   }
   const t = tools[0]
@@ -213,35 +231,80 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
   let totalDurationMs: number | undefined
   let terminal = false
   let lastEventId: string | undefined
+  let traceId: string | undefined
+  let runObservation: ExecutionObservation = {}
+  let durationScope: string | undefined
+  const seenEvents = new Set<string>()
 
   /** 找最近一个未终态的 ToolPhase（用于合并同 step 事件） */
-  function findOpenToolPhase(nodeId: string): TraceToolPhase | undefined {
+  function findToolPhase(nodeId: string, openOnly = true, identity?: ExecutionObservation): TraceToolPhase | undefined {
     for (let i = phases.length - 1; i >= 0; i -= 1) {
       const p = phases[i]
       if (p.kind !== 'tool') continue
-      if (p.status === 'success' || p.status === 'failed') continue
-      if (nodeId && p.node_id && p.node_id !== nodeId) continue
+      if (openOnly && (p.status === 'success' || p.status === 'failed')) continue
+      if (nodeId && p.node_id !== nodeId) continue
+      if (identity?.call_id && p.call_id && identity.call_id !== p.call_id) continue
+      if (identity?.span_id && p.span_id && identity.span_id !== p.span_id) continue
       return p
     }
     return undefined
   }
 
   for (const ev of list) {
+    if (ev.event_id && seenEvents.has(ev.event_id)) continue
+    if (ev.event_id) seenEvents.add(ev.event_id)
     const type = asString(ev.event_type).trim() as AgentRunEvent['event_type']
-    const data = asRecord(ev.data)
+    const data: Record<string, unknown> = { ...readExecutionObservation({ ...ev }), ...asRecord(ev.data) }
+    const observation = readExecutionObservation({ ...ev, ...data })
+    traceId ||= observation.trace_id
+    if (type.startsWith('run.')) {
+      runObservation = { ...runObservation, ...observation }
+      if (type === 'run.completed' || (type === 'run.observed' && data.status === 'completed')) {
+        delete runObservation.error_code
+        delete runObservation.error_type
+      }
+    }
     if (!intent) intent = pickString(data, 'intent', 'user_message', 'message_text')
     if (ev.event_id) lastEventId = ev.event_id
+
+    if (type === 'run.observed') {
+      totalDurationMs = pickNumber(data, 'duration_ms') ?? totalDurationMs
+      durationScope = pickString(data, 'duration_scope') || durationScope
+      const observedStatus = pickString(data, 'status')
+      const statuses: Record<string, TracePhaseStatus> = {
+        queued: 'running', planning: 'running', running: 'running', retrying: 'running',
+        completed: 'success', failed: 'failed', blocked: 'blocked', waiting_user: 'waiting',
+        paused: 'paused', cancelled: 'cancelled', rejected: 'blocked',
+      }
+      if (statuses[observedStatus]) {
+        status = statuses[observedStatus]
+        terminal = ['completed', 'failed', 'cancelled', 'rejected'].includes(observedStatus)
+      }
+      const phase = [...phases].reverse().find(p => p.kind === (data.phase === 'planning' ? 'planner' : 'run'))
+      const phaseDuration = asNonNegativeNumber(data.phase_duration_ms)
+      if (phase && phaseDuration !== undefined && data.phase === 'planning') phase.duration_ms = phaseDuration
+      if (terminal && phase?.kind === 'run' && phase.status === status && data.phase === 'execution') {
+        phase.duration_ms = pickNumber(data, 'duration_ms')
+      }
+      if (terminal && status !== 'success' && !phases.some(p => p.kind === 'run' && p.status === status)) {
+        phases.push({ ...observation, kind: 'run', status, started_event_id: asString(ev.event_id),
+          title: status === 'cancelled' ? '任务已取消' : '执行已停止', error: pickString(data, 'error', 'message') || undefined })
+      }
+      continue
+    }
 
     // PlannerPhase
     if (type === 'planner.started') {
       const openPlanner = [...phases].reverse().find((p) => p.kind === 'planner' && p.status === 'running') as TracePlannerPhase | undefined
       const title = friendlyPhaseTitle(ev.message, '正在生成执行计划')
       if (openPlanner) {
+        Object.assign(openPlanner, observation)
         openPlanner.title = title
         openPlanner.started_event_id = asString(ev.event_id) || openPlanner.started_event_id
         openPlanner.started_at = asString(ev.created_at) || openPlanner.started_at
       } else {
         phases.push({
+          ...observation,
           kind: 'planner',
           status: 'running',
           started_event_id: asString(ev.event_id),
@@ -257,6 +320,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       if (idx >= 0) {
         const realIdx = phases.length - 1 - idx
         const p = phases[realIdx] as TracePlannerPhase
+        Object.assign(p, observation)
         p.status = 'success'
         p.duration_ms = pickNumber(data, 'duration_ms', 'planning_duration_ms')
         p.step_count = pickNumber(data, 'step_count', 'steps_count')
@@ -264,6 +328,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
         if (p.step_count) p.subtitle = `${p.step_count} 步`
       } else {
         phases.push({
+          ...observation,
           kind: 'planner',
           status: 'success',
           started_event_id: asString(ev.event_id),
@@ -282,6 +347,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       if (idx >= 0) {
         const realIdx = phases.length - 1 - idx
         const p = phases[realIdx] as TracePlannerPhase
+        Object.assign(p, observation)
         p.status = 'failed'
         p.detail = asString(ev.message).trim() || '计划生成被阻断'
       }
@@ -296,6 +362,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       const toolId = pickString(data, 'tool_id', 'tool')
       const action = pickString(data, 'action', 'name')
       phases.push({
+        ...observation,
         kind: 'tool',
         status: 'running',
         started_event_id: asString(ev.event_id),
@@ -316,9 +383,10 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     }
     if (type === 'tool.completed' || type === 'tool.failed') {
       const nodeId = pickString(data, 'node_id', 'step_id')
-      const target = findOpenToolPhase(nodeId)
+      const target = findToolPhase(nodeId, true, observation)
       const failed = TOOL_TERMINAL_FAILED.has(type)
       if (target) {
+        Object.assign(target, observation)
         target.status = failed ? 'failed' : 'success'
         target.duration_ms = pickNumber(data, 'duration_ms')
         if (failed) {
@@ -329,6 +397,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       } else {
         // 没找到对应 started，补一条紧凑 tool phase
         phases.push({
+          ...observation,
           kind: 'tool',
           status: failed ? 'failed' : 'success',
           started_event_id: asString(ev.event_id),
@@ -352,13 +421,13 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
 
     // Observation / step.*（挂到最近 ToolPhase）
     if (type === 'observation.recorded') {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'), false)
       const text = asString(ev.message).trim() || asString(data.observation).trim() || asString(data.summary).trim()
       if (target && text) target.observations.push(text)
       continue
     }
     if (type === 'step.waiting_user') {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'))
       if (target) {
         target.waiting_approval = true
         target.status = 'waiting'
@@ -367,7 +436,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       continue
     }
     if (type === 'step.approved') {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'))
       if (target) {
         target.waiting_approval = false
         target.status = 'running'
@@ -376,7 +445,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       continue
     }
     if (type === 'step.retry_scheduled') {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'), false)
       if (target) target.retries += 1
       continue
     }
@@ -386,14 +455,15 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       type === 'step.repair_applied' ||
       type === 'step.repair_rejected'
     ) {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'), false)
       const text = asString(ev.message).trim() || type
       if (target) target.repair_history.push(text)
       continue
     }
     if (type === 'step.blocked') {
-      const target = findOpenToolPhase('')
+      const target = findToolPhase(pickString(data, 'node_id', 'step_id'))
       if (target) {
+        Object.assign(target, observation)
         target.status = 'blocked'
         target.error = asString(ev.message).trim() || '步骤依赖未满足'
       }
@@ -405,15 +475,16 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     if (type === 'run.completed') {
       status = 'success'
       terminal = true
-      totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
+      totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms') ?? totalDurationMs
       // chat_payload 的可读文本已在气泡正文渲染；再塞 final_output 会造成名单双份
       const finalPreview = data.chat_payload != null ? undefined : safeOutputPreview(data)
       phases.push({
+        ...observation,
         kind: 'run',
         status: 'success',
         started_event_id: asString(ev.event_id),
         started_at: asString(ev.created_at),
-        duration_ms: totalDurationMs,
+        duration_ms: pickNumber(data, 'duration_ms', 'total_duration_ms'),
         title: friendlyPhaseTitle(ev.message, '执行完成'),
         final_output_preview: finalPreview,
       } as TraceRunPhase)
@@ -422,9 +493,10 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
     if (type === 'run.failed' || type === 'run.continue_ignored') {
       status = 'failed'
       terminal = true
-      totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
+      totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms') ?? totalDurationMs
       const failFallback = type === 'run.continue_ignored' ? '执行已中止' : '执行失败'
       phases.push({
+        ...observation,
         kind: 'run',
         status: 'failed',
         started_event_id: asString(ev.event_id),
@@ -440,6 +512,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       status = 'failed'
       terminal = true
       phases.push({
+        ...observation,
         kind: 'run',
         status: 'failed',
         started_event_id: asString(ev.event_id),
@@ -453,6 +526,7 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
       // 仅占位；随后 planner.started 会合并到同一 phase，避免「已创建 + 开始执行」双行噪音
       if (!phases.some((p) => p.kind === 'planner')) {
         phases.push({
+          ...observation,
           kind: 'planner',
           status: 'running',
           started_event_id: asString(ev.event_id),
@@ -470,20 +544,23 @@ export function buildAgentRunTraceFromEvents(events: AgentRunEvent[], runId: str
   if (terminal) {
     for (const p of phases) {
       if (p.kind === 'planner' && p.status === 'running') {
-        p.status = status === 'failed' ? 'failed' : 'success'
+        p.status = status
         if (!p.title || /已创建$/.test(p.title) || isTracePlumbingTitle(p.title)) {
-          p.title = '执行计划已生成'
+          p.title = status === 'success' ? '执行计划已生成' : '计划未完成'
         }
       }
     }
   }
 
   return {
+    ...runObservation,
+    trace_id: runObservation.trace_id || traceId,
     run_id: runId,
     // 没有业务 intent 时不要拿 run_id 当标题（用户会看到 run_8a03… 像乱码）
     intent: intent || '',
     status,
     total_duration_ms: totalDurationMs,
+    duration_scope: durationScope,
     phases,
     last_event_id: lastEventId,
     terminal,

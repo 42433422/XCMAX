@@ -55,6 +55,10 @@ _TEMPLATE_SCOPE_BY_TARGET = {
 }
 
 
+def _failure(code: str, message: str, **details: Any) -> dict[str, Any]:
+    return {"success": False, "error_code": code, "message": message, **details}
+
+
 def _elt_enabled() -> bool:
     flag = str(os.environ.get("FHD_ELT_CENTER_ENABLED") or "").strip().lower()
     if flag not in {"1", "true", "yes", "on"}:
@@ -255,7 +259,7 @@ def _run_file_stage(
     try:
         out = operation()
     except PermissionError as err:
-        out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
+        out = _failure("spreadsheet_access_denied", str(err))
     _batch_result_note(action, label, out)
     _publish_file_stage(
         node_id=node_id,
@@ -379,16 +383,14 @@ def _execution_message(summary: dict, notes: str) -> str:
 def _summary(data: dict) -> dict[str, Any]:
     return {
         "run_id": data.get("id"),
-        "target_type": data.get("target_type"),
-        "status": data.get("status"),
-        "preview_revision": data.get("preview_revision"),
-        "stage": data.get("stage"),
-        "total_rows": data.get("total_rows"),
-        "new_rows": data.get("summary", {}).get("new"),
-        "update_rows": data.get("summary", {}).get("update"),
-        "skip_rows": data.get("summary", {}).get("skip"),
-        "error_rows": data.get("summary", {}).get("error"),
-        "executed_rows": data.get("summary", {}).get("executed"),
+        **{
+            key: data.get(key)
+            for key in ("target_type", "status", "preview_revision", "stage", "total_rows")
+        },
+        **{
+            f"{key}_rows": data.get("summary", {}).get(key)
+            for key in ("new", "update", "skip", "error", "executed")
+        },
         "error": data.get("error"),
         "reversible": data.get("reversible"),
         "customer_products": _linked_companion_preview(data),
@@ -560,6 +562,27 @@ def _template_target_type(data: dict[str, Any]) -> str:
     return target_type
 
 
+def _template_payload(
+    name: str, key: str, kind: str, path: str, sheet: str, headers: list, **analysis: Any
+) -> dict:
+    return {
+        "template_name": name,
+        "template_key": key,
+        "template_type": kind,
+        "original_file_path": path,
+        "analyzed_data": {
+            "category": "excel",
+            **analysis,
+            "fields": [{"label": header, "value": "", "type": "dynamic"} for header in headers],
+            "preview_data": {
+                "sample_rows": [],
+                "sheet_name": sheet,
+                "grid_preview": _grid_preview(path),
+            },
+        },
+    }
+
+
 def _register_header_template(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
     """通用表已经是模板库里的表：按每张通用表写一个可见模板。
 
@@ -631,23 +654,7 @@ def _register_header_template(data: dict[str, Any], owner_id: int) -> dict[str, 
             workbook.save(destination)
             workbook.close()
             result = service.save_template(
-                {
-                    "template_name": name,
-                    "template_key": f"ELT_{digest}",
-                    "template_type": "Excel",
-                    "original_file_path": str(destination),
-                    "analyzed_data": {
-                        "category": "excel",
-                        "fields": [
-                            {"label": header, "value": "", "type": "dynamic"} for header in headers
-                        ],
-                        "preview_data": {
-                            "sample_rows": [],
-                            "sheet_name": name,
-                            "grid_preview": _grid_preview(str(destination)),
-                        },
-                    },
-                }
+                _template_payload(name, f"ELT_{digest}", "Excel", str(destination), name, headers)
             )
         except RECOVERABLE_ERRORS:
             continue
@@ -796,24 +803,15 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
                 suffix += 1
             headers = [header for header in meta.get("headers") or [] if header]
             result = service.save_template(
-                {
-                    "template_name": name,
-                    "template_key": region_key,
-                    "template_type": template_type,
-                    "original_file_path": str(meta.get("file_path") or ""),
-                    "analyzed_data": {
-                        "category": "excel",
-                        "business_scope": _template_scope(region, meta, target_type),
-                        "fields": [
-                            {"label": header, "value": "", "type": "dynamic"} for header in headers
-                        ],
-                        "preview_data": {
-                            "sample_rows": [],
-                            "sheet_name": meta.get("sheet") or "",
-                            "grid_preview": _grid_preview(str(meta.get("file_path") or "")),
-                        },
-                    },
-                }
+                _template_payload(
+                    name,
+                    region_key,
+                    template_type,
+                    str(meta.get("file_path") or ""),
+                    meta.get("sheet") or "",
+                    headers,
+                    business_scope=_template_scope(region, meta, target_type),
+                )
             )
             if not result.get("success"):
                 return {"action": "error", "reason": str(result.get("message") or "save_failed")}
@@ -1148,6 +1146,30 @@ def _create_ai_import_template(
     }
 
 
+def _preview_decision(
+    params: dict, *, ready: bool, error_rows: int, pending_mappings: list
+) -> dict[str, Any]:
+    """Keep newly created and existing previews on the same confirmation contract."""
+    blocked_by_errors = bool(error_rows) and params.get("valid_rows_only") is not True
+    executable = (
+        ready
+        and not blocked_by_errors
+        and (not pending_mappings or params.get("accept_suggested") is True)
+    )
+    requires_decision = ready and not executable
+    resume_params: dict[str, Any] = {}
+    if requires_decision and blocked_by_errors:
+        resume_params["valid_rows_only"] = True
+    elif requires_decision and pending_mappings:
+        resume_params["accept_suggested"] = True
+    return {
+        "executable": executable,
+        "executable_with_suggestions": ready and not blocked_by_errors,
+        "requires_user_decision": requires_decision,
+        "resume_params": resume_params,
+    }
+
+
 def _preview(
     params: dict,
     runtime_context: dict,
@@ -1162,11 +1184,9 @@ def _preview(
     if upload is None:
         upload = _owned_upload(str(params.get("file_path") or ""), runtime_context)
     if not upload:
-        return {
-            "success": False,
-            "error_code": "upload_not_found",
-            "message": "找不到当前账号可用上传文件，请重新上传 Excel 后再导入。",
-        }
+        return _failure(
+            "upload_not_found", "找不到当前账号可用上传文件，请重新上传 Excel 后再导入。"
+        )
     service = get_elt_service()
     actor = _bound_actor(runtime_context)
     try:
@@ -1190,7 +1210,7 @@ def _preview(
                     checkpoint_run_id=checkpoint_id or None,
                 )
     except EltError as exc:
-        return {"success": False, "error_code": exc.code, "message": exc.message}
+        return _failure(exc.code, exc.message)
     run_id = str(created.get("id") or "")
     data = _wait(
         service,
@@ -1231,11 +1251,12 @@ def _preview(
     blocked_by_errors = bool(error_rows) and not accept_valid_rows
     # 有错误行或映射待确认时，ELT 会阻断整批执行；提前告知调用方，避免执行阶段才失败。
     ok = primary_ready and companion_ready
-    summary["executable"] = (
-        ok and not blocked_by_errors and (not pending_mappings or accept_suggested)
+    decision = _preview_decision(
+        params, ready=ok, error_rows=error_rows, pending_mappings=pending_mappings
     )
+    summary["executable"] = decision["executable"]
     # 只剩映射置信度不足时，用户可以一次性接受 AI 建议直接执行。
-    summary["executable_with_suggestions"] = ok and not blocked_by_errors
+    summary["executable_with_suggestions"] = decision["executable_with_suggestions"]
     template_note = ""
     if summary["template_name"]:
         ai_note = (
@@ -1274,12 +1295,7 @@ def _preview(
             message += "".join(blockers)
         message += _companion_note(summary["customer_products"])
     # 预演发现阻断项时，契约要求编排在此暂停询问用户，而不是继续执行后失败。
-    requires_decision = ok and not summary["executable"]
-    resume_params: dict[str, Any] = {}
-    if requires_decision and accept_valid_rows is False and error_rows:
-        resume_params["valid_rows_only"] = True
-    if requires_decision and pending_mappings and not blocked_by_errors:
-        resume_params["accept_suggested"] = True
+    requires_decision = decision["requires_user_decision"]
     return {
         "success": ok,
         "preview": True,
@@ -1290,7 +1306,7 @@ def _preview(
         "requires_user_decision": requires_decision,
         "question": message if requires_decision else "",
         # 用户确认后重新执行预演/执行时带上解除阻断的参数，避免再次停在同一个问题。
-        "resume_params": resume_params,
+        "resume_params": decision["resume_params"],
         "data": summary,
     }
 
@@ -1391,11 +1407,7 @@ def _execute(params: dict, runtime_context: dict) -> dict:
 
     run_id = str(params.get("run_id") or "").strip()
     if not run_id:
-        return {
-            "success": False,
-            "error_code": "missing_run_id",
-            "message": "缺少 ELT 预演编号，请先执行 elt_import.preview。",
-        }
+        return _failure("missing_run_id", "缺少 ELT 预演编号，请先执行 elt_import.preview。")
     service = get_elt_service()
     actor = _bound_actor(runtime_context)
     resumed = False
@@ -1438,14 +1450,13 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                 )
             status = str(current.get("status") or "")
         if status in PREVIEW_PENDING or _interrupted_linked_preview(current):
-            return {
-                "success": False,
-                "preview": True,
-                "deferred": True,
-                "error_code": "elt_preview_not_ready",
-                "message": f"预演 {run_id} 尚未就绪，业务写入未提交。",
-                "data": {**_summary(current), "run_id": run_id},
-            }
+            return _failure(
+                "elt_preview_not_ready",
+                f"预演 {run_id} 尚未就绪，业务写入未提交。",
+                preview=True,
+                deferred=True,
+                data={**_summary(current), "run_id": run_id},
+            )
         if status == "preview_ready":
             companion = _companion_summary(
                 _wait_linked_preview(service, actor.id, current, runtime_context)
@@ -1454,28 +1465,28 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                 summary = {**_summary(current), "customer_products": companion}
                 if companion["status"] in EXECUTION_UNCERTAIN - PREVIEW_PENDING:
                     return _unknown_execution(companion["run_id"], summary)
-                return {
-                    "success": False,
-                    "deferred": _companion_is_deferred(companion),
-                    "error_code": "elt_companion_incomplete",
-                    "message": f"运单预演已完成{_companion_note(companion)}。运单写入未提交。",
-                    "data": summary,
-                }
+                return _failure(
+                    "elt_companion_incomplete",
+                    f"运单预演已完成{_companion_note(companion)}。运单写入未提交。",
+                    deferred=_companion_is_deferred(companion),
+                    data=summary,
+                )
             if runtime_context.get("_elt_file_phase") == "linked_preview":
                 _renew_file_stage(runtime_context, "execute")
         if status not in EXECUTION_UNCERTAIN | {"completed", "partial"}:
             with get_db() as db, worker_write_guard(db):
                 revision = str(current.get("preview_revision") or "")
-                revisions = params.get("preview_revisions")
-                confirmed_revision = str(
-                    (revisions.get(run_id) if isinstance(revisions, dict) else None)
-                    or params.get("preview_revision")
-                    or ""
-                )
+                confirmed_revision = params.get("preview_revision")
+                if params.get("run_ids"):
+                    revisions = params.get("preview_revisions")
+                    confirmed_revision = (
+                        revisions.get(run_id) if isinstance(revisions, dict) else None
+                    )
+                confirmed_revision = str(confirmed_revision or "")
                 linked = (current.get("draft") or {}).get("linked_preview") or _linked_shipment_id(
                     current
                 )
-                if (linked and not confirmed_revision) or (
+                if ((linked or params.get("run_ids")) and not confirmed_revision) or (
                     confirmed_revision and confirmed_revision != revision
                 ):
                     raise EltError(
@@ -1492,13 +1503,12 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                             "data": _summary(current),
                         }
                 if not _has_stage_budget(runtime_context):
-                    return {
-                        "success": False,
-                        "deferred": True,
-                        "error_code": "elt_preview_not_ready",
-                        "message": f"预演 {run_id} 已就绪，本轮尚未提交写入。",
-                        "data": _summary(current),
-                    }
+                    return _failure(
+                        "elt_preview_not_ready",
+                        f"预演 {run_id} 已就绪，本轮尚未提交写入。",
+                        deferred=True,
+                        data=_summary(current),
+                    )
                 write_requested = True
                 service.execute(
                     db,
@@ -1514,14 +1524,13 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         if write_requested and exc.code == "ELT_RUN_BUSY":
             return _unknown_execution(run_id, {"run_id": run_id})
         if exc.code == "ELT_RUN_BUSY":
-            return {
-                "success": False,
-                "deferred": True,
-                "error_code": "elt_preview_not_ready",
-                "message": f"预演 {run_id} 正在处理，业务写入未提交。",
-                "data": {"run_id": run_id},
-            }
-        return {"success": False, "error_code": exc.code, "message": exc.message}
+            return _failure(
+                "elt_preview_not_ready",
+                f"预演 {run_id} 正在处理，业务写入未提交。",
+                deferred=True,
+                data={"run_id": run_id},
+            )
+        return _failure(exc.code, exc.message)
     try:
         data = _wait(
             service,
@@ -1571,16 +1580,15 @@ def _execute(params: dict, runtime_context: dict) -> dict:
 
 
 def _unknown_execution(run_id: str, summary: dict) -> dict:
-    return {
-        "success": False,
-        "error_code": "tool_timeout_unknown",
-        "outcome": "unknown",
-        "committed": _confirmed_written_rows({"data": summary, "outcome": "unknown"}) > 0,
-        "reconciliation_required": True,
-        "retryable": False,
-        "message": f"请在数据对接中心核对原回执 {run_id}，勿重复提交。",
-        "data": summary,
-    }
+    return _failure(
+        "tool_timeout_unknown",
+        f"请在数据对接中心核对原回执 {run_id}，勿重复提交。",
+        outcome="unknown",
+        committed=_confirmed_written_rows({"data": summary, "outcome": "unknown"}) > 0,
+        reconciliation_required=True,
+        retryable=False,
+        data=summary,
+    )
 
 
 def _confirmed_written_rows(result: dict) -> int:
@@ -1797,7 +1805,7 @@ def _review_summary(data: dict) -> dict[str, Any]:
     }
 
 
-def _review_existing(run_id: str, runtime_context: dict) -> dict:
+def _review_existing(run_id: str, params: dict, runtime_context: dict) -> dict:
     """Read an owned existing preview even in auto mode; never create or execute it."""
     from app.application.elt.errors import EltError
     from app.application.elt.service import get_elt_service
@@ -1810,15 +1818,31 @@ def _review_existing(run_id: str, runtime_context: dict) -> dict:
         summary = _review_summary(data)
         companion = _read_linked_companion(service, actor, data)
         summary["customer_products"] = companion
+        decision = _preview_decision(
+            params,
+            ready=data.get("status") == "preview_ready" and _companion_preview_ready(companion),
+            error_rows=int(summary.get("error_rows") or 0),
+            pending_mappings=_pending_mappings(data),
+        )
+        summary["executable"] = decision["executable"]
+        summary["executable_with_suggestions"] = decision["executable_with_suggestions"]
         message = (
             _companion_note(summary)
             if (data.get("draft") or {}).get("linked_preview")
             else f"导入目标「{summary['target_type']}」，状态 {summary['status']}"
             + _companion_note(companion)
         )
-        return {"success": True, "preview": True, "message": message, "data": summary}
+        return {
+            "success": True,
+            "preview": True,
+            "message": message,
+            "requires_user_decision": decision["requires_user_decision"],
+            "question": message if decision["requires_user_decision"] else "",
+            "resume_params": decision["resume_params"],
+            "data": summary,
+        }
     except EltError as exc:
-        return {"success": False, "error_code": exc.code, "message": exc.message}
+        return _failure(exc.code, exc.message)
 
 
 def _companion_note(companion: dict) -> str:
@@ -1864,29 +1888,39 @@ def _companion_note(companion: dict) -> str:
     return note
 
 
+def _run_execution_stage(
+    run_id: str, params: dict, context: dict, index=1, total=1, label: str | None = None
+) -> dict:
+    return _run_file_stage(
+        "导入",
+        index,
+        total,
+        _run_label(run_id, context) if label is None else label,
+        partial(_execute, {**params, "run_id": run_id}, context),
+        context,
+    )
+
+
 def _registered_router_elt_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     """注册路由：elt_import.preview / elt_import.execute。"""
     if not _elt_enabled():
-        return {
-            "success": False,
-            "error_code": "elt_center_disabled",
-            "message": "数据对接中心未启用（需要企业版），暂时无法通过 ELT 导入。",
-        }
+        return _failure(
+            "elt_center_disabled", "数据对接中心未启用（需要企业版），暂时无法通过 ELT 导入。"
+        )
     payload = dict(params or {})
     if action == "preview":
         if run_id := str(payload.get("run_id") or "").strip():
-            return _review_existing(run_id, runtime_context)
+            return _review_existing(run_id, payload, runtime_context)
         paths = _split_paths(payload.get("file_paths"))
         if paths:
             return _preview_batch(paths, payload, runtime_context)
         if not str(payload.get("file_path") or "").strip():
-            return {
-                "success": False,
-                "error_code": "elt_file_path_required",
-                "message": "请提供 file_path（单个文件）或 file_paths（整批文件）后再预演。",
-            }
+            return _failure(
+                "elt_file_path_required",
+                "请提供 file_path（单个文件）或 file_paths（整批文件）后再预演。",
+            )
         try:
             path = str(payload["file_path"])
             upload = _owned_upload(path, runtime_context)
@@ -1900,11 +1934,7 @@ def _registered_router_elt_import(
                 runtime_context,
             )
         except PermissionError as err:
-            return {
-                "success": False,
-                "error_code": "spreadsheet_access_denied",
-                "message": str(err),
-            }
+            return _failure("spreadsheet_access_denied", str(err))
     if action == "execute":
         ids = _split_run_ids(payload.get("run_ids")) or _split_run_ids(payload.get("run_id"))
         paths = _split_paths(payload.get("file_paths"))
@@ -1915,14 +1945,7 @@ def _registered_router_elt_import(
         if len(ids) > 1:
             return _execute_batch(ids, payload, runtime_context)
         if ids:
-            return _run_file_stage(
-                "导入",
-                1,
-                1,
-                _run_label(ids[0], runtime_context),
-                partial(_execute, {**payload, "run_id": ids[0]}, runtime_context),
-                runtime_context,
-            )
+            return _run_execution_stage(ids[0], payload, runtime_context)
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
 
@@ -1982,17 +2005,14 @@ def _expand_directory_paths(
             expanded.extend(matched)
             continue
         unresolved.append(
-            {
-                "file_path": str(path),
-                "file_name": candidate.name,
-                "success": False,
-                "error_code": "directory_needs_upload",
-                "message": (
-                    f"「{candidate.name}」是本地目录，ELT 只导入已上传到本账号的文件；"
-                    f"目录内 {len(names)} 个可导入文件尚无上传记录，"
-                    "请先用「上传附件」或数据对接中心上传后再导入。"
-                ),
-            }
+            _failure(
+                "directory_needs_upload",
+                f"「{candidate.name}」是本地目录，ELT 只导入已上传到本账号的文件；"
+                f"目录内 {len(names)} 个可导入文件尚无上传记录，"
+                "请先用「上传附件」或数据对接中心上传后再导入。",
+                file_path=str(path),
+                file_name=candidate.name,
+            )
         )
     return expanded, unresolved
 
@@ -2174,7 +2194,7 @@ def _preview_batch(
         checkpoint_ids = _batch_checkpoint_ids(paths, runtime_context) if write else {}
         checkpoints, receipts = _load_checkpoint_batch(checkpoint_ids, runtime_context)
     except PermissionError as exc:
-        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(exc)}
+        return _failure("spreadsheet_access_denied", str(exc))
     expanded, unresolved = (
         (paths, [])
         if checkpoint_ids
@@ -2223,13 +2243,7 @@ def _preview_batch(
                 raise PermissionError("原任务上传的文件内容已改变。")
         except PermissionError as err:
             items.append(
-                {
-                    "file_path": path,
-                    "file_name": label,
-                    "success": False,
-                    "error_code": "spreadsheet_access_denied",
-                    "message": str(err),
-                }
+                _failure("spreadsheet_access_denied", str(err), file_path=path, file_name=label)
             )
             continue
         if upload:
@@ -2251,14 +2265,7 @@ def _preview_batch(
             _resume_checkpoint_previews(
                 get_elt_service(), _bound_actor(runtime_context).id, checkpoint
             )
-            out = _run_file_stage(
-                "导入",
-                index,
-                total,
-                label,
-                partial(_execute, {**base, "run_id": checkpoint["id"]}, runtime_context),
-                runtime_context,
-            )
+            out = _run_execution_stage(checkpoint["id"], base, runtime_context, index, total, label)
         else:
             checkpoint_args: _PreviewCheckpoint = {}
             if checkpoint_ids:
@@ -2285,14 +2292,7 @@ def _preview_batch(
                 and preview.get("executable") is True
                 and _can_start_file_stage(runtime_context)
             ):
-                out = _run_file_stage(
-                    "导入",
-                    index,
-                    total,
-                    label,
-                    partial(_execute, {**base, "run_id": run_id}, runtime_context),
-                    runtime_context,
-                )
+                out = _run_execution_stage(run_id, base, runtime_context, index, total, label)
             else:
                 out = {
                     **out,
@@ -2365,21 +2365,14 @@ def _preview_batch(
 def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> dict:
     """整批执行：按预演 run 逐个写入，单个失败不影响其余。"""
     targets = run_ids[:_MAX_BATCH_IMPORTS]
-    base = _single_params(payload)
+    base = {**_single_params(payload), "run_ids": run_ids}
     items: list[dict] = []
     total = len(targets)
     for index, run_id in enumerate(targets, start=1):
         if not _can_start_file_stage(runtime_context):
             break
         label = _run_label(run_id, runtime_context)
-        out = _run_file_stage(
-            "导入",
-            index,
-            total,
-            label,
-            partial(_execute, {**base, "run_id": run_id}, runtime_context),
-            runtime_context,
-        )
+        out = _run_execution_stage(run_id, base, runtime_context, index, total, label)
         items.append({"run_id": run_id, "file_name": label, **out})
         if out.get("outcome") == "unknown":
             break

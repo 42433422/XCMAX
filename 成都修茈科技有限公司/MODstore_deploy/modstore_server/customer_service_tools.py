@@ -26,7 +26,6 @@ from modstore_server.models_cs import (
 )
 from modstore_server.openapi_connector_runtime import call_generated_operation
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-from modstore_server.workflow_engine import workflow_engine
 
 
 def json_dumps(data: Any) -> str:
@@ -849,11 +848,13 @@ def _mark_catalog_for_review(
 def _execute_workflow(
     action: CustomerServiceAction, user: User, request: Dict[str, Any]
 ) -> Dict[str, Any]:
+    from modstore_server.workflow_event_runner import run_recorded_workflow
+
     workflow_id = int(action.target_id or request.get("workflow_id") or 0)
     if workflow_id <= 0:
         return {"ok": False, "message": "缺少工作流 ID"}
-    output = workflow_engine.execute_workflow(
-        workflow_id,
+    output = run_recorded_workflow(
+        workflow_id=workflow_id,
         input_data=request.get("input_data") or {},
         user_id=user.id,
     )

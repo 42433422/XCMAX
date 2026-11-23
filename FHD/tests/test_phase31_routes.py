@@ -89,7 +89,7 @@ def test_compat_customers_match_mod_block(
 
 
 def test_compat_customer_get_one_and_create(
-    compat_customer_client: TestClient, local_tools
+    compat_customer_client: TestClient, local_tools, trusted_actor, monkeypatch
 ) -> None:
     row = MagicMock()
     row.id = 2
@@ -105,19 +105,23 @@ def test_compat_customer_get_one_and_create(
             return_value={"id": 2, "unit_name": "A"},
         ),
         patch.object(customer_routes, "_customers_write_raise"),
-        patch.object(
-            customer_routes,
-            "_customer_pg_insert",
-            return_value={"id": 3, "unit_name": "B"},
+        patch(
+            "app.application.customer_app_service.CustomerApplicationService.create",
+            return_value={"success": True, "data": {"id": 3, "customer_name": "B"}},
         ),
         patch.object(
             customer_routes, "_customer_body_name_contact", return_value=("B", "", "", "")
         ),
     ):
         assert compat_customer_client.get("/customers/2").status_code == 200
+        actor = trusted_actor(tenant_id=7, role="admin")
+        monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+        compat_customer_client.headers.update(actor.headers)
         created = compat_customer_client.post("/customers", json={"unit_name": "B"})
         assert created.status_code == 200
         assert created.json()["data"]["id"] == 3
+        assert created.json()["agent_status"] == "blocked"
+        assert created.json()["error_code"] == "customer_receipt_unverified"
 
 
 def test_compat_customer_batch_delete(

@@ -4,12 +4,16 @@ name: ci-mobile-flutter
 
 on:
   push:
+    branches: [main, develop, master]
+    tags: ['**']
     paths:
       - "FHD/mobile-flutter-poc/**"
       - "FHD/config/download_release.json"
       - "FHD/VERSION.md"
       - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
+      - "FHD/.github/workflows/ci-mobile-flutter.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   pull_request:
     paths:
       - "FHD/mobile-flutter-poc/**"
@@ -17,11 +21,13 @@ on:
       - "FHD/VERSION.md"
       - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
+      - "FHD/.github/workflows/ci-mobile-flutter.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   workflow_dispatch:
 
 concurrency:
-  group: ci-mobile-flutter-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # Candidate tests never inherit repository-wide write permissions.
 permissions:
   contents: read

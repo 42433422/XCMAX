@@ -3,13 +3,23 @@ name: Market E2E (Playwright)
 # P1-4 · market 表层 Playwright E2E 接入 PR（日更 PR 表层冒烟）
 on:
   push:
+    branches: [main, develop, master]
+    tags: ['**']
     paths:
       - "market/**"
       - ".github/workflows/market-e2e.yml"
+      - "成都修茈科技有限公司/MODstore_deploy/.github/workflows/market-e2e.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
   pull_request:
     paths:
       - "market/**"
       - ".github/workflows/market-e2e.yml"
+      - "成都修茈科技有限公司/MODstore_deploy/.github/workflows/market-e2e.yml"
+      - "scripts/dev/publish_ci_workflows_to_root.py"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Candidate tests never inherit repository-wide write permissions.
 permissions:

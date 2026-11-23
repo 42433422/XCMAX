@@ -295,17 +295,29 @@ def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch, loc
         )
     assert response.status_code == 200, response.text
     result = response.json()["job"]
-    assert result["status"] == "submitted"
+    assert result["status"] == "outcome_unknown"
     run = repo.get(result["run_id"])
     assert run.user_id == "7"
-    assert {"step.waiting_user", "step.approved", "tool.completed"} <= {
-        e.event_type for e in run.events
-    }
+    assert run.status == "blocked"
+    events = {e.event_type for e in run.events}
+    assert {"step.waiting_user", "step.approved", "verification.inconclusive"} <= events
+    assert not {"tool.completed", "run.completed"} & events
+    call = run.tool_calls[0]
+    assert call.output["submission_state"] == "submitted"
+    assert call.metadata["verification"]["accepted"] is False
+    assert call.metadata["verification"]["code"] == "result_verifier_unavailable"
     assert set(run.tool_calls[0].params) == {"file_path", "printer_name", "copies"}
     service.printer_utils._run_cups.assert_called_once()
     _, persisted = env.service._read(OWNER, job["id"])
     assert persisted["dispatch_claimed"] is True
     assert "dispatch_hash" not in persisted
+    restarted = jobs.LabelJobService(env.service.root)
+    never = MagicMock()
+    assert (
+        restarted.submit(OWNER, job["id"], confirmation["confirm_token"], never)["status"]
+        == "outcome_unknown"
+    )
+    never.assert_not_called()
     service.print_label(str(env.service.file(OWNER, job["id"])), "LabelPrinter", 1)
     assert service.printer_utils._run_cups.call_count == 1
 

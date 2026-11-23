@@ -1,0 +1,126 @@
+"""Independently compare a scoped workbook artifact with its original typed plan."""
+
+from __future__ import annotations
+
+import hashlib
+from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+
+from app.domain.workbook_write_contract import WORKBOOK_QC, WORKBOOK_WRITER
+
+
+def is_workbook_write(params: dict) -> bool:
+    return (
+        next(
+            (
+                params[key]
+                for key in ("employee_id", "pack_id", "tool_name", "id")
+                if params.get(key)
+            ),
+            "",
+        )
+        == WORKBOOK_WRITER
+    )
+
+
+@contextmanager
+def _owned_template(source: str, context: dict):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+    from app.infrastructure.tenant_scope import owned_tenant_id, tenant_scope
+
+    actor = _bound_actor(context)
+    tenant = str(context.get("tenant_id") or "")
+    if (
+        not tenant.isdecimal()
+        or int(tenant) <= 0
+        or str(actor.tenant_id) != tenant
+        or owned_tenant_id() not in (None, int(tenant))
+    ):
+        raise PermissionError("模板核验缺少原账号租户范围")
+    # Host contract capture/readback occurs outside the tool's tenant wrapper.
+    # Restore only the already sealed, live actor scope for the original reader.
+    with tenant_scope(int(tenant)), workflow_file_snapshot(source, context) as template:
+        yield template
+
+
+def capture_template(params: dict, context: dict) -> dict:
+    source = (params.get("input") or {}).get("template_path")
+    if not isinstance(source, str):
+        return {}
+    try:
+        with _owned_template(source, context) as path:
+            return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "suffix": path.suffix}
+    except (OSError, ValueError, PermissionError):
+        return {}
+
+
+def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict) -> dict:
+    from app.application.agent_orchestrator.artifact_files import read_verified_run_file
+    from app.application.agent_orchestrator.verification_readback import _files, _report
+    from app.application.employee_runtime.executor import _import_module_from_path
+    from app.application.employee_runtime.loader import (
+        resolve_pack_dir,
+        verify_direct_python_pack_trust,
+    )
+    from app.application.tools.workflow_spreadsheet_scope import _staging_root
+
+    payload = step.params.get("input") or {}
+    plan = payload.get("plan")
+    original = (call.metadata.get("verification_contract") or {}).get("workbook_template") or {}
+    artifacts = output.get("artifacts") or []
+    if (
+        not original.get("sha256")
+        or not isinstance(plan, dict)
+        or not isinstance(artifacts, list)
+        or len(artifacts) != 1
+        or not isinstance(artifacts[0], dict)
+    ):
+        return _report("inconclusive", "result_workbook_contract_missing", "workbook_qc")
+    suffix = Path(str(artifacts[0].get("name") or "")).suffix.lower()
+    if suffix not in {".xlsx", ".xlsm"}:
+        return _report("failed", "result_workbook_format_invalid", "workbook_qc")
+    files = _files(run, step, call, output, context, suffix)
+    if files["status"] != "verified":
+        return files
+    pack = resolve_pack_dir(WORKBOOK_QC)
+    if pack is None or not verify_direct_python_pack_trust(pack)[0]:
+        return _report("inconclusive", "result_workbook_qc_unavailable", "workbook_qc")
+    module = _import_module_from_path(
+        Path(pack) / "backend" / "vendor" / "excel_qc" / "checks.py", "_xcagi_workbook_qc"
+    )
+    if module is None or not callable(getattr(module, "run_qc", None)):
+        return _report("inconclusive", "result_workbook_qc_unavailable", "workbook_qc")
+    # Reopen the original owned input; a changed upload is not the preimage that
+    # was approved and frozen before the producing worker ran.
+    with _owned_template(payload["template_path"], context) as template:
+        if hashlib.sha256(template.read_bytes()).hexdigest() != original["sha256"]:
+            return _report("inconclusive", "result_workbook_template_changed", "workbook_qc")
+        with TemporaryDirectory(prefix="workbook-qc-", dir=_staging_root()) as directory:
+            filled = Path(directory) / ("result" + suffix)
+            filled.write_bytes(read_verified_run_file(run.run_id, artifacts[0]))
+            report = module.run_qc(filled, plan, template_path=template)
+    sections = report.get("sections") or {}
+    checked = {name: item.get("status") for name, item in sections.items()}
+    valid = (
+        report.get("verdict") == "PASS"
+        and checked.get("conformance") == checked.get("formulas") == "pass"
+        and (not plan.get("protected_ranges") or checked.get("protection") == "pass")
+    )
+    status = (
+        "verified" if valid else "failed" if report.get("verdict") == "FAIL" else "inconclusive"
+    )
+    quality = _report(
+        status,
+        "result_verified" if valid else "result_workbook_qc_unmet",
+        "workbook_qc",
+        verification_scope="planned_cells_formulas_and_protected_ranges",
+        template_sha256=original["sha256"],
+        artifact_sha256=artifacts[0]["metadata"]["sha256"],
+        sections=checked,
+        formula_recalculation_verified=False,
+    )
+    quality["checks"] = files["checks"] + quality["checks"]
+    return quality

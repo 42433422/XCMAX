@@ -6,7 +6,18 @@
       :action-pending="taskCenterStore.actionPending"
       @control="controlWorkspaceTask"
     />
-    <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div class="chat-header-actions">
+      <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+      <button
+        v-if="!isTaskPaneResizable"
+        type="button"
+        class="quick-btn chat-panel-toggle"
+        aria-haspopup="dialog"
+        aria-controls="chat-side-panel"
+        :aria-expanded="mobileChatPanelOpen"
+        @click="mobileChatPanelOpen = true"
+      >{{ $t('chat.taskTab') }} / {{ $t('chat.conversationTab') }}</button>
+    </div>
     <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
       {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
     </div>
@@ -53,6 +64,8 @@
         />
       </div>
       <ChatSidePanel
+        v-model:open="mobileChatPanelOpen"
+        :compact="!isTaskPaneResizable"
         :current-task="currentTask"
         :task-list="visibleTaskList"
         :task-control-states="taskControlStates"
@@ -257,15 +270,6 @@
             <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
           </button>
         </div>
-        <button
-          type="button"
-          class="btn"
-          :disabled="!messageInput.trim() || isLoading || imagePending || multimodalPendingCount > 0 || artifactStaging.length > 0 || unsupportedStaging.length > 0"
-          data-testid="generate-chat-image"
-          @click="generateChatImage"
-        >
-          {{ imagePending ? '生图中' : '生图' }}
-        </button>
         <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
@@ -277,12 +281,6 @@
         >
           {{ isLoading ? '发送纠正' : '发送' }}
         </button>
-      </div>
-      <div v-if="chatImage?.scope === messageSessionKey" aria-live="polite">
-        <figure v-for="image of chatImage.images" :key="image">
-          <img :src="image" alt="AI 生成图片" referrerpolicy="no-referrer" width="256" />
-          <figcaption>{{ chatImage.model }} · {{ chatImage.charge }}</figcaption>
-        </figure>
       </div>
       <div
         v-if="composerStatusText"
@@ -362,7 +360,6 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
-import { reserveImageRequest, finishImageRequest } from '@/utils/pendingImageRequest'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
@@ -391,6 +388,8 @@ const { currentIndustryId } = storeToRefs(industryStore)
 // Keep WeChat star-refresh forced off here so old checkbox events cannot misfire workflow polls.
 const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
+const mobileChatPanelOpen = ref(false)
+onDeactivated(() => { mobileChatPanelOpen.value = false })
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
@@ -831,55 +830,6 @@ const composerStatusText = computed(() => {
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
-
-const imagePending = ref(false)
-const chatImage = ref<{ scope: string; images: string[]; model: string; charge: string } | null>(null)
-let imageViewMounted = true
-onBeforeUnmount(() => { imageViewMounted = false })
-
-async function generateChatImage() {
-  const prompt = messageInput.value.trim()
-  if (!prompt || isLoading.value || imagePending.value || multimodalPendingCount.value || artifactStaging.value.length || unsupportedStaging.value.length) return
-  const scope = messageSessionKey.value
-  const identity = resolveChatStorageScope()
-  const sessionId = currentSessionId.value
-  const modId = modsStore.activeModId
-  const isOwnerCurrent = captureAuthSession()
-  let pending: Awaited<ReturnType<typeof reserveImageRequest>> | undefined
-  imagePending.value = true
-  try {
-    pending = await reserveImageRequest(identity, sessionId, modId, prompt)
-    if (!isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
-    const result = await chatApi.generateImage(prompt, pending.requestId)
-    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
-    const images = result.images.filter(url =>
-      /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.startsWith('https://'),
-    )
-    if (!images.length) {
-      showAppToast('生图结果没有可显示的图片。')
-      return
-    }
-    chatImage.value = {
-      scope,
-      images,
-      model: result.model,
-      charge: result.billed ? `本次扣费 ¥${result.charge_amount}` : '自带密钥',
-    }
-    await nextTick()
-    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
-    finishImageRequest(pending.key, pending.requestId)
-    if (messageInput.value.trim() === prompt) messageInput.value = ''
-  } catch (error: unknown) {
-    if (error instanceof ApiError && [400, 401, 402, 403, 404, 422, 429].includes(error.status)) {
-      if (pending) finishImageRequest(pending.key, pending.requestId)
-    }
-    if (messageSessionKey.value === scope) {
-      showAppToast(error instanceof Error ? error.message : '生图失败，请核对模型和计费状态。')
-    }
-  } finally {
-    imagePending.value = false
-  }
-}
 
 const sendMessage = async () => {
   if (isRecalling.value) return

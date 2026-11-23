@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { webcrypto } from 'node:crypto'
+
+vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ tenantId: 7, localUserId: 17 }) }))
+beforeEach(() => { localStorage.clear(); vi.stubGlobal('crypto', webcrypto) })
 
 const apiGet = vi.fn()
 const apiPost = vi.fn()
@@ -173,31 +177,28 @@ describe('xcmaxMarketProxy local duty api probe', () => {
 
   it('executeEmployeeTask posts to local employee execute when local api is available', async () => {
     apiGet.mockResolvedValueOnce({})
-    apiPost.mockResolvedValueOnce({ ok: true, source: 'local' })
+    apiPost.mockImplementationOnce(async (_path, payload) => ({ success: true, execution_state: 'completed', idempotency_key: payload.idempotency_key, run_id: 'original-run', source: 'local' }))
     const mod = await import('./xcmaxMarketProxy')
     const r = await mod.default.executeEmployeeTask('emp 1', 'daily.brief', { topic: 'ops' })
-    expect(r).toEqual({ ok: true, source: 'local' })
+    expect(r).toMatchObject({ success: true, execution_state: 'completed', source: 'local' })
     expect(apiGet).toHaveBeenCalledWith('/api/xcmax/local/duty-graph/health')
-    expect(apiPost).toHaveBeenCalledWith('/api/xcmax/local/employees/emp%201/execute', {
+    expect(apiPost).toHaveBeenCalledWith('/api/xcmax/local/employees/emp%201/execute', expect.objectContaining({
       task: 'daily.brief',
-      input_data: { topic: 'ops' },
-    })
+      input_data: { topic: 'ops' }, idempotency_key: expect.any(String), turn_id: expect.any(String),
+    }), { retry: false })
   })
 
-  it('executeEmployeeTask falls back to market proxy when local execute returns 404', async () => {
+  it('executeEmployeeTask reads its original key instead of posting to market after a 404', async () => {
     apiGet.mockResolvedValueOnce({})
     apiPost.mockRejectedValueOnce({ status: 404 })
-    apiPost.mockResolvedValueOnce({ ok: true, source: 'market' })
     const mod = await import('./xcmaxMarketProxy')
     const r = await mod.default.executeEmployeeTask('emp 2', 'daily.brief', { topic: 'ops' })
-    expect(r).toEqual({ ok: true, source: 'market' })
-    expect(apiPost).toHaveBeenNthCalledWith(1, '/api/xcmax/local/employees/emp%202/execute', {
+    expect(r).toMatchObject({ success: false, execution_state: 'unknown' })
+    expect(apiPost).toHaveBeenCalledTimes(1)
+    expect(apiPost).toHaveBeenNthCalledWith(1, '/api/xcmax/local/employees/emp%202/execute', expect.objectContaining({
       task: 'daily.brief',
       input_data: { topic: 'ops' },
-    })
-    expect(apiPost).toHaveBeenNthCalledWith(2, '/api/xcmax/market-proxy/employees/emp%202/execute', {
-      task: 'daily.brief',
-      input_data: { topic: 'ops' },
-    })
+    }), { retry: false })
+    expect(apiGet).toHaveBeenLastCalledWith(expect.stringContaining('/employees/emp%202/runs?idempotency_key='), {}, { retry: false })
   })
 })

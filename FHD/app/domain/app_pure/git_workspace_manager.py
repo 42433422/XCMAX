@@ -131,7 +131,7 @@ class GitWorkspaceManager:
     def remove_worktree(self, base_cwd: str, wt_path: str) -> None:
         persistent = self.relay_persistent_worktree_path()
         if persistent and os.path.realpath(wt_path) == os.path.realpath(persistent):
-            return  # 持久复用 worktree：保留以供下个任务复用，不删（下次 prepare 时重置为干净基线）。
+            return  # 持久 worktree 保留；下次 prepare 先检查是否存在未确认的改动。
         try:
             self.git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
         except RECOVERABLE_ERRORS:
@@ -140,8 +140,12 @@ class GitWorkspaceManager:
     def commit_and_push(self, cwd: str, branch: str, text: str) -> tuple[bool, str]:
         """push 阶段：add + commit + push 分支到 origin。"""
         try:
-            self.git(cwd, "add", "-A", timeout=120)
+            staged = self.git(cwd, "add", "-A", timeout=120)
+            if staged.returncode != 0:
+                return False, "暂存失败：" + (staged.stderr.strip() or staged.stdout.strip())[:300]
             st = self.git(cwd, "status", "--porcelain", timeout=30)
+            if st.returncode != 0:
+                return False, "读取提交状态失败：" + (st.stderr.strip() or st.stdout.strip())[:300]
             if not st.stdout.strip():
                 return False, "无改动可提交"
             title = (text.strip().splitlines() or ["开发任务"])[0][:60]

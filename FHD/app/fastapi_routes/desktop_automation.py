@@ -76,7 +76,8 @@ def get_profile(app_id: str):
 @router.post("/profiles")
 def register_profile(body: RegisterProfileBody):
     svc = get_desktop_automation_service()
-    return {"success": True, "data": svc.register_profile(body.profile)}
+    result = svc.register_profile(body.profile)
+    return {"success": result.get("success", False), "data": result}
 
 
 @router.post("/workflow/run")
@@ -114,4 +115,5 @@ async def bootstrap_app(body: BootstrapBody):
 @router.post("/yolo/export")
 def export_yolo(app_id: str):
     svc = get_desktop_automation_service()
-    return {"success": True, "data": svc.export_yolo(app_id)}
+    result = svc.export_yolo(app_id)
+    return {"success": result.get("success", False), "data": result}

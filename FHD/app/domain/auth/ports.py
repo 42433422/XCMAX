@@ -135,6 +135,18 @@ class MarketFirstLogin(Protocol):
     ) -> Awaitable[tuple[JsonObject | None, JSONResponse | None]]: ...
 
 
+class OfflineLogin(Protocol):
+    def __call__(
+        self,
+        *,
+        username: str,
+        password: str,
+        auth_app_service: LoginBackend,
+        sku: str,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> Awaitable[tuple[JsonObject | None, JSONResponse | None]]: ...
+
+
 class FinalizeOidc(Protocol):
     def __call__(
         self,

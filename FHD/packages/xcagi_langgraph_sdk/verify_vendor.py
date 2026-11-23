@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """XCAGI vendored langgraph-sdk 来源与许可证锁定验证脚本 (LG-W0-11).
 
-本脚本为「git tag -> SHA」来源校验（与 xcagi_langgraph_checkpoint 的 LG-W0-03 同型）：
+本脚本校验「git tag -> SHA -> 上游清单 -> 本地补丁 -> 当前清单」来源链：
 锁定的上游 tag 与 commit 见同目录 PROVENANCE.json（当前 sdk==0.4.6 @ 55b0e36c51d2922b11640b980fcfca1064243a96）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph_sdk 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 校验 vendored 副本与上游锁定 tag 解析出的 commit 的 libs/sdk-py/langgraph_sdk + LICENSE
-     字节级一致。在线模式取回远端 tag，rev-parse 其指向的 commit，要求恰好等于 PROVENANCE 锁定 SHA，
-     再对该 commit 做 git archive 与本地比对；PROVENANCE 记录的本地修改文件会报不一致。
+  3. 反向重放已记录的本地补丁，校验还原后的源码与上游清单一致，再正向重放校验当前源码。
+  4. 在线模式取回远端 tag，rev-parse 其指向的 commit，要求恰好等于 PROVENANCE 锁定 SHA，
+     再对 libs/sdk-py/langgraph_sdk + LICENSE 做 git archive，与上游清单逐文件比对。
      跳过本地产物（__pycache__/pyc/.venv/build/dist/*.egg-info/.pytest_cache 等）。
 
 可移植性: 上游源码在 with tempfile.TemporaryDirectory() 作用域内临时浅克隆（取回 tag 而非固定 SHA 或
  /tmp 检出），作用域退出自动清理，不残留临时目录；离线模式（--offline）则完全跳过上游比对。
 
 用法:
-  python verify_vendor.py            # 本地清单 + LICENSE + 上游 tag->commit 比对
-  python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过上游比对
+  python verify_vendor.py            # 本地清单 + LICENSE + 补丁重放 + 上游 tag->commit 比对
+  python verify_vendor.py --offline  # 本地清单 + LICENSE + 补丁重放，跳过在线比对
   python verify_vendor.py --gen      # 重新生成 MANIFEST.sha256
 
 退出码: 0=全部通过; 1=校验失败。
@@ -26,9 +26,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -71,16 +73,17 @@ def _walk_files(root: Path) -> list[Path]:
     return out
 
 
-def collect_files() -> dict[str, str]:
+def collect_files(root: Path | None = None) -> dict[str, str]:
     """返回 {相对路径(正斜杠): sha256}, 覆盖 TOPNODE 下的所有源文件。"""
+    root = root or HERE
     result: dict[str, str] = {}
     for node in TOPNODE:
-        p = HERE / node
+        p = root / node
         if p.is_file():
             result[node] = sha256_of(p)
         elif p.is_dir():
             for f in _walk_files(p):
-                result[f.relative_to(HERE).as_posix()] = sha256_of(f)
+                result[f.relative_to(root).as_posix()] = sha256_of(f)
     return result
 
 
@@ -91,12 +94,13 @@ def write_manifest() -> None:
     print(f"[gen] wrote {len(files)} entries -> {MANIFEST.name}")
 
 
-def read_manifest() -> dict[str, str]:
-    if not MANIFEST.exists():
-        print(f"[FAIL] manifest 缺失: {MANIFEST.name}")
+def read_manifest(path: Path | None = None) -> dict[str, str]:
+    path = path or MANIFEST
+    if not path.exists():
+        print(f"[FAIL] manifest 缺失: {path.name}")
         sys.exit(1)
     out: dict[str, str] = {}
-    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -117,9 +121,7 @@ def verify_manifest() -> bool:
     actual = collect_files()
     missing = [rel for rel in expected if rel not in actual]
     extra = [rel for rel in actual if rel not in expected]
-    changed = [
-        rel for rel in actual if rel in expected and actual[rel] != expected[rel]
-    ]
+    changed = [rel for rel in actual if rel in expected and actual[rel] != expected[rel]]
 
     ok = True
     for rel in sorted(missing):
@@ -147,6 +149,62 @@ def verify_license() -> bool:
     ok = "MIT License" in text and "LangChain, Inc." in text
     print(f"[{'OK' if ok else 'FAIL'}] LICENSE 为 MIT (LangChain, Inc.)")
     return ok
+
+
+def verify_local_patches(prov: dict) -> bool:
+    """Reconstruct the pinned upstream bytes and replay the recorded runtime delta."""
+    baseline = HERE / "UPSTREAM_MANIFEST.sha256"
+    if (
+        prov.get("upstream_sha256_manifest") != baseline.name
+        or not baseline.is_file()
+        or sha256_of(baseline) != prov.get("upstream_manifest_sha256")
+    ):
+        print("[FAIL] upstream manifest identity mismatch")
+        return False
+    records = prov.get("local_patches")
+    if not isinstance(records, list) or not records:
+        print("[FAIL] local patch provenance missing")
+        return False
+    patches: list[Path] = []
+    for record in records:
+        if not isinstance(record, dict):
+            return False
+        patch = (HERE / str(record.get("path", ""))).resolve()
+        if (
+            not patch.is_relative_to((HERE / "patches").resolve())
+            or not patch.is_file()
+            or sha256_of(patch) != record.get("sha256")
+        ):
+            print("[FAIL] local patch identity mismatch")
+            return False
+        patches.append(patch)
+    installed = collect_files()
+    with tempfile.TemporaryDirectory(prefix="langgraph-sdk-provenance-") as tmp:
+        restored = Path(tmp)
+        shutil.copytree(HERE / "langgraph_sdk", restored / "langgraph_sdk")
+        shutil.copy2(HERE / "LICENSE", restored / "LICENSE")
+        for reverse, sequence in ((True, reversed(patches)), (False, patches)):
+            for patch in sequence:
+                patch_to_apply = patch
+                if patch.suffix == ".b64":
+                    patch_to_apply = restored / f"{patch.stem}.decoded.patch"
+                    decoded = base64.b64decode(patch.read_text(encoding="ascii"))
+                    patch_to_apply.write_bytes(decoded)
+                command = ["git", "apply"]
+                if reverse:
+                    command.append("--reverse")
+                result = subprocess.run(
+                    [*command, str(patch_to_apply)], cwd=restored, capture_output=True, text=True
+                )
+                if result.returncode:
+                    print(f"[FAIL] patch replay failed: {patch.name}: {result.stderr.strip()}")
+                    return False
+            expected = read_manifest(baseline) if reverse else installed
+            if collect_files(restored) != expected:
+                print(f"[FAIL] {'upstream' if reverse else 'runtime'} reconstruction mismatch")
+                return False
+    print("[OK] local patches reconstruct pinned upstream and replay the installed runtime")
+    return True
 
 
 def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
@@ -203,9 +261,9 @@ def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
 
 
 def verify_upstream(prov: dict) -> bool:
-    """取回 PROVENANCE 锁定的远端 tag，校验其 commit 等于锁定 SHA，并字节级比对 libs/sdk-py + LICENSE。"""
+    """取回远端 tag，校验锁定 SHA，并比对 libs/sdk-py + LICENSE 的上游清单。"""
     sha = prov["upstream_commit_sha"]
-    tag = prov.get("upstream_tag", "1.2.10")
+    tag = prov.get("upstream_tag", "sdk==0.4.6")
     with tempfile.TemporaryDirectory() as tmpdir:
         base = Path(tmpdir)
         ok, repo, err = _clone_tag_at_sha(prov, base)
@@ -230,27 +288,23 @@ def verify_upstream(prov: dict) -> bool:
             kwargs = {"filter": "data"} if sys.version_info >= (3, 12) else {}
             tar.extractall(base, **kwargs)
 
-        # tar 内已含 libs/sdk-py/ 完整树；vendored rel 直接拼接在该根之下
+        # tar 内已含 libs/sdk-py/ 完整树；比较补丁之前的上游清单。
         upstream_lg = base / "libs" / "sdk-py"
-        upstream_lic = base / "libs" / "sdk-py" / "LICENSE"
         if not upstream_lg.is_dir():
             print("[FAIL] 锁定 commit 缺少 libs/sdk-py")
             return False
 
-        mismatches: list[str] = []
-        for rel, digest in collect_files().items():
-            upstream = upstream_lic if rel == "LICENSE" else upstream_lg / rel
-            if not upstream.is_file():
-                mismatches.append(f"{rel} (上游缺失)")
-                continue
-            if sha256_of(upstream) != digest:
-                mismatches.append(rel)
+        expected = read_manifest(HERE / "UPSTREAM_MANIFEST.sha256")
+        actual = collect_files(upstream_lg)
+        mismatches = [
+            rel
+            for rel in sorted(expected.keys() | actual.keys())
+            if expected.get(rel) != actual.get(rel)
+        ]
 
     ok = not mismatches
     if ok:
-        print(
-            f"[OK] 远端 tag {tag} 解析为锁定 commit {sha[:12]}，libs/sdk-py 字节级一致"
-        )
+        print(f"[OK] 远端 tag {tag} 解析为锁定 commit {sha[:12]}，libs/sdk-py 与上游清单字节级一致")
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")
@@ -260,9 +314,7 @@ def verify_upstream(prov: dict) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gen", action="store_true", help="重新生成 MANIFEST.sha256")
-    parser.add_argument(
-        "--offline", action="store_true", help="跳过上游吸收源字节级比对"
-    )
+    parser.add_argument("--offline", action="store_true", help="跳过上游吸收源字节级比对")
     args = parser.parse_args()
 
     if args.gen:
@@ -270,7 +322,7 @@ def main() -> int:
         return 0
 
     prov = load_provenance()
-    results = [verify_license(), verify_manifest()]
+    results = [verify_license(), verify_manifest(), verify_local_patches(prov)]
     if not args.offline:
         results.append(verify_upstream(prov))
     else:

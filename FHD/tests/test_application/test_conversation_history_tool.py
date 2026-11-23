@@ -1,4 +1,4 @@
-"""Native-plan dispatch reads exact SQL fragments under real session authorization."""
+"""Canonical tool dispatch reads exact SQL fragments under real session authorization."""
 
 import json
 from datetime import timedelta
@@ -8,8 +8,6 @@ import pytest
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.task_conversation_store import task_conversation_store as store
-from app.application.workflow.llm_plan_generation import _decode_completion, _tool_specs
-from app.application.workflow.tool_calling import native_plan_payload, plan_function_tools
 from app.application.workflow_registry_app import get_workflow_tool_registry
 from app.db.models.user import Session, User
 from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
@@ -51,42 +49,8 @@ def _context(owner=1, conversation="private"):
 
 
 def _execute(context, **arguments):
-    envelope = {
-        "mode": "workflow",
-        "nodes": [
-            {
-                "node_id": "read",
-                "tool_id": "conversation_history",
-                "action": "read",
-                "params": arguments,
-            }
-        ],
-    }
-    native = {
-        "choices": [
-            {
-                "message": {
-                    "tool_calls": [
-                        {
-                            "id": "history-plan",
-                            "type": "function",
-                            "function": {
-                                "name": plan_function_tools()[0]["function"]["name"],
-                                "arguments": json.dumps(envelope),
-                            },
-                        }
-                    ]
-                }
-            }
-        ],
-    }
-    parsed, nodes = _decode_completion(native_plan_payload(native))
-    assert parsed["mode"] == "workflow"
-    node = nodes[0]
     return AgentToolExecutor().execute(
-        AgentStep(
-            node_id=node.node_id, tool_id=node.tool_id, action=node.action, params=node.params
-        ),
+        AgentStep(node_id="read", tool_id="conversation_history", action="read", params=arguments),
         runtime_context=context,
     )
 
@@ -196,20 +160,16 @@ def test_read_is_reauthorized_after_lifecycle_change_even_with_same_idempotency_
 
 
 def test_history_read_contract_is_available_to_both_profiles_with_no_identity_parameters():
-    from app.application.workflow.planner_prompt_profile import select_tools_for_prompt
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.workflow.planning_graph_policy import filter_registry_for_profile
 
     registry = get_workflow_tool_registry()
     for profile in ("normal", "pro_default"):
-        visible = select_tools_for_prompt(
-            filter_registry_for_profile(registry, profile), "你好", {}
-        )
-        spec = next(
-            item for item in _tool_specs(visible) if item["tool_id"] == "conversation_history"
-        )
-        schema = next(
-            action["input_schema"] for action in spec["actions"] if action["action"] == "read"
-        )
+        visible = filter_registry_for_profile(registry, profile)
+        assert "read" in visible["conversation_history"]["actions"]
+        spec = get_tool_action_spec("conversation_history", "read")
+        assert spec is not None
+        schema = spec.input_schema
         assert schema["additionalProperties"] is False
         assert not {"user_id", "tenant_id", "session_id", "conversation_id"}.intersection(
             schema["properties"]

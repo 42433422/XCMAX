@@ -47,6 +47,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _observe_context(stage: str, tokens: int) -> None:
+    """上下文指标为可观测性埋点，采集失败不能影响主流程。"""
+    try:
+        from app.utils import metrics
+
+        metrics.context_window_tokens.labels(stage=stage).observe(max(0, int(tokens)))
+    except RECOVERABLE_ERRORS:
+        logger.debug("context window metric skipped", exc_info=True)
+
+
+def _observe_compression(strategy: str) -> None:
+    try:
+        from app.utils import metrics
+
+        metrics.context_compression_total.labels(strategy=strategy).inc()
+    except RECOVERABLE_ERRORS:
+        logger.debug("context compression metric skipped", exc_info=True)
+
+
+def _observe_overflow(stage: str) -> None:
+    try:
+        from app.utils import metrics
+
+        metrics.context_window_overflow_total.labels(stage=stage).inc()
+    except RECOVERABLE_ERRORS:
+        logger.debug("context overflow metric skipped", exc_info=True)
+
+
 __all__ = [
     "CONTEXT_WINDOW_MANAGER_VERSION",
     "ContextCompressionResult",
@@ -206,6 +235,15 @@ class ContextWindowManager:
                 budget = min(budget, self._explicit_budget - output_tokens - external_tokens)
         return budget - max(0, int(reserved_tokens))
 
+    @staticmethod
+    def _validate_context(context) -> None:
+        metadata = getattr(context, "metadata", None)
+        request = metadata.get("request_context") if isinstance(metadata, dict) else None
+        if isinstance(request, dict):
+            from app.application.ai_chat.dialogue_memory import conversation_summary
+
+            conversation_summary(request)
+
     async def compress(
         self,
         messages: list[dict[str, str]] | None,
@@ -220,36 +258,40 @@ class ContextWindowManager:
         output_tokens: int = 0,
         external_tokens: int = 0,
     ) -> ContextCompressionResult:
-        if context is not None:
-            lock = getattr(context, "_compression_lock", None)
-            if lock is None:
-                lock = asyncio.Lock()
-                context._compression_lock = lock
-            async with lock:
-                return await self._compress(
-                    messages or [],
-                    user_id,
-                    trace_id,
-                    provider,
-                    context,
-                    reserved_tokens,
-                    model,
-                    model_limits,
-                    output_tokens,
-                    external_tokens,
-                )
-        return await self._compress(
-            messages or [],
-            user_id,
-            trace_id,
-            provider,
-            None,
-            reserved_tokens,
-            model,
-            model_limits,
-            output_tokens,
-            external_tokens,
-        )
+        try:
+            if context is not None:
+                lock = getattr(context, "_compression_lock", None)
+                if lock is None:
+                    lock = asyncio.Lock()
+                    context._compression_lock = lock
+                async with lock:
+                    return await self._compress(
+                        messages or [],
+                        user_id,
+                        trace_id,
+                        provider,
+                        context,
+                        reserved_tokens,
+                        model,
+                        model_limits,
+                        output_tokens,
+                        external_tokens,
+                    )
+            return await self._compress(
+                messages or [],
+                user_id,
+                trace_id,
+                provider,
+                None,
+                reserved_tokens,
+                model,
+                model_limits,
+                output_tokens,
+                external_tokens,
+            )
+        except ContextWindowExceeded:
+            _observe_overflow("compress")
+            raise
 
     async def _compress(
         self,
@@ -267,10 +309,14 @@ class ContextWindowManager:
         started = time.perf_counter()
         if model_limits is not None:
             model_limits.assert_current()
+
+        self._validate_context(context)
         pre_tokens = estimate_messages_tokens(messages)
         budget = self._input_budget(
             model, model_limits, output_tokens, external_tokens, reserved_tokens
         )
+        _observe_context("pre", pre_tokens)
+        _observe_context("budget", budget)
         system = [m for m in messages if m.get("role") in {"system", "developer"}]
         history = [m for m in messages if m.get("role") not in {"system", "developer"}]
         groups = _turns(history)
@@ -337,7 +383,9 @@ class ContextWindowManager:
                 model=model,
                 model_limits=model_limits,
                 max_tokens=min(self._summarize_max_tokens, summary_room),
+                context=context,
             )
+            self._validate_context(context)
             if not summary_text:
                 raise ContextWindowExceeded(
                     "历史摘要生成失败，原文已保留，请重试或按历史引用分批读取。"
@@ -360,6 +408,8 @@ class ContextWindowManager:
         post_tokens = estimate_messages_tokens(compressed)
         if messages and post_tokens > budget:
             raise ContextWindowExceeded("上下文超过预算，原文未被裁剪。")
+        _observe_context("post", post_tokens)
+        _observe_compression(strategy)
         if model_limits is not None:
             model_limits.assert_current()
         return ContextCompressionResult(
@@ -387,6 +437,7 @@ class ContextWindowManager:
         model=None,
         model_limits=None,
         max_tokens=None,
+        context=None,
     ) -> tuple[str, LLMCall | None]:
         """Delegate cumulative summaries to LangChain; never pre-trim covered text.
 
@@ -418,6 +469,7 @@ class ContextWindowManager:
         batch_count = 0
 
         async def invoke_summary(request):
+            self._validate_context(context)
             call = LLMCall(
                 metadata={
                     "source": "context_window_manager.summarize",
@@ -482,6 +534,7 @@ class ContextWindowManager:
         summary: list[AnyMessage] = []
         summary_runtime: Runtime[None] = Runtime(context=None)
         while pending:
+            self._validate_context(context)
 
             def request_size(rows):
                 text = get_buffer_string([*summary, *rows], format="xml")

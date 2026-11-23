@@ -124,6 +124,9 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     chat_payload = final_output.get("chat_payload")
     if isinstance(chat_payload, dict):
         payloads.append(chat_payload)
+    codex_result = final_output.get("codex_result")
+    if isinstance(codex_result, dict):
+        payloads.append(codex_result)
     return payloads
 
 
@@ -219,6 +222,7 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         for candidate in (
             payload.get("response"),
             payload.get("message"),
+            payload.get("output") if payload.get("runtime") == "codex" else None,
             nested.get("message"),
             nested.get("summary"),
         ):
@@ -394,6 +398,61 @@ def guard_unexecuted_payload(run: Any, payload: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _verified_task_admissions(run: Any) -> list[dict[str, Any]]:
+    """Project only host-bound source proofs, not an executor's admission labels."""
+    from app.application.agent_orchestrator.result_verification import (
+        latest_step_call,
+        step_verification_blocked,
+    )
+
+    admissions = []
+    sources = {
+        ("employee", "execute"): ("employee_task_ledger", "business_effect_verified"),
+        ("enterprise_cognition", "plan"): ("enterprise_authority", "business_execution_verified"),
+        ("excel_import", "office_stage"): ("docking_approval", "business_execution_verified"),
+        ("dataset_rag", "rebuild_index"): ("dataset_rebuild_store", "business_effect_verified"),
+    }
+    for step in getattr(run, "steps", []) or []:
+        source = sources.get((step.tool_id, step.action))
+        if source is None or step.status != "completed":
+            continue
+        call = latest_step_call(run, step)
+        report = call.metadata.get("verification") if call else None
+        if (
+            not isinstance(report, dict)
+            or report.get("status") != "verified"
+            or report.get("accepted") is not True
+            or step_verification_blocked(run, step)
+        ):
+            continue
+        for check in report.get("checks", []):
+            evidence = check.get("evidence") or {}
+            if (
+                check.get("source") == source[0]
+                and check.get("status") == "passed"
+                and evidence.get("admission_verified") is True
+                and evidence.get(source[1]) is False
+                and (
+                    source[0] != "employee_task_ledger" or evidence.get("scope") == "task_admission"
+                )
+            ):
+                admissions.append(
+                    {
+                        "source": source[0],
+                        "scope": "task_admission",
+                        "task_id": evidence.get("task_id"),
+                        "current_child_status": evidence.get("current_child_status"),
+                        "business_effect_verified": False,
+                        **(
+                            {"approval_request_id": evidence.get("approval_request_id")}
+                            if source[0] == "docking_approval"
+                            else {}
+                        ),
+                    }
+                )
+    return admissions
+
+
 def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     """Attach a bounded, user-readable terminal result to a completed run."""
     status = _text(getattr(run, "status", ""), limit=32)
@@ -401,12 +460,24 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         return {}
     final_output = getattr(run, "final_output", {})
     final_output = dict(final_output) if isinstance(final_output, dict) else {}
+    runtime_result = next(
+        (
+            value
+            for key in ("codex_result", "chat_payload")
+            if isinstance(value := final_output.get(key), dict) and value.get("runtime") == "codex"
+        ),
+        None,
+    )
+    reply_only = runtime_result is not None and runtime_result.get("business_completed") is not True
     terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
     if terminal_catalog:
         status = "failed"  # Workflow completion is not success of a rejected/historical save.
+    admissions = _verified_task_admissions(run) if status == "completed" else []
     existing = final_output.get("business_result")
     if (
         not terminal_catalog
+        and runtime_result is None
+        and not admissions
         and isinstance(existing, dict)
         and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
     ):
@@ -415,21 +486,50 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     identity = harness_event_context(run)
     artifacts = getattr(run, "artifacts", []) or []
     pending = _pending_approval_signal(payloads)
+    approval_ids = [
+        item["approval_request_id"]
+        for item in admissions
+        if item.get("source") == "docking_approval" and item.get("approval_request_id")
+    ]
+    if not pending and approval_ids:
+        pending = {"approval_request_ids": approval_ids}
     # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
     # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
     unexecuted = (
-        mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
-        or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
-    )
+        not reply_only and mark_unexecuted_order_run(run, str(getattr(run, "message", "") or ""))
+    ) or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
     if unexecuted:
         status = "failed"
-    result_status = "pending_approval" if pending else status
+    result_status = (
+        "pending_approval" if pending else "pending" if admissions and not unexecuted else status
+    )
     if pending:
         summary = _pending_approval_summary(pending)
     elif unexecuted:
         summary = UNEXECUTED_ORDER_ERROR
+    elif admissions:
+        summary = "任务已登记并通过原账本核验；子任务的业务结果尚未确认。"
     else:
         summary = _result_summary(run, payloads)
+    if runtime_result is not None and reply_only and not pending and status == "completed":
+        # Completing a reply or some verified actions cannot prove the user's
+        # whole business goal. The reply and business projections stay distinct.
+        result_status = "reply_completed"
+        summary = (
+            "本轮回复已完成；已有操作回执通过核验，整体业务目标尚待核对"
+            if runtime_result.get("verified_operations") is True
+            else "本轮回复已完成，尚未核验业务目标完成"
+        )
+        if runtime_result.get("reconciliation_required") or runtime_result.get(
+            "requires_reconciliation"
+        ):
+            result_status = "unknown"
+            summary = "已有调用的结果尚待核对，请勿重复提交业务操作"
+        elif runtime_result.get("ok", runtime_result.get("success")) is not True:
+            result_status = _text(runtime_result.get("execution_state"), limit=32) or "failed"
+            if result_status == "completed":
+                result_status = "goal_verification_required"
+            summary = _text(runtime_result.get("error"), limit=800) or "业务目标尚未通过核验"
     result = {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
         "status": result_status,
@@ -449,6 +549,15 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
                 for call in (getattr(run, "tool_calls", []) or [])
             ),
             "pending_approval": bool(pending),
+            **(
+                {
+                    "scope": "task_admission",
+                    "business_effect_verified": False,
+                    "admitted_tasks": admissions,
+                }
+                if admissions
+                else {}
+            ),
             "approval_request_ids": (list(pending["approval_request_ids"]) if pending else []),
             "artifact_ids": [
                 _text(getattr(artifact, "artifact_id", ""), limit=96)
@@ -458,6 +567,13 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         },
         "projection_key": f"{BUSINESS_HARNESS_PROTOCOL}:{identity['run_id']}:{result_status}",
     }
+    if runtime_result is not None:
+        result.update(
+            business_completed=result["success"]
+            and runtime_result.get("business_completed") is True,
+            verified_operations=runtime_result.get("verified_operations") is True,
+            reply_completed=result_status == "reply_completed",
+        )
     final_output["business_result"] = result
     run.final_output = final_output
     return result
@@ -527,6 +643,7 @@ def visible_chat_business_result(
         or _completed_tool_count(result) > 0
         or result.get("pending_approval")
         or result.get("requires_reconciliation")
+        or result.get("verified_operations")
         or status in _VISIBLE_BUSINESS_RESULT_STATUSES
         or (
             status == "completed"

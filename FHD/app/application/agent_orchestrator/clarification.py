@@ -18,6 +18,65 @@ class ClarificationAnswerError(ValueError):
     """The answer does not resolve the currently pending input request."""
 
 
+def _control_binding(run: AgentRun, step: AgentStep) -> dict[str, Any]:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.result_verification import _scope
+
+    return {
+        "scope": _scope(run, run.metadata.get("runtime_context") or {}),
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+        "tool_id": step.tool_id,
+        "action": step.action,
+        "input_sha256": canonical_hash(step.params),
+        "output_sha256": canonical_hash(step.output),
+    }
+
+
+def control_verification_report(run: AgentRun, step: AgentStep) -> dict[str, Any] | None:
+    """An original host answer is a control decision, never a business receipt."""
+    if (
+        (step.tool_id, step.action, step.status) != ("clarify", "ask", "completed")
+        or step.output.get("answer_confirmed") is not True
+        or any(call.step_id == step.step_id for call in run.tool_calls)
+    ):
+        return None
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.result_verification import PROTOCOL
+
+    try:
+        expected = _control_binding(run, step)
+        for event in reversed(run.events):
+            if (
+                event.run_id == run.run_id
+                and event.event_type
+                in {"step.plan_confirmation_answered", "step.clarification_answered"}
+                and event.data.get("answered_by") == run.user_id
+                and expected in (event.data.get("control_receipts") or [])
+            ):
+                return {
+                    "protocol": PROTOCOL,
+                    "status": "not_required",
+                    "accepted": True,
+                    "code": "host_control_answer_confirmed",
+                    "checks": [
+                        {
+                            "check_id": "original_control_answer",
+                            "status": "passed",
+                            "source": "host_confirmation_event",
+                            "evidence": {
+                                "event_id": event.event_id,
+                                "binding_sha256": canonical_hash(expected),
+                                "business_effect_verified": False,
+                            },
+                        }
+                    ],
+                }
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
 def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep | None:
     """Select the pending interaction, optionally constrained to an approved step."""
     wanted = str(approved_step_id or "").strip()
@@ -99,7 +158,12 @@ def apply_plan_confirmation(run: AgentRun, *, step_id: str, confirmed: bool) -> 
     run.add_event(
         "step.plan_confirmation_answered",
         "计划级确认已答复",
-        {"step_id": step.step_id, "confirmed": bool(confirmed)},
+        {
+            "step_id": step.step_id,
+            "confirmed": bool(confirmed),
+            "answered_by": run.user_id,
+            "control_receipts": [_control_binding(run, step)] if confirmed else [],
+        },
     )
 
 
@@ -110,6 +174,7 @@ def apply_clarification_answer(
     parameters: dict[str, Any],
     confirmed: bool = False,
     allowed_fields: set[str] | None = None,
+    answered_by: str | None = None,
 ) -> None:
     """Apply a bounded answer to the exact clarification node in the durable plan."""
     step = next((item for item in run.steps if item.step_id == step_id), None)
@@ -124,6 +189,22 @@ def apply_clarification_answer(
     target = next((item for item in run.steps if item.node_id == target_id), None)
     if target is None or target.status != "pending":
         raise ClarificationAnswerError("澄清目标已变化，请重新规划任务")
+    reference_receipts = run.metadata.get("reference_clarifications", {})
+    if not isinstance(reference_receipts, dict):
+        raise ClarificationAnswerError("原引用澄清凭据无效")
+    reference_receipt = reference_receipts.get(step.step_id)
+    if reference_receipt is not None and (
+        not isinstance(reference_receipt, dict)
+        or reference_receipt.get("target_node_id") != target.node_id
+        or reference_receipt.get("target_params") != target.params
+        or reference_receipt.get("question_params") != step.params
+        or reference_receipt.get("answer") is not None
+        or (
+            (run.metadata.get("runtime_context") or {}).get("source") == "codex_runtime"
+            and str(answered_by or "") != run.user_id
+        )
+    ):
+        raise ClarificationAnswerError("原引用澄清凭据或答复身份已变化")
     spec = get_tool_action_spec(target.tool_id, target.action)
     missing = set(missing_tool_fields(target.tool_id, target.action, target.params))
     from app.application.shipment_inputs import shipment_call_payload
@@ -261,7 +342,12 @@ def apply_clarification_answer(
             candidate.update(deepcopy(parameters))
         if not confirmed and detail.get("requires_confirmation", True):
             raise ClarificationAnswerError("请明确回答该操作的澄清问题")
-    if confirmed and spec is not None and isinstance(spec.input_schema, dict):
+    if (
+        confirmed
+        and reference_receipt is None
+        and spec is not None
+        and isinstance(spec.input_schema, dict)
+    ):
         properties = spec.input_schema.get("properties") or {}
         if "confirmed" in properties:
             candidate["confirmed"] = True
@@ -344,6 +430,12 @@ def apply_clarification_answer(
         raise ClarificationAnswerError(f"补充信息后计划校验失败：{plan_error}")
     # Invalid answers leave both the pending request and full plan untouched.
     target.params = candidate
+    if reference_receipt is not None:
+        reference_receipt["answer"] = {
+            "answered_by": str(answered_by or ""),
+            "parameters": deepcopy(parameters),
+            "result_params": deepcopy(candidate),
+        }
     step.params = deepcopy(candidate_clarification.params)
     run.metadata["plan"] = plan_to_dict(candidate_plan)
     step.status = "completed"
@@ -353,6 +445,7 @@ def apply_clarification_answer(
         "requires_confirmation": False,
         "confirmed": bool(confirmed),
     }
+    answered_steps = [step]
     for other in run.steps:
         detail = other.params.get("clarification") or {}
         if (
@@ -373,6 +466,7 @@ def apply_clarification_answer(
             if not unresolved:
                 other.status = "completed"
                 other.output = {"answer_confirmed": True, "resolved_by_step_id": step.step_id}
+                answered_steps.append(other)
     run.final_output = {}
     run.error = ""
     run.add_event(
@@ -383,6 +477,8 @@ def apply_clarification_answer(
             "target_node_id": target.node_id,
             "fields": sorted(parameters),
             "plan_sha256": plan_fingerprint(candidate_plan),
+            "answered_by": run.user_id,
+            "control_receipts": [_control_binding(run, answered) for answered in answered_steps],
         },
     )
 
@@ -594,6 +690,23 @@ def pause_for_ambiguous_target(
             "candidates": candidates,
         },
     )
+    if reference and field_path:
+        from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+        receipts = run.metadata.setdefault("reference_clarifications", {})
+        receipts[clarify_step.step_id] = {
+            "version": 1,
+            "sequence": len(receipts),
+            "node_id": clarify_node_id,
+            "target_node_id": step.node_id,
+            "target_params": deepcopy(step.params),
+            "question_params": deepcopy(params),
+            "source_outputs": {
+                source.node_id: canonical_digest(source.output)
+                for source in run.steps
+                if source.node_id in step.depends_on and source.status == "completed"
+            },
+        }
     index = next(
         (position for position, item in enumerate(run.steps) if item.step_id == step.step_id),
         len(run.steps),

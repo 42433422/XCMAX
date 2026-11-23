@@ -437,7 +437,13 @@ class AgentRun:
         message: str = "",
         data: dict[str, Any] | None = None,
     ) -> RunEvent:
-        payload = {"harness": harness_event_context(self), **dict(data or {})}
+        from app.application.agent_orchestrator.task_context import ensure_run_trace
+
+        context = ensure_run_trace(self, bind=event_type == "run.created" and not self.events)
+        payload = {"harness": harness_event_context(self), **context, **dict(data or {})}
+        payload.update(run_id=self.run_id, trace_id=context["trace_id"], task_id=context["task_id"])
+        if event_type == "run.failed":
+            payload.setdefault("error_code", "agent_run_failed")
         event = RunEvent(
             run_id=self.run_id,
             event_type=event_type,
@@ -446,11 +452,58 @@ class AgentRun:
         )
         self.events.append(event)
         self.touch()
+        # Logging is observational; failure here must never retry committed tools.
+        import logging
+
+        from app.utils.operational_errors import BOUNDARY_ERRORS
+
+        observation: dict[str, Any] = {
+            key: payload[key]
+            for key in (
+                "trace_id",
+                "span_id",
+                "parent_span_id",
+                "request_id",
+                "task_id",
+                "run_id",
+                "step_id",
+                "node_id",
+                "call_id",
+                "attempt",
+                "duration_ms",
+                "duration_scope",
+                "error_code",
+                "error_type",
+            )
+            if key in payload
+        }
+        try:
+            logging.getLogger(__name__).info(
+                "agent.execution.%s",
+                event_type,
+                extra={
+                    "extra_data": {
+                        **observation,
+                        "event_id": event.event_id,
+                        "status": self.status,
+                    }
+                },
+            )
+        except BOUNDARY_ERRORS:
+            pass
         return event
 
     def to_dict(self) -> dict[str, Any]:
+        from app.application.agent_orchestrator.task_context import ensure_run_trace
+
+        correlation = ensure_run_trace(self, live=False)
         return {
             "run_id": self.run_id,
+            **{
+                key: correlation[key]
+                for key in ("trace_id", "span_id", "request_id")
+                if key in correlation
+            },
             "user_id": self.user_id,
             "message": self.message,
             "status": self.status,

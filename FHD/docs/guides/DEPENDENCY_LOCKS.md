@@ -1,61 +1,47 @@
 # Python 依赖锁定与可重复构建
 
-## 问题
+## 当前依赖声明与安装入口
 
-主依赖声明在 [`XCAGI/requirements.txt`](../../XCAGI/requirements.txt)（及根目录可能存在的约束文件）；**未提交完整 lockfile** 时，不同时间 `pip install` 可能解析到不同次版本，导致「本地可运行、CI/生产不一致」。
+依赖声明以 [`pyproject.toml`](../../pyproject.toml) 为准：`[project.dependencies]` 包含固定 Codex SDK/CLI 和受管 LangGraph 基础运行时；`server-api`、`dev`、`ml` 分别补充服务器、测试与可选 ML/GPU 依赖。所有下列命令都在 `FHD/` 执行。
 
-## 已纳入版本控制的锁定文件
-
-仓库包含 **[`XCAGI/requirements.lock.txt`](../../XCAGI/requirements.lock.txt)**（由 `pip-compile` 根据 `XCAGI/requirements.txt` 生成，pip 可直接安装），以及服务端锁
-[`ops/deploy/requirements-server-api.lock.txt`](../../ops/deploy/requirements-server-api.lock.txt)。
-
-两个 lock 路径是 GitHub 依赖告警的稳定身份：升级时必须在原路径更新安全版本，不能通过改名让旧告警失去后续修复状态。服务端未锁定入口位于
-[`requirements-server-api.txt`](../../requirements-server-api.txt)，这样其中的 `./packages/...` 本地源码依赖既能被 CI 安装，也能由仓库根目录的依赖图解析。
-
-## 方案 A：pip-tools（当前采用）
-
-### 重新生成锁定文件（维护者本地）
+使用 [`uv.lock`](../../uv.lock) 安装已解析的完整依赖集合：
 
 ```bash
-python -m pip install pip-tools
-python -m piptools compile XCAGI/requirements.txt -o XCAGI/requirements.lock.txt --resolver=backtracking
+uv sync --frozen --extra server-api --extra dev
 ```
 
-升级依赖：先改 `requirements.txt`，再执行上述命令并提交 `requirements.lock.txt` 的 diff。
+仅安装服务器运行环境时省略 `--extra dev`。`tool.uv.sources` 将 LangGraph 指向仓库内受管源码，固定 Codex SDK/CLI 已是基础依赖，旧 `codex-runtime` extra 只保留安装命令兼容。
 
-### CI / 安装
+既有 pip、桌面构建和容器构建使用 [`requirements-server-api.txt`](../../requirements-server-api.txt)，其中包含基础运行时、服务器依赖和 `./packages/...` 本地源码条目。源码开发环境可按现有 Windows 后端构建方式安装：
 
 ```bash
-pip install -r XCAGI/requirements.lock.txt
+python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"
 ```
 
-CI 中 **`.github/workflows/test.yml`** 的 `requirements-lock-consistency` 任务会在 PR 上重跑 `pip-compile` 并与 `requirements.lock.txt` diff，防止漂移。
+[`ops/deploy/requirements-server-api.lock.txt`](../../ops/deploy/requirements-server-api.lock.txt) 约束顶层包的精确版本；它不替代安装清单中的本地源码依赖，也不是完整传递依赖锁。容器和 CI 的实际安装参数以各自构建文件为准。
 
-## 方案 B：uv（可选）
-
-若已安装 [uv](https://docs.astral.sh/uv/)：
-
-```bash
-uv pip compile XCAGI/requirements.txt -o XCAGI/requirements.lock.txt
-uv pip sync XCAGI/requirements.lock.txt
-```
-
-与 pip-tools **二选一维护即可**，避免两套流程并行未同步。
-
-## Poetry 替代路径
-
-若团队统一 Poetry：将依赖迁入 `pyproject.toml` 的 `[project.dependencies]`，使用 `poetry lock` 生成 `poetry.lock`，并在 CI 中 `poetry install --no-root`。与 uv **二选一**，避免双套锁定并存。
-
-## 与 `pyproject.toml` 的关系
-
-**SSOT（2026-06-07）**：[`FHD/pyproject.toml`](../../pyproject.toml) `[project.optional-dependencies]` — `server-api`（生产）、`dev`（测试）、`ml`（GPU 可选）。
+## 文件职责
 
 | 文件 | 用途 |
 |------|------|
-| `requirements.txt` | 生产运行时（与 `server-api` 对齐） |
+| `pyproject.toml` | 基础运行时与各 extra 的依赖声明 |
+| `uv.lock` | 主仓完整依赖锁，配合 `uv sync --frozen` 使用 |
+| `requirements.txt` | `server-api` extra 的传统清单，不单独提供完整基础运行时 |
 | `requirements-ml.txt` | ML/GPU 可选 |
-| `requirements-server-api.txt` | CI/部署安装入口（含仓库内本地包） |
-| `ops/deploy/requirements-server-api.lock.txt` | 服务端精确版本与依赖告警 SSOT |
-| `pip install -e ".[dev]"` | 本地测试依赖 |
+| `requirements-server-api.txt` | CI、部署与桌面安装入口，含固定 SDK/CLI 和仓库内本地包 |
+| `ops/deploy/requirements-server-api.lock.txt` | 服务端顶层版本约束与依赖告警的稳定路径 |
+| `XCAGI/requirements.txt` / `XCAGI/requirements.lock.txt` | 保留的传统清单与锁身份；旧锁未包含完整固定 Agent 运行时 |
 
-`XCAGI/requirements.lock.txt` 仍用于 Docker/子树检出；发版前运行 `python scripts/dev/check_requirements_lock.py`。
+`XCAGI/requirements.lock.txt` 与服务端锁均保留原路径，安全版本维护继续关联原有依赖告警。新安装使用上面的当前入口；现有 Docker 构建已消费 `requirements-server-api.txt`。
+
+## 更新与验证
+
+依赖升级需同步 `pyproject.toml`、对应安装清单与版本约束，并运行 `uv lock` 更新主仓锁。保留锁文件各自的职责，不用旧 `XCAGI` 锁替换主仓解析结果。
+
+```bash
+uv lock --check
+python scripts/dev/check_requirements_lock.py
+python scripts/dev/ssot_plugins/deps.py check
+```
+
+`check_requirements_lock.py` 核对服务端安装清单的顶层包是否在约束文件中；`deps.py check` 核对传统 extra 清单的包名集合。这些检查不等于安装或平台验收。当前 CI 入口为仓根 `.github/workflows/fhd-ci-cd.yml` 和 `.github/workflows/fhd-test.yml`，两者均从服务端安装入口准备后端依赖；PostgreSQL 事务任务使用上述 `uv sync --frozen` 命令。

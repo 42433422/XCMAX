@@ -25,6 +25,11 @@ vi.mock('@/api/modStore', () => ({
   reloadEmployeePacks: (...a: unknown[]) => mockReloadEmployeePacks(...a),
 }))
 
+vi.mock('@/api/employeeDirectory', () => ({
+  employeeDirectoryScope: () => 'onboard-test-scope',
+  fetchEmployeeDirectory: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/constants/enterpriseModStack', () => ({
   defaultHostModIdForMarketEmployee: (...a: unknown[]) => mockDefaultHostModIdForMarketEmployee(...a),
   EnterpriseModStack: {},

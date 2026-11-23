@@ -31,12 +31,12 @@ def run_gate(gate, **changes):
         **os.environ,
         "GUARD": "success",
         "SSOT": "success",
-        "CLASSIFY": "success",
         "VALID": "true",
         "SOURCE_SHA": "a" * 40,
         "EXPECTED_SOURCE_SHA": "a" * 40,
         "QUALITY": "success",
         "SHARDS": "success",
+        "AGENT_TRANSACTIONS": "success",
         "SHOULD_RUN": "true",
         "SKIP": "false",
         **changes,
@@ -50,11 +50,28 @@ def test_gate_accepts_complete_execution_or_explicit_irrelevance(gate):
 
 
 @pytest.mark.parametrize(
+    "path", ["FHD/.github/workflows/ci-cd.yml", ".github/workflows/fhd-ci-cd.yml"]
+)
+@pytest.mark.parametrize("state", ["success", "failure", "cancelled", "skipped", "", "unknown"])
+@pytest.mark.parametrize("irrelevant", [False, True])
+def test_backend_gate_requires_joint_transaction_evidence(path, state, irrelevant):
+    jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]
+    job = jobs["backend-test"]
+    assert "agent-postgres-transactions" in job["needs"]
+    prerequisite = job["steps"][0]
+    assert (
+        prerequisite["env"]["AGENT_TRANSACTIONS"]
+        == "${{ needs.agent-postgres-transactions.result }}"
+    )
+    changes = {"AGENT_TRANSACTIONS": state}
+    if irrelevant:
+        changes.update(SHOULD_RUN="false", SKIP="true", SHARDS="skipped")
+    assert (run_gate(prerequisite["run"], **changes) == 0) == (state == "success")
+
+
+@pytest.mark.parametrize(
     "changes",
     [
-        {"CLASSIFY": "failure"},
-        {"CLASSIFY": "cancelled"},
-        {"CLASSIFY": "skipped"},
         {"VALID": ""},
         {"VALID": "false"},
         {"SOURCE_SHA": "b" * 40},
@@ -81,7 +98,7 @@ def test_gate_rejects_incomplete_or_inconsistent_evidence(gate, changes):
 
 def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
     jobs = yaml.safe_load((ROOT / ".github/workflows/fhd-ci-cd.yml").read_text())["jobs"]
-    prerequisites = {"classify", "guard-temp-scripts"}
+    prerequisites = {"guard-temp-scripts"}
     for name in (
         "backend-quality",
         "backend-test-shard",
@@ -91,7 +108,7 @@ def test_parallel_work_keeps_cheap_guards_and_publish_dependencies():
         "pack-verify",
     ):
         assert set(jobs[name]["needs"]) == prerequisites
-    assert set(jobs["container-scan"]["needs"]) == {"classify", "pack-verify"}
+    assert set(jobs["container-scan"]["needs"]) == {"guard-temp-scripts", "pack-verify"}
     assert {
         "backend-test",
         "frontend-test",

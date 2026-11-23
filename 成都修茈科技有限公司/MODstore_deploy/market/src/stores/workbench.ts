@@ -233,10 +233,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
 
   function patchManifest(path: string, value: unknown) {
     const keys = path.split('.')
+    if (keys.some((key) => !key || key === '__proto__' || key === 'constructor' || key === 'prototype')) {
+      throw new Error('Invalid manifest path')
+    }
     let obj: Record<string, unknown> = target.value.manifest
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i]
-      if (obj[k] == null || typeof obj[k] !== 'object') {
+      if (!Object.prototype.hasOwnProperty.call(obj, k) || obj[k] == null || typeof obj[k] !== 'object') {
         obj[k] = {}
       }
       obj = obj[k] as Record<string, unknown>

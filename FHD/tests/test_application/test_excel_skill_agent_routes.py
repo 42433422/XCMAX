@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -28,12 +29,17 @@ def _write_xlsx(path) -> str:
     return str(path)
 
 
-def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("output_mode", ["missing", "empty", "file"])
+def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch, output_mode) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     xlsx_path = _write_xlsx(tmp_path / "skill-analyze.xlsx")
+    output_path = tmp_path / "analysis.json"
+    params = {"file_path": xlsx_path, "sheet_name": "Sheet1"}
+    if output_mode != "missing":
+        params["output_json"] = str(output_path) if output_mode == "file" else ""
 
     with patch(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -41,26 +47,36 @@ def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch) ->
     ):
         response = _client().post(
             "/api/skills/analyze/excel",
-            json={"file_path": xlsx_path, "sheet_name": "Sheet1"},
+            json=params,
             headers={"X-User-Id": "tenant-a"},
         )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["agent_status"] == "completed"
+    assert payload["success"] is (output_mode != "file")
+    assert payload["agent_status"] == ("blocked" if output_mode == "file" else "completed")
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["sheet"] == "Sheet1"
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == ("blocked" if output_mode == "file" else "completed")
     assert run.intent == "skills_analyze_excel"
     assert run.tool_calls[0].tool_id == "excel_analyzer"
     assert run.tool_calls[0].action == "analyze"
     assert run.tool_calls[0].permission == "tool.excel_analyzer.analyze"
     assert run.tool_calls[0].cost_units == 1
+    assert run.tool_calls[0].output["sheet"] == "Sheet1"
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["accepted"] is (output_mode != "file")
+    if output_mode == "file":
+        assert output_path.exists()
+        assert run.tool_calls[0].output["output_file"] == str(output_path)
+        assert verification["code"] == "result_verifier_unavailable"
+    else:
+        assert payload["sheet"] == "Sheet1"
+        assert not output_path.exists()
+        assert verification["code"] == "read_only_output_contract_checked"
 
 
 def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> None:
@@ -98,13 +114,23 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
     assert run.tool_calls[0].cost_units == 1
 
 
+@pytest.mark.parametrize("output_mode", ["missing", "empty", "file"])
 def test_generate_label_template_route_executes_agent_run(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, output_mode
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+
+    output_path = tmp_path / "label.py"
+    params = {
+        "image_path": "/tmp/label.png",
+        "class_name": "ProductLabelTemplate",
+        "enable_ocr": True,
+    }
+    if output_mode != "missing":
+        params["output_file"] = str(output_path) if output_mode == "file" else ""
 
     with (
         patch(
@@ -117,7 +143,10 @@ def test_generate_label_template_route_executes_agent_run(
         ),
         patch(
             "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
-            return_value={"success": True, "fields": [{"label": "品名", "value": "清漆"}]},
+            return_value={
+                "success": True,
+                "fields": [{"label": "品名", "value": "清漆"}],
+            },
         ),
         patch(
             "app.services.skills.label_template_generator.label_template_generator.generate_template_code",
@@ -126,27 +155,32 @@ def test_generate_label_template_route_executes_agent_run(
     ):
         response = _client().post(
             "/api/skills/generate-label-template",
-            json={
-                "image_path": "/tmp/label.png",
-                "class_name": "ProductLabelTemplate",
-                "enable_ocr": True,
-            },
+            json=params,
             headers={"X-User-Id": "tenant-a"},
         )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["success"] is True
-    assert payload["agent_status"] == "completed"
+    assert payload["success"] is (output_mode != "file")
+    assert payload["agent_status"] == ("blocked" if output_mode == "file" else "completed")
     assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["code"].startswith("class ProductLabelTemplate")
 
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.user_id == "tenant-a"
-    assert run.status == "completed"
+    assert run.status == ("blocked" if output_mode == "file" else "completed")
     assert run.intent == "skills_generate_label_template"
     assert run.tool_calls[0].tool_id == "label_template_generator"
     assert run.tool_calls[0].action == "execute"
     assert run.tool_calls[0].permission == "tool.label_template_generator.execute"
     assert run.tool_calls[0].cost_units == 1
+    assert run.tool_calls[0].output["code"].startswith("class ProductLabelTemplate")
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["accepted"] is (output_mode != "file")
+    if output_mode == "file":
+        assert output_path.read_text() == run.tool_calls[0].output["code"]
+        assert verification["code"] == "result_verifier_unavailable"
+    else:
+        assert payload["code"].startswith("class ProductLabelTemplate")
+        assert not output_path.exists()
+        assert verification["code"] == "read_only_output_contract_checked"

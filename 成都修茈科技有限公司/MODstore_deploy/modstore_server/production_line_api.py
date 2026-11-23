@@ -57,7 +57,7 @@ async def api_pipeline_run(
     result = await run_production_line(
         line=body.line,
         start_from=body.start_from,
-        context=body.context or {},
+        context={**(body.context or {}), "created_by_user_id": int(_admin.id)},
     )
     return {"ok": True, "data": result}
 

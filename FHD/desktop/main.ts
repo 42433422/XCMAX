@@ -42,7 +42,7 @@ import {
   waitForMainApplicationReady,
   broadcastToRenderer,
 } from './window-manager'
-import { configureDesktopMediaPermissions, installDesktopCspDefenseInDepth, installDesktopWorkspaceCapability } from './session-security'
+import { configureDesktopMediaPermissions, installDesktopCspDefenseInDepth } from './session-security'
 import {
   captureFullScreenScreenshot,
   consumeReleaseNotes,
@@ -199,7 +199,6 @@ function bootstrap(): void {
 
       configureDesktopMediaPermissions()
       installDesktopCspDefenseInDepth()
-      installDesktopWorkspaceCapability()
       createMenu()
       createTray()
       if (!isE2ERun) {

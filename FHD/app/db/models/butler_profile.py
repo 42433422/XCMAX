@@ -16,6 +16,7 @@ from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.db_base import Base
+from app.utils.time import utc_now_naive
 
 
 class ButlerUserProfile(Base):
@@ -48,7 +49,7 @@ class ButlerUserProfile(Base):
 
     # === 元数据 ===
     last_inferred_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, comment="最后推断时间"
+        DateTime, default=utc_now_naive, comment="最后推断时间"
     )
     interaction_count: Mapped[int] = mapped_column(Integer, default=0, comment="累计互动轮数")
 

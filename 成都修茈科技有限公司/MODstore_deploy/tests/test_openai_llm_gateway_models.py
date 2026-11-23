@@ -201,7 +201,8 @@ async def test_openai_model_catalog_preserves_sanitized_deployment_limits(monkey
 
 
 @pytest.mark.asyncio
-async def test_gateway_default_vision_keeps_the_resolved_snapshot(monkeypatch):
+@pytest.mark.parametrize("finish_reason", ["stop", "length", "content_filter", None])
+async def test_gateway_default_vision_keeps_the_resolved_snapshot(monkeypatch, finish_reason):
     from modstore_server import llm_key_resolver
     from modstore_server import openai_llm_gateway_api as gateway
 
@@ -211,7 +212,7 @@ async def test_gateway_default_vision_keeps_the_resolved_snapshot(monkeypatch):
     resolve = AsyncMock(return_value=route.public_metadata())
     monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
     monkeypatch.setattr(llm_key_resolver, "resolve_chat_route_snapshot", lambda *args: route)
-    billed = AsyncMock(return_value={"content": "image answer"})
+    billed = AsyncMock(return_value={"content": "image answer", "finish_reason": finish_reason})
     monkeypatch.setattr(gateway, "run_billed_llm_chat", billed)
     request = Request({"type": "http", "headers": []})
     body = gateway.OAIChatCompletionRequest(
@@ -226,6 +227,7 @@ async def test_gateway_default_vision_keeps_the_resolved_snapshot(monkeypatch):
         ],
     )
     with Session() as db:
-        await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+        response = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+        assert json.loads(response.body)["choices"][0]["finish_reason"] == finish_reason
         resolve.assert_awaited_once_with(db, 7, operation="vision")
     assert billed.await_args.kwargs["route_snapshot"] is route

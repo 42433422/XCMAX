@@ -269,3 +269,251 @@ async def _stub_collect_context(brief, *, user_id, extra_kb_queries=()):
         sdk_doc="",
         allowlist_packages=["openpyxl"],
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    [
+        "timeout_with_workdir",
+        "timeout_without_workdir",
+        "employee_transport_only",
+        "employee_completed_rejected",
+        "employee_completed_observer_error",
+        "nested_unknown",
+        "nonretryable_sdk",
+        "runner_exception",
+        "runner_exception_after_safe_failure",
+    ],
+)
+async def test_unsafe_result_is_not_replayed_or_reported_as_success(monkeypatch, tmp_path, case):
+    from modstore_server.script_agent import agent_loop as loop
+    from modstore_server.script_agent.brief import PlanResult, Verdict
+
+    async def context(brief, **kwargs):
+        return await _stub_collect_context(brief, user_id=42)
+
+    async def plan(*args, **kwargs):
+        return PlanResult(plan_md="write result")
+
+    async def code(*args, **kwargs):
+        return _good_code()
+
+    async def observe(*args, **kwargs):
+        if case == "employee_completed_observer_error":
+            raise RuntimeError("observer unavailable")
+        return Verdict(ok=case == "employee_transport_only", reason="not verified")
+
+    monkeypatch.setattr(loop, "collect_context", context)
+    monkeypatch.setattr(loop, "make_plan", plan)
+    monkeypatch.setattr(loop, "write_code", code)
+    monkeypatch.setattr(loop, "repair_code", code)
+    monkeypatch.setattr(loop, "judge", observe)
+    result = _ok_result()
+    result.work_dir = str(tmp_path)
+    if case.startswith("timeout"):
+        result.ok = False
+        result.timed_out = True
+        result.returncode = -9
+        result.outputs = []
+        result.errors = ["script timed out"]
+        if case == "timeout_without_workdir":
+            result.work_dir = ""
+    elif case.startswith("employee"):
+        result.sdk_calls = [{"method": "employee_run", "ok": True}]
+        if case != "employee_transport_only":
+            result.sdk_calls[0]["result"] = {
+                "ok": True,
+                "status": "completed",
+                "task_id": "original-task",
+            }
+    elif case == "nested_unknown":
+        result.sdk_calls = [{"method": "ai", "ok": True, "result": {"outcome": "unknown"}}]
+    elif case == "nonretryable_sdk":
+        result.sdk_calls = [{"method": "ai", "ok": False, "retryable": False}]
+
+    calls = 0
+
+    async def runner(**kwargs):
+        nonlocal calls
+        calls += 1
+        if case == "runner_exception_after_safe_failure" and calls == 1:
+            return _failed_result()
+        if case.startswith("runner_exception"):
+            raise TimeoutError("runner acknowledgement lost")
+        return result
+
+    events = [
+        event
+        async for event in loop.run_agent_loop(
+            _brief(),
+            llm=StubLlmClient([]),
+            user_id=42,
+            session_id="no-replay",
+            sandbox_runner=runner,
+            max_iterations=3,
+        )
+    ]
+    assert calls == (2 if case == "runner_exception_after_safe_failure" else 1)
+    assert events[-1].type == "error"
+    outcome = events[-1].payload["outcome"]
+    assert outcome["ok"] is False
+    assert outcome["outcome"] == "unverified"
+    assert outcome["retryable"] is False
+    assert outcome["final_code"] == _good_code()
+    if case.startswith("runner_exception"):
+        assert outcome["last_result"] is None
+        assert outcome["last_verdict"] is None
+    else:
+        receipt = outcome["last_result"]
+        assert receipt["returncode"] == result.returncode
+        assert receipt["timed_out"] is result.timed_out
+        assert receipt["sdk_calls"] == result.sdk_calls
+        if case.startswith("timeout"):
+            assert receipt["timed_out"] is True
+            assert receipt["returncode"] == -9
+            assert not (tmp_path / "outputs" / "summary.md").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    [
+        "completed",
+        "accepted",
+        "running",
+        "unknown",
+        "invalid_type",
+        "rejected",
+        "timeout",
+        "denied",
+        "rpc_error",
+        "failed_output",
+        "failed_status_output",
+    ],
+)
+async def test_v1_real_rpc_receipt_preserves_effect_identity_and_privacy(
+    monkeypatch, tmp_path, case
+):
+    import json
+    import time
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from modstore_server.script_agent import agent_loop as loop
+    from modstore_server.script_agent.sandbox_runner import run_in_sandbox
+
+    async def context(brief, **kwargs):
+        return await _stub_collect_context(brief, user_id=42)
+
+    monkeypatch.setattr(loop, "collect_context", context)
+    effects = []
+    business = {
+        "ok": True,
+        "result": {
+            "outputs": [
+                {
+                    "handler": "para_delegate",
+                    "ok": True,
+                    "accepted": True,
+                    "completed": True,
+                    "para_task_id": "original-task",
+                    "para_result": {
+                        "task": {"id": "original-task", "private_text": "secret-business"}
+                    },
+                },
+                {"handler": "echo", "text": "secret-business"},
+            ],
+            "private_text": "secret-business",
+        },
+    }
+    if case in {"accepted", "running", "unknown"}:
+        business = {
+            "ok": True,
+            "status": case,
+            "accepted": True,
+            "task_id": "original-task",
+            "private_text": "secret-business",
+        }
+    elif case == "invalid_type":
+        business = {
+            "ok": True,
+            "status": "completed",
+            "accepted": "false",
+            "task_id": "original-task",
+        }
+    elif case in {"failed_output", "failed_status_output"}:
+        failed = (
+            {"ok": False, "error": "secret-business"}
+            if case == "failed_output"
+            else {"status": "failed"}
+        )
+        business = {"ok": True, "outputs": [{**failed, "task_id": "original-task"}]}
+
+    def execute_task(**kwargs):
+        effects.append(kwargs)
+        if case == "rpc_error":
+            raise RuntimeError("secret-business")
+        if case == "timeout":
+            time.sleep(2)
+        return business
+
+    monkeypatch.setattr(
+        "modstore_server.services.employee.get_default_employee_client",
+        lambda: SimpleNamespace(execute_task=execute_task),
+    )
+    code = (
+        "from pathlib import Path\n"
+        "from modstore_runtime import employee_run\n"
+        "employee_run('worker', 'apply', payload={'user_id': 999})\n"
+        "Path('outputs/result.json').write_text('{\"total\": 3}')\n"
+    )
+    llm = StubLlmClient(
+        [
+            "produce result",
+            f"```python\n{code}```",
+            json.dumps({"ok": case != "rejected", "reason": "checked actual output"}),
+        ]
+    )
+    events = [
+        event
+        async for event in loop.run_agent_loop(
+            _brief(),
+            llm=llm,
+            user_id=42,
+            session_id="real-v1-rpc",
+            sandbox_runner=run_in_sandbox,
+            sandbox_kwargs={
+                "script_root": tmp_path,
+                "timeout_seconds": 1 if case == "timeout" else 5,
+                "employee_run_allowlist": ["other-worker"] if case == "denied" else ["worker"],
+            },
+        )
+    ]
+    assert len(effects) == (0 if case == "denied" else 1)
+    if effects:
+        assert effects[0]["user_id"] == 42
+        assert effects[0]["input_data"] == {"user_id": 999}
+    outcome = events[-1].payload["outcome"]
+    receipt = outcome["last_result"]
+    assert len(receipt["sdk_calls"]) == 1
+    assert "secret-business" not in json.dumps(outcome)
+    if case == "completed":
+        assert events[-1].type == "done" and outcome["ok"] is True
+        assert outcome["last_verdict"]["ok"] is True
+        assert Path(receipt["outputs"][0]["path"]).read_text() == '{"total": 3}'
+        assert (
+            receipt["sdk_calls"][0]["result"]["result"]["outputs"][0]["para_task_id"]
+            == "original-task"
+        )
+    else:
+        assert events[-1].type == "error" and outcome["ok"] is False
+        assert outcome["outcome"] == "unverified" and outcome["retryable"] is False
+        if case == "timeout":
+            assert receipt["timed_out"] is True and receipt["returncode"] != 0
+        elif case == "rpc_error":
+            assert receipt["sdk_calls"][0]["outcome"] == "unknown"
+            assert receipt["sdk_calls"][0]["error"] == "RuntimeError"
+            assert "employee_run failed (RuntimeError)" in receipt["stderr_tail"]
+        elif case != "denied":
+            assert "original-task" in json.dumps(receipt["sdk_calls"])

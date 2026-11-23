@@ -18,7 +18,7 @@ from app.application.workspaces import WorkspaceRegistry
 from app.domain.app_pure.execution_scope import CapabilityGrant
 
 JsonObject = dict[str, Any]
-CliResult = tuple[int, str, str, str]
+CliResult = tuple[int | None, str, str, str]
 CliRunner = Callable[..., subprocess.CompletedProcess[str]]
 IdleRunner = Callable[[list[str], str, float, float], CliResult]
 
@@ -121,6 +121,10 @@ class ParaPorts:
 
 @dataclass(frozen=True)
 class MessageSyncPorts:
+    read_rows: Callable[[], list[JsonObject]]
+    reconcile_dispatch: Callable[[JsonObject], JsonObject]
+    dispatch_reply: Callable[[JsonObject], str]
+    task_reply: Callable[[JsonObject], str]
     fetch_task: Callable[[str], JsonObject | None]
     direct_reply: Callable[[str], str]
     should_reply: Callable[[str, JsonObject], bool]

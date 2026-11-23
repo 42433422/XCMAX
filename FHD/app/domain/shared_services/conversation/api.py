@@ -297,6 +297,24 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
     async def _call_ai(
         self, message: str, context: ConversationContext, intent_result: dict[str, Any]
     ) -> dict[str, Any]:
+        from dataclasses import replace
+
+        from app.application.ai_chat.dialogue_memory import (
+            conversation_history_messages,
+            conversation_key,
+            conversation_summary,
+            enrich_model_messages,
+        )
+
+        request_context = (context.metadata or {}).get("request_context")
+        request_context = dict(request_context) if isinstance(request_context, dict) else None
+        durable_history = bool(conversation_key(request_context))
+        if durable_history:
+            conversation_summary(request_context)
+            # Freeze the owning request through persona/compression awaits.
+            context = replace(
+                context, metadata={**context.metadata, "request_context": request_context}
+            )
         context_hash = self._metadata_cache_hash(
             {
                 "owner": context.user_id,
@@ -331,7 +349,11 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
             system_prompt, _persona_params = await self.persona_service.build_prompt_from_message(
                 user_id=context.user_id,
                 message=message,
-                history=context.conversation_history or [],
+                history=(
+                    conversation_history_messages(request_context)
+                    if durable_history
+                    else context.conversation_history or []
+                ),
                 industry=_req_ctx.get("industry", "通用"),
                 context_prompt=context_prompt,
             )
@@ -340,18 +362,13 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
 
         messages = [{"role": "system", "content": system_prompt}]
 
-        if context.conversation_history:
+        if context.conversation_history and not durable_history:
             # 全量传入历史，由 ContextWindowManager 在 call_llm_api 内统一按 token 预算裁剪
             # （消除"内存 20 / 喂 LLM 10 / persona 看全量 20"的三层不一致）
             messages.extend(context.conversation_history)
 
         messages.append({"role": "user", "content": message})
-        from app.application.ai_chat.dialogue_memory import enrich_model_messages
-
-        request_context = (context.metadata or {}).get("request_context")
-        messages = enrich_model_messages(
-            messages, message, request_context if isinstance(request_context, dict) else None
-        )
+        messages = enrich_model_messages(messages, message, request_context)
 
         # 获取当前LLM模式和信息（用于日志）
         if hasattr(self, "modstore_adapter") and self.modstore_adapter:

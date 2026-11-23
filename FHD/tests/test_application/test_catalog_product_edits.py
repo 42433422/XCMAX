@@ -564,9 +564,10 @@ def assert_historical_consumer(c, run, result):
     from app.application.agent_orchestrator.business_harness import ensure_terminal_business_result
     from app.application.agent_orchestrator.run_usage import RunUsageLedger
     from app.application.agent_orchestrator.step_execution import StepExecution
+    from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2
 
     dependencies = SimpleNamespace(
-        action_spec=lambda *_: SimpleNamespace(cost_units=0, permission="", timeout_seconds=2),
+        action_spec=lambda tool, action: ToolActionSpecV2(tool, action, timeout_seconds=2),
         validate=lambda *_: SimpleNamespace(ok=True),
         refresh_budget=lambda _: None,
     )

@@ -40,8 +40,10 @@ git clone https://github.com/42433422/XCMAX.git
 cd XCMAX/FHD
 python -m venv .venv
 # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"
 ```
+
+该入口同时安装基础运行时和服务器依赖，包括固定版本的 Codex SDK/CLI。新 Agent 任务还需要部署方配置模型路由与真实资格证，见 [固定本地 Agent 执行器](../README.md#固定本地-agent-执行器)。
 
 ### 2. 启动（按场景选择）
 

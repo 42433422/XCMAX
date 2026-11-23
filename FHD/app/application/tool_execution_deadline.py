@@ -79,15 +79,43 @@ def build_http_request(
                         body = resp.json()
                     except RECOVERABLE_ERRORS:
                         body = resp.text
-                    return {"ok": resp.is_success, "status": resp.status_code, "body": body}
-        except (TimeoutError, httpx.TimeoutException):
+                    result = {
+                        "ok": resp.is_success,
+                        "status": resp.status_code,
+                        "body": body,
+                    }
+                    if method.upper() not in {"GET", "HEAD", "OPTIONS"} and (
+                        resp.status_code >= 500 or resp.status_code in {408, 429}
+                    ):
+                        # A proxy/server failure after dispatch does not prove that
+                        # the remote mutation was rolled back. Keep that knowledge
+                        # outside the employee-controlled result envelope.
+                        for owner in owners:
+                            marker = {"kind": "http_failure", "method": method}
+                            if marker not in owner.uncertain:
+                                owner.uncertain.append(marker)
+                        result.update(outcome="unknown", retryable=False)
+                    return result
+        except asyncio.CancelledError:
             for owner in owners:
-                marker = {"kind": "http_timeout", "method": method}
+                marker = {"kind": "http_cancelled", "method": method}
+                if marker not in owner.uncertain:
+                    owner.uncertain.append(marker)
+            raise
+        except (TimeoutError, httpx.TransportError, OSError) as exc:
+            timed_out = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+            for owner in owners:
+                marker = {
+                    "kind": "http_timeout" if timed_out else "http_transport_error",
+                    "method": method,
+                }
                 if marker not in owner.uncertain:
                     owner.uncertain.append(marker)
             return {
                 "ok": False,
-                "error": "invocation deadline exceeded",
+                "error": (
+                    "invocation deadline exceeded" if timed_out else "HTTP response unavailable"
+                ),
                 "outcome": "unknown",
                 "retryable": False,
             }

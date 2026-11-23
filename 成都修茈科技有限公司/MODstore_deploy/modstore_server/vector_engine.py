@@ -375,10 +375,12 @@ def status() -> Dict[str, Any]:
         except BOUNDARY_ERRORS:  # noqa: BLE001
             out["collections"] = 0
         out["ready"] = True
-    except VectorEngineError as e:
-        out["error"] = str(e)
-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
-        out["error"] = str(e)
+    except VectorEngineError:
+        logger.exception("vector engine status unavailable")
+        out["error"] = "向量服务暂时不可用，请检查服务配置"
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.exception("vector engine status failed")
+        out["error"] = "向量服务状态暂时无法读取"
     return out
 
 

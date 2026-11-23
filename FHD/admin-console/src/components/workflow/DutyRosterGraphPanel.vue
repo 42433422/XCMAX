@@ -44,6 +44,7 @@ import {
   isVirtualEmployee,
 } from './dutyRoster/dutyRosterConstants'
 import type { EmpRow } from './dutyRoster/dutyRosterTypes'
+import { useAgentTaskCenterStore } from '@host/stores/agentTaskCenter'
 
 const props = withDefaults(defineProps<{ open: boolean; variant?: 'modal' | 'page' | 'embedded' }>(), {
   variant: 'modal',
@@ -52,6 +53,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const router = useRouter()
 const route = useRoute()
+const taskCenter = useAgentTaskCenterStore()
 const isPage = computed(() => props.variant === 'page')
 const isEmbedded = computed(() => props.variant === 'embedded')
 const isInlineLayout = computed(() => isPage.value || isEmbedded.value)
@@ -233,7 +235,8 @@ const {
   onNodeClick: handleNodeClick, focusEmployeeFromWorkshop, openSelectedWorkshopInClient,
   copySelectedWorkshopRoute, selectedWorkshopLinkedEmployees, selectedWorkshopRouteHref,
 } = workshop
-const { stats } = useDutyGraphBuild(state, core, data, { fitView, syncEmployeeRouteQuery })
+const { stats, liveFlowNodes, taskSnapshots } = useDutyGraphBuild(state, core, data, { fitView, syncEmployeeRouteQuery })
+const selectedTaskSnapshot = computed(() => taskSnapshots.value.get(selectedEmp.value?.id || ''))
 const { selectedHealth, selectedDeps, selectedCapabilityView, isSelectedVirtual,
   selectedLlm, selectedCapability, selectedRunNode } = selection
 const { fetchExecMetrics } = exec
@@ -256,6 +259,7 @@ watch(
   ([open, variant]) => {
     const active = variant === 'page' || variant === 'embedded' || open
     if (active) {
+      taskCenter.start()
       void load()
     } else {
       stopAutoRefresh()
@@ -346,6 +350,9 @@ onUnmounted(() => {
                 <slot name="pageActions" />
               </template>
             </DutyRosterHeader>
+          <p class="dg-task-sync" role="status">
+            {{ taskCenter.stale ? '任务状态待核对，接入恢复后自动同步' : taskCenter.connected ? '任务状态实时同步' : '任务状态定时核对中' }} · 连线表示编制或依赖关系
+          </p>
           <!-- ══ Error / 降级提示 ═══════════════════════════════════════════ -->
           <p v-if="error" class="dg-error">
             {{ error }}&nbsp;<button class="dg-btn--inline" @click="load">重试</button>
@@ -430,7 +437,7 @@ onUnmounted(() => {
             <!-- ── Flow + detail ─────────────────────────────────────────── -->
             <div v-else class="dg-flow-wrap">
             <DutyFlowGraph
-              :flow-nodes="flowNodes"
+              :flow-nodes="liveFlowNodes"
               :flow-edges="flowEdges"
               :flow-bg-pattern-color="flowBgPatternColor"
               :mini-map-mask-color="miniMapMaskColor"
@@ -473,6 +480,7 @@ onUnmounted(() => {
               :selected-llm="selectedLlm"
               :selected-capability="selectedCapability"
               :selected-run-node="selectedRunNode"
+              :task-snapshot="selectedTaskSnapshot"
               :fetch-exec-metrics="fetchExecMetrics"
               :dispatch-task="dispatchTask"
               :publish-task-to-butler="publishTaskToButler"

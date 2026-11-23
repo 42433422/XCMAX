@@ -15,9 +15,10 @@
 - 包名：`langgraph-prebuilt`
 - 内部命名空间：`langgraph.prebuilt`（与核心包共享 `langgraph` 命名空间）
 - 构建：`hatchling`，wheel 仅包含 `langgraph.prebuilt` 子包（`include = ["langgraph"]`）
-- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 上游字节比对；在线模式在
+- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 补丁双向重放 + 上游字节比对；在线模式在
   `TemporaryDirectory` 作用域内浅克隆上游并取回 tag `1.2.10`，`rev-parse` 其 commit 须等于锁定 SHA
-  `413414573…0bf`，再对该 commit 做 `git archive` 与本地比对；不依赖固定 `/tmp` 检出，可移植）
+  `413414573…0bf`，再对该 commit 做 `git archive` 与 `UPSTREAM_MANIFEST.sha256` 比对；
+  本地补丁反向重放须还原该上游清单，正向重放须还原当前源码；不依赖固定 `/tmp` 检出）
 - 依赖来源：`[tool.uv.sources]` 全部重定向到 XCAGI vendored 兄弟包
   （`langgraph`→`../xcagi_langgraph_core`、`langgraph-checkpoint`→`../xcagi_langgraph_checkpoint`、
   `langgraph-sdk`→`../xcagi_langgraph_sdk`、
@@ -26,6 +27,17 @@
 - `uv.lock`：已生成并锁定兄弟包 editable；`uv lock --check` 通过
 - 导入探针：`uv run --locked pytest tests/`（在包本地 locked uv 环境运行，不修改 sys.path、不 skip，
   并断言导入模块源码位于 `FHD/packages` 下）
+
+## 已有本地补丁的来源
+
+`patches/existing-exception-boundaries.patch.b64` 记录主分支 commit
+`ce5a491e1836a5516c773e6461da4fa027097ae9` 中已经存在的 `_exception_policy.py`
+及 `tool_node.py` 改动；前者的路径历史指向 commit
+`ac2d54fc10b3c608b43a1cde138032c6ab086bcc`（`fix: close full-repository audit findings`）。
+模块说明和实际差异表明，这些改动为五处工具边界的 `Exception` 捕获设置了可审计的名称。
+`BOUNDARY_ERRORS = (Exception,)` 保持原捕获语义；本次补齐来源清单和可重放补丁，
+没有修改这两处运行时代码，也没有升级 `langgraph-prebuilt` 1.1.0。
+补丁哈希、原主分支证据与上游清单哈希见 `PROVENANCE.json`。
 
 ## 可导入入口（本任务验收）
 

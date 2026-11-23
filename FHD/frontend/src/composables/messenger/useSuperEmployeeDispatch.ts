@@ -12,7 +12,7 @@
  * 入参为父组件持有的共享 ref 与回调；返回的 ref / computed / 函数由父组件
  * 解构后继续供模板与其余 composable 使用。WebSocket / 普通会话 IO 仍由父组件负责。
  */
-import { computed, nextTick, ref, type Ref } from 'vue'
+import { computed, getCurrentScope, nextTick, onScopeDispose, ref, type Ref } from 'vue'
 import api from '@/api'
 import { showAppToast } from '@/composables/useAppToast'
 import { productErrorMessage } from '@/utils/productErrorMessage'
@@ -50,12 +50,12 @@ import {
   type CodexDisplayMessage,
   type DutyEmployeeChatMessage,
   type DutyEmployeeEntry,
-  type EmployeeExecuteResponse,
   type ExternalAppEntry,
   type PinnedImEntry,
   type SystemEmployeeEntry,
 } from './useMessengerEntries'
 import { useCodexStreamEngine } from './useCodexStreamEngine'
+import { adminEmployeeMessage, adminEmployeeState, executeAdminEmployee, readPendingAdminEmployeeReceipts } from '@/utils/adminEmployeeRequest'
 
 type MobileApiResponse<T> = {
   success?: boolean
@@ -113,6 +113,12 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
   const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({})
   const dutyEmployeeDraft = ref('')
   const dutyEmployeeBusy = ref(false)
+  let dutyReceiptTimer: ReturnType<typeof setTimeout> | null = null
+  let dutyReceiptGeneration = 0
+  const employeeTransport = {
+    post: (path: string, body: Record<string, unknown>) => api.post(path, body, { retry: false }),
+    get: (path: string) => api.get(path, {}, { retry: false, quiet: true }),
+  }
   const codexScrollEl = ref<HTMLElement | null>(null)
   const dutyEmployeeScrollEl = ref<HTMLElement | null>(null)
   const codexInputEl = ref<HTMLInputElement | null>(null)
@@ -242,6 +248,52 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     })
   }
 
+  function applyDutyReceipt(entry: DutyEmployeeEntry, result: Record<string, unknown>, id?: string): boolean {
+    const state = adminEmployeeState(result)
+    const requestKey = String(result.idempotency_key || '')
+    const rows = dutyEmployeeMessages.value[entry.id] || []
+    const previous = requestKey ? rows.find(row => row.role === 'assistant' && row.request_key === requestKey) : undefined
+    const message: DutyEmployeeChatMessage = {
+      id: previous?.id || id || `duty-receipt-${requestKey}`,
+      role: 'assistant',
+      body: state === 'completed' ? dutyEmployeeReplyFromExecution(result, entry) : adminEmployeeMessage(result),
+      created_at: previous?.created_at || new Date().toISOString(),
+      status: state === 'completed' ? '已回复' : ['failed', 'cancelled', 'rejected'].includes(state) ? '失败' : '待核对',
+      request_key: requestKey,
+      run_id: String(result.run_id || ''),
+    }
+    if (previous) dutyEmployeeMessages.value = { ...dutyEmployeeMessages.value, [entry.id]: rows.map(row => row === previous ? message : row) }
+    else appendDutyEmployeeMessage(entry.id, message)
+    return message.status === '待核对'
+  }
+
+  async function refreshDutyEmployeeReceipts(): Promise<boolean> {
+    const entry = activeSystemEntry.value
+    if (!entry || !isDutyEmployeeEntry(entry)) return false
+    const receipts = await readPendingAdminEmployeeReceipts(entry.id, employeeTransport, localUserId.value)
+    if (activeSystemEntry.value?.id !== entry.id) return false
+    return receipts.map(result => applyDutyReceipt(entry, result)).some(Boolean)
+  }
+
+  function stopDutyReceiptPolling(): void {
+    dutyReceiptGeneration += 1
+    if (dutyReceiptTimer !== null) clearTimeout(dutyReceiptTimer)
+    dutyReceiptTimer = null
+  }
+
+  function startDutyReceiptPolling(): void {
+    stopDutyReceiptPolling()
+    const generation = dutyReceiptGeneration
+    let remaining = 20
+    const poll = async () => {
+      if (generation !== dutyReceiptGeneration) return
+      const pending = await refreshDutyEmployeeReceipts()
+      if (generation === dutyReceiptGeneration && pending && --remaining > 0) dutyReceiptTimer = setTimeout(() => { void poll() }, 3000)
+    }
+    dutyReceiptTimer = setTimeout(() => { void poll() }, 3000)
+  }
+  if (getCurrentScope()) onScopeDispose(stopDutyReceiptPolling)
+
   function codexMessageRoleLabel(message: CodexSuperEmployeeMessage): string {
     if (message.role === 'user') return codexSenderLabel.value
     const tool = activeSuperTool(activeSystemEntry.value)
@@ -272,6 +324,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
   }
 
   async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
+    stopDutyReceiptPolling()
     if (isAiGroupChatEntry(entry)) {
       closeOverlappingAssistantFloat()
       stopCodexPolling()
@@ -325,6 +378,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       messages.value = []
       hasMoreHistory.value = false
       closeContactPicker()
+      if (await refreshDutyEmployeeReceipts()) startDutyReceiptPolling()
       await nextTick()
       const el = dutyEmployeeScrollEl.value
       if (el) el.scrollTop = el.scrollHeight
@@ -504,7 +558,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       status: 'sent',
     })
     try {
-      const result = await api.post<EmployeeExecuteResponse>(`/api/xcmax/local/employees/${encodeURIComponent(entry.id)}/execute`, {
+      const result = await executeAdminEmployee(entry.id, {
         task: text,
         user_id: localUserId.value || 0,
         input_data: {
@@ -515,14 +569,8 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
           employee_id: entry.id,
           employee_name: entry.display_name,
         },
-      })
-      appendDutyEmployeeMessage(entry.id, {
-        id: `${localId}-assistant`,
-        role: 'assistant',
-        body: dutyEmployeeReplyFromExecution(result, entry),
-        created_at: new Date().toISOString(),
-        status: result.success === false ? '失败' : '已回复',
-      })
+      }, employeeTransport, localUserId.value)
+      if (applyDutyReceipt(entry, result, `${localId}-assistant`)) startDutyReceiptPolling()
     } catch (error) {
       appendDutyEmployeeMessage(entry.id, {
         id: `${localId}-error`,
@@ -571,5 +619,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     scrollCodexToBottom,
     stopCodexPolling,
     stopCodexTypewriter,
+    refreshDutyEmployeeReceipts,
+    stopDutyReceiptPolling,
   }
 }

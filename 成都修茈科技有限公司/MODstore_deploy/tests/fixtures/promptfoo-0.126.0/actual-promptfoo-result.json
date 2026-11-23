@@ -1,0 +1,736 @@
+{
+  "evalId": "eval-Xl7-2026-11-20T21:30:13",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-11-20T21:30:13.027Z",
+    "prompts": [
+      {
+        "raw": "{{task}}\n\nBASELINE_ONLY\r\n---\r\n",
+        "label": "baseline_prompt.md: {{task}}\n\nBASELINE_ONLY\r\n---\r\n...",
+        "id": "79f47df06c00498538dbf00e21aa58f994a6cecfeb292e154563371490f51497",
+        "provider": "echo",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "testCacheHitCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 2,
+          "totalLatencyMs": 4,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 2,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "{{task}}\n\nCANDIDATE_PASS\r\n---\r\n",
+        "label": "candidate_prompt.md: {{task}}\n\nCANDIDATE_PASS\r\n---\r\n...",
+        "id": "0436e29a03b6b4ce9ca703e3041889a57d7b3fc99ce87cd5678a640e1290b559",
+        "provider": "echo",
+        "metrics": {
+          "score": 2,
+          "testPassCount": 2,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "testCacheHitCount": 0,
+          "assertPassCount": 2,
+          "assertFailCount": 0,
+          "totalLatencyMs": 2,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 2,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"CANDIDATE_PASS\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"CANDIDATE_PASS\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"CANDIDATE_PASS\"",
+              "assertion": {
+                "type": "contains",
+                "value": "CANDIDATE_PASS"
+              }
+            }
+          ]
+        },
+        "id": "e0352a49-50b9-4d76-b3c5-d0b314ce0834",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Fixture alpha\n\nBASELINE_ONLY\r\n---\r\n",
+          "label": "baseline_prompt.md: {{task}}\n\nBASELINE_ONLY\r\n---\r\n...",
+          "config": {}
+        },
+        "promptId": "79f47df06c00498538dbf00e21aa58f994a6cecfeb292e154563371490f51497",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Fixture alpha\n\nBASELINE_ONLY\r\n---\r\n",
+          "raw": "Fixture alpha\n\nBASELINE_ONLY\r\n---\r\n",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "task": "Fixture alpha",
+            "case_id": "case-0"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CANDIDATE_PASS"
+            }
+          ],
+          "description": "Row #1",
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "task": "Fixture alpha",
+          "case_id": "case-0"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "CANDIDATE_PASS"
+              }
+            }
+          ]
+        },
+        "id": "5d41f303-9b2f-4d52-bdc4-09206b0dbf99",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Fixture alpha\n\nCANDIDATE_PASS\r\n---\r\n",
+          "label": "candidate_prompt.md: {{task}}\n\nCANDIDATE_PASS\r\n---\r\n...",
+          "config": {}
+        },
+        "promptId": "0436e29a03b6b4ce9ca703e3041889a57d7b3fc99ce87cd5678a640e1290b559",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Fixture alpha\n\nCANDIDATE_PASS\r\n---\r\n",
+          "raw": "Fixture alpha\n\nCANDIDATE_PASS\r\n---\r\n",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "task": "Fixture alpha",
+            "case_id": "case-0"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CANDIDATE_PASS"
+            }
+          ],
+          "description": "Row #1",
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "task": "Fixture alpha",
+          "case_id": "case-0"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"CANDIDATE_PASS\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"CANDIDATE_PASS\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"CANDIDATE_PASS\"",
+              "assertion": {
+                "type": "contains",
+                "value": "CANDIDATE_PASS"
+              }
+            }
+          ]
+        },
+        "id": "c6e13fe0-7c4f-4536-8069-e62b20575c8e",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Fixture beta\n\nBASELINE_ONLY\r\n---\r\n",
+          "label": "baseline_prompt.md: {{task}}\n\nBASELINE_ONLY\r\n---\r\n...",
+          "config": {}
+        },
+        "promptId": "79f47df06c00498538dbf00e21aa58f994a6cecfeb292e154563371490f51497",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Fixture beta\n\nBASELINE_ONLY\r\n---\r\n",
+          "raw": "Fixture beta\n\nBASELINE_ONLY\r\n---\r\n",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "task": "Fixture beta",
+            "case_id": "case-1"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CANDIDATE_PASS"
+            }
+          ],
+          "description": "Row #2",
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "task": "Fixture beta",
+          "case_id": "case-1"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "CANDIDATE_PASS"
+              }
+            }
+          ]
+        },
+        "id": "d3bd498b-7ebe-4558-8bea-54912f76c2ef",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Fixture beta\n\nCANDIDATE_PASS\r\n---\r\n",
+          "label": "candidate_prompt.md: {{task}}\n\nCANDIDATE_PASS\r\n---\r\n...",
+          "config": {}
+        },
+        "promptId": "0436e29a03b6b4ce9ca703e3041889a57d7b3fc99ce87cd5678a640e1290b559",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Fixture beta\n\nCANDIDATE_PASS\r\n---\r\n",
+          "raw": "Fixture beta\n\nCANDIDATE_PASS\r\n---\r\n",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "task": "Fixture beta",
+            "case_id": "case-1"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CANDIDATE_PASS"
+            }
+          ],
+          "description": "Row #2",
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "task": "Fixture beta",
+          "case_id": "case-1"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 2,
+      "failures": 2,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 4,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        }
+      },
+      "durationMs": 44,
+      "evaluationDurationMs": 44
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "employee on-the-job training regression",
+    "prompts": [
+      "file:///tmp/pytest-of-agent/pytest-146/test_real_promptfoo_cli_seals_0/baseline_prompt.md",
+      "file:///tmp/pytest-of-agent/pytest-146/test_real_promptfoo_cli_seals_0/candidate_prompt.md"
+    ],
+    "providers": [
+      "echo"
+    ],
+    "tests": [
+      {
+        "vars": {
+          "task": "Fixture alpha",
+          "case_id": "case-0"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "CANDIDATE_PASS"
+          }
+        ],
+        "description": "Row #1"
+      },
+      {
+        "vars": {
+          "task": "Fixture beta",
+          "case_id": "case-1"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "CANDIDATE_PASS"
+          }
+        ],
+        "description": "Row #2"
+      }
+    ],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "/tmp/pytest-of-agent/pytest-146/test_real_promptfoo_cli_seals_0/actual-promptfoo-result.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {},
+    "basePath": "/tmp/pytest-of-agent/pytest-146/test_real_promptfoo_cli_seals_0"
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.126.0",
+    "nodeVersion": "v24.22.3",
+    "platform": "linux",
+    "arch": "x64",
+    "exportedAt": "2026-11-20T21:30:13.102Z",
+    "evaluationCreatedAt": "2026-11-20T21:30:13.027Z"
+  },
+  "vars": [
+    "task",
+    "case_id"
+  ],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": false,
+    "repeat": 1,
+    "maxConcurrency": 1,
+    "cache": false
+  }
+}

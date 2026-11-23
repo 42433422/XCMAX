@@ -16,6 +16,7 @@ Three failure modes are surfaced loudly so CI / scripts can react:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -163,7 +164,11 @@ class SkillPublisher:
                 industry=opts.industry,
             )
         except MODstoreError as exc:
-            result.error = str(exc)
+            logging.getLogger(__name__).exception("Skill publication failed")
+            status = getattr(exc.__cause__, "code", None)
+            result.error = (
+                f"publish_failed:http_{status}" if type(status) is int and 100 <= status <= 599 else "publish_failed"
+            )
             return result
         result.upload = upload
         return result

@@ -43,9 +43,7 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
     )
     original.status = "failed"
     service.save_run(original)
-    monkeypatch.setattr(
-        service, "_plan", lambda *_a, **_k: pytest.fail("retry must reuse the saved plan")
-    )
+    assert not hasattr(service, "_plan")
     retried = service.retry_run(original.run_id, requested_by="7", auto_execute=False)
     assert retried.status == "queued"
     assert retried.run_id == original.run_id
@@ -171,6 +169,113 @@ def test_runtime_scope_keeps_legacy_scalar_and_alias_semantics(
             ] == [run.run_id]
             assert repository.list_recent(user_id="other-owner", runtime_scope=scope, limit=1) == []
             assert repository.list_recent(user_id="owner", runtime_scope=scope, limit=0) == []
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("backend", ["memory", "sql"])
+def test_status_filter_precedes_matches_and_limit(tmp_path, backend):
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_models import RunContextScope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'status-list.db'}")
+    try:
+        repository = (
+            InMemoryAgentRunRepository()
+            if backend == "memory"
+            else SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+        )
+        for index, status in enumerate(("waiting_user", "waiting_user", "completed")):
+            run = AgentRun("owner", f"run-{index}")
+            run.status = status
+            run.plan_id = "wanted" if index != 1 else "different"
+            run.metadata["runtime_context"] = {
+                "tenant_id": "tenant",
+                "mod_id": "mod",
+                "session_id": "session",
+                "_conversation_revision": 0,
+            }
+            repository.save(run)
+            if index == 0:
+                wanted = run.run_id
+        service = AgentOrchestrator(repository=repository)
+        scope = RunContextScope("tenant", "mod", "session", 0)
+        assert [
+            run.run_id
+            for run in service.list_runs(
+                user_id="owner",
+                status="waiting_user",
+                runtime_scope=scope,
+                matches=lambda run: run.plan_id == "wanted",
+                limit=1,
+            )
+        ] == [wanted]
+        assert service.list_runs(status="waiting_user", runtime_scope=scope, limit=0) == []
+        assert service.list_runs(status="failed", runtime_scope=scope) == []
+    finally:
+        engine.dispose()
+
+
+def test_sql_waiting_query_does_not_deserialize_completed_history(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import RunContextScope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'waiting-list.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    runtime = {
+        "tenant_id": "tenant",
+        "mod_id": "mod",
+        "session_id": "session",
+        "_conversation_revision": 0,
+    }
+    try:
+        waiting = AgentRun("owner", "original waiting run")
+        waiting.status = "waiting_user"
+        waiting.metadata["runtime_context"] = runtime
+        repository.save(waiting)
+        with factory.begin() as db:
+            for index in range(105):
+                completed = AgentRun("owner", f"completed-{index}")
+                completed.status = "completed"
+                completed.metadata["runtime_context"] = runtime
+                repository.save_in_session(db, completed)
+            for user, tenant in (("other-owner", "tenant"), ("owner", "other-tenant")):
+                hidden = AgentRun(user, "waiting elsewhere")
+                hidden.status = "waiting_user"
+                hidden.metadata["runtime_context"] = {**runtime, "tenant_id": tenant}
+                repository.save_in_session(db, hidden)
+
+        decoded = []
+        original_mapper = repository._record_to_run
+
+        def record_to_run(record):
+            decoded.append(record.run_id)
+            return original_mapper(record)
+
+        monkeypatch.setattr(repository, "_record_to_run", record_to_run)
+        service = AgentOrchestrator(repository=repository)
+        assert [
+            run.run_id
+            for run in service.list_runs(
+                user_id="owner",
+                status="waiting_user",
+                runtime_scope=RunContextScope("tenant", "mod", "session", 0),
+                limit=2,
+            )
+        ] == [waiting.run_id]
+        assert decoded == [waiting.run_id]
+        decoded.clear()
+        assert (
+            service.list_runs(
+                user_id="owner",
+                status="waiting_user",
+                runtime_scope=RunContextScope("missing-tenant", "mod", "session", 0),
+                limit=2,
+            )
+            == []
+        )
+        assert decoded == []
     finally:
         engine.dispose()
 
@@ -534,6 +639,10 @@ def test_concurrent_parent_saves_keep_child_receipts_and_reject_rebinding(tmp_pa
         assert repo.get(parent.run_id).metadata["child_results"] == receipts
         # A stale writer cannot erase the other child's result or rewind completion.
         stale = copy.deepcopy(snapshots[0])
+        stale.metadata["runtime_context"].update(
+            untrusted_sources=[{"source": "tool", "text": "returned after child commit"}],
+            context_summary={"system": "", "data": []},
+        )
         stale.metadata["child_results"]["child-0"].update(status="running", final_output={})
         repo.save(stale)
         assert repo.get(parent.run_id).metadata["child_results"] == receipts

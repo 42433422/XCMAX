@@ -1,7 +1,11 @@
 # 服务器全量 API（无 GPU / 无 Windows 音频栈）；与 XCAGI/requirements.txt 相比去掉 torch 等大包。
-# SSOT 声明：pyproject.toml [project.optional-dependencies].server-api
+# SSOT 声明：pyproject.toml 基础运行时 + [project.optional-dependencies].server-api
 # 锁定版本：ops/deploy/requirements-server-api.lock.txt（CI: scripts/dev/check_requirements_lock.py）
 # 重型 ML：requirements.txt / optional-dependencies.ml（torch、transformers）
+
+# 固定执行器：官方 SDK 与各平台 CLI wheel 同步锁定。
+openai-codex==0.171.0
+openai-codex-cli-bin==0.171.0
 
 # XCAGI 吸收并维护的 LangGraph 运行时；CI/服务端必须从仓库内同一份源码安装。
 langchain-core==1.5.3
@@ -35,6 +39,7 @@ gunicorn>=22.0.0
 gevent>=25.4.2
 python-dotenv>=1.2.2
 httpx==0.28.1
+httpx-sse==0.4.3
 socksio>=1.0.0
 requests>=2.33.0
 urllib3>=2.8.0

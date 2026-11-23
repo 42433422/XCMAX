@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from app.application.tutorial_v2.catalog import COURSE_BY_ID
 from app.db.models.tutorial import TutorialRun, TutorialWorkspace
+from app.utils.time import utc_now_naive
 
 TUTORIAL_COOKIE = "xcagi_tutorial_run"
 COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60
@@ -191,7 +192,7 @@ def resolve_tutorial_scope(
             error_status=409,
         )
     entered = run.last_entered_at or run.started_at or run.created_at
-    if entered is not None and entered < datetime.utcnow() - timedelta(
+    if entered is not None and entered < utc_now_naive() - timedelta(
         seconds=COOKIE_MAX_AGE_SECONDS
     ):
         return TutorialScopeDecision(

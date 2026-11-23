@@ -697,6 +697,37 @@ describe('executeRemoteChatRound 流式回合', () => {
 })
 
 describe('executeRemoteChatRound 断线续传与超时', () => {
+  it.each(['queued', 'running', 'waiting_user', 'waiting_input', 'waiting_auth', 'paused', 'unknown', 'future_state'])('JSON 与 SSE 保留 %s 原运行状态，不触发成功动作', async execution_state => {
+    const payload = { success: false, execution_state, run_id: 'original-run',
+      response: '原任务进度', task: { type: 'custom' }, autoAction: { type: 'should-not-run' } }
+    for (const streamEnabled of [true, false]) {
+      h.state.streamEnabled = streamEnabled
+      const { round, deps, messages } = setup()
+      feed([{ type: 'done', result: payload }])
+      deps.chatRequest.requestChatByModeWithTimeout.mockResolvedValue(payload)
+      await round.executeRemoteChatRound(['执行'], undefined, scope())
+      expect(messages.value[0]).toMatchObject({ content: '原任务进度', workflowAction: execution_state })
+      expect(deps.showTaskConfirm).not.toHaveBeenCalled()
+      expect(deps.handleAutoAction).not.toHaveBeenCalled()
+      expect(deps.syncAgentRunFromPayload).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'original-run' }), '执行', expect.any(Function))
+    }
+  })
+
+  it('批量业务未完成时逐条保留原回执而非覆盖为批量失败', async () => {
+    h.state.streamEnabled = false
+    const { round, deps, messages } = setup()
+    deps.chatRequest.requestChatByModeBatchWithTimeout.mockResolvedValue({
+      batch: true, success: false, results: [
+        { success: true, response: '首项完成', execution_state: 'completed' },
+        { success: false, response: '第二项等待确认', execution_state: 'waiting_user', run_id: 'waiting-run' },
+      ],
+    })
+    await round.executeRemoteChatRound(['第一项', '第二项'], undefined, scope())
+    expect(messages.value.map(message => message.content)).toEqual(['首项完成', '第二项等待确认'])
+    expect(messages.value[1].workflowAction).toBe('waiting_user')
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
+  })
+
   it.each(['running', 'blocked'])('继续回执绑定原 %s 任务且不触发业务动作', async status => {
     const { round, deps, messages } = setup()
     feed([{ type: 'done', result: {
@@ -933,7 +964,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await round.executeRemoteChatRound(['写入'], undefined, scope())
 
     expect(deps.addMessage).toHaveBeenCalledWith(
-      '处理失败: 写入失败',
+      '写入失败',
       'ai',
       expect.objectContaining({ workflowAction: 'unknown', businessResult: expect.objectContaining({ summary: '结果未知' }) }),
       expect.any(Object),
@@ -1008,7 +1039,7 @@ describe('executeRemoteChatRound 非流式回退', () => {
     expect(deps.attachBusinessResultToLastAiMessage).toHaveBeenCalledWith(expect.objectContaining({ success: false }))
   })
 
-  it('请求异常携带 route_metadata 时写回失败提示', async () => {
+  it('请求异常保留 route_metadata 和 unknown，不重派任务', async () => {
     const { round, deps } = setup()
     const route = routePayload()
     deps.chatRequest.requestChatByModeWithTimeout.mockRejectedValue(Object.assign(new Error('上游超时'), { data: { route_metadata: route } }))
@@ -1016,11 +1047,13 @@ describe('executeRemoteChatRound 非流式回退', () => {
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
     expect(deps.addMessage).toHaveBeenCalledWith(
-      '处理失败: 上游超时',
+      expect.stringContaining('结果未知'),
       'ai',
-      expect.objectContaining({ workflowAction: 'failed', routeMetadata: route }),
+      expect.objectContaining({ workflowAction: 'unknown', routeMetadata: route }),
       expect.any(Object),
     )
+    expect(h.getConversation).toHaveBeenCalledExactlyOnceWith('session-1', { turn_id: 'turn-1' })
+    expect(deps.chatRequest.requestChatByModeWithTimeout).toHaveBeenCalledTimes(1)
   })
 
   it('请求抛出字符串时用兜底文案', async () => {
@@ -1029,7 +1062,21 @@ describe('executeRemoteChatRound 非流式回退', () => {
 
     await round.executeRemoteChatRound(['执行'], undefined, scope())
 
-    expect(deps.addMessage).toHaveBeenCalledWith('处理失败: 网络断开', 'ai', expect.objectContaining({ workflowAction: 'failed' }), expect.any(Object))
+    expect(deps.addMessage).toHaveBeenCalledWith(expect.stringContaining('结果未知'), 'ai', expect.objectContaining({ workflowAction: 'unknown' }), expect.any(Object))
+  })
+
+  it.each([false, true])('JSON 断线读取原 turn 完成回执，批量=%s', async batch => {
+    const { round, deps, messages } = setup()
+    const request = batch ? deps.chatRequest.requestChatByModeBatchWithTimeout : deps.chatRequest.requestChatByModeWithTimeout
+    request.mockRejectedValue(new Error('network error'))
+    h.getConversation.mockResolvedValue({ turn_receipt: {
+      turn_id: 'turn-1', run_id: 'original-run', status: 'completed', message: '原任务持久完成回执',
+    } })
+    await round.executeRemoteChatRound(batch ? ['a', 'b'] : ['a'], undefined, scope())
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(h.getConversation).toHaveBeenCalledExactlyOnceWith('session-1', { turn_id: 'turn-1' })
+    expect(messages.value[0]).toMatchObject({ content: '原任务持久完成回执', workflowAction: 'completed' })
+    expect(deps.handleAutoAction).not.toHaveBeenCalled()
   })
 
   it('会话切换后只把结果持久化到原会话，不写当前界面', async () => {

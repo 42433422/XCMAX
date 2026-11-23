@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class TraceStore:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
-        self._otlp_tracer: Any | None = None
+        self._otlp_exporter: Any | None = None
         self._otlp_failed = False
 
     # ---- 写入 ----
@@ -210,38 +210,83 @@ class TraceStore:
         if not endpoint or self._otlp_failed:
             return
         try:
-            tracer = self._get_otlp_tracer(endpoint)
-            if tracer is None:
-                return
-            attrs = {
-                k: v
-                for k, v in (span_dict.get("attributes") or {}).items()
-                if isinstance(v, (str, int, float, bool))
-            }
-            with tracer.start_as_current_span(span_dict.get("name") or "chat") as ot_span:
-                for key, value in attrs.items():
-                    ot_span.set_attribute(key, value)
-        except RECOVERABLE_ERRORS:
-            self._otlp_failed = True
-            logger.warning("OTLP export disabled after failure", exc_info=True)
+            from opentelemetry import trace
+            from opentelemetry.sdk.resources import Resource
+            from opentelemetry.sdk.trace import Event, ReadableSpan
+            from opentelemetry.sdk.trace.export import SpanExportResult
+            from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 
-    def _get_otlp_tracer(self, endpoint: str) -> Any | None:
-        if self._otlp_tracer is not None:
-            return self._otlp_tracer
-        try:
-            from opentelemetry import trace as ot_trace
-            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        except ImportError:
+            from app.neuro_bus.tracer import otel_context
+
+            # Flush happens off-thread. Export the original span, never create a new trace.
+            context = otel_context(
+                span_dict.get("trace_id"),
+                span_dict.get("span_id"),
+                trace_flags=span_dict.get("trace_flags", "01"),
+                trace_state=span_dict.get("trace_state", ""),
+            )
+            if context is None or span_dict.get("end_time") is None:
+                return
+            original = trace.get_current_span(context).get_span_context()
+            span_context = trace.SpanContext(
+                original.trace_id,
+                original.span_id,
+                is_remote=False,
+                trace_flags=original.trace_flags,
+                trace_state=original.trace_state,
+            )
+            parent_context = otel_context(
+                span_dict.get("trace_id"),
+                span_dict.get("parent_span_id"),
+                trace_flags=span_dict.get("trace_flags", "01"),
+                trace_state=span_dict.get("trace_state", ""),
+            )
+            parent = (
+                trace.get_current_span(parent_context).get_span_context()
+                if parent_context
+                else None
+            )
+            started = int(float(span_dict["start_time"]) * 1_000_000_000)
+            duration = span_dict.get("duration_ms")
+            elapsed = (
+                max(0, int(float(duration) * 1_000_000))
+                if duration is not None
+                else max(0, int(float(span_dict["end_time"]) * 1_000_000_000) - started)
+            )
+            failed = span_dict.get("status") == "error"
+            span = ReadableSpan(
+                name=span_dict.get("name") or "chat",
+                context=span_context,
+                parent=parent,
+                resource=Resource.create({"service.name": "xcagi.genai"}),
+                instrumentation_scope=InstrumentationScope("xcagi.genai"),
+                kind=trace.SpanKind.CLIENT,
+                start_time=started,
+                end_time=started + elapsed,
+                status=trace.Status(trace.StatusCode.ERROR if failed else trace.StatusCode.UNSET),
+                attributes=span_dict.get("attributes") or {},
+                events=[
+                    Event(
+                        event["name"],
+                        attributes=event.get("attributes") or {},
+                        timestamp=int(float(event["timestamp"]) * 1_000_000_000),
+                    )
+                    for event in span_dict.get("events") or []
+                ],
+            )
+            exporter = self._get_otlp_exporter(endpoint)
+            if exporter is not None and exporter.export((span,)) != SpanExportResult.SUCCESS:
+                logger.warning("OTLP export failed; local trace retained")
+        except BOUNDARY_ERRORS:
             self._otlp_failed = True
-            return None
-        provider = TracerProvider()
-        provider.add_span_processor(
-            SimpleSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces"))
-        )
-        self._otlp_tracer = ot_trace.get_tracer("xcagi.genai", tracer_provider=provider)
-        return self._otlp_tracer
+            logger.warning("OTLP export disabled after failure")
+
+    def _get_otlp_exporter(self, endpoint: str) -> Any | None:
+        if self._otlp_exporter is None:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+            self._otlp_exporter = OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces")
+        return self._otlp_exporter
 
 
 _store: TraceStore | None = None

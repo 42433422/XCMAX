@@ -3,7 +3,9 @@
 import hashlib
 import io
 import json
+import runpy
 import zipfile
+from pathlib import Path
 
 import httpx
 import pytest
@@ -78,7 +80,10 @@ def evidence(monkeypatch, tmp_path):
             "status": "completed",
             "conclusion": "success",
             "event": "push" if run_id == 40 else "workflow_dispatch",
-            "display_title": f"CI/CD {SHA}" if run_id == 40 else "Security full release scan",
+            "display_title": (f"CI/CD {SHA}" if run_id == 40 else "Security full release scan"),
+            "run_attempt": 1,
+            "run_started_at": "2026-11-19T00:01:00Z",
+            "updated_at": "2026-11-19T00:09:00Z",
         }
         for run_id, workflow in (
             (40, "fhd-ci-cd.yml"),
@@ -118,15 +123,41 @@ def evidence(monkeypatch, tmp_path):
         f"{SHA}...main": {"status": "ahead", "merge_base_commit": {"sha": SHA}},
         f"{SHA}...{LATER}": {"status": "ahead", "merge_base_commit": {"sha": SHA}},
         f"{LATER}...main": {"status": "ahead", "merge_base_commit": {"sha": LATER}},
+        f"{SHA}...{CONTROLLER}": {"status": "ahead", "merge_base_commit": {"sha": SHA}},
+        f"{CONTROLLER}...main": {
+            "status": "ahead",
+            "merge_base_commit": {"sha": CONTROLLER},
+        },
+    }
+    scanners = runpy.run_path(
+        str(Path(__file__).resolve().parents[3] / "FHD/scripts/security/security_release_gate.py")
+    )["REQUIRED_SCANNERS"]
+    sources = {
+        "40": {
+            "business-contract-evidence.json": {
+                "source_sha": SHA,
+                "test_sha": SHA,
+                "run_id": "40",
+                "run_attempt": "1",
+                "execution_environment": "github-actions",
+            }
+        },
+        "41": {
+            f"{name}.json": {"source_sha": SHA, "release_sha": SHA, "available": True}
+            for name in scanners
+        },
     }
 
-    def packed():
+    def packed(artifact_id=60):
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as zipped:
-            zipped.writestr(
-                zipfile.ZipInfo("modstore-deployment-correlation.json", (2026, 1, 1, 0, 0, 0)),
-                json.dumps(receipt),
+            files = (
+                {"modstore-deployment-correlation.json": receipt}
+                if artifact_id == 60
+                else sources[str(artifact_id - 21)]
             )
+            for name, data in files.items():
+                zipped.writestr(zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)), json.dumps(data))
         return stream.getvalue()
 
     def github(method, path, body=None):
@@ -137,6 +168,32 @@ def evidence(monkeypatch, tmp_path):
         if "/compare/" in path:
             return comparisons[path.rsplit("/", 1)[-1]]
         if "/artifacts?" in path:
+            run_id = path.split("/runs/")[1].split("/")[0]
+            if run_id in sources:
+                check = checks[run_id]
+                artifact_id = int(run_id) + 21
+                raw = packed(artifact_id)
+                return {
+                    "total_count": 1,
+                    "artifacts": [
+                        {
+                            "id": artifact_id,
+                            "expired": False,
+                            "size_in_bytes": len(raw),
+                            "name": (
+                                "backend-combined-1"
+                                if run_id == "40"
+                                else "xcagi-security-release-reports"
+                            ),
+                            "created_at": "2026-11-19T00:05:00Z",
+                            "workflow_run": {
+                                "id": int(run_id),
+                                "head_sha": check["head_sha"],
+                            },
+                            "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+                        }
+                    ],
+                }
             return {
                 "artifacts": [
                     {
@@ -149,6 +206,9 @@ def evidence(monkeypatch, tmp_path):
                 ]
             }
         if "/attempts/" in path:
+            run_id = path.split("/runs/")[1].split("/")[0]
+            if run_id in checks:
+                return checks[run_id]
             assert "/runs/50/attempts/" in path
             return {"jobs": jobs_by_attempt[path.split("/attempts/")[1].split("/")[0]]}
         if "/workflows/" in path:
@@ -158,12 +218,14 @@ def evidence(monkeypatch, tmp_path):
     def respond(request):
         if request.url.host == "api.github.com":
             assert request.headers["authorization"] == "Bearer test-only"
+            artifact_id = request.url.path.split("/artifacts/")[1].split("/")[0]
             return httpx.Response(
-                302, headers={"location": "https://proof.blob.core.windows.net/archive"}
+                302,
+                headers={"location": f"https://proof.blob.core.windows.net/archive/{artifact_id}"},
             )
         assert "authorization" not in request.headers
         if request.url.host == "proof.blob.core.windows.net":
-            return httpx.Response(200, content=packed())
+            return httpx.Response(200, content=packed(int(request.url.path.rsplit("/", 1)[-1])))
         assert str(request.url) == "https://xiu-ci.com/api/health"
         return httpx.Response(200, json=health)
 
@@ -192,6 +254,7 @@ def evidence(monkeypatch, tmp_path):
         "comparisons": comparisons,
         "archive": archive,
         "calls": calls,
+        "sources": sources,
     }
 
 
@@ -211,6 +274,58 @@ def test_exact_production_receipt_and_public_identity_complete_delivery(evidence
     assert result["deployment_completed_at"] == "2026-11-19T00:20:00+00:00"
     assert result["receipt"]["security_scan_run_id"] == 41
     assert result["identity"]["artifact_sha256"] == "d" * 64
+
+
+def _bind_later_controller(evidence):
+    contract = delivery._source_contract()
+    proof = evidence["receipt"]["source_evidence"] = {}
+    for key, run_id in (("ci_run_id", "40"), ("security_scan_run_id", "41")):
+        run = evidence["checks"][run_id]
+        run.update(head_sha=CONTROLLER, event="workflow_dispatch")
+        proof[key] = contract.read_source_evidence(
+            REPO,
+            key,
+            run,
+            SHA,
+            api=lambda path: delivery.github("GET", path),
+            read_archive=lambda artifact: {
+                name: json.dumps(data).encode()
+                for name, data in evidence["sources"][str(artifact["id"] - 21)].items()
+            },
+        )
+
+
+def test_later_main_controller_keeps_original_tested_sha_and_native_artifacts(evidence):
+    _bind_later_controller(evidence)
+    result = delivery.collect_delivery(evidence["state"])
+    assert result["status"] == "deployment_verified"
+    for key, proof in result["receipt"]["source_evidence"].items():
+        assert proof["source_sha"] == SHA and proof["controller_sha"] == CONTROLLER
+        assert proof["run_id"] == result["receipt"][key]
+    assert f"/repos/{REPO}/compare/{SHA}...{CONTROLLER}" in evidence["calls"]
+    assert f"/repos/{REPO}/compare/{CONTROLLER}...main" in evidence["calls"]
+
+
+@pytest.mark.parametrize(
+    "changed", ["missing", "missing-native", "ci-source", "scan-source", "attempt", "ancestry"]
+)
+def test_later_controller_cannot_replace_original_approved_source_proof(evidence, changed):
+    _bind_later_controller(evidence)
+    if changed == "missing":
+        del evidence["receipt"]["source_evidence"]
+    elif changed == "missing-native":
+        del evidence["sources"]["40"]["business-contract-evidence.json"]
+    elif changed == "ci-source":
+        evidence["sources"]["40"]["business-contract-evidence.json"]["source_sha"] = CONTROLLER
+    elif changed == "scan-source":
+        evidence["sources"]["41"]["codeql.json"]["source_sha"] = CONTROLLER
+    elif changed == "attempt":
+        evidence["checks"]["40"]["run_attempt"] = 2
+    else:
+        evidence["comparisons"][f"{CONTROLLER}...main"]["status"] = "diverged"
+    result = delivery.collect_delivery(evidence["state"])
+    assert result["status"] == "waiting_delivery"
+    assert result["reason"] == "production_release_evidence_mismatch"
 
 
 def _active_descendant(evidence):
@@ -308,6 +423,10 @@ def test_legacy_unsigned_workflow_receipt_stays_pending(evidence):
         ("push", "Legacy push title"),
         ("schedule", "Nightly CI"),
         ("workflow_dispatch", f"CI/CD {SHA}"),
+        (
+            "workflow_dispatch",
+            f"CI/CD {SHA} [delivery:749f8800-080f-5f7a-8c94-1c51db98f8b4]",
+        ),
     ],
 )
 def test_ci_checkout_source_accepts_supported_main_events(evidence, event, title):
@@ -320,6 +439,7 @@ def test_ci_checkout_source_accepts_supported_main_events(evidence, event, title
     [
         ("workflow_dispatch", f"CI/CD {HEAD}"),
         ("workflow_dispatch", f"CI/CD {SHA} candidate"),
+        ("workflow_dispatch", f"CI/CD {SHA} [delivery:unbound]"),
         ("workflow_dispatch", None),
         ("pull_request", f"CI/CD {SHA}"),
         (None, f"CI/CD {SHA}"),

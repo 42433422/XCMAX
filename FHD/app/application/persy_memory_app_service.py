@@ -278,10 +278,10 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         status=requested_status or None,
                         memory_type=requested_type or None,
                     )
-                except ValueError as exc:
+                except ValueError:
                     return {
                         "success": False,
-                        "message": str(exc),
+                        "message": "memory status or type filter is invalid",
                         "error_code": "persy_memory_invalid_filter",
                     }
                 rows.extend(

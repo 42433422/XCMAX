@@ -14,7 +14,12 @@ from . import config
 
 
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
-    if not execution_succeeded(result):
+    if (
+        not result
+        or result.get("handler_failed")
+        or not execution_succeeded(result)
+        or execution_requires_reconciliation(result)
+    ):
         return False
     report_text = _extract_report_excerpt(result).lower()
     if "blocked by risk middleware" in report_text:
@@ -286,7 +291,11 @@ def _extract_para_meta(
         "error": output.get("error") if isinstance(output, dict) else None,
         "para_status": para_result.get("task_status") or para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
-        "task_id": (output.get("task_id") if isinstance(output, dict) else None)
+        "task_id": (
+            output.get("task_id") or output.get("para_task_id")
+            if isinstance(output, dict)
+            else None
+        )
         or para_result.get("task_id")
         or para_result.get("id")
         or response.get("taskId"),

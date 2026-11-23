@@ -87,10 +87,12 @@ make -f Makefile.win dev
 
 | 路径 | 用途 |
 |------|------|
-| [`FHD/uv.lock`](../FHD/uv.lock) | **主仓** uv 锁定（`cd FHD && uv sync`） |
-| [`FHD/XCAGI/requirements.lock.txt`](../FHD/XCAGI/requirements.lock.txt) | pip-compile 锁定（CI / 传统 pip 安装） |
+| [`FHD/uv.lock`](../FHD/uv.lock) | **主仓**完整依赖锁（`cd FHD && uv sync --frozen --extra server-api --extra dev`） |
+| [`FHD/requirements-server-api.txt`](../FHD/requirements-server-api.txt) | CI、部署与桌面安装入口，含固定 Codex SDK/CLI 和受管本地包 |
+| [`FHD/ops/deploy/requirements-server-api.lock.txt`](../FHD/ops/deploy/requirements-server-api.lock.txt) | 服务端顶层版本约束，安装时配合上述清单 |
+| [`FHD/XCAGI/requirements.lock.txt`](../FHD/XCAGI/requirements.lock.txt) | 保留的传统锁与依赖告警身份；新安装使用当前入口 |
 
-Monorepo 根目录 **无** 独立 `uv.lock`；Python 开发请以 **`FHD/`** 为工作目录。
+Monorepo 根目录 **无** 独立 `uv.lock`；Python 开发请以 **`FHD/`** 为工作目录。pip 安装命令和锁职责见 [Python 依赖锁定](../FHD/docs/guides/DEPENDENCY_LOCKS.md)。
 
 ## 文档真相源
 

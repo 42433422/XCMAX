@@ -19,10 +19,8 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _chat_read_token_required_payload,
     _chat_request_subject,
     _ensure_chat_db_read_authorized,
-    _ensure_vector_index_if_needed,
     _extract_excel_paths_from_context,
     _extract_excel_paths_from_message,
-    _looks_like_vector_request,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
     _sse_event_line,
@@ -304,48 +302,6 @@ def test_merge_runtime_context_with_message_paths_dedup() -> None:
     assert merged["excel_file_path"]
     assert "报价.xlsx" in merged["excel_file_path"]
     assert found
-
-
-# ---------------------------------------------------------------------------
-# vector request
-# ---------------------------------------------------------------------------
-
-
-def test_looks_like_vector_request() -> None:
-    assert _looks_like_vector_request("做个向量索引") is True
-    assert _looks_like_vector_request("semantic search please") is True
-    assert _looks_like_vector_request("普通对话") is False
-
-
-def test_ensure_vector_index_not_requested() -> None:
-    assert _ensure_vector_index_if_needed("普通问题", {}) is None
-
-
-def test_ensure_vector_index_missing_path() -> None:
-    hint = _ensure_vector_index_if_needed("建立向量索引", {})
-    assert hint is not None
-    assert "Excel" in hint or "路径" in hint
-
-
-def test_ensure_vector_index_success() -> None:
-    executor = MagicMock(return_value='{"success": true}')
-    with patch(
-        "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-        return_value=executor,
-    ):
-        out = _ensure_vector_index_if_needed("向量索引", {"excel_file_path": "/tmp/x.xlsx"})
-    assert out is None
-
-
-def test_ensure_vector_index_tool_error() -> None:
-    executor = MagicMock(return_value='{"error": "no_sheet", "message": "找不到工作表"}')
-    with patch(
-        "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-        return_value=executor,
-    ):
-        out = _ensure_vector_index_if_needed("向量索引", {"excel_file_path": "/tmp/x.xlsx"})
-    assert out is not None
-    assert "失败" in out
 
 
 # ---------------------------------------------------------------------------

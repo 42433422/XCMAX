@@ -140,6 +140,15 @@ it('the will-navigate policy blocks external replacement without logging credent
   expect(prevent).toHaveBeenCalledOnce()
 })
 
+it.each(['file:///tmp/untrusted.html', 'data:text/html,<script>alert(1)</script>', 'javascript:alert(1)'])(
+  'blocks renderer replacement with a non-backend document: %s', url => {
+    const prevent = vi.fn()
+    const warn = vi.fn()
+    handleDesktopWillNavigate(url, 17500, prevent, warn)
+    expect(prevent).toHaveBeenCalledOnce()
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[xcagi-desktop] blocked untrusted will-navigate')
+  },
+)
 
 it.each(['http://127.0.0.1/', 'http://127.0.0.1:80/', 'http://localhost/'])(
   'canonical HTTP default port respects configured port: %s', (url) => {

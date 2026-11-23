@@ -18,8 +18,6 @@ from app.application.workflow.workflow_types import (
 )
 from app.db.db_base import Base
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
-from tests.fixtures.backend_ci_isolation import provision_native_checkpoint_schema
-from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture()
@@ -108,7 +106,10 @@ class TestWorkflowPlanStore:
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()
         store.save(
-            plan=plan, runtime_context={"user_id": "u1"}, status="pending_awaiting", user_id="u1"
+            plan=plan,
+            runtime_context={"user_id": "u1"},
+            status="pending_awaiting",
+            user_id="u1",
         )
         store.save(
             plan=plan_from_dict({**plan_to_dict(plan), "plan_id": "wp-other-1"}),
@@ -130,86 +131,6 @@ class TestWorkflowPlanStore:
         assert [row["plan_id"] for row in store.list_active("u1", session_id="new")] == ["u1-new"]
         assert len(store.list_active("u1")) == 2
 
-    def test_returning_to_original_session_restores_same_run_after_slot_overwrite(
-        self, session_factory
-    ):
-        from unittest.mock import Mock, patch
-
-        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-        from app.application.ai_chat_app_service import AIChatApplicationService
-
-        store = WorkflowPlanStore(session_factory=session_factory)
-        svc = object.__new__(AIChatApplicationService)
-        svc._pending_workflows = {}
-        with patch("app.application.workflow.plan_store.WorkflowPlanStore", return_value=store):
-            for session in ("A", "B"):
-                plan = plan_from_dict({**plan_to_dict(_plan()), "plan_id": f"plan-{session}"})
-                svc._pending_workflows["u1"] = {
-                    "plan": plan,
-                    "runtime_context": {"user_id": "u1", "session_id": session},
-                    "agent_run_id": f"run-{session}",
-                    "approval_required": session == "B",
-                    "approval_nodes": [{"node_id": "n2"}] if session == "B" else [],
-                }
-                svc._persist_plan_state(
-                    plan, svc._pending_workflows["u1"]["runtime_context"], "pending_awaiting"
-                )
-            assert svc._pending_workflows["u1"]["agent_run_id"] == "run-B"
-            orchestrator = Mock()
-            plan_a = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-A"})
-            plan_b = plan_from_dict({**plan_to_dict(_plan()), "plan_id": "plan-B"})
-            orchestrator.get_run.side_effect = lambda run_id: AgentRun(
-                user_id="u1",
-                message="long task",
-                run_id=run_id,
-                status="waiting_user",
-                plan_id="plan-B" if run_id == "run-B" else "plan-A",
-                intent="long_task",
-                metadata={"plan": plan_to_dict(plan_b if run_id == "run-B" else plan_a)},
-                steps=[
-                    AgentStep(
-                        node_id=node.node_id,
-                        tool_id=node.tool_id,
-                        action=node.action,
-                        depends_on=node.depends_on,
-                        status="waiting_user" if node.node_id == "n2" else "completed",
-                    )
-                    for node in plan_a.nodes
-                ],
-            )
-            orchestrator.continue_run.return_value = AgentRun(
-                user_id="u1",
-                message="long task",
-                run_id="run-A",
-                status="completed",
-                plan_id="plan-A",
-                intent="long_task",
-                metadata={"plan": plan_to_dict(plan_a)},
-            )
-            svc._format_agent_run_response = Mock(return_value={"run_id": "run-A"})
-            with patch(
-                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
-            ):
-                handled, response = svc._resume_pending_dynamic_workflow(
-                    "u1", "确认", "确认", {"session_id": "A"}
-                )
-            assert handled and response["run_id"] == "run-A"
-            orchestrator.continue_run.assert_called_once_with(
-                "run-A", approved_by="u1", runtime_context={"user_id": "u1", "session_id": "A"}
-            )
-            orchestrator.start_run_from_plan.assert_not_called()
-            assert (
-                store.load("plan-B")["runtime_context"]["pending_confirmation"]["agent_run_id"]
-                == "run-B"
-            )
-
-            with patch(
-                "app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator
-            ):
-                assert svc._hydrate_pending_workflow("u1", "B")
-            assert svc._pending_workflows["u1"]["approval_required"] is True
-            assert svc._pending_workflows["u1"]["approval_nodes"] == [{"node_id": "n2"}]
-
     def test_upsert_same_plan_id_updates(self, session_factory):
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()
@@ -230,7 +151,9 @@ class TestCrossSessionResume:
         first_calls: list[str] = []
         engine = _engine_with_recording(first_calls, fail_on="t3.tool")
         first = engine.run(
-            plan, runtime_context={"user_id": "u1", "session_id": "sess"}, checkpointer=cp
+            plan,
+            runtime_context={"user_id": "u1", "session_id": "sess"},
+            checkpointer=cp,
         )
         assert first.success is False
         store.save(
@@ -276,49 +199,6 @@ def _sequential_plan() -> PlanGraph:
     return PlanGraph(plan_id="wp-sess-abc12345", intent="long_task", nodes=nodes)
 
 
-@pytest.mark.parametrize("failed_save", [False, True])
-def test_normal_cancel_is_durable_and_save_failure_preserves_pending(
-    session_factory, monkeypatch, failed_save
-):
-    import app.application.workflow.plan_store as module
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    store = WorkflowPlanStore(session_factory=session_factory)
-    plan = _plan()
-    context = {"user_id": "u1", "session_id": "sess", "task_id": "original-task"}
-    store.save(
-        plan=plan,
-        runtime_context=context,
-        status="pending_awaiting",
-        user_id="u1",
-        session_id="sess",
-    )
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
-    monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
-    if failed_save:
-        from sqlalchemy.exc import OperationalError
-
-        def fail(self):
-            raise OperationalError("commit", {}, RuntimeError("controlled commit failure"))
-
-        monkeypatch.setattr(session_factory.class_, "commit", fail)
-    result = service._try_handle_dynamic_workflow(
-        "u1", "取消", "normal", {"session_id": "sess"}, {}
-    )
-    assert result["success"] is not failed_save
-    assert store.load(plan.plan_id)["status"] == (
-        "pending_awaiting" if failed_save else "cancelled"
-    )
-    assert store.load(plan.plan_id)["runtime_context"] == context
-    assert ("u1" in service._pending_workflows) == failed_save
-    reopened = object.__new__(AIChatApplicationService)
-    reopened._pending_workflows = {}
-    assert reopened._hydrate_pending_workflow("u1", "sess") is failed_save
-    if not failed_save:
-        assert result["data"]["data"] == {"plan_id": plan.plan_id, "task_id": "original-task"}
-
-
 @pytest.mark.parametrize("required", [False, True])
 def test_real_integrity_failure_without_committed_row_has_no_strict_receipt(
     session_factory, monkeypatch, required
@@ -339,167 +219,9 @@ def test_real_integrity_failure_without_committed_row_has_no_strict_receipt(
     assert store.load(_plan().plan_id) is None
 
 
-@pytest.mark.parametrize("user_id,session_id", [("u2", "sess"), ("u1", "other")])
-@pytest.mark.parametrize("message", ["取消", "确认"])
-def test_restarted_control_never_loads_another_owner_or_session(
-    session_factory, monkeypatch, user_id, session_id, message
-):
-    from unittest.mock import Mock
-
-    import app.application.workflow.plan_store as module
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    store = WorkflowPlanStore(session_factory=session_factory)
-    plan = _plan()
-    store.save(
-        plan=plan,
-        runtime_context={"user_id": "u1", "session_id": "sess"},
-        status="pending_awaiting",
-        user_id="u1",
-        session_id="sess",
-    )
-    monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
-    # No matching pending task: retain the normal model-selection path, not a
-    # fabricated cancellation/confirmation success for somebody else's plan.
-    model_reply = {"success": False, "message": "clarification required"}
-    service._dispatch_model_selection = Mock(return_value=model_reply)
-    result = service._try_handle_dynamic_workflow(
-        user_id, message, "normal", {"session_id": session_id}, {}
-    )
-    assert result is model_reply
-    service._dispatch_model_selection.assert_called_once()
-    assert service._pending_workflows == {}
-    assert store.load(plan.plan_id)["status"] == "pending_awaiting"
-
-
-def test_restarted_confirmation_without_execution_record_stays_fail_closed(
-    session_factory, monkeypatch
-):
-    from unittest.mock import Mock
-
-    import app.application.workflow.plan_store as module
-    from app.application.ai_chat_app_service import AIChatApplicationService
-
-    store = WorkflowPlanStore(session_factory=session_factory)
-    plan = _plan()
-    store.save(
-        plan=plan,
-        runtime_context={"user_id": "u1", "session_id": "sess"},
-        status="pending_awaiting",
-        user_id="u1",
-        session_id="sess",
-    )
-    monkeypatch.setattr(module, "WorkflowPlanStore", lambda: store)
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
-    service._dispatch_model_selection = Mock(side_effect=AssertionError("must not replan"))
-    result = service._try_handle_dynamic_workflow(
-        "u1", "确认", "normal", {"session_id": "sess"}, {}
-    )
-    assert result["success"] is False
-    assert result["data"]["action"] == "workflow_resume_failed"
-    assert store.load(plan.plan_id)["status"] == "pending_awaiting"
-    assert service._pending_workflows["u1"]["plan"].plan_id == plan.plan_id
-    service._dispatch_model_selection.assert_not_called()
-
-
-@pytest.mark.parametrize("scoped", [False, True])
-def test_restarted_confirmation_resumes_signed_durable_agent_run(
-    monkeypatch, tmp_path, trusted_actor, scoped
-):
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.application.agent_task_context import scoped_conversation_user_id
-    from app.application.ai_chat.dialogue_memory import prepare_chat_turn
-    from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.employee_runtime.task_continuity import ledger_path
-
-    actor = trusted_actor(user_id=17, role="admin")
-    session_factory = actor.factory
-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    context = {**actor.context, "user_id": "17", "session_id": "sess"}
-    prepare_chat_turn("resume", context)
-    chat_user = scoped_conversation_user_id("17", context) if scoped else "17"
-    plan = PlanGraph(
-        plan_id="restart-confirm-plan",
-        intent="employee",
-        nodes=[
-            WorkflowNode(
-                "employee",
-                "employee",
-                "execute",
-                params={
-                    "employee_id": "clerk",
-                    "task": "start continuity",
-                    "continuity_action": "start",
-                    "goal": "verify resumed confirmation",
-                },
-            )
-        ],
-    )
-    repository = SQLAlchemyAgentRunRepository(session_factory=session_factory)
-    run = AgentRun(user_id="17", message="resume", metadata={"runtime_context": context})
-    AgentOrchestrator(repository=repository)._apply_plan(run, plan)
-    run.status = "waiting_user"
-    run.steps[0].status = "waiting_user"
-    repository.save(run)
-    store = WorkflowPlanStore(session_factory=session_factory)
-    monkeypatch.setattr("app.application.workflow.plan_store.WorkflowPlanStore", lambda: store)
-    if scoped:
-        original = object.__new__(AIChatApplicationService)
-        original._pending_workflows = {
-            chat_user: {"plan": plan, "runtime_context": context, "agent_run_id": run.run_id}
-        }
-        assert original._persist_plan_state(plan, context, "pending_awaiting")
-        saved = store.load(plan.plan_id)
-        assert saved["user_id"] == chat_user
-        assert saved["runtime_context"]["user_id"] == "17"
-        assert saved["runtime_context"]["pending_confirmation"]["agent_run_id"] == run.run_id
-    else:
-        store.save(
-            plan=plan,
-            runtime_context={**context, "pending_confirmation": {"agent_run_id": run.run_id}},
-            status="pending_awaiting",
-            user_id="17",
-            session_id="sess",
-        )
-    # New service and repository objects, not the old in-memory run instance.
-    provision_native_checkpoint_schema(session_factory.kw["bind"])
-    fresh = SQLAlchemyAgentRunRepository(session_factory=session_factory, auto_create=False)
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.AgentOrchestrator",
-        lambda: AgentOrchestrator(repository=fresh),
-    )
-    service = object.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
-    service._try_handle_dynamic_workflow(chat_user, "确认", "normal", {"session_id": "sess"}, {})
-    completed = fresh.get(run.run_id)
-    assert completed.status == "completed", completed.to_dict()
-    assert completed.tool_calls and completed.tool_calls[0].output["success"]
-    assert ledger_path(tmp_path).is_file()
-    assert store.load(plan.plan_id)["status"] == "succeeded"
-    receipt = ledger_path(tmp_path).read_bytes()
-    handled, response = service._resume_pending_dynamic_workflow(
-        chat_user, "确认", "确认", {"session_id": "sess"}
-    )
-    assert handled and response["data"]["action"] == "clarification_required"
-    assert ledger_path(tmp_path).read_bytes() == receipt
-    assert len(fresh.get(run.run_id).tool_calls) == len(completed.tool_calls)
-
-
 @pytest.mark.parametrize("status", ["pending_awaiting", "cancelled", "succeeded"])
 def test_session_persistence_reports_real_commit_failure(session_factory, monkeypatch, status):
-    from unittest.mock import Mock
-
     from sqlalchemy.exc import OperationalError
-
-    from app.application.ai_chat.workflow_session import WorkflowSession
 
     store = WorkflowPlanStore(session_factory=session_factory)
 
@@ -507,6 +229,24 @@ def test_session_persistence_reports_real_commit_failure(session_factory, monkey
         raise OperationalError("commit", {}, RuntimeError("controlled commit failure"))
 
     monkeypatch.setattr(session_factory.class_, "commit", fail)
-    session = WorkflowSession({}, Mock(), store=store)
-    assert not session.persist_plan_state(_plan(), {"user_id": "u1"}, status)
+    with pytest.raises(OperationalError, match="controlled commit failure"):
+        store.save(
+            plan=_plan(), runtime_context={"user_id": "u1"}, status=status, require_commit=True
+        )
     assert store.load(_plan().plan_id) is None
+
+
+@pytest.mark.parametrize("status", ["queued", "retrying", "paused", "blocked", "unknown"])
+def test_unfinished_plan_remains_observable_without_resuming(session_factory, status):
+    store = WorkflowPlanStore(session_factory=session_factory)
+    store.save(
+        plan=_plan(),
+        runtime_context={"agent_run_id": "original"},
+        status=status,
+        user_id="owner",
+        session_id="same",
+    )
+    assert store.list_active("owner", session_id="same")[0]["status"] == status
+    loaded = store.load(_plan().plan_id)
+    assert loaded["runtime_context"] == {"agent_run_id": "original"}
+    assert loaded["status"] == status

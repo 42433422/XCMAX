@@ -83,9 +83,13 @@ def collect_runtime_evidence(state):
             break
     try:
         state["gate"] = schedule.should_run_self_maintenance_loop(force=False)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         config.logger.exception("failed to evaluate self-maintenance runtime gate")
-        state["gate"] = {"should_run": False, "reason": "gate_error", "error": str(exc)}
+        state["gate"] = {
+            "should_run": False,
+            "reason": "gate_error",
+            "error": "维护准入状态暂时无法核验",
+        }
     state["trigger"] = schedule.cron_trigger_for_self_maintenance()
     state["open_items"] = (
         state["memory"].get("open_items")

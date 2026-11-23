@@ -259,37 +259,6 @@ def _merge_runtime_context_with_message_paths(
     return merged_ctx, found
 
 
-def _looks_like_vector_request(message: str) -> bool:
-    text = (message or "").lower()
-    keywords = ("向量", "索引", "语义检索", "embedding", "vector", "semantic search")
-    return any(k in text for k in keywords)
-
-
-def _ensure_vector_index_if_needed(message: str, runtime_context: dict) -> str | None:
-    if not _looks_like_vector_request(message):
-        return None
-    file_path = str(runtime_context.get("excel_file_path") or "").strip()
-    if not file_path:
-        return "我识别到您在请求向量索引，但没有拿到 Excel 路径。请发送类似 `@424/26年出货单打印/鸿瑞达报价26年.xlsx` 的路径。"
-    root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-    try:
-        from app.mod_sdk.planner_tools import resolve_planner_tool_executor
-
-        raw = resolve_planner_tool_executor()(
-            "excel_vector_index",
-            {"file_path": file_path},
-            workspace_root=root,
-        )
-        result = json.loads(raw)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("xcagi vector pre-index failed")
-        return f"我尝试为 `{file_path}` 建立向量索引时失败：{e}。请确认文件路径是否存在，或告诉我要索引的工作表名。"
-    if isinstance(result, dict) and result.get("error"):
-        msg = result.get("message") or result.get("error")
-        return f"我尝试为 `{file_path}` 建立向量索引失败：{msg}。请确认路径正确，或把目标工作表名发我。"
-    return None
-
-
 _CHAT_TIMEOUT_CEILING_SECONDS = 600.0
 
 
@@ -333,7 +302,11 @@ def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
 
 
 def _sse_event_line(payload: dict) -> bytes:
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+    from app.fastapi_routes.domains.conversation.stream_helpers import (
+        _sse_event_line as encode_event,
+    )
+
+    return encode_event(payload)
 
 
 def _sse_chunk_reports_running_tool(item: object) -> bool:

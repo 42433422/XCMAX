@@ -11,6 +11,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.infrastructure.excel.date_norm import cn_date, to_number
+
 logger = logging.getLogger(__name__)
 
 MAX_CODE_LENGTH = 2000
@@ -118,6 +120,8 @@ def _safe_exec_pandas(code: str, df: pd.DataFrame) -> pd.DataFrame:
     env: dict[str, Any] = {
         "df": df.copy(),
         "pd": pd,
+        "cn_date": cn_date,
+        "to_number": to_number,
         "result": None,
         "__builtins__": SAFE_BUILTINS,
     }

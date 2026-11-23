@@ -1,7 +1,7 @@
 """Isolated tests for one-use, cross-worker wallet/plans sign-in."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from threading import local
 
@@ -111,7 +111,9 @@ def test_expired_wrong_purpose_wrong_target_and_changed_credentials(database):
             service.consume_code(code, target, purpose)
     with factory() as session:
         session.execute(
-            update(BrowserHandoffCode).values(expires_at=datetime.utcnow() - timedelta(seconds=1))
+            update(BrowserHandoffCode).values(
+                expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1)
+            )
         )
         session.commit()
     with pytest.raises(ValueError):

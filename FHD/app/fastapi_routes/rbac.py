@@ -267,4 +267,9 @@ def rbac_invite_member(
         )
         return JSONResponse({"success": True, "data": data}, status_code=201)
     except TenantIdentityError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
+        message = {
+            "请输入有效的市场账号用户名": "请输入有效的市场账号用户名",
+            "只有已验证的企业所有者可以邀请成员": "只有已验证的企业所有者可以邀请成员",
+            "不能邀请自己": "不能邀请自己",
+        }.get(str(exc), "企业邀请无法完成，请核对账号权限")
+        return JSONResponse({"success": False, "message": message}, status_code=403)

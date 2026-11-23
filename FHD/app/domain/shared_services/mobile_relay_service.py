@@ -208,18 +208,37 @@ class MobileRelayService:
         )
 
     def create_task(
-        self, *, user_id: int, relay_id: str, kind: str, payload: dict[str, Any] | None = None
+        self,
+        *,
+        user_id: int,
+        relay_id: str,
+        kind: str,
+        payload: dict[str, Any] | None = None,
+        client_request_id: str | None = None,
     ) -> dict[str, Any] | None:
         return cast(
             dict[str, Any] | None,
-            self._tasks.create_task(user_id=user_id, relay_id=relay_id, kind=kind, payload=payload),
+            self._tasks.create_task(
+                user_id=user_id,
+                relay_id=relay_id,
+                kind=kind,
+                payload=payload,
+                client_request_id=client_request_id,
+            ),
+        )
+
+    def get_task_by_request(
+        self, *, user_id: int, relay_id: str, client_request_id: str
+    ) -> dict[str, Any] | None:
+        return self._tasks.get_task_by_request(
+            user_id=user_id, relay_id=relay_id, client_request_id=client_request_id
         )
 
     def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         return cast(dict[str, Any] | None, self._tasks.get_task(user_id=user_id, task_id=task_id))
 
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
-        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        """Cancel an unclaimed task; a running task awaits its original receipt."""
         return cast(
             dict[str, Any] | None, self._tasks.cancel_task(user_id=user_id, task_id=task_id)
         )

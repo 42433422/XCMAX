@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime
 from urllib.parse import quote
 
@@ -96,6 +97,14 @@ class ParaClient:
             raise ParaUnavailable("invalid_submit_response")
         return task
 
+    def cancel_task(self, task_id: str, body: dict) -> dict:
+        task = self.request("POST", "/api/tasks/" + quote(task_id, safe="") + "/cancel", body).get(
+            "task"
+        )
+        if not isinstance(task, dict) or task.get("id") != task_id or not task.get("status"):
+            raise ParaUnavailable("invalid_cancellation_response")
+        return task
+
 
 def age_seconds(value: str, now: float) -> float:
     try:
@@ -135,9 +144,17 @@ def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict 
     preferred = os.environ.get("MODSTORE_PARA_DEVICE_ID", "")
     target = request.get("target", "mac")
     tool = request.get("tool", "codex")
+    if tool == "opencode" and not re.fullmatch(r"[0-9a-f]{40}", request.get("source_sha", "")):
+        return None, "waiting_for_original_source_sha"
     reason = "waiting_for_device_or_verified_tool"
     for raw in devices:
         caps = raw.get("capabilities") or {}
+        if tool == "opencode" and (
+            caps.get("opencode_cli") is not True
+            or caps.get("opencode_credential_isolation") != "srt-0.0.83-header-only-platform-v1"
+        ):
+            reason = "waiting_for_native_opencode_isolation"
+            continue
         if target == "mac" and raw.get("id") != preferred:
             continue
         if target == "windows" and caps.get("platform") != "windows":
@@ -182,6 +199,8 @@ def execution_view(raw: dict) -> dict:
                     "status",
                     "branch_name",
                     "progress",
+                    "attempt_count",
+                    "cancellation",
                 )
             }
             for s in raw.get("subTasks", [])

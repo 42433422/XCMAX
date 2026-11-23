@@ -17,7 +17,14 @@ CacheKey = tuple[str, str]
 
 def preflight_timeout(connection: Connection) -> httpx.Timeout:
     """市场预检（路由/目录）必须短于对话首包预算，不可无限等待不可达的平台。"""
-    return httpx.Timeout(min(connection.timeout, 5.0), connect=3.0)
+    from app.application.tool_execution_deadline import (
+        check_invocation_deadline,
+        remaining_invocation_seconds,
+    )
+
+    check_invocation_deadline()
+    timeout = remaining_invocation_seconds(min(connection.timeout, 5.0))
+    return httpx.Timeout(timeout, connect=min(3.0, timeout))
 
 
 @dataclass(frozen=True)
@@ -86,8 +93,6 @@ class ChatInput:
         }
         if stream:
             payload["stream"] = True
-        if allow_failover is not None:
-            payload["allow_failover"] = allow_failover
         payload.update(
             {
                 key: value
@@ -102,6 +107,12 @@ class ChatInput:
                 }
             }
         )
+        if allow_failover is not None:
+            # An explicit request veto wins, but cannot turn a bounded backup
+            # attempt into another platform-owned candidate chain.
+            payload["allow_failover"] = (
+                allow_failover and self.extra.get("allow_failover") is not False
+            )
         if connection.user_id:
             payload["user_id"] = connection.user_id
         return payload

@@ -70,7 +70,6 @@ def durable_compat_history(tmp_path, monkeypatch, trusted_actor):
 
     conversation = ConversationService()
     service = AIChatApplicationService.__new__(AIChatApplicationService)
-    service._pending_workflows = {}
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
     monkeypatch.setattr("app.domain.shared_services.conversation_service.get_db", db)

@@ -89,7 +89,7 @@ void main() {
             idempotencyKey: 'turn-test',
             attachments: [receipt]),
         throwsA(isA<MobileApiException>()
-            .having((e) => e.statusCode, 'status', 502)));
+            .having((e) => e.errorCode, 'code', 'CHAT_RECEIPT_PENDING')));
   });
 
   test('untrusted upload without owned receipt is not accepted', () async {

@@ -137,5 +137,8 @@ def test_daily_uses_public_pointer_and_weekly_full_digest():
         Path(__file__).resolve().parents[2] / ".github/workflows/desktop-manifest-drift-check.yml"
     ).read_text()
     assert "inputs.version || ''" in workflow
-    assert "30 3 * * 0" in workflow
+    assert 'cron: "55 15 * * 0"' in workflow
+    assert "github.event.schedule == '55 15 * * 0'" in workflow
     assert "--full-sha256" in workflow
+    assert "issues: write" in workflow
+    assert "if: failure()" in workflow

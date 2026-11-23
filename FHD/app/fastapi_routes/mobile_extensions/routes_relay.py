@@ -6,7 +6,7 @@ import logging
 import os
 from dataclasses import dataclass
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.mobile_extensions.protocols import (
@@ -18,6 +18,7 @@ from app.application.mobile_extensions.protocols import (
     RelayMobileAuthPayloadCall,
     UserDependency,
 )
+from app.application.mobile_relay_ports import RelayTaskConflict
 from app.fastapi_routes.mobile_extensions.models import (
     RelayDesktopCompleteBody,
     RelayDesktopPollBody,
@@ -205,9 +206,13 @@ class RelayRoutes:
                 )
             try:
                 payload = dict(body.payload or {})
-                payload.setdefault("user_id", uid)
+                payload["user_id"] = uid
                 task = ports.mobile_relay_service().create_task(
-                    user_id=uid, relay_id=body.relay_id, kind=body.kind, payload=payload
+                    user_id=uid,
+                    relay_id=body.relay_id,
+                    kind=body.kind,
+                    payload=payload,
+                    client_request_id=getattr(body, "client_request_id", None),
                 )
                 if not task:
                     return JSONResponse(
@@ -217,10 +222,17 @@ class RelayRoutes:
                         status_code=404,
                     )
                 return format_mobile_response(data={"task": task})
+            except RelayTaskConflict:
+                return JSONResponse(
+                    format_mobile_response(
+                        None, "该请求标识已绑定其他任务内容，请查询原任务", success=False, code=409
+                    ),
+                    status_code=409,
+                )
             except ValueError:
                 return JSONResponse(
                     format_mobile_response(
-                        None, "任务内容必须端到端加密后发送", success=False, code=400
+                        None, "任务请求标识无效或内容未端到端加密", success=False, code=400
                     ),
                     status_code=400,
                 )
@@ -232,6 +244,36 @@ class RelayRoutes:
                 )
 
         self.mobile_relay_create_task = mobile_relay_create_task
+
+        @router.get("/relay/tasks", response_model=None)
+        async def mobile_relay_task_by_request(
+            relay_id: str = Query(..., min_length=8, max_length=80),
+            client_request_id: str = Query(..., min_length=1, max_length=160),
+            user: MobilePrincipal | None = Depends(get_user),
+        ) -> object:
+            uid, _ = ports.mobile_user_identity(user)
+            if uid <= 0:
+                return JSONResponse(
+                    format_mobile_response(None, "未授权", success=False, code=401),
+                    status_code=401,
+                )
+            try:
+                task = ports.mobile_relay_service().get_task_by_request(
+                    user_id=uid, relay_id=relay_id, client_request_id=client_request_id
+                )
+            except ValueError:
+                return JSONResponse(
+                    format_mobile_response(None, "任务请求标识无效", success=False, code=400),
+                    status_code=400,
+                )
+            if not task:
+                return JSONResponse(
+                    format_mobile_response(None, "任务不存在", success=False, code=404),
+                    status_code=404,
+                )
+            return format_mobile_response(data={"task": task})
+
+        self.mobile_relay_task_by_request = mobile_relay_task_by_request
 
         @router.get("/relay/tasks/{task_id}", response_model=None)
         async def mobile_relay_task_status(

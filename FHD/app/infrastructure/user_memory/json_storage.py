@@ -7,6 +7,7 @@ import os
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
+from typing import Any
 
 from app.application.user_memory.protocols import JsonObject
 from app.domain.user_memory.records import UserMemory
@@ -29,11 +30,18 @@ class JsonMemoryStorage:
     def read(self) -> dict[str, UserMemory]:
         if not self.path.exists():
             return {}
-        with self.path.open(encoding="utf-8") as stream:
+        with self.path.open("r", encoding="utf-8") as stream:
             data = json.load(stream)
+        return self.decode_snapshot(data, deserialize=self.deserialize)
+
+    @staticmethod
+    def decode_snapshot(
+        data: Any, *, deserialize: Callable[[JsonObject], UserMemory] = UserMemory.from_dict
+    ) -> dict[str, UserMemory]:
+        """Decode an already opened snapshot without creating users or writing caches."""
         if not isinstance(data, dict):
             raise ValueError("memory store must contain an object")
-        return {user_id: self.deserialize(value) for user_id, value in data.items()}
+        return {user_id: deserialize(value) for user_id, value in data.items()}
 
     def write(self, memories: dict[str, UserMemory]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

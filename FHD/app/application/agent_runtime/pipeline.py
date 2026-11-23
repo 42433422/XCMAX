@@ -1,8 +1,8 @@
 """统一 Agent Runtime 主链路四接缝实现。
 
 接缝与调用方：
-- ``recall_knowledge_context``：agent_orchestrator ``_plan``（pre-plan 知识库召回）
-- ``meter_llm_call`` / ``completion_usage``：planner_llm_gateway、employee agent_loop、
+- ``recall_knowledge_context``：Codex 原目标准备阶段的授权知识库召回
+- ``meter_llm_call`` / ``completion_usage``：保留的单次认知调用、
   其它此前绕过计费的 LLM 调用点（计费不受开关限制，始终生效）
 - ``remember_run_outcome``：agent_orchestrator 终态（completed/failed）回写记忆
 

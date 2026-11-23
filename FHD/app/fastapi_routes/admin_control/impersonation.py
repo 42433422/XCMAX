@@ -100,7 +100,12 @@ class Impersonation:
                 admin_sid, enterprise_sid or None
             )
         except ValueError as exc:
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+            message = {
+                "admin session 无效": "admin session 无效",
+                "admin session 不存在": "admin session 不存在",
+                "admin session 未处于代管态": "admin session 未处于代管态",
+            }.get(str(exc), "代管会话无法激活，请核对登录状态")
+            return JSONResponse({"success": False, "message": message}, status_code=400)
         return {"success": True, "session_id": sid}
 
     async def admin_end_impersonate(self, request: Request):

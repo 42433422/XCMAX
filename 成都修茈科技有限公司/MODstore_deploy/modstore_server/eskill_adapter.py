@@ -48,7 +48,7 @@ class RuleBasedESkillAdapter:
         }
         logic_type = str(logic.get("type") or "template_transform")
         if error:
-            changes["metadata"]["last_error"] = str(error)
+            changes["metadata"]["last_error"] = "eskill_execution_failed"
         if input_data.get("details"):
             changes["metadata"]["used_details"] = True
         for prior in history:
