@@ -157,9 +157,11 @@ def classify_runtime_result(
     ]
 
     def _proven_not_executed(row: dict[str, Any]) -> bool:
-        execution = (row.get("receipt") or {}).get("execution")
+        receipt = row.get("receipt") or {}
+        execution = receipt.get("execution")
         return (
-            isinstance(execution, dict)
+            receipt.get("success") is False
+            and isinstance(execution, dict)
             and execution.get("outcome") == "not_executed"
             and execution.get("committed") is False
         )
