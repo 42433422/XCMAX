@@ -976,12 +976,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "ea9ed50f9195b1a4f0008b40834f18505292e5ba",
+      "head_blob": "21a6e8608e41cc98e2b5b7015c789b457268c911",
       "before_lines": 0,
-      "after_lines": 1016,
-      "reason": "按用户成熟组件复用要求，新增产品适配层绑定原客户合同、授权员工包、执行前原件与独立参考；复用 WorkflowEngine、EmployeeRuntimeClient、openpyxl 和 CSV，不另写工作流或电子表格引擎。此记录不是审批。 本轮在已有有界回放适配器中补原业务输入核对，供已冻结交付重验；只读取原input_files并沿现有租户路径和字节限制校验，不重读可选expected_files。 本轮复用原@anthropic-ai/sandbox-runtime固定0.0.83和现役宿主/隔离状态校验，原批准包进入独立零网络沙箱执行；程序目录一次挂载避免逐文件glob超过原库9000参数上限。",
+      "after_lines": 954,
+      "reason": "按用户成熟组件复用要求，新增产品适配层绑定原客户合同、授权员工包、执行前原件与独立参考；复用 WorkflowEngine、EmployeeRuntimeClient、openpyxl 和 CSV，不另写工作流或电子表格引擎。此记录不是审批。 本轮在已有有界回放适配器中补原业务输入核对，供已冻结交付重验；只读取原input_files并沿现有租户路径和字节限制校验，不重读可选expected_files。 本轮复用原@anthropic-ai/sandbox-runtime固定0.0.83和现役宿主/隔离状态校验，原批准包进入独立零网络沙箱执行；程序目录一次挂载避免逐文件glob超过原库9000参数上限。 本轮将原openpyxl/CSV产物规范化和比较职责提取到小型workflow_training_artifact_verification模块，原模块保留延迟委托、相同签名及动态限制/工作簿回调，原生worker入口和执行逻辑不变；遵守原40000字节结构门禁。",
       "boundary": "原业务源字节与冻结参考仍逐次核对；仅放行解释器、必要程序包及本次临时根目录，拒绝宿主目录库、市场包、运行脚本、付款/事件/备份和旁置数据。网络拒绝、原生隔离不可用阻断，沿原60秒截止与进程组清理；不启用嵌套用户命名空间或未隔离回退。",
-      "validation": "固定SRT源码和原CSV/Excel导入链静态复核完成，无额外产品JSON资源需求；最终防止裸跑/超时进程组原测试2项通过，Black/isort通过。原完整回放模块本机29通过、5项因不受支持宿主拒绝；最终原生正控、真实CLI/API封印与输出比较仍必须正式Ubuntu22 CI通过，未用单元测试代替原生验证。",
+      "validation": "固定SRT源码和原CSV/Excel导入链静态复核完成，无额外产品JSON资源需求；最终防止裸跑/超时进程组原测试2项通过，Black/isort通过。原完整回放模块本机29通过、5项因不受支持宿主拒绝；最终原生正控、真实CLI/API封印与输出比较仍必须正式Ubuntu22 CI通过，未用单元测试代替原生验证。 本次另外21个函数AST相同，两比较函数显式依赖绑定规范化后AST等价；原比较13项通过。两回放模块提取前57通过/6失败，提取后58通过/5失败，五个原生失败集合相同；原timeout时序失败复验通过不归因本次修复。正式原生CI仍须完成。",
       "follow_up": "由@42433422结合精确base/head/blob和正式原生CI复核；本记录是评审请求，不代表架构批准。代码只适配现役SRT、WorkflowEngine与EmployeeRuntimeClient，真实模型增益、客户验收和运行版本仍须各自原始证据。",
       "review_owner": "@42433422"
     },
