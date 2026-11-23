@@ -509,3 +509,59 @@ def test_report_revalidation_rejects_tampered_verdict(verifier):
         verifier.run.metadata["runtime_goal_contract"], verifier.rows, verifier.output, [], report
     )
     assert not coverage["completed"]
+
+
+def test_fenced_reply_json_with_original_request_alias_keeps_frozen_source(verifier):
+    verifier.run.message = "解释库存是什么意思"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "库存是企业当前拥有的货物数量。"
+    expected = review(
+        goal(
+            verifier.run.message,
+            kind="reply",
+            evidence_ids=["response"],
+            source_id="original_request",
+        )
+    )
+    verifier.replies = [
+        response({}, text="```json\n" + json.dumps(expected, ensure_ascii=False) + "\n```")
+    ]
+    report = verifier.verify()
+    assert report["accepted"] and report["mode"] == "reply"
+    assert report["review"]["goals"][0]["source_id"] == "request"
+    assert len(verifier.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "alias,source",
+    [
+        ("history", "解释库存是什么意思"),
+        ("original_request", "伪造不存在于本轮请求的业务操作"),
+    ],
+)
+def test_review_source_alias_cannot_introduce_untrusted_goal(verifier, alias, source):
+    verifier.run.message = "解释库存是什么意思"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "库存是企业当前拥有的货物数量。"
+    verifier.replies = [
+        response(review(goal(source, kind="reply", evidence_ids=["response"], source_id=alias)))
+    ]
+    report = verifier.verify()
+    assert not report["accepted"]
+    assert report["status"] == "needs_work"
+
+
+def test_optional_reply_branches_are_one_goal_not_two_required_operations(verifier):
+    verifier.run.message = "用英文解释库存；若用中文作答，可改为给出中文定义"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "Inventory is the goods held by a business."
+    verifier.replies = [
+        response(review(goal(verifier.run.message, kind="reply", evidence_ids=["response"])))
+    ]
+    report = verifier.verify()
+    assert report["accepted"] and report["mode"] == "reply"
+    payload = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])
+    assert any("二选一" in rule and "任一" in rule for rule in payload["rules"])
