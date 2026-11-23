@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.domain.enterprise_cognition.contracts import INPUT_MODELS
+from app.domain.enterprise_cognition.world_observation import delivery_scenario, relationship_references
 
 
 def _order_observation(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -92,6 +93,14 @@ class EnterpriseCognitionService:
 
     def query(self, params: dict, **scope) -> dict[str, Any]:
         entity_type, entity_id = params["entity_type"], params.get("entity_id")
+        if params.get("as_of") is not None:
+            observation = self.projections.get(entity_type, entity_id, as_of=params["as_of"], **scope)
+            return {
+                "history": observation,
+                "historical_observation_verified": observation.get("knowledge_kind") == "fact",
+                "current_state_verified": False,
+                "business_data_written": False,
+            }
         references: dict[str, Any] = (
             {"refs": [{"entity_type": entity_type, "entity_id": entity_id}], "has_more": False}
             if entity_id
@@ -111,6 +120,16 @@ class EnterpriseCognitionService:
         states = {row["entity_id"]: row for row in snapshots}
         return {
             "snapshots": snapshots,
+            "relationships": [
+                {"source_entity_id": row["entity_id"], **relation}
+                for row in snapshots
+                for relation in relationship_references(row)
+            ],
+            "scenario": (
+                delivery_scenario(snapshots[0], params["scenario_delivery_quantity"])
+                if params.get("scenario_delivery_quantity") is not None and snapshots
+                else None
+            ),
             "goals": goals,
             "goal_scope": "current_actor_visible_recent_50_for_selected_entities",
             "goals_may_be_truncated": len(goals) == 50,
