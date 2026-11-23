@@ -776,3 +776,94 @@ def test_functional_identity_receipt_uses_original_sql_ledger(database, monkeypa
         principal.account_state = "disabled"
         session.commit()
     assert self_model.project(store.read_state())["identity_readback"]["status"] == "unverified"
+
+
+def test_due_identity_readback_refreshes_after_policy_change_without_consumption(database, monkeypatch):
+    from modstore_server import xiaoc_self_model as self_model
+
+    monkeypatch.setenv("MODSTORE_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_EXPECTED_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_RELEASE_ARTIFACT_SHA256", "b" * 64)
+    initial = configure()
+    first = self_model.record_identity_check(only_if_due=True)
+    assert first["status"] == "pass"
+    assert self_model.record_identity_check(only_if_due=True) == {
+        "status": "not_due",
+        "evidence_ref": first["evidence_ref"],
+    }
+    paused = store.update_settings(
+        LifeUpdate(expected_revision=initial["revision"], paused=True), actor_user_id=7
+    )
+    assert self_model.project(paused)["identity_readback"]["status"] == "unverified"
+    second = self_model.record_identity_check(only_if_due=True)
+    assert second["status"] == "pass" and second["evidence_ref"] != first["evidence_ref"]
+    after = store.read_state()
+    assert after["paused"] is True
+    assert after["budget"] == paused["budget"]
+    assert after["goals"] == paused["goals"]
+    assert self_model.project(after)["identity_readback"]["evidence_ref"] == second["evidence_ref"]
+
+
+def test_self_cost_reads_original_request_and_not_reservations(database, monkeypatch):
+    from modstore_server import xiaoc_self_metrics as metrics
+
+    monkeypatch.setenv("MODSTORE_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_EXPECTED_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("MODSTORE_RELEASE_ARTIFACT_SHA256", "b" * 64)
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=80)
+    store.record_cycle_step(claim, kind="model", details={"request_id": "self-cost-original"})
+    receipt = {
+        "request_id": "self-cost-original",
+        "owner_user_id": 7,
+        "status": "settled",
+        "actual_tokens": 3,
+        "accrued_cost_cents": 2,
+        "reserved_cost_cents": 99,
+        "cost_basis": "approved_company_tariff_accrual",
+    }
+    with database() as session:
+        session.add(
+            LlmClientRequest(
+                user_id=7,
+                client_request_id=receipt["request_id"],
+                request_sha256="a" * 64,
+                state="completed",
+                done_json=json.dumps(receipt),
+            )
+        )
+        session.commit()
+    state = finish(
+        claim,
+        actual_tokens=3,
+        model="provider/model",
+        details={"private_customer_text": "not_part_of_self_metrics"},
+    )
+    snapshot = metrics.with_cycle_receipts(state)
+    assert "not_part_of_self_metrics" not in json.dumps(snapshot["self_cycle_receipts"])
+    cost = metrics.read_accrual(snapshot)
+    assert cost["cost_cents"] == 2
+    assert cost["supplier_cost_cents"] is None
+    assert cost["known_cycle_refs"] == ["cycle:" + claim["cycle_id"]]
+    with database() as session:
+        row = session.scalar(select(LlmClientRequest))
+        row.state = "unknown"
+        session.commit()
+    assert metrics.read_accrual(snapshot)["cost_cents"] is None
+
+
+def test_self_audit_mapping_keeps_all_existing_anchors_unverified(monkeypatch):
+    from modstore_server import strategy_planner, xiaoc_self_metrics
+
+    monkeypatch.setattr(
+        strategy_planner,
+        "_domain_status",
+        lambda: {
+            "domains": [{"domain_id": "autonomy", "status": "PASS", "audited_at": "2026-11-23"}]
+        },
+    )
+    result = xiaoc_self_metrics.audit_projection()
+    assert result["domain_count"] == 18
+    assert result["anchor_count"] == 108
+    assert all(row["status"] == "unverified" for row in result["anchors"])
+    assert result["historical_domains"]["autonomy"]["status"] == "PASS"
