@@ -17,7 +17,7 @@ const rows = file => {
   try { content = readFileSync(file, 'utf8'); }
   catch (error) { if (error.code === 'ENOENT') return []; throw error; }
   // Another process can still be appending the last JSONL record during polling.
-  return content.slice(0, content.lastIndexOf('\n') + 1).trim().split('\n').filter(Boolean).map(JSON.parse);
+  return content.split('\n').slice(0, -1).filter(Boolean).map(JSON.parse);
 };
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -51,6 +51,10 @@ test('JSONL evidence rejects a malformed newline-terminated record', t => {
   const file = join(root, 'transport.jsonl');
   writeFileSync(file, '{"type":"task_progress","status":"running"}\n{"status":"fail\n');
   assert.throws(() => rows(file), SyntaxError);
+  for (const content of ['{"ok":true}\n  \n', ' \n{"ok":true}\n']) {
+    writeFileSync(file, content);
+    assert.throws(() => rows(file), SyntaxError, 'complete whitespace records are invalid JSON');
+  }
   assert.throws(() => rows(root), { code: 'EISDIR' });
 });
 

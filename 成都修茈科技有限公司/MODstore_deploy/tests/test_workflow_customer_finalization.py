@@ -11,8 +11,13 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from modstore_server import auth_service, workflow_engine
+from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.sql.dml import Update
+
+from modstore_server import auth_service
 from modstore_server import workflow_customer_delivery as delivery
+from modstore_server import workflow_engine
 from modstore_server import workflow_event_runner as runner
 from modstore_server import workflow_execution_feedback as feedback
 from modstore_server.infrastructure.db import get_db
@@ -26,10 +31,6 @@ from modstore_server.models import (
     WorkflowNode,
 )
 from modstore_server.services.employee import get_default_employee_client
-from sqlalchemy import select, update
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.sql.dml import Update
-
 from tests import test_workflow_customer_delivery as customer_tests
 
 experiment_run = customer_tests.experiment_run
@@ -261,11 +262,12 @@ def test_customer_execute_api_recovers_terminal_without_repeating_billing(
 def test_customer_graph_is_durable_before_waiting_for_wallet(
     returned_customer_graph, monkeypatch, interruption
 ):
+    from starlette.requests import Request
+
     from modstore_server import llm_billing
     from modstore_server import workflow_customer_finalization as finalization
     from modstore_server.workflow_api import execution as execution_api
     from modstore_server.workflow_api.schemas import WorkflowExecuteBody
-    from starlette.requests import Request
 
     state = returned_customer_graph
     billed = []

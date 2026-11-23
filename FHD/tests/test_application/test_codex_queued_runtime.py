@@ -6,6 +6,7 @@ import copy
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
 from app.application.agent_runtime import gateway
@@ -97,7 +98,9 @@ def test_failed_queue_insert_rolls_back_the_parent_admission(runtime_entry, monk
     state = runtime_entry
 
     def fail(*_args, **_kwargs):
-        raise RuntimeError("synthetic queue write failure")
+        raise OperationalError(
+            "INSERT INTO agent_task_executions", {}, OSError("queue unavailable")
+        )
 
     monkeypatch.setattr(state.queue, "enqueue_in_session", fail)
     response = state.client.post(

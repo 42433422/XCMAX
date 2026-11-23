@@ -733,7 +733,17 @@ def test_deleting_the_owner_also_removes_saved_proposal_content(
         assert (root / "note.txt").read_text() == "private fixture\n"
 
 
-def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "starting_revision",
+    [
+        "2026_11_21_enterprise_cognition",
+        "2026_11_24_account_license",
+        "2026_11_24_code_edit_proposals",
+    ],
+)
+def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(
+    tmp_path, monkeypatch, starting_revision
+):
     from pathlib import Path
 
     from alembic.config import Config
@@ -746,16 +756,24 @@ def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(tmp_
     engine = create_engine(url)
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     with engine.begin() as db:
+        db.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, account_tier VARCHAR(32))"))
+        db.execute(text("INSERT INTO users VALUES (1, 'ultra')"))
         db.execute(text("CREATE TABLE retained_fixture (value TEXT NOT NULL)"))
         db.execute(text("INSERT INTO retained_fixture VALUES ('kept<A&B>')"))
     command.stamp(config, "2026_11_21_enterprise_cognition")
+    command.upgrade(config, starting_revision)
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as db:
         assert db.execute(text("SELECT value FROM retained_fixture")).scalar_one() == "kept<A&B>"
         assert "code_edit_proposals" in inspect(db).get_table_names()
+        assert db.execute(
+            text(
+                "SELECT account_tier, account_license_plan_id, account_license_expires_at FROM users"
+            )
+        ).all() == [("ultra", None, None)]
         assert (
             db.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "2026_11_24_code_edit_proposals"
+            == "2026_11_24_merge_account_edit"
         )
     engine.dispose()

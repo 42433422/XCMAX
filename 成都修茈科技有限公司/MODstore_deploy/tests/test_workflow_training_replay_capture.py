@@ -250,3 +250,31 @@ def test_missing_training_snapshot_cannot_be_recaptured_during_delivery(
     assert len(snapshots) == 1
     stored = env["binding"]["customer_delivery"]["business_replay"]
     assert stored == snapshots[0] and stored["replay_ready"] is False
+
+
+@pytest.mark.parametrize("change", ["remove", "replace"])
+def test_delivery_reuses_training_snapshot_after_optional_reference_changes(
+    customer_workflow, monkeypatch, change
+):
+    env = customer_workflow
+    _oracle(env, monkeypatch)
+    reference = env["workspace"] / "references/verified.csv"
+    capture = replay.capture_business_replay
+    captured = []
+
+    def capture_then_change_reference(db, contract, inputs):
+        snapshot = capture(db, contract, inputs)
+        captured.append(deepcopy(snapshot))
+        if len(captured) == 1:
+            assert snapshot["replay_ready"] is True
+            if change == "remove":
+                reference.unlink()
+            else:
+                reference.write_text("order,quantity\nchanged,999\n")
+        return snapshot
+
+    monkeypatch.setattr(replay, "capture_business_replay", capture_then_change_reference)
+    response = env["execute"]()
+    assert response.status_code == 200, response.text
+    assert len(captured) == 1
+    assert env["binding"]["customer_delivery"]["business_replay"] == captured[0]

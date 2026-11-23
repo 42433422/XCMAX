@@ -30,12 +30,15 @@ def test_each_graph_uses_its_own_dispatcher():
     assert first.call_count == second.call_count == 1
 
 
-def test_run_repository_closes_and_rolls_back_failed_session():
+@pytest.mark.parametrize("failure", [RuntimeError, KeyError, TypeError, AssertionError, OSError])
+def test_run_repository_closes_and_rolls_back_failed_session(failure):
     session = Mock()
     repo = SQLAlchemyAgentRunRepository(session_factory=lambda: session, auto_create=False)
-    with pytest.raises(RuntimeError):
+    error = failure("injected storage failure")
+    with pytest.raises(failure) as caught:
         with repo._session_scope():
-            raise RuntimeError("injected storage failure")
+            raise error
+    assert caught.value is error
     session.rollback.assert_called_once_with()
     session.close.assert_called_once_with()
     session.commit.assert_not_called()

@@ -4,10 +4,12 @@ import { renderCsBubbleHtml } from './csBubbleText'
 
 describe('renderButlerBubbleHtml', () => {
   it.each([renderButlerBubbleHtml, renderCsBubbleHtml])('renders original notes as text at the display boundary', (render) => {
-    const fixture = new DOMParser().parseFromString('<img src=x>', 'text/html')
-    fixture.querySelector('img')?.setAttribute('onerror', 'literal()')
+    const fixture = new DOMParser().parseFromString('<img src="x">', 'text/html')
+    const image = fixture.querySelector('img')
+    image?.setAttribute('onerror', 'literal()')
+    expect(image?.getAttribute('src')).toBe('x')
+    expect(image?.getAttribute('onerror')).toBe('literal()')
     const note = `客户 A&B <script>literal()</script> ${fixture.body.innerHTML} &lt;原实体&gt;`
-    expect(note).toContain('onerror="literal()"')
     const doc = new DOMParser().parseFromString(render(note), 'text/html')
     expect(doc.body.textContent).toBe(note)
     expect(doc.querySelector('script, img, [onerror]')).toBeNull()

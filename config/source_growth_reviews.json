@@ -33,7 +33,7 @@
       "after_lines": 1318,
       "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保护原unknown与不可重试证据；仅原pending回执经独立核验后允许结算，迟到快照不能恢复已消耗的执行权。 CI原事务回滚测试发现异常分类收紧后普通RuntimeError不再触发回滚；本轮复用contextlib.closing与ExitStack在任何失败退出时清理SQLAlchemy事务，净减5行。",
       "boundary": "保持原SQLAlchemy事务、租约及CAS，仅收紧原记录合并和有证据的pending结算。",
-      "validation": "真实SQLite准入、同请求回读、损坏父调用及pending回执专项已运行；远端PostgreSQL门禁仍须通过。 原未改测试先复现rollback=0，修后相关组136通过；13项PostgreSQL参数因缺CI服务跳过，不计通过。原mutation完整分数及最终CI仍须核对。",
+      "validation": "真实SQLite准入、同请求回读、损坏父调用及pending回执专项已运行；远端PostgreSQL门禁仍须通过。 原未改测试先复现rollback=0，修后相关组136通过；13项PostgreSQL参数因缺CI服务跳过，不计通过。原mutation完整分数及最终CI仍须核对。 本轮合解公共60767后，原事务组合、回执outbox、远端JSON适配器和AgentRunRepository完整组合53项通过、零跳过；五类异常核对原对象、rollback/close各一次及不commit，真实HTTP503与读取断连保留原请求体和待核对回执。最终公开head的CI结果另行核对。 继续合入公共6a996的TypeError和回执字节不变断言后，原组合及两项IO故障夹具共56项通过、零跳过；三个相邻交付恢复模块116项通过、零跳过，仅显式恢复DeliveryRemoteError，普通编程错误继续传播。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
@@ -802,7 +802,7 @@
       "reason": "本记录是精确源码增长的评审请求，不是审批证据。按用户开始实现真实闭环的授权，原 AgentRun 审批领取 CAS 同一事务保存真实审批人及时间，关闭领取已提交但决策身份尚未保存的中断窗口。",
       "boundary": "复用既有 SQLAlchemy 条件更新、原审批快照与原 agent_execution_claim；保留租户、计划、步骤和历史状态限制，领取后未知结果继续禁止重放，不新增任务账本或恢复引擎。",
       "validation": "真实隔离 SQL 回归覆盖领取前后中断、原审批人恢复、撤权与跨租户拒绝、配置节点实际交付及详情完整计划核对；以本 PR 最终文件树的集成回归与必需 CI 结果为准。",
-      "follow_up": "精确基线为 main@38b03d2c15391109bb1380b914b2e28cd769c5c0（本文件与原基线34937513的blob相同），由 @42433422 复核同一事务的决策身份、未知结果边界及最终 CI；本记录和 AI 代码复核不替代实际人工审批。 本轮合解继续保留既有执行状态语义；本登记仍不替代架构审批。",
+      "follow_up": "精确基线为 main@07c7489fe05fdc5a4a2a703e4000cc156fd4c8f3（本文件与38b03d2c及原基线34937513的blob相同），由 @42433422 复核同一事务的决策身份、未知结果边界及最终 CI；本记录和 AI 代码复核不替代实际人工审批。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py": {
@@ -996,6 +996,18 @@
       "head_blob": "3337b2c888ba8fdcf6d094c55caeec35fe6d2ff9",
       "before_lines": 757,
       "after_lines": 828
+    },
+    "FHD/app/domain/shared_services/tools_workflow_elt.py": {
+      "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
+      "base_blob": "243f7d384f14c665b901478807c9a176ee683177",
+      "head_blob": "895631aef36d8303f15c5d2a1f97393beae35018",
+      "before_lines": 2193,
+      "after_lines": 2194,
+      "reason": "原后端烟测的并发导入终结场景暴露：EltConflict 为既有业务冲突类型，但异常集合收紧后未在原终结边界接住。本次仅显式纳入该类型，复用原事务收尾路径，生产代码净增1行。",
+      "boundary": "保持现役SQLAlchemy事务、原任务和执行证据归属；不恢复通用RuntimeError捕获，不重放未知或已部分写入的业务，不增加执行入口。",
+      "validation": "原真实SQL并发终结回归未改断言，修前失败；修后五个相关原完整模块共454项通过、零跳过。正式公开集成head仍须通过原后端、覆盖率与mutation门禁，历史运行不替代最终CI。",
+      "follow_up": "由 @42433422 结合本次精确base/head/blob和最终CI评审；此记录只登记实际增长的架构评审请求，不代表人工批准。",
+      "review_owner": "@42433422"
     }
   }
 }

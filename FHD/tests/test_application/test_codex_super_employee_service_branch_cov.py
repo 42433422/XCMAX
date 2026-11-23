@@ -1445,11 +1445,13 @@ class TestDispatchToParaExceptions:
         assert "unreachable" in reason
 
     def test_generic_exception(self, tmp_path, monkeypatch):
-        """通用异常被捕获并写入 outbox（返回 dict 而非 None）。"""
+        """已分类的 HTTP 协议故障写入 outbox（返回 dict 而非 None）。"""
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
-        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=RuntimeError("boom")))
+        svc = _make_svc(
+            tmp_path, http_client_factory=_fake_http_factory(exc=httpx.RemoteProtocolError("boom"))
+        )
         result, reason = svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
-        # 通用异常走 _write_outbox 分支，返回 dict（accepted=False, status=dispatch_error）
+        # 协议故障走 _write_outbox 分支，返回 dict（accepted=False, status=dispatch_error）。
         assert result is not None
         assert result["accepted"] is False
         assert result["status"] == "dispatch_error"

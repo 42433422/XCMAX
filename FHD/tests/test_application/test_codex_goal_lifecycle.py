@@ -380,6 +380,7 @@ def test_approval_readback_allows_settled_failed_exploration_but_never_unknown(r
         runtime_goal_contract=contract,
         runtime_goal_digest=contract["digest"],
         codex_runtime={
+            "version": 1,
             "calls": {"read": {}, "write": {}},
             "goal_digest": contract["digest"],
             "coordinator_active": False,

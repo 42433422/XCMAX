@@ -144,9 +144,8 @@ async def finalize_enterprise_login(
                     )
 
                     trial_sync = active_plan_id == "saas-trial-30"
-                    personal_sync = (
-                        personal_plan
-                        and bool(market_token)
+                    verified_account_sync = (
+                        bool(market_token)
                         and not local_demo_market
                         and market_is_enterprise
                         and not market_is_admin
@@ -155,16 +154,15 @@ async def finalize_enterprise_login(
                         and market_result.get("account_state") == "active"
                         and market_result.get("desktop_access") is True
                     )
-                    if trial_sync or personal_sync:
+                    personal_sync = personal_plan and verified_account_sync
+                    applied = False
+                    if verified_account_sync:
                         applied = apply_paid_plan_for_user(
                             user_id=int(user_id),
                             plan_id=active_plan_id,
                             sync_from_market=True,
                             active_plan_expires_at=market_result.get("active_plan_expires_at"),
-                        )
-                    else:
-                        applied = apply_paid_plan_for_user(
-                            user_id=int(user_id), plan_id=active_plan_id
+                            verified_account_sync=verified_account_sync,
                         )
                     if trial_sync and not applied:
                         raise TenantIdentityError("体验授权的到期信息未同步，请重新登录后重试")

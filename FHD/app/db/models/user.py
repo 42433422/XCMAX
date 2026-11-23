@@ -62,6 +62,10 @@ class User(Base):
     account_tier: Mapped[Optional[str]] = mapped_column(
         String(32), nullable=True, comment="账号等级: normal|pro|max|ultra（仅 enterprise）"
     )
+    # Verified account grants are independent of another member's tenant plan.
+    # NULL retains the pre-existing tenant subscription behavior for legacy rows.
+    account_license_plan_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    account_license_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # 注册/联系表单填写的预算区间，仅作销售线索。
     budget_range: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # 安全：登录失败计数与账户锁定

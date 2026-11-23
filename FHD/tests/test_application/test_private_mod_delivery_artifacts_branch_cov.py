@@ -33,7 +33,7 @@ async def _assert_shared_http_error_dict_detail_0(
             return_value="https://m.example.com",
         ),
     ):
-        with pytest.raises(RuntimeError) as ei:
+        with pytest.raises(mod.DeliveryRemoteError) as ei:
             await mod.custom_delivery_remote_json("tok", "/foo")
     assert _shared_literal_1 in str(ei.value)
 
@@ -194,7 +194,7 @@ class TestCustomDeliveryRemoteJson:
                 return_value="https://m.example.com",
             ),
         ):
-            with pytest.raises(RuntimeError) as ei:
+            with pytest.raises(mod.DeliveryRemoteError) as ei:
                 await mod.custom_delivery_remote_json("tok", "/foo")
         assert "403" in str(ei.value)
 
@@ -211,7 +211,7 @@ class TestCustomDeliveryRemoteJson:
                 return_value="https://m.example.com",
             ),
         ):
-            with pytest.raises(RuntimeError) as ei:
+            with pytest.raises(mod.DeliveryRemoteError) as ei:
                 await mod.custom_delivery_remote_json("tok", "/foo")
         assert "格式无效" in str(ei.value)
 

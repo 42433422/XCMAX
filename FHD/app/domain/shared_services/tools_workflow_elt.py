@@ -998,6 +998,7 @@ def _finalize_import(
 
     from sqlalchemy import Table, update
 
+    from app.application.elt.errors import EltConflict
     from app.application.elt.operation_owner import claim_operation, finish_operation
     from app.application.elt.preview_confirmation import CONFIRMATION_KEY
     from app.application.elt.service_support import dump_json, load_json
@@ -1117,7 +1118,7 @@ def _finalize_import(
             finish_operation(db, operation)
             db.commit()
         return knowledge, template, _receipt_notes(knowledge, template)
-    except RECOVERABLE_ERRORS as exc:
+    except (EltConflict, *RECOVERABLE_ERRORS) as exc:
         return _unknown_auxiliary(str(exc)[:200])
 
 

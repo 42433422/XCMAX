@@ -9,7 +9,10 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 
-from app.application.private_mod_delivery_artifacts import custom_delivery_remote_json
+from app.application.private_mod_delivery_artifacts import (
+    DeliveryRemoteError,
+    custom_delivery_remote_json,
+)
 from app.application.session_account_meta import load_session_account_meta
 from app.enterprise.private_delivery_binding import (
     load_session_private_delivery_binding,
@@ -18,7 +21,10 @@ from app.infrastructure.auth.dependencies import session_id_from_request
 from app.mod_sdk.owner_workspace import authenticated_owner
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_REFRESH_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
+_REFRESH_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+    HTTPException,
+    DeliveryRemoteError,
+)
 
 
 def valid_entitlement_ids(values: list) -> set[str]:

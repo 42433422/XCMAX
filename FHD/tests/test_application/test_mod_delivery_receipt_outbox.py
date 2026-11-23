@@ -4,6 +4,7 @@ import copy
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import Request
 
@@ -53,17 +54,23 @@ async def test_response_loss_retries_same_install_id_and_body(pending, monkeypat
     request, root = pending
     sent = []
 
-    async def post(token, path, *, method, payload):
-        sent.append(copy.deepcopy(payload))
+    def post(request):
+        assert request.method == "POST"
+        assert request.url.path == "/api/customer-service/custom-deliveries/9/installed"
+        assert request.headers["Authorization"] == "Bearer current-token"
+        sent.append(json.loads(request.content))
         if len(sent) == 1:
-            raise failure("response lost")
-        return {"receipt": {"record": {"verified": False}}}
+            if failure is ConnectionError:
+                raise httpx.ReadError("response lost", request=request)
+            return httpx.Response(503, json={"detail": "receipt response unavailable"})
+        return httpx.Response(200, json={"receipt": {"record": {"verified": False}}})
 
     async def no_runtime(request, row):
         return None
 
+    client = httpx.AsyncClient
     monkeypatch.setattr(
-        "app.application.private_mod_delivery_artifacts.custom_delivery_remote_json", post
+        httpx, "AsyncClient", lambda **kwargs: client(transport=httpx.MockTransport(post), **kwargs)
     )
     monkeypatch.setattr(outbox, "_runtime_payload", no_runtime)
     assert (await outbox.retry_delivery_receipts(request, "current-token"))["pending"] == 1
