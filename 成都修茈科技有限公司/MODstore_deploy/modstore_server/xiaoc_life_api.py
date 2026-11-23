@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -62,6 +63,19 @@ def _call(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 @router.get("")
 def get_life(_admin: User = Depends(require_admin)) -> dict[str, Any]:
     return read_state()
+
+
+@router.get("/self-model")
+async def get_self_model(admin: User = Depends(require_admin)) -> dict[str, Any]:
+    from modstore_server.xiaoc_self_model import model_inventory, project, registry_inventory
+
+    state = await asyncio.to_thread(read_state)
+    result = project(state)
+    inventory = await asyncio.to_thread(registry_inventory, state, admin)
+    inventory["models"] = await model_inventory()
+    result["inventory"] = inventory
+    result["inventory_status"] = "point_in_time_registry_not_independent_proof"
+    return result
 
 
 @router.put("")
