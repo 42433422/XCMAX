@@ -163,26 +163,16 @@ def test_gateway_protocol_cannot_be_guessed(value):
         _route(gateway_kind=value)
 
 
-@pytest.mark.parametrize(
-    "check",
-    [
-        "responses_stream",
-        "multi_turn_tools",
-        "openai_network_denied",
-        "business_receipt_verified",
-        "upstream_failover_disabled",
-        "response_model_identity",
-        "forced_compaction_restart_same_task_no_replay",
-    ],
-)
+@pytest.mark.parametrize("check", QUALIFICATION_CHECKS)
 @pytest.mark.parametrize("value", [None, "FAIL", "PENDING", True, "pass", {"status": "PASS"}])
 def test_qualification_requires_each_gate_check(tmp_path, check, value):
     route = _route(response_model="model-snapshot")
-    evidence = synthetic_qualification(route, tmp_path)
+    checks = dict.fromkeys(QUALIFICATION_CHECKS, "PASS")
     if value is None:
-        evidence["checks"].pop(check, None)
+        checks.pop(check, None)
     else:
-        evidence["checks"][check] = value
+        checks[check] = value
+    evidence = synthetic_qualification(route, tmp_path, checks=checks)
     path = tmp_path / "qualification.json"
     path.write_text(json.dumps(evidence))
     with pytest.raises(RuntimePolicyError, match="Exact route"):

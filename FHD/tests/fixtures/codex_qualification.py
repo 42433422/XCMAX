@@ -15,12 +15,14 @@ from app.infrastructure.codex.policy import (
 )
 
 
-def synthetic_qualification(route: ModelRoute, directory: Path) -> dict:
+def synthetic_qualification(
+    route: ModelRoute, directory: Path, *, checks: dict | None = None
+) -> dict:
     binding = {
         "route_identity": route.identity,
         "codex_version": CODEX_VERSION,
         "host_identity": qualification_host_identity(),
-        "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS"),
+        "checks": dict.fromkeys(QUALIFICATION_CHECKS, "PASS") if checks is None else dict(checks),
     }
     evidence = {
         "schema": "xcmax.runtime-qualification-evidence.v1",

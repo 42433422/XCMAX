@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier
 
 import httpx
 import pytest
@@ -83,15 +85,19 @@ def test_model_egress_denies_before_any_connection_and_pins_route(monkeypatch):
 
 def test_probe_audits_rejected_replay_and_has_no_production_tool_surface(tmp_path):
     probe = probe_at(tmp_path)
+    first = {"nonce": probe.nonce, "step": 1}
+    second = {"nonce": probe.nonce, "step": 2}
     assert not probe.invoke("execute_action", {"sql": "DROP TABLE receipt"})["success"]
-    assert probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
-    assert not probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
+    assert probe.invoke("execute_action", first)["success"]
+    assert not probe.invoke("execute_action", first)["success"]
     probe.phase = "resumed"
-    assert probe.invoke("task_evidence", {"nonce": probe.nonce})["verified"]
-    assert not probe.invoke("production_action", {"nonce": probe.nonce})["success"]
+    assert probe.invoke("task_evidence", first)["verified"]
+    assert probe.invoke("execute_action", second)["success"]
+    assert probe.invoke("task_evidence", second)["verified"]
+    assert not probe.invoke("production_action", first)["success"]
     snapshot = probe.snapshot()
     assert snapshot["row_verified"]
-    assert len([call for call in snapshot["calls"] if call[0] == "execute_action"]) == 3
+    assert len([call for call in snapshot["calls"] if call[0] == "execute_action"]) == 4
     checks = qualification._checks(probe, route())
     assert checks["business_receipt_verified"] == "FAIL"
     assert checks["forced_compaction_restart_same_task_no_replay"] == "FAIL"
@@ -99,10 +105,11 @@ def test_probe_audits_rejected_replay_and_has_no_production_tool_surface(tmp_pat
 
 def test_probe_rejects_extra_receipt_rows_in_bounded_read(tmp_path):
     probe = probe_at(tmp_path)
-    assert probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
+    arguments = {"nonce": probe.nonce, "step": 1}
+    assert probe.invoke("execute_action", arguments)["success"]
     with sqlite3.connect(probe.database) as db:
-        db.executemany("INSERT INTO receipt VALUES (?)", [("extra-one",), ("extra-two",)])
-    assert not probe.invoke("task_evidence", {"nonce": probe.nonce})["verified"]
+        db.executemany("INSERT INTO receipt VALUES (?, ?)", [("extra-one", 2), ("extra-two", 3)])
+    assert not probe.invoke("task_evidence", arguments)["verified"]
     assert not probe.snapshot()["row_verified"]
     assert qualification._checks(probe, route())["business_receipt_verified"] == "FAIL"
 
@@ -110,15 +117,20 @@ def test_probe_rejects_extra_receipt_rows_in_bounded_read(tmp_path):
 @pytest.mark.parametrize("overflow", [False, True])
 def test_probe_call_ledger_limit_cannot_hide_later_replay(tmp_path, overflow):
     probe = probe_at(tmp_path)
-    probe.invoke("execute_action", {"nonce": probe.nonce})
-    probe.invoke("task_evidence", {"nonce": probe.nonce})
+    first = {"nonce": probe.nonce, "step": 1}
+    second = {"nonce": probe.nonce, "step": 2}
+    probe.invoke("execute_action", first)
+    probe.invoke("task_evidence", first)
     probe.phase = "resumed"
-    for _ in range(qualification._MAX_PROBE_CALLS - 2 + int(overflow)):
-        assert probe.invoke("task_evidence", {"nonce": probe.nonce})["verified"]
+    probe.invoke("task_evidence", first)
+    probe.invoke("execute_action", second)
+    probe.invoke("task_evidence", second)
+    for _ in range(qualification._MAX_PROBE_CALLS - 5 + int(overflow)):
+        assert probe.invoke("task_evidence", second)["verified"]
     if overflow:
         # The replay lies after the bounded prefix; merely inspecting its calls
-        # would falsely see exactly one write and successful reads in both phases.
-        assert not probe.invoke("execute_action", {"nonce": probe.nonce})["success"]
+        # would falsely see only the two legitimate writes and their successful reads.
+        assert not probe.invoke("execute_action", first)["success"]
     probe.recovery = {
         "thread_id": "thread-fixture",
         "resumed_thread_id": "thread-fixture",
@@ -134,8 +146,66 @@ def test_probe_call_ledger_limit_cannot_hide_later_replay(tmp_path, overflow):
         "multi_turn_tools",
         "business_receipt_verified",
         "forced_compaction_restart_same_task_no_replay",
+        "multi_step_restart_continuation",
     ):
         assert checks[name] == ("FAIL" if overflow else "PASS")
+
+
+def test_single_step_readback_after_restart_cannot_prove_multistep_continuation(tmp_path):
+    probe = probe_at(tmp_path)
+    first = {"nonce": probe.nonce, "step": 1}
+    assert probe.invoke("execute_action", first)["success"]
+    assert probe.invoke("task_evidence", first)["verified"]
+    probe.phase = "resumed"
+    assert probe.invoke("task_evidence", first)["verified"]
+    probe.recovery = {
+        "thread_id": "same-thread",
+        "resumed_thread_id": "same-thread",
+        "compaction": {"thread_id": "same-thread", "turn_id": "compact"},
+        "first_process_id": 1,
+        "second_process_id": 2,
+    }
+    checks = qualification._checks(probe, route())
+    assert checks["multi_step_restart_continuation"] == "FAIL"
+    assert checks["business_receipt_verified"] == "FAIL"
+    assert probe.snapshot()["first_step_verified"]
+
+
+def test_second_step_requires_original_committed_step_and_resumed_readback(tmp_path):
+    probe = probe_at(tmp_path)
+    first = {"nonce": probe.nonce, "step": 1}
+    second = {"nonce": probe.nonce, "step": 2}
+    assert not probe.invoke("execute_action", second)["success"]
+    assert not probe.invoke("execute_action", {**first, "step": True})["success"]
+    assert probe.invoke("execute_action", first)["success"]
+    assert probe.invoke("task_evidence", first)["verified"]
+    probe.phase = "resumed"
+    assert not probe.invoke("execute_action", second)["success"]
+    assert probe.snapshot()["first_step_verified"]
+    assert probe.invoke("task_evidence", first)["verified"]
+    assert probe.invoke("execute_action", second)["success"]
+    assert probe.invoke("task_evidence", second)["verified"]
+    assert probe.snapshot()["row_verified"]
+    assert qualification._checks(probe, route())["multi_step_restart_continuation"] == "FAIL"
+
+
+def test_concurrent_probe_replays_are_all_audited_with_one_committed_step(tmp_path):
+    """Deterministic SQLite probe audit, not a real-model concurrency acceptance."""
+    probe = probe_at(tmp_path)
+    simultaneous = Barrier(8)
+
+    def attempt(_index):
+        simultaneous.wait(timeout=5)
+        return probe.invoke("execute_action", {"nonce": probe.nonce, "step": 1})
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        outcomes = list(pool.map(attempt, range(8)))
+    snapshot = probe.snapshot()
+    assert sum(outcome["success"] for outcome in outcomes) == 1
+    assert snapshot["first_step_verified"]
+    assert len(snapshot["calls"]) == 8
+    assert sum(call[3] for call in snapshot["calls"]) == 1
+    assert qualification._checks(probe, route())["business_receipt_verified"] == "FAIL"
 
 
 @pytest.mark.parametrize(
@@ -241,7 +311,7 @@ def test_failed_qualification_keeps_evidence_without_publishing_pass(tmp_path, m
     monkeypatch.setattr(qualification, "verify_installation", lambda: None)
 
     async def failed(_settings, _owner, probe):
-        probe.invoke("execute_action", {"nonce": probe.nonce})
+        probe.invoke("execute_action", {"nonce": probe.nonce, "step": 1})
         raise RuntimeError("Bearer account-secret https://secret.example")
 
     monkeypatch.setattr(qualification, "_run_probe", failed)
@@ -416,8 +486,10 @@ def _tool_target(tools, name):
     raise AssertionError("Pinned CLI did not expose the isolated qualification MCP tool")
 
 
-@pytest.mark.parametrize("maximum", [1024, 4000])
-def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(tmp_path, maximum):
+@pytest.mark.parametrize("maximum, budget", [(1024, 8), (4000, 24), (4000, 6)])
+def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(
+    tmp_path, maximum, budget
+):
     """Real 0.171 CLI/MCP/SQLite, synthetic model; no qualification is published."""
     pytest.importorskip("openai_codex")
     pytest.importorskip("codex_cli_bin")
@@ -430,14 +502,14 @@ def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(tmp
         body = await request.json()
         calls.append(body)
         index = len(calls)
-        if index in {1, 2, 5}:
-            name = "execute_action" if index == 1 else "task_evidence"
+        if index in {1, 2, 5, 6, 7}:
+            name = "execute_action" if index in (1, 6) else "task_evidence"
             item = {
                 "type": "function_call",
                 "id": f"fc-{index}",
                 "call_id": f"call-{index}",
                 **_tool_target(body["tools"], name),
-                "arguments": json.dumps({"nonce": probe.nonce}),
+                "arguments": json.dumps({"nonce": probe.nonce, "step": 1 if index < 6 else 2}),
                 "status": "completed",
             }
         else:
@@ -449,21 +521,35 @@ def test_real_cli_forced_compaction_restart_same_thread_without_probe_replay(tmp
         )
 
     with LocalRuntimeServer(upstream) as server:
-        bound = replace(route(max_output_tokens=maximum), base_url=server.url + "/v1")
+        bound = replace(
+            route(max_output_tokens=maximum, max_model_calls=budget), base_url=server.url + "/v1"
+        )
         settings = RuntimeSettings(
             route=bound,
             runtime_root=tmp_path,
             turn_timeout_seconds=30,
             qualification_file=tmp_path / "must-not-exist.json",
         )
+        if budget < 8:
+            with pytest.raises(
+                qualification._QualificationError, match="runtime_probe_turn_failed"
+            ):
+                asyncio.run(qualification._run_probe(settings, "fixture-only-owner", probe))
+            assert probe.error_code == "runtime_qualification_limit"
+            assert len(calls) == budget
+            assert qualification._checks(probe, bound)["multi_step_restart_continuation"] == "FAIL"
+            assert not settings.qualification_file.exists()
+            return
         asyncio.run(qualification._run_probe(settings, "fixture-only-owner", probe))
     assert qualification._checks(probe, bound) == dict.fromkeys(QUALIFICATION_CHECKS, "PASS")
     assert probe.snapshot()["calls"] == [
-        ("execute_action", "initial", 1),
-        ("task_evidence", "initial", 1),
-        ("task_evidence", "resumed", 1),
+        ("execute_action", "initial", 1, 1),
+        ("task_evidence", "initial", 1, 1),
+        ("task_evidence", "resumed", 1, 1),
+        ("execute_action", "resumed", 2, 1),
+        ("task_evidence", "resumed", 2, 1),
     ]
-    assert len(calls) == 6
+    assert len(calls) == 8
     assert all(body["max_output_tokens"] == min(maximum, 2048) for body in calls)
     assert probe.recovery["first_process_id"] != probe.recovery["second_process_id"]
     assert not settings.qualification_file.exists()

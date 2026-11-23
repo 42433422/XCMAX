@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -36,43 +37,67 @@ def test_runtime_check_reuses_authenticated_single_request(flags, retry):
 
 
 @pytest.mark.parametrize("flags,retry", [((), False), (("--retry",), True)])
-def test_deployment_runtime_check_uses_local_producer_without_account_http(
-    flags, retry, monkeypatch
+def test_deployment_runtime_check_uses_local_producer_without_http_session(
+    monkeypatch, capsys, flags, retry
 ):
     from app.application.agent_runtime import configuration
 
-    settings = Mock()
-    settings.require_qualified.return_value.runtime_identity.return_value = {
-        "route_identity": "operator-route",
-        "model": "configured-model",
-    }
-    prepare = Mock(return_value=settings)
-    monkeypatch.setattr(configuration, "prepare_deployment_runtime", prepare, raising=False)
+    # The producer/receipt contract is tested with real files separately; this
+    # fixture proves only local CLI dispatch and safe output, not model quality.
+    settings = SimpleNamespace(
+        require_qualified=Mock(
+            return_value=SimpleNamespace(runtime_identity=lambda: {"model": "operator-fixture"})
+        ),
+        turn_timeout_seconds=47,
+        credential="private-operator-secret",
+    )
+    produce = Mock(return_value=settings)
+    monkeypatch.setattr(configuration, "get_deployment_runtime_settings", produce)
+    forbidden = Mock(side_effect=AssertionError("local deployment must not load an HTTP session"))
+    monkeypatch.setattr(brain, "BrainClient", forbidden)
+    monkeypatch.setattr(brain, "SessionStore", forbidden)
+    assert brain.main(["--json", "--timeout", "1", "runtime-check", "--deployment", *flags]) == 0
+    produce.assert_called_once_with(retry=retry)
+    settings.require_qualified.assert_called_once_with()
+    output = capsys.readouterr().out
+    result = json.loads(output)
+    assert result["success"] and result["qualification"] == "passed"
+    assert result["turn_timeout_seconds"] == 47
+    assert result["route"] == {"model": "operator-fixture"}
+    assert "private-operator-secret" not in output
+    forbidden.assert_not_called()
+
+
+def test_deployment_runtime_check_in_shell_cannot_fall_back_to_account_http(monkeypatch, capsys):
+    check = Mock(return_value={"success": True, "qualification": "passed"})
+    monkeypatch.setattr(brain, "_deployment_runtime_check", check)
     client = Mock()
-    result = run(client, "runtime-check", "--deployment", *flags)
-    assert result["qualification"] == "passed"
-    assert result["managed_by"] == "deployment"
-    assert result["route"]["route_identity"] == "operator-route"
-    prepare.assert_called_once_with(retry=retry)
+    assert run(client, "runtime-check", "--deployment", "--retry")["success"]
+    check.assert_called_once_with(retry=True)
+    check.reset_mock()
+    monkeypatch.setattr("sys.stdin", io.StringIO("/runtime-check --deployment --retry\n/exit\n"))
+    assert brain.shell(brain.parser().parse_args(["--json", "shell"]), client) == 0
+    check.assert_called_once_with(retry=True)
     client.require_login.assert_not_called()
     client.request.assert_not_called()
+    assert json.loads(capsys.readouterr().out)["success"]
 
 
-def test_deployment_runtime_check_preserves_failure_without_remote_fallback(monkeypatch):
+def test_deployment_runtime_check_missing_explicit_config_is_nonzero_without_account_fallback(
+    monkeypatch, capsys
+):
     from app.application.agent_runtime import configuration
 
-    prepare = Mock(
-        side_effect=configuration.RuntimeSetupError(
-            "runtime_configuration_required", "请先提供部署运行配置"
-        )
-    )
-    monkeypatch.setattr(configuration, "prepare_deployment_runtime", prepare, raising=False)
-    client = Mock()
-    with pytest.raises(configuration.RuntimeSetupError, match="请先提供部署运行配置"):
-        run(client, "runtime-check", "--deployment")
-    client.require_login.assert_not_called()
-    client.request.assert_not_called()
-    assert prepare.call_count == 1
+    monkeypatch.delenv("XCAGI_AGENT_RUNTIME_CONFIG", raising=False)
+    forbidden = Mock(side_effect=AssertionError("must not load account or produce evidence"))
+    monkeypatch.setattr(brain, "BrainClient", forbidden)
+    monkeypatch.setattr(brain, "SessionStore", forbidden)
+    monkeypatch.setattr(configuration, "get_account_runtime_settings", forbidden)
+    monkeypatch.setattr("app.infrastructure.codex.qualification.qualify_runtime", forbidden)
+    assert brain.main(["--json", "runtime-check", "--deployment", "--retry"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["success"] is False and result["error_code"] == "runtime_configuration_required"
+    forbidden.assert_not_called()
 
 
 def test_real_editor_http_csrf_diff_apply_replay(brain_client, brain_server, monkeypatch, tmp_path):
