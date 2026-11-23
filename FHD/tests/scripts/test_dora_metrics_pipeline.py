@@ -196,7 +196,8 @@ def test_release_package_and_auto_update_wire_dora_receipts() -> None:
 
 
 @pytest.mark.parametrize(
-    "identity", [{}, {"commit": "a" * 40, "captured_at": "2026-07-25T11:34:00Z"}]
+    "identity",
+    [{}, {"commit": "a" * 40, "captured_at": "2026-07-25T11:34:00Z"}],
 )
 def test_regeneration_does_not_promote_old_coverage_to_current_pass(
     tmp_path, monkeypatch, identity
@@ -255,7 +256,15 @@ def test_product_view_separates_recorded_gate_from_current_verification(monkeypa
     # Isolate the coverage-projection test from unrelated acceptance history.
     # A shallow Actions checkout cannot resolve every historical evidence commit.
     builder = product_lines_status._capability_builder()
-    monkeypatch.setattr(builder, "build", lambda: ({"stats": {}}, [], []))
+    # Keep the complete capability-summary contract while isolating unrelated evidence Git history.
+    empty_stats = {
+        "total": 0,
+        "modules": 0,
+        "domains": 0,
+        "by_status": dict.fromkeys(("verified", "partial", "implemented", "planned"), 0),
+        "platform_counts": {},
+    }
+    monkeypatch.setattr(builder, "build", lambda: ({"stats": empty_stats}, [], []))
     monkeypatch.setattr(product_lines_status, "_capability_builder", lambda: builder)
     status = product_lines_status.build_status()
     coverage = status["coverage"]
