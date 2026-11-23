@@ -10,11 +10,22 @@
 
 - 生产机对 PostgreSQL 10/16 错峰强制切换并异地推送 WAL，`archive_timeout=15min`；每周生成物理基础备份；备份用专用受限 SSH 账号写入 `incoming`。温备机定期校验封存并恢复。单次 WAL 传输默认最多占用共享链路 15 分钟，发送端以确认游标推送新段，接收端保留安全窗口。PostgreSQL 10 支付温备常驻 `127.0.0.1:15432`，PostgreSQL 16 应用温备常驻 `127.0.0.1:15433`。每次生产发布按精确 Git SHA 同步制品并校验切换。入站目录保留当前与回退候选。active-peer 模式下 FHD/MODstore 常态在线，scheduler/payment 保持停机；生产单写仅通过受限 SSH 隧道对 DR 开放。当前运行角色与端口持久化到 `/etc/xcmax-dr-runtime-role.env`。正常状态下 WAL RPO 目标不超过 30 分钟。
 
-发布先验证原始归档及完整 SHA、发布 ID、制品摘要，再使用每个发布独立的 Python 环境准备候选，原子切换后核对真实健康 JSON。候选失败时恢复原指针与服务，并重新核对旧身份；FHD 原本停机的 standby 只暂存代码，须在提升时完成实际运行验收。`release_applied_*` 记录代码应用身份，不能单独作为服务在线证据。
+发布先验证原始归档及完整 SHA、发布 ID、制品摘要，再使用每个发布独立的 Python 环境准备候选，原子切换后核对真实健康 JSON。候选失败时恢复原指针与服务，并重新核对旧身份；FHD 原本停机的 standby 只暂存代码，须在提升时完成实际运行验收。`release_applied_*` 记录代码应用身份，不能单独作为服务在线证据。提升和 `--verify-current` 在共同锁内同时要求聚合 SHA、FHD 回执及 MODstore 回执一致，再读取两个服务的实际身份；一新一旧即使各自健康，也不能通过配对验收。
 
 切换中断会保留 `/var/lib/xcmax-dr/release_apply_<组件>.pending`，状态命令显示待核对；后续应用、归档恢复和提升均阻断。须沿该目录中的原目标、原标记和实际运行身份核对恢复结果，不应删除证据后盲目重试。发布、恢复和提升共用原生 `flock`，锁竞争不能被提升验证当作成功。
 
 逻辑归档恢复只允许配置文件确认的 `standby` 角色；`active-peer`、已提升、未知角色或待核对发布均不能覆盖共享业务 SQLite。升级与提升准备使用保留数据模式。真实 PostgreSQL 恢复、宿主故障及 RPO/RTO 仍需对应环境演练；本地 Bash/HTTP/SQLite 回归不代替这些结果。
+
+首次部署在第一次逻辑恢复前须显式登记 `standby`，之后继续原恢复配置与 prepare-runtime 流程。以下命令只创建不存在的 root 私有角色文件；已配置节点保留原角色，不重建该文件。缺少可靠角色证据时，定时恢复会保持阻断。
+
+```bash
+sudo python3 - <<'PY'
+import os
+fd = os.open('/etc/xcmax-dr-runtime-role.env', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'w') as handle:
+    handle.write('XCMAX_DR_SAVED_RUNTIME_MODE=standby\n')
+PY
+```
 
 ## 启用活动应用节点
 

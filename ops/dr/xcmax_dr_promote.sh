@@ -72,12 +72,6 @@ exec 9>"$LOCK"
 flock -n 9 || { echo "拒绝提升：另一提升任务正在进行" >&2; exit 1; }
 exec 8>/run/lock/xcmax-dr-release-apply.lock
 flock -n 8 || { echo "拒绝提升：发布或恢复正在进行" >&2; exit 1; }
-for component in modstore fhd; do
-  [[ ! -e "$STATE/release_apply_${component}.pending" ]] || {
-    echo "拒绝提升：$component 发布切换尚待核对" >&2; exit 1;
-  }
-done
-
 # Reuse the exact runtime gate under the lock already held by promotion. The
 # helper is source-safe; re-running its CLI would attempt to re-acquire this lock.
 # shellcheck disable=SC1091

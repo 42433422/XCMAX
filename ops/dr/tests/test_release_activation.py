@@ -55,9 +55,14 @@ class ReleaseActivationTest(unittest.TestCase):
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:
-                manifest = json.loads(
-                    owner.manifest(owner.current.resolve()).read_text()
+                component = (
+                    "fhd" if self.path.endswith("?component=fhd") else "modstore"
                 )
+                current = owner.runtime / ("fhd" if component == "fhd" else "source")
+                manifest_name = (
+                    "fhd-manifest.json" if component == "fhd" else ".xcmax-release.json"
+                )
+                manifest = json.loads((current.resolve() / manifest_name).read_text())
                 sha = manifest["git_sha"]
                 owner.observed.append(sha)
                 identity = {
@@ -69,7 +74,7 @@ class ReleaseActivationTest(unittest.TestCase):
                 }
                 if sha in owner.bad_sha:
                     identity["artifact_sha256"] = "0" * 64
-                if owner.component == "fhd":
+                if component == "fhd":
                     identity["product_version"] = manifest["version"]
                     payload = {
                         "status": "healthy",
@@ -107,7 +112,8 @@ class ReleaseActivationTest(unittest.TestCase):
             "curl",
             """#!/usr/bin/env python3
 import os, sys
-args = [os.environ['HEALTH_URL'] if arg.startswith('http://127.0.0.1:') else arg for arg in sys.argv[1:]]
+args = [os.environ['HEALTH_URL'] + ('?component=fhd' if ':15100/' in arg else '?component=modstore')
+        if arg.startswith('http://127.0.0.1:') else arg for arg in sys.argv[1:]]
 os.execv(os.environ['REAL_CURL'], [os.environ['REAL_CURL'], *args])
 """,
         )
@@ -172,6 +178,13 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         (self.state / f"release_applied_{self.component}_{suffix}").write_text(
             value + "\n"
         )
+
+    def add_fhd_release(self, sha: str) -> None:
+        self.component = "fhd"
+        target = self.make_release(sha)
+        (self.runtime / "fhd").symlink_to(target, target_is_directory=True)
+        self.write_marker("sha", sha)
+        self.component = "modstore"
 
     def run_function(
         self, name: str, *args: str, extra: str = ""
@@ -247,6 +260,43 @@ if current.resolve().name == os.environ.get('PREPARE_FAIL_SHA'):
         self.assertNotEqual(wrong.returncode, 0)
         self.assertEqual(self.current.resolve(), self.old)
         self.assert_old_markers()
+
+    def test_paired_release_accepts_matching_aggregate_and_both_live_identities(
+        self,
+    ) -> None:
+        self.add_fhd_release(self.old_sha)
+        result = self.run_function("verify_current_release_pair")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.observed, [self.old_sha, self.old_sha])
+
+    def test_paired_release_rejects_independently_healthy_different_commits(
+        self,
+    ) -> None:
+        self.add_fhd_release(self.new_sha)
+        for component in ("modstore", "fhd"):
+            result = self.run_function("verify_current_component", component)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(self.observed, [self.old_sha, self.new_sha])
+        self.observed.clear()
+        result = self.run_function("verify_current_release_pair")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("发布组件 SHA 不一致", result.stdout)
+        self.assertEqual(self.observed, [])
+
+    def test_paired_release_rejects_missing_invalid_or_unrelated_aggregate(
+        self,
+    ) -> None:
+        self.add_fhd_release(self.old_sha)
+        aggregate = self.state / "release_applied_sha"
+        for value in (None, "invalid", "c" * 40):
+            with self.subTest(aggregate=value):
+                aggregate.unlink(missing_ok=True)
+                if value is not None:
+                    aggregate.write_text(value + "\n")
+                result = self.run_function("verify_current_release_pair")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ERROR:", result.stdout)
+                self.assertEqual(self.observed, [])
 
     def test_healthy_components_require_a_matching_release_pair(self) -> None:
         fhd_marker = self.state / "release_applied_fhd_sha"

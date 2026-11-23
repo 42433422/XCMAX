@@ -118,29 +118,38 @@ verify_current_component() {
   [[ "$component" == modstore ]] || { name=fhd; port=15100; }
   manifest="$RUNTIME/$name/.xcmax-release.json"
   [[ "$component" == modstore ]] || manifest="$RUNTIME/$name/fhd-manifest.json"
-  expected_sha="$(cat "$STATE/release_applied_${component}_sha")"
+  expected_sha="$(cat "$STATE/release_applied_${component}_sha")" || return 1
   [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
   systemctl is-active --quiet "xcmax-dr-$component" || return 1
   verify_runtime "$component" "$manifest" "$expected_sha" "http://127.0.0.1:$port/api/health"
 }
 
-
 # Call only while the release lock is held. Component health is not pair evidence.
 verify_applied_release_pair() {
-  local pair=""
-  pair="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
-    [[ "$pair" =~ ^[0-9a-f]{40}$ ]] &&
-    [[ "$(cat "$STATE/release_applied_modstore_sha" 2>/dev/null)" == "$pair" ]] &&
-    [[ "$(cat "$STATE/release_applied_fhd_sha" 2>/dev/null)" == "$pair" ]] || {
-      log "ERROR: FHD/MODstore 缺少一致的已应用发布配对回执"
-      return 1
+  local aggregate component applied
+  aggregate="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
+    [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || {
+    log "ERROR: 缺少有效整组发布 SHA，不能确认运行验收"; return 1;
+  }
+  # Independent healthy components can belong to different releases after a
+  # partial apply/rollback. Require the committed pair before any live checks.
+  for component in modstore fhd; do
+    [[ ! -e "$STATE/release_apply_${component}.pending" ]] || {
+      log "ERROR: $component 存在待核对切换，不能确认整组发布"; return 1;
     }
+    applied="$(cat "$STATE/release_applied_${component}_sha" 2>/dev/null)" &&
+      [[ "$applied" == "$aggregate" ]] || {
+      log "ERROR: $component 发布组件 SHA 不一致，不能确认整组发布"; return 1;
+    }
+  done
 }
 
 verify_current_release_pair() {
+  local component
   verify_applied_release_pair || return 1
-  verify_current_component modstore || return 1
-  verify_current_component fhd || return 1
+  for component in modstore fhd; do
+    verify_current_component "$component" || return 1
+  done
   verify_applied_release_pair
 }
 
