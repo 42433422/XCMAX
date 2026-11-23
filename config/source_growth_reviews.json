@@ -436,13 +436,13 @@
     "FHD/frontend/src/composables/useChatMessages.ts": {
       "base_file": "FHD/frontend/src/composables/useChatMessages.ts",
       "base_blob": "17a45947801017562cbbad7a6046dbfc8d83edc8",
-      "head_blob": "9c5ab1cb819b2999c60ebe77642aea663b6bd659",
+      "head_blob": "7fed2de07016706788c73ca88c012cfc34e20c28",
       "before_lines": 824,
       "after_lines": 867,
-      "reason": "仅为架构评审请求，非批准；用户要求从代码层解决成熟度问题闭环。本轮复用原消息身份、分页和持久化组件，修复最新页刷新丢失旧页及分页边界，按明确durable回执限制可回取的本机正文副本，并保留原会话标题、总数与删除版本。 同时保留本轮historyEpoch与Vue生命周期修复，拒绝同会话往返、卸载后与无重叠分页窗口的旧响应。",
-      "boundary": "保留原runtimeContinuation与任务审批凭据；仅裁剪已确认且可由服务端回取的本机正文副本，未确认消息和活动流完整保留，配额失败不覆盖已有缓存。不新增权限判断或后台执行入口。 retain持有的原任务继续完成和保存，读取失效不等同于取消实际业务任务。",
-      "validation": "最终语义合解的原 useChatMessages 模块118项通过、0跳过；生产和测试 ESLint 通过。保留durable预算、原标题/总数、连续历史页、最早游标与historyEpoch迟到响应隔离。最终远端CI另验。",
-      "follow_up": "精确base为main@38b03d2c15391109bb1380b914b2e28cd769c5c0；本记录仅是评审请求，最终head仍需完整CI及架构审查。活动内存数组和跨会话总缓存预算不在本次完成范围；未确认内容优先保留，空间不足继续明确提示。",
+      "reason": "仅为架构评审请求，非批准；用户要求从代码层解决成熟度问题闭环。本轮复用原消息身份、分页和持久化组件，修复最新页刷新丢失旧页及分页边界，按明确durable回执限制可回取的本机正文副本，并保留原会话标题、总数与删除版本。 同时保留本轮historyEpoch与Vue生命周期修复，拒绝同会话往返、卸载后与无重叠分页窗口的旧响应。 同身份资料重发时，三项标量未变化不推进historyEpoch，避免必需初读与在途分页被误拒绝。",
+      "boundary": "保留原runtimeContinuation与任务审批凭据；仅裁剪已确认且可由服务端回取的本机正文副本，未确认消息和活动流完整保留，配额失败不覆盖已有缓存。不新增权限判断或后台执行入口。 retain持有的原任务继续完成和保存，读取失效不等同于取消实际业务任务。 复用Vue原生多个标量监听；原同步回调、账号认证、scope、epoch及消息revision检查不变，真实身份切换仍使旧回执失效。",
+      "validation": "原useChatMessages模块118项既有用例加3个同身份hydration回归共121项通过；新增三场景在旧监听器全部失败。合入c494公开ChatView时序修复后，原messages、ChatView.functions、ChatViewHost、StartupPageReady四模块共175项通过、0失败/跳过（包含上述121项），公开3个挂载竞态断言全保留。使用真实runtime身份setter与scope解析核对必需空/非空读取及在途历史页。ESLint和完整vue-tsc --noEmit通过；本地Chromium因socket EPERM未进入页面，原完整浏览器验收继续由精确head正式CI执行。",
+      "follow_up": "精确base为main@1a5e1d194f1b361ea488bf9bd781a788f767419f；本记录仅是架构评审请求，最终head仍需完整CI及人工架构审查。活动内存数组和跨会话总缓存预算不在本次完成范围；未确认内容优先保留，空间不足继续明确提示。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
