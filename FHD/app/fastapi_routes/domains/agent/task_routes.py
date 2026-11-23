@@ -35,7 +35,10 @@ from app.application.agent_orchestrator.unified_task import (
     create_unified_task,
     task_capabilities,
 )
-from app.application.enterprise_cognition.service import get_cognition_service
+from app.application.enterprise_cognition.service import (
+    cognition_result_verified,
+    get_cognition_service,
+)
 from app.domain.enterprise_cognition.contracts import CognitionRequest
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
@@ -620,13 +623,7 @@ def cognition(
         result = get_cognition_service().invoke(body.action, body.params, context=context)
         if body.action == "plan":
             return run_response(result, principal=principal)
-        verified = (
-            result.get("observation_verified") is True
-            if body.action == "evaluate"
-            else result.get("current_state_verified") is True
-            if body.action == "query"
-            else True
-        )
+        verified = cognition_result_verified(body.action, body.params, result)
         return {"success": verified, "data": result}
     except (AgentModAuthorizationError, PermissionError) as exc:
         raise HTTPException(403, "当前账号无权访问该企业状态或任务") from exc
