@@ -1,5 +1,5 @@
 {
-  "lines": 2686509,
+  "lines": 2690362,
   "updated": "2026-11-24",
-  "note": "用户已授权解决全部PR阻塞。保留最新公开bc5及main38b祖先和其确定性日界、真实市场绑定与退款回收修复；追加标准软件定制首单报价/付款、历史混购权益、未付返工门禁、付款与CRM原工单CAS和未知回执只读恢复，并补齐退款后重购时的本人权益隔离。Git相对bc5净增1098行，其中测试873、产品220、文档5；维护总数由原脚本实际写入lines字段，不预留额度。原组合8模块197通过/零跳过，随后只替换3个公开日界测试为确定性双日断言；退款购买/订阅/owner完整57项通过且FHD代码与被测0543逐字节相同；六个CAS生产文件mypy2.4.1定点通过。复用原SQLAlchemy/lock_version、订单和账号套餐目录；无新表/队列或SessionStore改造，不放宽权限、财务、幂等、覆盖率或安全门禁。未把本地验证当作最终CI或人工审批。"
+  "note": "PR #3529 stacked-base synchronization against codex/persy-l4-relation-revision-20261124 at 2bd875ba535e0d27e6f7bd5bf9ed7ec690cf061a: retain all five author source/test/document blobs from 9ce6bd4a618b5a36d6c0e8856ca845c496381db8 byte-for-byte (+250 maintained lines over the updated base) and add the required existing-feature changelog entry (+2). Resolve only the candidates.py import conflict by retaining both relation_write_conflicts and validate_relation_value; preserve the base recorded_at_utc lifecycle/readback fix and all mainline business contracts. Original counter measures 2690110 to 2690362 (+252), with no reserved allowance. No behavior assertions, access rules, source-growth thresholds, or CI gates are weakened; the draft retains its original stacked base and requires current-head CI and review."
 }

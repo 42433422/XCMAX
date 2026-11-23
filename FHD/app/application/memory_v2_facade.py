@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+from app.application.user_memory.relation_retrieval import parse_as_of
 from app.application.user_memory.retrieve import build_memory_context as build_memory_context
 from app.application.user_memory.retrieve import search as search
 from app.application.user_memory.write import normalize_memory_text as normalize_memory_text
@@ -132,6 +133,17 @@ def _memory_record_proof(record: dict[str, Any] | None) -> dict[str, Any] | None
     }
 
 
+def _memory_revision_time_valid(record: dict[str, Any]) -> bool:
+    value = record.get("recorded_at_utc")
+    if not isinstance(value, str):
+        return False
+    try:
+        parse_as_of(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _proposed_memory_matches(policy, params, record) -> bool:
     confidence = params.get("confidence")
     expected = {
@@ -149,6 +161,7 @@ def _proposed_memory_matches(policy, params, record) -> bool:
         "created_at": record.get("created_at"),
         "updated_at": record.get("created_at"),
         "revision": 1,
+        "recorded_at_utc": record.get("recorded_at_utc"),
         "history": [],
     }
     expected["status"] = "rejected" if expected["source_policy"] == "blocked" else "pending"
@@ -158,7 +171,11 @@ def _proposed_memory_matches(policy, params, record) -> bool:
     if expected["status"] == "rejected":
         expected["rejected_at"] = expected["created_at"]
         expected["rejected_reason"] = "source_policy_blocked"
-    return bool(expected["created_at"]) and canonical_hash(record) == canonical_hash(expected)
+    return (
+        bool(expected["created_at"])
+        and _memory_revision_time_valid(record)
+        and canonical_hash(record) == canonical_hash(expected)
+    )
 
 
 def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bool:
@@ -199,6 +216,7 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         **previous,
         "revision": before["revision"] + 1,
         "updated_at": record["updated_at"],
+        "recorded_at_utc": record.get("recorded_at_utc"),
         "history": history,
     }
     if step.action == "correct":
@@ -244,7 +262,9 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         expected["fingerprint"] = policy.fingerprint(
             str(expected["memory_type"]), str(expected["key"]), expected.get("value")
         )
-    return canonical_hash(record) == canonical_hash(expected)
+    return _memory_revision_time_valid(record) and canonical_hash(record) == canonical_hash(
+        expected
+    )
 
 
 def capture_memory_baseline(step, context) -> dict[str, Any]:

@@ -349,6 +349,7 @@ export interface PersyMemoryEntity {
   name?: string
   type?: string
   role?: string
+  entity_id?: string
 }
 
 export interface PersyMemoryValue {
@@ -357,6 +358,8 @@ export interface PersyMemoryValue {
   object?: string
   statement?: string
   entities?: PersyMemoryEntity[]
+  relation_cardinality?: 'one' | 'many'
+  relation_validity?: { effective_from?: string; effective_until?: string }
   [key: string]: unknown
 }
 

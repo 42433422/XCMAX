@@ -8,11 +8,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.relation_retrieval import select_effective_records
 from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,
 )
+from app.application.user_memory.relation_retrieval import select_effective_records
 from app.domain.user_memory.analysis import memory_summary
 
 
