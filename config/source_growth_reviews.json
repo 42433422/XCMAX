@@ -771,14 +771,14 @@
     },
     "FHD/app/application/agent_orchestrator/verification_readback.py": {
       "base_file": "FHD/app/application/agent_orchestrator/verification_readback.py",
-      "base_blob": "f4acbf37e7c54f852515a01c30efc323adc24bd1",
-      "head_blob": "3dac0f5fbe8143f31c8488f0c54885954bb2de9a",
-      "before_lines": 908,
-      "after_lines": 919,
-      "reason": "沿原独立读回分派补齐memory_v2.reject和ELT run_ids，复用既有持久记录与ELT整批声明，不增设备用执行或验证通道。",
-      "boundary": "记忆拒绝的状态、版本、历史链与原因必须匹配；ELT逐项目标和业务行均核验，缺失、部分或未知回执不能提升完成，验证阶段不重做写入。",
-      "validation": "本轮真实SQL审批、原EltService、持久回执和重复读回覆盖正向完成及缺版本、修订漂移、跨作用域和伪造结果；验证阶段SQL写入被监测。最终远端CI绑定实际候选提交。",
-      "follow_up": "按用户2026-11-23明确要求同步改造、集成最新主线并审查后合入；此记录提供精确blob供审查，不代表人工架构批准、生产资格或真实客户验收。",
+      "base_blob": "3dac0f5fbe8143f31c8488f0c54885954bb2de9a",
+      "head_blob": "9cf7b008ee79bd8f012eb6e427ec8fe85e2929f2",
+      "before_lines": 919,
+      "after_lines": 925,
+      "reason": "本记录仅登记精确源码增长的评审请求，不是审批证据。按用户真实业务全链路代码闭环要求，将 reports.export 接入原调用文件绑定和独立数据库报表验收。",
+      "boundary": "仅复用原 _files 与 verify_independent_result 分发；报表取数、逐格核对实现在专属 verification_reports 模块，不增加执行入口或旁路台账。",
+      "validation": "验证范围为原始调用绑定、SQL来源与XLSX逐格一致、撤权和错误金额拦截、重复恢复零业务写入；以本PR最终提交的测试与必需CI结果为准，登记不代表验收通过。",
+      "follow_up": "对本次薄分发增量与独立模块边界进行评审；后续读回类型继续放入专属模块，保持原总分发职责。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/super_employee_service.py": {

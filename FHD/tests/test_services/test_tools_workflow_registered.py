@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -26,6 +26,7 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_suppliers,
     execute_registered_workflow_tool,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # _registered_router_customers
@@ -630,32 +631,75 @@ class TestErpRouterDispatch:
         assert r["success"] is False
 
     @pytest.mark.parametrize("kind", ["sales", "inventory", "purchase"])
-    def test_reports_summary_and_export_use_same_rows(self, kind):
+    def test_reports_summary_and_export_use_same_rows(
+        self, kind, trusted_actor, tmp_path, monkeypatch
+    ):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from app.application.agent_orchestrator.artifact_files import read_verified_run_file
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+        from app.domain.shared_services.report_service import ReportService
+
+        actor = trusted_actor(role="admin")
+        monkeypatch.setattr(
+            "app.application.agent_orchestrator.artifact_files.get_app_data_dir",
+            lambda: str(tmp_path),
+        )
         rows = [{"model_number": "P002", "total_quantity": 18}]
-        with patch("app.domain.shared_services.report_service.ReportService") as factory:
-            svc = factory.return_value
-            query = getattr(svc, f"get_{kind}_report")
-            query.return_value = {"success": True, "data": rows}
-            svc.export_to_excel.return_value = {"success": True}
+        step = AgentStep(node_id="export", tool_id="reports", action="export", params={})
+        run = AgentRun(user_id=str(actor.user_id), message=f"EXPORT {kind.upper()}", steps=[step])
+        tool_call = ToolCall(
+            step_id=step.step_id, node_id=step.node_id, tool_id="reports", action="export"
+        )
+        context = {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": tool_call.call_id,
+            "input_sha256": canonical_hash(step.params),
+        }
+        with patch.object(
+            ReportService, f"get_{kind}_report", return_value={"success": True, "data": rows}
+        ) as query:
             assert (
-                _registered_router_reports(f"{kind}_summary", {}, {}, "shared", "")["data"] == rows
+                _registered_router_reports(f"{kind}_summary", {}, context, "shared", "")["data"]
+                == rows
             )
             result = _registered_router_reports(
-                "export", {}, {}, "shared", f"EXPORT {kind.upper()}"
+                "export", step.params, context, "shared", run.message
             )
-            assert result["success"]
-            svc.export_to_excel.assert_called_once_with(report_type=kind, data=rows, filename=kind)
+            assert result["success"] and result["row_count"] == len(rows)
             assert query.call_count == 2
+            assert query.call_args_list == [call(), call()]
+        artifact = result["artifacts"][0]
+        assert artifact["metadata"]["owner_user_id"] == str(actor.user_id)
+        assert artifact["metadata"]["tenant_id"] == str(actor.tenant_id)
+        workbook = load_workbook(
+            BytesIO(read_verified_run_file(run.run_id, artifact)), read_only=True
+        )
+        try:
+            assert workbook.sheetnames == [kind]
+            assert list(workbook.active.values) == [tuple(rows[0]), tuple(rows[0].values())]
+        finally:
+            workbook.close()
 
     @pytest.mark.parametrize("report", [{"success": False, "message": "query failed"}, None])
     def test_reports_export_does_not_fabricate_empty_success(self, report):
-        with patch("app.domain.shared_services.report_service.ReportService") as factory:
-            svc = factory.return_value
-            svc.get_inventory_report.return_value = report
+        from app.domain.shared_services.report_service import ReportService
+
+        with (
+            patch.object(ReportService, "get_inventory_report", return_value=report) as query,
+            patch.object(ReportService, "export_to_excel") as exporter,
+        ):
             params = {"report_type": "inventory"} if report else {}
             result = _registered_router_reports("export", params, {}, "shared", "")
             assert not result["success"]
-            svc.export_to_excel.assert_not_called()
+            exporter.assert_not_called()
+            assert query.call_count == bool(report)
 
     def test_finance_router_ledger_query(self):
         from app.services import accounting_services
