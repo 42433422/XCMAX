@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import errno
 import io
 import json
 import os
@@ -83,13 +84,13 @@ def _native_stderr_diagnostic(monkeypatch):
             return original(args, **kwargs)
         assert kwargs["stderr"] == subprocess.DEVNULL
         read_fd, write_fd = os.pipe()
+        proc = None
         try:
             proc = original(args, **{**kwargs, "stderr": write_fd})
-        except BaseException:
-            os.close(read_fd)
-            raise
         finally:
             os.close(write_fd)
+            if proc is None:
+                os.close(read_fd)
         # 16K characters retain at most 64KiB of UTF-8, never an unbounded PIPE.
         reader = _ExcerptReader(os.fdopen(read_fd, "rb"), 16384)
 
@@ -768,6 +769,35 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
     state = Path(f"/proc/{child}/stat")
     assert not state.exists() or state.read_text().split()[2] == "Z"
     assert controls and all(not path.exists() for path in controls)
+
+
+@pytest.mark.parametrize("failure_type", [OSError, KeyboardInterrupt, SystemExit])
+def test_native_stderr_diagnostic_closes_pipes_after_start_failure(
+    tmp_path, monkeypatch, failure_type
+):
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "unused-srt"))
+    original_pipe = os.pipe
+    descriptors = []
+    failure = failure_type("synthetic controller startup failure")
+
+    def pipe():
+        pair = original_pipe()
+        descriptors.append(pair)
+        return pair
+
+    def fail_start(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(os, "pipe", pipe)
+    monkeypatch.setattr(subprocess, "Popen", fail_start)
+    with pytest.raises(failure_type) as raised, _native_stderr_diagnostic(monkeypatch):
+        replay._run_worker({}, tmp_path, dict(os.environ))
+    assert raised.value is failure
+    assert len(descriptors) == 1
+    for fd in descriptors[0]:
+        with pytest.raises(OSError) as closed:
+            os.fstat(fd)
+        assert closed.value.errno == errno.EBADF
 
 
 @pytest.mark.parametrize("overflow", [False, True])
