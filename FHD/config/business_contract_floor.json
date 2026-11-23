@@ -25,7 +25,10 @@
     "R10-foreign-approval-does-not-insert-customer",
     "R10-approval-tenant",
     "R10-export-tenant",
-    "R10-recovery-tenant"
+    "R10-recovery-tenant",
+    "R05-approved-sales-full-chain",
+    "R07-approved-sales-worker-restart",
+    "R04-corrupt-sales-report-rejected"
   ],
   "required_tests": {
     "R01-elt-row-accounting": "tests/test_application/test_etl_preview_task_boundaries.py::test_one_sheet_row_splits_into_two_products_and_keeps_the_total_out",
@@ -53,6 +56,9 @@
     "R10-foreign-approval-does-not-insert-customer": "tests/test_application/test_approval_executor_gate.py::test_other_tenant_approval_does_not_authorize",
     "R10-approval-tenant": "tests/test_application/test_approval_workspace.py::test_other_tenant_cannot_change_a_persisted_approval",
     "R10-export-tenant": "tests/test_application/test_shipment_records_agent_routes.py::test_shipment_record_mutation_routes_execute_through_agent_orchestrator",
-    "R10-recovery-tenant": "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant"
+    "R10-recovery-tenant": "tests/test_application/test_etl_preview_task_boundaries.py::test_rollback_repairs_current_tenant_and_leaves_the_other_tenant",
+    "R05-approved-sales-full-chain": "tests/test_application/test_business_full_chain_acceptance.py::test_separate_reviewer_resumes_original_approval_then_delivers_reconciled_order",
+    "R07-approved-sales-worker-restart": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[False]",
+    "R04-corrupt-sales-report-rejected": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[True]"
   }
 }
