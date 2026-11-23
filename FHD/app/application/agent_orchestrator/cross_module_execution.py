@@ -397,7 +397,7 @@ def _execute_claimed_cross_module(
         return receipt
     except InjectedTransactionFault:
         raise
-    except chain._IMPORT_ERRORS as exc:
+    except (EltError,) + chain._IMPORT_ERRORS as exc:
         if finish:
             queue.finish(
                 run.run_id,

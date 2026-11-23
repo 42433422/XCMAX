@@ -16,10 +16,12 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .common import _SUBTASK_LABELS
 from .devices import DeviceSelection
+from .para import ParaRemoteError
 from .profiles import SuperEmployeeToolProfile
 from .protocols import ExecutionContext, OutboxWriter, ParaPorts
 
 _NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+_PARA_ERRORS = RECOVERABLE_ERRORS + (ParaRemoteError,)
 
 
 def _digest(value: Any) -> str:
@@ -237,7 +239,7 @@ class EmployeeDispatcher:
                     f"/api/tasks/by-request/{quote(str(pending_key), safe='')}",
                 )
             return self._original_receipt(receipt, result)
-        except RECOVERABLE_ERRORS:
+        except _PARA_ERRORS:
             return None
 
     def _original_receipt(
@@ -363,7 +365,7 @@ class EmployeeDispatcher:
                             [],
                             tier=int(receipt.get("para_tier") or 2),
                         )
-            except RECOVERABLE_ERRORS:
+            except _PARA_ERRORS:
                 if not task_id:
                     return self._persist_receipt(request, receipt)
             else:
@@ -384,7 +386,7 @@ class EmployeeDispatcher:
                         [],
                         tier=int(receipt.get("para_tier") or 2),
                     )
-            except RECOVERABLE_ERRORS as exc:
+            except _PARA_ERRORS as exc:
                 return self._persist_receipt(request, {**receipt, "reason": str(exc)[:500]})
         if (
             continue_plan
@@ -404,7 +406,7 @@ class EmployeeDispatcher:
                 if isinstance(task, dict) and str(task.get("id") or "") == task_id:
                     receipt["task_status"] = str(task.get("status") or "")
                     receipt["response"] = {"task": task}
-            except RECOVERABLE_ERRORS:
+            except _PARA_ERRORS:
                 pass
         return self._persist_receipt(request, receipt)
 
@@ -465,7 +467,7 @@ class EmployeeDispatcher:
             ].get("safe_to_fallback"):
                 return (self._unknown_dispatch(request, str(exc)), "dispatch_unknown")
             return (None, f"para_api_unreachable: {exc}")
-        except RECOVERABLE_ERRORS as exc:
+        except _PARA_ERRORS as exc:
             if isinstance(request.get("dispatch_receipt"), dict) and not request[
                 "dispatch_receipt"
             ].get("safe_to_fallback"):
@@ -634,7 +636,7 @@ class EmployeeDispatcher:
                     )
                     raise
                 return self._unknown_dispatch(request, str(exc))
-            except RECOVERABLE_ERRORS as exc:
+            except _PARA_ERRORS as exc:
                 return self._unknown_dispatch(request, str(exc))
             result_task = result.get("task")
             result_task_id = (

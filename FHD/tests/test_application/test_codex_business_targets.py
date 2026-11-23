@@ -813,6 +813,7 @@ def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, 
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
     from threading import Barrier, Event
 
+    from app.application.elt import operation_owner
     from app.application.elt.errors import EltConflict
     from app.db.models import ShipmentRecord
     from app.db.models.elt import EltRun
@@ -831,10 +832,17 @@ def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, 
 
     ingest = Mock(side_effect=pause_writer)
     monkeypatch.setattr(state.knowledge, "ingest_document", ingest)
+    claim = operation_owner.claim_operation
+
+    def simultaneous_claim(db, run, kind, **kwargs):
+        if kind == "batch_execute":
+            arrived.wait(timeout=10)
+        return claim(db, run, kind, **kwargs)
+
+    monkeypatch.setattr(operation_owner, "claim_operation", simultaneous_claim)
 
     def finalize():
         with tenant_scope(state.actor.tenant_id):
-            arrived.wait(timeout=10)
             return _finalize_import(current, state.actor.user_id)
 
     with ThreadPoolExecutor(max_workers=2) as executor:

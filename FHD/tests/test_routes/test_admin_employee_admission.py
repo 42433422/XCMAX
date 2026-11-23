@@ -63,7 +63,7 @@ def admin_employee(monkeypatch, trusted_actor):
                 (employee_id, context["run_id"]),
             )
         if state.error:
-            raise RuntimeError("receipt unavailable")
+            raise state.error
         return state.output
 
     invocation = Mock(side_effect=execute)
@@ -683,9 +683,10 @@ def test_admin_safe_retry_still_dispatches_one_effect(admin_employee, monkeypatc
         )
 
 
-def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_employee):
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_employee, error_type):
     entry = admin_employee
-    entry.state.error = True
+    entry.state.error = error_type("receipt unavailable")
     with entry.client() as client:
         missing = client.get("/employees/clerk/runs", params={"idempotency_key": "missing"})
         assert missing.status_code == 404 and entry.invocation.call_count == 0
@@ -694,6 +695,11 @@ def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_emplo
     assert first["execution_state"] == repeated["execution_state"] == "unknown"
     assert first["run_id"] == repeated["run_id"]
     assert entry.invocation.call_count == 1
+    with entry.factory() as db:
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
 
 
 @pytest.mark.parametrize("code", ["timeout", "upstream_unavailable", "rate_limited"])

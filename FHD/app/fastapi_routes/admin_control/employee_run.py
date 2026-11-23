@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,7 +30,9 @@ from app.domain.task_lifecycle.results import (
     execution_result_outcome_unknown,
     execution_result_pending_state,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -462,7 +465,9 @@ def execute_admitted_employee(
         result = copy.deepcopy(result)
         if isinstance(result.get("run_id"), int):
             result["employee_run_id"] = result.pop("run_id")
-    except RECOVERABLE_ERRORS:
+    except BOUNDARY_ERRORS:
+        # The admitted invocation may already have committed an external effect.
+        logger.exception("admin employee invocation interrupted; original task %s", run.run_id)
         result = {
             "success": False,
             "execution_state": "unknown",
