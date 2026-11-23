@@ -216,7 +216,21 @@ def _append(business, kind, minute, **extra):
     )
 
 
-def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(business):
+@pytest.mark.parametrize(
+    ("kind", "replacement"),
+    [
+        (None, {}),
+        ("first_use", {"artifact_id": "different-delivery"}),
+        ("first_use", {"artifact_sha256": "f" * 64}),
+        ("outcome", {"artifact_id": "different-delivery"}),
+        ("outcome", {"measured_value": float("inf")}),
+        ("outcome", {"measured_value": True, "target": 1}),
+        ("outcome", {"baseline": float("-inf")}),
+    ],
+)
+def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(
+    business, kind, replacement
+):
     consumer, factory, scope, now = business
     agreement = {
         "baseline": 1,
@@ -227,6 +241,13 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
         "agreement_sha256": "a" * 64,
         "customer_confirmed": True,
     }
+    replacement = dict(replacement)
+    artifact = (
+        {"artifact_id": replacement.pop("artifact_id")} if "artifact_id" in replacement else {}
+    )
+    agreement.update(
+        {name: replacement[name] for name in ("baseline", "target") if name in replacement}
+    )
     _append(business, "goal", 1, evidence=agreement)
     _append(business, "delivery", 2)
     _append(
@@ -238,7 +259,9 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
             "success": True,
             "business_output": True,
             "task_type": "report",
+            **(replacement if kind == "first_use" else {}),
         },
+        **(artifact if kind == "first_use" else {}),
     )
     _append(
         business,
@@ -249,11 +272,20 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
             "measured_value": 3,
             "source_material_summary": "原始报告执行统计",
             "source_material_sha256": "b" * 64,
+            **(replacement if kind == "outcome" else {}),
         },
+        **(artifact if kind == "outcome" else {}),
     )
     context = {"business": scope}
     assert consumer.observe_business_step("O8", context)["result"]["status"] == "waiting_evidence"
     _append(business, "acceptance", 5, evidence={"customer_confirmed": True})
+    if kind:
+        first_unproven = "O6" if kind == "first_use" else "O8"
+        assert (
+            consumer.observe_business_step(first_unproven, context)["result"]["status"]
+            == "waiting_evidence"
+        )
+        return
     for step in ["O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8"]:
         assert (
             consumer.observe_business_step(step, context)["result"]["status"] == "completed"
