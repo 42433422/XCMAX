@@ -567,14 +567,64 @@ class TaskContinuityRuntime:
         parent = self._authorized(payload, actor, scope, write=True)
         if not _is_task(parent):
             return parent
-        specs = list(payload.get("children") or [])
-        if len(specs) < 3:
+        raw_specs = payload.get("children")
+        if not isinstance(raw_specs, list) or len(raw_specs) < 3:
             return self._fail(parent, "insufficient_children", "父任务至少要拆成 3 个子任务")
+        sealed = isinstance(self._trusted_context.get("_actor_authorization"), dict)
+        requires_identity = sealed or isinstance(parent.get("agent_admission"), dict)
+        if requires_identity and not sealed:
+            return self._fail(parent, "employee_actor_required", "原任务需要已认证的员工授权")
+        # Validate the entire split before changing the original child roster.
+        specs = []
+        for spec in raw_specs:
+            if (
+                not isinstance(spec, dict)
+                or not isinstance(spec.get("employee_id"), str)
+                or not spec["employee_id"].strip()
+                or not isinstance(spec.get("params", {}), dict)
+                or not isinstance(spec.get("business_data", {}), dict)
+            ):
+                return self._fail(parent, "invalid_child_spec", "子任务缺少合法员工或参数")
+            employee = spec["employee_id"].strip()
+            tool = str(spec.get("tool") or "child_work")
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", tool):
+                return self._fail(parent, "tool_invalid", "子任务工具名称无效")
+            if requires_identity:
+                card, error = self._handoff_identity(employee, parent)
+                if error:
+                    return self._fail(parent, error, "子任务员工身份不可核验，未创建子任务")
+                assert card is not None
+                failure = _availability_failure(card)
+                if failure:
+                    return self._fail(parent, failure[0], failure[1])
+                employee = card["employee_id"]
+            specs.append(
+                {
+                    "employee_id": employee,
+                    "tool": tool,
+                    "params": _clone(spec.get("params", {})),
+                    "business_data": _clone(spec.get("business_data", {})),
+                    "isolation_marker": str(spec.get("isolation_marker") or ""),
+                }
+            )
+        request_hash = hashlib.sha256(
+            json.dumps(specs, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        original = parent.get("split_request_sha256")
+        if original:
+            if original != request_hash:
+                return self._fail(parent, "split_plan_conflict", "原拆分计划已冻结，禁止追加重复子任务")
+            children, unavailable = bound_task_children(self.state, parent)
+            if unavailable or len(children) != len(specs):
+                return self._fail(parent, "child_result_unavailable", "原子任务清单待核对")
+            return self._envelope(parent, business=False)
+        if parent["child_task_ids"]:
+            return self._fail(parent, "split_already_started", "已存在子任务，须先核对原任务清单")
+        parent["split_request_sha256"] = request_hash
+        parent["completion_condition"] = "all_children_success"
         for spec in specs:
-            if not isinstance(spec, dict):
-                continue
             child_id = _new_id("task")
-            employee = str(spec.get("employee_id") or "")
+            employee = spec["employee_id"]
             child = {
                 **_clone(parent),
                 "task_id": child_id,
@@ -584,8 +634,14 @@ class TaskContinuityRuntime:
                 "conversation_id": f"{parent['conversation_id']}:{child_id}",
                 "owner_employee": employee,
                 "holder_employee": employee,
-                "authorized_employees": [employee, parent["owner_employee"]],
-                "grants": {employee: ["*"], parent["owner_employee"]: ["*"]},
+                "authorized_employees": list(dict.fromkeys([employee, parent["owner_employee"]])),
+                "grants": {employee: [spec["tool"]]},
+                "collaboration_assignment": {
+                    "employee_id": employee,
+                    "tool": spec["tool"],
+                    "requires_live_identity": requires_identity,
+                },
+                "completion_condition": "all_steps_success",
                 "steps": [
                     _step_from(
                         child_id,
@@ -608,6 +664,7 @@ class TaskContinuityRuntime:
                 "prior_results": [],
                 "created_at": _now(),
             }
+            child.pop("split_request_sha256", None)
             child["business_data"]["isolation_marker"] = str(
                 spec.get("isolation_marker") or child_id
             )
@@ -1330,6 +1387,22 @@ class TaskContinuityRuntime:
                     "idempotency_scope_conflict" if foreign else "tool_outcome_unknown"
                 )
                 return
+        assignment = task.get("collaboration_assignment")
+        if isinstance(assignment, dict) and assignment.get("requires_live_identity"):
+            card, error = self._handoff_identity(actor, task)
+            if (
+                not isinstance(self._trusted_context.get("_actor_authorization"), dict)
+                or actor != assignment.get("employee_id")
+                or step["tool"] != assignment.get("tool")
+                or error
+                or _availability_failure(card or {})
+            ):
+                step.update(
+                    status="failed",
+                    error_code="employee_assignment_revoked",
+                    error_message="责任员工身份或委派范围已失效，未启动工具",
+                )
+                return
         grant = list(task["grants"].get(actor) or [])
         if "*" not in grant and step["tool"] not in grant:
             step["status"] = "failed"
@@ -1466,13 +1539,28 @@ class TaskContinuityRuntime:
                 error_message="原子任务清单缺失或归属不一致，须核对原记录；未确认父任务完成",
                 result_payload={},
             )
-        elif aggregate["failure"]:
+        elif any(step["status"] == "recovering" for step in parent["steps"]):
+            parent.update(
+                status="recovering",
+                error_code="tool_outcome_unknown",
+                error_message="父任务自身工具结果待核对",
+                result_payload={},
+            )
+        elif aggregate["failure"] or any(
+            step["status"] in {"failed", "blocked"} for step in parent["steps"]
+        ):
             parent["status"] = "failed"
             parent["error_code"] = "child_failed"
             parent["error_message"] = "子任务失败，父任务不能记为成功"
             parent["result_payload"] = {}
-        elif aggregate["incomplete"] or aggregate["success"] != len(children):
+        elif (
+            aggregate["incomplete"]
+            or aggregate["success"] != len(children)
+            or any(step["status"] != "success" for step in parent["steps"])
+        ):
             parent["status"] = "running"
+            parent["error_code"] = ""
+            parent["error_message"] = ""
             parent["result_payload"] = {}
         elif children:
             parent["status"] = _TERMINAL_OK
@@ -1497,6 +1585,8 @@ class TaskContinuityRuntime:
             task["remaining_steps"] = [
                 step["step_id"] for step in task["steps"] if step["status"] != "success"
             ]
+            if task["completion_condition"] == "all_children_success" and task["child_task_ids"]:
+                self._aggregate_parent(task)
             return
         statuses = {step["status"] for step in task["steps"]}
         if task["status"] == "paused":
@@ -1526,6 +1616,22 @@ class TaskContinuityRuntime:
         if not isinstance(found, dict):
             return self._fail(None, "task_not_found", "任务不存在")
         if self._allows(found, actor, scope):
+            assignment = found.get("collaboration_assignment")
+            if write and isinstance(assignment, dict):
+                if actor != assignment.get("employee_id"):
+                    return self._fail(
+                        found, "employee_assignment_mismatch", "非责任员工不得执行子任务", redact=True
+                    )
+                if assignment.get("requires_live_identity"):
+                    if not isinstance(self._trusted_context.get("_actor_authorization"), dict):
+                        return self._fail(found, "employee_actor_required", "员工授权不可核验")
+                    card, error = self._handoff_identity(actor, found)
+                    if error:
+                        return self._fail(found, error, "责任员工身份已失效")
+                    assert card is not None
+                    failure = _availability_failure(card)
+                    if failure:
+                        return self._fail(found, failure[0], failure[1])
             return found
         return self._fail(found, "unauthorized", "无权读取其他员工或用户的任务上下文", redact=True)
 
@@ -1977,7 +2083,9 @@ def _find_step(task: dict[str, Any] | None, step_id: str) -> dict[str, Any] | No
 
 def _deps_ok(task: dict[str, Any], step: dict[str, Any]) -> bool:
     by_id = {item["step_id"]: item for item in task["steps"]}
-    return all(by_id[dep]["status"] == "success" for dep in step["depends_on"] if dep in by_id)
+    return all(
+        dep in by_id and by_id[dep]["status"] == "success" for dep in step["depends_on"]
+    )
 
 
 def _merge_conditions(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
