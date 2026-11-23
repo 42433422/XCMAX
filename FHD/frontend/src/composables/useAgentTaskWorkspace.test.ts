@@ -203,7 +203,7 @@ describe('useAgentTaskWorkspace', () => {
     expect(isFirstAiTaskPending()).toBe(false)
   })
 
-  it('uses task snapshots as the live clock and keeps polling as a slow fallback', async () => {
+  it.each(['tasks', 'runs', 'failure'] as const)('keeps newer stream evidence when an earlier %s read settles and retains slow polling', async (source) => {
     class FakeEventSource {
       static instances: FakeEventSource[] = []
       readonly listeners = new Map<string, (event: MessageEvent) => void>()
@@ -229,13 +229,30 @@ describe('useAgentTaskWorkspace', () => {
 
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource
     vi.useFakeTimers()
+    let settle!: () => void
+    const pending = new Promise((resolve, reject) => {
+      settle = source === 'failure'
+        ? () => reject(new Error('late read failure'))
+        : () => resolve({ success: true, data: [source === 'runs' ? serverRun() : serverTask()] })
+    })
+    if (source === 'runs') {
+      apiMock.listTasks.mockRejectedValueOnce(new Error('task list unavailable'))
+      apiMock.listRuns.mockReturnValueOnce(pending)
+    } else apiMock.listTasks.mockReturnValueOnce(pending)
     const state = setup()
     state.workspace.start()
-    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(FakeEventSource.instances[0]?.url).toContain('/api/agent/tasks/events/stream')
-    FakeEventSource.instances[0]?.emit('task.snapshot', [serverTask('completed')])
+    const completed = { ...serverTask('completed'), updated_at: '2026-08-10T08:02:00Z' }
+    FakeEventSource.instances[0]?.emit('task.snapshot', [completed])
     expect(state.taskList.value[0]?.status).toBe('success')
+    const verified = { ...state.workspace.taskSyncState.value }
+    settle()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(state.taskList.value[0]?.status).toBe('success')
+    expect(state.workspace.taskSyncState.value).toEqual(verified)
+    expect(apiMock.listRuns).toHaveBeenCalledTimes(source === 'runs' ? 1 : 0)
 
     await vi.advanceTimersByTimeAsync(14_999)
     expect(apiMock.listTasks).toHaveBeenCalledTimes(1)

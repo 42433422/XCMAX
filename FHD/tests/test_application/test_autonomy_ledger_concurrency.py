@@ -62,7 +62,9 @@ def test_claim_cannot_be_overwritten_by_concurrent_transition(isolated, monkeypa
     def transition():
         competing.set()
         if operation == "resume":
-            return ledger.resume_action(action_id, approver="other", defer_execution=True)
+            return ledger.resume_action(
+                action_id, approver="other", approval_id="other", defer_execution=True
+            )
         if operation == "reject":
             return ledger.reject_action(action_id, approver="other")
         if operation == "mark":
@@ -72,7 +74,13 @@ def test_claim_cannot_be_overwritten_by_concurrent_transition(isolated, monkeypa
     monkeypatch.setattr(ledger, "evaluate_risk", held_risk)
     monkeypatch.setattr(ledger, "_latest", observed_latest)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(ledger.resume_action, action_id, approver="admin", defer_execution=True)
+        first = pool.submit(
+            ledger.resume_action,
+            action_id,
+            approver="admin",
+            approval_id="original-workflow",
+            defer_execution=True,
+        )
         assert entered.wait(5)
         second = pool.submit(transition)
         assert competing.wait(5)
@@ -127,6 +135,10 @@ def test_concurrent_maintenance_preserves_success_and_releases_claim_lock(isolat
         assert first.result(timeout=5)["state"] == "executed"
     assert len(posts) == 1
     assert ledger.get_action_state(action_id)["state"] == "executed"
+    assert ledger.get_action_state(action_id)["approval_id"] == ""
+    assert ledger.complete_action(action_id, success=True) == ledger.get_action_state(action_id)
+    with pytest.raises(ledger.ApprovalStateError, match="approved workflow"):
+        ledger.complete_action(action_id, success=True, approval_id="unrelated-workflow")
 
 
 def _process_resume(action_id, start, output, effects):

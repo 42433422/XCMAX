@@ -343,6 +343,8 @@ def _claim_action(
     actor = str(approver or "").strip()
     if not actor:
         raise ApprovalStateError("approver is required")
+    if defer_execution and not str(approval_id or "").strip():
+        raise ApprovalStateError("deferred execution requires a bound workflow approval_id")
     action = str(latest.get("action") or "")
     decision = evaluate_risk(
         action,
@@ -453,6 +455,11 @@ def complete_action(
     if latest is None:
         raise ApprovalStateError(f"approved action not found: {action_id}")
     _check_retry_approval(latest, approval_id)
+    bound_approval_id = str(latest.get("approval_id") or "")
+    if approval_id != bound_approval_id or (
+        latest.get("executor_name") == "github_deploy" and not bound_approval_id.strip()
+    ):
+        raise ApprovalStateError("execution receipt does not belong to the approved workflow")
     state = str(latest.get("state") or "")
     terminal_state = "executed" if success else "execution_failed"
     if state == terminal_state:

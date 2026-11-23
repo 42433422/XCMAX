@@ -97,6 +97,14 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
 
   // The synthetic account must also own its background startup reads. Letting
   // these reach an unauthenticated API redirects the shell to the login page.
+  await page.route(url => url.pathname === '/api/market/session-handoff', route => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    return route.fulfill({
+      status: 404, contentType: 'application/json',
+      headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      body: JSON.stringify({ success: false, message: '当前会话未连接市场账号，请重新登录' }),
+    })
+  })
   const accountReads: Record<string, unknown> = {
     '/api/system/workflow-employee-catalog': { success: true, data: { catalog: [], static_catalog: [], scope: 'tenant' } },
     '/api/platform-shell/employee-directory': { success: true, data: { employees: [] } },
