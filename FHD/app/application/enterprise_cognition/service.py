@@ -207,5 +207,18 @@ class EnterpriseCognitionService:
             return observation
 
 
+def cognition_result_verified(action: str, params: dict, result: dict) -> bool:
+    """HTTP and model tools share the same epistemic success semantics."""
+    if action == "evaluate":
+        return result.get("observation_verified") is True
+    if action != "query":
+        return True
+    if params.get("as_of") is not None:
+        return result.get("historical_observation_verified") is True
+    if params.get("scenario_delivery_quantity") is not None:
+        return (result.get("scenario") or {}).get("knowledge_kind") == "prediction"
+    return result.get("current_state_verified") is True
+
+
 def get_cognition_service() -> EnterpriseCognitionService:
     return EnterpriseCognitionService()
