@@ -1,6 +1,8 @@
 from contextlib import nullcontext
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -8,6 +10,7 @@ from app.domain.shared_services.tools_workflow_elt import (
     _registered_router_elt_import,
     _resolve_template,
 )
+from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 
 
 def _run(status="preview_ready", **overrides):
@@ -582,244 +585,272 @@ def test_execute_reports_original_uncertain_receipt_without_resubmitting(elt_too
     assert out["data"]["run_id"] == "run-1"
 
 
-def test_execute_syncs_source_to_knowledge_base():
-    service = MagicMock()
-    service.get_run.return_value = {"id": "run-1", "preview_revision": "a" * 64}
-    service.execute.return_value = {"id": "run-1"}
+@pytest.mark.parametrize("target", ["products", "shipment_records"])
+def test_execute_preserves_business_identity_when_auxiliary_run_is_missing(elt_tools, target):
+    """A dispatcher-only unit cannot stand in for the original persisted ELT run."""
+    elt, service = elt_tools
+    service.get_run.return_value = _run(preview_revision="a" * 64)
     run = _run(
         status="completed",
+        target_type=target,
         summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10},
     )
-    with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._knowledge_receipt",
-            return_value={"action": "new", "run_id": "run-1"},
-        ) as knowledge,
-        patch("app.application.elt.service.get_elt_service", return_value=service),
-    ):
-        result = _registered_router_elt_import(
-            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
-        )
-    knowledge.assert_called_once()
-    assert result["data"]["knowledge"]["action"] == "new"
-    assert "原件已同步到知识库" in result["message"]
-
-
-def test_execute_registers_source_in_template_library():
-    service = MagicMock()
-    service.get_run.return_value = {"id": "run-1", "preview_revision": "a" * 64}
-    service.execute.return_value = {"id": "run-1"}
-    run = _run(
-        status="completed",
-        target_type="shipment_records",
-        summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10},
-    )
-    with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._knowledge_receipt",
-            return_value={"action": "new"},
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._template_receipt",
-            return_value={"action": "new", "names": ["宗南家私-发货单版式"]},
-        ),
-        patch("app.application.elt.service.get_elt_service", return_value=service),
-    ):
-        result = _registered_router_elt_import(
-            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
-        )
-    assert result["data"]["template"]["names"] == ["宗南家私-发货单版式"]
-    assert "已登记模板到模板库（宗南家私-发货单版式）" in result["message"]
-
-
-def test_template_receipt_registers_segmented_region(tmp_path):
-    from app.domain.shared_services.tools_workflow_elt import _template_receipt
-
-    upload = MagicMock(storage_path="/tmp/宗南.xlsx", file_name="宗南.xlsx")
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = upload
-    template_service = MagicMock()
-    template_service.get_templates.return_value = {"templates": []}
-    template_service.save_template.return_value = {"success": True, "id": 12}
-    data = {
-        "upload_id": "upload-1",
-        "target_type": "shipment_records",
+    db.query.return_value.filter.return_value.first.return_value = None
+    with (
+        patch.object(elt, "get_db", return_value=nullcontext(db)),
+        patch.object(elt, "_wait", return_value=run),
+        patch.object(elt, "_knowledge_receipt") as knowledge,
+        patch.object(elt, "_template_receipt") as template,
+    ):
+        result = _registered_router_elt_import(
+            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
+        )
+    knowledge.assert_not_called()
+    template.assert_not_called()
+    assert result["data"]["run_id"] == "run-1"
+    assert result["data"]["executed_rows"] == 10
+    assert result["committed"] is True
+    assert result["data"]["knowledge"]["action"] == "unknown"
+    assert result["data"]["template"]["action"] == "unknown"
+    assert "原回执待核对" in result["message"]
+
+
+@pytest.fixture
+def template_store(preview_store, monkeypatch, tmp_path):
+    """Actual owned uploads, template SQL rows, and workbook files for focused UI semantics."""
+    from app.application.template_app_service import TemplateApplicationService
+    from app.db.init_db import init_template_tables
+    from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
+    monkeypatch.setattr("app.application.elt.service.SessionLocal", preview_store.factory)
+    with preview_store.factory() as db:
+        init_template_tables(str(db.get_bind().url.database))
+    templates = TemplateApplicationService(FileSystemTemplateStore(str(tmp_path)))
+    monkeypatch.setattr(
+        "app.application.template_app_service.get_template_app_service",
+        lambda: templates,
+    )
+    preview_store.templates = templates
+    return preview_store
+
+
+def _template_source(store, *, include_quote=True, no_regions=False, variant="A"):
+    from openpyxl import Workbook
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "宗南"
+    sheet.append(["宗南家私"])
+    sheet.append([])
+    sheet.append(["产品型号", "数量/件"])
+    sheet.append([variant, 2])
+    regions = [
+        {
+            "id": "宗南!R3C1:2",
+            "sheet": "宗南",
+            "header_row": 3,
+            "status": "selected",
+            "customer_name": "宗南家私",
+            "headers": ["产品型号", "数量/件"],
+        }
+    ]
+    if include_quote:
+        quote = book.create_sheet("报价")
+        quote.append(["2025年3月报价"])
+        quote.append(["型号", "单价"])
+        quote.append([variant, 12])
+        regions.append(
+            {
+                "id": "报价!R2C1:2",
+                "sheet": "报价",
+                "header_row": 2,
+                "status": "excluded",
+                "headers": ["型号", "单价"],
+            }
+        )
+    content = BytesIO()
+    book.save(content)
+    book.close()
+    content.seek(0)
+    with store.factory() as db:
+        upload = store.service.save_upload(
+            db,
+            owner_user_id=7,
+            file_name="宗南.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            stream=content,
+        )
+        db.commit()
+    return {
+        "id": str(uuid4()),
+        "upload_id": upload["upload_id"],
         "file_name": "宗南.xlsx",
-        "file_sha256": "a" * 64,
-        "source_features": {
-            "regions": [
-                {"id": "宗南!R3C1:10", "sheet": "宗南", "header_row": 3, "status": "selected"},
-                {"id": "报价!R2C1:5", "sheet": "报价", "header_row": 2, "status": "excluded"},
-            ]
-        },
+        "file_sha256": upload["sha256"],
+        "target_type": "shipment_records",
+        "source_features": {"regions": [] if no_regions else regions},
     }
 
-    def _extract(_path, *, source_region_id, **_kwargs):
-        if source_region_id == "宗南!R3C1:10":
-            return {
-                "file_path": str(tmp_path / "seg-1.xlsx"),
-                "sheet": "宗南",
-                "customer_name": "宗南家私",
-                "headers": ["产品型号", "数量/件"],
-            }
-        return {
-            "file_path": str(tmp_path / "seg-2.xlsx"),
-            "sheet": "报价",
-            "title": "2025年3月报价",
-            "headers": ["型号", "单价"],
-        }
 
+def test_template_receipt_registers_segmented_region(template_store):
+    from openpyxl import load_workbook
+
+    from app.application.elt import shipment_template_extractor
+    from app.domain.shared_services.tools_workflow_elt import _template_receipt
+
+    data = _template_source(template_store)
     with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
-        patch(
-            "app.application.elt.shipment_template_extractor.extract_region_template",
-            side_effect=_extract,
+        patch.object(
+            shipment_template_extractor,
+            "extract_region_template",
+            wraps=shipment_template_extractor.extract_region_template,
         ) as extract,
-        patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=template_service,
-        ),
+        patch.object(
+            template_store.templates,
+            "save_template",
+            wraps=template_store.templates.save_template,
+        ) as save,
     ):
         receipt = _template_receipt(data, 7)
-    assert receipt["action"] == "new"
-    # 全部区段都登记：选中的送货单 + 未选入业务导入的报价表。
+    assert receipt["action"] == "new", receipt
+    # Both selected shipment and excluded quote regions remain visible in the library.
     assert receipt["names"] == ["宗南家私-发货单版式", "宗南-2025年3月报价"]
     assert extract.call_count == 2
     assert extract.call_args.kwargs["clear_example_rows"] is True
-    payload = template_service.save_template.call_args_list[0].args[0]
+    assert extract.call_args.kwargs["owned_upload_user_id"] == 7
+    payload = save.call_args_list[0].args[0]
     assert payload["template_name"] == "宗南家私-发货单版式"
-    assert payload["original_file_path"].endswith("seg-1.xlsx")
     assert payload["analyzed_data"]["business_scope"] == "shipmentRecords"
     assert [field["label"] for field in payload["analyzed_data"]["fields"]] == [
         "产品型号",
         "数量/件",
     ]
+    book = load_workbook(payload["original_file_path"], data_only=True)
+    try:
+        assert book.sheetnames == ["宗南"]
+        assert list(book.active.values)[2] == ("产品型号", "数量/件")
+        assert book.active.cell(4, 1).value is None  # Examples are cleared in the actual file.
+    finally:
+        book.close()
+    assert len(receipt["evidence"]["items"]) == 2
+    assert all(item["file_sha256"] and item["row_sha256"] for item in receipt["evidence"]["items"])
 
 
-def test_template_receipt_skips_run_without_selected_region():
+def test_template_receipt_skips_run_without_selected_region(template_store):
     from app.domain.shared_services.tools_workflow_elt import _template_receipt
 
-    receipt = _template_receipt({"upload_id": "upload-1", "source_features": {"regions": []}}, 7)
-    assert receipt == {"action": "skip", "reason": "no_region"}
+    receipt = _template_receipt(_template_source(template_store, no_regions=True), 7)
+    assert receipt["action"] == "skip", receipt
+    assert receipt["reason"] == "no_region"
+    assert receipt["evidence"]["items"] == []
+    assert receipt["template_ids"] == []
 
 
-def test_template_receipt_skips_same_source_reimport(tmp_path):
-    import hashlib
-
+def test_template_receipt_skips_same_source_reimport(template_store):
     from app.domain.shared_services.tools_workflow_elt import _template_receipt
 
-    region_key = f"ELT_{hashlib.sha1('宗南!R3C1:10'.encode()).hexdigest()[:12]}"
-    upload = MagicMock(storage_path="/tmp/宗南.xlsx", file_name="宗南.xlsx")
-    db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = upload
-    template_service = MagicMock()
-    template_service.get_templates.return_value = {
-        "templates": [{"name": "宗南家私-发货单版式", "source": "db", "template_key": region_key}]
-    }
-    data = {
-        "upload_id": "upload-1",
-        "target_type": "shipment_records",
-        "file_name": "宗南.xlsx",
-        "file_sha256": "a" * 64,
-        "source_features": {
-            "regions": [{"id": "宗南!R3C1:10", "sheet": "宗南", "status": "selected"}]
-        },
-    }
-    with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
-        patch(
-            "app.application.elt.shipment_template_extractor.extract_region_template",
-            return_value={
-                "file_path": str(tmp_path / "seg.xlsx"),
-                "sheet": "宗南",
-                "customer_name": "宗南家私",
-                "headers": [],
-            },
-        ),
-        patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=template_service,
-        ),
-    ):
+    data = _template_source(template_store, include_quote=False)
+    original = _template_receipt(data, 7)
+    assert original["action"] == "new", original
+    with patch.object(
+        template_store.templates,
+        "save_template",
+        wraps=template_store.templates.save_template,
+    ) as save:
         receipt = _template_receipt(data, 7)
-    assert receipt["action"] == "skip"
-    template_service.save_template.assert_not_called()
+    assert receipt["action"] == "skip", receipt
+    assert receipt["reason"] == "duplicate_name"
+    assert receipt["template_ids"] == original["template_ids"]
+    assert receipt["evidence"]["items"][0]["action"] == "skip"
+    assert (
+        receipt["evidence"]["items"][0]["file_sha256"]
+        == original["evidence"]["items"][0]["file_sha256"]
+    )
+    save.assert_not_called()
 
 
-def test_template_receipt_suffixes_name_taken_by_other_file(tmp_path):
+def test_template_receipt_suffixes_name_taken_by_other_file(template_store):
     from app.domain.shared_services.tools_workflow_elt import _template_receipt
 
-    upload = MagicMock(storage_path="/tmp/宗南.xlsx", file_name="宗南.xlsx")
-    db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = upload
-    template_service = MagicMock()
-    template_service.get_templates.return_value = {
-        "templates": [
-            {"name": "宗南家私-发货单版式", "source": "db", "file_path": "/other/file.xlsx"}
-        ]
-    }
-    template_service.save_template.return_value = {"success": True, "id": 13}
-    data = {
-        "upload_id": "upload-1",
-        "target_type": "shipment_records",
-        "file_name": "宗南.xlsx",
-        "source_features": {
-            "regions": [{"id": "宗南!R3C1:10", "sheet": "宗南", "status": "selected"}]
-        },
-    }
-    with (
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(return_value=db), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt.os.path.exists", return_value=True),
-        patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
-        patch(
-            "app.application.elt.shipment_template_extractor.extract_region_template",
-            return_value={
-                "file_path": str(tmp_path / "seg.xlsx"),
-                "sheet": "宗南",
-                "customer_name": "宗南家私",
-                "headers": [],
-            },
-        ),
-        patch(
-            "app.application.template_app_service.get_template_app_service",
-            return_value=template_service,
-        ),
-    ):
-        receipt = _template_receipt(data, 7)
+    original = _template_receipt(_template_source(template_store, include_quote=False), 7)
+    receipt = _template_receipt(
+        _template_source(template_store, include_quote=False, variant="B"),
+        7,
+    )
+    assert original["action"] == receipt["action"] == "new", receipt
     assert receipt["names"] == ["宗南家私-发货单版式-2"]
+    assert original["template_ids"] != receipt["template_ids"]
+
+
+def test_header_template_uses_only_tables_written_by_original_run(template_store):
+    from openpyxl import load_workbook
+
+    from app.application.template_mutation_receipt import _row
+    from app.domain.shared_services.tools_workflow_elt import _template_receipt
+
+    store = template_store
+
+    def import_csv(content):
+        with store.factory() as db:
+            upload = store.service.save_upload(
+                db,
+                owner_user_id=7,
+                file_name="台账.csv",
+                content_type="text/csv",
+                stream=BytesIO(content.encode("utf-8")),
+            )
+            db.commit()
+            created = store.service.create_preview(
+                db,
+                owner_user_id=7,
+                upload_id=upload["upload_id"],
+                target_type="dynamic_table",
+            )
+        store.executor.futures[-1].result(timeout=10)
+        with store.factory() as db:
+            preview = store.service.get_run(db, run_id=created["id"], owner_user_id=7)
+            assert preview["status"] == "preview_ready", preview
+            store.service.execute(
+                db,
+                run_id=preview["id"],
+                owner_user_id=7,
+                confirmed=True,
+                valid_rows_only=False,
+                preview_revision=preview["preview_revision"],
+                accept_suggested=True,
+            )
+        store.executor.futures[-1].result(timeout=10)
+        with store.factory() as db:
+            completed = store.service.get_run(db, run_id=created["id"], owner_user_id=7)
+        assert completed["status"] == "completed", completed
+        assert not completed["source_features"].get("regions")
+        return completed
+
+    other = import_csv("旧列,旧值\n旧记录,1\n")
+    current = import_csv("车间,投入\n一车间,120\n")
+    receipt = _template_receipt(current, 7)
+    assert receipt["action"] == "new", receipt
+    items = receipt["evidence"]["items"]
+    assert len(items) == 1
+    assert items[0]["target"] == {
+        "table_id": current["receipt"]["table_id"],
+        "headers": ["车间", "投入"],
+    }
+    assert items[0]["target"]["table_id"] != other["receipt"]["table_id"]
+    with store.factory() as db:
+        row = _row(db, items[0]["template_id"], 1)
+        book = load_workbook(row["original_file_path"], data_only=True)
+        try:
+            assert list(book.active.values) == [("车间", "投入")]
+        finally:
+            book.close()
+    reused = _template_receipt(current, 7)
+    assert reused["action"] == "skip", reused
+    assert reused["template_ids"] == receipt["template_ids"]
+    assert reused["evidence"]["items"][0]["target"] == items[0]["target"]
+    assert reused["evidence"]["items"][0]["file_sha256"] == items[0]["file_sha256"]
 
 
 def test_execute_reports_all_duplicate_rows():
