@@ -19,6 +19,7 @@ from openpyxl import Workbook
 from modstore_server import capability_trainer as trainer
 from modstore_server import workflow_training_replay as replay
 from modstore_server.workflow_nl_graph import SYSTEM_PROMPT
+from modstore_server.workflow_nl_training import DEFERRED_BUSINESS_REASON
 from tests.promptfoo_local_only import local_only_environment
 from tests.test_workflow_training_replay import _fixture
 
@@ -62,12 +63,15 @@ def _cases():
     raise AssertionError("fixture did not produce distinct original-content partitions")
 
 
+@pytest.mark.parametrize("deferred", [False, True], ids=["direct", "deferred"])
 def test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, deferred
 ):
     cli = os.environ.get("PROMPTFOO_CLI") or shutil.which("promptfoo")
     if not cli:
         pytest.skip("requires the repository's pinned promptfoo CLI")
+    sandbox = os.environ.get("PROMPTFOO_SANDBOX_ENTRY")
+    assert sandbox, "requires the repository's pinned native replay sandbox"
     monkeypatch.setenv("XCAGI_LLM_MODEL", "unused-fixture")
     monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://unused.invalid/v1")
     cases, graph = _cases()
@@ -107,6 +111,10 @@ def test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout(
     with local_only_environment(tmp_path) as (environment, _denied):
         environment["PROMPTFOO_PYTHON"] = sys.executable
         environment["NODE_OPTIONS"] = "--max-old-space-size=128"
+        if deferred:
+            environment["XCAGI_TRAINING_DEFER_NATIVE_REPLAY"] = "1"
+        else:
+            environment["PROMPTFOO_SANDBOX_ENTRY"] = sandbox
         process = subprocess.run(
             [
                 str(cli),
@@ -129,7 +137,20 @@ def test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout(
             timeout=120,
         )
     assert process.returncode == 100, process.stderr[-4000:]
+    raw_result = output.read_bytes()
+    rows = json.loads(raw_result)["results"]["results"]
+    assert len(rows) == 4
+    if deferred:
+        assert all(row["success"] is False for row in rows)
+        assert all(
+            row["gradingResult"]["componentResults"][0]["reason"] == DEFERRED_BUSINESS_REASON
+            for row in rows
+        )
+    else:
+        assert sum(row["success"] for row in rows) == 2
     evidence = trainer.seal_evaluation(bundle_path, output)
+    assert output.read_bytes() == raw_result
+    assert evidence["results_sha256"] == trainer._file_hash(output)
     assert evidence["baseline"] == {"pass": 0, "total": 2}
     assert evidence["candidate"] == {"pass": 2, "total": 2}
     assert evidence["verdict"] == "candidate_for_approval"

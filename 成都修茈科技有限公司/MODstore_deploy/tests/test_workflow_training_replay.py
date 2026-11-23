@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import os
+import socket
 import subprocess
 import sys
 import zipfile
@@ -20,7 +21,7 @@ from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.workflow_nl_training import get_assert
 
 
-def _fixture(kind="csv", *, wrong_reference=False):
+def _fixture(kind="csv", *, wrong_reference=False, module_suffix="", order="A-1"):
     employee = f"{kind}-generate-employee"
     root = Path(__file__).resolve().parents[3] / "FHD/mods/_employees" / employee
     manifest = json.loads((root / "manifest.json").read_text())
@@ -33,9 +34,16 @@ def _fixture(kind="csv", *, wrong_reference=False):
         for path in sorted(root.rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts:
                 member = f"{employee}/{path.relative_to(root).as_posix()}"
+                raw = (
+                    json.dumps(manifest).encode()
+                    if path.name == "manifest.json"
+                    else path.read_bytes()
+                )
+                if path.name == manifest["actions"]["direct_python"]["module"] + ".py":
+                    raw += module_suffix.encode()
                 bundle.writestr(
                     member,
-                    json.dumps(manifest) if path.name == "manifest.json" else path.read_bytes(),
+                    raw,
                 )
     config = parse_employee_config_v2(manifest)
     package = {
@@ -48,20 +56,18 @@ def _fixture(kind="csv", *, wrong_reference=False):
     }
     inputs = {"file_path": "/original/customer/inputs/order.json"}
     payload = json.dumps(
-        {"columns": ["order", "quantity"], "rows": [{"order": "A-1", "quantity": 3}]}
+        {"columns": ["order", "quantity"], "rows": [{"order": order, "quantity": 3}]}
     ).encode()
     if kind == "csv":
         output_path = "outputs/output.csv"
-        expected = (
-            b"order,quantity\r\nA-1,99\r\n" if wrong_reference else b"order,quantity\r\nA-1,3\r\n"
-        )
+        expected = f"order,quantity\r\n{order},{99 if wrong_reference else 3}\r\n".encode()
     else:
         output_path = "outputs/output.xlsx"
         book = Workbook()
         sheet = book.active
         sheet.title = "Sheet1"
         sheet.append(["order", "quantity"])
-        sheet.append(["A-1", 99 if wrong_reference else 3])
+        sheet.append([order, 99 if wrong_reference else 3])
         buffer = io.BytesIO()
         book.save(buffer)
         expected = buffer.getvalue()
@@ -167,6 +173,138 @@ def test_successful_native_run_with_wrong_cells_fails_business_assertion():
     assert result["runtime_verified"] is True
     assert result["pass"] is False
     assert result["reason"] == "training_business_artifact_mismatch"
+
+
+@pytest.mark.parametrize("entry", ["seal", "cli"])
+def test_native_replay_cannot_read_host_oracle_write_outside_or_use_network(
+    tmp_path, monkeypatch, entry
+):
+    from modstore_server import capability_trainer as trainer
+
+    oracle = tmp_path / "parent-only-oracle.txt"
+    outside = tmp_path / "outside-write.txt"
+    oracle.write_text("independent reference must remain outside the worker")
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "unused-fixture")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://unused.invalid/v1")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(8)
+        # This is an approved, hash-bound original package with a production-like
+        # import side effect, not code supplied by the candidate workflow graph.
+        probe = f"""
+from pathlib import Path as _ProbePath
+import socket as _probe_socket
+_escaped = []
+try:
+    _ProbePath({str(oracle)!r}).read_text()
+    _escaped.append('host_oracle')
+except OSError:
+    pass
+try:
+    _ProbePath({str(outside)!r}).write_text('native import side effect')
+    _escaped.append('outside_write')
+except OSError:
+    pass
+try:
+    with _probe_socket.create_connection(('127.0.0.1', {listener.getsockname()[1]}), timeout=1):
+        _escaped.append('localhost')
+except OSError:
+    pass
+if _escaped:
+    raise RuntimeError('training replay escaped: ' + ','.join(_escaped))
+"""
+        partitions = {}
+        for number in range(100):
+            source, graph, _ = _fixture(module_suffix=probe, order=f"isolation-{number}")
+            frozen = source["customer_business_replay"]
+            replay.validate_replay_manifest(frozen)
+            source_sha = frozen["assets"]["input_files"][0]["sha256"]
+            partitions.setdefault(
+                int(source_sha[:8], 16) % 5 == 0,
+                {"task": f"Generate isolation-{number}", "generation_context": source},
+            )
+            if len(partitions) == 2:
+                break
+        assert len(partitions) == 2
+        built = trainer.build_config(
+            out_dir=tmp_path,
+            baseline_prompt="original",
+            candidate_prompt="candidate",
+            cases=list(partitions.values()),
+            surface="workflow_nl_prompt",
+        )
+        bundle = json.loads(Path(built["bundle"]).read_text())
+        tests = json.loads(Path(built["tests"]).read_text())
+        result = tmp_path / "result.json"
+        result.write_text(
+            json.dumps(
+                {
+                    "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+                    "results": {
+                        "prompts": [
+                            {"raw": Path(built[key]).read_text()}
+                            for key in ("baseline", "candidate")
+                        ],
+                        "results": [
+                            {
+                                "promptIdx": arm,
+                                "testIdx": index,
+                                "success": True,
+                                "failureReason": 0,
+                                "gradingResult": {"pass": True, "score": 1, "reason": "fixture"},
+                                "provider": {"id": bundle["provider_id"]},
+                                "vars": test["vars"],
+                                "response": {"output": json.dumps(graph)},
+                            }
+                            for arm in (0, 1)
+                            for index, test in enumerate(tests)
+                        ],
+                    },
+                }
+            )
+        )
+        error = None
+        if entry == "seal":
+            try:
+                sealed = trainer.seal_evaluation(Path(built["bundle"]), result)
+            except ValueError as exc:
+                error = str(exc)
+        else:
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "modstore_server.capability_trainer",
+                    "decide",
+                    "--bundle",
+                    built["bundle"],
+                    "--result",
+                    str(result),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            error = process.stderr if process.returncode else None
+            if error is None:
+                sealed = json.loads(process.stdout)
+        assert not outside.exists(), "native replay wrote outside its temporary root"
+        listener.settimeout(0.05)
+        with pytest.raises(socket.timeout):
+            connection, _ = listener.accept()
+            connection.close()
+        assert error is None, error
+        assert sealed["runtime_verified"] is True
+        assert sealed["candidate"] == {"pass": 2, "total": 2}
+
+
+def test_native_replay_without_sandbox_cannot_be_verified(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "missing-cli.js"))
+    source, graph, _ = _fixture()
+    result = get_assert(json.dumps(graph), {"vars": {"generation_context": source}})
+    assert result["pass"] is False
+    assert result["runtime_verified"] is False
+    assert result["reason"] == "training_business_replay_blocked"
 
 
 def test_missing_original_snapshot_cannot_be_provider_verified():
@@ -359,6 +497,24 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
         return original([sys.executable, "-c", script], **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", start)
+    # This test owns a real timed-out process tree; the native sandbox boundary is
+    # exercised separately above, so its configuration helper creates no child here.
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                {
+                    "node": sys.executable,
+                    "runtime": "fixture-cli.js",
+                    "policy": {"filesystem": {"allowRead": []}},
+                }
+            ),
+            "",
+        ),
+    )
     with pytest.raises(subprocess.TimeoutExpired):
         replay._run_worker({}, tmp_path, dict(os.environ), timeout=1)
     child = int(pid_file.read_text())

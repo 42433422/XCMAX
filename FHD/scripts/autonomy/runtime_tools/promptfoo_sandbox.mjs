@@ -64,6 +64,7 @@ export function trainerEnvironment(spec, temp) {
     PROMPTFOO_SELF_HOSTED: '1', PROMPTFOO_INSECURE_SSL: '0',
     PROMPTFOO_CONFIG_DIR: join(temp, 'promptfoo'), PROMPTFOO_LOG_DIR: join(temp, 'logs'),
     PROMPTFOO_PYTHON: spec.python, PYTHONPATH: spec.pythonpath,
+    XCAGI_TRAINING_DEFER_NATIVE_REPLAY: '1',
     PYTHONDONTWRITEBYTECODE: '1',
   };
 }

@@ -254,7 +254,7 @@ def _reconcile_sql_and_download(business, run):
         assert db.execute(
             "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
             (business.foreign_reviewer.tenant_id,),
-        ).fetchall() == [(20,)]
+        ).fetchmany(2) == [(20,)]
         journal_id = sale["invoice_entry_id"]
         assert db.execute(
             "SELECT debit_total,credit_total,status FROM journal_entries WHERE id=?",

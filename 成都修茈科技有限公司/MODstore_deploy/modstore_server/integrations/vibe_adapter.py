@@ -334,8 +334,6 @@ def ensure_within_workspace(
     boundary and anchors relative file names. New output paths may opt out of
     the existence check only.
     """
-    if not root:
-        raise VibePathError("缺少 root 参数")
     from fastapi import HTTPException
 
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
@@ -343,6 +341,8 @@ def ensure_within_workspace(
     ensure_fhd_on_path()
     from app.infrastructure.workspace import resolve_safe_workspace_relpath
 
+    if not root:
+        raise VibePathError("缺少 root 参数")
     try:
         configured = _tenant_workspace_root(user_id).absolute()
         template = os.environ.get("MODSTORE_TENANT_WORKSPACE_ROOT", "").strip()

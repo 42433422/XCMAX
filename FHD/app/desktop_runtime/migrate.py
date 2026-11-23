@@ -11,7 +11,8 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from contextlib import contextmanager
+import tempfile
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Iterator
 
@@ -21,7 +22,12 @@ from app.utils.time import utc_now_naive
 from .backup_retention import cleanup_local_backups
 from .db import integrity_check_ok as _integrity_check_ok
 from .db import quick_check_ok as _quick_check_ok
-from .desktop_runtime_paths import configure_desktop_environment, ensure_desktop_dirs
+from .desktop_runtime_paths import (
+    clear_database_recovery_marker,
+    configure_desktop_environment,
+    ensure_desktop_dirs,
+    mark_database_recovery_required,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +131,17 @@ def recover_if_corrupt(
     库损坏但没备份时返回 action=corrupt_no_backup，调用方应决定是否阻塞启动。
     主库不存在（首启）时返回 action=skipped。
     """
+    # Startup self-check runs before Alembic; share its existing reentrant lock
+    # so another startup/migration cannot replace the image being inspected.
+    try:
+        with migration_lock(data_dir):
+            return _recover_if_corrupt_locked(data_dir)
+    except (OSError, sqlite3.Error) as exc:
+        logger.error("database recovery could not complete safely: %s", exc)
+        return {"action": "corrupt_no_backup", "detail": f"recovery failed: {exc}"}
+
+
+def _recover_if_corrupt_locked(data_dir: str | os.PathLike[str] | None) -> dict[str, str]:
     dirs = ensure_desktop_dirs(data_dir)
     db = dirs["data"] / "xcagi.db"
     backups_dir = dirs["backups"]
@@ -151,16 +168,26 @@ def recover_if_corrupt(
 
     # 4) 库损坏：改名留证据
     logger.error("database corrupt: %s, attempting recovery from backups", db)
+    # A crash after quarantine must not make the next startup treat the missing
+    # database as a first install. Keep the existing persistent warning until
+    # the replacement has been verified and published under this same lock.
+    mark_database_recovery_required(dirs["root"])
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}")
     # Windows rename refuses an existing target; a second corruption within the
     # same second must keep both copies as evidence instead of aborting recovery.
+    sidecars = ("", "-wal", "-shm", "-journal")
     suffix = 1
-    while corrupt_path.exists():
+    while any(os.path.lexists(f"{corrupt_path}{extension}") for extension in sidecars):
         corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}-{suffix}")
         suffix += 1
     try:
-        db.rename(corrupt_path)
+        # A crashed WAL/rollback journal belongs to the damaged image. Reusing
+        # it with the replacement can silently overwrite the restored snapshot.
+        for extension in sidecars:
+            original = Path(f"{db}{extension}")
+            if os.path.lexists(original):
+                original.rename(Path(f"{corrupt_path}{extension}"))
         logger.warning("renamed corrupt db to %s", corrupt_path)
     except OSError as exc:
         logger.error("failed to rename corrupt db: %s", exc)
@@ -186,12 +213,44 @@ def recover_if_corrupt(
         if not _integrity_check_ok(candidate):
             logger.warning("skipping bad backup: %s", candidate)
             continue
+        published = False
         try:
-            shutil.copy2(candidate, db)
+            # Stage a complete SQLite snapshot (including any committed WAL),
+            # verify that exact image, then publish it on the same filesystem.
+            with tempfile.TemporaryDirectory(prefix="xcagi-recovery-", dir=db.parent) as work:
+                restored = Path(work) / "restored.db"
+                with (
+                    closing(
+                        sqlite3.connect(candidate.resolve().as_uri() + "?mode=ro", uri=True)
+                    ) as source,
+                    closing(sqlite3.connect(restored)) as target,
+                ):
+                    source.backup(target)
+                    if (
+                        target.execute(
+                            "SELECT 1 FROM sqlite_schema WHERE type = 'table' "
+                            "AND name NOT GLOB 'sqlite_*' LIMIT 1"
+                        ).fetchone()
+                        is None
+                    ):
+                        logger.warning(
+                            "skipping empty backup without database tables: %s", candidate
+                        )
+                        continue
+                if not _integrity_check_ok(restored):
+                    logger.error("restored snapshot failed integrity check: %s", candidate)
+                    continue
+                shutil.copystat(candidate, restored)
+                restored.replace(db)
+                published = True
+            if not clear_database_recovery_marker(dirs["root"]):
+                return {"action": "corrupt_no_backup", "detail": "recovery marker cleanup failed"}
             logger.info("restored db from backup: %s", candidate.name)
             return {"action": "restored", "detail": candidate.name}
-        except OSError as exc:
+        except (OSError, sqlite3.Error) as exc:
             logger.error("restore from %s failed: %s", candidate, exc)
+            if published:
+                return {"action": "corrupt_no_backup", "detail": f"restore cleanup failed: {exc}"}
             continue
 
     # 6) 所有备份都不行——主库已被改名，需要调用方决定是否阻塞启动

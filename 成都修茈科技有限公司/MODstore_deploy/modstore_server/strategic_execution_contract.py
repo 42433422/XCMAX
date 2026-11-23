@@ -109,9 +109,7 @@ def _workspace_file(path: str, workspace: str, user_id: int, *, exists: bool) ->
         root = ensure_within_workspace(workspace, user_id=user_id)
         if not root.is_dir():
             raise PortfolioError("strategy workspace is not a directory")
-        target = ensure_within_workspace(
-            path.strip(), user_id=user_id, within=root, must_exist=exists
-        )
+        target = ensure_within_workspace(candidate, user_id=user_id, within=root, must_exist=exists)
         if exists and not target.is_file():
             raise PortfolioError("strategy file is not a regular file")
     except (VibePathError, ValueError) as exc:

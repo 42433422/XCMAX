@@ -94,6 +94,7 @@ test('model admission is exact and the CLI environment has no inherited credenti
   ]) assert.equal((await invoke(url, body, info)).action, 'deny');
   const environment = trainerEnvironment(spec, '/tmp/training-synthetic');
   assert.equal(environment.PROMPTFOO_DISABLE_SHARING, '1');
+  assert.equal(environment.XCAGI_TRAINING_DEFER_NATIVE_REPLAY, '1');
   for (const name of ['OPENAI_API_KEY', 'XCAGI_LLM_API_KEY', 'DISPATCH_TOKEN', 'GITHUB_TOKEN',
     'PROMPTFOO_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NODE_OPTIONS']) assert.equal(environment[name], undefined);
 });

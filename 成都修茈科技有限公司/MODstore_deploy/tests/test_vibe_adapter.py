@@ -213,9 +213,10 @@ def test_workspace_rejects_escape_before_resolving_user_path(tmp_path, monkeypat
         patch.setattr(os.path, "realpath", observed)
         with pytest.raises(VibePathError) as denied:
             ensure_within_workspace(targets[escape], user_id=42)
-    # The shared resolver locates FHD from its own trusted module, not user input.
+    # Module and tenant-root guards resolve only fixed, server-selected anchors.
     assert all(
-        path == platform_locator or path.is_relative_to(workspace) for path in probed
+        path in (platform_locator, workspace.parent) or path.is_relative_to(workspace)
+        for path in probed
     ), probed
     assert Path(os.path.abspath(targets[escape])) not in probed
     assert str(tmp_path) not in str(denied.value)

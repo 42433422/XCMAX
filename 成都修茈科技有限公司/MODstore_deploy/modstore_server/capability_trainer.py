@@ -801,12 +801,52 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
             if "baseline" not in verdict:
                 raise ValueError("training_business_results_incomplete")
         # Validate the complete matrix before starting any original native employee.
+        measured_rows = []
         for row, arm, index, output, variables in pending:
-            assertion = get_assert(output, {"vars": variables})
-            if assertion["pass"] is not row.get("success"):
+            from modstore_server.workflow_nl_training import DEFERRED_BUSINESS_REASON
+
+            grading = row.get("gradingResult") or {}
+            components = grading.get("componentResults") or [grading]
+            deferred = (
+                business
+                and row.get("success") is False
+                and grading.get("pass") is False
+                and grading.get("score") == 0
+                and isinstance(components, list)
+                and len(components) == 1
+                and isinstance(components[0], dict)
+                and components[0].get("pass") is False
+                and components[0].get("score") == 0
+                and components[0].get("reason") == DEFERRED_BUSINESS_REASON
+            )
+            if deferred:
+                from modstore_server.workflow_training_replay import evaluate_business_replay
+
+                assertion = evaluate_business_replay(output, variables["generation_context"])
+            else:
+                assertion = get_assert(output, {"vars": variables})
+            if not deferred and assertion["pass"] is not row.get("success"):
                 raise ValueError("training_workflow_result_unverified")
             if business:
                 verified[arm, index] = assertion
+                passed = assertion["pass"] is True
+                measured_rows.append(
+                    {
+                        **row,
+                        "vars": variables,
+                        "success": passed,
+                        "failureReason": 0 if passed else 1,
+                        "error": None if passed else assertion.get("reason"),
+                        "gradingResult": assertion,
+                    }
+                )
+        if business:
+            # Keep the official output bytes and their hash intact. Only these
+            # independently measured rows may supply the business verdict.
+            verdict = decide(
+                {**result, "results": {**result["results"], "results": measured_rows}},
+                bundle=bundle,
+            )
     if business:
         verdict = seal_business_evidence(bundle, tests, verified, verdict)
     assert verdict is not None

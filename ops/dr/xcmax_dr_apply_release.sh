@@ -153,6 +153,32 @@ verify_current_release_pair() {
   verify_applied_release_pair
 }
 
+# Restore only an original receipt, under the same release lock as activation.
+# Independent component health cannot manufacture a previously absent pair.
+restore_previous_release_pair() {
+  local expected="$1" phase component applied temporary="$STATE/.release_applied_sha.$$"
+  [[ "$expected" =~ ^[0-9a-f]{40}$ && ! -e "$STATE/release_applied_sha" ]] || return 1
+  for phase in before after; do
+    for component in modstore fhd; do
+      [[ ! -e "$STATE/release_apply_${component}.pending" ]] || return 1
+      applied="$(cat "$STATE/release_applied_${component}_sha" 2>/dev/null)" &&
+        [[ "$applied" == "$expected" ]] || return 1
+    done
+    if [[ "$phase" == before ]]; then
+      for component in modstore fhd; do
+        verify_current_component "$component" || return 1
+      done
+    fi
+  done
+  if printf '%s\n' "$expected" >"$temporary" &&
+    mv -f -- "$temporary" "$STATE/release_applied_sha"; then
+    log "原整组发布回执已重新核验: $expected"
+    return 0
+  fi
+  rm -f -- "$temporary"
+  return 1
+}
+
 acquire_release_lock() {
   exec 9>"$LOCK"
   if ! flock -n 9; then
@@ -198,15 +224,20 @@ IDENTITY
     [[ ! -f "$STATE/release_applied_${component}_$suffix" ]] ||
       cp -- "$STATE/release_applied_${component}_$suffix" "$pending/$suffix"
   done
+  [[ ! -f "$STATE/release_applied_sha" ]] ||
+    cp -- "$STATE/release_applied_sha" "$pending/aggregate_sha"
   finish_activation() {
-    local code="$?" restored=0 observed
+    local code="$?" restored=0 observed previous_pair_sha
     trap - EXIT
     if [[ "$code" == 0 ]]; then
       rm -rf -- "$pending"
       return
     fi
+    previous_pair_sha="$(cat "$pending/aggregate_sha" 2>/dev/null || true)"
     if [[ "$touched" == 0 ]]; then
       rm -rf -- "$pending"
+      restore_previous_release_pair "$previous_pair_sha" ||
+        log "ERROR: 原整组发布尚未核验，保持整组验收阻断"
       return "$code"
     fi
     # A competing pointer is never overwritten by this attempt's compensation.
@@ -240,6 +271,8 @@ IDENTITY
     if [[ "$restored" == 1 ]]; then
       log "ERROR: $component 候选未通过，已恢复原版本及原运行状态"
       rm -rf -- "$pending"
+      restore_previous_release_pair "$previous_pair_sha" ||
+        log "ERROR: 原整组发布尚未核验，保持整组验收阻断"
     else
       log "ERROR: $component 恢复结果未核实，保留原切换证据: $pending"
     fi

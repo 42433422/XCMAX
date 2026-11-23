@@ -215,14 +215,8 @@ def test_business_bundle_freezes_partitions_and_evaluator_inputs(tmp_path, monke
     ]
 
 
-@pytest.mark.parametrize(
-    "mutation", ["duplicate", "provider", "missing", "last_case", "second_vars"]
-)
-def test_invalid_result_matrix_never_starts_native_execution(
-    tmp_path, monkeypatch, cases, mutation
-):
-    from modstore_server import workflow_nl_training
-
+@pytest.fixture
+def business_report(tmp_path, monkeypatch, cases):
     monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
     monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
     built = trainer.build_config(
@@ -243,11 +237,131 @@ def test_invalid_result_matrix_never_starts_native_execution(
             "gradingResult": {"pass": bool(arm)},
             "provider": {"id": bundle["provider_id"]},
             "vars": deepcopy(test["vars"]),
-            "response": {"output": "fixture graph"},
+            "response": {"output": json.dumps({"arm": arm, "index": index})},
         }
         for arm in (0, 1)
         for index, test in enumerate(tests)
     ]
+    result = {
+        "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+        "results": {
+            "prompts": [{"raw": Path(built[key]).read_text()} for key in ("baseline", "candidate")],
+            "results": rows,
+        },
+    }
+    return Path(built["bundle"]), tmp_path / "result.json", result
+
+
+def _defer_business_result(result):
+    from modstore_server.workflow_nl_training import DEFERRED_BUSINESS_REASON
+
+    assertion = {
+        "pass": False,
+        "score": 0,
+        "runtime_verified": False,
+        "measurement_scope": datasets.BUSINESS_SCOPE,
+        "reason": DEFERRED_BUSINESS_REASON,
+    }
+    for row in result["results"]["results"]:
+        row.update(
+            success=False,
+            failureReason=1,
+            gradingResult={**assertion, "componentResults": [dict(assertion)]},
+        )
+
+
+@pytest.mark.parametrize("measurement", ["verified", "holdout_failure", "unavailable"])
+def test_deferred_result_requires_host_measurement_without_rewriting_raw_report(
+    monkeypatch, cases, business_report, measurement
+):
+    from modstore_server import workflow_nl_training, workflow_training_replay
+
+    bundle, output, result = business_report
+    _defer_business_result(result)
+    output.write_text(json.dumps(result))
+    raw = output.read_bytes()
+    raw_hash = trainer._file_hash(output)
+    _, _, verified = _sealed_inputs(cases)
+    calls = []
+
+    def measure(value, source):
+        # This is a sealing contract fixture; the real CLI/employee test is separate.
+        identity = json.loads(value)
+        arm, index = identity["arm"], identity["index"]
+        assert source == cases[index]["generation_context"]
+        calls.append((arm, index))
+        assertion = dict(verified[arm, index])
+        if measurement == "unavailable":
+            assertion.update({"pass": False, "runtime_verified": False})
+        elif measurement == "holdout_failure" and (arm, index) == (1, 1):
+            assertion["pass"] = False
+        return {**assertion, "score": int(assertion["pass"])}
+
+    def unexpected_nested_replay(*_args, **_kwargs):
+        pytest.fail("deferred result returned to the nested promptfoo assertion")
+
+    monkeypatch.setenv("XCAGI_TRAINING_DEFER_NATIVE_REPLAY", "1")
+    monkeypatch.setattr(workflow_training_replay, "evaluate_business_replay", measure)
+    monkeypatch.setattr(workflow_nl_training, "get_assert", unexpected_nested_replay)
+    evidence = trainer.seal_evaluation(bundle, output)
+    assert len(calls) == 4 and set(calls) == set(verified)
+    assert output.read_bytes() == raw
+    assert evidence["results_sha256"] == raw_hash
+    assert evidence["baseline"] == {"pass": 0, "total": 2}
+    assert evidence["candidate"] == {
+        "pass": {"verified": 2, "holdout_failure": 1, "unavailable": 0}[measurement],
+        "total": 2,
+    }
+    assert evidence["holdout_verified"] is (measurement == "verified")
+    assert evidence["verdict"] == (
+        "candidate_for_approval" if measurement == "verified" else "keep_baseline"
+    )
+    if measurement == "unavailable":
+        assert evidence["runtime_verified"] is False
+
+
+@pytest.mark.parametrize("mutation", ["claimed_success", "missing_marker"])
+def test_non_deferred_results_keep_the_original_success_consistency_check(
+    monkeypatch, business_report, mutation
+):
+    from modstore_server import workflow_nl_training, workflow_training_replay
+
+    bundle, output, result = business_report
+    _defer_business_result(result)
+    row = result["results"]["results"][-1]
+    if mutation == "claimed_success":
+        row.update(success=True, failureReason=0)
+        row["gradingResult"].update({"pass": True, "score": 1})
+    else:
+        row["gradingResult"]["componentResults"][0]["reason"] = "unverified provider claim"
+    output.write_text(json.dumps(result))
+    monkeypatch.setattr(
+        workflow_training_replay,
+        "evaluate_business_replay",
+        lambda *_args: {"pass": False},
+    )
+    monkeypatch.setattr(
+        workflow_nl_training,
+        "get_assert",
+        lambda *_args: {"pass": mutation == "missing_marker"},
+    )
+    with pytest.raises(ValueError, match="training_workflow_result_unverified"):
+        trainer.seal_evaluation(bundle, output)
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+@pytest.mark.parametrize(
+    "mutation", ["duplicate", "provider", "missing", "last_case", "second_vars", "cached"]
+)
+def test_invalid_result_matrix_never_starts_native_execution(
+    monkeypatch, business_report, mutation, deferred
+):
+    from modstore_server import workflow_nl_training, workflow_training_replay
+
+    bundle, output, result = business_report
+    if deferred:
+        _defer_business_result(result)
+    rows = result["results"]["results"]
     if mutation == "duplicate":
         rows.append(deepcopy(rows[-1]))
     elif mutation == "provider":
@@ -256,23 +370,18 @@ def test_invalid_result_matrix_never_starts_native_execution(
         rows.pop()
     elif mutation == "second_vars":
         rows[-1]["testCase"] = {"vars": {**deepcopy(rows[-1]["vars"]), "task": "different task"}}
+    elif mutation == "cached":
+        rows[-1]["response"]["cached"] = True
     else:
         rows[-1]["vars"]["generation_context"]["extra"] = "unbound context"
-    result = {
-        "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
-        "results": {
-            "prompts": [{"raw": Path(built[key]).read_text()} for key in ("baseline", "candidate")],
-            "results": rows,
-        },
-    }
-    output = tmp_path / "result.json"
     output.write_text(json.dumps(result))
 
     def unexpected_execution(*_args, **_kwargs):
         pytest.fail("invalid result matrix started native replay")
 
     monkeypatch.setattr(workflow_nl_training, "get_assert", unexpected_execution)
+    monkeypatch.setattr(workflow_training_replay, "evaluate_business_replay", unexpected_execution)
     with pytest.raises(
         ValueError, match="training_(business_results_incomplete|workflow_result_unverified)"
     ):
-        trainer.seal_evaluation(Path(built["bundle"]), output)
+        trainer.seal_evaluation(bundle, output)

@@ -358,6 +358,62 @@ def test_only_original_parent_releases_its_browser_session(harness, monkeypatch)
     assert registry.mcp_session_scope({**context, "parent_run_id": "foreign-parent"}) == ""
 
 
+@pytest.mark.parametrize(
+    ("status", "failure", "close_fails"),
+    [
+        ("completed", "save", False),
+        ("cancelled", "save", False),
+        ("failed", "save", False),
+        ("rejected", "save", False),
+        ("completed", "save", True),
+        ("completed", "", True),
+        ("failed", "execute", True),
+    ],
+)
+def test_terminal_browser_cleanup_survives_receipt_save_failure(
+    harness, monkeypatch, status, failure, close_fails
+):
+    h = harness
+    service = AgentOrchestrator(repository=h.repo)
+    save, closed = h.repo.save, []
+    primary_error, cleanup_error = OSError("original failure"), RuntimeError("close")
+
+    def save_run(run):
+        if failure == "save" and (run.metadata.get("execution") or {}).get("state") == "idle":
+            raise primary_error
+        return save(run)
+
+    def finish_run(run, **kwargs):
+        run.status = status
+        if failure == "execute":
+            raise primary_error
+
+    def close_scope(scope):
+        closed.append(scope)
+        if close_fails:
+            raise cleanup_error
+        return 1
+
+    monkeypatch.setattr(h.repo, "save", save_run)
+    monkeypatch.setattr(service, "_execute_ready_steps", finish_run)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.browser_tool_process.close_browser_worker_scope",
+        close_scope,
+    )
+    monkeypatch.setattr("app.infrastructure.mcp.client.close_scope", lambda scope: 0)
+    try:
+        raise LookupError("already handled by the caller")
+    except LookupError:
+        with pytest.raises(OSError if failure else RuntimeError) as error:
+            service._execute_with_durable_lease(h.parent, runtime_context=h.actor.context)
+    assert error.value is (primary_error if failure else cleanup_error)
+    assert closed == [registry.mcp_session_scope({**h.actor.context, "run_id": h.parent.run_id})]
+    stored = h.repo.get(h.parent.run_id)
+    assert stored.status == ("running" if failure == "save" else status)
+    assert stored.metadata["execution"]["state"] == ("active" if failure == "save" else "idle")
+    assert h.calls == []
+
+
 def test_navigation_verifies_the_exact_requested_page_header(harness):
     h = harness
     params = {

@@ -13,9 +13,11 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -417,6 +419,20 @@ def capture_business_replay(db, contract, inputs):
         }
 
 
+def require_original_business_inputs(contract):
+    """Keep the original source-byte guard without re-reading optional oracles."""
+    frozen = contract.get("business_replay") or {}
+    if frozen.get("replay_ready") is not True:
+        return
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    assets = frozen["assets"]
+    for item in assets["input_files"]:
+        path = _workspace_file(item["path"], assets["workspace"], contract["user_id"], exists=True)
+        if _read_asset(path) != _bytes(item):
+            raise ValueError("workflow customer delivery business input bytes changed")
+
+
 def export_customer_replay(binding, execution_input, source_evidence_sha256):
     contract = deepcopy(binding.get("customer_delivery") or {})
     frozen = contract.pop("business_replay", {})
@@ -527,11 +543,131 @@ def _remap(value, original, workspace):
     return value
 
 
+def _sandbox_support():
+    return (
+        Path(__file__).resolve().parents[3]
+        / "FHD/scripts/autonomy/runtime_tools/opencode_agent.mjs"
+    )
+
+
+def _verify_worker_isolation():
+    if sys.platform == "linux":
+        result = subprocess.run(
+            [
+                shutil.which("node") or "node",
+                "--input-type=module",
+                "-e",
+                "import {readFileSync} from 'node:fs'; "
+                "const {assertLinuxWorkloadIsolation}=await import(process.argv[1]); "
+                "assertLinuxWorkloadIsolation(readFileSync(0, 'utf8'));",
+                _sandbox_support().as_uri(),
+            ],
+            input=Path("/proc/self/status").read_text(),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode:
+            raise ValueError("training_replay_workload_isolation_required")
+    elif sys.platform != "darwin":
+        raise ValueError("training_replay_sandbox_unavailable")
+
+
 def _run_worker(request, directory, env, *, timeout=60):
     from modstore_server.self_maintenance_subprocess import terminate_subprocess
 
+    deadline = time.monotonic() + timeout
+    support = _sandbox_support()
+    runtime = os.environ.get("PROMPTFOO_SANDBOX_ENTRY") or str(
+        support.parent
+        / "capability_trainer_deps/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js"
+    )
+    # Reuse the supported host, pinned SRT and deny-by-default policy already used
+    # by the product. Neither package hashes nor a temporary cwd isolate native code.
+    configured = subprocess.run(
+        [
+            shutil.which("node", path=env.get("PATH")) or "node",
+            "--input-type=module",
+            "-e",
+            "const {openCodeSandboxEntry, sandboxSettings}=await import(process.argv[1]); "
+            "const runtime=openCodeSandboxEntry({DEVFLEET_OPENCODE_SANDBOX_ENTRY:process.argv[4]}); "
+            "if (!runtime) throw Error('training_replay_sandbox_unavailable'); "
+            "process.stdout.write(JSON.stringify({runtime, node:process.execPath, "
+            "policy:sandboxSettings(process.argv[2], process.argv[2], process.argv[3], "
+            "process.execPath, new URL('https://offline.invalid'), false, runtime)}));",
+            support.as_uri(),
+            str(directory),
+            sys.executable,
+            runtime,
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=timeout,
+    )
+    if configured.returncode:
+        raise ValueError("training_replay_sandbox_unavailable")
+    settings = json.loads(configured.stdout)
+    policy = settings["policy"]
+    policy["network"] = {
+        "allowedDomains": [],
+        "deniedDomains": [],
+        "strictAllowlist": True,
+        "allowAllUnixSockets": False,
+        "allowLocalBinding": False,
+    }
+    project = Path(__file__).resolve().parents[1]
+    code_roots = (
+        project / "modstore_server",
+        project / "modman",
+        project.parents[1] / "FHD/app",
+    )
+    # Mount program directories once: per-file globs exceed SRT's mount limit.
+    # Its more-specific denies keep adjacent host state out of the replay.
+    policy["filesystem"]["allowRead"].extend(
+        [sys.prefix, sys.base_prefix, *(str(path) for path in code_roots)]
+    )
+    policy["filesystem"].setdefault("denyRead", []).extend(
+        str(code_roots[0] / name)
+        for name in (
+            "catalog_data",
+            "data",
+            "market_files",
+            "payment_orders",
+            "webhook_events",
+            "workbench_script_runs",
+            "backups",
+        )
+    )
+    policy["filesystem"]["denyRead"].extend(
+        str(root / "**" / pattern)
+        for root in code_roots
+        for pattern in (
+            "*.json",
+            "*.jsonl",
+            "*.db",
+            "*.sqlite*",
+            "*.log",
+            "*.pem",
+            "*.key",
+            ".env*",
+        )
+    )
+    policy_path = Path(directory) / "sandbox-settings.json"
+    policy_path.write_text(json.dumps(policy))
+    env = {**env, "PYTHONDONTWRITEBYTECODE": "1"}
     with subprocess.Popen(
-        [sys.executable, "-m", __name__, "--worker"],
+        [
+            settings["node"],
+            settings["runtime"],
+            "--settings",
+            str(policy_path),
+            "--",
+            sys.executable,
+            "-m",
+            __name__,
+            "--worker",
+        ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -541,7 +677,9 @@ def _run_worker(request, directory, env, *, timeout=60):
         start_new_session=os.name == "posix",
     ) as proc:
         try:
-            stdout, stderr = proc.communicate(json.dumps(request), timeout=timeout)
+            stdout, stderr = proc.communicate(
+                json.dumps(request), timeout=max(0, deadline - time.monotonic())
+            )
             return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
         finally:
             # Reap the owned group before Popen closes its pipes, including on timeout.
@@ -661,6 +799,7 @@ def evaluate_business_replay(output, source):
 
 def _worker(request):
     """Restore the frozen native packages and call the existing product runtime."""
+    _verify_worker_isolation()
     from cryptography.fernet import Fernet
     from sqlalchemy import select
 

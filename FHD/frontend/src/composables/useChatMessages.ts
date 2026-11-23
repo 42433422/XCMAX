@@ -230,6 +230,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   let historyMessageCount: number | null = null
   let historyTitle = ''
   let historyEpoch = 0
+  let disposed = false
   const resetHistoryPage = () => {
     historyEpoch++
     beforeMessageId = undefined
@@ -265,7 +266,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     })
   }
   async function loadEarlierMessages(): Promise<void> {
-    if (earlierMessagesLoading.value || !messagesHaveEarlier.value || beforeMessageId === undefined) return
+    if (disposed || earlierMessagesLoading.value || !messagesHaveEarlier.value || beforeMessageId === undefined) return
     const scope = storageKey.value, sid = sessionId.value, epoch = historyEpoch
     const currentOwner = captureAuthSession(), expectedRevision = historyRevision
     earlierMessagesLoading.value = true
@@ -360,6 +361,8 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
 
   if (getCurrentScope()) {
     onScopeDispose(() => {
+      disposed = true
+      resetHistoryPage()
       flushMessagesCache()
       releaseChatMessageStore(activeStoreKey, activeStore.value)
     })
@@ -703,12 +706,13 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   async function syncFromServer(options: { required?: boolean; isCurrent?: () => boolean; onConversation?: (data: unknown) => void } = {}): Promise<boolean> {
     try {
       const sid = String(sessionId.value || '').trim()
-      if (!sid) { if (options.required) throw new Error('当前会话未就绪'); return false }
+      if (!sid || disposed) { if (options.required) throw new Error('当前会话未就绪'); return false }
       const sessionCurrent = captureAuthSession()
+      const epoch = historyEpoch
       const scope = [sid, activeModId.value, productReadAccountEpoch.value]
       const revision = JSON.stringify(messages.value)
       const data = await chatApi.getConversation(sid)
-      if (!sessionCurrent() || options.isCurrent?.() === false ||
+      if (!sessionCurrent() || epoch !== historyEpoch || options.isCurrent?.() === false ||
         scope.some((value, i) => value !== [sessionId.value, activeModId.value, productReadAccountEpoch.value][i])
         || revision !== JSON.stringify(messages.value)) {
         if (options.required) throw new Error('当前会话已改变，请重试')
@@ -732,6 +736,13 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
       const localList = messages.value
+      const firstServerId = Number(asRecord(serverMessages[0]).id)
+      // Only an overlapping window proves the loaded pages still join the latest page.
+      const joinedHistory = sameRevision && localList.some(message => message.serverMessageId === firstServerId
+        || message.persistence?.id === `server:${firstServerId}`)
+      if (sameRevision && !joinedHistory) {
+        resetHistoryPage()
+      }
       const lastLocal = localList[localList.length - 1]
       const serverTurnIds = new Set(sanitized.map(message => message.turnId).filter(Boolean))
       // 原地复用本地消息对象：对象身份稳定，列表 key 才不会在同步后整列变化。
@@ -761,10 +772,9 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         }
         return true
       })
-      const firstServerId = Number(asRecord(serverMessages[0]).id)
-      const older = sameRevision && dataRow.has_more === true ? localList.filter(message => {
-        const id = message.serverMessageId ?? Number(message.persistence?.id?.replace(/^server:/, ''))
-        return message.persistence?.status === 'saved' && id > 0 && id < firstServerId
+      const older = joinedHistory && dataRow.has_more === true ? localList.filter(message => {
+        const id = message.serverMessageId ?? Number(message.persistence?.id?.match(/^server:(\d+)$/)?.[1])
+        return message.persistence?.status === 'saved' && Number.isSafeInteger(id) && id > 0 && id < firstServerId
       }) : []
       // A latest-page refresh must keep the oldest loaded boundary, including exhaustion.
       setHistoryPage(older.length ? { ...dataRow,

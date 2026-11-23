@@ -14,6 +14,8 @@ from modstore_server.retort_experiment_surfaces import (
     WORKFLOW_NL_RESOURCE,
 )
 
+DEFERRED_BUSINESS_REASON = "training_business_replay_requires_host_verification"
+
 
 def offline_execution_feedback(bundle, variables, passed):
     """Static regression can propose a runtime experiment, never prove its business effect."""
@@ -208,6 +210,16 @@ def get_assert(output, context):
         or (source.get("execution_feedback") or {}).get("measurement_scope")
         == WORKFLOW_CUSTOMER_MEASUREMENT
     ):
+        # The model-facing sandbox cannot create a stricter nested namespace.
+        # Only the existing host seal may run original packages in a separate,
+        # network-denied sandbox; this result never claims business validation.
+        if os.environ.get("XCAGI_TRAINING_DEFER_NATIVE_REPLAY") == "1":
+            return {
+                "pass": False,
+                "score": 0,
+                "runtime_verified": False,
+                "reason": DEFERRED_BUSINESS_REASON,
+            }
         from modstore_server.workflow_training_replay import evaluate_business_replay
 
         return evaluate_business_replay(output, source)

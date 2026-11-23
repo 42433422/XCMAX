@@ -65,9 +65,12 @@ def resolve_safe_workspace_relpath(rel: str, *, base: Path | None = None) -> Pat
         raise HTTPException(status_code=400, detail="invalid path")
     # Preserve native symlink/parent semantics after the lexical boundary check.
     target_text = os.path.realpath(os.path.join(base_text, raw))
-    if target_text != base_text and not target_text.startswith(base_prefix):
+    if target_text == base_text:
+        target = Path(base_text)
+    elif target_text.startswith(base_prefix):
+        target = Path(target_text)
+    else:
         raise HTTPException(status_code=400, detail="invalid path")
-    target = Path(target_text)
     try:
         target.relative_to(base)
     except ValueError as e:

@@ -172,7 +172,12 @@ def _customer(db: Any, user_id: int) -> Any:
 
 
 def prepare_customer_delivery(
-    db: Any, execution: Any, binding: dict[str, Any], policy: dict[str, Any]
+    db: Any,
+    execution: Any,
+    binding: dict[str, Any],
+    policy: dict[str, Any],
+    *,
+    frozen_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Freeze the paid goal and every native node of the actually approved graph."""
     from modstore_server.customer_value_lifecycle_api import _authoritative_order
@@ -230,7 +235,13 @@ def prepare_customer_delivery(
     )
     from modstore_server.workflow_training_replay import capture_business_replay
 
-    replay = capture_business_replay(db, contract, inputs)
+    # Optional training bytes are captured at admission, not at each execution
+    # boundary. Revalidation receives only the verified server-recorded contract.
+    replay = (
+        capture_business_replay(db, contract, inputs)
+        if frozen_contract is None
+        else deepcopy(frozen_contract.get("business_replay"))
+    )
     if replay is not None:
         contract["business_replay"] = replay
     return {**contract, "contract_sha256": digest(contract)}
@@ -357,6 +368,7 @@ def require_running_contract(contract: dict[str, Any]) -> None:
     """Recheck SQL authority at every existing native execution boundary."""
     from modstore_server.strategic_execution_contract import freeze_execution
     from modstore_server.workflow_execution_feedback import _admitted
+    from modstore_server.workflow_training_replay import require_original_business_inputs
 
     with get_session_factory()() as db:
         execution, binding, stored = _stored_contract(db, int(contract["execution_id"]))
@@ -364,7 +376,10 @@ def require_running_contract(contract: dict[str, Any]) -> None:
             _admitted(db, binding) or _admitted(db, binding, promoted=True)
         ):
             raise ValueError("workflow customer delivery approval is no longer current")
-        current = prepare_customer_delivery(db, execution, binding, contract["policy"])
+        require_original_business_inputs(stored)
+        current = prepare_customer_delivery(
+            db, execution, binding, contract["policy"], frozen_contract=stored
+        )
         if current != stored:
             raise ValueError("workflow customer delivery inputs, package or agreement changed")
         resolved, _data, _rows = _walk_delivery(db, stored, until=contract["node_id"])

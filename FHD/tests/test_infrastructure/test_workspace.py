@@ -109,9 +109,23 @@ def test_explicit_workspace_root_rejects_non_relative_paths(tmp_path: Path, rela
         resolve_safe_workspace_relpath(relative, base=tmp_path)
 
 
+@pytest.mark.parametrize("filesystem_root", [False, True])
+def test_workspace_resolver_preserves_root_and_child_identity(
+    tmp_path: Path, monkeypatch, filesystem_root
+):
+    root = Path(tmp_path.anchor) if filesystem_root else tmp_path
+    monkeypatch.setenv("WORKSPACE_ROOT", str(root))
+
+    assert resolve_safe_workspace_relpath(".") == root
+    assert resolve_safe_workspace_relpath(".", base=root) == root
+    relative = (tmp_path / "result.csv").relative_to(root).as_posix()
+    assert resolve_safe_workspace_relpath(relative, base=root) == tmp_path / "result.csv"
+    assert not (tmp_path / "result.csv").exists()
+
+
 def test_explicit_workspace_root_preserves_native_names_and_checks_links(tmp_path: Path):
     root = tmp_path / "tenant"
-    outside = tmp_path / "private"
+    outside = tmp_path / "tenant-private"
     root.mkdir()
     outside.mkdir()
     (root / "a").mkdir()
