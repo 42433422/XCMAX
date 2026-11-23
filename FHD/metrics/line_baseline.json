@@ -1,5 +1,5 @@
 {
-  "lines": 2679775,
+  "lines": 2679939,
   "updated": "2026-11-23",
-  "note": "按用户修复配置并提PR合入的授权，补修独立评审已确定复现的Python3.11运行验收取消与总超时竞态：复用stdlib asyncio.timeout替换wait_for，生产代码净减1行；既有运输合同内增加真实固定SDK子进程的取消/总deadline同tick回归，测试净增71行。旧实现两项失败，修复后两项通过，运输与资格完整39项通过；检查进程退出、订阅解除、无新turn或重放。维护行净增70用于此已证实缺陷，未删无关功能或降低验收门禁，最终提交仍需完整CI与受保护合入。"
+  "note": "按用户修复配置并提PR合入的授权，修复最终CI原设置页E2E暴露的历史导航竞态。实际生产同步器与vue-router createWebHistory诊断确认：前进已换entry、异步guard未完成时，旧40ms定时器以旧route覆盖新entry。仅让成功导航持有position/fullPath/generation一致的同步权，新导航/reset撤销旧timer，保留同entry地址纠正。生产净增16行、4项真实webHistory回归新增148行；旧3失败1正控通过，新4全过，相关48项及类型/ESLint通过。原Playwright断言未改，固定浏览器仍由最终CI验收；未删除无关功能或降低门禁。"
 }
