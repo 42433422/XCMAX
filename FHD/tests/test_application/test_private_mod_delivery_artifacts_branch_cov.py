@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import DEFAULT, AsyncMock, MagicMock, patch
@@ -53,6 +53,18 @@ def _resp(status_code=200, body=None, content=b"data", headers=None):
     resp.headers = headers or {}
     resp.json.return_value = body
     return resp
+
+
+@contextmanager
+def _market_client(client):
+    with (
+        patch("httpx.AsyncClient", return_value=client),
+        patch(
+            "app.fastapi_routes.market_account._market_base_url",
+            return_value="https://m.example.com",
+        ),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -116,13 +128,7 @@ class TestCustomDeliveryRemoteJson:
 
     async def test_path_without_leading_slash_and_payload(self):
         client = _async_client(request_resp=_resp(200, {"id": 1}))
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
+        with _market_client(client):
             result = await mod.custom_delivery_remote_json(
                 "tok", "foo/bar", method="post", payload={"a": 1}
             )
@@ -136,13 +142,7 @@ class TestCustomDeliveryRemoteJson:
         client = _async_client(
             request_error=httpx_connect_error(),
         )
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
+        with _market_client(client):
             with pytest.raises(ConnectionError):
                 await mod.custom_delivery_remote_json("tok", "/foo")
 
@@ -150,13 +150,7 @@ class TestCustomDeliveryRemoteJson:
         resp = _resp(200, body=None)
         resp.json.side_effect = ValueError("bad json")
         client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
+        with _market_client(client):
             result = await mod.custom_delivery_remote_json("tok", "/foo")
         assert result == {}
 
@@ -185,13 +179,7 @@ class TestCustomDeliveryRemoteJson:
     async def test_non_dict_ok_body_raises_delivery_domain_error(self):
         resp = _resp(200, body=[1, 2])
         client = _async_client(request_resp=resp)
-        with (
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
-        ):
+        with _market_client(client):
             with pytest.raises(mod.DeliveryRemoteError) as ei:
                 await mod.custom_delivery_remote_json("tok", "/foo")
         assert "格式无效" in str(ei.value)

@@ -37,7 +37,7 @@ export function replayPolicy(spec) {
       || !statSync(resource).isFile()) throw new Error('training_replay_source_boundary_changed');
   // One read-only mount per program tree avoids SRT's 9000-argument limit.
   // Deny every adjacent non-source entry, including unknown extensions and
-  // symlinks; inspect the declared resource's directory without denying it.
+  // symlinks; preserve only the declared resource as a read exception.
   const nonPrograms = directory => readdirSync(directory, { withFileTypes: true }).flatMap(item => {
     const path = join(directory, item.name);
     if (item.isDirectory() && (existsSync(join(path, '__init__.py'))
@@ -49,7 +49,10 @@ export function replayPolicy(spec) {
     ...programs, resource,
     realpathSync(resolve(dirname(entry), '../../../packages')),
     realpathSync(resolve(dirname(entry), '../../../../packages')));
-  settings.filesystem.denyRead.push(...programs.flatMap(nonPrograms));
+  // Runtime state stays denied even when it contains Python package markers.
+  settings.filesystem.denyRead.push(...programs.flatMap(nonPrograms),
+    ...['catalog_data', 'data', 'market_files', 'payment_orders', 'webhook_events',
+      'workbench_script_runs', 'backups'].map(name => join(programs[0], name)));
   settings.filesystem.allowWrite = [spec.directory];
   return { ...settings, enableWeakerNestedSandbox: false,
     network: { allowedDomains: [], deniedDomains: [], strictAllowlist: true,

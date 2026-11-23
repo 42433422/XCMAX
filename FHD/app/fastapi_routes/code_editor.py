@@ -109,12 +109,7 @@ def _proposal_scope(user: Any) -> str:
 
 def _owned_edit(edit_id: str, user: Any) -> dict[str, Any]:
     with get_host_db() as db:
-        row = (
-            db.query(CodeEditProposal)
-            .filter_by(edit_id=edit_id, user_id=int(user.id))
-            .filter(CodeEditProposal.state != "applied")
-            .first()
-        )
+        row = db.query(CodeEditProposal).filter_by(edit_id=edit_id, user_id=int(user.id)).first()
         if row is None or row.scope_json != _proposal_scope(user):
             raise HTTPException(status_code=404, detail="unknown edit_id")
         return {**json.loads(row.payload_json), "state": row.state}
@@ -212,7 +207,69 @@ def code_editor_edit(body: EditBody, user: Any = Depends(get_logged_in_user)) ->
 @router.get("/diff/{edit_id}")
 def code_editor_diff(edit_id: str, user: Any = Depends(get_logged_in_user)) -> dict:
     row = _owned_edit(edit_id, user)
-    return {"success": True, "unified_diff": row.get("unified_diff") or ""}
+    return {
+        "success": True,
+        "edit_id": edit_id,
+        "state": row["state"],
+        "path": row["rel"],
+        "created": bool(row["is_new_file"]),
+        "target_sha256": row.get("target_sha256"),
+        "unified_diff": (row.get("unified_diff") or "") if row["state"] == "pending" else "",
+    }
+
+
+def _target_snapshot(info: os.stat_result) -> list[int]:
+    # Rename/link preserve these fields; ctime changes during publication.
+    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
+
+
+def _matches_target(path: Path, receipt: dict[str, Any]) -> bool:
+    expected = receipt.get("target_snapshot")
+    if expected is None or not path.is_file():
+        return False
+    try:
+        with path.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            if _target_snapshot(before) != expected:
+                return False
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            after = os.fstat(stream.fileno())
+        current = path.stat()
+        return (
+            _target_snapshot(after) == _target_snapshot(current) == expected
+            and before.st_ctime_ns == after.st_ctime_ns == current.st_ctime_ns
+            and digest == receipt["target_sha256"]
+        )
+    except FileNotFoundError:
+        return False
+
+
+def _finish_edit(edit_id: str, user: Any, path: Path, receipt: dict[str, Any]) -> dict:
+    if not _matches_target(path, receipt):
+        raise HTTPException(status_code=409, detail="edit outcome requires verification")
+    terminal = {key: receipt[key] for key in ("path", "rel", "is_new_file", "target_sha256")}
+    with get_host_db() as db:
+        consumed = (
+            db.query(CodeEditProposal)
+            .filter_by(
+                edit_id=edit_id,
+                user_id=int(user.id),
+                scope_json=_proposal_scope(user),
+                state="applying",
+            )
+            .update(
+                {"state": "applied", "payload_json": json.dumps(terminal)},
+                synchronize_session=False,
+            )
+        )
+        if consumed != 1:
+            raise HTTPException(status_code=409, detail="edit outcome requires verification")
+    return {
+        "success": True,
+        "edit_id": edit_id,
+        "state": "applied",
+        "created": receipt["is_new_file"],
+    }
 
 
 @router.post("/apply/{edit_id}")
@@ -232,11 +289,16 @@ def code_editor_apply(
     try:
         with FileLock(lock_root / f"{lock_key}.lock", timeout=30, mode=0o600):
             row = _owned_edit(edit_id, user)
-            if row["state"] != "pending":
-                raise HTTPException(status_code=409, detail="edit outcome requires verification")
+            if row["state"] == "applied":
+                raise HTTPException(status_code=404, detail="unknown edit_id")
             path = _safe_rel_path(row["rel"])
             if str(path) != row["path"]:
                 raise HTTPException(status_code=409, detail="file path changed")
+            if row["state"] == "applying":
+                # The original claim can only be settled by readback, never republished.
+                return _finish_edit(edit_id, user, path, row)
+            if row["state"] != "pending":
+                raise HTTPException(status_code=409, detail="edit outcome requires verification")
             created = bool(row["is_new_file"])
             if created and path.exists():
                 raise HTTPException(status_code=409, detail="file already exists")
@@ -252,8 +314,15 @@ def code_editor_apply(
                 else nullcontext(None)
             )
             with prepared as staged:
-                # Commit before publication. Failed/uncertain writes stay blocked;
-                # successful claims remain applied across the original restore flow.
+                receipt = {
+                    "path": row["path"],
+                    "rel": row["rel"],
+                    "is_new_file": created,
+                    "target_sha256": hashlib.sha256(row["new"].encode("utf-8")).hexdigest(),
+                    "target_snapshot": _target_snapshot((staged or path).stat()),
+                }
+                # Persist the original publication identity before writing, and
+                # discard proposal bodies even if publication or confirmation fails.
                 with get_host_db() as db:
                     claimed = (
                         db.query(CodeEditProposal)
@@ -263,28 +332,16 @@ def code_editor_apply(
                             scope_json=_proposal_scope(user),
                             state="pending",
                         )
-                        .update({"state": "applying"}, synchronize_session=False)
+                        .update(
+                            {"state": "applying", "payload_json": json.dumps(receipt)},
+                            synchronize_session=False,
+                        )
                     )
                     if claimed != 1:
                         raise HTTPException(status_code=409, detail="edit already claimed")
                 if staged is not None:
                     _publish_edit(path, staged, create=created)
-                with get_host_db() as db:
-                    consumed = (
-                        db.query(CodeEditProposal)
-                        .filter_by(
-                            edit_id=edit_id,
-                            user_id=int(user.id),
-                            scope_json=_proposal_scope(user),
-                            state="applying",
-                        )
-                        .update({"state": "applied"}, synchronize_session=False)
-                    )
-                    if consumed != 1:
-                        raise HTTPException(
-                            status_code=409, detail="edit outcome requires verification"
-                        )
-            return {"success": True, "created": created}
+                return _finish_edit(edit_id, user, path, receipt)
     except Timeout as exc:
         raise HTTPException(status_code=409, detail="file is being edited") from exc
 

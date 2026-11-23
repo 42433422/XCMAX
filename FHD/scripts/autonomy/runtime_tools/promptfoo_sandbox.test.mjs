@@ -127,7 +127,24 @@ test('fixed native replay policy denies network and preserves the namespace/writ
   assert.ok(policy.filesystem.allowRead.includes(join(spec.project, 'modstore_server')));
   assert.ok(!policy.filesystem.allowRead.some(path => path.endsWith('/modstore.db')
     || path.includes('/catalog_data')));
-  assert.ok(!policy.filesystem.denyRead.includes(join(spec.project, 'modstore_server/data')));
+  const stateNames = ['catalog_data', 'data', 'market_files', 'payment_orders',
+    'webhook_events', 'workbench_script_runs', 'backups'];
+  const project = join(realpathSync(root), 'source'), server = join(project, 'modstore_server');
+  mkdirSync(join(project, 'modman'), { recursive: true });
+  for (const name of stateNames) {
+    const directory = join(server, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, '__init__.py'), '# Synthetic package marker; never executed.\n');
+  }
+  const resource = join(server, 'data/commerce_terms.generated.json');
+  writeFileSync(resource, '{}');
+  const withPackageMarkers = replayPolicy({ ...spec, project });
+  for (const name of stateNames) {
+    assert.ok(withPackageMarkers.filesystem.denyRead.includes(join(server, name)), name);
+  }
+  assert.ok(withPackageMarkers.filesystem.allowRead.includes(resource));
+  assert.ok(!withPackageMarkers.filesystem.denyRead.includes(resource));
+  assert.ok(policy.filesystem.denyRead.includes(join(spec.project, 'modstore_server/data')));
   assert.ok(!policy.filesystem.denyRead.includes(join(spec.project, 'modstore_server/data/commerce_terms.generated.json')));
   // Each mount costs several arguments; enumerating this tree's 3272 source
   // files exceeded the pinned runtime's 9000-argument ceiling before execution.
