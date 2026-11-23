@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -35,6 +35,11 @@ router = APIRouter(prefix="/life", tags=["xiaoc-life"])
 class RevisionBody(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     expected_revision: int = Field(ge=1)
+
+
+class ReviewExperience(RevisionBody):
+    candidate_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    action: Literal["confirm", "reject", "revoke"]
 
 
 class PromoteGoal(RevisionBody):
@@ -116,6 +121,24 @@ def experiences(
             "items": [_event_dict(row) for row in rows],
             "next_cursor": rows[-1].id if len(rows) == limit else None,
         }
+
+
+@router.post("/experiences/{candidate_id}/review")
+def review_experience(
+    candidate_id: str, body: ReviewExperience, admin: User = Depends(require_admin)
+) -> dict[str, Any]:
+    from modstore_server.xiaoc_life_experience_review import review_experience as apply_review
+
+    return cast_state(
+        _call(
+            apply_review,
+            candidate_id,
+            candidate_sha256=body.candidate_sha256,
+            action=body.action,
+            expected_revision=body.expected_revision,
+            actor_user_id=int(admin.id),
+        )
+    )
 
 
 @router.post("/goals/{goal_id}/portfolio")

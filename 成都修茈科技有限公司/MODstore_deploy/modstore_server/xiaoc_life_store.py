@@ -244,6 +244,9 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        from modstore_server.xiaoc_life_experience_review import review_facts
+
+        data["experience_review_facts"] = review_facts(session, data)
         data["status"] = (
             "stopped"
             if data["stopped"]
