@@ -100,3 +100,33 @@ def test_prometheus_empty_vector_is_unknown_not_zero() -> None:
     response = {"status": "success", "data": {"result": []}}
     with patch.object(slo, "_prom_get", return_value=response):
         assert slo.prom_query("http://127.0.0.1:9091", "sum(metric)", attempts=1) is None
+
+def test_ambiguous_production_telemetry_persists_red_evidence(tmp_path: Path) -> None:
+    """A live source returning multiple series cannot silently certify one subset."""
+    ambiguous = {
+        "status": "success",
+        "data": {"result": [{"value": [0, "1"]}, {"value": [0, "0"]}]},
+    }
+    out = tmp_path / "production-slo.json"
+    with (
+        patch.object(slo, "measure_retention_days", return_value=120.0),
+        patch.object(slo, "_prom_get", return_value=ambiguous),
+    ):
+        evidence, passed = slo.collect(
+            prom_url="http://127.0.0.1:9091",
+            prom_token="test-only-token",
+            window="1d",
+            mode="preflight",
+            release_id="",
+            raw_retention_days=120,
+            out_path=out,
+        )
+
+    assert passed is False
+    assert evidence["all_pass"] is False
+    assert evidence["day0_eligible"] is False
+    assert evidence["coverage"] == 0
+    assert evidence["scrape_coverage"] == 0
+    assert any("scrape_source_unavailable:ValueError" in e for e in evidence["source_errors"])
+    assert slo.telemetry_admissible(evidence) is False
+    assert out.is_file()
