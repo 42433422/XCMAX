@@ -152,6 +152,9 @@ def test_runtime_contract_keeps_native_and_scheduled_coverage():
         "missing_case",
         "missing_native_report",
         "missing_native_case",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[ready]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[missing_reference]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[changed_reference]",
         "skipped",
         "failure",
         "error",
@@ -186,7 +189,9 @@ def test_native_business_replay_requires_executed_original_scenarios(tmp_path, f
         "test_running_delivery_reuses_its_original_optional_training_snapshot[delete]",
         "test_running_delivery_reuses_its_original_optional_training_snapshot[replace]",
         "test_running_delivery_reuses_its_original_optional_training_snapshot[disable_policy]",
-        "test_frozen_training_snapshot_still_rejects_changed_business_input",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[ready]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[missing_reference]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[changed_reference]",
         "test_missing_training_snapshot_cannot_be_recaptured_during_delivery",
         "test_delivery_recheck_does_not_add_a_late_training_snapshot",
         "test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout[direct]",
@@ -205,6 +210,7 @@ def test_native_business_replay_requires_executed_original_scenarios(tmp_path, f
             and index == 0
             or fault == "missing_native_case"
             and index == len(required) - 1
+            or fault == name
         ):
             continue
         report = (
