@@ -529,6 +529,13 @@ def test_automatic_proposal_uses_only_admin_frozen_task_input(ports, monkeypatch
         portfolio_limits=limits(),
         task_input={"approved_record_id": "record-17"},
     )
+    from modstore_server import xiaoc_self_model
+
+    monkeypatch.setattr(
+        xiaoc_self_model,
+        "employee_preflight",
+        lambda *_: {"status": "registered_unverified", "reason": "test_registry_fixture"},
+    )
     captured = {}
 
     def propose(**kwargs):
@@ -773,4 +780,26 @@ def test_real_cognition_graph_reads_historical_review_without_new_execution_auth
     review = next(row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row)
     assert review["verdict_counts"]["miss"] == 1
     assert result["goals"][0]["status"] == "proposed"
+    assert "decision_id" not in result["goals"][0]
+
+
+@pytest.mark.parametrize("status", ["unavailable", "unknown"])
+def test_self_capability_preflight_blocks_new_proposal(ports, monkeypatch, status):
+    from modstore_server import xiaoc_self_model
+
+    store = ports[0]
+    store.state["policy"].update(employee_id="missing-employee", portfolio_limits=limits())
+    monkeypatch.setattr(
+        xiaoc_self_model,
+        "employee_preflight",
+        lambda *_: {"status": status, "reason": "test_missing_capability"},
+    )
+    monkeypatch.setattr(
+        portfolio,
+        "create_portfolio_proposal",
+        lambda **_: pytest.fail("unavailable capability cannot create an execution proposal"),
+    )
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "blocked"
+    assert result["goals"][0]["blocked_reason"] == "test_missing_capability"
     assert "decision_id" not in result["goals"][0]
