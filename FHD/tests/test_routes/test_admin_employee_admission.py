@@ -410,6 +410,77 @@ def test_admin_pending_receipt_is_not_reexecuted_or_completed(admin_employee, st
     assert not run.steps[0].finished_at
 
 
+@pytest.mark.parametrize("wrapper", ["result", "output", "data"])
+@pytest.mark.parametrize("outer_retryable", [None, True])
+def test_admin_nested_no_retry_receipt_preserves_original_effect(
+    admin_employee, monkeypatch, wrapper, outer_retryable
+):
+    from collections import OrderedDict
+
+    from app.utils.resilience import rate_limiter
+
+    monkeypatch.setattr(rate_limiter, "_tool_breakers", OrderedDict())
+    entry = admin_employee
+    entry.state.output = {
+        "success": False,
+        "error_code": "upstream_unavailable",
+        wrapper: {"success": False, "retryable": False, "summary": "original effect retained"},
+        **({"retryable": outer_retryable} if outer_retryable is not None else {}),
+    }
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        replay = client.post("/employees/clerk/execute", json=entry.body).json()
+        read = client.get(
+            "/employees/clerk/runs", params={"idempotency_key": "stable-request"}
+        ).json()
+    assert entry.invocation.call_count == 1
+    assert first["run_id"] == replay["run_id"] == read["run_id"]
+    assert first["attempts"] == replay["attempts"] == read["attempts"] == 1
+    assert not first["success"] and not replay["success"] and not read["success"]
+    with entry.factory() as db:
+        row = db.query(EmployeeRunLog).one()
+        assert row.status == "failed" and row.attempts == 1
+        assert json.loads(row.output_json) == read["data"]
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
+def test_admin_safe_retry_still_dispatches_one_effect(admin_employee, monkeypatch):
+    from collections import OrderedDict
+
+    from app.utils.resilience import rate_limiter
+
+    monkeypatch.setattr(rate_limiter, "_tool_breakers", OrderedDict())
+    entry = admin_employee
+    dispatch = entry.invocation.side_effect
+
+    def fail_before_dispatch(*args, **kwargs):
+        if entry.invocation.call_count < 3:
+            return {
+                "success": False,
+                "error_code": "upstream_unavailable",
+                "retryable": True,
+                "execution_status": "not_started",
+            }
+        return dispatch(*args, **kwargs)
+
+    entry.invocation.side_effect = fail_before_dispatch
+    monkeypatch.setattr(employee_run.time, "sleep", lambda _: None)
+    with entry.client() as client:
+        first = client.post("/employees/clerk/execute", json=entry.body).json()
+        replay = client.post("/employees/clerk/execute", json=entry.body).json()
+    assert first["run_id"] == replay["run_id"]
+    assert first["attempts"] == replay["attempts"] == entry.invocation.call_count == 3
+    with entry.factory() as db:
+        assert (
+            db.connection().exec_driver_sql("SELECT count(*) FROM admin_employee_effects").scalar()
+            == 1
+        )
+
+
 def test_admin_unknown_exception_and_missing_key_read_never_dispatch(admin_employee):
     entry = admin_employee
     entry.state.error = True
