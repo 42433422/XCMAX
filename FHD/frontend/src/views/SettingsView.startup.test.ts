@@ -132,6 +132,24 @@ describe('settings first-screen startup registration', () => {
     expect(boundary.runtimeCheck).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { name: 'in-progress', initial: 'in_progress', owner: 'account', next: 'failed' },
+    { name: 'deployment', initial: 'passed', owner: 'deployment', next: 'required' },
+  ])('keeps a $name refresh read-only when the authoritative status changes', async ({ initial, owner, next }) => {
+    boundary.runtimeStatus.mockResolvedValue({ success: true, qualification: initial, managed_by: owner, route: { model: 'saved-model', route_identity: 'saved-route' } })
+    open()
+    await flushPromises()
+    expect(wrapper!.get('[data-testid="runtime-check"]').text()).toBe('刷新状态')
+    boundary.runtimeStatus.mockResolvedValue({ success: true, qualification: next, managed_by: 'account' })
+    await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
+    await flushPromises()
+    expect(boundary.runtimeCheck).not.toHaveBeenCalled()
+    expect(wrapper!.get('[data-testid="runtime-check"]').text()).toBe('运行验收')
+    await wrapper!.get('[data-testid="runtime-check"]').trigger('click')
+    await flushPromises()
+    expect(boundary.runtimeCheck).toHaveBeenCalledExactlyOnceWith('/api/desktop/agent-runtime/qualification', { retry: true }, expect.objectContaining({ retry: false }))
+  })
+
   it.each(['same-tab', 'other-tab'])('retires a passed qualification when the saved model changes in %s', async source => {
     open()
     await flushPromises()
