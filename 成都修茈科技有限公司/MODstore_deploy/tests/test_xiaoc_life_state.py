@@ -964,3 +964,82 @@ def test_spawned_processes_share_persistent_identity_and_one_claim(database):
                 worker.close()
         output.close()
         output.join_thread()
+
+
+def _checkpoint_act(claim, actual_tokens):
+    assert store.begin_cycle_graph(claim)
+    for phase in ("observe", "decide", "act"):
+        store.record_cycle_phase(claim, phase)
+    store.record_cycle_step(claim, kind="model", details={"request_id": "checkpoint-original"})
+    fields = {
+        "result": {
+            "status": "completed",
+            "goals": [{"id": "original-goal", "decision_id": "original-decision"}],
+        },
+        "actual_tokens": actual_tokens,
+        "evidence_refs": ["receipt:original"],
+    }
+    store.record_cycle_checkpoint(claim, "act", **fields)
+    store.record_cycle_checkpoint(claim, "act", **fields)
+    assert store.read_state()["activity"]["checkpoint_phase"] == "act"
+    return fields
+
+
+def test_crash_after_effect_checkpoint_preserves_original_readback_once(database, monkeypatch):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: now)
+    initial = configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    fields = _checkpoint_act(claim, 63)
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_checkpoint(claim, "act", **{**fields, "actual_tokens": 99})
+    # A persisted node result alone is not proof that the provider finished.
+    later = now + timedelta(minutes=6)
+    monkeypatch.setattr(store, "utcnow", lambda: later)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: later)
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 1}
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    with database() as session:
+        session.add(
+            LlmClientRequest(
+                user_id=7,
+                client_request_id="checkpoint-original",
+                request_sha256="c" * 64,
+                state="completed",
+                done_json=json.dumps({"status": "settled", "actual_tokens": 63}),
+            )
+        )
+        session.commit()
+    assert reconcile.reconcile_usage() == {"resolved": 1, "waiting": 0}
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 0}
+    state = store.read_state()
+    assert state["identity_id"] == initial["identity_id"]
+    assert state["activity"] is None and state["goals"] == []
+    assert state["budget"]["used_tokens"] == 63
+    assert state["budget"]["reserved_tokens"] == 0
+    recovered = state["events"][0]["details"]["graph_checkpoint_recovery"]
+    assert recovered["phase"] == "act" and recovered["usage_matches_reported"] is True
+    assert recovered["result_refs"] == ["goal:original-goal", "portfolio:original-decision"]
+    assert not recovered["replayed"] and not recovered["learning_applied"]
+    assert not recovered["business_outcome_verified"]
+    assert finish(claim, actual_tokens=63)["budget"]["used_tokens"] == 63
+
+
+def test_checkpoint_survives_stop_and_is_not_execution_authority(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    fields = _checkpoint_act(claim, None)
+    store.update_settings(
+        LifeUpdate(expected_revision=store.read_state()["revision"], stopped=True), actor_user_id=7
+    )
+    store.record_cycle_phase(claim, "reflect")
+    with pytest.raises(LifePolicyError):
+        store.record_cycle_checkpoint({**claim, "owner_user_id": 8}, "reflect", **fields)
+    store.record_cycle_checkpoint(claim, "reflect", **fields)
+    assert not store.cycle_active(claim)
+    assert store.read_state()["activity"]["checkpoint_phase"] == "reflect"
+    final = finish(claim, actual_tokens=None, goals=[{"id": "must-not-be-adopted"}])
+    assert final["status"] == "stopped" and final["goals"] == []
+    assert final["budget"]["reserved_tokens"] == 200
+    assert final["events"][0]["details"]["graph_checkpoints"]["reflect"]["reported_tokens"] is None

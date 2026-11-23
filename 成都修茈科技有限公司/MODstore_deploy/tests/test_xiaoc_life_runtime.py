@@ -38,6 +38,7 @@ class Store:
         self.claimed = False
         self.finished = []
         self.phases = []
+        self.checkpoints = []
         self.graph_started = False
 
     def read_state(self):
@@ -70,6 +71,9 @@ class Store:
         if phase != "reflect":
             assert self.cycle_active(claim)
         self.phases.append(phase)
+
+    def record_cycle_checkpoint(self, claim, phase, **details):
+        self.checkpoints.append((phase, details))
 
     def record_cycle_step(self, claim, **details):
         assert self.cycle_active(claim)
@@ -165,6 +169,8 @@ def test_real_graph_proposes_without_claiming_goal_completed_or_self_approval(po
     store, calls, current, _, _ = ports
     result = asyncio.run(runtime.tick_async())
     assert store.phases == ["observe", "decide", "act", "reflect"]
+    assert [phase for phase, _ in store.checkpoints] == ["act", "reflect"]
+    assert store.checkpoints[-1][1]["actual_tokens"] == 42
     assert len(calls) == 1
     assert current["owner"] == 17
     assert result["actual_tokens"] == 42

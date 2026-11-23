@@ -27,6 +27,7 @@ from modstore_server.xiaoc_life_cognition import (
     reflection_facts,
     reflection_receipt,
 )
+from modstore_server.xiaoc_life_telemetry import life_operation
 
 
 class LifeBlocked(ValueError):
@@ -894,10 +895,21 @@ def build_life_graph(ports: CyclePorts):
 
     def durable_node(name: str):
         async def invoke(state: LifeCycle) -> LifeCycle:
-            if name != "reflect":
-                ports.active()
-            _store().record_cycle_phase(ports.claim, name)
-            return await getattr(ports, name)(state)
+            with life_operation(name):
+                if name != "reflect":
+                    ports.active()
+                _store().record_cycle_phase(ports.claim, name)
+                result = await getattr(ports, name)(state)
+                if name in {"act", "reflect"}:
+                    _store().record_cycle_checkpoint(
+                        ports.claim,
+                        name,
+                        result=dict(result),
+                        actual_tokens=ports.actual_tokens,
+                        evidence_refs=ports.evidence,
+                        reflection_status=ports.details.get("reflection_receipt", {}).get("status"),
+                    )
+                return result
 
         return invoke
 
@@ -917,16 +929,17 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
         return dict(_store().read_state())
     ports = CyclePorts(claim)
     try:
-        with _store().life_execution_scope(claim):
+        with life_operation("graph"), _store().life_execution_scope(claim):
             result = await build_life_graph(ports).ainvoke({}, {"recursion_limit": 8})
     except asyncio.CancelledError:
         ports.details["reason"] = "cycle_cancelled"
-        ports.finish(
-            {
-                "status": "interrupted",
-                "summary": "本轮已中断，未知调用保留预算等待核对。",
-            }
-        )
+        with life_operation("settle"):
+            ports.finish(
+                {
+                    "status": "interrupted",
+                    "summary": "本轮已中断，未知调用保留预算等待核对。",
+                }
+            )
         raise
     except BOUNDARY_ERRORS as exc:
         ports.details["reason"] = str(exc) if isinstance(exc, LifeBlocked) else type(exc).__name__
@@ -936,7 +949,8 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
                 ports.details["reason"], "本轮条件尚未满足，已保留观察和调用记录。"
             ),
         }
-    return ports.finish(result)
+    with life_operation("settle"):
+        return ports.finish(result)
 
 
 async def tick_async() -> dict[str, Any]:
@@ -945,16 +959,18 @@ async def tick_async() -> dict[str, Any]:
         reconcile_usage,
     )
 
-    reconcile_usage()
-    reconcile_goals()
-    store = _store()
-    state = store.read_state()
-    for domain in _domain_order(state):
-        claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
-        if claim is not None:
-            claim["state"]["events"] = state.get("events", [])
-            return await run_claimed_cycle(claim)
-    return {"status": "idle", "identity_id": state["identity_id"]}
+    with life_operation("tick"):
+        with life_operation("reconcile"):
+            reconcile_usage()
+            reconcile_goals()
+        store = _store()
+        state = store.read_state()
+        for domain in _domain_order(state):
+            claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
+            if claim is not None:
+                claim["state"]["events"] = state.get("events", [])
+                return await run_claimed_cycle(claim)
+        return {"status": "idle", "identity_id": state["identity_id"]}
 
 
 def tick() -> dict[str, Any]:

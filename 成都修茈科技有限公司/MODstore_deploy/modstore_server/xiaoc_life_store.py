@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.identity import User
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
+from modstore_server.xiaoc_life_checkpoint import make_checkpoint, same_checkpoint
 from modstore_server.xiaoc_life_policy import (
     IDENTITY_ID,
     MINIMUM_LEVEL,
@@ -275,6 +276,10 @@ def read_state() -> dict[str, Any]:
                 "status": data["status"],
                 "phase": active.get("phase", "claimed"),
                 "phase_started_at": active.get("phase_started_at", active["started_at"]),
+                "checkpoint_phase": (
+                    "reflect" if "reflect" in active.get("graph_checkpoints", {})
+                    else "act" if "act" in active.get("graph_checkpoints", {}) else None
+                ),
                 "summary": (
                     "原运行已禁止新增动作，保留原回执及预算核对"
                     if data["status"] in {"paused", "stopped", "blocked"}
@@ -696,6 +701,7 @@ def finish_cycle(
                 "owner_user_id": claim["owner_user_id"],
                 "steps": active.get("steps", []),
                 "last_phase": active.get("phase", "claimed"),
+                "graph_checkpoints": active.get("graph_checkpoints", {}),
                 "outbound_journal_version": active.get("outbound_journal_version"),
             },
         )
@@ -791,6 +797,7 @@ def defer_cycle(
 
 def begin_cycle_graph(claim: dict[str, Any]) -> bool:
     """Only one graph invocation may consume a claimed cognition lease."""
+
     def begin(data: dict[str, Any], session: Session) -> bool:
         if not _claim_active(data, session, claim):
             return False
@@ -833,6 +840,47 @@ def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
         active["phase_started_at"] = utcnow().isoformat()
 
     _mutate(record)
+
+
+def record_cycle_checkpoint(
+    claim: dict[str, Any],
+    phase: str,
+    *,
+    result: dict[str, Any],
+    actual_tokens: int | None,
+    evidence_refs: list[str],
+    reflection_status: str | None = None,
+) -> None:
+    """Keep bounded returned-node evidence in the same SQL CAS authority."""
+    checkpoint = make_checkpoint(
+        claim, phase, result=result, actual_tokens=actual_tokens,
+        evidence_refs=evidence_refs, reflection_status=reflection_status,
+        recorded_at=utcnow().isoformat(),
+    )
+
+    def save(data: dict[str, Any], session: Session) -> None:
+        event_id = "cycle:" + claim["cycle_id"]
+        if (
+            session.get(XiaoCLifeEvent, event_id) is not None
+            or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+        ):
+            return
+        active = data.get("active_cycle") or {}
+        if not _matches_claim(active, claim) or not active.get("graph_started"):
+            raise LifePolicyError("节点检查点不属于原运行")
+        records = active.setdefault("graph_checkpoints", {})
+        previous = records.get(phase)
+        if previous is not None:
+            if not same_checkpoint(previous, checkpoint):
+                raise LifePolicyError("原节点检查点不可覆盖")
+            return
+        if active.get("phase") != phase or (phase == "reflect" and "act" not in records):
+            raise LifePolicyError("节点检查点不符合原图阶段")
+        # Receipt-only write: late evidence may survive revocation, but cannot
+        # execute another node or grant any learning/dispatch authority.
+        records[phase] = checkpoint
+
+    _mutate(save)
 
 
 def record_cycle_step(claim: dict[str, Any], *, kind: str, details: dict[str, Any]) -> None:

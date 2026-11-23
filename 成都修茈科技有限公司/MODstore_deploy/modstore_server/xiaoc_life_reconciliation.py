@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
+from modstore_server.xiaoc_life_checkpoint import recover_checkpoint
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, utcnow
 from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
 
@@ -101,6 +102,8 @@ def reconcile_usage() -> dict[str, int]:
                     "steps": active.get("steps", []),
                     "owner_user_id": active["owner_user_id"],
                     "outbound_journal_version": active.get("outbound_journal_version"),
+                    "policy_revision": active["policy_revision"],
+                    "graph_checkpoints": active.get("graph_checkpoints", {}),
                     "active": True,
                 }
             )
@@ -168,6 +171,7 @@ def reconcile_usage() -> dict[str, int]:
                     running.get("cycle_id") != item["cycle_id"]
                     or running.get("lease_token") != item["lease_token"]
                     or running.get("steps", []) != steps
+                    or running.get("graph_checkpoints", {}) != item.get("graph_checkpoints", {})
                     or not (
                         running.get("awaiting_worker") or waiting_deadline(current) <= utcnow()
                     )
@@ -182,6 +186,13 @@ def reconcile_usage() -> dict[str, int]:
                 budget["exploration_tokens"] += actual
             current["unknown_usage"] = budget["reserved_tokens"] > 0
             current["last_status"] = "waiting"
+            checkpoint = recover_checkpoint(
+                item.get("graph_checkpoints"),
+                cycle_id=item["cycle_id"],
+                owner_user_id=item["owner_user_id"],
+                policy_revision=item.get("policy_revision", 0),
+                actual_tokens=actual,
+            )
             _event(
                 session,
                 event_id,
@@ -190,7 +201,10 @@ def reconcile_usage() -> dict[str, int]:
                 summary="已核对原运行账本并结算模型用量，没有重新执行原调用。",
                 evidence_refs=["cycle:" + item["cycle_id"]],
                 actual_tokens=actual,
-                details={"steps": item["steps"]},
+                details={
+                    "steps": item["steps"],
+                    **({"graph_checkpoint_recovery": checkpoint} if checkpoint else {}),
+                },
             )
             return True
 
