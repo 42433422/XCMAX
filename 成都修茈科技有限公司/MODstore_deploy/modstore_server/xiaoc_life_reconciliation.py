@@ -170,6 +170,7 @@ def reconcile_usage() -> dict[str, int]:
 
 
 def reconcile_goals() -> dict[str, Any]:
+    from modstore_server.xiaoc_goal_management import portfolio_goal_closed
     from modstore_server.xiaoc_life_cognition import goal_review_projection, portfolio_feedback
 
     snapshot = read_state()
@@ -185,7 +186,8 @@ def reconcile_goals() -> dict[str, Any]:
         selected = record.get("plan", {}).get("selected", [])
         tasks = record.get("tasks", {})
         states = [tasks.get(key, {}).get("status", "pending") for key in selected]
-        if record.get("halted"):
+        closed = portfolio_goal_closed(record, now=utcnow())
+        if closed:
             status, label = "stopped", "原组合已停止"
         elif states and all(state == "completed" for state in states):
             status, label = (
@@ -206,6 +208,7 @@ def reconcile_goals() -> dict[str, Any]:
                 states,
                 record.get("halted", False),
                 feedback["evidence_ref"],
+                *(["authority_closed"] if closed and not record.get("halted") else []),
             ]
         )
         review = goal_review_projection(

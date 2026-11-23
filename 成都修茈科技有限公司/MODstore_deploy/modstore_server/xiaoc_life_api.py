@@ -19,7 +19,8 @@ from modstore_server.strategic_portfolio import (
     create_portfolio_proposal,
     digest,
 )
-from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate
+from modstore_server.xiaoc_goal_management import ORIGIN, check_candidate_promotion
+from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate, utcnow
 from modstore_server.xiaoc_life_store import (
     _event,
     _event_dict,
@@ -135,6 +136,11 @@ def promote_goal(
         raise HTTPException(
             409, "原改进目标须先完成原派工审批，由 L6 循环生成绑定原任务的工程预算提案"
         )
+    if (
+        goal.get("candidate_origin") == ORIGIN
+        and goal.get("candidate_owner_user_id") != int(admin.id)
+    ):
+        raise HTTPException(409, "经营候选不属于当前授权人")
     if goal.get("decision_id"):
         return {"decision_id": goal["decision_id"], "life": state}
     if body.employee_id not in {item.get("id") for item in _load_all_employee_profiles()}:
@@ -142,6 +148,17 @@ def promote_goal(
     if not goal.get("evidence_refs"):
         raise HTTPException(409, "没有实际来源的想法不能转为执行提案")
     limits = body.limits.model_dump()
+    if goal.get("candidate_origin") == ORIGIN:
+        from modstore_server.strategy_business_context import customer_value_context
+
+        _call(
+            check_candidate_promotion,
+            goal,
+            int(admin.id),
+            limits,
+            customer_value_context(),
+            now=utcnow(),
+        )
     opportunity = Opportunity(
         opportunity_id="life-" + digest(goal_id)[:24],
         title=goal["title"][:200],
@@ -164,7 +181,11 @@ def promote_goal(
         limits=limits,
         opportunities=[opportunity.model_dump()],
         idempotency_key="xiaoc-life:"
-        + digest([goal_id, limits, body.employee_id, body.input_data]),
+        + digest(
+            [goal_id, ORIGIN]
+            if goal.get("candidate_origin") == ORIGIN
+            else [goal_id, limits, body.employee_id, body.input_data]
+        ),
     )
     decision_id = proposal["decision"]["decision_id"]
 
@@ -174,6 +195,12 @@ def promote_goal(
         ):
             raise LifePolicyError("设置已变化，提案保留待审核，未启动任何任务")
         target = next(item for item in current["goals"] if item["id"] == goal_id)
+        if goal.get("candidate_origin") == ORIGIN and (
+            target.get("candidate_owner_user_id") != int(admin.id)
+            or target.get("observation") != goal.get("observation")
+            or (not target.get("decision_id") and target.get("status") != "proposed")
+        ):
+            raise LifePolicyError("原经营候选已改变，提案未绑定")
         if target.get("decision_id") not in (None, "", decision_id):
             raise LifePolicyError("目标已绑定另一个提案")
         target.update(decision_id=decision_id, status="awaiting_approval")

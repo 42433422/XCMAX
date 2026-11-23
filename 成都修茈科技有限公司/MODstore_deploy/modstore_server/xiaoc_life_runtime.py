@@ -15,6 +15,7 @@ from typing import Any, TypedDict
 from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
+from modstore_server.xiaoc_goal_management import discover_goal_candidate, portfolio_goal_closed
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
@@ -54,6 +55,7 @@ class LifeCycle(TypedDict, total=False):
     portfolio: dict[str, Any]
     evolution: dict[str, Any]
     goals: list[dict[str, Any]]
+    discovered_goals: list[dict[str, Any]]
     interests: list[dict[str, Any]]
     self_model: dict[str, Any]
     summary: str
@@ -181,7 +183,9 @@ def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
             record = portfolio_status(goal["decision_id"], owner_user_id=owner)
         except PortfolioError:
             continue
-        if record["status"] not in {"approved", "executing"} or record.get("halted"):
+        if record["status"] not in {"approved", "executing"} or portfolio_goal_closed(
+            record, now=datetime.now(UTC)
+        ):
             continue
         ready = _ready_portfolio_tasks(record)
         company = bool(record.get("limits", {}).get("company_budget_id"))
@@ -242,7 +246,9 @@ class CyclePorts:
                 )
             ):
                 continue
-            if status["status"] in {"approved", "executing"} and not status.get("halted"):
+            if status["status"] in {"approved", "executing"} and not portfolio_goal_closed(
+                status, now=datetime.now(UTC)
+            ):
                 return {"goal": goal, "snapshot": status}
         return None
 
@@ -270,6 +276,15 @@ class CyclePorts:
         from modstore_server.strategy_planner import collect_context
 
         context = await asyncio.to_thread(collect_context)
+        if self.domain == "enterprise":
+            candidate = discover_goal_candidate(
+                context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
+            )
+            if candidate is not None:
+                goal, fact = candidate
+                self.evidence = [fact["ref"]]
+                self.details["sources"] = [fact]
+                return {"facts": [fact], "discovered_goals": [goal]}
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
         facts.extend(reflection_facts(self.state))
@@ -412,7 +427,7 @@ class CyclePorts:
 
     async def decide(self, state: LifeCycle) -> LifeCycle:
         self.active()
-        if state.get("portfolio") or state.get("evolution"):
+        if state.get("portfolio") or state.get("evolution") or state.get("discovered_goals"):
             return {}
         from fastapi import HTTPException
 
@@ -519,6 +534,12 @@ class CyclePorts:
                 "goals": [goal],
                 "status": "completed",
                 "summary": "已将原改进批准接入公司工程预算提案，等待原审批。",
+            }
+        if state.get("discovered_goals"):
+            return {
+                "goals": state["discovered_goals"],
+                "status": "completed",
+                "summary": "已从原客户价值账本形成待审核经营候选，未生成或执行员工任务。",
             }
         decision = state["decision"]
         if decision["action"] == "wait":
@@ -727,7 +748,7 @@ class CyclePorts:
         selected_tasks = [after.get("tasks", {}).get(key, {}) for key in selected]
         remaining_ready = company and bool(_ready_portfolio_tasks(after))
         goal_status = "active"
-        if after.get("halted"):
+        if portfolio_goal_closed(after, now=datetime.now(UTC)):
             goal_status = "stopped"
         elif (
             not remaining_ready
