@@ -374,7 +374,11 @@ def conversations_get(
     limit: int = Query(default=50, ge=1, le=200),
     before_id: int | None = Query(default=None, ge=1),
     turn_id: str | None = Query(default=None, max_length=256),
+    after_id: Annotated[int | None, Query(ge=1)] = None,
+    through_id: Annotated[int | None, Query(ge=1)] = None,
 ) -> dict:
+    if before_id is not None and after_id is not None:
+        raise HTTPException(status_code=422, detail="before_id and after_id are mutually exclusive")
     cid = (conversation_id or "").strip()
     resolved_user_id = _xcagi_request_user_id(request, user_id)
     scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
@@ -389,6 +393,8 @@ def conversations_get(
                 mod_id=scope[1],
                 limit=limit,
                 before_id=before_id,
+                after_id=after_id,
+                through_id=through_id,
                 turn_id=turn_id,
             )
         )

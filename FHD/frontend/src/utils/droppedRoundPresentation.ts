@@ -27,11 +27,14 @@ interface DroppedRoundPresentation {
 }
 
 export function activeChatTurnStatus(raw: string): ActiveChatTurn['status'] | undefined {
-  if (raw === 'waiting_user' || raw === 'waiting_approval') return 'waiting_approval'
-  if (raw === 'waiting_input' || raw === 'waiting_auth') return 'blocked'
-  if (raw === 'queued' || raw === 'pending') return 'queued'
+  raw = raw.trim().toLowerCase()
+  // Task lifecycle machine/adapters and run observations share this UI projection.
+  if (['waiting', 'waiting_user', 'waiting_approval', 'awaiting_approval', 'pending_approval', 'approval_required'].includes(raw)) return 'waiting_approval'
+  if (['waiting_input', 'awaiting_input', 'waiting_auth', 'awaiting_auth', 'waiting_authorization', 'requires_token',
+    'unknown', 'outcome_unknown', 'needs_verification', 'inconclusive', 'partial', 'partial_success', 'interrupted', 'deferred'].includes(raw)) return 'blocked'
+  if (['created', 'queued', 'pending', 'accepted', 'submitted'].includes(raw)) return 'queued'
   if (raw === 'paused' || raw === 'blocked') return raw
-  if (['running', 'planning', 'retrying'].includes(raw)) return 'running'
+  if (['running', 'claimed', 'planning', 'processing', 'retrying', 'streaming', 'inflight', 'in_progress'].includes(raw)) return 'running'
 }
 
 export function readActiveChatTurn(value: unknown): ActiveChatTurn | undefined {

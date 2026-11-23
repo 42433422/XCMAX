@@ -19,8 +19,9 @@ from app.utils.process_lock import exclusive_file_lock
 from app.utils.time import utc_now_naive
 
 from .backup_retention import cleanup_local_backups
+from .database_profile import configured_remote_database_url
+from .db import check_database as _check_database
 from .db import integrity_check_ok as _integrity_check_ok
-from .db import quick_check_ok as _quick_check_ok
 from .desktop_runtime_paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,11 @@ _MIN_DISK_FREE_BYTES = 500 * 1024 * 1024  # 500 MB
 # 进程退出时释放，不会遗留死锁；超时则失败退出，不静默带病迁移。
 _MIGRATION_LOCK_NAME = ".xcagi-migration.lock"
 _MIGRATION_LOCK_TIMEOUT_SECONDS = 600.0
+
+
+def _quick_check_ok(path: Path) -> bool:
+    """Compatibility query; recovery uses the non-boolean check result directly."""
+    return _check_database(path).state == "healthy"
 
 
 @contextmanager
@@ -58,6 +64,8 @@ def backup_database(
     文件合并，保证备份出来的库是一致的。备份后跑 integrity_check 校验，
     校验失败删除备份文件并返回 None。
     """
+    if configured_remote_database_url(data_dir):
+        raise RuntimeError("remote PostgreSQL requires the server backup workflow")
     dirs = ensure_desktop_dirs(data_dir)
     db = dirs["data"] / "xcagi.db"
     if not db.exists():
@@ -117,12 +125,13 @@ def recover_if_corrupt(
     2. 对主库 xcagi.db 跑 PRAGMA quick_check。
     3. 如果损坏：把坏库改名为 .corrupt-{timestamp} 留证据；
        扫描 backups/ 按时间倒序找第一个通过 integrity_check 的备份恢复。
-    4. 返回 {"action": "ok"|"restored"|"corrupt_no_backup"|"skipped",
+    4. 返回 {"action": "ok"|"restored"|"corrupt_no_backup"|"skipped"|"unavailable",
             "detail": str}
 
     库正常时返回 action=ok，不做任何操作。
     库损坏且能恢复时返回 action=restored，detail 是恢复来源文件名。
     库损坏但没备份时返回 action=corrupt_no_backup，调用方应决定是否阻塞启动。
+    锁定或不可读时返回 unavailable，原库与备份均保持不变。
     主库不存在（首启）时返回 action=skipped。
     """
     dirs = ensure_desktop_dirs(data_dir)
@@ -145,9 +154,13 @@ def recover_if_corrupt(
     if not db.exists():
         return {"action": "skipped", "detail": "database does not exist yet"}
 
-    # 3) quick_check 通过 = 库健康，直接返回
-    if _quick_check_ok(db):
+    # An inconclusive check cannot authorize replacing committed customer data.
+    health = _check_database(db)
+    if health.state == "healthy":
         return {"action": "ok", "detail": ""}
+    if health.state == "unavailable":
+        logger.warning("database check unavailable; preserving database: %s", health.detail)
+        return {"action": "unavailable", "detail": health.detail}
 
     # 4) 库损坏：改名留证据
     logger.error("database corrupt: %s, attempting recovery from backups", db)
@@ -376,6 +389,7 @@ def run_alembic_upgrade(
     data_dir: str | os.PathLike[str] | None = None, version: str = "heads"
 ) -> None:
     configure_desktop_environment(data_dir)
+    _require_local_migration(data_dir)
     # 迁移会改写 schema 契约，必须与并发启动的其它进程互斥（见 migration_lock）。
     with migration_lock(data_dir):
         if _should_bootstrap_sqlite(data_dir):
@@ -434,6 +448,8 @@ def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | 
     返回 True 表示已在 head（可零开销跳过）；False 表示需要升级（含首启、
     链外版本戳待修复、版本戳缺失三种情况，均交给 run_alembic_upgrade 处理）。
     """
+    if configured_remote_database_url(data_dir):
+        return _remote_schema_is_current()
     dirs = ensure_desktop_dirs(data_dir)
     db = dirs["data"] / "xcagi.db"
     if not db.exists() or db.stat().st_size == 0:
@@ -456,6 +472,33 @@ def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | 
     return stamped == _current_head_revision()
 
 
+def _remote_schema_is_current() -> bool:
+    """Inspect the shared schema without bootstrapping, restamping or migrating it."""
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.db import get_host_engine
+
+    try:
+        with get_host_engine().connect() as connection:
+            current = set(MigrationContext.configure(connection).get_current_heads())
+    except SQLAlchemyError as exc:
+        raise RuntimeError(
+            "remote PostgreSQL schema unavailable; refusing desktop startup"
+        ) from exc
+    return current == set(_known_alembic_heads())
+
+
+def _require_local_migration(data_dir: str | os.PathLike[str] | None) -> None:
+    if configured_remote_database_url(data_dir):
+        raise RuntimeError(
+            "remote PostgreSQL requires the explicit server migration workflow; "
+            "desktop bootstrap, restamp and local backup are not applicable"
+        )
+    if os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") in {"unavailable", "corrupt_no_backup"}:
+        raise RuntimeError("desktop database recovery is unresolved; refusing migration")
+
+
 def ensure_startup_migration(
     data_dir: str | os.PathLike[str] | None = None, version: str = "startup"
 ) -> dict[str, str]:
@@ -470,6 +513,13 @@ def ensure_startup_migration(
     而不是带病启动后静默 500。
     """
     configure_desktop_environment(data_dir)
+    if configured_remote_database_url(data_dir):
+        if not _remote_schema_is_current():
+            raise RuntimeError(
+                "remote PostgreSQL schema requires explicit server migration; refusing desktop startup"
+            )
+        return {"action": "skipped", "detail": "remote schema already at head"}
+    _require_local_migration(data_dir)
     if is_schema_current(data_dir):
         return {"action": "skipped", "detail": "schema already at head"}
     with migration_lock(data_dir):
@@ -503,6 +553,7 @@ def _should_bootstrap_sqlite(data_dir: str | os.PathLike[str] | None = None) -> 
 
 def bootstrap_sqlite_schema(data_dir: str | os.PathLike[str] | None = None) -> None:
     configure_desktop_environment(data_dir)
+    _require_local_migration(data_dir)
     # Import model modules so Base.metadata contains the full schema.
     import app.db.models  # noqa: F401
     from app.db import dispose_and_recreate_engine, get_runtime_engine

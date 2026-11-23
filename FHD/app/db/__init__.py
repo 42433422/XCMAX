@@ -184,8 +184,8 @@ def _resolve_host_database_url() -> str:
     test_mgr = _get_test_db_manager()
     if test_mgr and test_mgr.is_enabled():
         return f"sqlite:///{test_mgr.resolved_test_db_path()}"
-    # 桌面模式必须用本机 SQLite，忽略外部环境残留的 DATABASE_URL（如开发机 PostgreSQL）
-    if _sqlite_desktop_mode():
+    # Ignore inherited URLs; the validated desktop profile selects local or remote storage.
+    if _desktop_mode():
         from app.desktop_runtime.db import configure_sqlite_defaults
 
         return configure_sqlite_defaults()
@@ -199,8 +199,8 @@ def _get_database_url(db_path: str | None = None) -> str:
     test_mgr = _get_test_db_manager()
     if test_mgr and test_mgr.is_enabled():
         return f"sqlite:///{test_mgr.resolved_test_db_path()}"
-    # 桌面模式优先：避免父进程 DATABASE_URL 把桌面后端拽到不可用的 PostgreSQL
-    if _sqlite_desktop_mode():
+    # Use the same profile as the host engine, migration and desktop status.
+    if _desktop_mode():
         from app.desktop_runtime.db import configure_sqlite_defaults
 
         return _database_url_for_active_mod(configure_sqlite_defaults())
@@ -211,13 +211,21 @@ def _get_database_url(db_path: str | None = None) -> str:
     return _database_url_for_active_mod(_DEFAULT_DATABASE_URL)
 
 
-def _sqlite_desktop_mode() -> bool:
+def _desktop_mode() -> bool:
     return (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
+
+
+def _sqlite_desktop_mode() -> bool:
+    if not _desktop_mode():
+        return False
+    from app.desktop_runtime.database_profile import configured_remote_database_url
+
+    return configured_remote_database_url() is None
 
 
 def _create_engine_for_url(url: str):

@@ -38,16 +38,47 @@ async def _chat_completion(
     messages: list[dict[str, Any]], max_tokens: int = 4000
 ) -> dict[str, Any]:
     """Non-agent cognition uses the owner-bound model route."""
+    from app.domain.model_admission_errors import (
+        ModelCircuitOpenError,
+        ModelConcurrencyLimitError,
+        ModelRateLimitError,
+    )
     from app.infrastructure.llm.providers.registry import get_active_provider
 
+    started = time.monotonic()
     try:
         provider = get_active_provider()
         if provider is not None:
             result = await provider.chat_completion(messages, max_tokens=max_tokens)
             if isinstance(result, dict):
                 return result
-    except RECOVERABLE_ERRORS:
+            raise ValueError("Model response is not an object")
+    except (ModelRateLimitError, ModelConcurrencyLimitError, ModelCircuitOpenError) as exc:
+        # These guards reject before network I/O; preserve their recovery contract.
+        return {
+            "error": str(exc),
+            "error_code": exc.code,
+            "retryable": True,
+            "retry_after": exc.retry_after,
+            "outcome": "not_started",
+            "reconciliation_required": False,
+        }
+    except RECOVERABLE_ERRORS as exc:
+        from app.infrastructure.llm.retry_policy import model_failure_details
+
         logger.warning("employee model request failed")
+        details = model_failure_details(
+            exc,
+            stage="employee_cognition",
+            attempt=1,
+            elapsed_ms=(time.monotonic() - started) * 1000,
+        )
+        return {
+            "error": "员工模型请求未完成，请查看任务状态。",
+            "error_code": str(details["failure_kind"]),
+            **details,
+            "reconciliation_required": details["outcome"] == "unknown",
+        }
     return {
         "error": "当前会话的模型服务不可用，请检查模型配置或重新登录。",
         "error_code": "employee_llm_not_configured",

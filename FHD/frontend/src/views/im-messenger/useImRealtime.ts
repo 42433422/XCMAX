@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+import { getCurrentScope, nextTick, onScopeDispose } from 'vue'
 import type { Ref } from 'vue'
 import { imWebSocketUrl, markImRead, type ImConversationSummary, type ImMessage } from '@/api/im'
 import { captureMessageScroll } from '@/composables/messenger/useChatSession'
@@ -36,6 +36,8 @@ export function useImRealtime(deps: ImRealtimeDeps) {
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectAttempt = 0
+  let disposed = false
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; disconnectWs() })
 
   function applyIncomingMessage(msg: ImMessage, cid: number): void {
     // 上游行为守卫（企业客服会话由 enterprise CS bridge 专管，不走通用实时路径）
@@ -91,35 +93,43 @@ export function useImRealtime(deps: ImRealtimeDeps) {
   }
 
   function scheduleReconnect(): void {
+    if (disposed) return
     if (reconnectTimer) clearTimeout(reconnectTimer)
     const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt)
     reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
       reconnectAttempt += 1
       connectWs()
     }, delay)
   }
 
   function connectWs(): void {
-    if (!localUserId.value) return
+    if (disposed || !localUserId.value) return
     disconnectWs(false)
     try {
       wsConnecting.value = true
       ws = new WebSocket(imWebSocketUrl())
+      const owner = ws
+      const isCurrent = () => !disposed && ws === owner
       ws.onopen = () => {
+        if (!isCurrent()) return
         wsConnected.value = true
         wsConnecting.value = false
         reconnectAttempt = 0
       }
       ws.onclose = () => {
+        if (!isCurrent()) return
         wsConnected.value = false
         wsConnecting.value = false
         scheduleReconnect()
       }
       ws.onerror = () => {
+        if (!isCurrent()) return
         wsConnected.value = false
         wsConnecting.value = false
       }
       ws.onmessage = (ev) => {
+        if (!isCurrent()) return
         try {
           handleWsPayload(JSON.parse(String(ev.data)))
         } catch {

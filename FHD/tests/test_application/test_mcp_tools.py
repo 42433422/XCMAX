@@ -126,7 +126,9 @@ def test_call_mcp_tool_strips_internal_params(monkeypatch) -> None:
     monkeypatch.setattr(
         mcp_registry,
         "load_server_configs",
-        lambda *a, **k: [mcp_config.McpServerConfig(name="demo", command="x")],
+        lambda *a, **k: [
+            mcp_config.McpServerConfig(name="demo", command="x", read_only_tools=("search_notes",))
+        ],
     )
     monkeypatch.setattr(
         mcp_registry,

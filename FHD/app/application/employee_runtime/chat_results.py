@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.application.employee_runtime.memory import MemoryContext
+from app.application.employee_runtime.result_builders import cognition_failure_fields
 
 
 def is_interactive_chat_payload(payload: dict[str, Any]) -> bool:
@@ -69,6 +70,7 @@ def build_collaboration_context_result(
         "pack": {"id": pack["pack_id"], "version": pack.get("version")},
         "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
         "success": not degraded,
+        **(cognition_failure_fields(reasoning) if degraded else {}),
         "result": {
             "task": task,
             "handlers": handler_list,
@@ -108,9 +110,7 @@ def build_interactive_chat_fallback_result(
         "pack": {"id": pack["pack_id"], "version": pack.get("version")},
         "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
         "success": False,
-        "error": str(reasoning.get("error") or "员工认知模型暂不可用"),
-        "error_code": str(reasoning.get("error_code") or "employee_cognition_unavailable"),
-        "retryable": bool(reasoning.get("retryable", False)),
+        **cognition_failure_fields(reasoning),
         "result": {
             "task": task,
             "handlers": handler_list,

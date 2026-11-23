@@ -364,6 +364,16 @@ describe('ChatView functions – sendMessage', () => {
     wrapper.unmount()
   })
 
+  it('最新历史不可用时保留未发送输入', async () => {
+    const { wrapper } = await mountChatView()
+    const vm = wrapper.vm as any
+    vm.messageInput = '尚未发送的输入'
+    mockChatSendMessage.mockRejectedValueOnce(new Error('最新历史暂不可读'))
+    await vm.sendMessage()
+    expect(vm.messageInput).toBe('尚未发送的输入')
+    wrapper.unmount()
+  })
+
   it('有内容时发送按钮可用并提供可访问状态', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any

@@ -16,7 +16,10 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
-from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+from app.application.agent_orchestrator.task_execution_models import (
+    TaskQueueCapacityError,
+    dispatched_run_state,
+)
 from app.application.agent_orchestrator.task_execution_repository import (
     AgentTaskExecution,
     TaskExecutionRepository,
@@ -166,10 +169,18 @@ class AgentTaskDispatcher:
         self._recover_outcomes()
         while not self._stop.is_set() and self._active_count() < self._max_workers:
             owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
-            execution = self._execution_repo.claim(
-                owner_id,
-                lease_seconds=self._lease_seconds,
-            )
+            with self._active_lock:
+                background = sum(
+                    item.execution.dispatch_class != "interactive" for item in self._active.values()
+                )
+            try:
+                execution = self._execution_repo.claim(
+                    owner_id,
+                    lease_seconds=self._lease_seconds,
+                    interactive_only=background >= max(1, self._max_workers - 1),
+                )
+            except TaskQueueCapacityError:
+                break  # Another database client owns this short scheduling transaction.
             if execution is None:
                 break
             worker = threading.Thread(
@@ -337,10 +348,18 @@ class AgentTaskDispatcher:
                 else nullcontext()
             )
             with scope:
-                run = orchestrator.execute_dispatched_run(
-                    execution.run_id,
-                    recovered=execution.recovery_count > 0,
+                from app.application.tool_execution_deadline import invocation_deadline
+
+                bounded_read = (
+                    invocation_deadline(time.monotonic() + execution.dispatch_deadline_seconds)
+                    if execution.dispatch_class == "interactive"
+                    else nullcontext()
                 )
+                with bounded_read:
+                    run = orchestrator.execute_dispatched_run(
+                        execution.run_id,
+                        recovered=execution.recovery_count > 0,
+                    )
             if run is None:
                 error_code = "worker_run_unavailable"
             else:

@@ -25,6 +25,7 @@ from app.application.agent_orchestrator.run_repository import get_agent_run_repo
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
 from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
+from app.application.agent_orchestrator.task_execution_models import TaskQueueCapacityError
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
@@ -85,6 +86,12 @@ logger = logging.getLogger(__name__)
 # registration/golden-snapshot boundary even though direct TestClient calls
 # could still traverse them.
 router = task_router
+
+
+def _queue_capacity_response(result: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(
+        result, status_code=429, headers={"Retry-After": str(result["retry_after"])}
+    )
 
 
 # Owned catalog edits share the authenticated agent run router; no ERP fallback.
@@ -251,6 +258,8 @@ def create_agent_run(
             start_paused=not auto_execute,
             start_queued=auto_execute,
         )
+        if result.get("error_code") == TaskQueueCapacityError.code:
+            return _queue_capacity_response(result)
         run_id = str(result.get("run_id") or "")
         run = get_agent_run_repository().get(run_id) if run_id else None
         if run is None:
@@ -285,6 +294,8 @@ def create_agent_run(
         return JSONResponse(
             {"success": False, "message": "会话已变更或删除，请重新打开会话后提交"}, status_code=409
         )
+    except TaskQueueCapacityError as exc:
+        return _queue_capacity_response(exc.result())
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent run")
 
@@ -490,15 +501,28 @@ def answer_agent_clarification(
             _, error = _owned_run(orchestrator, run_id, principal)
             if error is not None:
                 return error
+            queue = get_task_execution_repository()
+            durable = isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository)
+            if durable and not isinstance(queue, SQLAlchemyTaskExecutionRepository):
+                raise ApprovalGrantStorageError("持久化澄清需要持久化队列")
             run = orchestrator.stage_clarification_answer(
-                run_id, step_id=step_id, parameters=parameters, requested_by=principal.user_id
+                run_id,
+                step_id=step_id,
+                parameters=parameters,
+                requested_by=principal.user_id,
+                queue=queue if durable else None,
             )
         if run is None:
             return JSONResponse({"success": False, "message": "agent run 不存在"}, status_code=404)
-        _enqueue_run(run, requested_by=principal.user_id)
+        if durable:
+            notify_agent_task_dispatcher()
+        else:
+            _enqueue_run(run, requested_by=principal.user_id)
         return JSONResponse(_run_response(run, principal=principal), status_code=202)
     except ClarificationAnswerError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except TaskQueueCapacityError as exc:
+        return _queue_capacity_response(exc.result())
     except RECOVERABLE_ERRORS:
         return _internal_error_response("answer agent clarification")
 
@@ -607,6 +631,8 @@ def continue_agent_run(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
             status_code=403,
         )
+    except TaskQueueCapacityError as exc:
+        return _queue_capacity_response(exc.result())
     except RECOVERABLE_ERRORS:
         return _internal_error_response("continue agent run")
 
@@ -753,6 +779,8 @@ def resume_agent_run(
         return JSONResponse(
             {"success": False, "message": "任务授权或状态已变化，请先核对"}, status_code=403
         )
+    except TaskQueueCapacityError as exc:
+        return _queue_capacity_response(exc.result())
     except RECOVERABLE_ERRORS:
         return _internal_error_response("resume agent run")
 
@@ -822,5 +850,7 @@ def retry_agent_run(
                 },
                 status_code=409,
             )
+        except TaskQueueCapacityError as exc:
+            return _queue_capacity_response(exc.result())
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")

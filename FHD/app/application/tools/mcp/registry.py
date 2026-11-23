@@ -170,6 +170,20 @@ def _discover(
             actions[info.name] = _action_spec(info, config)
         for name in RESOURCE_ACTIONS:
             actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
+        from app.application.tools.mcp.verification import registered_contract
+
+        for name, metadata in actions.items():
+            if config.browser or metadata.get("read_only") is not False:
+                continue
+            contract = registered_contract(config, actions, name)
+            digest = hashlib.sha256(json.dumps(contract, sort_keys=True).encode()).hexdigest()
+            metadata["result_verification"] = {
+                "status": "ready" if contract else "unavailable",
+                "contract_sha256": digest if contract else "",
+            }
+            metadata["version"] = f"mcp-readback-v1:{digest}"
+            if not contract:
+                metadata["description"] += " 未配置独立业务回读，写入暂不可执行。"
         tools[tool_id] = {
             "description": (
                 f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）"
@@ -233,6 +247,8 @@ def call_mcp_tool(
     params: dict[str, Any] | None = None,
     *,
     runtime_context: dict[str, Any] | None = None,
+    expected_config_sha256: str | None = None,
+    expected_input_schema_sha256: str | None = None,
 ) -> dict[str, Any]:
     """执行外部 MCP 工具；未发现或已过期时返回明确错误。"""
     if not mcp_enabled():
@@ -244,6 +260,11 @@ def call_mcp_tool(
     config = servers.get(str(tool_id))
     if config is None or str(action) not in tools.get(str(tool_id), {}).get("actions", {}):
         return {"success": False, "message": f"外部工具或动作未注册：{tool_id}.{action}"}
+    if expected_config_sha256 is not None:
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        if canonical_hash(asdict(config)) != expected_config_sha256:
+            return {"success": False, "error_code": "mcp_verification_contract_changed"}
     arguments = {
         key: value for key, value in dict(params or {}).items() if not str(key).startswith("_")
     }
@@ -256,6 +277,11 @@ def call_mcp_tool(
                 "retryable": False,
             }
     spec = tools[str(tool_id)]["actions"][str(action)]
+    if expected_input_schema_sha256 is not None:
+        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+        if canonical_hash(spec.get("input_schema") or {}) != expected_input_schema_sha256:
+            return {"success": False, "error_code": "mcp_verification_contract_changed"}
     from app.application.agent_orchestrator.tool_spec import validate_schema_object
 
     valid, message = validate_schema_object(spec.get("input_schema") or {}, arguments)
@@ -266,6 +292,30 @@ def call_mcp_tool(
             "message": message,
             "retryable": False,
         }
+    if not config.browser and spec.get("read_only") is False:
+        from app.application.tools.mcp.verification import (
+            registered_contract,
+            require_write_acceptance,
+        )
+
+        try:
+            require_write_acceptance(
+                str(tool_id),
+                str(action),
+                arguments,
+                runtime_context or {},
+                selected_contract=registered_contract(
+                    config, tools[str(tool_id)]["actions"], str(action)
+                ),
+            )
+        except (ValueError, PermissionError):
+            return {
+                "success": False,
+                "error_code": "mcp_result_verifier_required",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "外部写入缺少当前账号的原审批或独立核验契约，未执行。",
+            }
     if config.browser and action not in BROWSER_OBSERVATIONS:
         try:
             from app.application.agent_orchestrator.business_action_ledger import canonical_hash

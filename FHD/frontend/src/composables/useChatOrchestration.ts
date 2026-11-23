@@ -78,7 +78,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const isRecalling = computed(() => recalling.has(recallKey.value))
   const {
     messages,
-    messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+    messagesHaveEarlier, messagesHaveLater, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+    loadNewerMessages, loadLatestMessages, assertHistoryCapacity,
     cacheError,
     retryMessagesCache,
     retryMessageSave,
@@ -608,8 +609,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
   }
 
+  let preparingHistory = false
   async function sendMessage(message: string, turn?: { retryOf?: string; idempotencyKey?: string; destructiveConfirmed?: boolean }) {
     if (isRecalling.value) return
+    assertHistoryCapacity?.()
+    if (messagesHaveLater?.value) {
+      if (preparingHistory) throw new Error('正在恢复最新会话，请稍后发送。')
+      const scope = captureLocalScope()
+      preparingHistory = true
+      try {
+        await loadLatestMessages()
+        if (!scope.isCurrent()) throw new Error('当前会话已改变，请重试。')
+      } finally { preparingHistory = false }
+    }
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
     if (isLoading.value) stopReply({ supersede: true })
     const generation = chatSessionActivity.beginRound(taskSessionId)
@@ -933,7 +945,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   return {
     messages,
-    messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+    messagesHaveEarlier, messagesHaveLater, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
+    loadNewerMessages, loadLatestMessages,
     cacheError,
     retryMessagesCache,
     retryMessageSave,

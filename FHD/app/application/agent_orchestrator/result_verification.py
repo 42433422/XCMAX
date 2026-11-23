@@ -94,6 +94,10 @@ def freeze_verification_contract(
         "read_only": bool(spec and spec.is_read_only_call(call.params)),
         "output_schema": copy.deepcopy(spec.output_schema) if spec else {},
     }
+    if step.tool_id.startswith("mcp__") and not contract["read_only"]:
+        from app.application.tools.mcp.verification import capture_acceptance
+
+        contract["mcp_acceptance"] = capture_acceptance(step, context)
     if (step.tool_id, step.action) == ("reports", "export"):
         from app.application.agent_orchestrator.verification_reports import capture_report_baseline
 
@@ -305,6 +309,7 @@ def verify_step_result(
 def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_cognition import plan_admission_receipt
     from app.application.agent_orchestrator.verification_kellai import can_observe_kellai_delivery
+    from app.application.tools.mcp.verification import can_observe_unknown
 
     if "_credential_authorization" in context:
         from app.application.aiopen.service import api_key_permits_execution
@@ -316,12 +321,14 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
                 "checks": [],
             }
     delivery_observation = can_observe_kellai_delivery(run, step, call)
+    mcp_observation = can_observe_unknown(run, step, call)
     child_admission = (step.tool_id, step.action) == ("enterprise_cognition", "plan") and (
         plan_admission_receipt(call.output)
     )
     pending = pending_execution_receipt(call.output)
     if (
         not delivery_observation
+        and not mcp_observation
         and not pending
         and (
             call.output.get("success") is not True

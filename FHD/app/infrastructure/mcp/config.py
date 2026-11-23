@@ -59,6 +59,8 @@ class McpServerConfig:
     # Only these operator-reviewed actions may open a fresh stateful session.
     session_start_tools: tuple[str, ...] = ()
     browser: bool = False
+    # Operator-reviewed readback contracts, never accepted from remote annotations.
+    verification: dict[str, dict] = field(default_factory=dict)
 
 
 def mcp_enabled() -> bool:
@@ -152,6 +154,7 @@ def _server_config(name: str, raw: object) -> McpServerConfig | None:
             else ()
         ),
         browser=raw.get("browser") is True,
+        verification=(raw["verification"] if isinstance(raw.get("verification"), dict) else {}),
     )
 
 

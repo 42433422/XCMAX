@@ -8,7 +8,7 @@ import { ref, nextTick } from 'vue'
 import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { setActivePinia, createPinia } from 'pinia'
-import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue, resetChatMessageStores } from './useChatMessages'
+import { CHAT_CACHE_MESSAGES, chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue, resetChatMessageStores } from './useChatMessages'
 
 vi.mock('@/api/chat', () => ({
   default: {
@@ -75,7 +75,7 @@ describe('useChatMessages', () => {
   it.each([1, null])('rejects an older pending page after revision %s replaces it', async revision => {
     const api = (await import('@/api/chat')).default
     const chat = useChatMessages(ref('revision-page-race'))
-    chat.loadMessages([{ role: 'ai', content: 'old latest', time: '', persistence: { id: 'server:80', status: 'saved' } }],
+    chat.loadMessages([{ role: 'ai', content: 'old latest', time: '', persistence: { id: 'server:80', status: 'saved', durable: true } }],
       { revision: 0, has_more: true, next_before_id: 80 })
     let release!: (page: never) => void
     vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
@@ -140,7 +140,7 @@ describe('useChatMessages', () => {
     vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0,
       has_more: false, messages: [row(1)] } as never)
     await chat.loadEarlierMessages()
-    expect(api.getConversation).toHaveBeenLastCalledWith('refresh-loaded-history', { before_id: 80, limit: 80 })
+    expect(api.getConversation).toHaveBeenLastCalledWith('refresh-loaded-history', { before_id: 80, limit: 80, through_id: 160 })
     expect(chat.messages.value.map(message => message.content)).toEqual(['message 1', 'message 80', 'message 160'])
     vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
     await chat.syncFromServer()
@@ -155,7 +155,7 @@ describe('useChatMessages', () => {
     const api = (await import('@/api/chat')).default
     const chat = useChatMessages(ref('recalled-loaded-history'))
     chat.loadMessages([{ role: 'ai', content: 'recalled message', time: '', serverMessageId: 1,
-      persistence: { id: 'client-old', status: 'saved' } }], { revision: 0, has_more: false })
+      persistence: { id: 'client-old', status: 'saved', durable: true } }], { revision: 0, has_more: false })
     vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'recalled-loaded-history', revision: 1,
       has_more: true, next_before_id: 160, messages: [{ id: 160, role: 'ai', content: 'current message' }] } as never)
     await chat.syncFromServer()
@@ -537,7 +537,7 @@ describe('useChatMessages', () => {
   it('removes cached deleted server history instead of restoring it as a local fallback', async () => {
     const api = (await import('@/api/chat')).default
     const chat = useChatMessages(ref('deleted-server-history'))
-    chat.loadMessages([{ role: 'user', content: 'withdrawn content', time: '', persistence: { id: 'server:12', status: 'saved' } }])
+    chat.loadMessages([{ role: 'user', content: 'withdrawn content', time: '', persistence: { id: 'server:12', status: 'saved', durable: true } }])
     vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, durable: true, revision: null, messages: [] } as never)
     await chat.syncFromServer()
     expect(chat.messages.value).toEqual([])
@@ -554,7 +554,7 @@ describe('useChatMessages', () => {
     vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: false,
       messages: [1, 2, 3].map(id => ({ id, role: 'ai', content: `message-${id}` })) } as never)
     await chat.loadEarlierMessages()
-    expect(api.getConversation).toHaveBeenLastCalledWith('paged-history', { before_id: 4, limit: 80 })
+    expect(api.getConversation).toHaveBeenLastCalledWith('paged-history', { before_id: 4, through_id: 5, limit: 80 })
     expect(chat.messages.value.map(row => row.content)).toEqual([1, 2, 3, 4, 5].map(id => `message-${id}`))
     expect(chat.messagesHaveEarlier.value).toBe(false)
   })
@@ -820,7 +820,7 @@ describe('message persistence failure UX', () => {
     api.loadMessages([...protectedRows, ...durable], { revision: 0, title: 'Original conversation', message_count: 160, has_more: false })
     expect(api.messages.value).toHaveLength(166)
     const cache = JSON.parse(localStorage.getItem('chat_bounded-cache_') || '[]')
-    expect(cache).toHaveLength(86)
+    expect(cache).toHaveLength(CHAT_CACHE_MESSAGES + protectedRows.length)
     for (const row of protectedRows) expect(cache.some((item: any) => item.persistence.id === row.persistence.id)).toBe(true)
     expect(cache.some((item: any) => item.content === 'original 1')).toBe(false)
     expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
@@ -860,10 +860,11 @@ describe('message persistence failure UX', () => {
       persistence: { id: `server:${index + 1}`, status: 'saved' as const, durable: true } }))
     api.loadMessages([pending, ...confirmed])
     const cache = JSON.parse(localStorage.getItem('chat_byte-budget_') || '[]')
-    expect(cache).toHaveLength(3)
-    expect(cache[0].content).toBe(pending.content)
-    expect(cache.slice(1).map((row: any) => row.serverMessageId)).toEqual([5, 6])
-    expect(api.messages.value).toHaveLength(7)
+    expect(cache).toHaveLength(2)
+    expect(cache.find((row: any) => row.persistence.id === 'unsaved-large').content).toBe(pending.content)
+    expect(cache.filter((row: any) => row.persistence.durable).map((row: any) => row.serverMessageId)).toEqual([6])
+    expect(api.messages.value).toHaveLength(6)
+    expect(api.messagesHaveEarlier.value).toBe(true)
   })
 
   it('keeps the previous unconfirmed cache and every live message when a bounded write hits quota', () => {

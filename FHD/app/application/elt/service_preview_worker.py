@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import logging
 import time
-from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
 from app.application.elt.errors import EltError
@@ -20,7 +19,6 @@ from app.application.elt.operation_owner import (
 )
 from app.application.elt.preview_confirmation import publish_preview
 from app.application.elt.service_support import dump_json, load_json, safe_error
-from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -45,26 +43,20 @@ class PreviewWorkerMixin:
     def _submit_preview(
         self, run_id: str, tenant_id: int, owner_user_id: int, *, operation_token: str | None = None
     ) -> None:
+        from app.application.elt.service_background import submit_background
+
         facade = _facade()
-        with facade.SUBMITTED_LOCK:
-            if run_id in facade.SUBMITTED and operation_token is None:
-                return
-            facade.SUBMITTED.add(run_id)
-
-        def work() -> None:
-            try:
-                with tenant_scope(tenant_id):
-                    self._preview_worker(run_id, owner_user_id, operation_token=operation_token)
-            finally:
-                with facade.SUBMITTED_LOCK:
-                    facade.SUBMITTED.discard(run_id)
-
-        try:
-            facade.EXECUTOR.submit(copy_context().run, work)
-        except RECOVERABLE_ERRORS:
-            with facade.SUBMITTED_LOCK:
-                facade.SUBMITTED.discard(run_id)
-            raise
+        submit_background(
+            self,
+            kind="preview",
+            run_id=run_id,
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+            operation_token=operation_token,
+            options=None,
+            executor=facade.EXECUTOR,
+            session_factory=facade.new_session,
+        )
 
     def _preview_worker(
         self, run_id: str, owner_user_id: int, *, operation_token: str | None = None

@@ -96,6 +96,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | SLO 错误预算候选规则 | [Sloth v0.16.0](https://github.com/slok/sloth/releases/tag/v0.16.0)，Apache-2.0，CI 镜像固定 `ghcr.io/slok/sloth:v0.16.0` | 复用 Sloth 的多窗口燃烧率规则生成器，针对现有 Prometheus 业务事件指标生成候选告警；不新增第二套 SLO 事实源，不自动替换线上告警。原采集器仍核对样本下限、24h 抓取率和正式发布身份，规则生成/合成测试不代表现场已启用或业务指标达标。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
+| ELT 后台容量与回收 | 已有 CPython `concurrent.futures` / `multiprocessing`（PSF-2.0）、psutil `7.2.2`（BSD-3-Clause）及工具执行器的 owned-worker supervisor | 线程只监督独立子进程，复用父进程丢失检测、进程树回收、RSS 采样和硬截止。产品适配绑定实际业务库、原账号/租户、审批版本与同一个 `EltRun` 操作令牌，无新增运行时依赖或任务引擎。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
 | ELT 事务与提交恢复 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)，MIT；服务端与桌面锁 `2.0.52`，开发 `uv.lock` 为 `2.0.51` | 使用 `Session.begin_nested()` 保存点隔离失败行，既有租约 UPDATE 建立外层事务；提交应答丢失只在独立 Session 核对原行回执和计数。移除先回滚再重写已成功行的逻辑；知识库独立写入前释放 SQL 写锁，逐行记录回执。 |
 | ELT 归档并发 | [filelock 4.2.4](https://github.com/tox-dev/filelock)，MIT；[cryptography](https://github.com/pyca/cryptography)，Apache-2.0/BSD-3-Clause，`uv.lock` 为 `50.0.0`、桌面锁为 `50.0.1` | 复用跨进程文件锁与 Fernet；首次生成密钥互斥且独占创建，已有无效密钥拒绝替换；密文限额按编码开销计算，解密后核对原长度和摘要。 |
@@ -103,6 +104,10 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | ELT 交付文件 | openpyxl `3.1.5`（MIT）与 Python 标准库 `csv`、`tempfile`、`os.replace`（PSF-2.0） | XLSX 逐格核对值、类型与格式，CSV 逐行回读；临时文件通过后原子发布。唯一下载入口发送有界、摘要已核验的字节快照，缺摘要或摘要失配不放行。 |
 
 ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行，不新增调度器或状态账本。重复表头和天然后缀碰撞由现有表头生成器消歧，原标签、列坐标和表头行保存在来源信息中，字段含义继续由模型判断。SQL 保存点、加密、文件锁、表格解析和重试均来自上述固定组件；保留的产品适配只负责原租户/账号、审批版本、行数守恒和业务回执，通用库不能替代这些产品事实。
+
+ELT 预演、草稿重校验和确认执行共用有界资源准入：每个后端进程默认最多 12 项在途、每租户 4 项，预演最多占 9 项，给确认执行保留 3 项。`ELT_EXECUTOR_WORKERS` 为 4–32 个监督线程；`ELT_MAX_IN_FLIGHT` 不超过监督线程数，`ELT_TENANT_MAX_IN_FLIGHT` 小于总量，`ELT_EXECUTION_RESERVED` 至少保留 1 项。超限立即拒绝并在原审计中记录 `not_started`，不留无界内存队列。默认 `ELT_BACKGROUND_TIMEOUT_SECONDS=900`（最大 3600）与 `ELT_WORKER_MEMORY_MB=2048`（128–8192）约束一个工作进程及其被观测到的子孙进程；既有工具子进程 CPU/文件句柄限制继续生效。
+
+启动前以原租约令牌做数据库条件更新，只允许一个后端分派同一任务；实际执行再激活 `owned_execute` 并重查批准版本。未确认的执行、超时或回执丢失保留令牌和 `outcome_unknown`，启动恢复与过期扫描不自动重放。只有进程树清理证据齐全才归还槽；证据不全时该槽保持占用，需在核对并重启后端后恢复容量。容量限制按后端进程计算，多副本需按实例数配置部署总预算；业务执行权仍由共享数据库保证。子进程需要可访问的持久数据库，内存 SQLite 不作为跨进程任务存储；原线程内应用逻辑测试与真实 spawn/卡进程回收测试分别验证其边界。
 
 Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回执，原样携带 `run_id`、`chunk_index`、`idempotency_key`，并返回 `executed_rows` 与该分片行数相同、`committed: true`。202、204、明确失败、无回执或身份/行数不符进入待核对，不根据响应猜测完成或再次发送。回执的 `business_verified: false` 明确表示接收方自报提交尚不等于其业务数据库已独立对账；空分片连接测试只证明连通性。文件回读亦只证明产物字节与批准内容一致，`formulas_recalculated: false` 不冒充公式重算，客户原件 B31 对账与实际部署验收仍需另取证据。
 
@@ -117,6 +122,10 @@ Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回�
 遥测队列有界，退出时由 SDK 排空并关闭 exporter；短暂导出失败不永久关闭后续批次。本地查询逐行读取并只保留所需最新记录，持续运行时按日清理过期数据。遥测仍是观察数据，不能替代业务账本；强制结束进程、磁盘故障或队列溢出不承诺零丢失。网络故障与备份回归证明限定代码路径；真实生产 90 天、7 天 staging 压测及 Windows/macOS 安装恢复须提供对应原始证据，短时本地回归不能代替。
 
 对话执行卡复用同一套 Trace 组件展示规划、附件读取、工具节点、确认和回执。规划占用状态栏，步骤数来自真实工具事件或运行回执。ELT 进度直接读取已持久化的阶段数据；流结束且缺少工具回执时显示“待核对”。正文和执行进度独立更新。
+
+长对话复用原 SQL 会话存储的 `before_id/after_id/through_id` 游标与快照，原文仍以服务端为准；前端只保留分页适配，不新增历史数据库。可重建且已结束的历史常驻窗口限 160 条、512 KiB 序列化数据，启动缓存限 40 条、128 KiB；DOM 仍只挂载 80 条。单条超预算正文可按页读回，但不写入 localStorage，不能据此承诺进程的绝对内存上界。未确认保存、待审批、执行中及未知结果保留，达到待处理预算后阻止继续翻页和启动新回复；流式引用释放前不移动其消息下标。较新/最新按钮回读 SQL，发送前恢复最新上下文，读取失败保留输入及原未决状态。
+
+IM 身份初始化复用 Vue 作用域和 `AbortController`；卸载或账号代次失效后不建立新连接，KeepAlive 缓存保留原激活语义。同步 SSE 沿用浏览器 EventSource 和原持久游标，12 次失败后进入 60 秒冷却，联网、回到前台或原后端就绪事件可恢复连接；显式停止会撤销恢复监听，旧连接迟到事件不覆盖新游标。这些回归证明对应代码路径，长时运行与各平台交付仍需同版实测。
 
 员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
 
@@ -216,6 +225,35 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 任务详情展示核验状态、独立通过/仅契约检查步数和证据，并提供“重新核验结果”。接口为 `GET /api/agent/runs/{run_id}/verification` 和 `POST /api/agent/runs/{run_id}/verify`。`not_required` 仅用于注册为只读且输出契约通过、未声明待核验文件的动作，表示**只读契约检查**；旧记录为 `not_verified`，混合新旧步骤不能省略未覆盖步骤后宣称整任务已核验。员工结果包检查只拦截显式失败和身份不符，不能代替此独立读回。
 
+动态 MCP 业务写入复用已锁定的 MCP Python SDK 2.3.0、jsonschema 4.26.0 和 referencing 0.37.0（均为 MIT）及原审批、任务和结果核验引擎。在已有 `mcp_servers.json` 的服务器配置下登记 `verification.<写动作>`：`version=1`、`read_action`、原输入必填的 `operation_key_param`、`read_arguments` 及 `postcondition_schema`。`read_arguments` 将读取参数名映射到 `operation_key/tenant_id/owner_user_id/input_sha256`，必须包含前三种来源；值由原任务身份生成。读取动作必须同时列入本地 `read_only_tools` 且服务器声明只读，调用者仍须有当前读取权限。缺契约的写动作在执行前明确拒绝；浏览器原有页面断言协议继续独立适用。
+
+例如，供应方已有 `post_sale` 写动作及 `read_operation` 原操作账本读口时，可在该服务器的原配置中加入以下片段；动作名、入参名及后置条件须与经过审查的实际接口一致：
+
+```json
+{
+  "read_only_tools": ["read_operation"],
+  "verification": {
+    "post_sale": {
+      "version": 1,
+      "read_action": "read_operation",
+      "operation_key_param": "operation_id",
+      "read_arguments": {
+        "operation_id": "operation_key",
+        "tenant_id": "tenant_id",
+        "owner_user_id": "owner_user_id"
+      },
+      "postcondition_schema": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {"status": {"const": "posted"}}
+      }
+    }
+  }
+}
+```
+
+独立读取的 `structuredContent` 必须包含上述四个原身份字段、`operation_state="completed"` 及符合本地 JSON Schema 的 `effect`。适配器须从供应方原操作账本读取这些字段，不能把查询入参回显冒充回执；Schema 不允许网络引用，契约限 16 KiB、读回证据限 64 KiB，沿原 MCP 绝对超时预算。服务器配置和读写 Schema 摘要在执行前冻结，变化后旧契约不放行。核验范围为原操作的业务效果；传输结果未知时只更新观察，保留原回执、未结清状态和禁止重放约束。产品适配仅绑定原账号、原参数与经审查读口，通用组件不能替代供应方业务事实的可信来源。
+
 只读资格只接受宿主在 [原工具登记](config/risk_actions.registry.json) 显式登记的 `read_only=True`。核验适配以宿主 `verify_independent_result` 的实际分派为准，不再维护会随合并失效的第二份动作数量清单。旧 `query/list` 等动作若既无此标记也无独立适配器，即使执行及输出契约通过，仍会进入 `inconclusive` 并阻止完成；需逐动作审查实际实现，不能凭名称、低风险或幂等性放行。尚未补齐的范围包括部分报表汇总、库存流水、客户地址和账龄分析。Excel 读取、结构、查询与统计已按实际只读实现登记；自然语言查询只执行经过校验的有界 JSON 计划，与受限筛选表达式互斥，不再执行模型生成的任意代码。这里说明限定链路的实现与核验范围，不能据此认定全系统达到生产 L6。
 
 | 核验范围 | 已接入的独立事实 | 尚未覆盖的条件 |
@@ -233,6 +271,7 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 | `elt_import.execute` 的六类 SQL 目标 | 执行前冻结原预演、审批计划及来源摘要；执行后独立回读原行级账本及 `dynamic_table`、客户、产品、客户产品、采购单、发货记录的真实字段、归属与关联 | 同内容去重仍须核对真实目标；计划、来源、租户或数据不符时不放行。考勤、导出、知识库、Webhook 等其他目标尚无本适配器，保持待核验；未知执行不能因读回成功而重放 |
 | `browser.observe/execute`、`computer_execute`、具备后置条件的 AIOPEN/MCP 写动作 | 原调用冻结断言；原制品/效果记录的实际观察与文件字节，或同一屏幕/浏览器代次的新只读观察 | 明确 DOM、像素、页面或文件范围及 `business_effect_verified=false`；历史记录不证明当前状态，缺条件、丢失会话或权限不足仍待核对 |
 | 注册只读动作 | 原输出契约检查，明确标为 `not_required` | 不宣称已证明外部业务副作用；声明文件却没有适配器仍阻断 |
+| 已登记核验契约的动态 MCP 写动作 | 独立只读原操作账本、账号/租户/参数摘要及冻结的业务后置条件 | 缺少受信读口时写前拒绝；未知执行只允许观察，不自动结清或重放 |
 | 其他销售/出库/会计、未覆盖的 ELT 目标及尚未接入适配器的外部动作 | 保留已有专用执行回执与门禁 | 尚未全部接通本引擎的可信原回执和独立适配器；未覆盖的副作用返回 `inconclusive` |
 | 旧任务、legacy 管理端路径 | 保留历史原回执；员工台账的新 `verified` 为 false，旧值只作为 `legacy_result_valid` 展示 | 执行包检查明确标为 `execution_envelope`；无冻结契约不能补造独立通过，仍需逐入口迁移和真实业务验收 |
 
@@ -404,6 +443,21 @@ MODstore `VIBE_AGENT_V2` 保持默认关闭。脚本循环沿用原 AgentLoop �
 会话连续性复用 [LangChain 1.3.14 SummarizationMiddleware](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/langchain_v1)（MIT）及上述 Core 1.5.3，宿主压缩入口覆盖普通及流式模型调用，预留输出和工具 schema，保存完整原文的已覆盖游标；摘要失败不伪造覆盖。跨进程文件互斥使用 [filelock 4.2.4](https://github.com/tox-dev/filelock/tree/4.2.4)（MIT，统一跨进程锁依赖版本）。SQLAlchemy 事务管理会话 revision、删除标记和整轮回执，JSON 只作为可重建投影；历史通过授权游标分页读取，保存失败仅重试原回执。
 
 正式业务工作流使用 [LangGraph 原生检查点](https://docs.langchain.com/oss/python/langgraph/checkpointers)（核心 1.2.10、checkpoint 4.3.0、SQLite 3.1.2、Postgres 3.1.1+xcagi.1，MIT，源码与许可见 `packages/xcagi_langgraph_*`），在原 run 内恢复参数澄清、审批和安全步骤。通用自然语言任务恢复原 Codex thread，保存的原始目标与补答不变；新动作和已冻结工作流各自沿原权限与审批执行。运行快照 CAS 不代替执行租约，队列继续使用现有条件更新、租约及未决效果核对。DatasetRag 保留答案来源与查询范围；批量导入先读取已执行文件回执，只处理原授权范围中的未完成项。未知写入保留待核对。
+
+原 Agent 任务队列增加有界准入和租户公平调度，仍由同一 `AgentTaskExecutionRecord`、`SessionBook` 与 dispatcher 承接。准入与原 task/run 发布共同提交；容量不足返回 `task_queue_capacity`、HTTP `429`、`Retry-After: 1` 和本次准入 `outcome=not_started`，已存在的幂等请求仍返回原任务。等待审批、暂停、阻塞与未知结果继续计入已受理任务，不能通过停留等待状态绕过配额；未知副作用不会因为容量压力自动重放。无 tenant 的记录按原账号分别计量。
+
+| 原队列配置 | 默认值与边界 |
+|---|---|
+| `XCAGI_AGENT_TASK_MAX_ADMITTED` | 全局未结束受理量 1024，上限 4096。 |
+| `XCAGI_AGENT_TASK_TENANT_MAX_ADMITTED` | 每租户 128，受全局上限约束。 |
+| `XCAGI_AGENT_TASK_MAX_INFLIGHT` | 跨进程有效执行租约总量默认跟随 `XCAGI_AGENT_TASK_WORKERS`（默认 4），上限 128；本进程仍受原 worker 数限制。 |
+| `XCAGI_AGENT_TASK_TENANT_MAX_INFLIGHT` | 每租户默认全局执行量减 1、最少 1，默认配置下为 3。 |
+| `XCAGI_AGENT_TASK_INTERACTIVE_SECONDS` | 宿主单步只读任务预算默认 10 秒，上限 60 秒，且不能超过原 ToolSpec 的执行期限。 |
+| `XCAGI_AGENT_TASK_AGING_SECONDS` | 等待默认超过 30 秒后优先于同一租户的新优先级任务，上限 300 秒。 |
+
+领取任务先考虑租户当前占用与最近服务时间，再考虑等待时长和原优先级，已达租户上限的记录在 SQL 限量候选前排除。全局、租户及本进程各自有至少两个槽时，后台任务不能占用最后一个单步只读槽；默认全局最多同时运行 3 个后台任务，同一租户最多 2 个后台任务，余量可供经宿主确认的短查询使用。宿主在入队时将任务类别、原步骤/参数摘要、ToolSpec 契约摘要和预算冻结于原生命周期记录，并在领取时重核。只有当前已验证目录中的单步、幂等且实际只读的调用可使用保留槽；Codex、多步流程和按文件管理期限的导入保持后台类别。客户端优先级或自行声明只读不能获得保留容量。目录缓存为空、参数变化或契约失配时保守转为后台，队列锁内不刷新 MCP 目录或发起网络发现。短查询沿原 invocation deadline 和可回收的隔离工具进程执行；超时后保留真实执行结果与未知副作用边界，不强杀普通线程冒充已终止。
+
+此处复用下表 SQLAlchemy 事务和条件更新、PostgreSQL 事务级 advisory try-lock、SQLite 写锁，以及既有 worker 租约、心跳、CAS 和进程回收生命周期，仅增加原队列的配额与选择策略，不增加表、服务或另一套运行时。PostgreSQL 锁竞争在执行前返回可重试拒绝，避免持有原任务行锁时阻塞等待另一把调度锁。`test_task_dispatch_maturity_closure.py` 覆盖独立进程竞争、租户/长短任务交错、幂等受理、冻结契约与真实隔离进程超时；HTTP 回归另核验拒绝后的原父任务回滚。PostgreSQL 用例接入原 `XCAGI_TEST_AGENT_POSTGRES_URL` 专项门禁，本地 SQLite 通过不等同于 PostgreSQL 或生产容量验收。
 
 统一执行入口与任务状态继续复用上述 LangGraph 和现有 task/run/step、审批、轮次回执组件，新增部分限于本产品的授权范围、原子准入和状态投影；不增加第二套调度服务。复用与对照来源如下，具体缺口和未完成的验收见 [流程 SSOT §2.2](docs/architecture/PROCESS_FLOW_SSOT.md#22-统一执行入口与任务状态实现与证据边界)。
 

@@ -264,10 +264,11 @@ def fake_adapter(monkeypatch):
 
 @pytest.fixture
 def no_background(monkeypatch):
-    # 让后台 worker 不在真实线程池里跑，避免连接真实 DB。
+    # Public service branch tests replace dispatch at its explicit boundary;
+    # process admission/cleanup uses real file databases in the background tests.
     monkeypatch.setattr(
-        "app.application.elt.service_support.EXECUTOR.submit",
-        lambda fn, *a, **k: None,
+        "app.application.elt.service_background.submit_background",
+        lambda *a, **k: None,
     )
 
 
@@ -1230,24 +1231,6 @@ class TestServiceDraft:
         svc.update_draft(elt_db, run_id=run.id, owner_user_id=1, patch={"field_mappings": []})
         metric = mock_elt_metrics.elt_manual_corrections_total
         assert metric.labels.called
-
-    def test_submit_revalidation_dedup(self, elt_db, svc, app_data, fake_adapter, monkeypatch):
-        from app.application.elt import service_draft as draft_mod
-
-        submitted = []
-        monkeypatch.setattr(
-            "app.application.elt.service_support.EXECUTOR.submit",
-            lambda fn, *a, **k: submitted.append(fn),
-        )
-        run = _make_run(elt_db)
-        svc._submit_revalidation(run.id, 1, 1)
-        first = len(submitted)
-        svc._submit_revalidation(run.id, 1, 1)  # dedup -> no second submit
-        assert len(submitted) == first
-        from app.application.elt.service_support import SUBMITTED
-
-        SUBMITTED.discard(run.id)
-        assert draft_mod is not None
 
     def test_revalidate_existing_rows(
         self, elt_db, svc, app_data, fake_adapter, monkeypatch, mock_elt_metrics

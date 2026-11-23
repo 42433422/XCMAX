@@ -101,7 +101,7 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
                         updated_at = CURRENT_TIMESTAMP
                     WHERE status IN ('queued', 'previewing', 'executing')
                       AND (operation_token IS NULL OR
-                           (operation_kind NOT IN ('batch_execute', 'batch_rollback')
+                           (operation_kind NOT IN ('batch_execute', 'batch_rollback', 'owned_execute')
                             AND operation_lease_until <= CURRENT_TIMESTAMP))
                     """
                 )
@@ -142,7 +142,7 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
                     error_message = '外部批处理结果无法确认，请核对实际结果后人工处理',
                     updated_at = CURRENT_TIMESTAMP
                 WHERE operation_token IS NOT NULL
-                  AND operation_kind IN ('batch_execute', 'batch_rollback')
+                  AND operation_kind IN ('batch_execute', 'batch_rollback', 'owned_execute')
                   AND operation_lease_until <= CURRENT_TIMESTAMP
                   AND status != 'outcome_unknown'
             """)

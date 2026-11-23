@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from app.application.elt import (
     llm_assist,
     llm_session_provider,
+    service_background,
     service_draft,
     service_execution,
     service_preview,
@@ -108,6 +109,18 @@ def preview_store(tmp_path, monkeypatch):
             fallback=fallback,
             calls=[],
         )
+
+        def application_worker(job, session_factory):
+            # These tests exercise application/LLM failure injection in the same
+            # interpreter. Actual owned spawn, deadlines and cleanup are covered
+            # by test_elt_background_maturity, without this transport substitute.
+            try:
+                with tenant_scope(job.owner.tenant_id):
+                    service_background._dispatch(store.service, job)
+            finally:
+                service_background._release(job)
+
+        monkeypatch.setattr(service_background, "_supervise", application_worker)
         try:
             yield store
         finally:
@@ -590,7 +603,7 @@ def test_unexpected_revalidation_error_fails_and_releases_lease(preview_store, m
     assert result["status"] == result["stage"] == "failed"
     assert result["error_code"] == "ELT_INTERNAL_ERROR"
     assert result["lease"] == (None, None, None)
-    assert run_id not in service_draft.SUBMITTED
+    assert run_id not in service_background.SUBMITTED
 
 
 def test_unexpected_database_execution_error_rolls_back_chunk_without_replay(
@@ -656,12 +669,12 @@ def test_unexpected_external_batch_error_retains_unknown_outcome_and_rejects_ret
     result = snapshot(store, run_id)
     assert result["status"] == result["stage"] == "outcome_unknown"
     assert result["error_code"] == "ELT_OUTCOME_UNKNOWN"
-    assert result["lease"][0] == "batch_execute" and all(result["lease"])
+    assert result["lease"][0] == "owned_execute" and all(result["lease"])
     assert len(calls) == 1 and len(calls[0]) == 2
     with store.factory() as db, pytest.raises(EltError) as error:
         store.service.retry(db, run_id=run_id, owner_user_id=7)
     assert error.value.code == "ELT_RETRY_NOT_ALLOWED"
-    assert len(calls) == 1 and run_id not in service_execution.SUBMITTED
+    assert len(calls) == 1 and run_id not in service_background.SUBMITTED
 
 
 @pytest.mark.parametrize("exception", [KeyboardInterrupt, SystemExit])

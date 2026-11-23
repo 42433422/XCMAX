@@ -164,7 +164,7 @@ def test_knowledge_external_store_is_called_without_holding_host_write_lock(
     assert current["summary"]["executed"] == (1 if lose_ack else 2)
     assert len(knowledge.status(dataset_id="office-docking", tenant_id="1")["documents"]) == 2
     if lose_ack:
-        assert current["lease"][0] == "batch_execute"
+        assert current["lease"][0] == "owned_execute"
         with store.factory() as db, pytest.raises(EltError):
             store.service.retry(db, run_id=run_id, owner_user_id=7)
     assert len(calls) == 2
@@ -186,7 +186,9 @@ def test_commit_acknowledgement_is_read_back_without_replaying(
     def factory():
         nonlocal opened
         opened += 1
-        if opened > 1 and not readback_available:
+        # The original entry now freezes dispatch in its own short parent
+        # transaction, before opening the worker and independent receipt reader.
+        if opened > 2 and not readback_available:
             raise RuntimeError("synthetic unavailable independent readback")
         db = store.factory()
         commit = db.commit
