@@ -11,6 +11,7 @@ from app.application.elt import service_targets
 from app.application.elt.result_export import write_xlsx_result
 from app.application.elt.service_support import dump_json
 from app.db.models.elt import EltRun, EltUpload
+from app.fastapi_routes import elt
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_routes.test_elt_sources import source_client as source_client
 
@@ -94,3 +95,73 @@ def test_download_requires_login(download_store):
 def test_download_requires_read_grant(download_store):
     download_store.actor.permissions = set()
     assert download_store.client.get(download_store.download_url).status_code == 403
+
+
+@pytest.mark.parametrize("damage", ["changed", "missing_digest"])
+def test_download_rejects_unverified_artifact(download_store, damage):
+    store = download_store
+    path = store.root / "elt" / "exports" / store.receipt["file_name"]
+    if damage == "changed":
+        path.write_bytes(b"different artifact, same run")
+    else:
+        with tenant_scope(1), store.factory() as db:
+            run = db.get(EltRun, "download-regression")
+            run.receipt_json = dump_json({"file_name": path.name})
+            db.commit()
+    response = store.client.get(store.download_url)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ELT_EXPORT_UNVERIFIED"
+    assert path.is_file()  # Preserve evidence; never regenerate and relabel a changed result.
+
+
+def test_download_sends_verified_snapshot_if_result_is_replaced(download_store, monkeypatch):
+    store = download_store
+    service = elt.get_elt_service()
+    original = service.download_content
+    streams = []
+
+    def replace_after_verification(db, **kwargs):
+        content, name = original(db, **kwargs)
+        streams.append(content)
+        (store.root / "elt" / "exports" / name).write_bytes(b"changed after verification")
+        return content, name
+
+    monkeypatch.setattr(service, "download_content", replace_after_verification)
+    response = store.client.get(store.download_url)
+    assert response.status_code == 200
+    assert response.content == store.export_bytes
+    assert response.headers["cache-control"] == "private, no-store"
+    assert all(stream.closed for stream in streams)
+
+
+def test_download_rejects_oversize_without_reading_entire_artifact(download_store, monkeypatch):
+    monkeypatch.setattr(service_targets, "MAX_FILE_BYTES", 128)
+    response = download_store.client.get(download_store.download_url)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ELT_EXPORT_TOO_LARGE"
+
+
+@pytest.mark.parametrize("rolled", [False, True])
+async def test_download_closes_snapshot_when_client_disconnects_before_body(rolled):
+    from tempfile import SpooledTemporaryFile
+
+    from starlette.requests import ClientDisconnect
+
+    content = SpooledTemporaryFile(max_size=1024, mode="w+b")
+    content.write(b"verified snapshot")
+    if rolled:
+        content.rollover()
+    response = elt._attachment_response(content, "result.csv")
+
+    async def send(_event):
+        raise OSError("client disconnected before response body")
+
+    async def receive():
+        return {"type": "http.disconnect"}
+
+    try:
+        with pytest.raises(ClientDisconnect):
+            await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+        assert content.closed
+    finally:
+        content.close()

@@ -2627,8 +2627,18 @@ def test_webhook_adapter_success(monkeypatch):
     calls = []
 
     class FakeResp:
-        def __init__(self, code):
+        def __init__(self, code, payload):
             self.status_code = code
+            self.payload = payload
+
+        def json(self):
+            return {
+                "run_id": self.payload["run_id"],
+                "chunk_index": self.payload["chunk_index"],
+                "idempotency_key": self.payload["idempotency_key"],
+                "executed_rows": len(self.payload["rows"]),
+                "committed": True,
+            }
 
     class FakeClient:
         def __init__(self, *a, **k):
@@ -2642,7 +2652,7 @@ def test_webhook_adapter_success(monkeypatch):
 
         def post(self, *a, **k):
             calls.append(k.get("headers", {}))
-            return FakeResp(next(statuses))
+            return FakeResp(next(statuses), k["json"])
 
     monkeypatch.setattr("httpx.Client", FakeClient)
     monkeypatch.setattr("app.application.elt.targets.batch.read_webhook_secret", lambda ref: "sec")

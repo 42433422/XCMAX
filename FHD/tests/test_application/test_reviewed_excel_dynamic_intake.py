@@ -40,6 +40,9 @@ def _workbook(kind):
     elif kind == "recipe":
         headers = ["批次编号", "组分代号", "配比", "搅拌分钟"]
         rows = [["B-001", "甲组分", 0.3, 20], ["B-002", "乙组分", 0.7, 25]]
+    elif kind == "duplicate_headers":
+        headers = ["凭证编号", "金额", "金额", "金额_2"]
+        rows = [["V-001", 12, 34, 56], ["V-002", 78, 90, 12]]
     else:
         headers, rows = ["通知"], [["本周例会改到周五"], ["请参会人员提前准备"]]
     selected.append(headers)
@@ -57,6 +60,8 @@ def _workbook(kind):
     out = BytesIO()
     book.save(out)
     book.close()
+    if kind == "duplicate_headers":
+        headers = ["凭证编号", "金额", "金额_3", "金额_2"]
     return out.getvalue(), headers, rows
 
 
@@ -109,7 +114,7 @@ def _model_pipeline(monkeypatch, *, schema_mode="table"):
     return calls
 
 
-@pytest.mark.parametrize("kind", ["ledger", "recipe"])
+@pytest.mark.parametrize("kind", ["ledger", "recipe", "duplicate_headers"])
 def test_fixed_enum_knowledge_still_previews_and_confirms_structured_rows(
     intake_store, monkeypatch, kind
 ):
@@ -123,14 +128,16 @@ def test_fixed_enum_knowledge_still_previews_and_confirms_structured_rows(
                 used_llm=True,
                 provider="platform",
                 model="synthetic",
-                data={"clear": [], "reason": "synthetic audit"}
-                if audit
-                else {
-                    "candidates": [
-                        {"clear": [{"sheet": "所选数据", "cell": "C2"}], "reason": "已清理字段"}
-                        for _ in range(3)
-                    ]
-                },
+                data=(
+                    {"clear": [], "reason": "synthetic audit"}
+                    if audit
+                    else {
+                        "candidates": [
+                            {"clear": [{"sheet": "所选数据", "cell": "C2"}], "reason": "已清理字段"}
+                            for _ in range(3)
+                        ]
+                    }
+                ),
             )
 
         monkeypatch.setattr(
@@ -163,6 +170,32 @@ def test_fixed_enum_knowledge_still_previews_and_confirms_structured_rows(
         assert draft["dynamic_schema"]["headers"] == headers
         assert draft["dynamic_schema"]["columns"][2]["type"] == "number"
         assert db.query(EltDynamicTable).count() == db.query(EltDynamicRow).count() == 0
+        if kind == "duplicate_headers":
+            from app.application.elt.errors import EltConflict
+            from app.application.elt.preview_confirmation import verify_preview
+            from app.application.elt.service_support import dump_json
+
+            source = db.query(EltRunRow).filter_by(run_id=plan["run_id"]).first()
+            assert load_json(source.source_json, {}) == dict(zip(headers, rows[0], strict=True))
+            provenance = load_json(source.provenance_json, {})
+            assert provenance["columns"] == dict(zip(headers, range(1, 5), strict=True))
+            assert provenance["original_headers"] == {
+                "凭证编号": "凭证编号",
+                "金额": "金额",
+                "金额_3": "金额",
+                "金额_2": "金额_2",
+            }
+            assert provenance["header_rows"] == {"start": 1, "end": 1}
+            # Either formerly colliding value is part of the reviewed content.
+            for column in ("金额", "金额_3"):
+                normalized = load_json(source.normalized_json, {})
+                assert str(normalized[column]) == str(rows[0][headers.index(column)])
+                normalized[column] = -100
+                source.normalized_json = dump_json(normalized)
+                with pytest.raises(EltConflict) as changed:
+                    verify_preview(db, db.get(EltRun, plan["run_id"]), business["preview_revision"])
+                assert changed.value.code == "ELT_PREVIEW_CHANGED"
+                db.rollback()
     assert business["status"] == "preview_ready" and business["summary"]["new"] == 2
     assert_no_writes(store)
 
@@ -195,6 +228,10 @@ def test_fixed_enum_knowledge_still_previews_and_confirms_structured_rows(
         payloads = [load_json(item.payload_json, {}) for item in stored]
         assert [item[headers[0]] for item in payloads] == [row[0] for row in rows]
         assert str(payloads[1][headers[2]]) == str(rows[1][2])
+        if kind == "duplicate_headers":
+            assert [[str(payload[key]) for key in headers] for payload in payloads] == [
+                [str(value) for value in row] for row in rows
+            ]
         if kind == "ledger":
             assert payloads[0].get(headers[2]) in (None, "")
         assert {(item.tenant_id, item.owner_user_id, item.run_id) for item in stored} == {
@@ -203,6 +240,21 @@ def test_fixed_enum_knowledge_still_previews_and_confirms_structured_rows(
         preview_rows = db.query(EltRunRow).filter_by(run_id=plan["run_id"]).all()
         assert {item.source_sheet for item in preview_rows} == {"所选数据"}
     assert len(store.starts) == 1
+
+
+def test_selected_candidate_preserves_values_under_unnamed_columns():
+    from app.application.elt.candidate_table import read_candidate_table
+
+    book = Workbook()
+    book.active.append(["凭证编号", "金额", None])
+    book.active.append(["V-001", 12, "原备注"])
+    stream = BytesIO()
+    book.save(stream)
+    book.close()
+    dataset = read_candidate_table(stream.getvalue())
+    assert dataset.rows[0].values == {"凭证编号": "V-001", "金额": 12, "未命名列3": "原备注"}
+    assert dataset.rows[0].provenance["original_headers"]["未命名列3"] == ""
+    assert dataset.rows[0].provenance["columns"]["未命名列3"] == 3
 
 
 @pytest.mark.parametrize("schema_mode", ["not_table", "unavailable", "prose"])
