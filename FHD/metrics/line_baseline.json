@@ -1,5 +1,5 @@
 {
-  "lines": 2709324,
+  "lines": 2709871,
   "updated": "2026-11-24",
-  "note": "browser contract diagnostics: preserve the original real Chromium success, verification and privacy assertions while serializing only safe failure metadata instead of truncated dict repr; measured +3 test lines over eae0453, with no production behavior, retries, timeouts or gate changes"
+  "note": "按用户PR阻塞全部解决授权，保留公开85774255浏览器原断言安全诊断、eae04534及全部并行来源。相对公开维护基线的增长547行用于桌面公开错误目录、DR原整组回执的身份和并发核对、固定SRT精确运行时依赖和薄配置职责、验证摘要清单及双方原回归。原DR58及新增2、交付24、回放静态21、封印/数据集41、业务链25、工作流契约219项在各自范围通过；未以本地静态验证替代正式原生正控。结构181、其他原门禁与断言不变，不删无关代码抵数；实际计数由原脚本登记，增长仅请求评审。"
 }

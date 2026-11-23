@@ -511,109 +511,38 @@ def _verify_worker_isolation():
         raise ValueError("training_replay_sandbox_unavailable")
 
 
+def _sandbox_command(directory, env, policy_path, *, timeout=60):
+    from modstore_server.workflow_training_sandbox import sandbox_command
+
+    return sandbox_command(
+        directory,
+        env,
+        policy_path,
+        support=_sandbox_support(),
+        project=Path(__file__).resolve().parents[1],
+        worker_module=__name__,
+        timeout=timeout,
+    )
+
+
 def _run_worker(request, directory, env, *, timeout=60):
     from modstore_server.self_maintenance_subprocess import terminate_subprocess
 
     deadline = time.monotonic() + timeout
-    support = _sandbox_support()
-    runtime = os.environ.get("PROMPTFOO_SANDBOX_ENTRY") or str(
-        support.parent
-        / "capability_trainer_deps/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js"
-    )
-    # Reuse the supported host, pinned SRT and deny-by-default policy already used
-    # by the product. Neither package hashes nor a temporary cwd isolate native code.
-    configured = subprocess.run(
-        [
-            shutil.which("node", path=env.get("PATH")) or "node",
-            "--input-type=module",
-            "-e",
-            "const {openCodeSandboxEntry, sandboxSettings}=await import(process.argv[1]); "
-            "const runtime=openCodeSandboxEntry({DEVFLEET_OPENCODE_SANDBOX_ENTRY:process.argv[4]}); "
-            "if (!runtime) throw Error('training_replay_sandbox_unavailable'); "
-            "process.stdout.write(JSON.stringify({runtime, node:process.execPath, "
-            "policy:sandboxSettings(process.argv[2], process.argv[2], process.argv[3], "
-            "process.execPath, new URL('https://offline.invalid'), false, runtime)}));",
-            support.as_uri(),
-            str(directory),
-            sys.executable,
-            runtime,
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=timeout,
-    )
-    if configured.returncode:
-        raise ValueError("training_replay_sandbox_unavailable")
-    settings = json.loads(configured.stdout)
-    policy = settings["policy"]
-    policy["network"] = {
-        "allowedDomains": [],
-        "deniedDomains": [],
-        "strictAllowlist": True,
-        "allowAllUnixSockets": False,
-        "allowLocalBinding": False,
-    }
-    project = Path(__file__).resolve().parents[1]
-    code_roots = (
-        project / "modstore_server",
-        project / "modman",
-        project.parents[1] / "FHD/app",
-    )
-    # Mount program directories once: per-file globs exceed SRT's mount limit.
-    # Its more-specific denies keep adjacent host state out of the replay.
-    policy["filesystem"]["allowRead"].extend(
-        [sys.prefix, sys.base_prefix, *(str(path) for path in code_roots)]
-    )
-    policy["filesystem"].setdefault("denyRead", []).extend(
-        str(code_roots[0] / name)
-        for name in (
-            "catalog_data",
-            "data",
-            "market_files",
-            "payment_orders",
-            "webhook_events",
-            "workbench_script_runs",
-            "backups",
-        )
-    )
-    policy["filesystem"]["denyRead"].extend(
-        str(root / "**" / pattern)
-        for root in code_roots
-        for pattern in (
-            "*.json",
-            "*.jsonl",
-            "*.db",
-            "*.sqlite*",
-            "*.log",
-            "*.pem",
-            "*.key",
-            ".env*",
-        )
-    )
-    policy_path = Path(directory) / "sandbox-settings.json"
-    policy_path.write_text(json.dumps(policy))
-    env = {**env, "PYTHONDONTWRITEBYTECODE": "1"}
-    with subprocess.Popen(
-        [
-            settings["node"],
-            settings["runtime"],
-            "--settings",
-            str(policy_path),
-            "--",
-            sys.executable,
-            "-m",
-            __name__,
-            "--worker",
-        ],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=directory,
-        env=env,
-        start_new_session=os.name == "posix",
-    ) as proc:
+    env = {**env, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"}
+    with (
+        tempfile.TemporaryDirectory(prefix="workflow-replay-policy-") as control,
+        subprocess.Popen(
+            _sandbox_command(directory, env, Path(control) / "settings.json", timeout=timeout),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=directory,
+            env=env,
+            start_new_session=os.name == "posix",
+        ) as proc,
+    ):
         try:
             stdout, stderr = proc.communicate(
                 json.dumps(request), timeout=max(0, deadline - time.monotonic())

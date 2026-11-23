@@ -17,6 +17,7 @@ import pytest
 from openpyxl import Workbook
 
 from modstore_server import workflow_training_replay as replay
+from modstore_server import workflow_training_sandbox as replay_sandbox
 from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.workflow_nl_training import get_assert
 
@@ -483,8 +484,173 @@ def test_csv_existing_native_fixture_keeps_its_content_comparison():
     assert replay._equal_files("result.csv", b'"order","quantity"\n"A-1","3"\n', expected) is True
 
 
+@pytest.fixture
+def configured_replay_sandbox(tmp_path, monkeypatch):
+    """Static policy fixtures; real native execution remains in the CSV/Excel tests."""
+    runtime = tmp_path / "trusted" / "sandbox-runtime"
+    entry = runtime / "dist" / "cli.js"
+    entry.parent.mkdir(parents=True)
+    entry.touch()
+    (entry.parent / "index.js").touch()
+    seccomp = runtime / "vendor/seccomp/x64/apply-seccomp"
+    seccomp.parent.mkdir(parents=True)
+    seccomp.touch(mode=0o700)
+    node = tmp_path / "trusted" / "node"
+    node.touch(mode=0o700)
+    monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(entry.parent / "index.js"))
+    monkeypatch.setattr(replay_sandbox.shutil, "which", lambda *args, **kwargs: str(node))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                {
+                    "runtime": str(entry),
+                    "node": str(node),
+                    "arch": "x64",
+                    "policy": {
+                        "filesystem": {
+                            "denyRead": ["/"],
+                            "allowRead": [str(node), str(replay._sandbox_support())],
+                            "allowWrite": [args[5], args[5]],
+                            "denyWrite": [str(Path(args[5]) / ".git")],
+                        },
+                        "credentials": {"envVars": [{"name": "OPENCODE_API_KEY", "mode": "deny"}]},
+                    },
+                }
+            ),
+            "",
+        ),
+    )
+    return entry, node, seccomp
+
+
+def test_worker_policy_has_no_network_or_ambient_customer_directory(
+    tmp_path, configured_replay_sandbox
+):
+    entry, node, _ = configured_replay_sandbox
+    root = tmp_path / "replay"
+    root.mkdir()
+    control = tmp_path / "control"
+    control.mkdir()
+    settings = control / "settings.json"
+    command = replay._sandbox_command(root, {"PATH": "/usr/bin:/bin"}, settings)
+    assert command == [
+        str(node),
+        str(entry),
+        "--settings",
+        str(settings),
+        "--",
+        sys.executable,
+        "-m",
+        replay.__name__,
+        "--worker",
+    ]
+    policy = json.loads(settings.read_text())
+    assert policy["network"] == {
+        "allowedDomains": [],
+        "deniedDomains": ["*"],
+        "strictAllowlist": True,
+        "allowUnixSockets": [],
+        "allowAllUnixSockets": False,
+        "allowLocalBinding": False,
+    }
+    assert policy["filesystem"]["allowWrite"] == [str(root)]
+    readable = policy["filesystem"]["allowRead"]
+    project = Path(replay.__file__).resolve().parents[1]
+    for private in (
+        "/",
+        str(control),
+        str(tmp_path),
+        str(project),
+        str(project.parents[1] / "FHD"),
+    ):
+        assert private not in readable
+    assert "/" in policy["filesystem"]["denyRead"]
+    for name in ("data", "catalog_data", "market_files", "tests"):
+        assert str(project / "modstore_server" / name) in policy["filesystem"]["denyRead"]
+    for option in (
+        "allowNestedUserNamespaces",
+        "enableWeakerNestedSandbox",
+        "enableWeakerNetworkIsolation",
+    ):
+        assert policy[option] is False
+    assert policy["credentials"] == {"envVars": [{"name": "OPENCODE_API_KEY", "mode": "deny"}]}
+    assert "tlsTerminate" not in policy["network"]
+
+
+def test_worker_policy_reads_exact_python_shared_library(
+    tmp_path, monkeypatch, configured_replay_sandbox
+):
+    library_dir = tmp_path / "python-runtime/lib"
+    library_dir.mkdir(parents=True)
+    library = library_dir / "libpython-test.so"
+    library.touch()
+    config = {
+        "LIBDIR": str(library_dir),
+        "LDLIBRARY": library.name,
+        "INSTSONAME": library.name,
+        "PYTHONFRAMEWORK": "",
+    }
+    original = replay_sandbox.sysconfig.get_config_var
+    monkeypatch.setattr(
+        replay_sandbox.sysconfig,
+        "get_config_var",
+        lambda name: config[name] if name in config else original(name),
+    )
+    root = tmp_path / "replay"
+    root.mkdir()
+    settings = tmp_path / "settings.json"
+    replay._sandbox_command(root, {"PATH": "/usr/bin:/bin"}, settings)
+    readable = json.loads(settings.read_text())["filesystem"]["allowRead"]
+    assert str(library) in readable
+    assert str(library_dir) not in readable
+    assert str(library_dir.parent) not in readable
+
+
+@pytest.mark.parametrize("unavailable", ["package", "node", "host", "identity", "seccomp"])
+def test_unavailable_native_boundary_fails_before_employee_execution(
+    unavailable, tmp_path, monkeypatch, configured_replay_sandbox
+):
+    _, _, seccomp = configured_replay_sandbox
+    if unavailable == "package":
+        monkeypatch.setenv("PROMPTFOO_SANDBOX_ENTRY", str(tmp_path / "missing"))
+    elif unavailable == "node":
+        monkeypatch.setattr(replay_sandbox.shutil, "which", lambda *args, **kwargs: None)
+    elif unavailable == "host":
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, "", "unsupported host"),
+        )
+    elif unavailable == "identity":
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(
+                args, 0, '{"runtime":"changed"}', ""
+            ),
+        )
+    else:
+        monkeypatch.setattr(sys, "platform", "linux")
+        seccomp.unlink()
+
+    def forbidden_start(*args, **kwargs):
+        pytest.fail("employee started without the required native boundary")
+
+    monkeypatch.setattr(subprocess, "Popen", forbidden_start)
+    source, graph, _ = _fixture()
+    result = replay.evaluate_business_replay(json.dumps(graph), source)
+    assert result["pass"] is False
+    assert result["score"] == 0
+    assert result["runtime_verified"] is False
+    assert result["reason"] == "training_business_replay_blocked"
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process group contract")
-def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
+def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch, configured_replay_sandbox):
     original = subprocess.Popen
     pid_file = tmp_path / "descendant.pid"
     script = (
@@ -497,24 +663,7 @@ def test_timeout_reaps_worker_descendants(tmp_path, monkeypatch):
         return original([sys.executable, "-c", script], **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", start)
-    # This test owns a real timed-out process tree; the native sandbox boundary is
-    # exercised separately above, so its configuration helper creates no child here.
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args,
-            0,
-            json.dumps(
-                {
-                    "node": sys.executable,
-                    "runtime": "fixture-cli.js",
-                    "policy": {"filesystem": {"allowRead": []}},
-                }
-            ),
-            "",
-        ),
-    )
+    # The trusted configuration is static; this test owns only process cleanup.
     with pytest.raises(subprocess.TimeoutExpired):
         replay._run_worker({}, tmp_path, dict(os.environ), timeout=1)
     child = int(pid_file.read_text())

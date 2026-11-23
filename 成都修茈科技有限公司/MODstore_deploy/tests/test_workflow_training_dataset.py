@@ -210,9 +210,11 @@ def test_business_bundle_freezes_partitions_and_evaluator_inputs(tmp_path, monke
         "workflow_training_replay.py",
         "workflow_training_dataset.py",
         "workflow_training_artifact_verification.py",
+        "workflow_training_sandbox.py",
     }.issubset(bundle["validation_sha256"])
-    verifier = Path(trainer.__file__).with_name("workflow_training_artifact_verification.py")
-    assert bundle["validation_sha256"][verifier.name] == trainer._file_hash(verifier)
+    for name in ("workflow_training_artifact_verification.py", "workflow_training_sandbox.py"):
+        verifier = Path(trainer.__file__).with_name(name)
+        assert bundle["validation_sha256"][verifier.name] == trainer._file_hash(verifier)
     assert datasets.verify_partitions(bundle, [test["vars"] for test in tests]) == [
         "development",
         "holdout",
@@ -275,8 +277,11 @@ def _defer_business_result(result):
 
 
 @pytest.mark.parametrize("deferred", [False, True])
+@pytest.mark.parametrize(
+    "verifier_name", ["workflow_training_artifact_verification.py", "workflow_training_sandbox.py"]
+)
 def test_artifact_verifier_drift_blocks_sealing_before_native_execution(
-    monkeypatch, business_report, deferred
+    monkeypatch, business_report, deferred, verifier_name
 ):
     from modstore_server import workflow_nl_training, workflow_training_replay
 
@@ -287,12 +292,12 @@ def test_artifact_verifier_drift_blocks_sealing_before_native_execution(
     original_hash = trainer._file_hash
 
     def changed_verifier_hash(path):
-        if path.name == "workflow_training_artifact_verification.py":
+        if path.name == verifier_name:
             return "0" * 64
         return original_hash(path)
 
     def unexpected_execution(*_args, **_kwargs):
-        pytest.fail("changed artifact verifier started native replay")
+        pytest.fail("changed verifier started native replay")
 
     monkeypatch.setattr(trainer, "_file_hash", changed_verifier_hash)
     monkeypatch.setattr(workflow_nl_training, "get_assert", unexpected_execution)

@@ -126,11 +126,17 @@ verify_current_component() {
 
 # Call only while the release lock is held. Component health is not pair evidence.
 verify_applied_release_pair() {
-  local aggregate component applied
+  local aggregate
   aggregate="$(cat "$STATE/release_applied_sha" 2>/dev/null)" &&
     [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || {
     log "ERROR: 缺少有效整组发布 SHA，不能确认运行验收"; return 1;
   }
+  verify_component_release_pair "$aggregate"
+}
+
+verify_component_release_pair() {
+  local aggregate="$1" component applied
+  [[ "$aggregate" =~ ^[0-9a-f]{40}$ ]] || return 1
   # Independent healthy components can belong to different releases after a
   # partial apply/rollback. Require the committed pair before any live checks.
   for component in modstore fhd; do
@@ -156,22 +162,17 @@ verify_current_release_pair() {
 # Restore only an original receipt, under the same release lock as activation.
 # Independent component health cannot manufacture a previously absent pair.
 restore_previous_release_pair() {
-  local expected="$1" phase component applied temporary="$STATE/.release_applied_sha.$$"
-  [[ "$expected" =~ ^[0-9a-f]{40}$ && ! -e "$STATE/release_applied_sha" ]] || return 1
-  for phase in before after; do
-    for component in modstore fhd; do
-      [[ ! -e "$STATE/release_apply_${component}.pending" ]] || return 1
-      applied="$(cat "$STATE/release_applied_${component}_sha" 2>/dev/null)" &&
-        [[ "$applied" == "$expected" ]] || return 1
-    done
-    if [[ "$phase" == before ]]; then
-      for component in modstore fhd; do
-        verify_current_component "$component" || return 1
-      done
-    fi
+  local expected="$1" component temporary="$STATE/.release_applied_sha.$$"
+  [[ ! -e "$STATE/release_applied_sha" && ! -L "$STATE/release_applied_sha" ]] || return 1
+  verify_component_release_pair "$expected" || return 1
+  for component in modstore fhd; do
+    verify_current_component "$component" || return 1
   done
+  verify_component_release_pair "$expected" || return 1
+  # Publish atomically without replacing a receipt created during the readback.
   if printf '%s\n' "$expected" >"$temporary" &&
-    mv -f -- "$temporary" "$STATE/release_applied_sha"; then
+    ln -T -- "$temporary" "$STATE/release_applied_sha"; then
+    rm -f -- "$temporary"
     log "原整组发布回执已重新核验: $expected"
     return 0
   fi
@@ -196,7 +197,7 @@ activate_component() (
   local name=source port=19999 service="xcmax-dr-$1" previous_manifest previous_sha
   [[ "$component" == modstore ]] || { name=fhd; port=15100; }
   local current="$RUNTIME/$name" pending="$STATE/release_apply_${component}.pending"
-  local previous="" was_active=0 touched=0 moved_directory=0
+  local previous="" previous_pair="" was_active=0 touched=0 moved_directory=0
   [[ ! -e "$pending" ]] || { log "ERROR: 原 $component 切换尚待核对: $pending"; exit 1; }
   if [[ -L "$current" || -d "$current" ]]; then
     previous="$(readlink -f "$current")"
@@ -218,14 +219,16 @@ IDENTITY
   [[ -n "$previous" || "$was_active" == 0 ]] || {
     log "ERROR: 运行中服务缺少原发布路径，拒绝不可恢复的切换"; exit 1;
   }
+  if verify_applied_release_pair >/dev/null 2>&1; then
+    previous_pair="$(cat "$STATE/release_applied_sha")"
+  fi
   mkdir -m 0700 "$pending"
   printf '%s\n' "$previous" "$target" "$was_active" >"$pending/targets"
   for suffix in sha created_at; do
     [[ ! -f "$STATE/release_applied_${component}_$suffix" ]] ||
       cp -- "$STATE/release_applied_${component}_$suffix" "$pending/$suffix"
   done
-  [[ ! -f "$STATE/release_applied_sha" ]] ||
-    cp -- "$STATE/release_applied_sha" "$pending/aggregate_sha"
+  [[ -z "$previous_pair" ]] || printf '%s\n' "$previous_pair" >"$pending/aggregate_sha"
   finish_activation() {
     local code="$?" restored=0 observed previous_pair_sha
     trap - EXIT

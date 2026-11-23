@@ -421,6 +421,7 @@ def _workflow_validation_hashes(*, business=False):
             "workflow_training_dataset.py",
             "workflow_training_replay.py",
             "workflow_training_artifact_verification.py",
+            "workflow_training_sandbox.py",
             "workflow_customer_delivery.py",
             "workflow_variables.py",
             "workflow_engine_workflowengine_mixin01.py",
