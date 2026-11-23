@@ -691,15 +691,19 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         "sandbox_report": None,
     }
 
+    started_sessions = set()
+
     async def fake_start(user_id, payload, **kwargs):
         assert user_id == user.id
         assert payload["intent"] in {"mod", "employee"}
-        return {"session_id": state["id"], "status": "running"}
+        session_id = kwargs.get("session_id") or state["id"]
+        started_sessions.add(session_id)
+        return {"session_id": session_id, "status": "running"}
 
     async def fake_snapshot(session_id, user_id):
-        assert session_id == state["id"]
+        assert session_id in started_sessions
         assert user_id == user.id
-        return dict(state)
+        return {**state, "id": session_id}
 
     monkeypatch.setattr(workbench_api, "start_workbench_session_for_user", fake_start)
     monkeypatch.setattr(workbench_api, "get_workbench_session_snapshot", fake_snapshot)

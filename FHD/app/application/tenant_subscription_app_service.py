@@ -13,6 +13,7 @@ from app.db.session import get_host_db as get_db
 from app.infrastructure.billing.saas_plans import (
     PERSONAL_PLAN_ID,
     is_saas_plan_id,
+    list_saas_plans,
     plan_by_id,
     trial_days,
 )
@@ -197,16 +198,32 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
             tenant = db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
 
         plan = plan_by_id(str(tenant.plan_id)) if tenant and tenant.plan_id else None
+        if (
+            plan
+            and plan.get("license_type") == "permanent"
+            and user.account_tier in _ACCOUNT_TIERS
+            and _tier_rank(user.account_tier) < _tier_rank(plan.get("account_tier"))
+        ):
+            # A shared tenant can retain another member's higher purchased plan.
+            plan = next(
+                (
+                    row
+                    for row in list_saas_plans(include_legacy=True)
+                    if row.get("license_type") == "permanent"
+                    and row.get("account_tier") == user.account_tier
+                ),
+                None,
+            )
         paid_plan_active = bool(plan)
         if plan and str(plan.get("license_type") or "") == "trial":
             paid_plan_active = bool(
                 tenant and tenant.trial_expires_at and tenant.trial_expires_at >= now
             )
-        if tenant and tenant.plan_id and paid_plan_active:
+        if tenant and plan and paid_plan_active:
             return {
                 "active": True,
                 "reason": "paid_plan",
-                "plan_id": tenant.plan_id,
+                "plan_id": plan["id"],
                 "tenant_id": tenant.id,
                 "trial_expires_at": (
                     tenant.trial_expires_at.isoformat() if tenant.trial_expires_at else None
@@ -316,8 +333,9 @@ def apply_paid_plan_for_user(
             return False
         if user.tier != "admin":
             user.tier = "enterprise"
+        # Only this account's previous grant and newly purchased plan can upgrade it.
         user.account_tier = _ACCOUNT_TIERS[
-            max(_tier_rank(user.account_tier), _tier_rank(effective.get("account_tier")))
+            max(_tier_rank(user.account_tier), _tier_rank(plan.get("account_tier")))
         ]
         db.commit()
         logger.info(

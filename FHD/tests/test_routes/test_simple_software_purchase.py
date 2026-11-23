@@ -182,6 +182,7 @@ def test_legacy_orders_fulfill_but_cannot_be_newly_purchased(purchase, plan_id, 
         assert db.get(Tenant, 1).plan_id == plan_id
         assert db.get(Tenant, 1).trial_expires_at is None
         assert db.get(User, 1).account_tier == plan["account_tier"]
+    assert subscriptions.subscription_status_for_user(1)["plan_id"] == plan_id
 
 
 def test_trial_sync_never_restarts_the_paid_thirty_day_period(purchase, monkeypatch):
@@ -287,6 +288,47 @@ async def test_verified_market_free_login_reclaims_refunded_permanent_access(
         assert result["personal_plan"] is True
         assert result["account_license_plan_id"] == saas_plans.PERSONAL_PLAN_ID
         assert result["account_tier"] == "personal"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shared_tenant", [False, True])
+@pytest.mark.parametrize("purchase_source", ["market", "payment"])
+async def test_refunded_ultra_repurchase_keeps_account_and_tenant_rights_separate(
+    purchase, market_login, shared_tenant, purchase_source
+):
+    client, sessions, _ = purchase
+    ultra = "saas-permanent-ultra"
+    assert (await market_login(ultra))["success"]
+    if shared_tenant:
+        with sessions.begin() as db:
+            db.add(User(id=2, username="colleague", password="unused", tenant_id=1))
+        assert subscriptions.apply_paid_plan_for_user(user_id=2, plan_id=ultra)
+
+    assert (await market_login(saas_plans.PERSONAL_PLAN_ID))["success"]
+    assert subscriptions.subscription_status_for_user(1)["reason"] == "personal_plan"
+    if shared_tenant:
+        assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+
+    order_id = ""
+    if purchase_source == "payment":
+        response = client.post("/api/model-payment/checkout", json={"plan_id": STANDARD})
+        assert response.status_code == 200, response.text
+        order_id = response.json()["data"]["order_id"]
+    for _ in range(2):
+        if purchase_source == "market":
+            assert (await market_login(STANDARD))["success"]
+        else:
+            assert notify(client, order_id).text == "success"
+        with sessions() as db:
+            assert db.get(User, 1).account_tier == "normal"
+            assert db.get(User, 1).market_user_id == 41
+            if shared_tenant:
+                assert db.get(User, 2).account_tier == "ultra"
+                assert db.get(Tenant, 1).plan_id == ultra
+        assert subscriptions.subscription_status_for_user(1)["plan_id"] == STANDARD
+        if shared_tenant:
+            assert subscriptions.subscription_status_for_user(2)["plan_id"] == ultra
+    assert client.post("/api/model-payment/checkout", json={"plan_id": STANDARD}).status_code == 409
 
 
 @pytest.mark.asyncio
