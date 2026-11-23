@@ -164,10 +164,17 @@ def test_unqualified_entry_blocks_without_a_native_fallback(runtime_entry):
     state = runtime_entry
     state.settings = replace(state.settings, qualification_file=None)
     response = state.client.post("/api/agent/runs", json={"message": "解释库存含义"})
-    assert response.status_code == 409, response.text
-    assert response.json()["success"] is False
-    assert response.json()["runtime_result"]["legacy_fallback_allowed"] is False
-    assert state.repository.list_recent() == []
+    # HTTP only enqueues a durable parent; qualification is enforced by the worker.
+    assert response.status_code == 202, response.text
+    payload = response.json()
+    assert payload["data"]["status"] == "queued"
+    assert payload["runtime_result"]["legacy_fallback_allowed"] is False
+    assert state.calls == state.servers == []
+
+    run_id = payload["data"]["run_id"]
+    state.drain(run_id)
+    assert state.queue.get(run_id).last_error_code == "runtime_policy_blocked"
+    assert state.repository.get(run_id).final_output["codex_result"]["run_id"] == run_id
     assert state.calls == state.servers == []
 
 
