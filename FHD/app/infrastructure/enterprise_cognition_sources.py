@@ -15,6 +15,8 @@ from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
 from app.db.models.finance import FinancialTransaction
+from app.db.models.inventory import InventoryTransaction
+from app.db.models.mrp import ManufacturingOrder
 from app.db.models.sales import SalesOrder
 from app.db.models.user import User
 from app.domain.enterprise_cognition.catalog import EntityDefinition
@@ -28,6 +30,8 @@ _MODELS: dict[str, Any] = {
     "employee": AiEmployeeProfile,
     "task": AgentTaskRecord,
     "fund": FinancialTransaction,
+    "inventory": InventoryTransaction,
+    "production": ManufacturingOrder,
 }
 _FIELDS = {
     "order": (
@@ -62,6 +66,30 @@ _FIELDS = {
         "root_run_id",
         "attempt",
         "run_count",
+    ),
+    "inventory": (
+        "id",
+        "ledger_id",
+        "product_id",
+        "warehouse_id",
+        "location_id",
+        "transaction_type",
+        "quantity",
+        "before_quantity",
+        "after_quantity",
+        "transaction_date",
+        "sales_order_id",
+        "sales_order_item_id",
+    ),
+    "production": (
+        "id",
+        "order_no",
+        "bom_id",
+        "product_id",
+        "product_name",
+        "quantity",
+        "warehouse_id",
+        "status",
     ),
     "fund": (
         "id",
@@ -200,10 +228,13 @@ class AuthorityReader:
     def list_refs(self, db, definition: EntityDefinition, scope: SourceScope, limit: int) -> dict:
         model = _MODELS[definition.entity_type]
         column = getattr(model, definition.id_field)
+        changed_column = (
+            model.transaction_date if definition.entity_type == "inventory" else model.updated_at
+        )
         statement = (
             self._statement(definition, scope)
             .with_only_columns(column)
-            .order_by(model.updated_at.desc(), column)
+            .order_by(changed_column.desc(), column)
             .limit(limit + 1)
         )
         scanned_more = False
@@ -257,7 +288,16 @@ class AuthorityReader:
             }
             if definition.entity_type == "order":
                 self._order_quantities(row, scope, state)
-            return {"state": state, "source_last_changed": json_value(row.updated_at)}
+            if definition.entity_type == "production":
+                fields = ("id", "product_id", "quantity", "consumed_quantity", "unit")
+                state["lines"] = [
+                    {key: json_value(getattr(line, key)) for key in fields}
+                    for line in sorted(row.lines, key=lambda item: item.id)
+                    if line.tenant_id == scope.tenant_id
+                ]
+            # Movement time is not a revision timestamp; never substitute it.
+            changed_at = None if definition.entity_type == "inventory" else row.updated_at
+            return {"state": state, "source_last_changed": json_value(changed_at)}
 
         return self._in_source(db, definition, load)
 
