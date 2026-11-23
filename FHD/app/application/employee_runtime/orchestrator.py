@@ -21,6 +21,22 @@ from app.domain.employee.collaboration_graph import CollaborationGraph
 logger = logging.getLogger(__name__)
 
 
+class CollaborationPlanError(ValueError):
+    """A declared dependency graph cannot safely be admitted."""
+
+
+def _collaboration_failure(employee_id: str, code: str, message: str) -> dict[str, Any]:
+    return {
+        "skipped": False,
+        "employee_id": employee_id,
+        "success": False,
+        "error_code": code,
+        "message": message,
+        "node_outputs": {},
+        "node_results": [],
+    }
+
+
 def _resolve_depends_on(manifest: dict[str, Any], config: dict[str, Any]) -> list[str]:
     deps: list[str] = []
     collab = config.get("collaboration") if isinstance(config.get("collaboration"), dict) else {}
@@ -70,12 +86,13 @@ class EmployeeOrchestrator:
         self, employee_id: str, task: str, *, include_root: bool = True
     ) -> PlanGraph | None:
         eid = str(employee_id or "").strip()
+        cycle = self.graph.execution_cycle(eid)
+        if cycle:
+            logger.warning("employee collaboration cycle rejected")
+            raise CollaborationPlanError("员工协作依赖存在环，未执行任何节点")
         order = self.graph.execution_order(eid)
         if len(order) <= 1:
             return None
-        cycle = self.graph.detect_cycle()
-        if cycle:
-            logger.warning("collaboration cycle detected")
 
         exec_order = order if include_root else [n for n in order if n != eid]
         if not exec_order:
@@ -148,7 +165,10 @@ class EmployeeOrchestrator:
         manifest = manifest or {}
         config = config or {}
         self.depends_on(employee_id, manifest, config)
-        plan = self.build_plan(employee_id, task, include_root=include_root)
+        try:
+            plan = self.build_plan(employee_id, task, include_root=include_root)
+        except CollaborationPlanError as exc:
+            return _collaboration_failure(employee_id, "employee_dependency_cycle", str(exc))
         if plan is None:
             return {"skipped": True, "reason": "no depends_on", "employee_id": employee_id}
 
@@ -172,12 +192,41 @@ class EmployeeOrchestrator:
             }
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        # Inherit the server's tenant scope, never infer it from node inputs.
+        current_tenant = current_tenant_id()
+        declared_tenant = ctx.get("tenant_id")
+        if (
+            isinstance(declared_tenant, bool)
+            or (current_tenant is None and not declared_tenant)
+            or (
+                current_tenant is not None
+                and declared_tenant is not None
+                and str(declared_tenant) != str(current_tenant)
+            )
+        ):
+            return _collaboration_failure(
+                employee_id, "employee_tenant_scope_invalid", "员工协作租户范围缺失或不一致"
+            )
+        if current_tenant is not None:
+            ctx["tenant_id"] = current_tenant
+        ctx["user_id"] = user_id
 
         stable_id = canonical_hash(
             {
                 "employee_id": str(employee_id),
                 "task": str(task),
-                "dependencies": [node.node_id for node in plan.nodes],
+                "include_root": include_root,
+                "dependencies": [
+                    {
+                        "node_id": node.node_id,
+                        "depends_on": list(node.depends_on),
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                    }
+                    for node in plan.nodes
+                ],
                 "user_id": user_id,
                 "tenant_id": str(ctx.get("tenant_id") or ""),
                 "session_id": str(ctx.get("session_id") or ctx.get("conversation_id") or ""),
@@ -188,7 +237,7 @@ class EmployeeOrchestrator:
         )
         plan.plan_id = f"emp-collab-{stable_id[:32]}"
         ctx["employee_collaboration_run"] = True
-        parent_run_id = str(ctx.get("run_id") or "").strip()
+        parent_run_id = str(ctx.get("run_id") or ctx.get("agent_run_id") or "").strip()
         if parent_run_id:
             ctx["parent_run_id"] = parent_run_id
             ctx["parent_task_id"] = str(ctx.get("task_id") or parent_run_id)
@@ -200,32 +249,108 @@ class EmployeeOrchestrator:
             runtime_context=ctx,
             auto_execute=True,
         )
-        if parent_run_id:
-            orchestrator.attach_child_run(parent_run_id, run)
-        outputs = (run.final_output or {}).get("node_outputs")
-        outputs = outputs if isinstance(outputs, dict) else {}
-        return {
-            "skipped": False,
-            "employee_id": employee_id,
-            "plan_id": run.plan_id,
-            "agent_run_id": run.run_id,
-            "status": run.status,
-            "success": run.status == "completed",
-            "message": run.error or str((run.final_output or {}).get("message") or run.status),
-            "node_outputs": outputs,
-            "node_results": [
-                {
-                    "node_id": nr.node_id,
-                    "success": nr.status == "completed",
-                    "tool_id": nr.tool_id,
-                    "error": nr.error,
-                }
-                for nr in run.steps
-            ],
-        }
+        run_context = run.metadata.get("runtime_context") or {}
+        if (
+            str(run.user_id) != str(user_id)
+            or str(run_context.get("tenant_id") or "") != str(ctx["tenant_id"])
+            or str(run_context.get("mod_id") or "") != str(ctx.get("mod_id") or "")
+        ):
+            return _collaboration_failure(
+                employee_id, "employee_collaboration_scope_changed", "协作回执不属于当前授权范围"
+            )
+        if parent_run_id and not orchestrator.attach_child_run(parent_run_id, run):
+            return {
+                **_collaboration_failure(
+                    employee_id,
+                    "employee_child_receipt_unbound",
+                    "协作回执未能绑定原父任务，须核对后恢复；未放行下游",
+                ),
+                "agent_run_id": run.run_id,
+                "status": "recovering",
+                "requires_reconciliation": True,
+                "retryable": False,
+            }
+        return _project_collaboration_result(employee_id, plan, run)
+
+
+def _project_collaboration_result(
+    employee_id: str, plan: PlanGraph, run: Any
+) -> dict[str, Any]:
+    """The original AgentRun steps, not a group status or model text, decide completion."""
+    from app.domain.task_lifecycle.results import (
+        execution_result_error,
+        execution_result_pending_state,
+    )
+
+    expected = {node.node_id: node for node in plan.nodes}
+    seen: set[str] = set()
+    exact = len(run.steps) == len(expected)
+    node_results = []
+    outputs = (run.final_output or {}).get("node_outputs")
+    outputs = outputs if isinstance(outputs, dict) else {}
+    for step in run.steps:
+        node = expected.get(step.node_id)
+        bound = (
+            node is not None
+            and step.node_id not in seen
+            and step.tool_id == node.tool_id
+            and step.action == node.action
+            and list(step.depends_on) == list(node.depends_on)
+        )
+        exact = exact and bound
+        seen.add(step.node_id)
+        output = step.output
+        published = outputs.get(step.node_id)
+        completed = bool(
+            bound
+            and step.status == "completed"
+            and isinstance(output, dict)
+            and isinstance(published, dict)
+            and output == published
+            and not execution_result_error(output)
+            and not execution_result_pending_state(output)
+        )
+        node_results.append(
+            {
+                "node_id": step.node_id,
+                "step_id": step.step_id,
+                "status": step.status,
+                "success": completed,
+                "tool_id": step.tool_id,
+                "error": step.error,
+            }
+        )
+    success = bool(
+        run.status == "completed"
+        and exact
+        and set(expected) == seen == set(outputs)
+        and node_results
+        and all(row["success"] for row in node_results)
+    )
+    result = {
+        "skipped": False,
+        "employee_id": employee_id,
+        "plan_id": run.plan_id,
+        "agent_run_id": run.run_id,
+        "status": run.status if success or run.status != "completed" else "incomplete",
+        "success": success,
+        # This is a context execution receipt, not independent business acceptance.
+        "validation_scope": "agent_run_execution_receipt",
+        "independent_verified": False,
+        "message": run.error or (
+            str((run.final_output or {}).get("message") or run.status)
+            if success else "协作节点未全部完成或回执不一致，未放行下游"
+        ),
+        "node_outputs": outputs if success else {},
+        "node_results": node_results,
+    }
+    if not success:
+        result["error_code"] = "employee_collaboration_incomplete"
+    return result
 
 
 __all__ = [
+    "CollaborationPlanError",
     "EmployeeOrchestrator",
     "build_global_collaboration_graph",
 ]
