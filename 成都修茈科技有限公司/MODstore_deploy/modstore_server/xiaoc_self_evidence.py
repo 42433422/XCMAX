@@ -190,6 +190,7 @@ def annotate_unverified_catalog(
             )
     return catalog
 
+
 def fixture_trend(events: list[dict[str, Any]], *, current_sha: str | None) -> dict[str, Any]:
     """Compare identical frozen fixture protocols across release SHAs only."""
     unavailable = {"status": "insufficient_comparable_fixture_evidence"}
@@ -230,11 +231,13 @@ def fixture_trend(events: list[dict[str, Any]], *, current_sha: str | None) -> d
         ):
             continue
         regression = sorted(
-            k for k in before
+            k
+            for k in before
             if before[k]["integration"] == "PASS" and after[k]["integration"] == "FAIL"
         )
         evidence_lost = sorted(
-            k for k in before
+            k
+            for k in before
             if before[k]["integration"] == "PASS"
             and after[k]["integration"] in {"BLOCKED", "NOT RUN"}
         )
