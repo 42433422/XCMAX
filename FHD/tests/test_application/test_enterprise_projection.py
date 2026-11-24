@@ -724,3 +724,23 @@ def test_purchase_authority_read_permissions_and_committed_changes(world, observ
     permissions.remove("tool.purchase.query_orders")
     with pytest.raises(PermissionError):
         get(service, "purchase_order", "613")
+
+
+def test_procurement_references_are_unverified_pointers_not_facts_about_targets():
+    from app.domain.enterprise_cognition.world_observation import relationship_references
+
+    source = {
+        "knowledge_kind": "fact",
+        "entity_type": "purchase_inbound",
+        "state": {"order_id": 613, "supplier_id": 610, "warehouse_id": 611},
+        "evidence": [{"source": "purchase_inbounds", "row_id": "614"}],
+    }
+    refs = relationship_references(source)
+    assert {(row["entity_type"], row["entity_id"]) for row in refs} == {
+        ("purchase_order", "613"),
+        ("supplier", "610"),
+        ("warehouse", "611"),
+    }
+    assert all(row["target_visibility_verified"] is False for row in refs)
+    assert all(row["evidence"] == source["evidence"] for row in refs)
+    assert relationship_references({**source, "knowledge_kind": "unknown"}) == []
