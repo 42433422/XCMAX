@@ -778,7 +778,9 @@ def test_functional_identity_receipt_uses_original_sql_ledger(database, monkeypa
     assert self_model.project(store.read_state())["identity_readback"]["status"] == "unverified"
 
 
-def test_due_identity_readback_refreshes_after_policy_change_without_consumption(database, monkeypatch):
+def test_due_identity_readback_refreshes_after_policy_change_without_consumption(
+    database, monkeypatch
+):
     from modstore_server import xiaoc_self_model as self_model
 
     monkeypatch.setenv("MODSTORE_GIT_SHA", "a" * 40)
