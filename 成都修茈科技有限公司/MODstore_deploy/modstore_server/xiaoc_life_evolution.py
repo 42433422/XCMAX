@@ -10,6 +10,8 @@ from copy import deepcopy
 from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
+from sqlalchemy import or_, select
+
 from modstore_server import xiaoc_life_store as life
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
@@ -330,10 +332,145 @@ def propose_budget(claim: dict[str, Any], goal: dict[str, Any]) -> dict[str, Any
     return life._mutate(bind)
 
 
+def _historical_rejection(
+    session: Any, request_id: str, candidate_identity: str = ""
+) -> str | None:
+    """An original request cannot erase a recorded rejection with a later snapshot.
+
+    Use the existing append-only events, not the bounded goal projection. The
+    exact request ID is immutable and already bound to its owner and protocol.
+    An exact candidate commit resubmitted under a different request is also
+    subject to review, scoped to the same owner and repository.
+    """
+    refs = {f"retort:{request_id}"}
+    if candidate_identity:
+        refs.add(f"retort-candidate:{candidate_identity}")
+    conditions = [
+        XiaoCLifeEvent.evidence_json.contains(f'"{ref}"', autoescape=True) for ref in sorted(refs)
+    ]
+    events = session.scalars(
+        select(XiaoCLifeEvent)
+        .where(
+            XiaoCLifeEvent.identity_id == IDENTITY_ID,
+            XiaoCLifeEvent.kind == "reflection",
+            XiaoCLifeEvent.status.in_(("evolution_failed", "waiting_recovery")),
+            or_(*conditions),
+        )
+        .order_by(XiaoCLifeEvent.created_at, XiaoCLifeEvent.id)
+    )
+    for event in events:
+        if not refs.intersection(json_loads(event.evidence_json, [])):
+            continue
+        outcome = json_loads(event.details_json, {}).get("evolution_outcome") or {}
+        metrics = outcome.get("metrics") or {}
+        if event.status == "evolution_failed" or (
+            metrics.get("impact_status") == "customer_impact_rejected"
+        ):
+            return str(outcome.get("evidence_ref") or event.id)
+    return None
+
+
+def _archive_sha256(verification: dict[str, Any]) -> str:
+    archive = verification.get("evidence_archive")
+    artifact_digest = verification.get("artifact_digest", "")
+    if isinstance(archive, str) and archive:
+        # The encrypted archive port returns a relative storage reference.
+        # Its content identity is the verified GitHub artifact digest.
+        value = (
+            artifact_digest.removeprefix("sha256:")
+            if isinstance(artifact_digest, str) and artifact_digest.startswith("sha256:")
+            else ""
+        )
+    elif isinstance(archive, dict):
+        value = archive.get("sha256", "")
+    else:
+        value = ""
+    return (
+        value
+        if isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+        else ""
+    )
+
+
+def _comparison_receipt(
+    request_id: str, protocol: dict[str, Any], evidence: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Read the existing independent verifier's paired-check report, never re-score it."""
+    snapshot, effects = evidence["snapshot"], evidence["effects"]
+    verification = snapshot.get("verification") or {}
+    execution = snapshot.get("execution") or {}
+    failed = effects.get("failed_verification") or {}
+    failed_bound = (
+        evidence["status"] == snapshot.get("status") == "failed"
+        and execution.get("status") == "failed"
+        and failed.get("status") == "workflow_failed"
+        and failed.get("workflow_conclusion") == "failure"
+        and str(execution.get("run_id")) == failed.get("run_id")
+        and execution.get("target_sha") == failed.get("target_sha")
+        and execution.get("failed_verification_sha256") == failed.get("evidence_digest")
+        and bool(failed.get("evidence_digest"))
+    )
+    if failed_bound:
+        verification = failed
+    elif (
+        verification != effects.get("verification") or verification.get("status") != "checks_passed"
+    ):
+        return None
+    comparison = verification.get("comparison")
+    if (
+        not isinstance(comparison, dict)
+        or verification.get("request_id") != request_id
+        or verification.get("protocol_digest") != protocol["protocol_digest"]
+        or verification.get("run_id") != str(evidence["effects"].get("run_id"))
+        or not _archive_sha256(verification)
+        or comparison.get("schema") != "retort.paired-checks/v1"
+        or comparison.get("scope") != "independent_check_exit_codes_not_capability_score"
+        or comparison.get("baseline_sha") != protocol.get("source_sha")
+        or comparison.get("candidate_sha") != verification.get("target_sha")
+        or comparison.get("protocol_digest") != protocol["protocol_digest"]
+        or not comparison.get("bundle_digest")
+        or comparison.get("bundle_digest") != verification.get("evidence_digest")
+        or comparison.get("run_id") != verification.get("run_id")
+    ):
+        return None
+    rows = comparison.get("checks")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or any(
+            not isinstance(row, dict)
+            or type(row.get("baseline_returncode")) is not int
+            or type(row.get("candidate_returncode")) is not int
+            for row in rows
+        )
+    ):
+        return None
+    baseline_passed = sum(row["baseline_returncode"] == 0 for row in rows)
+    candidate_passed = sum(row["candidate_returncode"] == 0 for row in rows)
+    if (
+        comparison.get("total") != len(rows)
+        or comparison.get("baseline_passed") != baseline_passed
+        or comparison.get("candidate_passed") != candidate_passed
+        or (not failed_bound and candidate_passed != len(rows))
+    ):
+        return None
+    return {
+        "workflow_conclusion": "failure" if failed_bound else "success",
+        "archive_sha256": _archive_sha256(verification),
+        "baseline_passed": baseline_passed,
+        "candidate_passed": candidate_passed,
+        "total": len(rows),
+        "scope": comparison["scope"],
+        "receipt_sha256": digest(comparison),
+    }
+
+
 def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     from modstore_server.strategic_workspace_receipts import _evidence, _terminal
 
-    row, _ = _original(session, goal, owner)
+    row, source = _original(session, goal, owner)
     protocol = json_loads(str(row.protocol_json), {})
     evidence = _evidence(row)
     state = evidence["snapshot"]
@@ -365,6 +502,76 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     delivery = state.get("delivery") or {}
     from modstore_server.xiaoc_life_experiment_review import original_experiment_projection
 
+    impact = state.get("impact") or {}
+    verification = state.get("verification") or {}
+    candidate_sha = (
+        verification.get("target_sha") or (state.get("execution") or {}).get("target_sha") or ""
+    )
+    candidate_identity = (
+        digest({"owner": owner, "repository": protocol["repository"], "candidate": candidate_sha})
+        if isinstance(candidate_sha, str)
+        and len(candidate_sha) == 40
+        and all(char in "0123456789abcdef" for char in candidate_sha)
+        and protocol.get("repository")
+        else ""
+    )
+    current_rejection = (
+        status == "evolution_failed" or impact.get("status") == "customer_impact_rejected"
+    )
+    # A contradictory terminal snapshot must never override a negative impact.
+    if current_rejection and terminal and terminal["ok"]:
+        status = "waiting_recovery"
+        summary = "原改进的交付回执与拒绝效果冲突，未登记成功；等待人工复核与恢复。"
+        terminal = None
+    # Do not re-hash a negative event merely because it has just been persisted.
+    historical_rejection = (
+        None
+        if current_rejection
+        else _historical_rejection(session, cast(str, row.id), candidate_identity)
+    )
+    if historical_rejection:
+        status = "evolution_evidence_incomplete"
+        summary = "原改进曾被拒绝，当前回执与历史失败冲突；须人工复核，不登记成功。"
+        terminal = None
+    # Delivery and independent checks are not evidence of improved outcomes.
+    # The original Retort impact and recovery ports remain authoritative.
+    effect_verdict = "not_verified"
+    if historical_rejection or current_rejection:
+        effect_verdict = "rejected"
+    elif (
+        terminal
+        and terminal["ok"]
+        and state.get("has_customer_feedback") is True
+        and impact.get("status") == "customer_impact_verified"
+        and impact.get("release_sha")
+        and impact["release_sha"] == delivery.get("release_sha")
+        and impact.get("verified_at")
+    ):
+        effect_verdict = "impact_receipt_verified"
+    comparison = _comparison_receipt(cast(str, row.id), protocol, evidence)
+    audit = {
+        "proposal_sha256": digest(source),
+        "baseline_sha": protocol.get("source_sha", ""),
+        "candidate_sha": candidate_sha,
+        "candidate_identity": candidate_identity,
+        "protocol_digest": protocol["protocol_digest"],
+        "verification_archive_sha256": (
+            comparison["archive_sha256"] if comparison else _archive_sha256(verification)
+        ),
+        "dispatch_approval_digest": (evidence["effects"].get("authorization") or {}).get(
+            "digest", ""
+        ),
+        "acceptance_approval_digest": (state.get("approval") or {}).get("digest", ""),
+        "impact_receipt_sha256": digest(impact) if impact else "",
+        "recovery_receipt_sha256": digest(state["recovery"]) if state.get("recovery") else "",
+        # Preserve the measured comparison separately from verified delivery
+        # and actual impact. Historical reports may not include paired results.
+        "comparison_status": (
+            "paired_exit_codes_verified" if comparison else "paired_measurement_not_established"
+        ),
+        "comparison": comparison,
+        "historical_rejection_ref": historical_rejection,
+    }
     metrics = {
         "request_id": row.id,
         "status": status,
@@ -376,6 +583,7 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "impact_status": (state.get("impact") or {}).get("status", "not_measured"),
         "recovery_status": (state.get("recovery") or {}).get("status", "not_requested"),
         "terminal_verified": terminal is not None,
+        "effect_verdict": effect_verdict,
         "scope": "original_retort_receipt_not_model_self_assessment",
         "experiment_reflection": original_experiment_projection(row, delivery),
     }
@@ -383,7 +591,10 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "status": status,
         "summary": summary,
         "metrics": metrics,
-        "evidence_ref": "evolution-outcome:" + row.id + ":" + digest(metrics)[:24],
+        "candidate_audit": audit,
+        "evidence_ref": (
+            "evolution-outcome:" + row.id + ":" + digest({"metrics": metrics, "audit": audit})[:24]
+        ),
     }
 
 
@@ -408,6 +619,7 @@ def reconcile() -> int:
                         "status": "evolution_evidence_incomplete",
                         "observed_at": "",
                         "terminal_verified": False,
+                        "effect_verdict": "not_verified",
                     },
                     "evidence_ref": "evolution-outcome:"
                     + goal["retort_request_id"]
@@ -425,13 +637,17 @@ def reconcile() -> int:
             goal["evolution_outcome"] = observed
             event_id = "evolution:" + digest(observed)
             if session.get(XiaoCLifeEvent, event_id) is None:
+                refs = ["retort:" + goal["retort_request_id"], observed["evidence_ref"]]
+                candidate_identity = observed.get("candidate_audit", {}).get("candidate_identity")
+                if candidate_identity:
+                    refs.append("retort-candidate:" + candidate_identity)
                 life._event(
                     session,
                     event_id,
                     kind="reflection",
                     status=observed["status"],
                     summary=observed["summary"],
-                    evidence_refs=["retort:" + goal["retort_request_id"], observed["evidence_ref"]],
+                    evidence_refs=refs,
                     details={"evolution_outcome": observed},
                 )
             changed += 1
