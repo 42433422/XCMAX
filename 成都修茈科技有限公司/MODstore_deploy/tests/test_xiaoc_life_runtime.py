@@ -855,3 +855,19 @@ def test_native_pre_act_restart_reuses_saved_decision_without_rebilling(ports, m
 
     # The CAS guard rejects a second resume instead of resending the act.
     assert original_admit(store.claim) is False
+
+
+def test_checkpointer_connection_loss_blocks_before_any_model_call(ports, monkeypatch):
+    store, calls, *_ = ports
+
+    @asynccontextmanager
+    async def disconnected():
+        raise OSError("checkpoint database disconnected")
+        yield None
+
+    monkeypatch.setattr(runtime, "native_life_checkpointer", disconnected)
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "failed"
+    assert result["actual_tokens"] == 0
+    assert store.claimed and len(store.finished) == 1
+    assert not calls and not store.claim.get("outbound_attempted")

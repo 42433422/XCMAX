@@ -1174,3 +1174,50 @@ def test_native_act_cas_is_permanent_and_preserves_original_task_identity(databa
     store.record_cycle_phase(claim, "act")
     assert not store.admit_cycle_act(claim)
     assert finish(claim)["budget"]["used_tokens"] == 50
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MODSTORE_TEST_POSTGRES_URL"),
+    reason="requires isolated PostgreSQL for real connection fault injection",
+)
+def test_postgres_backend_disconnect_preserves_original_lease(monkeypatch):
+    from sqlalchemy.exc import DBAPIError
+
+    url = os.environ["MODSTORE_TEST_POSTGRES_URL"]
+    admin = create_engine(url)
+    schema = f"xiaoc_life_disconnect_{uuid4().hex}"
+    with admin.begin() as ctl:
+        ctl.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = None
+    try:
+        engine = create_engine(
+            url,
+            connect_args={"options": f"-csearch_path={schema}"},
+            pool_pre_ping=True,
+        )
+        factory = _prepare_database(engine, monkeypatch)
+        original = configure()
+        claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+        assert claim is not None
+        with factory() as session:
+            pid = session.scalar(text("SELECT pg_backend_pid()"))
+            assert type(pid) is int
+            with admin.begin() as ctl:
+                assert ctl.scalar(
+                    text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}
+                ) is True
+            with pytest.raises(DBAPIError):
+                session.execute(text("SELECT 1"))
+            session.rollback()
+        recovered = store.read_state()
+        assert recovered["identity_id"] == original["identity_id"]
+        assert recovered["activity"]["id"] == claim["cycle_id"]
+        assert recovered["budget"]["reserved_tokens"] == 200
+        assert store.claim_cycle(domain="enterprise", reserve_tokens=200) is None
+        assert engine.pool.checkedout() == 0
+    finally:
+        if engine is not None:
+            engine.dispose()
+        with admin.begin() as ctl:
+            ctl.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
