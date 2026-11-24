@@ -151,15 +151,12 @@ class TestRegisterModelValidators:
         monkeypatch.setattr("builtins.__import__", fake_import)
         assert register_model_validators() is False
 
-    def test_returns_false_on_unexpected_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def boom(_name: str) -> None:
-            raise RuntimeError("unexpected")
-
+    def test_returns_false_on_model_read_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original_import = __builtins__["__import__"]  # type: ignore[index]
 
         def fake_import(name: str, *args, **kwargs):
             if "customer" in name:
-                raise RuntimeError("unexpected")
+                raise OSError("could not read customer model")
             return original_import(name, *args, **kwargs)
 
         monkeypatch.setattr("builtins.__import__", fake_import)

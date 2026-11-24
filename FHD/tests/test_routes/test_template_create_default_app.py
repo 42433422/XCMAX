@@ -92,16 +92,14 @@ def template_app(tmp_path, monkeypatch):
         engine.dispose()
 
 
-@pytest.fixture
-def approved_app(template_app):
+def approved_template_client(client, repo, session="label-session-7"):
     from starlette.requests import Request
 
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
-    client, engine, repo = template_app
-    headers = {"X-Session-ID": "label-session-7"}
-    request = Request({"type": "http", "headers": [(b"x-session-id", b"label-session-7")]})
+    headers = {"X-Session-ID": session}
+    request = Request({"type": "http", "headers": [(b"x-session-id", session.encode())]})
     principal = require_agent_principal(request, x_user_id=None)
     actor = SimpleNamespace(
         user_id=principal.user_id,
@@ -109,7 +107,13 @@ def approved_app(template_app):
         context=authenticated_runtime_context({}, principal),
         headers=headers,
     )
-    return ApprovedCapabilityClient(client, repo, actor), engine, repo
+    return ApprovedCapabilityClient(client, repo, actor)
+
+
+@pytest.fixture
+def approved_app(template_app):
+    client, engine, repo = template_app
+    return approved_template_client(client, repo), engine, repo
 
 
 def _label_payload():

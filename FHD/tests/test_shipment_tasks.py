@@ -102,7 +102,7 @@ class TestGenerateShipmentOrderTask:
         from app.tasks.shipment_tasks import generate_shipment_order
 
         mock_app_service = MagicMock()
-        mock_app_service.generate_shipment_document.side_effect = RuntimeError("生成失败")
+        mock_app_service.generate_shipment_document.side_effect = OSError("生成失败")
         mock_get_app_service.return_value = mock_app_service
 
         with patch.object(

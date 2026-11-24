@@ -314,9 +314,7 @@ class TestBatchInsert:
     def test_failure_rollback(self):
         opt = QueryOptimizer()
         mock_session = MagicMock()
-        # batch_execute catches RECOVERABLE_ERRORS, so RuntimeError won't propagate
-        # Instead, it records the failure in BatchResult
-        mock_model = MagicMock(side_effect=RuntimeError("db error"))
+        mock_model = MagicMock(side_effect=ValueError("db error"))
         items = [{"name": "a"}]
         result = opt.batch_insert(mock_session, mock_model, items)
         # The error is caught by batch_execute, not re-raised
