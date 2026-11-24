@@ -40,3 +40,17 @@ def test_unknown_or_future_publication_is_not_invented():
 def test_invalid_public_url_cannot_become_evidence():
     for url in ("file:///tmp/secret", "https://user:pw@example.org", "https://["):
         assert public_source_observation({"url": url}, NOW) is None
+
+
+def test_public_timestamp_outside_utc_range_remains_unverified():
+    for value in (
+        "0001-01-01T00:00:00+14:00",
+        "9999-12-31T23:59:59-14:00",
+    ):
+        row = public_source_observation(
+            {"url": "https://example.org/report", "publishedDate": value}, NOW
+        )
+        assert row is not None
+        assert row["publication_date_reported"] == value
+        assert row["published_at"] is None
+        assert row["knowledge_kind"] == "unknown"

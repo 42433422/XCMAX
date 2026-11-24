@@ -52,8 +52,16 @@ def public_source_observation(row: dict[str, Any], collected_at: datetime) -> di
             except (ValueError, TypeError, OverflowError):
                 published = None
         # Date-only, unspecified timezones and future dates are not verified instants.
-        if published is not None and (published.tzinfo is None or published > collected_at):
-            published = None
+        if published is not None:
+            if published.tzinfo is None:
+                published = None
+            else:
+                try:
+                    published = published.astimezone(UTC)
+                except OverflowError:
+                    published = None
+            if published is not None and published > collected_at:
+                published = None
     return ExternalObservation(
         url=url,
         source_host=host.lower(),
@@ -61,6 +69,6 @@ def public_source_observation(row: dict[str, Any], collected_at: datetime) -> di
         snippet=str(row.get("content") or "")[:700],
         engine=str(row["engine"])[:100] if row.get("engine") else None,
         publication_date_reported=reported,
-        published_at=published.astimezone(UTC) if published else None,
+        published_at=published,
         collected_at=collected_at,
     ).model_dump(mode="json")

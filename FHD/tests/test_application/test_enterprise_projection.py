@@ -599,3 +599,15 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
     updated = get(service, "production", "505")
     assert Decimal(updated["state"]["lines"][0]["consumed_quantity"]) == 1
     assert get(service, "inventory", "999")["knowledge_kind"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "cutoff",
+    ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"],
+)
+def test_historical_query_out_of_range_utc_fails_closed(world, cutoff):
+    service, *_ = world
+    assert get(service)["knowledge_kind"] == "fact"
+    response = get(service, as_of=cutoff)
+    assert response["knowledge_kind"] == "unknown"
+    assert response["reason_code"] == "observation_history_unavailable"

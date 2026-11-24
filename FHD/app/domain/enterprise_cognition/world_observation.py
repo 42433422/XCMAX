@@ -25,7 +25,10 @@ def observation_time(snapshot: dict[str, Any]) -> datetime:
     value = datetime.fromisoformat(snapshot["observed_at"])
     if value.tzinfo is None:
         raise ValueError("observation_time_requires_timezone")
-    return value.astimezone(UTC)
+    try:
+        return value.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError("observation_time_utc_out_of_range") from exc
 
 
 def read_observations(
@@ -101,10 +104,14 @@ def historical_observation(raw: str, as_of: str, expected_scope: dict[str, Any])
     at = datetime.fromisoformat(as_of)
     if at.tzinfo is None:
         raise ValueError("as_of_requires_timezone")
+    try:
+        at_utc = at.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError("as_of_utc_out_of_range") from exc
     history, truncated = read_observations(raw, expected_scope)
-    candidates = [item for item in history if observation_time(item) <= at]
+    candidates = [item for item in history if observation_time(item) <= at_utc]
     base = {
-        "as_of": at.astimezone(UTC).isoformat(),
+        "as_of": at_utc.isoformat(),
         "history_truncated": truncated,
         "business_validity_verified": False,
         "current_state_verified": False,
