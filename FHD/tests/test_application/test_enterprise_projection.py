@@ -446,6 +446,8 @@ async def test_committed_orm_change_reaches_running_neurobus_and_refreshes(world
             db.get(SalesOrderItem, 401).delivered_quantity = 9
             db.commit()
         await asyncio.wait_for(delivered.wait(), timeout=2)
+        # Keep observation order monotonic without expiring the cache.
+        clock[0] += 1
         after = get(service)
         assert after["retrieved_from"] == "authority"
         assert after["state"]["remaining_quantity"] == "1.0000"
