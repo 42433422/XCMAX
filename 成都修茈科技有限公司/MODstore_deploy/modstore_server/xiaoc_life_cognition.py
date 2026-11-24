@@ -32,6 +32,15 @@ class InterestSuggestion(BaseModel):
     evidence_refs: list[str] = Field(min_length=1, max_length=6)
 
 
+class AlternativeResourceCaps(BaseModel):
+    """A smaller requested hard reservation, not a cost prediction or permission."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    cost_cents: int = Field(ge=0, le=100_000_000)
+    tokens: int = Field(ge=0, le=1_000_000_000)
+    compute_seconds: int = Field(ge=1, le=240)
+
+
 class ProposalAlternative(BaseModel):
     """Evidence-linked option for review, not an executable action."""
 
@@ -39,6 +48,7 @@ class ProposalAlternative(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     tradeoff: str = Field(min_length=1, max_length=200)
     task: str | None = Field(default=None, min_length=1, max_length=700)
+    resource_caps: AlternativeResourceCaps | None = None
     evidence_refs: list[str] = Field(min_length=1, max_length=4)
 
 
@@ -75,8 +85,10 @@ Return ONLY a JSON object, in Chinese, matching this shape:
 "evidence_refs":["exact supplied ref"]}}.
 New goals remain proposals. Only use supplied refs, including on nested objects.
 For enterprise proposals supply different concrete tasks for the same measurable
-objective when supported by observations. The hypothesis is a test target, not a
-forecast. Supported report metrics: slo_availability, slo_error_rate, intent_accuracy,
+objective when supported by observations. Optional resource_caps may only reduce
+the original task's hard limits (cost_cents, tokens, compute_seconds); they are
+unverified reservation requests, never predicted costs or spending authority.
+The hypothesis is a test target, not a forecast. Supported report metrics: slo_availability, slo_error_rate, intent_accuracy,
 legacy_ratio, domain_rated_ratio. Customer revenue/acceptance requires the separate
 original customer-goal binding and is not available in this proposal form.
 Alternatives are for propose only; the runtime adds a no-action baseline. Never

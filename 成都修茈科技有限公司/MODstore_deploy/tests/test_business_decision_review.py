@@ -206,3 +206,55 @@ def test_money_and_acceptance_require_original_metric_source():
     assert review._measured_source(acceptance, evidence, start, end)
     assert not review._measured_source(acceptance, {**evidence, "value": 0.9}, start, end)
     assert not review._measured_source(acceptance, {**evidence, "target_goals": 0}, start, end)
+
+
+def test_lower_alternative_reservation_uses_real_capacity_and_original_solver(database, monkeypatch):
+    from modstore_server import strategic_company_resources
+
+    seed_owner(database)
+    monkeypatch.setattr(review, "get_session_factory", lambda: database)
+    monkeypatch.setattr(
+        strategic_company_resources, "remaining",
+        lambda *_args: {"cost_cents": 20, "tokens": 20_000, "compute_seconds": 60, "slots": 1},
+    )
+    cap = {"cost_cents": 10, "tokens": 10_000, "compute_seconds": 30}
+    alt = {
+        "title": "limited review", "task": "other approved bounded task",
+        "tradeoff": "smaller hard cap, feasibility only", "evidence_refs": ["incident:1"],
+        "resource_caps": cap,
+    }
+    response = portfolio.create_portfolio_proposal(
+        owner_user_id=7, goal="Improve delivery", period="bounded-review",
+        limits=limits(), opportunities=[opportunity()], idempotency_key="bounded-review",
+        decision_options={
+            "alternatives": [
+                alt, {**alt, "title": "excess", "task": "excess request",
+                      "resource_caps": {**cap, "cost_cents": 51}},
+            ],
+            "context_sha256": digest("observed world"), "evidence_refs": ["incident:1"],
+        },
+    )
+    comparison = response["decision_review"]
+    assert comparison["options"][1]["feasible"] is False
+    selected = next(row for row in comparison["options"] if row["option_id"] == comparison["selected_for_approval"])
+    assert selected["reservation_cap"] == cap
+    assert selected["reservation_basis"] == "hard_caps_not_cost_estimate"
+    assert comparison["options"][-1]["reason"] == "alternative_exceeds_original_task_reservation"
+    assert len(response["decision"]["decision_payload"]["opportunities"]) == 1
+    assert response["decision"]["status"] == "proposed"
+
+
+def test_decision_comparison_never_reserves_more_than_stop_loss(database, monkeypatch):
+    seed_owner(database)
+    monkeypatch.setattr(review, "get_session_factory", lambda: database)
+    response = portfolio.create_portfolio_proposal(
+        owner_user_id=7, goal="Improve delivery", period="stop-loss-review",
+        limits=limits(stop_loss_cents=10), opportunities=[opportunity()],
+        idempotency_key="stop-loss-review", decision_options={
+            "alternatives": [], "context_sha256": digest("observed world"),
+            "evidence_refs": ["incident:1"],
+        },
+    )
+    assert response["decision"] is None
+    assert response["decision_review"]["selected_for_approval"] == "no_action"
+    assert response["decision_review"]["capacity_at_review"]["cost_cents"] == 10

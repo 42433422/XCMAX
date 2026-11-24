@@ -294,7 +294,12 @@ def create_portfolio_proposal(
             or any(ch not in "0123456789abcdef" for ch in context_sha)
         ):
             raise PortfolioError("invalid bounded decision comparison")
-        alternatives = [ProposalAlternative.model_validate(alt).model_dump() for alt in alternatives]
+        parsed_alternatives = [ProposalAlternative.model_validate(alt) for alt in alternatives]
+        # Preserve the original idempotency digest when the optional caps are absent.
+        alternatives = [
+            alt.model_dump(exclude={"resource_caps"} if alt.resource_caps is None else None)
+            for alt in parsed_alternatives
+        ]
         if not set(rows[0]["source_refs"]).issubset(refs) or any(
             not set(alt["evidence_refs"]).issubset(refs) for alt in alternatives
         ):

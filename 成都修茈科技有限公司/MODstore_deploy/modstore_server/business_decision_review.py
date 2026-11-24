@@ -315,7 +315,8 @@ def compare_options(
         for key in RESOURCES:
             effective[key] = min(effective[key], capacity[key])
         effective["max_parallel"] = min(effective["max_parallel"], capacity["slots"])
-        effective["stop_loss_cents"] = min(effective["stop_loss_cents"], effective["cost_cents"])
+    effective["cost_cents"] = min(effective["cost_cents"], effective["stop_loss_cents"])
+    effective["stop_loss_cents"] = min(effective["stop_loss_cents"], effective["cost_cents"])
     options: list[dict[str, Any]] = [
         {
             "option_id": "no_action",
@@ -347,9 +348,30 @@ def compare_options(
                 "forecast": {"status": "unknown_not_executable"},
             })
             continue
+        requested_caps = alt.get("resource_caps")
+        if requested_caps is not None and (
+            not isinstance(requested_caps, dict)
+            or set(requested_caps) != set(RESOURCES)
+            or any(
+                type(requested_caps[key]) is not int
+                or not 0 <= requested_caps[key] <= primary[key]
+                for key in RESOURCES
+            )
+            or requested_caps["compute_seconds"] <= 0
+        ):
+            rejected.append({
+                "option_id": "review-" + digest(alt)[:20],
+                "title": alt["title"],
+                "evidence_refs": alt["evidence_refs"],
+                "feasible": False,
+                "reason": "alternative_exceeds_original_task_reservation",
+                "forecast": {"status": "unknown_not_executable"},
+            })
+            continue
         normalized_tasks.add(normalized)
         candidate = {
             **primary,
+            **(requested_caps or {}),
             "opportunity_id": "option-" + digest([primary["opportunity_id"], alt])[:24],
             "title": alt["title"],
             "task": task,
@@ -373,8 +395,13 @@ def compare_options(
     for candidate in candidates:
         # Positive probe weights are feasibility only, never a predicted probability.
         admitted = (
-            effective["compute_seconds"] > 0
+            bool(candidate.get("execution_binding"))
+            and not candidate.get("depends_on")
+            and _date(effective["expires_at"]) > now
+            and effective["compute_seconds"] > 0
             and effective["max_parallel"] > 0
+            and candidate["risk"] != "high"
+            and all(candidate[key] <= effective[key] for key in RESOURCES)
             and candidate["opportunity_id"] in optimize_portfolio(
                 [{**candidate, "value_score": 1, "confidence_bps": 1}], effective,
                 max_selected=1,
@@ -395,6 +422,8 @@ def compare_options(
             "feasible": admitted,
             "reason": "solver_capacity_and_execution_contract" if admitted else "capacity_or_risk",
             "reservation_cap": {key: candidate[key] for key in RESOURCES},
+            "reservation_basis": "hard_caps_not_cost_estimate",
+            "execution_binding_sha256": digest(candidate.get("execution_binding") or {}),
             "policy_risk": candidate["risk"],
             "forecast": predicted,
         })
@@ -425,7 +454,10 @@ def compare_options(
         "frozen_at": now.isoformat(),
         "context_sha256": context_sha256,
         "evidence_refs": evidence_refs,
-        "capacity_at_review": {key: effective[key] for key in (*RESOURCES, "max_parallel")},
+        "capacity_at_review": {
+            key: effective[key] for key in (*RESOURCES, "max_parallel", "stop_loss_cents")
+        },
+        "capacity_constraint": "remaining_company_and_original_caps_with_stop_loss",
         "capacity_basis": "company_remaining_at_review" if capacity is not None else "proposal_caps_only",
         "options": options + rejected,
         "selected_for_approval": selected[0]["opportunity_id"] if selected else "no_action",
