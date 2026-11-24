@@ -338,7 +338,7 @@ class AuthorityReader:
             elif definition.entity_type == "employee":
                 self._employee_observation(source, row, scope, state)
             elif definition.entity_type == "journal_entry":
-                fields = (
+                fields: tuple[str, ...] = (
                     "id",
                     "account_id",
                     "account_code",
