@@ -66,16 +66,17 @@ jobs:
 
       - name: Check formatting without weakening original gates
         run: |
-          black --check modstore_server/xiaoc_life_native_checkpoint.py \
+          black --check --diff modstore_server/xiaoc_life_native_checkpoint.py \
             modstore_server/xiaoc_life_runtime.py modstore_server/xiaoc_life_store.py \
             tests/test_xiaoc_life_native_checkpoint.py tests/test_xiaoc_life_runtime.py \
             tests/test_xiaoc_life_state.py
-          isort --check-only modstore_server/xiaoc_life_native_checkpoint.py \
+          isort --check-only --diff modstore_server/xiaoc_life_native_checkpoint.py \
             modstore_server/xiaoc_life_runtime.py modstore_server/xiaoc_life_store.py \
             tests/test_xiaoc_life_native_checkpoint.py tests/test_xiaoc_life_runtime.py \
             tests/test_xiaoc_life_state.py
 
       - name: Real SQLite and PostgreSQL cross-process life regression
+        if: ${{ always() }}
         run: |
           python -m pytest -q --tb=short \
             tests/test_xiaoc_life_native_checkpoint.py \

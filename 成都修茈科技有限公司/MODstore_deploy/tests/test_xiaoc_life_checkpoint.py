@@ -95,6 +95,12 @@ def test_otel_and_prometheus_observe_return_error_and_cancel_without_payload(mon
         assert all("private-error" not in str(span.attributes) for span in spans)
         for stage in ("act", "reflect"):
             assert telemetry.ACTIVE.labels(stage)._value.get() == 0
+        with telemetry.life_operation("graph", cycle_id="secret-cycle-id"):
+            pass
+        trace_span = exporter.get_finished_spans()[-1]
+        assert trace_span.attributes["xiaoc.cycle_sha256"] != "secret-cycle-id"
+        assert len(trace_span.attributes["xiaoc.cycle_sha256"]) == 64
+        assert "secret-cycle-id" not in str(trace_span.attributes)
     finally:
         provider.shutdown()
 

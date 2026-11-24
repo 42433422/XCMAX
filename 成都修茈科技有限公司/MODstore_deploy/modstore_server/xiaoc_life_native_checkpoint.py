@@ -32,13 +32,15 @@ async def native_life_checkpointer() -> AsyncIterator[Any]:
     SQLite and PostgreSQL use their actual persisted stores.
     """
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+    from sqlalchemy.engine import Connection
 
     from modstore_server import xiaoc_life_store
 
     # The forked checkpoint package supports strict msgpack deserialization.
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     with xiaoc_life_store.get_session_factory()() as session:
-        engine = session.get_bind()
+        binding = session.get_bind()
+        engine = binding.engine if isinstance(binding, Connection) else binding
         dialect = engine.dialect.name
         url = engine.url
 

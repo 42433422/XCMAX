@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from time import perf_counter
@@ -31,9 +32,13 @@ DURATION = Histogram(
 
 
 @contextmanager
-def life_operation(stage: str) -> Iterator[None]:
+def life_operation(stage: str, *, cycle_id: str | None = None) -> Iterator[None]:
     if stage not in STAGES:
         raise ValueError("unknown life runtime telemetry stage")
+    if cycle_id is not None and (
+        not isinstance(cycle_id, str) or not 0 < len(cycle_id) <= 96
+    ):
+        raise ValueError("invalid trace cycle identity")
     started = perf_counter()
     gauge = ACTIVE.labels(stage)
     gauge.inc()
@@ -58,6 +63,11 @@ def life_operation(stage: str) -> Iterator[None]:
                 # Fixed vocabulary only: no IDs, prompts, secrets or error text.
                 span.set_attribute("xiaoc.stage", stage)
                 span.set_attribute("xiaoc.outcome", outcome)
+                if cycle_id is not None:
+                    # Correlate across nodes without exporting raw tenant IDs.
+                    span.set_attribute(
+                        "xiaoc.cycle_sha256", hashlib.sha256(cycle_id.encode()).hexdigest()
+                    )
     finally:
         gauge.dec()
         OPERATIONS.labels(stage, outcome).inc()

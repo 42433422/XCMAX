@@ -1010,9 +1010,14 @@ async def recover_native_act() -> dict[str, Any] | None:
     async with native_life_checkpointer() as saver:
         graph = build_life_graph(ports, checkpointer=saver)
         config = native_thread_config(claim)
-        result = await _continue_at_act(graph, config, ports, restoring=True)
-        if result is None:
-            return None
+        # Restore the same authority context used by normal execution.
+        # The remote employee/model gates must see this original lease.
+        with life_operation("graph", cycle_id=claim["cycle_id"]), _store().life_execution_scope(
+            claim
+        ):
+            result = await _continue_at_act(graph, config, ports, restoring=True)
+            if result is None:
+                return None
         with life_operation("settle"):
             return ports.finish(result)
 
@@ -1023,7 +1028,9 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
         return dict(_store().read_state())
     ports = CyclePorts(claim)
     try:
-        with life_operation("graph"), _store().life_execution_scope(claim):
+        with life_operation("graph", cycle_id=claim["cycle_id"]), _store().life_execution_scope(
+            claim
+        ):
             async with native_life_checkpointer() as saver:
                 graph = build_life_graph(ports, checkpointer=saver)
                 config = native_thread_config(claim)
