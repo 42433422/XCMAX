@@ -8,6 +8,7 @@ Only the existing human-approved portfolio can execute.
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime, timedelta
 from statistics import mean
 from typing import Any
@@ -25,7 +26,12 @@ from modstore_server.strategic_portfolio import (
     digest,
     optimize_portfolio,
 )
-from modstore_server.strategy_bets import BetHypothesis, judge
+from modstore_server.strategy_bets import (
+    CUSTOMER_ACCEPTANCE_METRIC,
+    REVENUE_METRIC,
+    BetHypothesis,
+    judge,
+)
 
 MIN_SAMPLES = 40
 HISTORY_LIMIT = 256
@@ -60,21 +66,69 @@ def _sha(value: Any) -> bool:
     )
 
 
+def _measured_source(
+    hypothesis: BetHypothesis, evidence: dict[str, Any], start: datetime, end: datetime
+) -> bool:
+    """Validate the original metric-reader receipt, not a new causal attribution."""
+    value = evidence.get("value")
+    if type(value) not in (int, float) or not math.isfinite(value):
+        return False
+    source = evidence.get("source")
+    if not isinstance(source, str) or not source.strip():
+        return False
+    if hypothesis.metric_id == REVENUE_METRIC:
+        return (
+            source in ("python_payment_orders", "java_postgresql_internal_api")
+            and evidence.get("basis") == "attributed_verified_payments_in_approved_window"
+            and value >= 0
+        )
+    if hypothesis.metric_id == CUSTOMER_ACCEPTANCE_METRIC:
+        accepted = evidence.get("accepted_goals")
+        total = evidence.get("target_goals")
+        return (
+            source == "CustomerValueReceipt:verified_outcome_and_customer_acceptance"
+            and evidence.get("basis") == "approved_goals_with_completed_artifact_and_customer_acceptance"
+            and type(accepted) is int
+            and type(total) is int
+            and 0 <= accepted <= total
+            and total > 0
+            and value == accepted / total
+        )
+    try:
+        return start <= _date(evidence["observed_at"]) <= end
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
 def closed_sample(
     item: dict[str, Any], state: dict[str, Any], as_of: datetime
 ) -> dict[str, Any] | None:
     key = item["opportunity_id"]
     target = item.get("hypothesis")
-    task = state.get("tasks", {}).get(key)
-    snapshot = state.get("hypothesis_outcomes", {}).get(key)
+    tasks = state.get("tasks")
+    outcomes = state.get("hypothesis_outcomes")
+    if not isinstance(tasks, dict) or not isinstance(outcomes, dict):
+        return None
+    task = tasks.get(key)
+    snapshot = outcomes.get(key)
     if not target or not isinstance(task, dict) or not isinstance(snapshot, dict):
         return None
+    calls = task.get("calls")
     if (
         task.get("status") not in {"completed", "failed"}
-        or not isinstance(task.get("calls"), dict)
-        or not all(call.get("status") == "settled" for call in task["calls"].values())
+        or task.get("cost_basis") != "approved_tariff_accrual"
+        or not _sha(task.get("result_sha256"))
+        or not isinstance(calls, dict)
+        or not all(
+            isinstance(call, dict)
+            and call.get("status") == "settled"
+            and call.get("cost_basis") == "approved_tariff_accrual"
+            and type(call.get("accrued_cost_cents")) is int
+            and call["accrued_cost_cents"] >= 0
+            for call in calls.values()
+        )
         or type(task.get("accrued_cost_cents")) is not int
-        or task["accrued_cost_cents"] < 0
+        or task["accrued_cost_cents"] != sum(call["accrued_cost_cents"] for call in calls.values())
         or snapshot.get("opportunity_id") != key
         or snapshot.get("hypothesis") != target
     ):
@@ -94,14 +148,17 @@ def closed_sample(
         start = _date(snapshot["window_start"])
         end = _date(snapshot["window_end"])
         reviewed = _date(snapshot["reviewed_at"])
+        completed = _date(task["completed_at"])
         if (
             start != _date(task["started_at"])
             or end != start + timedelta(days=hypothesis.window_days)
             or not start < end <= reviewed <= as_of
+            or not start <= completed <= reviewed
+            or not _measured_source(hypothesis, evidence, start, end)
         ):
             return None
         verdict = judge(hypothesis.metric_id, value, hypothesis.threshold, hypothesis.direction)
-    except (KeyError, TypeError, ValueError, OverflowError):
+    except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
         return None
     if verdict not in {"hit", "miss"} or snapshot.get("verdict") != verdict:
         return None
@@ -113,6 +170,8 @@ def closed_sample(
         "value": value,
         "hit": int(verdict == "hit"),
         "accrued_cost_cents": task["accrued_cost_cents"],
+        "cost_basis": task["cost_basis"],
+        "result_sha256": task["result_sha256"],
     }
 
 
@@ -153,8 +212,15 @@ def history(session: Any, owner: int, as_of: datetime) -> dict[str, list[dict[st
             or canonical_hash != proposal.get("proposal_sha256")
         ):
             continue
-        for item in proposal["opportunities"]:
-            if not item.get("execution_binding"):
+        opportunities = proposal.get("opportunities")
+        if not isinstance(opportunities, list):
+            continue
+        for item in opportunities:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("opportunity_id"), str)
+                or not item.get("execution_binding")
+            ):
                 continue
             sample = closed_sample(item, state, as_of)
             if sample:
@@ -395,15 +461,23 @@ def evaluate_review(
     expected = option["forecast"]
     p = expected.get("probability_of_target")
     value = expected.get("expected_metric_value")
+    cost = expected.get("expected_accrued_cost_cents")
     return {
         "status": "independent_measurement_verified",
         "option_id": selected,
         "snapshot_sha256": sample["snapshot_sha256"],
+        "metric_evidence_sha256": sample["evidence_sha256"],
+        "execution_result_sha256": sample["result_sha256"],
         "metric_id": item["hypothesis"]["metric_id"],
         "window_start": sample["window_start"],
         "window_end": sample["window_end"],
         "actual_metric_value": sample["value"],
         "actual_accrued_cost_cents": sample["accrued_cost_cents"],
+        "cost_basis": sample["cost_basis"],
+        "predicted_accrued_cost_cents": cost,
+        "cost_error_cents": sample["accrued_cost_cents"] - cost if cost is not None else None,
+        "counterfactual_status": "unknown_no_matched_control",
+        "verification_scope": "original_ledger_snapshot_and_settlement_not_fresh_source_replay",
         "hit": sample["hit"],
         "predicted_probability": p,
         "predicted_metric_value": value,
