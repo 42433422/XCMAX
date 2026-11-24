@@ -179,7 +179,8 @@ for line in sys.stdin:
           "modelProvider":p["modelProvider"],"cwd":os.getcwd(),"approvalPolicy":"never",
           "approvalsReviewer":"user","sandbox":{"type":"readOnly"},"instructionSources":[]}})
     elif method == "turn/start":
-        mode = msg["params"]["input"][0]["text"]
+        inputs = msg["params"]["input"]
+        mode = inputs[0]["text"] if inputs else "tool-output"
         send({"id":msg["id"],"result":{"turn":turn()}})
         if mode == "disconnect":
             sys.exit(0)
@@ -243,6 +244,28 @@ def test_pinned_sdk_stream_resume_and_denied_approval(config, fake_runtime, monk
         for m in messages
         if m.get("method") == "initialize"
     )
+
+
+def test_goal_feedback_is_sdk_tool_output_not_user_input(config, fake_runtime):
+    binary, log = fake_runtime
+
+    async def scenario():
+        async with CodexTransport(replace(config, codex_bin=str(binary))) as runtime:
+            await runtime.start_thread()
+            _ = [event async for event in runtime.stream_turn("Revise the email")]
+            _ = [event async for event in runtime.stream_turn(None, goal_feedback="Keep English")]
+
+    asyncio.run(scenario())
+    turns = [m["params"] for line in log.read_text().splitlines()
+             if (m := json.loads(line)).get("method") == "turn/start"]
+    first, retry = turns
+    assert first["threadId"] == retry["threadId"]
+    assert first["input"][0]["text"] == "Revise the email"
+    assert "toolOutput" not in first
+    assert retry["input"] == []
+    assert retry["toolOutput"]["name"] == "verify_runtime_goal"
+    assert retry["toolOutput"]["output"] == "Keep English"
+    assert retry["toolOutput"]["retain"] is False
 
 
 def test_interruption_is_a_terminal_event_not_business_success(config, fake_runtime):

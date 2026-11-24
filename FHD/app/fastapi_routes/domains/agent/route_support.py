@@ -246,7 +246,12 @@ def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -
 
 
 def public_event_dict(event: Any) -> dict[str, Any]:
-    return cast("dict[str, Any]", redact_internal_errors(event.to_dict()))
+    data = cast("dict[str, Any]", redact_internal_errors(event.to_dict()))
+    if event.event_type.startswith("runtime."):
+        from app.application.agent_runtime.gateway import public_runtime_result
+
+        return cast("dict[str, Any]", public_runtime_result(data))
+    return data
 
 
 def internal_error_response(operation: str) -> JSONResponse:

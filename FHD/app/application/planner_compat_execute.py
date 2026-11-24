@@ -14,6 +14,7 @@ from app.application.planner_compat.protocols import (
     ChatTurn,
     Payload,
 )
+from app.application.planner_compat.runtime import observed_chat_run
 from app.application.planner_compat.tracing import TurnTrace
 from app.fastapi_routes.xcagi_compat_chat_models import (
     XcagiCompatChatBatchBody,
@@ -31,6 +32,10 @@ class ChatTurnExecutor:
 
     async def execute(self, turn: ChatTurn, *, timeout: float) -> Payload:
         trace = TurnTrace(turn, turn.planner_context(), self.trace)
+        receipt: dict[str, str] = {}
+        if turn_id := trace.context.get("turn_id"):
+            receipt["turn_id"] = str(turn_id)
+        token = observed_chat_run.set(receipt)
         try:
             call = (
                 self.backends.mainline(turn.body, trace.context, message=turn.message)
@@ -44,7 +49,7 @@ class ChatTurnExecutor:
                 return payload
             return trace.attach(payload, mainline=True)
         except TimeoutError:
-            return trace.attach(self.responses.timeout(timeout), mainline=True)
+            return {**self.responses.timeout(timeout), **receipt, "observation_timeout": True}
         except RECOVERABLE_ERRORS as exc:
             if turn.is_batch:
                 error = self.responses.http_error(exc)
@@ -53,6 +58,8 @@ class ChatTurnExecutor:
                     {"success": False, "message": detail, "response": detail}, mainline=True
                 )
             raise self.responses.http_error(exc) from exc
+        finally:
+            observed_chat_run.reset(token)
 
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:

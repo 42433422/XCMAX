@@ -33,6 +33,22 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
     }
 
 
+def withhold_runtime_output(result: dict[str, Any], *, status: str, error: str) -> None:
+    """Keep reviewed evidence, but retract an apparent success rejected by the host."""
+    result.update(
+        ok=False,
+        business_completed=False,
+        reply_completed=False,
+        exit_status=status,
+        execution_state=status,
+        error=error,
+        output="本轮结果未通过核验，未发布正文。",
+        session_messages=[
+            message for message in result.get("session_messages", []) if message["role"] == "user"
+        ],
+    )
+
+
 def receipt_state(row: dict[str, Any]) -> str:
     receipt = row.get("receipt") or {}
     if execution_result_outcome_unknown(receipt) or row.get("state") in {"claimed", "unknown"}:
@@ -169,7 +185,7 @@ def classify_runtime_result(
             exit_status="goal_verification_required",
             execution_state="blocked",
             error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-            output=f"已核验 {len(verified_rows)} 项操作，整体目标尚未完成。\n{feedback}",
+            output="本轮未通过完整性核验，原任务与回执已保留，请核对后重试。",
             goal_response=reviewed_output,
             verification_feedback=feedback,
             retryable=isinstance(report, dict)

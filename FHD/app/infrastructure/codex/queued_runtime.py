@@ -20,7 +20,11 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.application.agent_orchestrator.worker_repository import lock_execution_claim
 from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
-from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result, model_unsettled
+from app.domain.task_lifecycle.agent_runtime_results import (
+    base_runtime_result,
+    model_unsettled,
+    withhold_runtime_output,
+)
 from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
 
 
@@ -246,6 +250,10 @@ def _execute_queued_runtime(
             call.get("state") in {"claimed", "unknown"}
             for call in current.get("calls", {}).values()
         ):
+            if result.get("ok") is True:
+                withhold_runtime_output(
+                    result, status="unknown", error="执行或模型计量结果尚未确定，请核对原任务回执"
+                )
             result.update(
                 ok=False,
                 business_completed=False,
