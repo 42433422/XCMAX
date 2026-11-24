@@ -123,3 +123,97 @@ def original_experiment_projection(row: Any, delivery: dict[str, Any]) -> dict[s
     return frozen_experiment_projection(
         spec, progress, delivery, policy_digest=_digest(spec)
     )
+
+
+
+def bound_portfolio_experiment(
+    session: Any, decision_id: str, proposal: dict[str, Any], state: dict[str, Any],
+    item: dict[str, Any], *, now: Any,
+) -> dict[str, Any] | None:
+    """Read the original approved experiment tied to this exact strategic worker.
+
+    Never create/advance an experiment, change exposure, or infer financial
+    counterfactuals from a software or prompt experiment.
+    """
+    from modstore_server.business_decision_review import proposal_content
+    from modstore_server.strategic_portfolio import PortfolioError, digest
+    from modstore_server.strategic_workspace_bridge import KIND, original
+    from modstore_server.strategic_workspace_receipts import validate_terminal
+
+    remote = (item.get("input_data") or {}).get("remote_execution")
+    if not isinstance(remote, dict) or remote.get("kind") != KIND:
+        return None
+    opportunity_id = item.get("opportunity_id")
+    unknown = {
+        "status": "unknown", "opportunity_id": opportunity_id,
+        "finding_type": "unverified_original_experiment",
+    }
+    try:
+        owner = proposal["owner_user_id"]
+        proposal_sha = proposal["proposal_sha256"]
+        authorization = state["authorization"]
+        task = state["tasks"][opportunity_id]
+        worker = task["worker_binding"]
+        receipt = task["execution_receipt"]
+        start, completed = _time(task["started_at"]), _time(task["completed_at"])
+        if (
+            type(owner) is not int or owner <= 0
+            or not _sha(proposal_sha)
+            or digest(proposal_content(proposal)) != proposal_sha
+            or state.get("proposal_sha256") != proposal_sha
+            or type(authorization.get("user_id")) is not int
+            or authorization["user_id"] != owner
+            or authorization.get("proposal_sha256") != proposal_sha
+            or not authorization.get("actor")
+            or not proposal["limits"].get("company_budget_id")
+            or item not in proposal["opportunities"]
+            or opportunity_id not in state["plan"]["selected"]
+            or task.get("status") not in ("completed", "failed")
+            or not _sha(task.get("result_sha256"))
+            or not isinstance(task.get("calls"), dict)
+            or any(
+                not isinstance(call, dict) or call.get("status") != "settled"
+                for call in task["calls"].values()
+            )
+            or not isinstance(worker, dict)
+            or worker.get("decision_id") != decision_id
+            or worker.get("opportunity_id") != opportunity_id
+            or worker.get("owner_user_id") != owner
+            or worker.get("proposal_sha256") != proposal_sha
+            or worker.get("adapter") != KIND
+            or worker.get("receipt_id") != remote["original_request_id"]
+            or not worker.get("lease_token")
+            or worker["lease_token"] != task.get("lease_token")
+            or not isinstance(receipt, dict)
+            or receipt.get("truncated")
+            or digest(receipt) != task["result_sha256"]
+            or (receipt.get("ok") is True) != (task["status"] == "completed")
+            or start is None or completed is None or not start <= completed <= now
+        ):
+            return unknown
+        request = {**remote, "binding": worker}
+        row, _, effects = original(session, request, active=False)
+        validate_terminal(session, request, receipt)
+        delivery = receipt["remote_receipt"]["delivery"]
+        result = original_experiment_projection(row, delivery)
+        closed = _time((effects.get("experiment") or {}).get("closed_at"))
+        observed = _time(result.get("observed_at"))
+        began = _time(result.get("observation_start"))
+        if (
+            result.get("status") not in ("measured", "inconclusive")
+            or not _sha(result.get("snapshot_sha256"))
+            or began is None or observed is None or closed is None
+            or not start <= began <= observed <= closed <= completed
+        ):
+            return unknown
+        return {
+            **result,
+            "decision_id": decision_id,
+            "opportunity_id": opportunity_id,
+            "proposal_sha256": proposal_sha,
+            "execution_result_sha256": task["result_sha256"],
+            "original_request_id": remote["original_request_id"],
+            "scope": "same_approved_retort_experiment_not_general_business_counterfactual",
+        }
+    except (PortfolioError, KeyError, TypeError, ValueError, AttributeError):
+        return unknown

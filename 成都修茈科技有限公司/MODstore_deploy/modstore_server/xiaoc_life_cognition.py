@@ -14,6 +14,8 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from modstore_server.strategy_bets import BetHypothesis
+
 
 class CitedSuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -30,12 +32,23 @@ class InterestSuggestion(BaseModel):
     evidence_refs: list[str] = Field(min_length=1, max_length=6)
 
 
+class AlternativeResourceCaps(BaseModel):
+    """A smaller requested hard reservation, not a cost prediction or permission."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    cost_cents: int = Field(ge=0, le=100_000_000)
+    tokens: int = Field(ge=0, le=1_000_000_000)
+    compute_seconds: int = Field(ge=1, le=240)
+
+
 class ProposalAlternative(BaseModel):
     """Evidence-linked option for review, not an executable action."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=120)
     tradeoff: str = Field(min_length=1, max_length=200)
+    task: str | None = Field(default=None, min_length=1, max_length=700)
+    resource_caps: AlternativeResourceCaps | None = None
     evidence_refs: list[str] = Field(min_length=1, max_length=4)
 
 
@@ -45,6 +58,7 @@ class LifeDecision(BaseModel):
     summary: str = Field(min_length=1, max_length=600)
     evidence_refs: list[str] = Field(min_length=1, max_length=8)
     goal: CitedSuggestion | None = None
+    hypothesis: BetHypothesis | None = None
     alternatives: list[ProposalAlternative] = Field(default_factory=list, max_length=2)
     interests: list[InterestSuggestion] = Field(default_factory=list, max_length=3)
     self_assessment: CitedSuggestion | None = None
@@ -62,12 +76,23 @@ Return ONLY a JSON object, in Chinese, matching this shape:
 "evidence_refs":["exact supplied ref"],
 "goal":null or {"title":"...","description":"testable proposed task, not a completed result",
 "evidence_refs":["exact supplied ref"]},
-"alternatives":[{"title":"...","tradeoff":"uncertain cost or benefit","evidence_refs":["exact supplied ref"]}],
+"hypothesis":null or {"hypothesis":"falsifiable objective","metric_id":"slo_availability",
+"threshold":0.99,"direction":"max","window_days":7,"kill_criteria":["miss target"]},
+"alternatives":[{"title":"...","task":"different concrete task for the same objective",
+"tradeoff":"uncertain cost or benefit","evidence_refs":["exact supplied ref"]}],
 "interests":[{"topic":"...","reason":"...","confidence":0.5,"evidence_refs":["exact supplied ref"]}],
 "self_assessment":null or {"title":"...","description":"hypothesis about a limitation",
 "evidence_refs":["exact supplied ref"]}}.
 New goals remain proposals. Only use supplied refs, including on nested objects.
-Alternatives are optional, for propose only, and never authorize actions.
+For enterprise proposals supply different concrete tasks for the same measurable
+objective when supported by observations. Optional resource_caps may only reduce
+the original task's hard limits (cost_cents, tokens, compute_seconds); they are
+unverified reservation requests, never predicted costs or spending authority.
+The hypothesis is a test target, not a forecast. Supported report metrics: slo_availability, slo_error_rate, intent_accuracy,
+legacy_ratio, domain_rated_ratio. Customer revenue/acceptance requires the separate
+original customer-goal binding and is not available in this proposal form.
+Alternatives are for propose only; the runtime adds a no-action baseline. Never
+supply numeric probabilities, scores, costs or estimated returns as actual facts.
 Evidence status describes observations, not certainty about their contents.
 Historical measured outcomes do not establish success or subjective consciousness.
 A cognitive review is historical ledger consistency, not a future prediction,
@@ -252,6 +277,35 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "stop_reason": stop,
         "hypotheses": hypotheses[:4],
     }
+    evaluation = review.get("decision_evaluation")
+    if isinstance(evaluation, dict) and evaluation.get("status") == "independent_measurement_verified":
+        metrics["decision_evaluation"] = {
+            key: evaluation[key]
+            for key in (
+                "status", "option_id", "snapshot_sha256", "metric_id", "window_start", "window_end",
+                "actual_metric_value", "actual_accrued_cost_cents", "hit", "predicted_probability",
+                "predicted_metric_value", "brier", "metric_error", "forecast_status",
+                "metric_evidence_sha256", "execution_result_sha256", "cost_basis",
+                "predicted_accrued_cost_cents", "cost_error_cents", "counterfactual_status",
+                "verification_scope", "experiment_snapshot_sha256", "experiment_scope",
+            )
+            if key in evaluation
+        }
+    experiments = review.get("experiment_evaluations")
+    if isinstance(experiments, list):
+        metrics["experiment_evaluations"] = [
+            {key: entry[key] for key in (
+                "status", "finding_type", "opportunity_id", "decision_id", "proposal_sha256",
+                "execution_result_sha256", "original_request_id", "experiment_id", "snapshot_id",
+                "snapshot_sha256", "metric_id", "sample_size", "lift", "interval", "direction",
+                "decision", "observation_start", "observation_end", "observed_at", "scope",
+            ) if key in entry}
+            for entry in experiments[:4]
+            if isinstance(entry, dict)
+            and entry.get("decision_id") == record["decision_id"]
+            and entry.get("proposal_sha256") == record.get("proposal_sha256")
+            and entry.get("status") in ("measured", "inconclusive")
+        ]
     return {
         "outcome_status": status,
         "summary": summary,
@@ -789,6 +843,15 @@ def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> 
         raise ValueError("life_self_assessment_requires_reflection")
     if decision.action == "propose" and decision.goal is None:
         raise ValueError("life_proposal_requires_goal")
+    if decision.hypothesis is not None:
+        from modstore_server.strategy_bets import CUSTOMER_ACCEPTANCE_METRIC, REVENUE_METRIC
+
+        if (
+            decision.action != "propose"
+            or domain != "enterprise"
+            or decision.hypothesis.metric_id in {REVENUE_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
+        ):
+            raise ValueError("life_hypothesis_requires_enterprise_report_metric")
     if decision.alternatives:
         if decision.action != "propose" or decision.goal is None:
             raise ValueError("life_alternatives_require_proposal")

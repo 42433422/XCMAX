@@ -653,7 +653,9 @@ class CyclePorts:
                             "employee_id": employee,
                             "input_data": self.state.get("policy", {}).get("task_input", {}),
                             "value_score": 1,
-                            "confidence_bps": 2500,
+                            # These are scheduler probe weights, not an estimated return/probability.
+                            "confidence_bps": 1 if self.domain == "enterprise" else 2500,
+                            "hypothesis": decision.get("hypothesis"),
                             **{
                                 key: limits[key]
                                 for key in ("cost_cents", "tokens", "compute_seconds")
@@ -663,6 +665,19 @@ class CyclePorts:
                             "source_refs": goal["evidence_refs"],
                         }
                     ],
+                    decision_options=(
+                        {
+                            "alternatives": decision.get("alternatives", []),
+                            "context_sha256": _digest([
+                                self.details.get("attention", {}).get("selected_refs", []),
+                                [fact for fact in state.get("facts", []) if fact.get("ref") in self.evidence],
+                                self.state.get("identity_id"),
+                                self.state.get("self_model", {}),
+                            ]),
+                            "evidence_refs": sorted(self.evidence or goal["evidence_refs"]),
+                        }
+                        if self.domain == "enterprise" else None
+                    ),
                     idempotency_key="xiaoc-life:"
                     + _digest(
                         [
@@ -673,6 +688,15 @@ class CyclePorts:
                         ]
                     )[:48],
                 )
+                if proposal.get("decision_review"):
+                    self.details["decision_comparison"] = proposal["decision_review"]
+                if proposal.get("decision") is None:
+                    goal["blocked_reason"] = "awaiting_feasible_decision_option"
+                    return {
+                        "goals": [goal],
+                        "status": "blocked",
+                        "summary": "原资源约束未找到可行行动，本轮保留不行动选项及比较回执。",
+                    }
                 goal.update(
                     decision_id=proposal["decision"]["decision_id"],
                     status="awaiting_approval",

@@ -804,6 +804,32 @@ def review_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> d
             ),
             "stop_reason": state.get("stop_reason", ""),
         }
+        from modstore_server.xiaoc_life_experiment_review import bound_portfolio_experiment
+
+        experiments = [
+            measured
+            for item in proposal["opportunities"]
+            if (measured := bound_portfolio_experiment(
+                _session, decision_id, proposal, state, item, now=datetime.now(UTC)
+            )) is not None
+        ]
+        if experiments:
+            report["experiment_evaluations"] = experiments
+        if proposal.get("decision_review"):
+            from modstore_server.business_decision_review import evaluate_review
+
+            evaluation = evaluate_review(proposal, state, datetime.now(UTC))
+            if evaluation is not None:
+                selected_experiment = next(
+                    (entry for entry in experiments if
+                     entry.get("opportunity_id") == evaluation.get("option_id")
+                     and entry.get("status") in ("measured", "inconclusive")),
+                    None,
+                )
+                if selected_experiment:
+                    evaluation["experiment_snapshot_sha256"] = selected_experiment["snapshot_sha256"]
+                    evaluation["experiment_scope"] = selected_experiment["scope"]
+                report["decision_evaluation"] = evaluation
         state["reviews"] = [*state.get("reviews", [])[-89:], report]
         return report
 
