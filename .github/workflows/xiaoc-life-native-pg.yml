@@ -84,3 +84,27 @@ jobs:
             tests/test_xiaoc_life_checkpoint.py \
             tests/test_xiaoc_life_state.py \
             tests/test_xiaoc_life_runtime.py
+
+  persy-readback:
+    if: github.event_name == 'pull_request' && github.base_ref == 'codex/integrate-open-prs-20261121-36690872'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+      - name: Install FHD test dependencies
+        run: |
+          set -euo pipefail
+          test_pins="$(python scripts/dev/check_requirements_lock.py --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
+      - name: Verify approved relation write against original store
+        run: |
+          python -m pytest -q --tb=short \
+            tests/test_application/test_memory_v2_agent_routes.py::test_memory_v2_proposal_readback_preserves_pending_relation_conflict

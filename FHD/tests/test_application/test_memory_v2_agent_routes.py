@@ -98,6 +98,58 @@ def _assert_memory_run(
     }
 
 
+def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
+    tmp_path, monkeypatch, authenticated_memory_client
+) -> None:
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    def relation(person):
+        return {
+            "statement": f"Northwind contact {person}",
+            "subject": "Northwind",
+            "predicate": "contact",
+            "object": person,
+            "relation_cardinality": "one",
+            "entities": [
+                {
+                    "name": "Northwind",
+                    "type": "organization",
+                    "role": "subject",
+                    "entity_id": "customer:17",
+                },
+                {"name": person, "type": "person", "role": "object"},
+            ],
+        }
+
+    repo = InMemoryAgentRunRepository()
+    _configure_runtime(monkeypatch, tmp_path)
+    try:
+        with _patch_agent_repo(repo):
+            client = ApprovedCapabilityClient(_client(), repo, authenticated_memory_client)
+            payload = {
+                "user_id": "7",
+                "memory_type": "entity",
+                "key": "contact",
+                "source": "user_explicit",
+                "evidence": [{"source": "reviewed_business_record"}],
+            }
+            first = client.post("/memory/v2/candidates", json={**payload, "value": relation("Alice")})
+            assert first.status_code == 200, first.json()
+            first_id = first.json()["candidate"]["memory_id"]
+            confirmed = client.post(f"/memory/v2/{first_id}/confirm", json={"user_id": "7"})
+            assert confirmed.status_code == 200, confirmed.json()
+            active = confirmed.json()["memory"]
+            second = client.post("/memory/v2/candidates", json={**payload, "value": relation("Bob")})
+            assert second.status_code == 200, second.json()
+            candidate = second.json()["candidate"]
+            assert candidate["status"] == "pending"
+            assert candidate["conflict_review"] == [
+                {"memory_id": first_id, "revision": active["revision"]}
+            ]
+    finally:
+        memory_mod.reset_user_memory_service()
+
+
 @pytest.mark.parametrize("account_tier", ["normal", "personal"])
 def test_memory_v2_lifecycle_routes_execute_through_agent(
     tmp_path,
