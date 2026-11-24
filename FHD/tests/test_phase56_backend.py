@@ -4,6 +4,7 @@ workflow types, conversation/misc helpers (mocked I/O)."""
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import OperationalError
 from starlette.requests import Request
 
 from app.application.ai_chat_app_service import (
@@ -167,7 +169,7 @@ def test_extract_log_clear_old() -> None:
 def test_extract_log_db_error_returns_failure() -> None:
     with patch(
         "app.infrastructure.persistence.extract_log_store_impl.get_db",
-        side_effect=RuntimeError("db down"),
+        side_effect=OperationalError(None, None, sqlite3.OperationalError("db down")),
     ):
         out = SQLAlchemyExtractLogStore().find_all()
     assert out["success"] is False

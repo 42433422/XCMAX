@@ -56,7 +56,7 @@ def receiver(tmp_path):
         def do_GET(self):
             with sqlite3.connect(database) as connection:
                 rows = connection.execute(
-                    "SELECT request_id FROM effects ORDER BY rowid"
+                    "SELECT request_id FROM effects ORDER BY rowid LIMIT 3"
                 ).fetchall()
             self.reply({"request_ids": [row[0] for row in rows]})
 
@@ -188,7 +188,7 @@ def test_committed_effect_with_lost_receipt_is_never_replayed(
         assert result.get("error_code") != "output_schema_validation_failed"
         with sqlite3.connect(effects) as connection:
             assert connection.execute(
-                "SELECT request_id FROM effects ORDER BY rowid"
+                "SELECT request_id FROM effects ORDER BY rowid LIMIT 3"
             ).fetchall() == [("baseline",), (original,)]
 
         api.delete("/proxies/external-receipt/toxics/lost-receipt").raise_for_status()

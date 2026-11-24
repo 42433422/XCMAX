@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -416,7 +416,7 @@ def _invoke_alert_hook(job_id: str, error: str, job_dict: dict[str, Any]) -> Non
         return
     try:
         hook(job_id, error, job_dict)
-    except RECOVERABLE_ERRORS as exc:
+    except BOUNDARY_ERRORS as exc:
         logger.warning("employee cron alert hook failed job_id=%s: %s", job_id, exc)
 
 

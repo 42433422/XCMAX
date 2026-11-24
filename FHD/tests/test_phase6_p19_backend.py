@@ -20,7 +20,7 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict, empty string)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
+- Exception paths (RECOVERABLE_ERRORS: OSError, ValueError (not unclassified RuntimeError))
 """
 
 from __future__ import annotations
@@ -767,7 +767,7 @@ class TestPerformanceOptimizerInit:
         with (
             patch(
                 "app.utils.performance.redis_cache.get_redis_cache",
-                side_effect=RuntimeError("no redis"),
+                side_effect=OSError("no redis"),
             ),
             patch(
                 "app.utils.performance.query_optimizer.get_query_optimizer",
@@ -1211,7 +1211,7 @@ class TestExcelVectorQuery:
 
     def test_query_exception_returns_500(self, local_tools):
         mock_svc = MagicMock()
-        mock_svc.query.side_effect = RuntimeError("db down")
+        mock_svc.query.side_effect = OSError("db down")
         with patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
             return_value=mock_svc,
@@ -1329,7 +1329,7 @@ class TestBindTenantForLogin:
 
         with patch(
             "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="X", username="alice")
         assert result["tenant_id"] is None
@@ -1488,11 +1488,11 @@ class TestFinalizeEnterpriseLogin:
         with (
             patch(
                 "app.fastapi_routes.market_account.save_session_market_token",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
             patch(
                 "app.application.enterprise_login_flow.extract_market_user_blob",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
         ):
             out = await finalize_enterprise_login(
@@ -1820,7 +1820,7 @@ class TestPublishTemplateEvent:
 
         with patch(
             "app.fastapi_routes.template_api.publish_neuro_event",
-            side_effect=RuntimeError("bus down"),
+            side_effect=OSError("bus down"),
         ):
             # Should not raise
             _publish_template_event("test.event", {})

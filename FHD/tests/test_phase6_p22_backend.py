@@ -1383,7 +1383,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        mock_bus.publish.side_effect = RuntimeError("bus down")
+        mock_bus.publish.side_effect = OSError("bus down")
         event = _make_event({"product_id": "P1", "unit_name": "甲公司"})
         result = await handlers.handle_product_created(event)
         assert result["success"] is False
@@ -1397,7 +1397,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        mock_bus.publish.side_effect = LookupError("lookup failed")
+        mock_bus.publish.side_effect = OSError("lookup failed")
         event = _make_event({"product_id": "P1", "changed_fields": ["name"]})
         result = await handlers.handle_product_updated(event)
         assert result["success"] is False
@@ -1823,7 +1823,7 @@ class TestEmployeeAgentBranches:
         agent = EmployeeAgent("emp-1")
         with patch(
             "app.application.employee_runtime.agent.load_employee_pack_from_disk",
-            side_effect=RuntimeError("disk io"),
+            side_effect=OSError("disk io"),
         ):
             out = agent.run("task", input_data={})
         assert out["success"] is False
@@ -2164,7 +2164,7 @@ class TestModsRoutesBranches:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("mm boom"),
+                side_effect=OSError("mm boom"),
             ),
             patch(
                 "app.enterprise.mod_entitlements.sync_entitlements_from_request",
@@ -2290,7 +2290,7 @@ class TestModsRoutesBranches:
             ),
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("mm boom"),
+                side_effect=OSError("mm boom"),
             ),
         ):
             client = TestClient(app)
@@ -2330,7 +2330,7 @@ class TestModsRoutesBranches:
             ),
             patch(
                 "app.application.mod_uninstall.uninstall_mod_for_request",
-                side_effect=RuntimeError("uninstall boom"),
+                side_effect=OSError("uninstall boom"),
             ),
         ):
             client = TestClient(app)

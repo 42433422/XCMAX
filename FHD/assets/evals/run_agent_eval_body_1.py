@@ -68,6 +68,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
     from app.application.agent_orchestrator import tool_permission
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.domain.shared_services.kitten_ai_document import pickup
+    from app.infrastructure.llm import trace_store
 
     class FixtureToolExecutor(AgentToolExecutor):
         def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
@@ -78,6 +79,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         isolated_env = {
             "XCAGI_DATA_DIR": str(tmp_path / "xcagi-data"),
             "XCAGI_DESKTOP_DATA_DIR": str(tmp_path / "xcagi-data"),
+            "XCAGI_GENAI_TRACE_DIR": str(tmp_path / "xcagi-data" / "logs" / "genai_traces"),
             "DATASET_RAG_STORE_PATH": str(tmp_path / "dataset-rag" / "datasets.json"),
             "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
@@ -86,6 +88,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         }
         with (
             patch.dict(os.environ, isolated_env, clear=False),
+            patch.object(trace_store, "_store", None),
             patch.object(tool_permission, "_IDEMPOTENCY", {}),
             patch.object(tool_permission, "_LIVE_OWNERS", set()),
             patch.object(pickup, "_CACHED_BASE", None),
@@ -94,7 +97,9 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
                 "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
                 FixtureToolExecutor,
             ),
+            ExitStack() as cleanup,
         ):
+            cleanup.callback(trace_store.reset_trace_store)
             results = [run_task(task) for task in load_tasks(path)]
     passed = sum(1 for result in results if result["passed"])
     total = len(results)

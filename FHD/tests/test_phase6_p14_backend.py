@@ -281,7 +281,7 @@ class TestAddIntentFeedback:
     def test_add_intent_feedback_swallows_recoverable_error(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.add_feedback.side_effect = RuntimeError("db down")
+        conversation_service.user_memory.add_feedback.side_effect = OSError("db down")
         # RuntimeError is in RECOVERABLE_ERRORS: swallowed, returns None, but the
         # inner boundary call must have been attempted exactly once.
         result = conversation_service.add_intent_feedback(
@@ -333,7 +333,7 @@ class TestRecordUserAction:
     def test_record_user_action_swallows_recoverable_error(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.record_action.side_effect = RuntimeError("db down")
+        conversation_service.user_memory.record_action.side_effect = OSError("db down")
         result = conversation_service.record_user_action(
             user_id="u1", intent="greeting", slots={}, message="hello"
         )
@@ -371,7 +371,7 @@ class TestApplyMemoryPreferences:
     def test_apply_memory_preferences_swallows_error_returns_original(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.apply_preference_to_slots.side_effect = RuntimeError(
+        conversation_service.user_memory.apply_preference_to_slots.side_effect = OSError(
             "db down"
         )
         original = {"k": "v"}
@@ -431,7 +431,7 @@ class TestGetHabitSuggestions:
     def test_get_habit_suggestions_swallows_error_returns_empty(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError("db")
+        conversation_service.user_memory.get_habit_suggestions.side_effect = OSError("db")
         result = conversation_service.get_habit_suggestions("u1")
         assert result == []
 
@@ -548,7 +548,7 @@ class TestCheckHabitSuggestion:
         assert result is None
 
     def test_habit_error_returns_none(self, conversation_service: _ConversationHost) -> None:
-        conversation_service.user_memory.get_habit_suggestions.side_effect = RuntimeError("db")
+        conversation_service.user_memory.get_habit_suggestions.side_effect = OSError("db")
         result = conversation_service._check_habit_suggestion("u1", "greeting", {})
         assert result is None
 

@@ -400,7 +400,7 @@ def test_apply_notify_paid_saas_plan_apply_recoverable_error_stays_pending(
     with (
         patch(
             "app.application.tenant_subscription_app_service.apply_paid_plan_for_user",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ),
         patch(
             "app.infrastructure.billing.saas_plans.is_saas_plan_id",

@@ -108,10 +108,13 @@ def _db_session_scope():
             db.commit()
             completed = True
         finally:
-            # A failed after_commit hook must keep its original error.
-            if not completed and db.is_active:
-                db.rollback()
-                logger.error("数据库事务失败，已回滚")
+            if not completed:
+                transaction = db.get_transaction()
+                # SQLAlchemy 2.0's internal guard includes failed-flush DEACTIVE
+                # but excludes COMMITTED/CLOSED, preserving after_commit errors.
+                if transaction is None or transaction._rollback_can_be_called():
+                    db.rollback()
+                    logger.error("数据库事务失败，已回滚")
 
 
 get_db = contextmanager(_db_session_scope)
@@ -129,9 +132,12 @@ def get_host_db():
             db.commit()
             completed = True
         finally:
-            if not completed and db.is_active:
-                db.rollback()
-                logger.error("宿主库事务失败，已回滚")
+            if not completed:
+                transaction = db.get_transaction()
+                # Use the same SQLAlchemy 2.0 rollback-state guard as get_db.
+                if transaction is None or transaction._rollback_can_be_called():
+                    db.rollback()
+                    logger.error("宿主库事务失败，已回滚")
 
 
 def get_db_dependency():

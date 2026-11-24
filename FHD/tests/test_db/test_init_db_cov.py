@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import importlib
 import os
+import sqlite3
 import sys
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 # pre-import so patch.object can refer to the module object
 import app.db as _app_db_module
@@ -148,7 +150,7 @@ class TestResolveAuthBootstrapEngine:
             patch.object(
                 _app_db_module, "_create_engine_for_url", side_effect=ImportError, create=True
             ),
-            patch.object(_app_db_module, "_get_engine", side_effect=RuntimeError, create=True),
+            patch.object(_app_db_module, "_get_engine", side_effect=ImportError, create=True),
         ):
             result = _resolve_auth_bootstrap_engine()
         assert result is None
@@ -210,7 +212,10 @@ class TestEnsureSqliteRbacBootstrap:
         eng = _make_mock_engine("sqlite")
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=eng),
-            patch("app.db.init_db._seed_sqlite_rbac_defaults", side_effect=RuntimeError("boom")),
+            patch(
+                "app.db.init_db._seed_sqlite_rbac_defaults",
+                side_effect=OperationalError(None, None, sqlite3.OperationalError("boom")),
+            ),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(["permissions", "roles", "role_permissions"]),

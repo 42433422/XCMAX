@@ -13,7 +13,7 @@ from app.neuro_bus.deduplicator import get_deduplicator
 from app.neuro_bus.event_store import EventStoreMode, get_event_store
 from app.neuro_bus.health_monitor import get_health_monitor
 from app.neuro_bus.retry_handler import get_retry_handler
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ class NeuroBusInitializer:
             if self._health_monitor:
                 self._health_monitor.stop_monitoring()
                 logger.info("[NeuroBusInitializer] ✓ 健康监控已停止")
-        except RECOVERABLE_ERRORS as e:
+        except BOUNDARY_ERRORS as e:
             # 健康监控停止失败不得阻断系统拆除——状态必须在 finally 中清理。
             logger.error("[NeuroBusInitializer] 关闭健康监控时出错: %s", e)
         finally:

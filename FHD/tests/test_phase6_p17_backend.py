@@ -682,7 +682,7 @@ class TestModstorePlatformAdapterGetProviders:
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=RuntimeError("conn fail"))
+        mock_client.get = AsyncMock(side_effect=OSError("conn fail"))
         mock_client.is_closed = False
         a._client = mock_client
 
@@ -1769,7 +1769,7 @@ class TestChartDataServiceRevenueChart:
         svc = ChartDataService()
         with patch(
             "app.db.session.get_db",
-            side_effect=RuntimeError("no db"),
+            side_effect=OSError("no db"),
         ):
             result = svc.get_revenue_chart_data()
         assert result["success"] is False
@@ -1816,7 +1816,7 @@ class TestChartDataServiceProductPieChart:
         svc = ChartDataService()
         with patch(
             "app.db.session.get_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             result = svc.get_product_pie_chart_data()
         assert result["success"] is False
@@ -1938,7 +1938,7 @@ class TestChartDataServiceInventoryChart:
         svc = ChartDataService()
         with patch(
             "app.db.session.get_db",
-            side_effect=RuntimeError("no db"),
+            side_effect=OSError("no db"),
         ):
             result = svc.get_inventory_chart_data()
         assert result["success"] is False
