@@ -1,0 +1,34 @@
+name: XiaoC D01-D03 Self Model Contract
+on:
+  push:
+    branches: [codex/xiaoc-functional-self-model-20261124]
+  pull_request:
+    branches: [codex/xiaoc-evidence-cognition-ce197738, main]
+    paths:
+      - "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_self_*.py"
+      - "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py"
+      - "成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_self_*.py"
+      - ".github/workflows/xiaoc-self-model-contract.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  self-model-contract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install original backend dependency contracts
+        run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          python -m pip install "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_core" "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint" "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_prebuilt" "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_sdk" -e "$GITHUB_WORKSPACE/packages/retort_engine" -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]" "$pytest_pin"
+      - name: SQL identity, 18x108 catalog, scoped accrual and historical evidence tests
+        run: |
+          python -m pytest -q --tb=short tests/test_xiaoc_self_model.py tests/test_xiaoc_self_metrics.py tests/test_xiaoc_life_state.py::test_functional_identity_receipt_uses_original_sql_ledger tests/test_xiaoc_life_state.py::test_due_identity_readback_refreshes_after_policy_change_without_consumption tests/test_xiaoc_life_state.py::test_self_cost_reads_original_request_and_not_reservations tests/test_xiaoc_life_state.py::test_self_audit_mapping_keeps_all_existing_anchors_unverified
