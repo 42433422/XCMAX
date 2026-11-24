@@ -1,9 +1,12 @@
 """L4 relation policy and path evidence unit contracts."""
 
 from datetime import UTC, datetime
+
+import pytest
 from unittest.mock import MagicMock
 
 from app.application.user_memory.relation_retrieval import (
+    parse_as_of,
     relation_paths,
     select_effective_records,
     validate_relation_value,
@@ -90,3 +93,18 @@ def test_agent_relation_path_rejects_revoked_or_changed_intermediate():
     assert filter_recalled_memories(owner, hits, memory_service=service) == []
     service.list_memories.return_value = [{**first, "status": "deleted"}, second]
     assert filter_recalled_memories(owner, hits, memory_service=service) == []
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"],
+)
+def test_utc_conversion_overflow_stays_a_validation_error(timestamp):
+    with pytest.raises(ValueError, match="UTC conversion is out of range"):
+        parse_as_of(timestamp)
+    outcome = validate_relation_value(
+        {"relation_validity": {"effective_from": timestamp}}
+    )
+    assert outcome is not None
+    assert outcome["success"] is False
+    assert outcome["error_code"] == "memory_invalid_relation_validity"

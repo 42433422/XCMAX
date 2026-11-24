@@ -130,7 +130,10 @@ def parse_as_of(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
         raise ValueError("as_of requires an explicit UTC offset")
-    return parsed.astimezone(UTC)
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError("as_of UTC conversion is out of range") from exc
 
 
 def _revision_time(record: dict[str, Any]) -> datetime | None:
