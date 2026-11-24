@@ -230,9 +230,7 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
         if isinstance(employee, dict):
             employee_id = norm_pkg_id(employee.get("id"))
             if expected_id and employee_id and employee_id != expected_id:
-                errors.append(
-                    f"metadata.id={expected_id} 与包内 employee.id={employee_id} 不一致"
-                )
+                errors.append(f"metadata.id={expected_id} 与包内 employee.id={employee_id} 不一致")
         workflow_employees = inner.get("workflow_employees")
         if isinstance(workflow_employees, list):
             for index, row in enumerate(workflow_employees):
