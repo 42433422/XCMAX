@@ -224,6 +224,6 @@ def fixture_trend(events: list[dict[str, Any]], *, current_sha: str | None) -> d
             "historical_evidence_ref": prior_ref,
             "fixture_regressions_to_review": regression,
             "fixture_evidence_lost": evidence_lost,
-            "rule": "fixture changes do not measure business or model skill without external review",
+            "rule": "fixture changes are not independently verified skill measurements",
         }
     return unavailable
