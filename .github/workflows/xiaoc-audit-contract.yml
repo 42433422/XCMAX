@@ -31,4 +31,4 @@ jobs:
       - name: Verify 18-domain 108-anchor catalog and generated view
         run: python scripts/dev/audit_benchmark_ssot.py check
       - name: Exercise non-self-certifying verdict and trend guards
-        run: python -m pytest -q tests/test_scripts/test_xiaoc_independent_eval.py
+        run: python -m pytest --confcutdir=tests/test_scripts -q tests/test_scripts/test_xiaoc_independent_eval.py
