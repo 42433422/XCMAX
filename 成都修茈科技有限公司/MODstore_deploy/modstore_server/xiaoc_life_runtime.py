@@ -27,6 +27,10 @@ from modstore_server.xiaoc_life_cognition import (
     reflection_facts,
     reflection_receipt,
 )
+from modstore_server.xiaoc_life_native_checkpoint import (
+    native_life_checkpointer,
+    native_thread_config,
+)
 from modstore_server.xiaoc_life_telemetry import life_operation
 
 
@@ -59,6 +63,7 @@ class LifeCycle(TypedDict, total=False):
     self_model: dict[str, Any]
     summary: str
     status: str
+    model_receipt: dict[str, Any]
 
 
 def _store():
@@ -508,7 +513,14 @@ class CyclePorts:
                 "status": "unverified_options_not_execution_authority",
                 "alternatives": [item.model_dump() for item in decision.alternatives],
             }
-        return {"decision": decision.model_dump()}
+        return {
+            "decision": decision.model_dump(),
+            "model_receipt": {
+                "actual_tokens": self.actual_tokens,
+                "model": self.model,
+                "evidence_refs": self.evidence[:32],
+            },
+        }
 
     async def act(self, state: LifeCycle) -> LifeCycle:
         self.active()
@@ -897,7 +909,7 @@ class CyclePorts:
         )
 
 
-def build_life_graph(ports: CyclePorts):
+def build_life_graph(ports: CyclePorts, *, checkpointer: Any | None = None):
     from langgraph.graph import END, START, StateGraph
 
     graph = StateGraph(LifeCycle)
@@ -929,7 +941,69 @@ def build_life_graph(ports: CyclePorts):
     graph.add_edge("decide", "act")
     graph.add_edge("act", "reflect")
     graph.add_edge("reflect", END)
-    return graph.compile()
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["act"] if checkpointer is not None else None,
+    )
+
+
+async def _continue_at_act(graph: Any, config: dict[str, Any], ports: CyclePorts) -> dict[str, Any] | None:
+    """Resume exactly once from a persisted, verified pre-act checkpoint."""
+    snapshot = await graph.aget_state(config)
+    if tuple(snapshot.next) != ("act",):
+        return None
+    state = snapshot.values
+    if not isinstance(state, dict):
+        return None
+    receipt = state.get("model_receipt")
+    if state.get("decision"):
+        # On recovery the in-memory model receipt is NOT authoritative.
+        # Refuse a new act until the original outbound ledger is independently
+        # settled and agrees with the durable LangGraph state.
+        if not isinstance(receipt, dict):
+            return None
+        from modstore_server.xiaoc_life_reconciliation import _verified_usage
+
+        with life_operation("reconcile"):
+            usage = await asyncio.to_thread(
+                _verified_usage, ports.claim.get("steps", []), ports.claim["owner_user_id"]
+            )
+        if (
+            usage is None
+            or type(receipt.get("actual_tokens")) is not int
+            or usage != receipt["actual_tokens"]
+            or usage > ports.claim["reserved_tokens"]
+        ):
+            return None
+        ports.actual_tokens = usage
+        ports.model = str(receipt.get("model") or "")[:256]
+        ports.evidence = [
+            ref for ref in receipt.get("evidence_refs", [])
+            if isinstance(ref, str) and 0 < len(ref) <= 256
+        ][:32]
+    if not _store().admit_cycle_act(ports.claim):
+        return None  # The winner owns this cycle; never settle its reservation.
+    return await graph.ainvoke(None, config, durability="sync")
+
+
+async def recover_native_act() -> dict[str, Any] | None:
+    """Recovery only at a completed decision before act starts.
+
+    A crash in decide/act is deliberately NOT replayed. Expired or revoked
+    claims cannot regain authority by virtue of a graph checkpoint.
+    """
+    claim = _store().pending_native_act_claim()
+    if claim is None:
+        return None
+    ports = CyclePorts(claim)
+    async with native_life_checkpointer() as saver:
+        graph = build_life_graph(ports, checkpointer=saver)
+        config = native_thread_config(claim)
+        result = await _continue_at_act(graph, config, ports)
+        if result is None:
+            return None
+        with life_operation("settle"):
+            return ports.finish(result)
 
 
 async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
@@ -939,7 +1013,15 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
     ports = CyclePorts(claim)
     try:
         with life_operation("graph"), _store().life_execution_scope(claim):
-            result = await build_life_graph(ports).ainvoke({}, {"recursion_limit": 8})
+            async with native_life_checkpointer() as saver:
+                graph = build_life_graph(ports, checkpointer=saver)
+                config = native_thread_config(claim)
+                await graph.ainvoke({}, config, durability="sync")
+                result = await _continue_at_act(graph, config, ports)
+                if result is None:
+                    # Another worker won the pre-act CAS, or an unverified
+                    # model receipt prevents effects. Do not finish its lease.
+                    return dict(_store().read_state())
     except asyncio.CancelledError:
         ports.details["reason"] = "cycle_cancelled"
         with life_operation("settle"):
@@ -972,6 +1054,9 @@ async def tick_async() -> dict[str, Any]:
         with life_operation("reconcile"):
             reconcile_usage()
             reconcile_goals()
+        resumed = await recover_native_act()
+        if resumed is not None:
+            return resumed
         store = _store()
         state = store.read_state()
         for domain in _domain_order(state):

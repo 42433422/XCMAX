@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 import pytest
 
@@ -42,6 +42,7 @@ class Store:
         self.phases = []
         self.checkpoints = []
         self.graph_started = False
+        self.act_admitted = False
 
     def read_state(self):
         return copy.deepcopy(self.state)
@@ -67,6 +68,15 @@ class Store:
         if not self.cycle_active(claim) or self.graph_started:
             return False
         self.graph_started = True
+        return True
+
+    def pending_native_act_claim(self):
+        return None
+
+    def admit_cycle_act(self, claim):
+        if not self.cycle_active(claim) or self.act_admitted:
+            return False
+        self.act_admitted = True
         return True
 
     def record_cycle_phase(self, claim, phase):
@@ -96,6 +106,14 @@ def ports(monkeypatch):
     calls = []
     current = {}
     monkeypatch.setattr(runtime, "_store", lambda: store)
+
+    @asynccontextmanager
+    async def memory_checkpointer():
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        yield InMemorySaver()
+
+    monkeypatch.setattr(runtime, "native_life_checkpointer", memory_checkpointer)
     monkeypatch.setattr(xiaoc_life_reconciliation, "reconcile_goals", lambda: None)
     monkeypatch.setattr(xiaoc_life_reconciliation, "reconcile_usage", lambda: None)
     monkeypatch.setattr(runtime.CyclePorts, "approved_portfolio", lambda self: None)

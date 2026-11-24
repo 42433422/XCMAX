@@ -5,7 +5,7 @@
 
 ## 单一权威
 - 原 XiaoCLifeState 行提供 identity_id、数据库 CAS state_version、管理员授权 revision、原活跃 cycle_id、阶段及预算；XiaoCLifeEvent 保存不可变事实。管理端读取同一状态。
-- LangGraph 仍是原 observe / decide / act / reflect 图。在原 CAS 行内保存 act / reflect 已返回节点的有界、校验和绑定检查点；它只允许原账本读回和结算，不重放外部操作，不等同于完整原生 LangGraph checkpointer。异步任务由原 AgentRun / Employee Runtime / 战略账本按原身份推进，未知调用只核对回执。
+- LangGraph 保留原 observe / decide / act / reflect 图，新增官方 AsyncPostgresSaver / AsyncSqliteSaver 原生持久检查点，采用 `durability="sync"`。原 CAS 行独立保留 act/reflect 回执投影。图在 act 之前静态中断，原 SQL CAS 一次性准入后执行；崩溃时仅从已经完整保存的 decide→act 安全边界恢复，必须独立核对原模型用量。act 一旦准入不可回放；不完整的外部副作用只能按原回执核对，不能因图检查点而重试。异步任务由原 AgentRun / Employee Runtime / 战略账本按原身份推进，未知调用只核对回执。
 - APScheduler 原任务是触发器，不能作为唯一任务权威。停止不销毁身份、不清除历史、不退款未知调用；显式启动不复活旧授权。授权到期、撤权与预算耗尽停止新准入；原回执仍可只读核对。
 
 ## 前置条件和证据
@@ -27,4 +27,4 @@
 - 原生 pytest / PostgreSQL 跨进程 / 真实模型与业务 / 72h / 30 天：NOT RUN，待完整受控检出及执行环境。
 - 新增的节点回执检查点包含原 cycle / owner / revision、阶段、证据引用和报告用量；恢复必须先独立核对原账本。未知结果保持 fail closed，不将节点返回或匹配用量冒充业务验收。
 - 原调度/图/阶段/结算使用 OpenTelemetry API span；Prometheus 默认注册表提供 modstore_xiaoc_life_operations_total、modstore_xiaoc_life_active_operations、modstore_xiaoc_life_operation_duration_seconds。returned 只表示函数返回。仅在部署配置有效 tracer provider 后输出 trace；禁止从本模块覆盖全局 provider。停止后的活动计数必须下降，进程退出后的真实连接和资源释放仍需外部证据。
-- 完整原生 LangGraph checkpointer 及任意中间节点恢复仍未实现；不得宣称真实持续运行、全量生产通过或意识。
+- 原生检查点与 pre-act 安全边界恢复已接入代码；act/decide 中途崩溃不做危险的任意节点回放。尚需原生产 PostgreSQL 多进程、跨重启和真实模型端到端验收；不得宣称真实持续运行、全量生产通过或意识。

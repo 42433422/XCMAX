@@ -814,6 +814,51 @@ def begin_cycle_graph(claim: dict[str, Any]) -> bool:
     return _mutate(begin)
 
 
+def pending_native_act_claim() -> dict[str, Any] | None:
+    """Find an admitted graph at a durable pre-effect boundary, without changing it.
+
+    The original decision's persisted LangGraph checkpoint must still be
+    independently checked before this lease can be used to enter act.
+    """
+    _ensure()
+    with get_session_factory()() as session:
+        row = session.get(XiaoCLifeState, IDENTITY_ID)
+        assert row is not None
+        data = json.loads(row.state_json)
+        active = data.get("active_cycle") or {}
+        if (
+            not active.get("graph_started")
+            or active.get("act_admitted")
+            or active.get("phase") != "decide"
+            or not _claim_active(data, session, active)
+        ):
+            return None
+        return {**copy.deepcopy(active), "state": copy.deepcopy(data)}
+
+
+def admit_cycle_act(claim: dict[str, Any]) -> bool:
+    """Single-use SQL CAS fence for a resumed graph's first effectful node.
+
+    Once admitted, act is NEVER replayed. An interrupted or unknown effect
+    must use original business/model receipts, not checkpoint replay.
+    """
+
+    def admit(data: dict[str, Any], session: Session) -> bool:
+        active = data.get("active_cycle") or {}
+        if (
+            not _claim_active(data, session, claim)
+            or not active.get("graph_started")
+            or active.get("phase") != "decide"
+            or active.get("act_admitted")
+        ):
+            return False
+        active["act_admitted"] = True
+        active["act_admitted_at"] = utcnow().isoformat()
+        return True
+
+    return _mutate(admit)
+
+
 def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
     """Persist node progress in the original CAS row, not a second task engine."""
     phases = ("claimed", "observe", "decide", "act", "reflect")
