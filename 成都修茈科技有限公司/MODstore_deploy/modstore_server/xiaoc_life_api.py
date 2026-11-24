@@ -86,11 +86,15 @@ async def get_self_model(admin: User = Depends(require_admin)) -> dict[str, Any]
     result["performance"]["cost_cents"] = costs["cost_cents"]
     result["performance"]["cost_status"] = costs["status"]
     result["cost_evidence"] = costs
-    from modstore_server.xiaoc_self_evidence import annotate_unverified_catalog
+    from modstore_server.xiaoc_self_evidence import annotate_unverified_catalog, fixture_trend
 
     catalog = await asyncio.to_thread(audit_projection)
     result["audit_catalog"] = annotate_unverified_catalog(
         catalog,
+        state.get("self_fixture_checks", []),
+        current_sha=result["identity"]["release"]["git_sha"],
+    )
+    result["fixture_trend"] = fixture_trend(
         state.get("self_fixture_checks", []),
         current_sha=result["identity"]["release"]["git_sha"],
     )
