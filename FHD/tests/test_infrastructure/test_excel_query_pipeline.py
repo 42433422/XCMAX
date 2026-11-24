@@ -213,13 +213,22 @@ def test_ambiguous_header_requires_confirmation_before_reading_or_querying(
 def test_real_sdk_header_failure_does_not_become_no_model_fallback(
     tmp_path, monkeypatch, unconfigured_header_registry, decision, scoped
 ):
+    import httpx
+    from openai import AuthenticationError
+
     from app.application.tools.workflow import handle_excel_analysis
     from app.infrastructure.llm import client
 
     path = tmp_path / "ledger.xlsx"
     _write_workbook(path)
     create = MagicMock(
-        side_effect=RuntimeError("provider authorization denied")
+        side_effect=AuthenticationError(
+            "provider authorization denied",
+            response=httpx.Response(
+                401, request=httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+            ),
+            body=None,
+        )
         if decision == "failure"
         else None,
         return_value={"choices": [{"message": {"content": '{"header_row": 0}'}}]},

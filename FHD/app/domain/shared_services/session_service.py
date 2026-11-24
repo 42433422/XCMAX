@@ -40,14 +40,10 @@ class SessionService(NeuroEventPublisherMixin):
             }
 
     def validate_session(self, session_id: str):
-        from app.infrastructure.session.session_manager import get_session_manager
-
-        return get_session_manager().validate_session(session_id)
+        return get_service_registry().session_manager.validate_session(session_id)
 
     def get_session_info(self, session_id: str):
-        from app.infrastructure.session.session_manager import get_session_manager
-
-        return get_session_manager().get_session_info(session_id)
+        return get_service_registry().session_manager.get_session_info(session_id)
 
     def delete_session(self, session_id: str) -> bool:
         with get_db() as db:

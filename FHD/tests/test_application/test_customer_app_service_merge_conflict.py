@@ -11,9 +11,16 @@ Covers:
 
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.exc import OperationalError
+
 from app.application.customer_app_service import CustomerApplicationService
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
 
 
 def _purchase_unit(id_=1, name="Acme", person="Bob", phone="123", addr="street"):
@@ -68,7 +75,7 @@ class TestGetAll:
 
     def test_exception_returns_error_dict(self) -> None:
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db down")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db down")):
             out = svc.get_all()
         assert out["success"] is False
         assert out["data"] == []
@@ -101,7 +108,7 @@ class TestGetById:
 
     def test_exception_returns_error(self) -> None:
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("boom")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("boom")):
             out = svc.get_by_id(1)
         assert out["success"] is False
         assert out["data"] is None
@@ -152,7 +159,7 @@ class TestCreate:
         svc = CustomerApplicationService()
         session = MagicMock()
         session.query.return_value.filter.return_value.first.return_value = None
-        session.commit.side_effect = RuntimeError("commit failed")
+        session.commit.side_effect = _db_error("commit failed")
         with patch.object(svc, "_get_session", return_value=session):
             out = svc.create({"customer_name": "Boom"})
         assert out["success"] is False
@@ -197,7 +204,7 @@ class TestUpdate:
         u = _purchase_unit(1, "Me")
         session = MagicMock()
         session.query.return_value.filter.return_value.first.side_effect = [u, None]
-        session.commit.side_effect = RuntimeError("boom")
+        session.commit.side_effect = _db_error("boom")
         with patch.object(svc, "_get_session", return_value=session):
             out = svc.update(1, {"contact_person": "X"})
         assert out["success"] is False

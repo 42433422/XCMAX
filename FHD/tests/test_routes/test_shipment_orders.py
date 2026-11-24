@@ -18,8 +18,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 def client(trusted_actor) -> TestClient:
     app = FastAPI()
     app.include_router(shipment_orders.router)
+    actor = trusted_actor(tenant_id=None, role="admin", tier="admin")
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
+        app, raise_server_exceptions=False, headers={**actor.headers, "Idempotency-Key": actor.session_id}
     )
 
 

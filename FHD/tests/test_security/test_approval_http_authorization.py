@@ -18,6 +18,7 @@ from app.application import approval_workspace_app_service as service
 from app.application.facades import session_facade
 from app.db.db_base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRecord, ApprovalRequest
+from app.db.models.tenant import Tenant
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.fastapi_routes.approval import router
@@ -40,6 +41,7 @@ def approval_http(request, monkeypatch):
             for model in (
                 User,
                 UserSession,
+                Tenant,
                 ApprovalFlow,
                 ApprovalFlowNode,
                 ApprovalRequest,
@@ -52,6 +54,7 @@ def approval_http(request, monkeypatch):
             text("CREATE TABLE ai_action_audit (actor TEXT, action TEXT, payload TEXT)")
         )
     with Session(engine) as db:
+        db.add(Tenant(id=10, code="approval-test", name="Approval test tenant"))
         for uid, role, tier, active, tenant in (
             (1, "viewer", "enterprise", True, 10),
             (2, "admin", "admin", True, None),

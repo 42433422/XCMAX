@@ -93,7 +93,7 @@ def _catalog(step: Any, context: dict[str, Any]) -> dict[str, Any]:
     if readback.get("success") is True and outcome == "saved" and evidence["current_matches"]:
         return _report("verified", "result_verified", "catalog_transaction", **evidence)
     if outcome == "rejected_no_effect":
-        return _report("failed", "result_catalog_rejected", "catalog_transaction", **evidence)
+        return _report("verified", "result_catalog_rejected", "catalog_transaction", **evidence)
     if (
         outcome == "saved"
         and readback.get("outcome") == "historical_saved"
