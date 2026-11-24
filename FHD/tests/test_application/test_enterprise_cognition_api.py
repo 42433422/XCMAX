@@ -123,6 +123,20 @@ def test_goal_deadline_is_user_objective_not_invented_order_due_date(enterprise_
     assert query["goal_progress"][0]["deadline_source"] == "user_goal"
     assert query["goal_progress"][0]["order_promised_date_inferred"] is False
     assert query["observations"][0]["delay_status"] == "unknown"
+    candidate, = query["operating_gap_candidates"]
+    assert candidate["goal_id"] == _goal(order_id)["goal_id"]
+    assert candidate["evidence"]["gap"] == "6"
+    assert candidate["deadline_missed"] is True
+    assert candidate["execution_authorized"] is False
+    assert candidate["requires_original_approval"] is True
+    assert candidate["evidence"]["source_version"] == query["snapshots"][0]["source_version"]
+    assert query["business_data_written"] is False
+    again = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": {"entity_id": order_id}},
+        headers=actor.headers,
+    ).json()["data"]
+    assert again["operating_gap_candidates"][0]["candidate_id"] == candidate["candidate_id"]
 
 
 def test_goal_filter_precedes_limit_and_matches_selected_authority(enterprise_http):
@@ -242,3 +256,15 @@ def test_model_and_http_share_strict_catalog_contract(enterprise_http):
         "plan",
         {"goal_id": "g", "request_id": "r", "message": "plan", "approved": True},
     ).ok
+
+
+def test_met_goal_and_foreign_entity_do_not_produce_operating_gap(enterprise_http):
+    actor, _, order_id, _, foreign_id = enterprise_http
+    service = EnterpriseCognitionService()
+    service.invoke("bind_goal", _goal(order_id, target="6"), context=actor.context)
+    own = service.invoke("query", {"entity_id": order_id}, context=actor.context)
+    assert own["goal_progress"][0]["target_met"] is True
+    assert own["operating_gap_candidates"] == []
+    foreign = service.invoke("query", {"entity_id": foreign_id}, context=actor.context)
+    assert foreign["current_state_verified"] is False
+    assert foreign["operating_gap_candidates"] == []
