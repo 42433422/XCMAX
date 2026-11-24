@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -353,8 +354,6 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
         try:
             return executor.execute(step, runtime_context=runtime_context)
         except BOUNDARY_ERRORS as exc:
-            import os
-
             print(
                 f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc} "
                 f"cwd={os.getcwd()} db_url={os.environ.get('DATABASE_URL')} "
@@ -367,6 +366,8 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     from pathlib import Path
 
     monkeypatch.delenv("XCAGI_OWNED_SOURCE_PROFILE", raising=False)
+    data_dir = Path(os.environ.get("XCAGI_DATA_DIR") or tmp_path / "app-data")
+    data_dir.mkdir(parents=True, exist_ok=True)
     owner_engine = setup.actor.factory.kw["bind"]
     owner_path = Path(str(owner_engine.url.database))
     owner_path.parent.mkdir(parents=True, exist_ok=True)

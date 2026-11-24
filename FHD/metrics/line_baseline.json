@@ -1,5 +1,5 @@
 {
-  "lines": 2732992,
+  "lines": 2732993,
   "updated": "2026-11-25",
-  "note": "PR #3558: create the receipt fixture owner database before the recovered write."
+  "note": "PR #3558: ensure the receipt fixture data directory exists."
 }
