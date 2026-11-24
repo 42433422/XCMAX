@@ -140,7 +140,8 @@ def test_default_factory_registers_template_upload_and_analyze(template_app):
 
 def test_upload_rejects_anonymous_without_ingest(template_app):
     client, _engine, _repo = template_app
-    response = _post(client, 
+    response = _post(
+        client,
         "/api/templates/upload",
         files={
             "file": (
@@ -162,7 +163,8 @@ def test_create_rejects_anonymous_or_missing_tenant_without_writes(
     headers = {"X-User-ID": "7", "X-Tenant-ID": "11"}
     if session_id:
         headers["X-Session-ID"] = session_id
-    response = _post(client, 
+    response = _post(
+        client,
         "/api/templates/create",
         headers=headers,
         json={**_label_payload(), "user_id": 7, "tenant_id": 11},
@@ -239,7 +241,8 @@ def test_default_delete_refuses_builtin_without_reporting_success(
     monkeypatch.setattr(
         "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
     )
-    response = _post(client, 
+    response = _post(
+        client,
         "/api/templates/delete",
         headers={"X-Session-ID": "label-session-7"},
         json={"id": "fs:standard.xlsx"},

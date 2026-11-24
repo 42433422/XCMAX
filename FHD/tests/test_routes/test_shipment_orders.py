@@ -20,7 +20,9 @@ def client(trusted_actor) -> TestClient:
     app.include_router(shipment_orders.router)
     actor = trusted_actor(tenant_id=None, role="admin", tier="admin")
     return TestClient(
-        app, raise_server_exceptions=False, headers={**actor.headers, "Idempotency-Key": actor.session_id}
+        app,
+        raise_server_exceptions=False,
+        headers={**actor.headers, "Idempotency-Key": actor.session_id},
     )
 
 

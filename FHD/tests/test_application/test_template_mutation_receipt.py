@@ -55,7 +55,8 @@ def test_template_create_update_and_recovery_read_only_original_transaction(
     from app.fastapi_routes.domains.system.system_routes import router
 
     client.app.include_router(router)
-    updated = _post(client, 
+    updated = _post(
+        client,
         "/api/templates/update",
         headers=headers,
         json={"id": created.json()["template"]["id"], "name": "Updated label"},
@@ -112,10 +113,11 @@ def test_reviewed_template_reuse_commits_original_receipt_without_second_templat
         "file_path": str(path),
         "preview_data": {"reviewed_excel": True},
     }
-    first = _post(client, 
-        "/api/templates/create", headers={"X-Session-ID": "label-session-7"}, json=payload
+    first = _post(
+        client, "/api/templates/create", headers={"X-Session-ID": "label-session-7"}, json=payload
     )
-    second = _post(client, 
+    second = _post(
+        client,
         "/api/templates/create",
         headers={"X-Session-ID": "label-session-7"},
         json={**payload, "name": "Another request for the same reviewed layout"},
@@ -146,7 +148,8 @@ def test_authenticated_analyze_create_and_preview_keep_original_tenant_file(temp
     client, engine, repo = template_app
     content = "产品名称,数量\n已上传产品,2\n".encode()
     headers = {"X-Session-ID": "label-session-7", "X-Tenant-ID": "22", "X-User-Id": "8"}
-    analyzed = _post(client, 
+    analyzed = _post(
+        client,
         "/api/templates/analyze",
         headers=headers,
         files={"file": ("source.csv", content, "text/csv")},
@@ -171,7 +174,8 @@ def test_authenticated_analyze_create_and_preview_keep_original_tenant_file(temp
     shared.parent.mkdir(parents=True)
     shared.write_bytes(content)
     for session, source in (("label-session-8", path), ("label-session-7", shared)):
-        refused = _post(client, 
+        refused = _post(
+            client,
             "/api/templates/create",
             headers={"X-Session-ID": session},
             json={**payload, "file_path": str(source), "original_file_path": str(source)},
@@ -196,7 +200,8 @@ def test_template_readback_rejects_missing_original_receipts_and_changed_scope(
     path = tmp_path / "tenants/11/templates/private.xlsx"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"original archived template bytes")
-    response = _post(client, 
+    response = _post(
+        client,
         "/api/templates/create",
         headers={"X-Session-ID": "label-session-7"},
         json={**_label_payload(), "file_path": str(path)},
