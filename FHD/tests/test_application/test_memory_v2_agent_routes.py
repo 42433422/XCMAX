@@ -100,9 +100,12 @@ def _assert_memory_run(
 
 @pytest.mark.parametrize("omit_conflict", [False, True])
 def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
-    tmp_path, monkeypatch, authenticated_memory_client, omit_conflict
+    tmp_path, monkeypatch, authenticated_memory_client, omit_conflict, request
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
+
+    if omit_conflict:
+        request.getfixturevalue("local_tools")
 
     def relation(person):
         return {
@@ -160,13 +163,18 @@ def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
                     path.write_text(json.dumps(persisted))
                     return {**output, "candidate": record}
 
-                monkeypatch.setattr(service, "propose_memory_candidate", omit_persisted_conflict)
+                writer = Mock(side_effect=omit_persisted_conflict)
+                monkeypatch.setattr(service, "propose_memory_candidate", writer)
             second = client.post(
                 "/memory/v2/candidates", json={**payload, "value": relation("Bob")}
             )
             if omit_conflict:
+                writer.assert_called_once()
                 assert second.status_code == 202, second.json()
-                report = repo.get(second.json()["run_id"]).tool_calls[0].metadata["verification"]
+                call = repo.get(second.json()["run_id"]).tool_calls[0]
+                assert call.output["success"] is True
+                assert "conflict_review" not in call.output["candidate"]
+                report = call.metadata["verification"]
                 assert report["code"] == "result_memory_effect_mismatch", report
                 return
             assert second.status_code == 200, second.json()
