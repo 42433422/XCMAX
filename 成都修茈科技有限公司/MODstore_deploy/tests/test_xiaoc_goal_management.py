@@ -150,3 +150,68 @@ def test_allocations_use_existing_opportunity_contract_and_stable_dependencies(o
         build_goal_opportunities(goal, allocations, {**caps, "tokens": 199})
     with pytest.raises(LifePolicyError):
         build_goal_opportunities(goal, allocations[:1], caps)
+
+
+def test_expired_unbound_candidate_renews_without_overwriting_history(observation):
+    now, value, state = observation
+    value["lifecycle_gaps"] = {"acceptance": 3}
+    first, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    state["goals"] = [first]
+    later = now + timedelta(days=8)
+    fresh = {**value, "observed_at": later.isoformat()}
+    renewed, fact = discover_goal_candidate({"customer_value": fresh}, state, 17, now=later)
+    assert renewed["id"] != first["id"]
+    assert renewed["supersedes_goal_id"] == first["id"]
+    assert renewed["evidence_refs"] == [fact["ref"]]
+    assert first["status"] == renewed["status"] == "proposed"
+    assert "decision_id" not in renewed
+    assert discover_goal_candidate({"customer_value": fresh}, state, 17, now=later)[0] == renewed
+    with pytest.raises(LifePolicyError):
+        check_candidate_promotion(
+            first, 17, {"expires_at": (later + timedelta(days=1)).isoformat()}, fresh, now=later
+        )
+    state["goals"].append(renewed)
+    assert discover_goal_candidate({"customer_value": fresh}, state, 17, now=later) is None
+    latest = later + timedelta(days=8)
+    third, _ = discover_goal_candidate(
+        {"customer_value": {**fresh, "observed_at": latest.isoformat()}}, state, 17, now=latest
+    )
+    assert third["supersedes_goal_id"] == renewed["id"]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"decision_id": "original-proposal"},
+        {"status": "rejected"},
+        {"status": "withdrawn"},
+        {"status": "completed"},
+        {"review_deadline": "invalid"},
+        {"step_bindings": {"inspect": "old-task"}},
+    ],
+)
+def test_expired_bound_or_terminal_goal_cannot_be_reopened(observation, changes):
+    now, value, state = observation
+    value["lifecycle_gaps"] = {"acceptance": 3}
+    first, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    state["goals"] = [{**first, **changes}]
+    later = now + timedelta(days=8)
+    fresh = {**value, "observed_at": later.isoformat()}
+    assert discover_goal_candidate({"customer_value": fresh}, state, 17, now=later) is None
+
+
+def test_renewal_requires_new_authoritative_observation(observation):
+    now, value, state = observation
+    value["lifecycle_gaps"] = {"acceptance": 3}
+    first, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    state["goals"] = [first]
+    deadline = now + timedelta(days=7)
+    later = deadline + timedelta(hours=1)
+    for changes in (
+        {"observed_at": deadline.isoformat()},
+        {"observed_at": later.isoformat(), "source_owner": "java_postgresql_internal_api"},
+        {"observed_at": later.isoformat(), "lifecycle_gaps": {"acceptance": 0}},
+    ):
+        assert discover_goal_candidate(
+            {"customer_value": {**value, **changes}}, state, 17, now=later
+        ) is None

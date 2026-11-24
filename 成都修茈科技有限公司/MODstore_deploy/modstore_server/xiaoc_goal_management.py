@@ -65,10 +65,49 @@ def _gaps(value: Any, now: datetime) -> dict[str, int]:
     }
 
 
+def _previous_expired_candidate(
+    goals: list[dict[str, Any]], owner: int, stage: str, value: dict[str, Any],
+    *, now: datetime,
+) -> tuple[bool, str | None]:
+    """Only renew expired, unbound review material, never an approved or stopped goal."""
+    prior = [
+        goal for goal in goals
+        if isinstance(goal, dict)
+        and goal.get("candidate_origin") == ORIGIN
+        and goal.get("candidate_owner_user_id") == owner
+        and goal.get("issue_key") == stage
+    ]
+    if not prior:
+        return True, None
+    try:
+        observed = parse_time(value["observed_at"])
+        dated = []
+        for goal in prior:
+            observation = goal["observation"]
+            deadline = parse_time(goal["review_deadline"])
+            if (
+                goal.get("status") != "proposed"
+                or goal.get("decision_id")
+                or goal.get("step_bindings")
+                or not isinstance(goal.get("id"), str)
+                or not goal["id"]
+                or observation.get("source_owner") != value["source_owner"]
+                or observation.get("stage") != stage
+                or observation.get("window_days") != value["window_days"]
+                or not parse_time(observation["observed_at"]) < deadline <= now
+                or observed <= deadline
+            ):
+                return False, None
+            dated.append((deadline, goal["id"]))
+        return True, max(dated)[1]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False, None
+
+
 def discover_goal_candidate(
     context: dict[str, Any], state: dict[str, Any], owner: int, *, now: datetime
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    """One stable candidate per owner and issue, with original observation evidence."""
+    """One active review candidate per owner/issue; retain expired review history."""
     if type(owner) is not int or owner <= 0 or state.get("paused"):
         return None
     goals = state.get("goals", [])
@@ -86,7 +125,13 @@ def discover_goal_candidate(
         return None
     existing = {goal.get("id") for goal in goals if isinstance(goal, dict)}
     for stage, count in sorted(gaps.items(), key=lambda row: (-row[1], row[0])):
-        goal_id = "xiaoc-issue-" + _digest([state["identity_id"], owner, ORIGIN, stage])[:24]
+        allowed, predecessor = _previous_expired_candidate(goals, owner, stage, value, now=now)
+        if not allowed:
+            continue
+        identity = [state["identity_id"], owner, ORIGIN, stage]
+        if predecessor is not None:
+            identity.append(predecessor)
+        goal_id = "xiaoc-issue-" + _digest(identity)[:24]
         if goal_id in existing:
             continue
         observation = {
@@ -134,6 +179,8 @@ def discover_goal_candidate(
             ],
             "subgoals_status": "review_only_not_dispatched",
         }
+        if predecessor is not None:
+            goal["supersedes_goal_id"] = predecessor
         fact = {"ref": ref, "text": json.dumps(observation, ensure_ascii=False)}
         return goal, fact
     return None
