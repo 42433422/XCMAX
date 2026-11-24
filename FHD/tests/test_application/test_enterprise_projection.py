@@ -636,7 +636,6 @@ def test_purchase_authority_read_permissions_and_committed_changes(world, observ
         db.add_all(
             [
                 Supplier(id=610, tenant_id=11, code="WORLD-S", name="Supplier A"),
-                Supplier(id=617, tenant_id=22, code="WORLD-OTHER-S", name="Foreign Supplier"),
                 Warehouse(id=611, tenant_id=11, code="WORLD-P-W", name="Purchasing warehouse"),
                 Product(id=612, tenant_id=11, name="Material"),
             ]
@@ -687,6 +686,10 @@ def test_purchase_authority_read_permissions_and_committed_changes(world, observ
                 ),
             ]
         )
+    # The other tenant's row is committed under its own tenant context, never
+    # smuggled through the current caller's tenant-scoped write session.
+    with tenant_scope(22), sessions.begin() as db:
+        db.add(Supplier(id=617, tenant_id=22, code="WORLD-OTHER-S", name="Foreign Supplier"))
     for kind, identity in (
         ("supplier", "610"),
         ("purchase_order", "613"),
