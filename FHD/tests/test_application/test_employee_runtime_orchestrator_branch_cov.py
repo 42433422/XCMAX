@@ -93,6 +93,7 @@ def test_run_with_dependencies_uses_agent_run_and_returns_receipts():
         ],
     )
     orchestrator = MagicMock()
+
     def start(**kwargs):
         run.plan_id = kwargs["plan"].plan_id
         return run
@@ -182,6 +183,7 @@ def test_default_collaboration_requires_complete_root_and_worker_receipts():
         metadata={"runtime_context": {"tenant_id": 1}},
     )
     orchestrator = MagicMock()
+
     def start(**kwargs):
         run.plan_id = kwargs["plan"].plan_id
         return run

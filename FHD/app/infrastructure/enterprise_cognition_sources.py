@@ -351,8 +351,7 @@ class AuthorityReader:
                     key=lambda line: line.id,
                 )
                 state["lines"] = [
-                    {key: json_value(getattr(line, key)) for key in fields}
-                    for line in lines[:200]
+                    {key: json_value(getattr(line, key)) for key in fields} for line in lines[:200]
                 ]
                 state["lines_truncated"] = len(lines) > 200
                 # Raw journal lines are evidence, not a cash or receivables balance.
@@ -367,8 +366,7 @@ class AuthorityReader:
                     key=lambda item: item.id,
                 )
                 state["items"] = [
-                    {key: json_value(getattr(item, key)) for key in fields}
-                    for item in items[:200]
+                    {key: json_value(getattr(item, key)) for key in fields} for item in items[:200]
                 ]
                 state["items_truncated"] = len(items) > 200
                 # Read document lines, never manufacture accounts payable or stock balances.

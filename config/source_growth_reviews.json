@@ -916,9 +916,9 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py",
       "base_blob": "ef5cb34e5e3a75be5c04a8e42ea747a75cacdde0",
-      "head_blob": "2f25e40c08f44e173a9cf18a68fe2b06357f7ec6",
+      "head_blob": "1d15a467f6c5c3fda194918de309cce1b64c2fae",
       "before_lines": 782,
-      "after_lines": 1181,
+      "after_lines": 1182,
       "reason": "#3558 架构评审请求：在原 SQL 生命周期状态中持久化周期身份、图阶段、检查点及收尾准入，并用周期锁协调主执行者和恢复者。",
       "boundary": "在既有 SQL 状态与事务内比较原 claim，不新增独立状态权威；收尾仍须经原动作回执验证，不放宽新动作准入。",
       "validation": "五文件生命周期工作流覆盖原状态准入、SQLite 状态、真实 PostgreSQL 跨进程锁与检查点恢复；正式 CI 与人工评审仍需完成。",

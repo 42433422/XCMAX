@@ -16,7 +16,8 @@ NODE = "tests/test_example.py::test_result"
 def xml(body=""):
     return (
         '<testsuites><testsuite><testcase classname="tests.test_example" name="test_result">'
-        + body + "</testcase></testsuite></testsuites>"
+        + body
+        + "</testcase></testsuite></testsuites>"
     ).encode()
 
 
@@ -68,20 +69,24 @@ def test_trends_do_not_compare_different_data_and_separate_missing_evidence():
         "auditor_source_sha": "a" * 40,
         "protocol_version": "digital-life-fixture/v1",
         "scoring_version": "ssot-v1",
-        "scenarios": [
-            {"id": key, "layers": {"integration": "PASS"}} for key in ("a", "b")
-        ],
+        "scenarios": [{"id": key, "layers": {"integration": "PASS"}} for key in ("a", "b")],
     }
     current = copy.deepcopy(old)
     current["source_sha"] = "b" * 40
     current["scenarios"][0]["layers"]["integration"] = "FAIL"
     current["scenarios"][1]["layers"]["integration"] = "BLOCKED"
     assert evaluator.compare(old, current) == {
-        "status": "COMPARABLE_FIXTURE_ONLY", "regressions": ["a"], "evidence_lost": ["b"]
+        "status": "COMPARABLE_FIXTURE_ONLY",
+        "regressions": ["a"],
+        "evidence_lost": ["b"],
     }
     for key in (
-        "standard_sha256", "dataset_sha256", "environment_sha256",
-        "auditor_source_sha", "protocol_version", "scoring_version",
+        "standard_sha256",
+        "dataset_sha256",
+        "environment_sha256",
+        "auditor_source_sha",
+        "protocol_version",
+        "scoring_version",
     ):
         changed = copy.deepcopy(current)
         changed[key] = "different"
@@ -104,7 +109,6 @@ def test_trends_do_not_compare_different_data_and_separate_missing_evidence():
     assert evaluator.compare(old, changed)["status"] == "INCOMPARABLE"
 
 
-
 def test_higher_evidence_layers_are_never_promoted(monkeypatch, tmp_path):
     raw = standard.CATALOG.read_bytes()
     monkeypatch.setattr(evaluator, "identity", lambda *_: None)
@@ -113,15 +117,23 @@ def test_higher_evidence_layers_are_never_promoted(monkeypatch, tmp_path):
     monkeypatch.setattr(evaluator, "environment", lambda: {"python": "test"})
     monkeypatch.setattr(evaluator, "run_node", lambda *_: {"status": "PASS"})
     report = evaluator.evaluate(
-        tmp_path / "candidate", "candidate", tmp_path / "report",
-        evaluator.digest(raw), True, auditor_sha="approved-auditor",
+        tmp_path / "candidate",
+        "candidate",
+        tmp_path / "report",
+        evaluator.digest(raw),
+        True,
+        auditor_sha="approved-auditor",
     )
     assert report["score"] is None
     assert report["domain_status"] == "UNRATED"
     assert all(
-        row["layers"] == {
-            "unit": "NOT RUN", "integration": "PASS", "real_model": "NOT RUN",
-            "real_business": "NOT RUN", "production": "NOT RUN",
+        row["layers"]
+        == {
+            "unit": "NOT RUN",
+            "integration": "PASS",
+            "real_model": "NOT RUN",
+            "real_business": "NOT RUN",
+            "production": "NOT RUN",
         }
         for row in report["scenarios"]
     )
@@ -134,8 +146,11 @@ def test_auditor_checkout_is_mandatory_for_execution(monkeypatch, tmp_path):
     monkeypatch.setattr(evaluator, "identity", lambda *_: None)
     with pytest.raises(ValueError, match="separate approved auditor"):
         evaluator.evaluate(
-            tmp_path / "candidate", "candidate", tmp_path / "output",
-            evaluator.digest(raw), True,
+            tmp_path / "candidate",
+            "candidate",
+            tmp_path / "output",
+            evaluator.digest(raw),
+            True,
         )
 
 

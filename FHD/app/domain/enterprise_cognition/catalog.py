@@ -17,7 +17,9 @@ class EntityDefinition:
 
 _DEFINITIONS = (
     EntityDefinition("order", "sales_orders", "id", "tool.sales.query", "销售订单；单号是显示编号"),
-    EntityDefinition("supplier", "suppliers", "id", "tool.purchase.query_suppliers", "供应商；不包含联系信息"),
+    EntityDefinition(
+        "supplier", "suppliers", "id", "tool.purchase.query_suppliers", "供应商；不包含联系信息"
+    ),
     EntityDefinition(
         "purchase_order",
         "purchase_orders",

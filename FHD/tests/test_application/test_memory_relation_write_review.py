@@ -176,8 +176,6 @@ def test_write_review_is_owner_scoped_and_never_blocks_on_revoked_relation():
         "scope": "owner",
         "value": _value("Bob"),
     }
-    assert relation_write_conflicts([old], proposed) == [
-        {"memory_id": "old", "revision": 3}
-    ]
+    assert relation_write_conflicts([old], proposed) == [{"memory_id": "old", "revision": 3}]
     assert relation_write_conflicts([old], {**proposed, "scope": "tenant"}) == []
     assert relation_write_conflicts([{**old, "status": "deleted"}], proposed) == []

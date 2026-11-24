@@ -875,7 +875,6 @@ def test_tampered_history_cannot_validate_a_cached_current_fact(world):
     assert unsafe["reason_code"] == "observation_history_unavailable"
 
 
-
 def test_journal_entry_authority_is_scoped_without_invented_account_balances(world, observer):
     from datetime import date
 

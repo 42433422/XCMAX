@@ -126,7 +126,7 @@ def test_goal_deadline_is_user_objective_not_invented_order_due_date(enterprise_
     assert query["goal_progress"][0]["deadline_source"] == "user_goal"
     assert query["goal_progress"][0]["order_promised_date_inferred"] is False
     assert query["observations"][0]["delay_status"] == "unknown"
-    candidate, = query["operating_gap_candidates"]
+    (candidate,) = query["operating_gap_candidates"]
     assert candidate["goal_id"] == _goal(order_id)["goal_id"]
     assert Decimal(candidate["evidence"]["gap"]) == 6
     assert candidate["deadline_missed"] is True
@@ -386,9 +386,9 @@ def test_empty_authorized_world_query_is_unknown_not_a_verified_fact():
             raise AssertionError("empty source must not synthesize a goal")
 
     query = {"entity_type": "order", "entity_id": None, "limit": 10, "force_refresh": False}
-    result = EnterpriseCognitionService(
-        projections=NoVisibleRecords(), goals=NoGoals()
-    ).query(query, tenant_id="11", actor_id="1", mod_id="")
+    result = EnterpriseCognitionService(projections=NoVisibleRecords(), goals=NoGoals()).query(
+        query, tenant_id="11", actor_id="1", mod_id=""
+    )
     assert result["snapshots"] == []
     assert result["current_state_verified"] is False
     assert result["reason_code"] == "no_visible_source_records"

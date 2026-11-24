@@ -61,9 +61,7 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             else None
         )
         declared_source = goal.get("source")
-        declared_kind = (
-            declared_source.get("kind") if isinstance(declared_source, dict) else None
-        )
+        declared_kind = declared_source.get("kind") if isinstance(declared_source, dict) else None
         return {
             "goal_id": goal["goal_id"],
             "knowledge_kind": "inference",

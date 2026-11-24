@@ -1,5 +1,5 @@
 {
-  "lines": 2732915,
+  "lines": 2732918,
   "updated": "2026-11-25",
-  "note": "棘轮下调"
+  "note": "PR #3558: +3 lines are mandated by pinned ruff-format (0.15.22) on nine files plus regenerated capability pages; no baseline policy or exclusion change."
 }

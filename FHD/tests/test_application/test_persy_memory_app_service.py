@@ -469,9 +469,7 @@ def test_shared_memory_lifecycle_is_governed_across_actors_and_mods(monkeypatch)
             actor_id=actor,
             tenant_id=tenant,
             mod_id=mod,
-            permissions=frozenset(
-                {"dataset.read", "dataset.write"} if write else {"dataset.read"}
-            ),
+            permissions=frozenset({"dataset.read", "dataset.write"} if write else {"dataset.read"}),
         )
 
     alice = access("alice")
@@ -493,27 +491,23 @@ def test_shared_memory_lifecycle_is_governed_across_actors_and_mods(monkeypatch)
 
     private = capture(alice, "客户北辰科技的沟通时间是周二下午", "user")
     private_id = private["candidates"][0]["memory_id"]
-    assert service.mutate(
-        access_context=alice, memory_id=private_id, action="confirm"
-    )["success"]
+    assert service.mutate(access_context=alice, memory_id=private_id, action="confirm")["success"]
     created = capture(alice)
     mid = created["candidates"][0]["memory_id"]
     assert not recall(bob)
-    assert not service.mutate(
-        access_context=reader, memory_id=mid, action="confirm"
-    )["success"]
+    assert not service.mutate(access_context=reader, memory_id=mid, action="confirm")["success"]
     assert service.mutate(access_context=alice, memory_id=mid, action="confirm")["success"]
     assert {row["memory_id"] for row in recall(bob)} == {mid}
     assert {row["memory_id"] for row in recall(reader)} == {mid}
     assert not recall(foreign)
     assert not recall(other_mod)
-    assert not service.mutate(access_context=foreign, memory_id=mid, action="delete")[
-        "success"
-    ]
+    assert not service.mutate(access_context=foreign, memory_id=mid, action="delete")["success"]
 
     replacement = extract_explicit_memories("客户北辰科技的负责人是王明")[0]
     assert service.mutate(
-        access_context=alice, memory_id=mid, action="correct",
+        access_context=alice,
+        memory_id=mid,
+        action="correct",
         patch={"key": replacement["key"], "value": replacement["value"]},
     )["success"]
     assert recall(bob)[0]["value"]["object"] == "王明"
@@ -544,9 +538,7 @@ def test_lexical_recall_revalidates_revision_without_graph_path(monkeypatch) -> 
         nonlocal reads
         reads += 1
         if reads == 2:
-            assert service.mutate(
-                access_context=access, memory_id=mid, action="delete"
-            )["success"]
+            assert service.mutate(access_context=access, memory_id=mid, action="delete")["success"]
         return original(**kwargs)
 
     monkeypatch.setattr(service, "list_memories", revoke_between_reads)
