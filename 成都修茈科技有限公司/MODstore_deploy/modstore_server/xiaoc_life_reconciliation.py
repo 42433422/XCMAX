@@ -105,6 +105,7 @@ def reconcile_usage() -> dict[str, int]:
                     "steps": active.get("steps", []),
                     "owner_user_id": active["owner_user_id"],
                     "outbound_journal_version": active.get("outbound_journal_version"),
+                    "outbound_attempted": bool(active.get("outbound_attempted")),
                     "policy_revision": active["policy_revision"],
                     "graph_checkpoints": active.get("graph_checkpoints", {}),
                     "active": True,
@@ -157,6 +158,7 @@ def reconcile_usage() -> dict[str, int]:
             actual = (
                 0
                 if item.get("outbound_journal_version") == 1
+                and not item.get("outbound_attempted")
                 and zero_usage_checkpoint_compatible(
                     item.get("graph_checkpoints", {}),
                     cycle_id=item["cycle_id"],

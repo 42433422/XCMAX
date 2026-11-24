@@ -383,10 +383,10 @@ def test_budget_updates_never_clear_consumption_or_allow_unbounded_authority(dat
     state = configure(daily_token_limit=100)
     assert state["budget"]["used_tokens"] == 150
     assert store.claim_cycle(domain="enterprise", reserve_tokens=1) is None
-    readback = store.claim_cycle(domain="enterprise", reserve_tokens=0)
-    assert readback["reserved_tokens"] == 0
-    state = finish(readback, actual_tokens=0)
-    assert state["budget"]["reserved_tokens"] == 0
+    # Neither paid nor zero-token activity may bypass the exhausted daily
+    # quota. Returning None here is part of the mandatory stop gate.
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
+    assert store.read_state()["budget"]["reserved_tokens"] == 0
     assert not state["unknown_usage"]
     with pytest.raises(LifePolicyError, match="31"):
         configure(authorization_expires_at=(store.utcnow() + timedelta(days=32)).isoformat())
@@ -1117,6 +1117,26 @@ def test_native_postgres_process_claim_checkpoint_and_pool_release(monkeypatch):
         finally:
             admin.dispose()
 
+
+
+def test_unreceipted_provider_attempt_cannot_be_reconciled_as_zero(database, monkeypatch):
+    now = datetime(2026, 11, 24, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: now)
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    store.mark_model_attempt(claim)
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    late = now + timedelta(minutes=6)
+    monkeypatch.setattr(store, "utcnow", lambda: late)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: late)
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 1}
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    finish(claim, actual_tokens=None)
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 1}
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+    assert store.read_state()["unknown_usage"] is True
+    assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
 
 
 def test_native_act_cas_is_permanent_and_preserves_original_task_identity(database):

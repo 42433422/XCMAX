@@ -484,6 +484,9 @@ class CyclePorts:
         with planning_usage_scope(self.claim["owner_user_id"], admission) as context:
             self.actual_tokens = None
             try:
+                # Commit the original uncertainty fence before any paid model
+                # transport; an absent return receipt must NOT become zero use.
+                _store().mark_model_attempt(self.claim)
                 result = await chat_dispatch_via_platform_only(
                     provider, model, messages, max_tokens=output_bound
                 )
@@ -491,7 +494,7 @@ class CyclePorts:
                 receipts = list(context["receipts"])
                 self.details["model_receipts"] = receipts
                 if not receipts:
-                    self.actual_tokens = 0
+                    self.actual_tokens = None
                 elif all(row.get("status") == "settled" for row in receipts):
                     self.actual_tokens = sum(int(row["actual_tokens"]) for row in receipts)
         if self.actual_tokens is None:

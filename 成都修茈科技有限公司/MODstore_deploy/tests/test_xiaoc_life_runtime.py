@@ -87,6 +87,9 @@ class Store:
     def record_cycle_checkpoint(self, claim, phase, **details):
         self.checkpoints.append((phase, details))
 
+    def mark_model_attempt(self, claim):
+        self.claim["outbound_attempted"] = True
+
     def record_cycle_step(self, claim, **details):
         assert self.cycle_active(claim)
         self.claim.setdefault("steps", []).append(details)
@@ -394,6 +397,7 @@ def test_prior_interests_and_self_assessment_change_next_model_context(ports):
         "title": "规划不足",
         "description": "应先检验目标与回执的对应关系",
         "status": "hypothesis",
+        "owner_user_id": 17,
     }
     asyncio.run(runtime.tick_async())
     payload = json.loads(ports[1][0]["messages"][1]["content"])
@@ -417,14 +421,14 @@ def test_newest_first_events_schedule_unvisited_then_least_recent_domain(ports):
     assert "exploration" not in runtime._domain_order(state)
 
 
-def test_pre_outbound_reservation_rejection_is_not_unknown_spending(ports, monkeypatch):
+def test_unreceipted_model_rejection_does_not_invent_free_usage(ports, monkeypatch):
     async def denied(*args, **kwargs):
         raise ValueError("another planning call owns the account quota slot")
 
     monkeypatch.setattr(ports[3], "chat_dispatch_via_platform_only", denied)
     result = asyncio.run(runtime.tick_async())
-    assert result["status"] == "failed" and result["actual_tokens"] == 0
-    assert not ports[1]
+    assert result["status"] == "failed" and result["actual_tokens"] is None
+    assert ports[0].claim["outbound_attempted"] and not ports[1]
 
 
 @pytest.mark.parametrize(
@@ -518,7 +522,7 @@ def test_portfolio_task_larger_than_cycle_reservation_never_dispatches(ports, mo
     assert result["actual_tokens"] == 0 and not ports[1]
 
 
-def test_same_goal_across_cycles_preserves_execution_identity(ports):
+def test_same_goal_across_cycles_preserves_execution_identity(ports, monkeypatch):
     store = ports[0]
     first = asyncio.run(runtime.tick_async())
     goal = {
@@ -529,6 +533,9 @@ def test_same_goal_across_cycles_preserves_execution_identity(ports):
     store.state["goals"] = [goal]
     store.claimed = False
     store.claim["cycle_id"] = "second-cycle"
+    # This unit fixture has no strategic_decisions database. Exercise the
+    # original-goal identity contract without pretending it has a real ledger.
+    monkeypatch.setattr(runtime, "_cycle_reservation", lambda state, domain: 32768)
     second = asyncio.run(runtime.tick_async())
     assert second["goals"][0] == goal
     assert second["details"]["existing_goal_id"] == goal["id"]
@@ -803,6 +810,19 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     finally:
         engine.dispose()
 
+
+
+def test_model_timeout_without_receipt_keeps_unknown_cost(ports, monkeypatch):
+    store, calls, _, llm, _ = ports
+
+    async def timeout(*args, **kwargs):
+        raise asyncio.TimeoutError("upstream response lost")
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", timeout)
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "failed" and result["actual_tokens"] is None
+    assert store.claim["outbound_attempted"] and not calls
+    assert len(store.finished) == 1
 
 
 def test_native_pre_act_restart_reuses_saved_decision_without_rebilling(ports, monkeypatch):

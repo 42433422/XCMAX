@@ -707,6 +707,7 @@ def finish_cycle(
                 "last_phase": active.get("phase", "claimed"),
                 "graph_checkpoints": active.get("graph_checkpoints", {}),
                 "outbound_journal_version": active.get("outbound_journal_version"),
+                "outbound_attempted": bool(active.get("outbound_attempted")),
             },
         )
         data["active_cycle"] = None
@@ -934,6 +935,20 @@ def record_cycle_checkpoint(
         records[phase] = checkpoint
 
     _mutate(save)
+
+
+def mark_model_attempt(claim: dict[str, Any]) -> None:
+    """Persist outbound uncertainty BEFORE a potentially billed model request.
+
+    An empty action journal cannot later be interpreted as no provider call
+    when the process crashes between transport and durable reservation receipt.
+    """
+    def mark(data: dict[str, Any], session: Session) -> None:
+        if not _claim_active(data, session, claim):
+            raise LifePolicyError("原模型授权已失效，禁止新增外呼")
+        data["active_cycle"]["outbound_attempted"] = True
+
+    _mutate(mark)
 
 
 def record_cycle_step(claim: dict[str, Any], *, kind: str, details: dict[str, Any]) -> None:
