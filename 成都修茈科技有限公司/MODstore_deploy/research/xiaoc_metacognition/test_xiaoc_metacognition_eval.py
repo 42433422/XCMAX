@@ -47,6 +47,11 @@ def test_paired_metrics_and_review_only():
     assert base["brier_score"] == pytest.approx(0.81)
     assert candidate["brier_score"] == pytest.approx(0.09)
     assert base["high_confidence_errors"] == 3
+    assert base["high_confidence_verified_trials"] == 3
+    assert base["high_confidence_error_rate_verified_only"] == pytest.approx(1.0)
+    assert base["mean_confidence_minus_correct_rate"] == pytest.approx(0.9)
+    assert candidate["mean_confidence_minus_correct_rate"] == pytest.approx(-0.3)
+    assert candidate["high_confidence_error_rate_verified_only"] is None
     assert base["unsupported_direct"] == 3
     assert base["repeated_failure_tasks"] == ["held"]
     assert candidate["unknown_acknowledged"] == 3
@@ -59,6 +64,8 @@ def test_unknown_result_is_not_a_failure_or_success():
     report = run(protocol, observations, receipts)
     assert report["paired_outcomes"] == {"unknown": 1, "improvement": 2}
     assert report["arms"]["baseline"]["overall"]["verified_trials"] == 2
+    assert report["arms"]["baseline"]["overall"]["high_confidence_verified_trials"] == 2
+    assert report["arms"]["baseline"]["overall"]["high_confidence_errors"] == 2
 
 
 @pytest.mark.parametrize("field", ["source", "group", "evidence"])
