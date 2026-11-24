@@ -169,3 +169,61 @@ def annotate_unverified_catalog(
                 "status": "unverified_fixture_claim_not_capability",
             })
     return catalog
+
+def fixture_trend(events: list[dict[str, Any]], *, current_sha: str | None) -> dict[str, Any]:
+    """Compare identical frozen fixture protocols across release SHAs only."""
+    unavailable = {"status": "insufficient_comparable_fixture_evidence"}
+    if not _sha(current_sha, 40):
+        return unavailable
+    valid: list[tuple[str, dict[str, Any]]] = []
+    for event in events[:20]:
+        details = event.get("details") or {}
+        if (
+            event.get("kind") != "self_fixture_check"
+            or event.get("status") != "historical_fixture"
+            or event.get("id") != "self-fixture:" + str(details.get("report_sha256"))
+            or not _sha(details.get("report_sha256"))
+            or not _sha(details.get("source_sha"), 40)
+            or not isinstance(details.get("scenarios"), dict)
+        ):
+            continue
+        valid.append((event["id"], details))
+    current = next(((ref, row) for ref, row in valid if row["source_sha"] == current_sha), None)
+    if current is None:
+        return unavailable
+    ref, latest = current
+    keys = ("standard_sha256", "dataset_sha256", "environment_sha256", "auditor_source_sha")
+    for prior_ref, prior in valid:
+        if prior["source_sha"] == current_sha or any(prior.get(k) != latest.get(k) for k in keys):
+            continue
+        if set(prior["scenarios"]) != set(latest["scenarios"]):
+            continue
+        before = prior["scenarios"]
+        after = latest["scenarios"]
+        if any(
+            not isinstance(before[k], dict)
+            or not isinstance(after[k], dict)
+            or before[k].get("anchor") != after[k].get("anchor")
+            or before[k].get("integration") not in {"PASS", "FAIL", "BLOCKED", "NOT RUN"}
+            or after[k].get("integration") not in {"PASS", "FAIL", "BLOCKED", "NOT RUN"}
+            for k in before
+        ):
+            continue
+        regression = sorted(
+            k for k in before
+            if before[k]["integration"] == "PASS" and after[k]["integration"] == "FAIL"
+        )
+        evidence_lost = sorted(
+            k for k in before
+            if before[k]["integration"] == "PASS"
+            and after[k]["integration"] in {"BLOCKED", "NOT RUN"}
+        )
+        return {
+            "status": "comparable_fixture_only_not_capability_degradation",
+            "current_evidence_ref": ref,
+            "historical_evidence_ref": prior_ref,
+            "fixture_regressions_to_review": regression,
+            "fixture_evidence_lost": evidence_lost,
+            "rule": "fixture changes do not measure business or model skill without external review",
+        }
+    return unavailable
