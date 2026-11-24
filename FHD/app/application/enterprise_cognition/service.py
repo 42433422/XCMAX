@@ -59,12 +59,18 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             if goal.get("deadline")
             else None
         )
+        declared_source = goal.get("source")
+        declared_kind = (
+            declared_source.get("kind") if isinstance(declared_source, dict) else None
+        )
         return {
             "goal_id": goal["goal_id"],
             "knowledge_kind": "inference",
             "derivation": "deterministic_metric_target_comparison",
             "source_knowledge_kind": "fact",
-            "goal_assertion_kind": "user_goal",
+            "goal_assertion_kind": (
+                declared_kind if declared_kind in {"user_goal", "strategic_plan"} else "unknown"
+            ),
             "evidence": source["evidence"],
             "current": str(value),
             "target": str(target),

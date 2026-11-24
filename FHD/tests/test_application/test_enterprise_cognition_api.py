@@ -307,3 +307,27 @@ def test_goal_comparison_without_verified_evidence_stays_unknown():
     )
     assert result["knowledge_kind"] == "unknown"
     assert result["target_met"] is None
+
+
+def test_goal_inference_keeps_strategic_goal_provenance():
+    from app.application.enterprise_cognition.service import _goal_progress
+
+    goal = {
+        "goal_id": "strategy-bound-goal",
+        "metric": "remaining_quantity",
+        "unit": "件",
+        "target": "0",
+        "direction": "decrease",
+        "source": {"kind": "strategic_plan", "plan_sha256": "e" * 64},
+    }
+    snapshot = {
+        "freshness": "fresh",
+        "source_version": "sha256:synthetic",
+        "state": {"remaining_quantity": "2", "quantity_unit": "件"},
+        "evidence": [{"source": "sales_orders", "row_id": "42"}],
+    }
+    result = _goal_progress(goal, snapshot)
+    assert result["knowledge_kind"] == "inference"
+    assert result["goal_assertion_kind"] == "strategic_plan"
+    assert result["source_knowledge_kind"] == "fact"
+    assert result["target_met"] is False
