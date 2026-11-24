@@ -396,7 +396,7 @@ class TestMobileHomeWithUser:
             ),
             patch(
                 "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("sync db fail"),
+                side_effect=OSError("sync db fail"),
             ),
             patch(
                 "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",

@@ -99,9 +99,9 @@ def _patch_shipments(side_effect=None, return_value=None):
 class TestBuildKittenBusinessSnapshot:
     def test_returns_success_structure(self):
         with (
-            _patch_materials(side_effect=RuntimeError("no db")),
-            _patch_products(side_effect=RuntimeError("no db")),
-            _patch_shipments(side_effect=RuntimeError("no db")),
+            _patch_materials(side_effect=OSError("no db")),
+            _patch_products(side_effect=OSError("no db")),
+            _patch_shipments(side_effect=OSError("no db")),
         ):
             result = build_kitten_business_snapshot()
         assert result["success"] is True
@@ -111,9 +111,9 @@ class TestBuildKittenBusinessSnapshot:
 
     def test_materials_section_error(self):
         with (
-            _patch_materials(side_effect=RuntimeError("db error")),
-            _patch_products(side_effect=RuntimeError("db error")),
-            _patch_shipments(side_effect=RuntimeError("db error")),
+            _patch_materials(side_effect=OSError("db error")),
+            _patch_products(side_effect=OSError("db error")),
+            _patch_shipments(side_effect=OSError("db error")),
         ):
             result = build_kitten_business_snapshot()
         assert "materials_error" in result["stats"]
@@ -121,18 +121,18 @@ class TestBuildKittenBusinessSnapshot:
 
     def test_products_section_error(self):
         with (
-            _patch_materials(side_effect=RuntimeError("db error")),
-            _patch_products(side_effect=RuntimeError("db error")),
-            _patch_shipments(side_effect=RuntimeError("db error")),
+            _patch_materials(side_effect=OSError("db error")),
+            _patch_products(side_effect=OSError("db error")),
+            _patch_shipments(side_effect=OSError("db error")),
         ):
             result = build_kitten_business_snapshot()
         assert "products_error" in result["stats"]
 
     def test_shipments_section_error(self):
         with (
-            _patch_materials(side_effect=RuntimeError("db error")),
-            _patch_products(side_effect=RuntimeError("db error")),
-            _patch_shipments(side_effect=RuntimeError("db error")),
+            _patch_materials(side_effect=OSError("db error")),
+            _patch_products(side_effect=OSError("db error")),
+            _patch_shipments(side_effect=OSError("db error")),
         ):
             result = build_kitten_business_snapshot()
         assert "shipments_error" in result["stats"]
@@ -169,9 +169,9 @@ class TestBuildKittenBusinessSnapshot:
 
     def test_text_truncation(self):
         with (
-            _patch_materials(side_effect=RuntimeError("db error")),
-            _patch_products(side_effect=RuntimeError("db error")),
-            _patch_shipments(side_effect=RuntimeError("db error")),
+            _patch_materials(side_effect=OSError("db error")),
+            _patch_products(side_effect=OSError("db error")),
+            _patch_shipments(side_effect=OSError("db error")),
         ):
             result = build_kitten_business_snapshot(max_text_chars=50)
         assert len(result["text"]) <= 74  # 50 + truncation suffix

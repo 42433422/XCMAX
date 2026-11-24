@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -80,12 +81,20 @@ def template_app(tmp_path, monkeypatch):
     client = TestClient(app)
     client.cookies.set("csrf_token", "label-test-csrf")
     client.headers["X-CSRF-Token"] = "label-test-csrf"
+    client.headers["Idempotency-Key"] = "template-acceptance"
     try:
         with tenant_scope(None):
             yield client, engine, repo
     finally:
         client.close()
         engine.dispose()
+
+
+def _post(client, *args, **kwargs):
+    """Provide explicit unique request identity on each release-gate test write."""
+    headers = dict(kwargs.pop("headers", {}) or {})
+    headers.setdefault("Idempotency-Key", f"template-test-{uuid4().hex}")
+    return client.post(*args, headers=headers, **kwargs)
 
 
 def _label_payload():
@@ -131,7 +140,7 @@ def test_default_factory_registers_template_upload_and_analyze(template_app):
 
 def test_upload_rejects_anonymous_without_ingest(template_app):
     client, _engine, _repo = template_app
-    response = client.post(
+    response = _post(client, 
         "/api/templates/upload",
         files={
             "file": (
@@ -153,7 +162,7 @@ def test_create_rejects_anonymous_or_missing_tenant_without_writes(
     headers = {"X-User-ID": "7", "X-Tenant-ID": "11"}
     if session_id:
         headers["X-Session-ID"] = session_id
-    response = client.post(
+    response = _post(client, 
         "/api/templates/create",
         headers=headers,
         json={**_label_payload(), "user_id": 7, "tenant_id": 11},
@@ -190,11 +199,13 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
             )
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
     for template_id in ("db:2", "db:3", "db:999"):
+        headers["Idempotency-Key"] = f"delete-unowned-{template_id}"
         response = client.request(
             method, "/api/templates/delete", headers=headers, json={"id": template_id}
         )
         assert response.status_code == 404, response.text
         assert response.json()["success"] is False
+    headers["Idempotency-Key"] = "delete-owned-db-1"
     for _repeat in range(2):
         response = client.request(
             method,
@@ -228,7 +239,7 @@ def test_default_delete_refuses_builtin_without_reporting_success(
     monkeypatch.setattr(
         "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
     )
-    response = client.post(
+    response = _post(client, 
         "/api/templates/delete",
         headers={"X-Session-ID": "label-session-7"},
         json={"id": "fs:standard.xlsx"},
@@ -261,7 +272,7 @@ def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, fo
     assert any(
         t["id"] == "db:1" for t in client.get("/api/templates", headers=headers).json()["templates"]
     )
-    response = client.post("/api/templates/delete", headers=headers, json={"id": "db:1"})
+    response = _post(client, "/api/templates/delete", headers=headers, json={"id": "db:1"})
     assert response.status_code == 200, response.text
     rows = client.get("/api/templates", headers=headers).json()["templates"]
     assert all(t.get("path") != str(own) for t in rows)
@@ -306,7 +317,7 @@ def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app
     # Unregistered files stay out of catalog details; explicit legacy IDs remain deletable.
     assert client.get(f"/api/templates/detail/{template_id}", headers=headers).status_code == 404
     for _repeat in range(2):
-        response = client.post("/api/templates/delete", headers=headers, json={"id": template_id})
+        response = _post(client, "/api/templates/delete", headers=headers, json={"id": template_id})
         assert response.status_code == 200, response.text
         assert response.json()["success"] is True
         assert response.json()["deleted"]["soft_deleted"] is True
@@ -325,7 +336,7 @@ def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app,
     client, engine, repo = template_app
     body = {**_label_payload(), "user_id": 8, "userId": 8, "tenant_id": 22}
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
-    response = client.post("/api/templates/create", headers=headers, json=body)
+    response = _post(client, "/api/templates/create", headers=headers, json=body)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["success"] is True, payload
@@ -382,3 +393,15 @@ def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app,
     _, saved_job = service._read((11, 7), job["id"])
     assert saved_job["layout"]["fields"][0]["left"] == 50
     assert saved_job["layout"]["fields"][0]["top"] == 90
+
+
+def test_write_without_stable_request_identity_is_rejected_without_mutation(template_app):
+    client, engine, _repo = template_app
+    response = client.post(
+        "/api/templates/create",
+        headers={"X-Session-ID": "label-session-7"},
+        json=_label_payload(),
+    )
+    assert response.status_code == 202, response.text
+    assert response.json()["error_code"] == "task_identity_required"
+    assert _template_count(engine) == 0
