@@ -1,5 +1,5 @@
 {
-  "lines": 2732918,
+  "lines": 2732924,
   "updated": "2026-11-25",
-  "note": "PR #3558: +3 lines are mandated by pinned ruff-format (0.15.22) on nine files plus regenerated capability pages; no baseline policy or exclusion change."
+  "note": "PR #3558: +6 lines for governed mem0 backend fixtures and optional snapshot observed_at; no baseline policy change."
 }

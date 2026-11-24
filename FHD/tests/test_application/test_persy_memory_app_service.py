@@ -459,7 +459,10 @@ def test_graph_recall_and_historical_review_use_existing_authority() -> None:
 def test_shared_memory_lifecycle_is_governed_across_actors_and_mods(monkeypatch) -> None:
     service = _service()
     backend = MagicMock()
+    backend.enabled = True
     backend.extract_candidates.return_value = None
+    backend.upsert_governed.return_value = True
+    backend.forget_source.return_value = 0
     monkeypatch.setattr(
         "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
     )
@@ -522,7 +525,10 @@ def test_lexical_recall_revalidates_revision_without_graph_path(monkeypatch) -> 
     service = _service()
     access = _access()
     backend = MagicMock()
+    backend.enabled = True
     backend.extract_candidates.return_value = None
+    backend.upsert_governed.return_value = True
+    backend.forget_source.return_value = 0
     monkeypatch.setattr(
         "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
     )

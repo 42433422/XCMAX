@@ -79,7 +79,7 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             "deadline_source": "user_goal" if deadline else None,
             "order_promised_date_inferred": False,
             "source_version": snapshot["source_version"],
-            "observed_at": snapshot["observed_at"],
+            "observed_at": snapshot.get("observed_at"),
         }
     except (GoalBindingError, ValueError, TypeError, InvalidOperation):
         return {
