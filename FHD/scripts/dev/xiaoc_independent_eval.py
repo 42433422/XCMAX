@@ -76,14 +76,44 @@ def aggregate(results: list[str], required: int) -> str:
 
 
 def compare(previous: dict, current: dict) -> dict:
-    """Only compare fixture runs with identical protocol, dataset and environment."""
-    keys = ("standard_sha256", "dataset_sha256", "environment_sha256", "seeds")
+    """Compare fixture-only trials with the same auditor, protocol and dataset.
+
+    The candidate source may change across versions. The independent auditor
+    version must not silently change: a changed judge is not capability drift.
+    """
+    incomparable = {"status": "INCOMPARABLE", "regressions": [], "evidence_lost": []}
+    keys = (
+        "standard_sha256",
+        "dataset_sha256",
+        "environment_sha256",
+        "seeds",
+        "auditor_source_sha",
+        "protocol_version",
+        "scoring_version",
+    )
     if any(not current.get(key) or previous.get(key) != current[key] for key in keys):
-        return {"status": "INCOMPARABLE", "regressions": [], "evidence_lost": []}
-    old = {row["id"]: row["layers"]["integration"] for row in previous["scenarios"]}
-    new = {row["id"]: row["layers"]["integration"] for row in current["scenarios"]}
-    if set(old) != set(new):
-        return {"status": "INCOMPARABLE", "regressions": [], "evidence_lost": []}
+        return incomparable
+
+    def layers(report: dict) -> dict[str, str] | None:
+        try:
+            entries = [
+                (row["id"], row["layers"]["integration"])
+                for row in report["scenarios"]
+            ]
+        except (KeyError, TypeError):
+            return None
+        if (
+            not entries
+            or len({key for key, _ in entries}) != len(entries)
+            or any(status not in {"PASS", "FAIL", "BLOCKED", "NOT RUN"} for _, status in entries)
+        ):
+            return None
+        return dict(entries)
+
+    old = layers(previous)
+    new = layers(current)
+    if old is None or new is None or set(old) != set(new):
+        return incomparable
     return {
         "status": "COMPARABLE_FIXTURE_ONLY",
         "regressions": sorted(key for key in new if old[key] == "PASS" and new[key] == "FAIL"),
