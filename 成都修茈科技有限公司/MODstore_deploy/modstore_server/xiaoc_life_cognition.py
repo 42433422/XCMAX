@@ -282,10 +282,25 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
                 "predicted_metric_value", "brier", "metric_error", "forecast_status",
                 "metric_evidence_sha256", "execution_result_sha256", "cost_basis",
                 "predicted_accrued_cost_cents", "cost_error_cents", "counterfactual_status",
-                "verification_scope",
+                "verification_scope", "experiment_snapshot_sha256", "experiment_scope",
             )
             if key in evaluation
         }
+    experiments = review.get("experiment_evaluations")
+    if isinstance(experiments, list):
+        metrics["experiment_evaluations"] = [
+            {key: entry[key] for key in (
+                "status", "finding_type", "opportunity_id", "decision_id", "proposal_sha256",
+                "execution_result_sha256", "original_request_id", "experiment_id", "snapshot_id",
+                "snapshot_sha256", "metric_id", "sample_size", "lift", "interval", "direction",
+                "decision", "observation_start", "observation_end", "observed_at", "scope",
+            ) if key in entry}
+            for entry in experiments[:4]
+            if isinstance(entry, dict)
+            and entry.get("decision_id") == record["decision_id"]
+            and entry.get("proposal_sha256") == record.get("proposal_sha256")
+            and entry.get("status") in ("measured", "inconclusive")
+        ]
     return {
         "outcome_status": status,
         "summary": summary,

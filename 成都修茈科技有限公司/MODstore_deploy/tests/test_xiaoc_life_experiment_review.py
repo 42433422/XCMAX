@@ -113,3 +113,77 @@ def test_experiment_with_unverified_evidence_is_unknown(change):
     assert frozen_experiment_projection(
         spec, progress, delivery, policy_digest="c" * 64
     ) == {"status": "unknown", "finding_type": "unknown"}
+
+
+
+def test_portfolio_experiment_requires_same_frozen_approval_worker_and_terminal(monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from modstore_server import strategic_workspace_bridge, strategic_workspace_receipts
+    from modstore_server import xiaoc_life_experiment_review as review
+    from modstore_server.business_decision_review import proposal_content
+    from modstore_server.strategic_portfolio import digest
+
+    spec, progress, delivery = fixture()
+    now = datetime(2026, 11, 24, tzinfo=UTC)
+    remote = {
+        "kind": strategic_workspace_bridge.KIND,
+        "original_request_id": "request-1",
+    }
+    item = {"opportunity_id": "op-1", "input_data": {"remote_execution": remote}}
+    proposal = {
+        "schema": "xcagi.strategic_portfolio/v1", "owner_user_id": 7, "goal": "verify effect",
+        "period": "one", "limits": {"company_budget_id": "approved"},
+        "opportunities": [item],
+    }
+    proposal["proposal_sha256"] = digest(proposal_content(proposal))
+    sha = proposal["proposal_sha256"]
+    receipt = {"ok": True, "remote_receipt": {"delivery": delivery}}
+    task = {
+        "status": "completed", "result_sha256": digest(receipt), "execution_receipt": receipt,
+        "calls": {}, "lease_token": "lease",
+        "started_at": "2026-11-19T01:00:00+00:00",
+        "completed_at": "2026-11-21T03:00:00+00:00",
+        "worker_binding": {
+            "decision_id": "d1", "opportunity_id": "op-1", "owner_user_id": 7,
+            "proposal_sha256": sha, "adapter": strategic_workspace_bridge.KIND,
+            "receipt_id": "request-1", "lease_token": "lease",
+        },
+    }
+    state = {
+        "authorization": {"user_id": 7, "actor": "admin", "proposal_sha256": sha},
+        "proposal_sha256": sha, "plan": {"selected": ["op-1"]}, "tasks": {"op-1": task},
+    }
+    calls = []
+    monkeypatch.setattr(
+        strategic_workspace_bridge, "original",
+        lambda *_args, **_kwargs: (SimpleNamespace(id="request-1"), {}, {"experiment": progress}),
+    )
+    monkeypatch.setattr(
+        strategic_workspace_receipts, "validate_terminal",
+        lambda *_args: calls.append("terminal"),
+    )
+    monkeypatch.setattr(
+        review, "original_experiment_projection",
+        lambda _row, release: frozen_experiment_projection(
+            spec, progress, release, policy_digest="c" * 64,
+        ),
+    )
+    def project():
+        return review.bound_portfolio_experiment(None, "d1", proposal, state, item, now=now)
+
+    result = project()
+    assert result["status"] == "measured"
+    assert result["proposal_sha256"] == sha and result["decision_id"] == "d1"
+    assert result["snapshot_sha256"] == progress["final_snapshot_sha256"]
+    assert calls == ["terminal"]
+    task["worker_binding"]["owner_user_id"] = 8
+    assert project()["status"] == "unknown"
+    assert calls == ["terminal"]
+    task["worker_binding"]["owner_user_id"] = 7
+    task["execution_receipt"]["ok"] = False
+    assert project()["status"] == "unknown"
+    task["execution_receipt"]["ok"] = True
+    state["plan"]["selected"] = []
+    assert project()["status"] == "unknown"
