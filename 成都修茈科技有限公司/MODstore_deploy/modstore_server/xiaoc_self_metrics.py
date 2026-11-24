@@ -6,6 +6,7 @@ not proof of business success or independently evaluated model capability.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import defaultdict
 from typing import Any, Callable
@@ -337,7 +338,8 @@ def audit_projection() -> dict[str, Any]:
 
     try:
         path = strategy_bets.repo_root() / "FHD/config/audit_benchmark_ssot.json"
-        catalog = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        catalog = json.loads(raw)
         domains = catalog["domains"]
         items = []
         for domain in domains:
@@ -351,7 +353,9 @@ def audit_projection() -> dict[str, Any]:
                     }
                 )
         if (
-            len(domains) != catalog["domain_count"]
+            len(domains) != 18
+            or len(items) != 108
+            or len(domains) != catalog["domain_count"]
             or len({row["id"] for row in domains}) != len(domains)
             or len({row["anchor_id"] for row in items}) != len(items)
         ):
@@ -371,6 +375,8 @@ def audit_projection() -> dict[str, Any]:
         "status": "catalog_only",
         "standard_version": catalog["standard_version"],
         "scoring_version": catalog["scoring_version"],
+        "standard_sha256": hashlib.sha256(raw).hexdigest(),
+        "checksum_meaning": "catalog_identity_only_not_independent_approval",
         "domain_count": len(domains),
         "anchor_count": len(items),
         "anchors": items,
