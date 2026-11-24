@@ -221,12 +221,13 @@ async def test_api_call_non_json_falls_back_to_text(monkeypatch):
 @pytest.mark.asyncio
 async def test_api_call_exception_branch(monkeypatch):
     def boom(method, url, kw):
-        raise RuntimeError("connect failed")
+        raise ConnectionError("connect failed")
 
     _install_httpx(monkeypatch, boom)
     r = await est._api_call("GET", "/x")
     assert r["ok"] is False
-    assert "connect failed" in r["error"]
+    assert r["error"] == "HTTP response unavailable"
+    assert "connect failed" not in str(r)
 
 
 # ---------------------------------------------------------------------------
@@ -1323,7 +1324,7 @@ async def test_test_llm_key_health_network_exception(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-x")
 
     def boom(method, url, kw):
-        raise RuntimeError("dns fail")
+        raise ConnectionError("dns fail")
 
     _install_httpx(monkeypatch, boom)
     r = await est.tool_test_llm_key_health({"provider": "deepseek"}, {})
@@ -1409,7 +1410,7 @@ async def test_query_provider_usage_request_exception(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-d")
 
     def boom(method, url, kw):
-        raise RuntimeError("timeout")
+        raise TimeoutError("timeout")
 
     _install_httpx(monkeypatch, boom)
     r = await est.tool_query_provider_usage({"provider": "deepseek"}, {})
@@ -1628,7 +1629,7 @@ async def test_handle_specialized_params_must_be_dict():
 @pytest.mark.asyncio
 async def test_handle_specialized_tool_execution_exception(monkeypatch):
     async def boom(params, ctx):
-        raise RuntimeError("tool crashed")
+        raise OSError("tool crashed")
 
     monkeypatch.setitem(est.TOOL_REGISTRY, "git_status", boom)
     r = await est.handle_specialized("site-content-editor", {"tool": "git_status"}, {})
@@ -1821,7 +1822,7 @@ async def test_query_cursor_usage_cli_error_branch(monkeypatch, tmp_path):
                 stderr = ""
 
             return _P()
-        raise RuntimeError("cli exploded")
+        raise OSError("cli exploded")
 
     monkeypatch.setattr(sp, "run", fake_run)
     r = await est.tool_query_cursor_usage({}, {})
@@ -2149,7 +2150,7 @@ async def test_query_trae_usage_api_exception(monkeypatch, tmp_path):
     import httpx as real_httpx
 
     def boom(url, **k):
-        raise RuntimeError("net down")
+        raise ConnectionError("net down")
 
     monkeypatch.setattr(real_httpx, "get", boom)
     r = await est.tool_query_trae_usage({}, {})

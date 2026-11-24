@@ -406,7 +406,7 @@ class TestPermissions:
         admin_user = MagicMock(role="admin")
         with patch(
             "app.application.auth_app_service.get_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             perms = svc.get_user_permissions(admin_user)
         # DEFAULT_PERMISSIONS is a list of dicts with 'code' key

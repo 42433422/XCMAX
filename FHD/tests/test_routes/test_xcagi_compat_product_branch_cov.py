@@ -115,12 +115,15 @@ class TestProductsCompatViaServiceEnabled:
         ):
             assert xp._products_compat_via_service_enabled() is False
 
-    def test_runtime_error_returns_false(self):
-        with patch(
-            "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-            side_effect=RuntimeError("boom"),
+    def test_programming_error_does_not_select_legacy_fallback(self):
+        with (
+            patch(
+                "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
+                side_effect=RuntimeError("invalid ERP service state"),
+            ),
+            pytest.raises(RuntimeError, match="invalid ERP service state"),
         ):
-            assert xp._products_compat_via_service_enabled() is False
+            xp._products_compat_via_service_enabled()
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +300,7 @@ class TestProductsPriceListWordResponse:
             ),
             patch(
                 "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
-                side_effect=RuntimeError("docx fail"),
+                side_effect=OSError("docx fail"),
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:

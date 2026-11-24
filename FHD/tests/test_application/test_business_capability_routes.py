@@ -286,7 +286,7 @@ def test_material_batch_failure_never_claims_deleted_records(monkeypatch):
     from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
 
     service = Mock()
-    service.batch_delete_materials.side_effect = RuntimeError("partial write; private details")
+    service.batch_delete_materials.side_effect = ConnectionError("partial write; private details")
     monkeypatch.setattr("app.application.get_material_application_service", lambda: service)
     result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "", "")
     assert result["success"] is False

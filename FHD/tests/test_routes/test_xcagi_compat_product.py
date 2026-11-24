@@ -172,7 +172,7 @@ class TestProductsList:
             patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
                 "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
-                side_effect=RuntimeError("db error"),
+                side_effect=ConnectionError("db error"),
             ),
         ):
             r = client.get("/products/list")

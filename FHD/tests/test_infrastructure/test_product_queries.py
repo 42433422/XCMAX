@@ -83,7 +83,7 @@ class TestLoadProductsListImplPg:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
-        mock_insp.get_columns.side_effect = RuntimeError("timeout")
+        mock_insp.get_columns.side_effect = TimeoutError("timeout")
         mock_conn = MagicMock()
         mock_conn.execute.return_value.scalar_one.return_value = 0
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)

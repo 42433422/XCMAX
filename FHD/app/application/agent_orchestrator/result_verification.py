@@ -422,15 +422,18 @@ def latest_step_call(run: AgentRun, step: AgentStep) -> ToolCall | None:
     return next((call for call in reversed(run.tool_calls) if call.step_id == step.step_id), None)
 
 
-def pending_execution_receipt(output: dict[str, Any]) -> bool:
-    """Only an acknowledged in-flight effect may later acquire independent evidence."""
+def pending_execution_receipt(output: dict[str, Any], *, include_blocked: bool = False) -> bool:
+    """Recognize known unfinished receipts; a block alone is not admission evidence."""
+    states = {"pending", "accepted", "queued", "running", "processing"}
+    if include_blocked:
+        states.add("blocked")
     return bool(
         not execution_result_outcome_unknown(output)
-        and execution_result_pending_state(output)
-        in {"pending", "accepted", "queued", "running", "processing"}
+        and execution_result_pending_state(output) in states
         and not any(
             execution_result_states(row) & {"failed", "rejected", "cancelled", "expired"}
             or row.get("error_code")
+            or (include_blocked and row.get("error"))
             or row.get("ok") is False
             for row in execution_result_envelopes(output)
         )
@@ -516,6 +519,23 @@ def step_verification_blocked(run: AgentRun, step: AgentStep) -> bool:
         step.status in {"waiting_user", "pending"}
         and step.output == call.output
         and step.params == preview_continuation_params(run, step, call)
+    )
+
+
+def verified_enterprise_admission(run: AgentRun, step: AgentStep) -> bool:
+    """Read the bound verifier's admission verdict, not fields asserted by the tool."""
+    if (step.tool_id, step.action, step.status) != ("enterprise_cognition", "plan", "completed"):
+        return False
+    call = latest_step_call(run, step)
+    if call is None or not _accepted_report_valid(run, step, call):
+        return False
+    report = call.metadata["verification"]
+    return report.get("status") == "verified" and any(
+        check.get("source") == "enterprise_authority"
+        and check.get("status") == "passed"
+        and (check.get("evidence") or {}).get("admission_verified") is True
+        and (check.get("evidence") or {}).get("business_execution_verified") is False
+        for check in report.get("checks", [])
     )
 
 

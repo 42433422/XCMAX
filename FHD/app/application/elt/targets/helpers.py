@@ -6,14 +6,13 @@ import ipaddress
 import os
 import socket
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
 from app.application.elt.errors import EltError
 from app.application.elt.targets.targets_base import TargetField, json_safe, strict_decimal
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def assert_safe_webhook_url(url: str) -> None:
@@ -126,7 +125,7 @@ def _values_equal(current: Any, expected: Any) -> bool:
     if isinstance(current, Decimal):
         try:
             return current == Decimal(str(expected))
-        except RECOVERABLE_ERRORS:
+        except InvalidOperation:
             return False
     if isinstance(current, datetime):
         return current.isoformat() == str(expected)

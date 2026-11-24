@@ -351,10 +351,9 @@ def test_inventory_combined_alert_merges_materials(
 def test_inventory_combined_alert_materials_exception(
     inventory_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        "app.application.get_material_application_service",
-        lambda: (_ for _ in ()).throw(RuntimeError("materials down")),
-    )
+    mat_svc = MagicMock()
+    mat_svc.get_low_stock_materials.side_effect = ConnectionError("materials database unavailable")
+    monkeypatch.setattr("app.application.get_material_application_service", lambda: mat_svc)
     body = inventory_client.get("/api/inventory/combined-alert").json()
     assert body["success"] is True
     assert body["material_low_stock"] == []
@@ -505,7 +504,9 @@ def test_materials_batch_delete_adapter_never_reports_partial_exception_as_succe
     monkeypatch.setattr(
         "app.application.get_material_application_service", lambda: mock_material_svc
     )
-    mock_material_svc.batch_delete_materials.side_effect = RuntimeError("partial fail")
+    mock_material_svc.batch_delete_materials.side_effect = ConnectionError(
+        "materials database disconnected during batch delete"
+    )
     result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "test", "")
     assert result["success"] is False and result["execution_state"] == "unknown"
     assert result["outcome"] == "unknown"
@@ -1068,10 +1069,9 @@ def test_ai_single_label_success(ai_client: TestClient, monkeypatch: pytest.Monk
 def test_ai_single_label_product_lookup_fail(
     ai_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        "app.application.get_product_app_service",
-        lambda: (_ for _ in ()).throw(RuntimeError("product svc down")),
-    )
+    product_svc = MagicMock()
+    product_svc.search_products.side_effect = ConnectionError("product database unavailable")
+    monkeypatch.setattr("app.application.get_product_app_service", lambda: product_svc)
     print_app = MagicMock()
     print_app.print_single_label.return_value = {"success": True}
     monkeypatch.setattr(

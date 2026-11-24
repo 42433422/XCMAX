@@ -27,7 +27,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 @pytest.fixture()
 def client(request, monkeypatch):
     actor = None
-    if any(action in request.node.name for action in ("create", "update", "delete")):
+    if "canonical_auth" not in request.node.name and any(
+        action in request.node.name for action in ("create", "update", "delete")
+    ):
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
         monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     app = FastAPI()
@@ -202,7 +204,7 @@ class TestCustomersCreate:
     def test_create_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
             with patch(f"{_FACADE}.customers_create") as bypass:
-                r = client.post("/customers", json={"name": "TestCo"})
+                r = client.post("/customers", json={"unit_name": "TestCo"})
         assert r.status_code == 401
         bypass.assert_not_called()
 
@@ -253,7 +255,7 @@ class TestCustomersUpdate:
     def test_update_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
             with patch(f"{_FACADE}.customers_update") as bypass:
-                r = client.put("/customers/1", json={"name": "Updated"})
+                r = client.put("/customers/1", json={"unit_name": "Updated"})
         assert r.status_code == 401
         bypass.assert_not_called()
 

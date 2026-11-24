@@ -950,7 +950,7 @@ def test_attendance_export_covers_query_empty_and_write_failures(
 @pytest.mark.parametrize(
     ("printers", "print_result", "reason"),
     [
-        (RuntimeError("offline"), None, "printer_status_failed:"),
+        (ConnectionError("offline"), None, "printer_status_failed:"),
         ([], None, "no_available_printer"),
         ({"success": False, "printers": []}, None, "no_available_printer"),
         ({"success": True, "printers": [{"name": "QA"}]}, None, "printer_rejected"),
@@ -1012,7 +1012,7 @@ def test_attendance_print_covers_query_empty_and_submit_exception(
         "_get_printer_service",
         lambda: _PrinterServiceResult(
             {"success": True, "count": 1, "printers": [{"name": "QA"}]},
-            RuntimeError("submit failed"),
+            OSError("submit failed"),
         ),
     )
     monkeypatch.setattr(

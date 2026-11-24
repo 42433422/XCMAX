@@ -17,7 +17,7 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict, empty string)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
+- Exception paths (RECOVERABLE_ERRORS: ValueError, OSError)
 """
 
 from __future__ import annotations
@@ -1617,7 +1617,7 @@ class TestSandboxSimulate:
         from app.neuro_bus.sandbox import Sandbox, SandboxContext
 
         def error_sim(ctx: SandboxContext):
-            raise RuntimeError("sim crash")
+            raise OSError("sim crash")
 
         sandbox = Sandbox()
         sandbox.register_simulator("err.event", error_sim)

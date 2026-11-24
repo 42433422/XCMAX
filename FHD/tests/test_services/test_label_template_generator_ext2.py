@@ -166,7 +166,7 @@ class TestAnalyzeColorsExceptionPath:
         mock_img = MagicMock()
         mock_img.width = 100
         mock_img.height = 100
-        mock_img.convert.side_effect = RuntimeError("convert failed")
+        mock_img.convert.side_effect = OSError("convert failed")
 
         result = _analyze_colors(mock_img)
         assert result["background"] == "#FFFFFF"

@@ -347,7 +347,7 @@ class TestDispatchModeBranches:
     def test_webhook_exception_preserves_unknown_receipt(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "unknown_mode")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://hook.test")
-        mock_client = _mock_http_client(post_exc=RuntimeError("network error"))
+        mock_client = _mock_http_client(post_exc=ConnectionError("network error"))
         svc = _make_svc(
             tmp_path,
             cli_runner=_null_runner,
@@ -1298,7 +1298,7 @@ class TestVerifyWorkspace:
     def test_git_exception_fails_verification(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_git", side_effect=RuntimeError("git error")):
+        with patch.object(svc, "_git", side_effect=OSError("git error")):
             ok, msg = svc._verify_workspace(str(tmp_path))
             assert ok is False
             assert "git error" in msg
@@ -1371,7 +1371,7 @@ class TestCommitAndPush:
 
     def test_exception_returns_false(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_git", side_effect=RuntimeError("git crash")):
+        with patch.object(svc, "_git", side_effect=OSError("git crash")):
             ok, msg = svc._commit_and_push(str(tmp_path), "branch", "task")
             assert ok is False
             assert "git 异常" in msg
@@ -1435,7 +1435,7 @@ class TestPrepareWorktree:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         with (
             patch.object(svc, "_is_git_repo", return_value=True),
-            patch.object(svc, "_git", side_effect=RuntimeError("crash")),
+            patch.object(svc, "_git", side_effect=OSError("crash")),
         ):
             assert svc._prepare_worktree(str(tmp_path), "task") is None
 
@@ -1908,7 +1908,7 @@ class TestRemoveWorktree:
 
     def test_exception_swallowed(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_git", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_git", side_effect=OSError("fail")):
             # Should not raise
             svc._remove_worktree(str(tmp_path), "/wt/path")
 
@@ -1943,7 +1943,7 @@ class TestIsGitRepo:
 
     def test_exception_returns_false(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        with patch.object(svc, "_git", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_git", side_effect=OSError("fail")):
             assert svc._is_git_repo(str(tmp_path)) is False
 
 

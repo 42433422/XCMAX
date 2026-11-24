@@ -428,7 +428,7 @@ class TestExecuteTask:
             "payload": {"message": "trigger error"},
         }
         mock_svc = MagicMock()
-        mock_svc.invoke.side_effect = RuntimeError("boom")
+        mock_svc.invoke.side_effect = OSError("boom")
         with patch(
             "app.domain.shared_services.mobile_relay_desktop_client.CodexSuperEmployeeService",
             return_value=mock_svc,

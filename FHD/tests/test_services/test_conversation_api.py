@@ -481,7 +481,7 @@ class TestCallLlmApi:
         svc = _ConcreteApi()
         with patch(
             "app.infrastructure.llm.providers.registry.get_active_provider",
-            side_effect=RuntimeError("provider error"),
+            side_effect=ConnectionError("provider error"),
         ):
             result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
         assert result is None
@@ -733,7 +733,7 @@ class TestTokenUsagePersisted:
             patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
             patch(
                 "app.infrastructure.billing.model_usage.record_model_usage",
-                side_effect=RuntimeError("ledger write failed"),
+                side_effect=OSError("ledger write failed"),
             ),
         ):
             result = await svc.call_llm_api([{"role": "user", "content": "hi"}])

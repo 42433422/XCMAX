@@ -51,7 +51,7 @@ def test_inject_excel_vector_search_failure(mock_get: MagicMock) -> None:
 
 @patch("app.application.get_excel_vector_search_app_service")
 def test_inject_excel_vector_service_exception(mock_get: MagicMock) -> None:
-    mock_get.side_effect = RuntimeError("search down")
+    mock_get.side_effect = OSError("search down")
     svc = _chat_svc()
     ctx = {"excel_vector_index_id": "idx-3"}
     out = svc._inject_excel_vector_context("问", ctx)
@@ -73,7 +73,7 @@ def im_client_error():
 
     mock_db = MagicMock()
     mock_svc = MagicMock()
-    mock_svc.list_conversations.side_effect = RuntimeError("db broken")
+    mock_svc.list_conversations.side_effect = ConnectionError("db broken")
 
     with (
         patch.object(im_routes, "_ensure_schema"),

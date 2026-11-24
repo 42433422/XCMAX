@@ -290,7 +290,7 @@ def test_backfill_marks_success_only_and_retries_failed_scans(legacy_store, monk
     def intermittent(**kwargs):
         calls.append(kwargs)
         if len(calls) == 1:
-            raise RuntimeError("storage temporarily unavailable")
+            raise OSError("storage temporarily unavailable")
         return recent(**kwargs)
 
     monkeypatch.setattr(repository, "recent_task_refs", intermittent)

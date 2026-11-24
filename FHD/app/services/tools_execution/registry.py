@@ -73,16 +73,18 @@ def _normalize_action(action: str, params: dict | None = None) -> str:
 def _validate_required_params(tool_id: str, action: str, params: dict | None) -> tuple[bool, str]:
     from app.application.shipment_inputs import missing_shipment_call_fields
 
-    missing = missing_shipment_call_fields(tool_id, action, dict(params or {}))
+    payload = dict(params or {})
+    missing = missing_shipment_call_fields(tool_id, action, payload)
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
+    if (tool_id, action) == ("shipment_records", "create") and "purchase_unit" in payload:
+        payload["unit_name"] = payload.get("unit_name") or payload["purchase_unit"]
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
     spec = get_tool_action_spec(tool_id, action)
     required = spec.required_params if spec is not None else []
     if not required:
         return True, ""
-    payload = dict(params or {})
     missing = [
         key
         for key in required

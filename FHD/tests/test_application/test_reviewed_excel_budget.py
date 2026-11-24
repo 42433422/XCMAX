@@ -229,7 +229,7 @@ def test_template_call_absolute_cap_interrupts_keepalive_activity(monkeypatch):
         _template_platform_complete([], {}, 20, owner_id=7)
 
 
-@pytest.mark.parametrize("failure_type", [RuntimeError, OSError, ImportError, TypeError])
+@pytest.mark.parametrize("failure_type", [ConnectionError, OSError, ImportError, TypeError])
 def test_platform_initialization_failure_is_presend_and_restores_owner(monkeypatch, failure_type):
     from app.application.elt import llm_session_provider as sessions
     from app.application.reviewed_excel_audit import ModelRequestNotSent

@@ -38,8 +38,11 @@ def system_client(trusted_actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(system_routes.router)
+    actor = trusted_actor(role="admin")
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+        app,
+        raise_server_exceptions=False,
+        headers={**actor.headers, "Idempotency-Key": actor.session_id},
     )
 
 
@@ -50,18 +53,13 @@ def test_system_startup_rejects_unprivileged_session(system_client, trusted_acto
     get_service.assert_not_called()
 
 
-@patch("app.application.facades.session_facade.get_system_service")
-def test_system_startup_post(mock_get: MagicMock, system_client: TestClient, local_tools) -> None:
-    mock_get.return_value.enable_startup.return_value = {"success": True}
-    r = system_client.post("/api/system/startup")
-    assert r.status_code == 200
-
-
-@patch("app.application.facades.session_facade.get_system_service")
-def test_system_startup_delete(mock_get: MagicMock, system_client: TestClient, local_tools) -> None:
-    mock_get.return_value.disable_startup.return_value = {"success": True}
-    r = system_client.delete("/api/system/startup")
-    assert r.status_code == 200
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+def test_system_startup_requires_approval(system_client: TestClient, method: str) -> None:
+    with patch("app.application.facades.session_facade.get_system_service") as service:
+        response = system_client.request(method, "/api/system/startup")
+    assert response.status_code == 202, response.text
+    assert response.json()["execution_state"] == "waiting_approval"
+    service.assert_not_called()
 
 
 @patch("app.application.facades.session_facade.get_database_service")

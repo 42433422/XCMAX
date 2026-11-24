@@ -187,7 +187,7 @@ def test_resolve_planner_mod_dir_manager_raises_recoverable(
     monkeypatch.chdir(tmp_path)
 
     def _raise() -> None:
-        raise RuntimeError("mod manager down")
+        raise OSError("mod manager down")
 
     with (
         patch(
@@ -358,7 +358,7 @@ def test_is_planner_mod_installed_list_all_mods_raises_recoverable() -> None:
         ),
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ),
         patch("app.mod_sdk.planner_tools.is_planner_mod_on_disk", return_value=False),
     ):
@@ -372,7 +372,7 @@ def test_is_planner_mod_installed_is_mods_disabled_raises_recoverable() -> None:
     with (
         patch(
             "app.infrastructure.mods.mod_manager.is_mods_disabled",
-            side_effect=RuntimeError("disabled check fail"),
+            side_effect=OSError("disabled check fail"),
         ),
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -996,9 +996,9 @@ async def test_handle_shipment_created_recoverable_error_propagates(
 ) -> None:
     event = _make_event({"shipment_id": "S1", "unit_name": "甲"})
     mock_core = MagicMock()
-    mock_core.create_shipment.side_effect = RuntimeError("db down")
+    mock_core.create_shipment.side_effect = ConnectionError("db down")
     with _shared_scope_handle_0(mock_core) as mock_reply:
-        with pytest.raises(RuntimeError, match="db down"):
+        with pytest.raises(ConnectionError, match="db down"):
             await handlers.handle_shipment_created(event)
     mock_reply.assert_called_once()
     # 第二个参数应为 None（result），第三个为 error
@@ -1064,7 +1064,7 @@ async def test_handle_item_added_recoverable_error_in_try_block(
         if call_count["n"] <= 4:
             return "val"
         # 第 5 次起是 try 块中的 unit_price → 抛错
-        raise LookupError("unit_price missing")
+        raise ValueError("unit_price missing")
 
     event.payload.get.side_effect = _get
     out = await handlers.handle_item_added(event)
@@ -1145,9 +1145,9 @@ async def test_handle_printed_core_raises_recoverable(
 ) -> None:
     event = _make_event({"shipment_id": "1", "printer_name": "p"})
     mock_core = MagicMock()
-    mock_core.mark_as_printed.side_effect = RuntimeError("printer offline")
+    mock_core.mark_as_printed.side_effect = OSError("printer offline")
     with _shared_scope_handle_0(mock_core) as mock_reply:
-        with pytest.raises(RuntimeError, match="printer offline"):
+        with pytest.raises(OSError, match="printer offline"):
             await handlers.handle_printed(event)
     mock_reply.assert_called_once()
     assert mock_reply.call_args.args[1] is None

@@ -84,7 +84,8 @@ jobs:
             tests/test_xiaoc_life_native_checkpoint.py \
             tests/test_xiaoc_life_checkpoint.py \
             tests/test_xiaoc_life_state.py \
-            tests/test_xiaoc_life_runtime.py
+            tests/test_xiaoc_life_runtime.py \
+            tests/test_xiaoc_life_integration.py
 
   persy-readback:
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.base_ref == 'codex/integrate-open-prs-20261121-36690872'

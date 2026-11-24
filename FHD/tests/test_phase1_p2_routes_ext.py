@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_memory_v2_agent_routes import _configure_runtime
 
-# ---------------------------------------------------------------------------
-# Conversation compat (stream / batch / context)
-# ---------------------------------------------------------------------------
+
+def _route_client(router: APIRouter, *, app: FastAPI | None = None, headers=None) -> TestClient:
+    app = app if app is not None else FastAPI()
+    app.include_router(router)
+    return TestClient(app, raise_server_exceptions=False, headers=headers)
 
 
 @pytest.fixture
 def conv_compat_client() -> TestClient:
     from app.legacy.routes.conversation import compat_routes
 
-    app = FastAPI()
-    app.include_router(compat_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(compat_routes.router)
 
 
 @patch(
@@ -70,9 +71,7 @@ def test_ai_stream_limit_429(mock_slot: MagicMock, conv_compat_client: TestClien
 def auth_client() -> TestClient:
     from app.fastapi_routes.domains.auth import routes as auth_routes
 
-    app = FastAPI()
-    app.include_router(auth_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(auth_routes.router)
 
 
 @patch("app.application.auth_app_service.get_auth_app_service")
@@ -115,9 +114,7 @@ def static_client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     (vue_dist / "favicon.ico").write_bytes(b"\x00\x00")
     (vue_dist / "manifest.webmanifest").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(static_routes, "get_base_dir", lambda: str(tmp_path))
-    app = FastAPI()
-    app.include_router(static_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(static_routes.router)
 
 
 def test_static_favicon(static_client: TestClient) -> None:
@@ -137,8 +134,7 @@ def misc_client() -> TestClient:
 
     app = FastAPI()
     app.openapi = lambda: {"openapi": "3.0.0"}
-    app.include_router(misc_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(misc_routes.router, app=app)
 
 
 def test_preferences_require_session_and_ignore_client_user_id(misc_client: TestClient) -> None:
@@ -185,95 +181,111 @@ def test_tool_categories_list(misc_client: TestClient) -> None:
     assert r.status_code == 200
 
 
-def test_memory_v2_routes_lifecycle_and_preference_sync(
-    misc_client: TestClient,
-    trusted_actor,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    actor = trusted_actor(
-        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+@pytest.fixture
+def memory_actor(trusted_actor):
+    return trusted_actor(user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"])
+
+
+@pytest.fixture
+def agent_repo(monkeypatch):
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
     )
-    misc_client.headers.update(actor.headers)
+    return repo
+
+
+@pytest.fixture
+def approved_memory_client(
+    misc_client, memory_actor, agent_repo, monkeypatch, tmp_path, local_tools
+):
+    from app.domain.shared_services.user_memory_service import reset_user_memory_service
+
+    _configure_runtime(monkeypatch, tmp_path)
+    try:
+        yield ApprovedCapabilityClient(misc_client, agent_repo, memory_actor)
+    finally:
+        reset_user_memory_service()
+
+
+def test_memory_v2_routes_lifecycle_and_preference_sync(approved_memory_client) -> None:
+    import app.domain.shared_services.user_memory_service as memory_mod
     from app.application.agent_task_context import scoped_personal_memory_id
 
-    memory_owner = scoped_personal_memory_id(actor.context)
-    import app.domain.shared_services.user_memory_service as memory_mod
-
-    memory_dir = tmp_path / "memory"
-    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
-    monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
-    monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
-    memory_mod.reset_user_memory_service()
-    try:
-        created = misc_client.post(
-            "/memory/v2/candidates",
-            json={
-                "user_id": "7",
-                "memory_type": "preference",
-                "key": "default_customer",
-                "value": "七彩乐园",
-                "confidence": 0.8,
-                "source": "pytest",
-                "evidence": [{"message": "总是给七彩乐园开单"}],
-            },
-        )
-        assert created.status_code in (200, 202), created.text
-        candidate = created.json()["candidate"]
-        memory_id = candidate["memory_id"]
-
-        pending = misc_client.get(
-            "/memory/v2",
-            params={"user_id": "7", "status": "pending"},
-        ).json()
-        assert pending["summary"]["by_status"]["pending"] == 1
-        assert pending["memories"][0]["memory_id"] == memory_id
-
-        confirmed = misc_client.post(
-            f"/memory/v2/{memory_id}/confirm",
-            json={"user_id": "7"},
-        ).json()
-        assert confirmed["memory"]["status"] == "active"
-
-        svc = memory_mod.get_user_memory_service()
-        assert svc.get_preference(memory_owner, "default_customer") == "七彩乐园"
-
-        corrected = misc_client.patch(
-            f"/memory/v2/{memory_id}",
-            json={
-                "user_id": "7",
-                "key": "favorite_customer",
-                "value": "彩虹乐园",
-                "reason": "用户纠正名称",
-            },
-        ).json()
-        assert corrected["memory"]["key"] == "favorite_customer"
-        assert svc.get_preference(memory_owner, "default_customer") is None
-        assert svc.get_preference(memory_owner, "favorite_customer") == "彩虹乐园"
-
-        summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
-        assert summary["summary"]["by_status"]["active"] == 1
-        assert "彩虹乐园" in summary["planner_context"]
-
-        deleted = misc_client.delete(
-            f"/memory/v2/{memory_id}",
-            params={"user_id": "7", "reason": "用户删除"},
-        ).json()
-        assert deleted["memory"]["status"] == "deleted"
-        assert svc.get_preference(memory_owner, "favorite_customer") is None
-
-        final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
-        assert final_summary["summary"]["by_status"]["deleted"] == 1
-        assert "无已确认记忆" in final_summary["planner_context"]
-    finally:
-        memory_mod.reset_user_memory_service()
-
-
-def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient, trusted_actor) -> None:
-    actor = trusted_actor(
-        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    misc_client = approved_memory_client
+    memory_owner = scoped_personal_memory_id(misc_client.actor.context)
+    created = misc_client.post(
+        "/memory/v2/candidates",
+        json={
+            "user_id": "7",
+            "memory_type": "preference",
+            "key": "default_customer",
+            "value": "七彩乐园",
+            "confidence": 0.8,
+            "source": "settings_ui",
+            "evidence": [{"message": "总是给七彩乐园开单"}],
+        },
+        headers={"Idempotency-Key": "phase1-memory-propose"},
     )
-    misc_client.headers.update(actor.headers)
+    assert created.status_code == 200, created.text
+    candidate = created.json()["candidate"]
+    memory_id = candidate["memory_id"]
+
+    pending = misc_client.get(
+        "/memory/v2",
+        params={"user_id": "7", "status": "pending"},
+    ).json()
+    assert pending["summary"]["by_status"]["pending"] == 1
+    assert pending["memories"][0]["memory_id"] == memory_id
+
+    confirmed = misc_client.post(
+        f"/memory/v2/{memory_id}/confirm",
+        json={"user_id": "7"},
+        headers={"Idempotency-Key": "phase1-memory-confirm"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["memory"]["status"] == "active"
+
+    svc = memory_mod.get_user_memory_service()
+    assert svc.get_preference(memory_owner, "default_customer") == "七彩乐园"
+
+    corrected = misc_client.patch(
+        f"/memory/v2/{memory_id}",
+        json={
+            "user_id": "7",
+            "key": "favorite_customer",
+            "value": "彩虹乐园",
+            "reason": "用户纠正名称",
+        },
+        headers={"Idempotency-Key": "phase1-memory-correct"},
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["memory"]["key"] == "favorite_customer"
+    assert svc.get_preference(memory_owner, "default_customer") is None
+    assert svc.get_preference(memory_owner, "favorite_customer") == "彩虹乐园"
+
+    summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
+    assert summary["summary"]["by_status"]["active"] == 1
+    assert "彩虹乐园" in summary["planner_context"]
+
+    deleted = misc_client.delete(
+        f"/memory/v2/{memory_id}",
+        params={"user_id": "7", "reason": "用户删除"},
+        headers={"Idempotency-Key": "phase1-memory-delete"},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["memory"]["status"] == "deleted"
+    assert svc.get_preference(memory_owner, "favorite_customer") is None
+
+    final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
+    assert final_summary["summary"]["by_status"]["deleted"] == 1
+    assert "无已确认记忆" in final_summary["planner_context"]
+
+
+def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient, memory_actor) -> None:
+    misc_client.headers.update(memory_actor.headers)
     with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
         bad_type = misc_client.post(
             "/memory/v2/candidates",
@@ -289,62 +301,46 @@ def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient, trus
     assert bad_status.json()["success"] is False
 
 
-def test_memory_v2_routes_govern_blocked_source(
-    misc_client: TestClient,
-    trusted_actor,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    actor = trusted_actor(
-        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+def test_memory_v2_routes_govern_blocked_source(approved_memory_client) -> None:
+    created = approved_memory_client.post(
+        "/memory/v2/candidates",
+        json={
+            "user_id": "7",
+            "memory_type": "preference",
+            "key": "favorite_customer",
+            "value": "污染客户",
+            "confidence": 0.95,
+            "source": "llm_guess",
+        },
+        headers={"Idempotency-Key": "phase1-blocked-memory-propose"},
     )
-    misc_client.headers.update(actor.headers)
-    import app.domain.shared_services.user_memory_service as memory_mod
+    assert created.status_code == 200, created.text
+    candidate = created.json()["candidate"]
+    assert candidate["status"] == "rejected"
+    assert candidate["source_policy"] == "blocked"
+    assert candidate["source_trust"] == "blocked"
+    assert "blocked_source" in candidate["governance_flags"]
+    assert candidate["confidence"] == 0.0
 
-    memory_dir = tmp_path / "memory"
-    monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
-    monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
-    monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
-    memory_mod.reset_user_memory_service()
-    try:
-        created = misc_client.post(
-            "/memory/v2/candidates",
-            json={
-                "user_id": "7",
-                "memory_type": "preference",
-                "key": "favorite_customer",
-                "value": "污染客户",
-                "confidence": 0.95,
-                "source": "llm_guess",
-            },
-        )
-        assert created.status_code in (200, 202), created.text
-        candidate = created.json()["candidate"]
-        assert candidate["status"] == "rejected"
-        assert candidate["source_policy"] == "blocked"
-        assert candidate["source_trust"] == "blocked"
-        assert "blocked_source" in candidate["governance_flags"]
-        assert candidate["confidence"] == 0.0
+    confirm = approved_memory_client.post(
+        f"/memory/v2/{candidate['memory_id']}/confirm",
+        json={"user_id": "7"},
+        headers={"Idempotency-Key": "phase1-blocked-memory-confirm"},
+    )
+    assert confirm.status_code == 202, confirm.text
+    confirmation = confirm.json()
+    assert confirmation["success"] is False
+    assert confirmation["agent_status"] == "blocked"
+    run = approved_memory_client.repository.get(confirmation["run_id"])
+    assert run.tool_calls[0].output["message"] == "记忆已拒绝，不能确认"
+    assert confirmation["outcome"] == "unknown"
+    assert confirmation["retryable"] is False
+    assert confirmation["reconciliation_required"] is True
 
-        confirm = misc_client.post(
-            f"/memory/v2/{candidate['memory_id']}/confirm",
-            json={"user_id": "7"},
-        )
-        assert confirm.status_code == 202, confirm.text
-        confirmation = confirm.json()
-        assert confirmation["success"] is False
-        assert confirmation["agent_status"] == "blocked"
-        assert confirmation["message"] == "记忆已拒绝，不能确认"
-        assert confirmation["outcome"] == "unknown"
-        assert confirmation["retryable"] is False
-        assert confirmation["reconciliation_required"] is True
-
-        summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
-        assert summary["summary"]["by_status"]["rejected"] == 1
-        assert summary["summary"]["by_source_policy"]["blocked"] == 1
-        assert "污染客户" not in summary["planner_context"]
-    finally:
-        memory_mod.reset_user_memory_service()
+    summary = approved_memory_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
+    assert summary["summary"]["by_status"]["rejected"] == 1
+    assert summary["summary"]["by_source_policy"]["blocked"] == 1
+    assert "污染客户" not in summary["planner_context"]
 
 
 @patch("app.infrastructure.db.sync_engine.switch_to_test_mode")
@@ -377,9 +373,7 @@ def test_system_test_db_enable(
 def product_compat_client() -> TestClient:
     from app.legacy.routes.product import compat_routes
 
-    app = FastAPI()
-    app.include_router(compat_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(compat_routes.router)
 
 
 @patch("app.bootstrap.get_products_service")
@@ -405,9 +399,7 @@ def test_product_compat_units(mock_get: MagicMock, product_compat_client: TestCl
 def customer_client() -> TestClient:
     from app.fastapi_routes.domains.customer import routes as customer_routes
 
-    app = FastAPI()
-    app.include_router(customer_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return _route_client(customer_routes.router)
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
@@ -431,40 +423,40 @@ def test_customers_post_missing_name(
     assert r.status_code == 400
 
 
-@patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-def test_customers_post_ok(
-    _mock_erp: MagicMock,
-    customer_client: TestClient,
-    local_tools,
-    trusted_actor,
-    monkeypatch,
-    tmp_path,
-) -> None:
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.application.customer_app_service import CustomerApplicationService
-
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+@pytest.fixture
+def local_agent_repo(agent_repo, local_tools, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    return agent_repo
+
+
+@patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
+def test_customers_post_ok(
+    _mock_erp: MagicMock, customer_client: TestClient, local_agent_repo, trusted_actor, monkeypatch
+) -> None:
+    from app.application.customer_app_service import CustomerApplicationService
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     actor = trusted_actor(role="admin")
-    customer_client.headers.update(actor.headers)
     monkeypatch.setattr("app.db.SessionLocal", actor.factory)
     monkeypatch.setattr("app.db.session.SessionLocal", actor.factory)
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
     monkeypatch.setattr("app.application.get_customer_app_service", CustomerApplicationService)
-    repo = InMemoryAgentRunRepository()
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
-    )
-    r = customer_client.post("/customers", json={"name": "丙公司", "contact_person": "李"})
+    client = ApprovedCapabilityClient(customer_client, local_agent_repo, actor)
+    body = {"name": "丙公司", "contact_person": "李"}
+    headers = {"Idempotency-Key": "phase1-customer-create"}
+    r = client.post("/customers", json=body, headers=headers)
     assert r.status_code == 200, r.text
     payload = r.json()
+    repeated = customer_client.post("/customers", json=body, headers=headers)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["run_id"] == payload["run_id"]
     assert payload["success"] is True, payload
     assert payload["data"]["customer_name"] == "丙公司"
     assert payload["data"]["contact_person"] == "李"
-    run = repo.get(payload["run_id"])
+    run = local_agent_repo.get(payload["run_id"])
     assert run is not None and run.status == "completed"
     assert len(run.tool_calls) == 1
     assert run.tool_calls[0].metadata["verification"]["accepted"] is True
@@ -488,11 +480,7 @@ def test_customers_post_ok(
 def system_client(trusted_actor) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
-    app = FastAPI()
-    app.include_router(system_routes.router)
-    return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
-    )
+    return _route_client(system_routes.router, headers=trusted_actor(role="admin").headers)
 
 
 @patch("app.application.facades.session_facade.get_system_service")
@@ -505,33 +493,33 @@ def test_system_health_and_version(mock_get: MagicMock, system_client: TestClien
 
 @patch("app.application.facades.session_facade.get_database_service")
 def test_database_backup_create(
-    mock_get: MagicMock, system_client: TestClient, local_tools, monkeypatch, tmp_path
+    mock_get: MagicMock, system_client: TestClient, local_agent_repo, trusted_actor, tmp_path
 ) -> None:
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
-
-    repo = InMemoryAgentRunRepository()
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
-    )
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    backup_path = tmp_path / "backup.sql"
     mock_get.return_value.backup_database.return_value = {
         "success": True,
-        "data": {"path": "/tmp/bak"},
+        "data": {"path": str(backup_path)},
     }
-    r = system_client.post("/api/database/backup")
+    client = ApprovedCapabilityClient(system_client, local_agent_repo, trusted_actor(role="admin"))
+    headers = {"Idempotency-Key": "phase1-database-backup"}
+    r = client.post("/api/database/backup", headers=headers)
     # A mock dispatch receipt cannot prove that a backup file exists.
-    assert r.status_code == 200, r.text
+    assert r.status_code == 202, r.text
     payload = r.json()
     assert payload["success"] is False
-    assert payload["verification_code"] == "result_verifier_unavailable"
     assert payload["reconciliation_required"] is True and payload["retryable"] is False
-    assert payload["data"]["path"] == "/tmp/bak"
+    assert "data" not in payload
+    repeated = system_client.post("/api/database/backup", headers=headers)
+    assert repeated.status_code == 202, repeated.text
+    assert repeated.json()["run_id"] == payload["run_id"]
     mock_get.return_value.backup_database.assert_called_once()
-    run = repo.get(payload["run_id"])
+    run = local_agent_repo.get(payload["run_id"])
     assert run is not None and run.status == "blocked"
     assert len(run.tool_calls) == 1 and run.steps[0].attempt_count == 1
     assert run.tool_calls[0].output["success"] is True
-    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+    assert run.tool_calls[0].output["data"]["path"] == str(backup_path)
+    verification = run.tool_calls[0].metadata["verification"]
+    assert verification["code"] == "result_verifier_unavailable"
+    assert verification["accepted"] is False
+    assert not backup_path.exists()
     assert not {"tool.completed", "run.completed"} & {e.event_type for e in run.events}

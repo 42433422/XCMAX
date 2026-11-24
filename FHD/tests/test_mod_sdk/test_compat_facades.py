@@ -86,7 +86,7 @@ class TestLanCompat:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("no mgr"),
+                side_effect=FileNotFoundError("mods root working directory unavailable"),
             ),
             patch.object(lan_compat, "_resolve_mod_dir", return_value=mod_dir),
         ):

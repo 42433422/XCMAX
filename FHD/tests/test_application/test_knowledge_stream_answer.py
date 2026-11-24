@@ -148,7 +148,7 @@ def test_stream_route_redacts_internal_errors_and_logs_for_operators(caplog) -> 
     class FailedViews(FakeViews):
         async def stream_answer(self, *_args):
             yield {"event": "meta", "data": {}}
-            raise RuntimeError("upstream secret-key at /private/customer.sqlite")
+            raise ConnectionError("upstream secret-key at /private/customer.sqlite")
 
     app = FastAPI()
     app.include_router(DatasetViewRoutes(views=lambda: FailedViews()).router)

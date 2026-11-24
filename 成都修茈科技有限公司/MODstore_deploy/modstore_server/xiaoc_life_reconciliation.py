@@ -3,20 +3,27 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
 from modstore_server.db.llm_chat import LlmClientRequest
-from modstore_server.db.xiaoc_life import XiaoCLifeEvent
+from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
 from modstore_server.xiaoc_life_checkpoint import (
     recover_checkpoint,
     zero_usage_checkpoint_compatible,
 )
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, utcnow
-from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
+from modstore_server.xiaoc_life_store import (
+    _event,
+    _mutate,
+    get_session_factory,
+    read_state,
+    try_cycle_lock,
+)
 
 
 def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
@@ -96,25 +103,28 @@ def reconcile_usage() -> dict[str, int]:
 
     reconcile_pending_usage()
 
-    def collect(data: dict[str, Any], session: Any) -> list[dict[str, Any]]:
+    def pending_active(data: dict[str, Any]) -> dict[str, Any] | None:
         active = data.get("active_cycle")
-        pending = []
-        if active and (active.get("awaiting_worker") or waiting_deadline(data) <= utcnow()):
-            pending.append(
-                {
-                    "cycle_id": active["cycle_id"],
-                    "lease_token": active["lease_token"],
-                    "domain": active["domain"],
-                    "reservation": active["reserved_tokens"],
-                    "steps": active.get("steps", []),
-                    "owner_user_id": active["owner_user_id"],
-                    "outbound_journal_version": active.get("outbound_journal_version"),
-                    "outbound_attempted": bool(active.get("outbound_attempted")),
-                    "policy_revision": active["policy_revision"],
-                    "graph_checkpoints": active.get("graph_checkpoints", {}),
-                    "active": True,
-                }
-            )
+        if not active or not (active.get("awaiting_worker") or waiting_deadline(data) <= utcnow()):
+            return None
+        return {
+            "cycle_id": active["cycle_id"],
+            "lease_token": active["lease_token"],
+            "domain": active["domain"],
+            "reservation": active["reserved_tokens"],
+            "steps": active.get("steps", []),
+            "owner_user_id": active["owner_user_id"],
+            "outbound_journal_version": active.get("outbound_journal_version"),
+            "outbound_attempted": bool(active.get("outbound_attempted")),
+            "policy_revision": active["policy_revision"],
+            "graph_checkpoints": active.get("graph_checkpoints", {}),
+            "native_closeout": active.get("native_closeout"),
+            "active": True,
+        }
+
+    def collect(data: dict[str, Any], session: Any) -> list[dict[str, Any]]:
+        active = pending_active(data)
+        pending = [active] if active else []
         reconciled = aliased(XiaoCLifeEvent)
         query = (
             select(XiaoCLifeEvent)
@@ -150,12 +160,10 @@ def reconcile_usage() -> dict[str, int]:
             )
         return pending
 
-    pending = _mutate(collect)
-    resolved = 0
-    for item in pending:
+    def resolve(item: dict[str, Any]) -> bool:
         steps = item.get("steps", [])
         if not isinstance(steps, list):
-            continue
+            return False
         if not steps:
             # A returned node may contradict an empty or incomplete journal.
             # Keep its reservation rather than inventing a verified zero charge.
@@ -174,36 +182,23 @@ def reconcile_usage() -> dict[str, int]:
         else:
             actual = _verified_usage(steps, item["owner_user_id"])
         if actual is None or not 0 <= actual <= item["reservation"]:
-            continue
+            return False
+        verified_actual = actual
 
-        def settle(
-            current: dict[str, Any],
-            session: Any,
-            *,
-            item: dict[str, Any] = item,
-            steps: list[dict[str, Any]] = steps,
-            actual: int = actual,
-        ) -> bool:
+        def settle(current: dict[str, Any], session: Any) -> bool:
             event_id = "reconciled:cycle:" + item["cycle_id"]
             if session.get(XiaoCLifeEvent, event_id) is not None:
                 return False
             if item["active"]:
-                running = current.get("active_cycle") or {}
-                if (
-                    running.get("cycle_id") != item["cycle_id"]
-                    or running.get("lease_token") != item["lease_token"]
-                    or running.get("steps", []) != steps
-                    or running.get("graph_checkpoints", {}) != item.get("graph_checkpoints", {})
-                    or not (running.get("awaiting_worker") or waiting_deadline(current) <= utcnow())
-                ):
+                if pending_active(current) != item:
                     return False
                 current["active_cycle"] = None
             budget = current["budget"]
             budget["reserved_tokens"] -= item["reservation"]
-            budget["used_tokens"] += actual
+            budget["used_tokens"] += verified_actual
             if item["domain"] == "exploration":
                 budget["exploration_reserved_tokens"] -= item["reservation"]
-                budget["exploration_tokens"] += actual
+                budget["exploration_tokens"] += verified_actual
             current["unknown_usage"] = budget["reserved_tokens"] > 0
             current["last_status"] = "waiting"
             checkpoint = None
@@ -213,7 +208,7 @@ def reconcile_usage() -> dict[str, int]:
                     cycle_id=item["cycle_id"],
                     owner_user_id=item.get("owner_user_id", 0),
                     policy_revision=item.get("policy_revision", 0),
-                    actual_tokens=actual,
+                    actual_tokens=verified_actual,
                 )
             _event(
                 session,
@@ -222,7 +217,7 @@ def reconcile_usage() -> dict[str, int]:
                 status="verified",
                 summary="已核对原运行账本并结算模型用量，没有重新执行原调用。",
                 evidence_refs=["cycle:" + item["cycle_id"]],
-                actual_tokens=actual,
+                actual_tokens=verified_actual,
                 details={
                     "steps": item["steps"],
                     **({"graph_checkpoint_recovery": checkpoint} if checkpoint else {}),
@@ -230,7 +225,29 @@ def reconcile_usage() -> dict[str, int]:
             )
             return True
 
-        resolved += int(_mutate(settle))
+        return _mutate(settle)
+
+    pending = _mutate(collect)
+    resolved = 0
+    for item in pending:
+        lock = try_cycle_lock(item["cycle_id"]) if item["active"] else nullcontext(True)
+        with lock as acquired:
+            if not acquired:
+                continue
+            if item["active"]:
+                with get_session_factory()() as session:
+                    row = session.get(XiaoCLifeState, IDENTITY_ID)
+                    assert row is not None
+                    fresh = pending_active(json.loads(row.state_json))
+                if (
+                    fresh is None
+                    or fresh["cycle_id"] != item["cycle_id"]
+                    or fresh["lease_token"] != item["lease_token"]
+                    or fresh["native_closeout"] is not None
+                ):
+                    continue
+                item = fresh
+            resolved += int(resolve(item))
     return {"resolved": resolved, "waiting": len(pending) - resolved}
 
 

@@ -22,6 +22,7 @@ from app.application.agent_orchestrator.tool_spec import (
 )
 from app.application.agent_orchestrator.verification_cognition import (
     normalize_tool_execution_result,
+    plan_admission_receipt,
     verified_plan_admission,
 )
 from app.application.tool_execution_deadline import (
@@ -29,6 +30,7 @@ from app.application.tool_execution_deadline import (
     invocation_requires_reconciliation,
 )
 from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
     execution_result_requires_reconciliation,
     normalize_execution_result,
 )
@@ -865,6 +867,38 @@ class AgentToolExecutor:
         return cast("dict[str, Any]", result)
 
 
+def _normalize_timely_tool_receipt(
+    step: AgentStep, result: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
+
+    if (
+        (step.tool_id, step.action) != ("enterprise_cognition", "plan")
+        and not plan_admission_receipt(result)
+        and pending_execution_receipt(result, include_blocked=True)
+    ):
+        normalized_result = {**result, "success": False, "retryable": False}
+    else:
+        normalized_result = normalize_tool_execution_result(step, result, context)
+    if (
+        step.tool_id == "business_db"
+        and step.action == "write"
+        and normalized_result.get("success") is True
+        and isinstance(step.params.get("payload"), dict)
+    ):
+        from app.domain.shared_services.tools_workflow_common import (
+            _remember_business_db_target,
+        )
+
+        _remember_business_db_target(
+            context,
+            str(step.params.get("entity") or ""),
+            str(step.params.get("operation") or "create"),
+            normalized_result,
+        )
+    return normalized_result
+
+
 def execute_with_tool_deadline(
     executor: Any, step: AgentStep, *, runtime_context: dict[str, Any], timeout_seconds: float
 ) -> dict[str, Any]:
@@ -972,6 +1006,7 @@ def execute_with_tool_deadline(
                     if callable(bounded)
                     else executor.execute(step, runtime_context=context)
                 )
+                completed_in_time = time.monotonic() <= (ceiling if file_deadlines else deadline)
             record_result(
                 normalize_tool_execution_result(step, result, context)
                 if isinstance(result, dict)
@@ -1007,60 +1042,33 @@ def execute_with_tool_deadline(
             "exception_type": type(exc).__name__,
         }
     else:
-        completed_in_time = time.monotonic() <= (ceiling if file_deadlines else deadline)
         if (
             completed_in_time
             and isinstance(result, dict)
             and not invocation.uncertain
-            and result.get("reconciliation_required") is True
+            and result.get("error_code") not in ("tool_worker_exited", "tool_worker_incomplete")
         ):
-            # Timely unresolved receipts retain evidence in place; only late or
-            # unknown-I/O receipts use nested reconciliation_evidence.
-            return {**result, "success": False, "outcome": "unknown", "retryable": False}
-        if (
-            completed_in_time
-            and isinstance(result, dict)
-            and not invocation.uncertain
-            and (
-                result.get("outcome") != "unknown"
-                or result.get("error_code")
-                in {
-                    "tool_identity_required",
-                    "tool_identity_override",
-                    "tool_permission_denied",
-                    "tool_contract_unavailable",
-                    "tool_scope_unavailable",
-                    "catalog_identity_override",
+            # These query refusals deliberately use an unknown outcome without
+            # opening a business effect. Other explicit uncertainty keeps the
+            # original receipt at the top level and must never permit retry.
+            refusal = result.get("error_code") in (
+                "tool_identity_required",
+                "tool_identity_override",
+                "tool_permission_denied",
+                "tool_contract_unavailable",
+                "tool_scope_unavailable",
+                "catalog_identity_override",
+            )
+            evidence = {**result, "outcome": None} if refusal else result
+            if execution_result_outcome_unknown(evidence, include_execution=True):
+                return {
+                    **result,
+                    "success": False,
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
                 }
-            )
-            and not result.get("reconciliation_required")
-        ):
-            normalized_result = normalize_tool_execution_result(step, result, context)
-            from app.application.agent_orchestrator.result_verification import (
-                pending_execution_receipt,
-            )
-
-            if pending_execution_receipt(result) and not verified_plan_admission(
-                step, result, context
-            ):
-                normalized_result = {**result, "success": False, "retryable": False}
-            if (
-                step.tool_id == "business_db"
-                and step.action == "write"
-                and normalized_result.get("success") is True
-                and isinstance(step.params.get("payload"), dict)
-            ):
-                from app.domain.shared_services.tools_workflow_common import (
-                    _remember_business_db_target,
-                )
-
-                _remember_business_db_target(
-                    context,
-                    str(step.params.get("entity") or ""),
-                    str(step.params.get("operation") or "create"),
-                    normalized_result,
-                )
-            return normalized_result
+            return _normalize_timely_tool_receipt(step, result, context)
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
     timed_out = not completed_in_time or any(
         marker.get("kind") == "http_timeout" for marker in invocation.uncertain

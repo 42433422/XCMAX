@@ -56,7 +56,7 @@ class TestRouterEvents:
 
     def test_register_handles_exception(self) -> None:
         with patch(
-            "app.legacy.routes.xcagi_compat.get_neuro_bus", side_effect=RuntimeError("no bus")
+            "app.legacy.routes.xcagi_compat.get_neuro_bus", side_effect=ConnectionError("no bus")
         ):
             from app.legacy.routes.xcagi_compat import _register_router_events
 

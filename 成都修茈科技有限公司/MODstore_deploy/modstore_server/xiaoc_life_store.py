@@ -17,8 +17,8 @@ from datetime import UTC, timedelta
 from typing import Any, Callable, Iterator, TypeVar, cast
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import select, text, update
+from sqlalchemy.engine import CursorResult, Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -573,6 +573,35 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
     return _mutate(claim)
 
 
+@contextlib.contextmanager
+def try_cycle_lock(cycle_id: str) -> Iterator[bool]:
+    """Serialize native work and expiry settlement on one database session."""
+    with get_session_factory()() as session:
+        engine = session.get_bind()
+    if engine.dialect.name == "sqlite":
+        yield True
+        return
+    if not isinstance(engine, Engine) or engine.dialect.name != "postgresql":
+        raise LifePolicyError("该数据库尚未提供可验证的生命运行锁")
+    params = {"key": "xiaoc-life:" + cycle_id}
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        if not connection.scalar(
+            text("SELECT pg_try_advisory_lock(hashtextextended(:key, 0))"), params
+        ):
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            try:
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))"), params
+                )
+            except Exception:
+                connection.invalidate()
+                raise
+
+
 def _matches_claim(current: dict[str, Any], claim: dict[str, Any]) -> bool:
     return bool(current.get("lease_token")) and all(
         key in claim and current.get(key) == claim[key]
@@ -669,6 +698,7 @@ def finish_cycle(
     interests: list[dict[str, Any]] | None = None,
     self_model: dict[str, Any] | None = None,
     details: dict[str, Any] | None = None,
+    expected_closeout: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if actual_tokens is not None and (type(actual_tokens) is not int or actual_tokens < 0):
         raise LifePolicyError("actual model usage must be verified nonnegative integer tokens")
@@ -683,6 +713,8 @@ def finish_cycle(
         active = data.get("active_cycle") or {}
         if not _matches_claim(active, claim):
             raise LifePolicyError("lifecycle receipt does not own this run")
+        if active.get("native_closeout") != expected_closeout:
+            raise LifePolicyError("lifecycle receipt does not match the prepared native closeout")
         budget = data["budget"]
         reserved = active["reserved_tokens"]
         # Late receipts still settle actual consumption, but cannot grant new learning.
@@ -697,6 +729,8 @@ def finish_cycle(
                 budget["exploration_tokens"] += actual_tokens
             if actual_tokens > reserved:
                 data["unknown_usage"] = True
+            elif expected_closeout is not None and budget["reserved_tokens"] == 0:
+                data["unknown_usage"] = False
         safe = fresh and actual_tokens is not None and actual_tokens <= reserved
         if fresh:
             _advance_goal_cursor(data, claim, details)
@@ -882,6 +916,43 @@ def pending_native_act_claim() -> dict[str, Any] | None:
         ):
             return None
         return {**copy.deepcopy(active), "state": copy.deepcopy(data)}
+
+
+def _native_closeout_eligible(active: dict[str, Any]) -> bool:
+    return bool(
+        active.get("graph_started") and active.get("act_admitted") and active.get("phase") == "act"
+    )
+
+
+def pending_native_closeout_claim() -> dict[str, Any] | None:
+    """Find the original admitted act, even when it no longer permits new work."""
+    _ensure()
+    with get_session_factory()() as session:
+        row = session.get(XiaoCLifeState, IDENTITY_ID)
+        assert row is not None
+        data = json.loads(row.state_json)
+        active = data.get("active_cycle") or {}
+        if not _native_closeout_eligible(active):
+            return None
+        return {**copy.deepcopy(active), "state": data}
+
+
+def prepare_native_closeout(
+    claim: dict[str, Any], source_checkpoint_id: str, receipt: dict[str, Any]
+) -> bool:
+    """Freeze an independently verified receipt before the native terminal write."""
+    marker = {"source_checkpoint_id": source_checkpoint_id, "receipt": receipt}
+
+    def prepare(data: dict[str, Any], _session: Session) -> bool:
+        active = data.get("active_cycle") or {}
+        if not _matches_claim(active, claim) or not _native_closeout_eligible(active):
+            return False
+        if (previous := active.get("native_closeout")) is not None:
+            return bool(previous == marker)
+        active["native_closeout"] = marker
+        return True
+
+    return _mutate(prepare)
 
 
 def admit_cycle_act(claim: dict[str, Any]) -> bool:

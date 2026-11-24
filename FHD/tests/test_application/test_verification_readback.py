@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import io
-import json
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -327,7 +326,7 @@ def office_output(owner, monkeypatch, tmp_path):
     directory.mkdir()
     monkeypatch.setattr(pickup, "_CACHED_BASE", directory)
 
-    def create(kind="docx", *, native=False):
+    def create(kind="docx", *, registered=False):
         case = invocation(
             owner,
             "generate_office_document",
@@ -349,21 +348,18 @@ def office_output(owner, monkeypatch, tmp_path):
             generated.append((request, output_format))
             return content, f"sample.{kind}"
 
-        if native:
-            from app.infrastructure.mods.mod_manager import import_mod_backend_py
+        if registered:
+            from app.domain.shared_services.tools_workflow_excel_ocr import (
+                _registered_router_generate_office_document,
+            )
 
             monkeypatch.setattr(
                 "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 generate,
             )
-            mod_path = Path(__file__).resolve().parents[2] / "mods/tools/xcagi-planner-excel-tools"
-            mod = import_mod_backend_py(str(mod_path), "xcagi-planner-excel-tools", "tool_handlers")
-            output = json.loads(
-                mod.run_native_tool(
-                    "generate_office_document", case.step.params, runtime_context=case.context
-                )
+            output = _registered_router_generate_office_document(
+                "execute", case.step.params, case.context, "", ""
             )
-            assert output["source"] == "mod:xcagi-planner-excel-tools"
         else:
             output = generate_office_document(
                 case.step.params,
@@ -377,13 +373,13 @@ def office_output(owner, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["docx", "xlsx"])
-@pytest.mark.parametrize("native", [False, True], ids=["builtin", "native_mod"])
+@pytest.mark.parametrize("registered", [False, True], ids=["builtin", "registered"])
 def test_office_generation_retains_pickup_and_independent_original_file(
-    office_output, kind, native
+    office_output, kind, registered
 ):
     from app.domain.shared_services.kitten_ai_document.pickup import pop_document_pickup
 
-    case, output, content, generated = office_output(kind, native=native)
+    case, output, content, generated = office_output(kind, registered=registered)
     assert len(output["artifacts"]) == 1
     artifact = output["artifacts"][0]
     assert artifact["artifact_type"] == "office_document"
@@ -480,7 +476,7 @@ def test_random_path_and_unknown_action_cannot_opt_in_to_file_verification(owner
 
 
 @pytest.mark.parametrize(
-    "outcome,expected", [("saved", "inconclusive"), ("rejected_no_effect", "failed")]
+    "outcome,expected", [("saved", "inconclusive"), ("rejected_no_effect", "verified")]
 )
 def test_catalog_historical_evidence_does_not_claim_a_new_current_success(
     owner, monkeypatch, outcome, expected
@@ -501,7 +497,11 @@ def test_catalog_historical_evidence_does_not_claim_a_new_current_success(
     monkeypatch.setattr("app.mod_sdk.catalog_product_store.verify_catalog_action", readback)
     result = verify(case)
     assert result["status"] == expected
-    assert result["checks"][0]["evidence"]["fresh_save"] is False
+    evidence = result["checks"][0]["evidence"]
+    assert evidence["fresh_save"] is evidence["current_matches"] is False
+    assert evidence["operation_outcome"] == outcome
+    if outcome == "rejected_no_effect":
+        assert result["code"] == "result_catalog_rejected"
     assert calls == [False]
 
 

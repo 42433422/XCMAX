@@ -371,9 +371,7 @@ class TestApplyMemoryPreferences:
     def test_apply_memory_preferences_swallows_error_returns_original(
         self, conversation_service: _ConversationHost
     ) -> None:
-        conversation_service.user_memory.apply_preference_to_slots.side_effect = OSError(
-            "db down"
-        )
+        conversation_service.user_memory.apply_preference_to_slots.side_effect = OSError("db down")
         original = {"k": "v"}
         result = conversation_service.apply_memory_preferences("u1", "greeting", original)
         assert result is original
@@ -614,7 +612,7 @@ class TestChatErrorPath:
         self, conversation_service: _ConversationHost
     ) -> None:
         with patch("app.application.get_ai_chat_app_service") as application:
-            application.return_value.process_chat.side_effect = RuntimeError("boom")
+            application.return_value.process_chat.side_effect = OSError("boom")
             result = await conversation_service.chat("u1", "hello")
             assert result["action"] == "error"
             assert "boom" in result["text"]

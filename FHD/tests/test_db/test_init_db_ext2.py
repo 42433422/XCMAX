@@ -903,7 +903,7 @@ class TestResolveAuthBootstrapEngineEdgeCases:
         mock_engine = Mock()
         mock_engine.dialect.name = "sqlite"
         with (
-            patch("app.db._create_engine_for_url", side_effect=RuntimeError("bad url")),
+            patch("app.db._create_engine_for_url", side_effect=ValueError("bad url")),
             patch("app.db._get_engine", return_value=mock_engine),
         ):
             result = _resolve_auth_bootstrap_engine("not_an_engine", database_url="bad://url")
@@ -914,7 +914,7 @@ class TestResolveAuthBootstrapEngineEdgeCases:
 
         real_engine = create_engine("sqlite:///:memory:")
         with (
-            patch("app.db._create_engine_for_url", side_effect=RuntimeError("bad url")),
+            patch("app.db._create_engine_for_url", side_effect=ValueError("bad url")),
         ):
             result = _resolve_auth_bootstrap_engine(real_engine, database_url="bad://url")
         assert result is real_engine

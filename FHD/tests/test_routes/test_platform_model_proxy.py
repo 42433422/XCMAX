@@ -121,7 +121,7 @@ def test_upstream_failure_never_reflects_credentials(
     if response_type == "response":
         upstream.return_value = JSONResponse({"detail": SECRET}, status_code=status)
     elif response_type == "exception":
-        upstream.side_effect = RuntimeError(SECRET)
+        upstream.side_effect = ConnectionError(SECRET)
     else:
         upstream.return_value = {
             "__proxy_error__": True,

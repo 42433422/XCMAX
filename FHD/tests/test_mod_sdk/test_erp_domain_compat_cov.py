@@ -71,7 +71,7 @@ class TestResolveModDir:
         """Most installs won't have the mod dir -> returns None."""
         monkeypatch.delenv("XCAGI_MODS_ROOT", raising=False)
         monkeypatch.delenv("XCAGI_MODS_DIR", raising=False)
-        with patch(_MOD_MANAGER_PATH, side_effect=RuntimeError("no mm")):
+        with patch(_MOD_MANAGER_PATH, side_effect=FileNotFoundError("mods root missing")):
             result = _resolve_mod_dir()
         assert result is None or isinstance(result, Path)
 
@@ -82,7 +82,7 @@ class TestResolveModDir:
         (mod_dir / "manifest.json").write_text("{}", encoding="utf-8")
         monkeypatch.setenv("XCAGI_MODS_ROOT", str(tmp_path))
         monkeypatch.delenv("XCAGI_MODS_DIR", raising=False)
-        with patch(_MOD_MANAGER_PATH, side_effect=RuntimeError("no mm")):
+        with patch(_MOD_MANAGER_PATH, side_effect=FileNotFoundError("mods root missing")):
             result = _resolve_mod_dir()
         assert result == mod_dir
 
@@ -93,7 +93,7 @@ class TestResolveModDir:
         (mod_dir / "manifest.json").write_text("{}", encoding="utf-8")
         monkeypatch.delenv("XCAGI_MODS_ROOT", raising=False)
         monkeypatch.setenv("XCAGI_MODS_DIR", str(tmp_path))
-        with patch(_MOD_MANAGER_PATH, side_effect=RuntimeError("no mm")):
+        with patch(_MOD_MANAGER_PATH, side_effect=FileNotFoundError("mods root missing")):
             result = _resolve_mod_dir()
         assert result == mod_dir
 
@@ -190,7 +190,7 @@ class TestIsErpDomainModInstalled:
 
     def test_exception_falls_back_to_dir(self, tmp_path):
         with (
-            patch(_MOD_MANAGER_PATH, side_effect=RuntimeError("fail")),
+            patch(_MOD_MANAGER_PATH, side_effect=FileNotFoundError("mods root missing")),
             patch("app.mod_sdk.erp_domain_compat._resolve_mod_dir", return_value=None),
         ):
             assert is_erp_domain_mod_installed() is False

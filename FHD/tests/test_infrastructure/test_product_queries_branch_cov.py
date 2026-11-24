@@ -178,7 +178,7 @@ class TestGetSyncEngineFailure:
         with (
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-                side_effect=RuntimeError("db connection failed"),
+                side_effect=ConnectionError("db connection failed"),
             ),
             patch(
                 "app.shell.mod_business_scope.business_data_exposed",
@@ -227,7 +227,7 @@ class TestCountQueryBranches:
 
     def test_count_query_failure_returns_none_total(self) -> None:
         mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
-        mock_conn_count.execute.side_effect = RuntimeError("count failed")
+        mock_conn_count.execute.side_effect = TimeoutError("count failed")
         mock_conn_data = _make_mock_conn()
         mock_eng.connect.side_effect = [mock_conn_meta, mock_conn_count, mock_conn_data]
         with (
@@ -266,9 +266,9 @@ class TestDataQueryBranches:
 
     def test_data_query_failure_with_total_none(self) -> None:
         mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
-        mock_conn_count.execute.side_effect = RuntimeError("count failed")
+        mock_conn_count.execute.side_effect = TimeoutError("count failed")
         mock_conn_data = _make_mock_conn()
-        mock_conn_data.execute.side_effect = RuntimeError("data query failed")
+        mock_conn_data.execute.side_effect = TimeoutError("data query failed")
         mock_eng.connect.side_effect = [mock_conn_meta, mock_conn_count, mock_conn_data]
         with (
             patch(
@@ -295,7 +295,7 @@ class TestDataQueryBranches:
         count_result.scalar_one.return_value = 42
         mock_conn_count.execute.return_value = count_result
         mock_conn_data = _make_mock_conn()
-        mock_conn_data.execute.side_effect = RuntimeError("data query failed")
+        mock_conn_data.execute.side_effect = TimeoutError("data query failed")
         mock_eng.connect.side_effect = [mock_conn_meta, mock_conn_count, mock_conn_data]
         with (
             patch(
@@ -601,7 +601,7 @@ class TestOrderByCreatedAt:
 class TestTotalNoneFallback:
     def test_total_none_falls_back_to_offset_plus_rows(self) -> None:
         mock_eng, mock_insp, mock_conn_meta, mock_conn_count = _setup_shared_0()
-        mock_conn_count.execute.side_effect = RuntimeError("count failed")
+        mock_conn_count.execute.side_effect = TimeoutError("count failed")
         mock_conn_data = _make_mock_conn()
         count_result = MagicMock()
         count_result.scalar_one.return_value = 0

@@ -344,7 +344,6 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
     from app.application.agent_orchestrator.result_verification import (
         bind_execution_receipt,
         verify_step_result,
@@ -353,6 +352,7 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     from app.application.agent_orchestrator.tool_permission import idempotency_scope_key
     from app.db.models.permission import Role
     from app.fastapi_routes.domains.customer.customer_routes import router
+    from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
 
     _, actor, _ = deletion
     with tenant_scope(7), actor.factory.begin() as db:
@@ -366,15 +366,15 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     app.include_router(router)
     with TestClient(app) as client:
         response = client.post(
-            "/customers/batch-delete", json={"ids": [3, 4]}, headers=actor.headers
+            "/customers/batch-delete",
+            json={"ids": [3, 4]},
+            headers={**actor.headers, "Idempotency-Key": "cascade-recheck-delete"},
         )
-    assert response.status_code == 200, response.text
+    assert response.status_code == 202, response.text
+    assert response.json()["pending_approval"] is True
     run = repository.get(response.json()["run_id"])
-    issue_approval_grant(run, principal_id=str(actor.user_id))
     with tenant_scope(7):
-        done = AgentOrchestrator(repository=repository).continue_run(
-            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
-        )
+        done = _approve_and_execute(AgentOrchestrator(repository=repository), run, actor)
     assert done.status == "completed", done.error
     step, call = done.steps[0], done.tool_calls[0]
     original = copy.deepcopy(call.output)

@@ -526,7 +526,7 @@ class TestAdminSetUserProfileDeep:
         """Lines 771-773: DB error → 500."""
         req = _mock_request()
         mock_get_db = MagicMock()
-        mock_get_db.return_value.__enter__.side_effect = RuntimeError("db down")
+        mock_get_db.return_value.__enter__.side_effect = ConnectionError("db down")
         mock_get_db.return_value.__exit__.return_value = False
 
         with (
@@ -689,7 +689,7 @@ class TestLocalSelfMaintenanceGovernanceReview:
             ),
             patch(
                 "app.application.self_maintenance_app_service.governance_review_local",
-                new=AsyncMock(side_effect=RuntimeError("fail")),
+                new=AsyncMock(side_effect=ConnectionError("fail")),
             ),
         ):
             resp = client.post(
@@ -1084,7 +1084,7 @@ class TestOpsStaffingCloseGap:
             ),
             patch(
                 "app.fastapi_routes.mod_store_routes._install_from_catalog",
-                new=AsyncMock(side_effect=RuntimeError("install fail")),
+                new=AsyncMock(side_effect=OSError("install fail")),
             ),
         ):
             resp = client.post("/api/xcmax/ops/staffing/close-gap", json={"skip_onboard": True})
@@ -1684,7 +1684,7 @@ class TestCollectLocalLedgerAdditional:
         """Lines 1902-1903: list_model_usage_entries raises → available=False."""
         with patch(
             "app.infrastructure.billing.model_usage.list_model_usage_entries",
-            side_effect=RuntimeError("db error"),
+            side_effect=ConnectionError("db error"),
         ):
             result = admin_routes._collect_local_ledger()
         assert result["available"] is False
@@ -1748,7 +1748,7 @@ class TestCollectCursorUsageAdditional:
         with (
             patch("shutil.which", return_value="/fake/cursor-usage"),
             patch("os.path.exists", return_value=True),
-            patch("subprocess.run", side_effect=RuntimeError("exec fail")),
+            patch("subprocess.run", side_effect=OSError("exec fail")),
         ):
             result = admin_routes._collect_cursor_usage()
         assert result["available"] is False

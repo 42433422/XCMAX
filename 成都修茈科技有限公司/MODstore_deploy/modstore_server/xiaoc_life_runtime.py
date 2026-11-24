@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypedDict
+from typing import Any, TypedDict, TypeVar
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_goal_management import (
@@ -37,6 +38,8 @@ from modstore_server.xiaoc_life_native_checkpoint import (
     native_thread_config,
 )
 from modstore_server.xiaoc_life_telemetry import life_operation
+
+T = TypeVar("T")
 
 
 class LifeBlocked(ValueError):
@@ -230,6 +233,36 @@ class CyclePorts:
         self.model = ""
         self.evidence: list[str] = []
         self.details: dict[str, Any] = {}
+        self.pending_writes: set[asyncio.Task[Any]] = set()
+        self.portfolio_started = False
+
+    async def write_in_thread(self, function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        job = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+        self.pending_writes.add(job)
+        try:
+            return await asyncio.shield(job)
+        finally:
+            if job.done():
+                self.pending_writes.discard(job)
+                if not job.cancelled():
+                    job.exception()
+
+    async def drain_writes(self) -> None:
+        # Cancelling the graph does not stop a running thread. Keep the cycle
+        # lock until those writes can no longer race a takeover or settlement.
+        cancelled = False
+        while self.pending_writes:
+            try:
+                await asyncio.wait(self.pending_writes)
+            except asyncio.CancelledError:
+                cancelled = True
+            for job in tuple(self.pending_writes):
+                if job.done():
+                    self.pending_writes.remove(job)
+                    if not job.cancelled():
+                        job.exception()
+        if cancelled:
+            raise asyncio.CancelledError
 
     def active(self) -> None:
         if not _store().cycle_active(self.claim):
@@ -285,7 +318,7 @@ class CyclePorts:
             return {"evolution": pending, "facts": []}
         from modstore_server.strategy_planner import collect_context
 
-        context = await asyncio.to_thread(collect_context)
+        context = await self.write_in_thread(collect_context)
         if self.domain == "enterprise":
             candidate = discover_goal_candidate(
                 context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
@@ -597,7 +630,7 @@ class CyclePorts:
         if state.get("evolution"):
             from modstore_server.xiaoc_life_evolution import propose_budget
 
-            goal = await asyncio.to_thread(propose_budget, self.claim, state["evolution"])
+            goal = await self.write_in_thread(propose_budget, self.claim, state["evolution"])
             self.evidence = [
                 "retort:" + goal["retort_request_id"],
                 "portfolio:" + goal["decision_id"],
@@ -665,7 +698,7 @@ class CyclePorts:
                 from modstore_server.xiaoc_life_evolution import propose
 
                 self.active()
-                goal = await asyncio.to_thread(propose, self.claim, goal)
+                goal = await self.write_in_thread(propose, self.claim, goal)
                 self.details["retort_request_id"] = goal["retort_request_id"]
             limits = self.state.get("policy", {}).get("portfolio_limits")
             employee = self.state.get("policy", {}).get("employee_id")
@@ -864,8 +897,9 @@ class CyclePorts:
             },
         )
         self.actual_tokens = None
+        self.portfolio_started = True
         try:
-            report = await asyncio.to_thread(
+            report = await self.write_in_thread(
                 run_portfolio_cycle, decision_id, owner_user_id=owner, max_tasks=1
             )
         finally:
@@ -874,7 +908,7 @@ class CyclePorts:
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
         if _store().cycle_active(self.claim) and after.get("started_at"):
-            await asyncio.to_thread(review_portfolio, decision_id, owner_user_id=owner)
+            await self.write_in_thread(review_portfolio, decision_id, owner_user_id=owner)
             after = portfolio_status(decision_id, owner_user_id=owner)
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
@@ -1159,33 +1193,236 @@ async def _continue_at_act(
     return await graph.ainvoke(None, config, durability="sync")
 
 
-async def recover_native_act() -> dict[str, Any] | None:
-    """Recovery only at a completed decision before act starts.
+def _verified_closeout(claim: dict[str, Any], state: Any) -> dict[str, Any] | None:
+    from modstore_server.strategic_portfolio import PortfolioError, portfolio_status
+    from modstore_server.strategic_portfolio_runtime import read_life_closeout_receipt
 
-    A crash in decide/act is deliberately NOT replayed. Expired or revoked
-    claims cannot regain authority by virtue of a graph checkpoint.
-    """
-    claim = _store().pending_native_act_claim()
+    if not isinstance(state, dict) or state.get("decision") or state.get("model_receipt"):
+        return None
+    binding = state.get("portfolio")
+    if not isinstance(binding, dict):
+        return None
+    goal, before = binding.get("goal"), binding.get("snapshot")
+    if not isinstance(goal, dict) or not isinstance(before, dict):
+        return None
+    goal_id, decision_id = goal.get("id"), goal.get("decision_id")
+    owner, proposal_hash = claim["owner_user_id"], before.get("proposal_sha256")
+    if (
+        not goal_id
+        or not decision_id
+        or not isinstance(proposal_hash, str)
+        or not proposal_hash
+        or before.get("decision_id") != decision_id
+        or before.get("owner_user_id") != owner
+        or not isinstance(goal.get("title"), str)
+        or not goal["title"]
+        or before.get("goal") != goal["title"][:4000]
+        or before.get("tasks", {}) != {}
+        or claim.get("awaiting_worker")
+        or claim.get("outbound_journal_version") != 1
+        or claim.get("outbound_attempted", False) is not False
+        or claim.get("steps")
+        != [
+            {
+                "kind": "portfolio",
+                "decision_id": decision_id,
+                "before_task_ids": [],
+                "before_call_ids": [],
+            }
+        ]
+        or not any(
+            current.get("id") == goal_id
+            and current.get("decision_id") == decision_id
+            and current.get("title") == goal["title"]
+            and current.get("domain", "enterprise")
+            == goal.get("domain", "enterprise")
+            == claim["domain"]
+            for current in claim["state"]["goals"]
+        )
+    ):
+        return None
+    receipt = read_life_closeout_receipt(claim, decision_id, proposal_hash)
+    if receipt is None:
+        return None
+    try:
+        record = portfolio_status(decision_id, owner_user_id=owner)
+    except PortfolioError:
+        return None
+    if (
+        record.get("proposal_sha256") != proposal_hash
+        or record.get("goal") != before["goal"]
+        or record.get("plan", {}).get("selected") != [receipt["task_id"]]
+        or list(record.get("tasks", {})) != [receipt["task_id"]]
+        or record["tasks"][receipt["task_id"]].get("status") != "completed"
+    ):
+        return None
+    steps = project_goal_steps(goal, record)
+    status = (
+        "stopped"
+        if portfolio_goal_closed(record, now=datetime.now(UTC))
+        else (
+            "blocked"
+            if steps and steps.get("all_steps_verified") is not True
+            else "execution_verified"
+        )
+    )
+    feedback = portfolio_feedback(record)
+    return {
+        **receipt,
+        "goal": {
+            "id": goal_id,
+            "decision_id": decision_id,
+            "status": status,
+            "outcome_status": feedback["outcome_status"],
+            "outcome_feedback": feedback["metrics"],
+            "outcome_ref": feedback["evidence_ref"],
+            "goal_review": goal_review_projection(
+                owner=owner,
+                goal_id=goal_id,
+                decision_id=decision_id,
+                status=status,
+                feedback=feedback,
+            ),
+            "evidence_refs": list(
+                dict.fromkeys([*goal.get("evidence_refs", []), *receipt["evidence_refs"]])
+            ),
+            **({"step_projection": steps} if steps else {}),
+        },
+    }
+
+
+async def _closeout_at_act(
+    graph: Any, config: dict[str, Any], claim: dict[str, Any]
+) -> dict[str, Any] | None:
+    from langgraph.graph import END
+
+    snapshot = await graph.aget_state(config)
+    checkpoint_id = snapshot.config.get("configurable", {}).get("checkpoint_id")
+    marker = claim.get("native_closeout")
+    if marker is None:
+        if snapshot.next != ("act",) or not checkpoint_id:
+            return None
+        receipt = _verified_closeout(claim, snapshot.values)
+        if receipt is None or not _store().prepare_native_closeout(claim, checkpoint_id, receipt):
+            return None
+        marker = {"source_checkpoint_id": checkpoint_id, "receipt": receipt}
+
+    source_config = {
+        **config,
+        "configurable": {**config["configurable"], "checkpoint_id": marker["source_checkpoint_id"]},
+    }
+    source = await graph.aget_state(source_config)
+    source_step = source.metadata.get("step") if source.metadata else None
+    if source.next != ("act",) or type(source_step) is not int:
+        return None
+    terminal_id = None
+    if checkpoint_id == marker["source_checkpoint_id"] and snapshot.next == ("act",):
+        updated = await graph.aupdate_state(source_config, None, as_node=END)
+        terminal_id = updated["configurable"]["checkpoint_id"]
+        snapshot = await graph.aget_state(config)
+    if (
+        snapshot.next
+        or snapshot.tasks
+        or snapshot.values != source.values
+        or not snapshot.metadata
+        or snapshot.metadata.get("source") != "update"
+        or snapshot.metadata.get("step") != source_step + 1
+        or not snapshot.parent_config
+        or snapshot.parent_config["configurable"] != source.config["configurable"]
+        or (
+            terminal_id is not None
+            and snapshot.config["configurable"]["checkpoint_id"] != terminal_id
+        )
+    ):
+        return None
+    receipt = marker["receipt"]
+    with life_operation("settle"):
+        return _store().finish_cycle(
+            claim,
+            status="completed",
+            summary="已核对原本地任务的持久回执并关闭原运行，未重新执行任务。",
+            actual_tokens=receipt["actual_tokens"],
+            evidence_refs=receipt["evidence_refs"],
+            goals=[receipt["goal"]],
+            details={
+                "portfolio_selection": {
+                    "goal_id": receipt["goal"]["id"],
+                    "decision_id": receipt["decision_id"],
+                },
+                "native_closeout": {
+                    "source_checkpoint_id": marker["source_checkpoint_id"],
+                    "terminal_checkpoint_id": snapshot.config["configurable"]["checkpoint_id"],
+                    "task_id": receipt["task_id"],
+                },
+            },
+            expected_closeout=marker,
+        )
+
+
+async def recover_native_act() -> dict[str, Any] | None:
+    """Settle a verified act receipt, or resume a decision not yet admitted to act."""
+    closed = await _recover_native_act(closing=True)
+    return closed if closed is not None else await _recover_native_act(closing=False)
+
+
+async def _recover_native_act(*, closing: bool) -> dict[str, Any] | None:
+    from modstore_server.models import get_session_factory
+    from modstore_server.xiaoc_life_store import try_cycle_lock
+
+    if closing:
+        with get_session_factory()() as session:
+            if session.get_bind().dialect.name != "postgresql":
+                return None
+        load = _store().pending_native_closeout_claim
+    else:
+        load = _store().pending_native_act_claim
+    claim = load()
     if claim is None:
         return None
-    ports = CyclePorts(claim)
-    async with native_life_checkpointer() as saver:
-        graph = build_life_graph(ports, checkpointer=saver)
-        config = native_thread_config(claim)
-        # Restore the same authority context used by normal execution.
-        # The remote employee/model gates must see this original lease.
-        with (
-            life_operation("graph", cycle_id=claim["cycle_id"]),
-            _store().life_execution_scope(claim),
+    with try_cycle_lock(claim["cycle_id"]) as acquired:
+        if not acquired:
+            return None
+        fresh = load()
+        if (
+            fresh is None
+            or fresh["cycle_id"] != claim["cycle_id"]
+            or fresh["lease_token"] != claim["lease_token"]
         ):
-            result = await _continue_at_act(graph, config, ports, restoring=True)
-            if result is None:
-                return None
-        with life_operation("settle"):
-            return ports.finish(result)
+            return None
+        ports = CyclePorts(fresh)
+        try:
+            async with native_life_checkpointer() as saver:
+                graph = build_life_graph(ports, checkpointer=saver)
+                config = native_thread_config(fresh)
+                if closing:
+                    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+                    if isinstance(saver, AsyncPostgresSaver):
+                        return await _closeout_at_act(graph, config, fresh)
+                    return None
+                with (
+                    life_operation("graph", cycle_id=fresh["cycle_id"]),
+                    _store().life_execution_scope(fresh),
+                ):
+                    result = await _continue_at_act(graph, config, ports, restoring=True)
+                if result is not None:
+                    with life_operation("settle"):
+                        return ports.finish(result)
+        finally:
+            await ports.drain_writes()
+    return None
 
 
 async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
+    from modstore_server.xiaoc_life_store import try_cycle_lock
+
+    with try_cycle_lock(claim["cycle_id"]) as acquired:
+        if not acquired:
+            return dict(_store().read_state())
+        return await _run_locked_cycle(claim)
+
+
+async def _run_locked_cycle(claim: dict[str, Any]) -> dict[str, Any]:
     if not _store().begin_cycle_graph(claim):
         # Never finish or release the reservation of a competing invocation.
         return dict(_store().read_state())
@@ -1205,14 +1442,17 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
                     # model receipt prevents effects. Do not finish its lease.
                     return dict(_store().read_state())
     except asyncio.CancelledError:
-        ports.details["reason"] = "cycle_cancelled"
-        with life_operation("settle"):
-            ports.finish(
-                {
-                    "status": "interrupted",
-                    "summary": "本轮已中断，未知调用保留预算等待核对。",
-                }
-            )
+        # A portfolio may already have committed its receipt just as the graph
+        # is cancelled. Leave its admitted act available to receipt recovery.
+        if not ports.pending_writes and not ports.portfolio_started:
+            ports.details["reason"] = "cycle_cancelled"
+            with life_operation("settle"):
+                ports.finish(
+                    {
+                        "status": "interrupted",
+                        "summary": "本轮已中断，未知调用保留预算等待核对。",
+                    }
+                )
         raise
     except BOUNDARY_ERRORS as exc:
         ports.details["reason"] = str(exc) if isinstance(exc, LifeBlocked) else type(exc).__name__
@@ -1222,6 +1462,8 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
                 ports.details["reason"], "本轮条件尚未满足，已保留观察和调用记录。"
             ),
         }
+    finally:
+        await ports.drain_writes()
     with life_operation("settle"):
         return ports.finish(result)
 
@@ -1234,10 +1476,13 @@ async def tick_async() -> dict[str, Any]:
     from modstore_server.xiaoc_self_model import execution_scope, record_identity_check
 
     with life_operation("tick"):
+        closed = await _recover_native_act(closing=True)
         with life_operation("reconcile"):
             reconcile_usage()
             reconcile_goals()
-        resumed = await recover_native_act()
+        if closed is not None:
+            return _store().read_state()
+        resumed = await _recover_native_act(closing=False)
         if resumed is not None:
             return resumed
         store = _store()

@@ -14,7 +14,12 @@ def test_inventory_http_preserves_text_and_tenant_isolation(tmp_path):
     # the production tool worker must reopen the same on-disk database itself.
     try:
         completed = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve()), str(tmp_path)],
+            [
+                sys.executable,
+                "-m",
+                "tests.test_application.test_inventory_input_fidelity",
+                str(tmp_path),
+            ],
             cwd=Path(__file__).resolve().parents[2],
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
             text=True,
@@ -65,6 +70,7 @@ def _exercise(root: Path) -> None:
             "XCAGI_MODS_ROOT": str(root / "mods"),
             "XCAGI_MODS_DIR": str(root / "mods"),
             "XCAGI_CLIENT_MODS_OFF": "1",
+            "XCAGI_SKIP_LEGACY_COMPAT_ROUTES": "0",
             "SECRET_KEY": "inventory-fidelity-test-only-not-a-production-key",
             "FHD_INTENT_SEMANTIC_ENABLED": "0",
             "CACHE_REDIS_URL": "",

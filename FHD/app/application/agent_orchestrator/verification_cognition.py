@@ -88,13 +88,19 @@ def normalize_tool_execution_result(step, output: dict, context: dict) -> dict:
     from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.domain.task_lifecycle.results import normalize_execution_result
 
-    return (
+    # Only scoped readback admits a plan receipt, regardless of its action.
+    if (step.tool_id, step.action) == ("enterprise_cognition", "plan") or plan_admission_receipt(
         output
-        if pending_execution_receipt(output)
-        or verified_plan_admission(step, output, context)
-        or _original_employee_delegation(step, output, context)
-        else normalize_execution_result(output)
-    )
+    ):
+        if verified_plan_admission(step, output, context):
+            return output
+        normalized = normalize_execution_result(output)
+        if output.get("success") is True:
+            return {**normalized, "success": False, "retryable": False}
+        return normalized
+    if pending_execution_receipt(output) or _original_employee_delegation(step, output, context):
+        return output
+    return normalize_execution_result(output)
 
 
 def _original_employee_delegation(step, output: dict, context: dict) -> bool:

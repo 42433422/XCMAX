@@ -55,6 +55,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -382,9 +383,10 @@ class TestInitDbAuthBootstrap:
             "app.db.init_db._resolve_auth_bootstrap_engine",
             lambda engine=None, database_url=None: sqlite_engine,
         )
-        with patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")):
-            # swallow_errors=True -> RuntimeError is caught and the function returns
-            # None without propagating.
+        with patch(
+            "sqlalchemy.inspect",
+            side_effect=OperationalError(None, None, sqlite3.OperationalError("inspect failed")),
+        ):
             result = ensure_sqlite_auth_bootstrap(sqlite_engine, swallow_errors=True)
         assert result is None
         # inspect failed before any DDL, so the users table was never created.
@@ -454,12 +456,12 @@ class TestInitDbResolveAuthBootstrapEngine:
         with (
             patch(
                 "app.db._create_engine_for_url",
-                side_effect=RuntimeError("cannot create"),
+                side_effect=ModuleNotFoundError("database driver unavailable"),
             ),
             patch("app.db._get_engine", return_value=fake_engine),
         ):
             result = init_db._resolve_auth_bootstrap_engine(
-                database_url="bad://url", engine=fake_engine
+                database_url="postgresql+psycopg://localhost/test", engine=fake_engine
             )
         assert result is fake_engine
 
@@ -474,7 +476,7 @@ class TestInitDbResolveAuthBootstrapEngine:
     def test_resolve_all_failures_returns_none(self, monkeypatch):
         from app.db import init_db
 
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             result = init_db._resolve_auth_bootstrap_engine()
         assert result is None
 
@@ -697,7 +699,7 @@ class TestInitDbOtherTables:
         from app.db.init_db import init_approval_tables
 
         # init_approval_tables tries _get_engine() first; force it to fail so our engine is used
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             init_approval_tables(sqlite_engine)
         with sqlite_engine.connect() as conn:
             tables = conn.execute(
@@ -709,7 +711,7 @@ class TestInitDbOtherTables:
         from app.db.init_db import init_service_bridge_tables
 
         # init_service_bridge_tables tries _get_engine() first; force it to fail so our engine is used
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             init_service_bridge_tables(sqlite_engine)
         with sqlite_engine.connect() as conn:
             tables = conn.execute(
@@ -1961,7 +1963,7 @@ class TestConsciousProcessorProcess:
         proc = ConsciousProcessor(enable_reliability=False)
 
         def handler(event):
-            raise RuntimeError("handler failed")
+            raise TimeoutError("handler failed: upstream request timed out")
 
         proc.register_handler("test.event", handler)
         event = _make_event("test.event")
@@ -2057,7 +2059,7 @@ class TestConsciousProcessorProcess:
         proc._sla_controller.finish_monitoring = Mock(return_value={"status": "ok"})
         proc._retry_handler = MagicMock()
         proc._retry_handler.execute_for_event = AsyncMock(
-            side_effect=RuntimeError("retry exhausted")
+            side_effect=TimeoutError("retry exhausted")
         )
 
         proc.register_handler("test.event", lambda e: {"ok": True})

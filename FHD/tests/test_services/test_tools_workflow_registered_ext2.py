@@ -600,7 +600,7 @@ class TestShipmentOrdersRouterBranches:
 
     def test_generate_batch_service_exception(self):
         svc = self._svc()
-        svc.generate_shipment_document.side_effect = RuntimeError("boom")
+        svc.generate_shipment_document.side_effect = OSError("boom")
         with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "generate_batch",
@@ -885,7 +885,7 @@ class TestMaterialsRouterBranches:
     def test_batch_delete_service_exception(self, action):
         svc = MagicMock()
         svc.get_all_materials.return_value = {"success": True, "data": [{"id": 1}]}
-        svc.batch_delete_materials.side_effect = RuntimeError("db error")
+        svc.batch_delete_materials.side_effect = ConnectionError("db error")
         with patch("app.application.get_material_application_service", return_value=svc):
             result = _registered_router_materials(action, {"ids": [1]}, {}, "admin", "")
         assert result["success"] is False

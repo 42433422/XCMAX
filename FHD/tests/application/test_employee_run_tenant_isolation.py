@@ -100,7 +100,7 @@ def test_http_run_history_is_scoped_even_for_admin(ledger, monkeypatch):
         ({"success": True, "result": {"needs_user_input": True}}, "waiting_input"),
         ({"success": True, "result": {"status": "queued"}}, "running"),
         ({"success": True, "execution_accepted": True}, "running"),
-        ({"success": True, "result": {"status": "blocked"}}, "unknown"),
+        ({"success": True, "result": {"status": "blocked"}}, "blocked"),
         (None, "unknown"),
         ({"success": True, "summary": "done", "outcome": "unknown"}, "unknown"),
         ({"success": True, "summary": "done", "requires_reconciliation": True}, "unknown"),

@@ -98,7 +98,7 @@ class TestResolveEmployeeTools:
         actor = trusted_actor(permissions=["customer.view"])
         config = {"tools": ["business_db", "customers", "nonexistent"]}
         names = ts.employee_tool_names("e", {}, config, actor.context)
-        assert names == ["business_db.read", "customers.query"]
+        assert names == ["business_db.read", "customers.export", "customers.query"]
         definition = ts.resolve_employee_tools("e", {}, config, actor.context)[0]
         branch = definition["function"]["parameters"]["anyOf"][0]
         assert branch["properties"]["params"]["properties"]["entity"]["enum"] == ["customers"]

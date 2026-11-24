@@ -197,9 +197,9 @@ def test_repeated_replay_preserves_original_lineage(replay_store):
 def test_replay_submission_failure_keeps_retryable_source_snapshot(replay_store, monkeypatch):
     store = replay_store
     monkeypatch.setattr(
-        store.service, "_submit_preview", Mock(side_effect=RuntimeError("queue closed"))
+        store.service, "_submit_preview", Mock(side_effect=ConnectionError("queue closed"))
     )
-    with pytest.raises(RuntimeError, match="queue closed"):
+    with pytest.raises(ConnectionError, match="queue closed"):
         store.service.replay(store.db, run_id="source", owner_user_id=7)
     run = store.db.query(EltRun).filter(EltRun.id != "source").one()
     assert run.status == "failed" and run.error_code == "ELT_INTERNAL_ERROR"

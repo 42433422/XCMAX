@@ -285,7 +285,7 @@ def windows_continuity_wait(monkeypatch):
 
 
 def test_windows_continuity_wait_imports_without_fcntl(windows_continuity_wait):
-    assert "fcntl" not in vars(windows_continuity_wait)
+    assert windows_continuity_wait.fcntl is None
     assert windows_continuity_wait.ContinuityRequestContext().state == {}
 
 

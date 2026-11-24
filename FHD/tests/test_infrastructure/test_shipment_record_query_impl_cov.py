@@ -142,7 +142,7 @@ class TestRecordToDict:
         record.__dict__ = {"id": 5, "name": "test", "_sa_instance_state": "skip"}
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-            side_effect=RuntimeError("inspect failed"),
+            side_effect=ValueError("inspect failed"),
         ):
             result = _record_to_dict(record)
         # Should use __dict__, skipping _sa_instance_state
@@ -158,7 +158,7 @@ class TestRecordToDict:
         # __dict__ might be empty with spec=[]
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-            side_effect=RuntimeError("inspect failed"),
+            side_effect=ValueError("inspect failed"),
         ):
             result = _record_to_dict(record)
         # Should have at least id and product_name from hardcoded keys
@@ -175,7 +175,7 @@ class TestRecordToDict:
         record = EmptyRecord()
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-            side_effect=RuntimeError("inspect failed"),
+            side_effect=ValueError("inspect failed"),
         ):
             result = _record_to_dict(record)
         assert result.get("id") == 99
@@ -185,7 +185,7 @@ class TestRecordToDict:
         record = MagicMock(spec=[])
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.sa_inspect",
-            side_effect=RuntimeError("inspect failed"),
+            side_effect=ValueError("inspect failed"),
         ):
             result = _record_to_dict(record)
         # spec=[] means no attributes; __dict__ would be empty or minimal
@@ -738,7 +738,7 @@ class TestGetShipmentRecords:
             ),
             patch(
                 "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
-                side_effect=RuntimeError("resolve error"),
+                side_effect=ConnectionError("resolve error"),
             ),
         ):
             result = query.get_shipment_records(unit_name="测试")
@@ -841,7 +841,7 @@ class TestGetShipmentRecords:
     def test_recoverable_error_returns_empty(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=RuntimeError("db error"),
+            side_effect=ConnectionError("db error"),
         ):
             result = query.get_shipment_records()
 

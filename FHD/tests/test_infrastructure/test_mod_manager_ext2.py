@@ -895,7 +895,7 @@ class TestModManagerInstallModPackage:
         mm = ModManager(mods_root=str(tmp_path))
         with patch(
             "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            side_effect=RuntimeError("unexpected"),
+            side_effect=OSError("unexpected"),
         ):
             result = mm.install_mod_package("/fake/path.xcmod")
         assert result[0] is False
@@ -946,7 +946,7 @@ class TestModManagerUninstallMod:
     def test_unload_generic_error(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         mock_registry = Mock()
-        mock_registry.get_mod_metadata.side_effect = RuntimeError("db error")
+        mock_registry.get_mod_metadata.side_effect = ConnectionError("db error")
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
         ):
@@ -1007,7 +1007,7 @@ class TestModManagerUpdateMod:
             patch("app.infrastructure.mods.mod_manager.ModPackage", return_value=mock_pkg),
             patch(
                 "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                side_effect=RuntimeError("extract failed"),
+                side_effect=OSError("extract failed"),
             ),
             patch.object(mm, "unload_mod", return_value=True),
             patch.object(mm, "load_mod", return_value=True),
@@ -1019,7 +1019,7 @@ class TestModManagerUpdateMod:
     def test_update_generic_error(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         mock_registry = Mock()
-        mock_registry.get_mod_metadata.side_effect = RuntimeError("unexpected")
+        mock_registry.get_mod_metadata.side_effect = ConnectionError("unexpected")
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
         ):

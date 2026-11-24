@@ -230,7 +230,7 @@ class TestRegisterDesktopRelayForPairing:
             patch.object(m, "_host_is_private_or_loopback", return_value=True),
             patch(
                 "app.application.facades.mobile_relay_facade.register_desktop_relay",
-                side_effect=RuntimeError("bad relay url"),
+                side_effect=RuntimeError("unexpected relay failure"),
             ),
         ):
             result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)

@@ -8,6 +8,7 @@ _attach_session_cookie, _jit_create_local_user_for_enterprise.
 from __future__ import annotations
 
 import json
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -188,7 +189,7 @@ class TestJitCreateLocalUserForEnterprise:
             _jit_create_local_user_for_enterprise,
         )
 
-        mock_get_db.side_effect = RuntimeError("DB error")
+        mock_get_db.side_effect = sqlite3.OperationalError("DB error")
         result = _jit_create_local_user_for_enterprise("newuser", "password123", "test@example.com")
         assert result is False
 

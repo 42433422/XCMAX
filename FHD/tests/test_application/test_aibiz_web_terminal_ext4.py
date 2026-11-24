@@ -648,7 +648,7 @@ class TestFetchSurfacePagePayload:
             ),
             patch(
                 "app.application.surface_audit_service.run_surface_audit_lane",
-                side_effect=RuntimeError("boom"),
+                side_effect=OSError("boom"),
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="software", index=0)
@@ -812,7 +812,7 @@ class TestResolveSurfaceAudit:
         monkeypatch.setenv("XCAGI_SURFACE_AUDIT_LOCAL", "1")
         with patch(
             "app.application.surface_audit_service.run_surface_audit_lane",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ):
             surface, note = await _resolve_surface_audit(
                 "P-S", refresh=False, authorization="", compact=True
@@ -1013,7 +1013,7 @@ class TestLocalSurfacePage:
         with patch(
             "app.application.aibiz_web_terminal_service._local_lane_pages",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ):
             result = await _local_surface_page("P-S", 0)
         assert result is None

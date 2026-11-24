@@ -1198,7 +1198,7 @@ class TestXcmaxSyncApplyInbox:
         conn.close()
 
         def bad_applier(item):
-            raise RuntimeError("applier fail")
+            raise sqlite3.IntegrityError("target row conflicts with existing data")
 
         with (
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),

@@ -6,6 +6,7 @@ Covers all route endpoints, helper functions, and error paths.
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import contextmanager as _shared_scope_contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -920,7 +921,7 @@ class TestSyncReceive:
         assert result["received"] == 2
 
     def test_receive_db_error(self, client: TestClient) -> None:
-        with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("db error")):
+        with patch("app.db.xcmax_sync.SyncDb", side_effect=sqlite3.OperationalError("db error")):
             import asyncio
 
             result = asyncio.get_event_loop().run_until_complete(

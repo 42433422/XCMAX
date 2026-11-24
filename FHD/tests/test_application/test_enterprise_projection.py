@@ -341,7 +341,7 @@ def test_observer_nested_commit_waits_for_outer_and_publish_failure_is_nonfatal(
     assert len(observer) == 1
 
     def unavailable(*args):
-        raise RuntimeError("bus offline")
+        raise ConnectionError("bus offline")
 
     monkeypatch.setattr("app.neuro_bus.application_neuro_bridge.publish_neuro_event", unavailable)
     with tenant_scope(11), sessions() as db:

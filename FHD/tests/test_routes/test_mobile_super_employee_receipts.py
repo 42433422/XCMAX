@@ -498,6 +498,7 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
             "accepted": True,
             "status": state,
             "task_status": state,
+            "reconciliation_required": False,
         }
         assert receipt["assistant_message"]["body"] == "task receipt"
     assert (

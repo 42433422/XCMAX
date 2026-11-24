@@ -2254,7 +2254,7 @@ class TestRunRebuildJobBoundary:
                     current.worker_id = "replacement-owner"
                     # A replacement owner is authoritative only after publication.
                     svc._persist_locked()
-                raise RuntimeError("late rebuild failure")
+                raise OSError("late rebuild failure")
 
             svc._renumber_chunks = fail_after_embedding
             svc._run_rebuild_job("ds1", job_id, schedule_next=False)

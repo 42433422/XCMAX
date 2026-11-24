@@ -351,7 +351,7 @@ class TestCreateShipment:
                 "amount": 50.0,
             }
         ]
-        with patch("app.infrastructure.mods.hooks.trigger", side_effect=RuntimeError("hook fail")):
+        with patch("app.infrastructure.mods.hooks.trigger", side_effect=OSError("hook fail")):
             result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is True
 

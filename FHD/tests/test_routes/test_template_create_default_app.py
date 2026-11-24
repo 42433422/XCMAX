@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 
 pytestmark = pytest.mark.release_gate
 
@@ -90,11 +92,28 @@ def template_app(tmp_path, monkeypatch):
         engine.dispose()
 
 
-def _post(client, *args, **kwargs):
-    """Provide explicit unique request identity on each release-gate test write."""
-    headers = dict(kwargs.pop("headers", {}) or {})
-    headers.setdefault("Idempotency-Key", f"template-test-{uuid4().hex}")
-    return client.post(*args, headers=headers, **kwargs)
+def approved_template_client(client, repo, session="label-session-7"):
+    from starlette.requests import Request
+
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    headers = {"X-Session-ID": session}
+    request = Request({"type": "http", "headers": [(b"x-session-id", session.encode())]})
+    principal = require_agent_principal(request, x_user_id=None)
+    actor = SimpleNamespace(
+        user_id=principal.user_id,
+        principal=principal,
+        context=authenticated_runtime_context({}, principal),
+        headers=headers,
+    )
+    return ApprovedCapabilityClient(client, repo, actor)
+
+
+@pytest.fixture
+def approved_app(template_app):
+    client, engine, repo = template_app
+    return approved_template_client(client, repo), engine, repo
 
 
 def _label_payload():
@@ -140,7 +159,7 @@ def test_default_factory_registers_template_upload_and_analyze(template_app):
 
 def test_upload_rejects_anonymous_without_ingest(template_app):
     client, _engine, _repo = template_app
-    response = _post(client, 
+    response = client.post(
         "/api/templates/upload",
         files={
             "file": (
@@ -162,7 +181,7 @@ def test_create_rejects_anonymous_or_missing_tenant_without_writes(
     headers = {"X-User-ID": "7", "X-Tenant-ID": "11"}
     if session_id:
         headers["X-Session-ID"] = session_id
-    response = _post(client, 
+    response = client.post(
         "/api/templates/create",
         headers=headers,
         json={**_label_payload(), "user_id": 7, "tenant_id": 11},
@@ -184,9 +203,9 @@ def test_delete_requires_real_login_and_tenant(template_app, method, session_id,
 
 @pytest.mark.parametrize("method", ["POST", "DELETE"])
 def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
-    template_app, monkeypatch, method
+    approved_app, monkeypatch, method
 ):
-    client, engine, repo = template_app
+    client, engine, repo = approved_app
     monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
     with engine.begin() as db:
         for tid in (11, 22, None):
@@ -230,20 +249,14 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
 
 
 def test_default_delete_refuses_builtin_without_reporting_success(
-    template_app, tmp_path, monkeypatch
+    approved_app, tmp_path, monkeypatch, local_tools
 ):
-    client, _engine, _repo = template_app
+    client, _engine, _repo = approved_app
     builtin = tmp_path / "resources/templates/standard.xlsx"
     builtin.parent.mkdir(parents=True)
     builtin.write_bytes(b"synthetic standard form")
-    monkeypatch.setattr(
-        "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
-    )
-    response = _post(client, 
-        "/api/templates/delete",
-        headers={"X-Session-ID": "label-session-7"},
-        json={"id": "fs:standard.xlsx"},
-    )
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_base_dir", lambda: str(tmp_path))
+    response = client.post("/api/templates/delete", json={"id": "fs:standard.xlsx"})
     assert response.status_code == 403, response.text
     assert response.json()["success"] is False
     assert builtin.read_bytes() == b"synthetic standard form"
@@ -252,8 +265,8 @@ def test_default_delete_refuses_builtin_without_reporting_success(
 @pytest.mark.parametrize(
     "folder, suffix", [("templates", ".xlsx"), ("document_templates", ".docx")]
 )
-def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, folder, suffix):
-    client, engine, _repo = template_app
+def test_db_delete_does_not_resurrect_as_scanned_file(approved_app, tmp_path, folder, suffix):
+    client, engine, _repo = approved_app
     own = tmp_path / "tenants/11" / folder / f"synthetic{suffix}"
     other = tmp_path / "tenants/22" / folder / own.name
     for path in (own, other):
@@ -272,7 +285,7 @@ def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, fo
     assert any(
         t["id"] == "db:1" for t in client.get("/api/templates", headers=headers).json()["templates"]
     )
-    response = _post(client, "/api/templates/delete", headers=headers, json={"id": "db:1"})
+    response = client.post("/api/templates/delete", headers=headers, json={"id": "db:1"})
     assert response.status_code == 200, response.text
     rows = client.get("/api/templates", headers=headers).json()["templates"]
     assert all(t.get("path") != str(own) for t in rows)
@@ -305,8 +318,8 @@ def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, fo
     assert own.read_bytes() == other.read_bytes() == b"synthetic retained bytes"
 
 
-def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app, tmp_path):
-    client, _engine, _repo = template_app
+def test_default_fs_delete_commits_removal_without_destroying_bytes(approved_app, tmp_path):
+    client, _engine, _repo = approved_app
     target = tmp_path / "tenants/11/templates/synthetic-private.xlsx"
     target.parent.mkdir(parents=True)
     target.write_bytes(b"synthetic retained bytes")
@@ -317,7 +330,7 @@ def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app
     # Unregistered files stay out of catalog details; explicit legacy IDs remain deletable.
     assert client.get(f"/api/templates/detail/{template_id}", headers=headers).status_code == 404
     for _repeat in range(2):
-        response = _post(client, "/api/templates/delete", headers=headers, json={"id": template_id})
+        response = client.post("/api/templates/delete", headers=headers, json={"id": template_id})
         assert response.status_code == 200, response.text
         assert response.json()["success"] is True
         assert response.json()["deleted"]["soft_deleted"] is True
@@ -327,16 +340,16 @@ def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app
     assert target.read_bytes() == b"synthetic retained bytes"
 
 
-def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app, tmp_path):
+def test_label_create_readback_uses_authenticated_owner_and_tenant(approved_app, tmp_path):
     from pypdf import PdfReader
 
     from app.application.label_job_service import LabelJobService
     from app.db.models.product import Product
 
-    client, engine, repo = template_app
+    client, engine, repo = approved_app
     body = {**_label_payload(), "user_id": 8, "userId": 8, "tenant_id": 22}
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
-    response = _post(client, "/api/templates/create", headers=headers, json=body)
+    response = client.post("/api/templates/create", headers=headers, json=body)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["success"] is True, payload
@@ -397,11 +410,12 @@ def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app,
 
 def test_write_without_stable_request_identity_is_rejected_without_mutation(template_app):
     client, engine, _repo = template_app
+    del client.headers["Idempotency-Key"]
     response = client.post(
         "/api/templates/create",
         headers={"X-Session-ID": "label-session-7"},
         json=_label_payload(),
     )
-    assert response.status_code == 202, response.text
+    assert response.status_code == 400, response.text
     assert response.json()["error_code"] == "task_identity_required"
     assert _template_count(engine) == 0

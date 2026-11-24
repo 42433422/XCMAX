@@ -958,6 +958,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.agent_orchestrator.result_verification import (
             project_verification,
             verification_blocked,
+            verified_enterprise_admission,
             verified_step_output,
         )
 
@@ -970,9 +971,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for step in run.steps
             if step.status == "completed"
         }
-        # LangGraph is the single scheduler for business plans. Its node callback
-        # delegates each side effect to StepExecution, retaining the existing
-        # permission, idempotency, billing, approval and audit boundaries.
+
+        def pause_for_enterprise_readback() -> None:
+            run.status, run.error = "blocked", "子任务已受理，尚未独立核验业务结果"
+            run.final_output["node_outputs"] = dict(node_outputs)
+
+        if any(verified_enterprise_admission(run, step) for step in run.steps):
+            pause_for_enterprise_readback()
+            self._repo.save(run)
+            return
+
+        # LangGraph schedules nodes; StepExecution retains permission, idempotency, billing, approval and audit.
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
         approved = str(approved_step_id or "").strip()
@@ -1159,6 +1168,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
         run.metadata["plan"] = plan_to_dict(plan)
         stopped_for_interaction = False
+        waiting_for_enterprise_readback = False
 
         def sync_step_plan(step: AgentStep, reason: str) -> bool:
             plan_node = next((node for node in plan.nodes if node.node_id == step.node_id), None)
@@ -1184,7 +1194,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             return True
 
         def dispatch(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
-            nonlocal stopped_for_interaction
+            nonlocal stopped_for_interaction, waiting_for_enterprise_readback
+            if waiting_for_enterprise_readback:
+                return {"success": True, "requires_confirmation": True, "retryable": False}
             state = params.get("_runtime_context")
             state = state if isinstance(state, dict) else {}
             node_id = str(state.get("_langgraph_node_id") or "")
@@ -1409,6 +1421,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                         "error_code": "result_verification_required",
                         "message": run.error,
                     }
+                if verified_enterprise_admission(run, step):
+                    admission = verified_step_output(run, step)
+                    node_outputs[step.node_id] = admission
+                    pause_for_enterprise_readback()
+                    waiting_for_enterprise_readback = True
+                    return {
+                        "success": True,
+                        "requires_confirmation": True,
+                        "retryable": False,
+                        "business_outcome": admission,
+                    }
                 decision = (
                     step.output.get("question")
                     if isinstance(step.output, dict)
@@ -1541,6 +1564,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     step.output = {**output, **step.output}
                     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
                     stopped_for_interaction = True
+        if waiting_for_enterprise_readback:
+            pause_for_enterprise_readback()
         if stopped_for_interaction or run.status in {"waiting_user", "blocked"}:
             self._repo.save(run)
             return

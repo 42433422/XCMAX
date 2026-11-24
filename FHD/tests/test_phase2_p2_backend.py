@@ -413,7 +413,7 @@ def test_find_latest_local_model_returns_none_when_missing(
 
 def test_financial_report_failure_is_reported():
     plugin = FinancialReportPlugin()
-    with patch.object(plugin, "_calculate_financial_metrics", side_effect=RuntimeError("db down")):
+    with patch.object(plugin, "_calculate_financial_metrics", side_effect=OSError("db down")):
         result = plugin.run({})
     assert result.level == "warn"
     assert result.details == {"message": "db down"}
@@ -428,6 +428,6 @@ def test_financial_report_failure_is_reported():
     ],
 )
 def test_inventory_database_failure_returns_safe_empty_result(method, expected):
-    with patch("app.db.session.get_db", side_effect=RuntimeError("db down")) as database:
+    with patch("app.db.session.get_db", side_effect=ConnectionError("db down")) as database:
         assert getattr(InventoryValuationPlugin(), method)() == expected
     database.assert_called_once_with()

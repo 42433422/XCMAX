@@ -805,7 +805,9 @@ def test_build_agent_gate_all_imports_fail_denies() -> None:
         "workspace_guard.build_employee_gate",
     ],
 )
-@pytest.mark.parametrize("error", [ImportError("unavailable"), RuntimeError("failed")])
+@pytest.mark.parametrize(
+    "error", [ImportError("unavailable"), ValueError("invalid workspace policy")]
+)
 def test_build_agent_gate_partial_failure_denies(target, error):
     with patch("app.application.employee_runtime." + target, side_effect=error):
         gate = EmployeeAgent("emp-1")._build_agent_gate({}, {}, None, {})

@@ -145,13 +145,15 @@ def _preflight_delivery_downgrade() -> None:
     if not migration.opts.get("destination_rev"):
         return
     plan = migration.opts["fn"](migration.get_current_heads(), migration)
-    if any(
-        isinstance(step, RevisionStep)
-        and not step.is_upgrade
-        and step.revision.revision == "2026_11_15_delivery_slices_merge"
+    downgrades = {
+        step.revision.revision
         for step in plan
-    ):
-        guard = ScriptDirectory.from_config(config).get_revision("2026_11_15_delivery_slices_merge")
+        if isinstance(step, RevisionStep) and not step.is_upgrade
+    }
+    for revision in ("2026_11_15_delivery_slices_merge", "2026_11_19_native_checkpoints"):
+        if revision not in downgrades:
+            continue
+        guard = ScriptDirectory.from_config(config).get_revision(revision)
         if guard is None:
             raise RuntimeError("Delivery downgrade safety revision is unavailable")
         with Operations.context(migration):

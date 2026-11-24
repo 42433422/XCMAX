@@ -17,6 +17,7 @@ Targets branches not covered by existing test_im_routes.py / test_im_routes_ext2
 
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -207,7 +208,7 @@ class TestIsAdminCustomerServiceSession:
     def test_exception_returns_false(self) -> None:
         request = MagicMock()
         db = MagicMock()
-        db.query.side_effect = RuntimeError("db error")
+        db.query.side_effect = sqlite3.OperationalError("db error")
         with patch(
             "app.infrastructure.auth.dependencies.session_id_from_request",
             return_value="sid",

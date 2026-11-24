@@ -14,6 +14,7 @@ import json
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.infrastructure.auth import oidc_provider
@@ -436,7 +437,10 @@ class TestExchangeOidcAuthorization:
             assert "protocol/openid-connect/userinfo" in get_url
 
     @pytest.mark.asyncio
-    async def test_no_access_token_raises(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("tokens", "message"), [({"access_token": ""}, "access_token"), ([], "无效响应")]
+    )
+    async def test_no_access_token_raises(self, monkeypatch, tokens, message):
         monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
         monkeypatch.setenv("XCAGI_OIDC_CLIENT_ID", "client")
         monkeypatch.setenv("XCAGI_OIDC_REDIRECT_URI", "https://app/cb")
@@ -447,7 +451,7 @@ class TestExchangeOidcAuthorization:
         }
 
         token_resp = MagicMock()
-        token_resp.json.return_value = {"access_token": ""}
+        token_resp.json.return_value = tokens
         token_resp.raise_for_status = MagicMock()
 
         mock_client = AsyncMock()
@@ -456,8 +460,9 @@ class TestExchangeOidcAuthorization:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="access_token"):
+            with pytest.raises(httpx.RemoteProtocolError, match=message):
                 await oidc_provider.exchange_oidc_authorization("code")
+        mock_client.get.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_non_dict_profile_returns_empty(self, monkeypatch):
