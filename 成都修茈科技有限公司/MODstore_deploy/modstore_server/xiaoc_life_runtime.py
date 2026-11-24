@@ -272,7 +272,14 @@ class CyclePorts:
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
-        facts.extend(self.state.get("experience_review_facts", []))
+        # Keep pending comparisons visible to reviewers, not to cognition.
+        facts.extend(
+            row
+            for row in self.state.get("experience_review_facts", [])
+            if isinstance(row, dict)
+            and isinstance(row.get("reviewed_experience"), dict)
+            and "experience_candidate" not in row
+        )
         facts.extend(reflection_facts(self.state))
         facts.extend(goal_review_facts(self.state))
         if self.domain == "reflection" and self.state["level"] >= 6:

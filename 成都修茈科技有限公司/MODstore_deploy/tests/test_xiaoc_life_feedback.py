@@ -824,6 +824,32 @@ def test_real_cognition_graph_reads_historical_review_without_new_execution_auth
     assert "decision_id" not in result["goals"][0]
 
 
+def test_real_cognition_graph_excludes_experiences_pending_human_review(ports):
+    store, calls, *_ = ports
+    store.state["owner_user_id"] = 17
+    store.state["revision"] = store.claim["policy_revision"]
+    pending = {
+        "ref": "experience:" + "a" * 64,
+        "text": "Pending review",
+        "experience_candidate": {"outcome": "success", "metric_id": "revenue_monthly"},
+    }
+    reviewed = {
+        "ref": "experience-review:" + "b" * 64,
+        "text": "Human-confirmed historical task comparison; not causal proof.",
+        "reviewed_experience": {"outcome": "failure", "metric_id": "revenue_monthly"},
+        "candidate_ref": "experience:" + "c" * 64,
+    }
+    store.state["experience_review_facts"] = [pending, reviewed]
+    result = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    refs = {row["ref"] for row in payload["observations"]}
+    assert pending["ref"] not in refs
+    assert reviewed["ref"] in refs
+    assert result["goals"][0]["status"] == "proposed"
+    assert "decision_id" not in result["goals"][0]
+
+
 def test_goal_review_evolves_with_original_receipts_without_changing_approval():
     record = _measured_review_record()
     record["halted"] = False
