@@ -82,9 +82,9 @@ def test_ci_gate_rejects_indirect_arithmetic_error_membership(tmp_path):
     )
     source = tmp_path / "errors.py"
     source.write_text(
-        "INFRA_TRANSIENT = (OSError, ArithmeticError)\\n"
-        "DATA_SHAPE = (ValueError,)\\n"
-        "RECOVERABLE_ERRORS = INFRA_TRANSIENT + DATA_SHAPE\\n"
+        "INFRA_TRANSIENT = (OSError, ArithmeticError)\n"
+        "DATA_SHAPE = (ValueError,)\n"
+        "RECOVERABLE_ERRORS = INFRA_TRANSIENT + DATA_SHAPE\n"
     )
     check = gate["check_programming_errors_excluded"]
     check.__globals__["SSOT_MODULE"] = source
