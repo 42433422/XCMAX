@@ -34,5 +34,5 @@ jobs:
           python -m pytest -q --tb=short tests/test_xiaoc_self_model.py tests/test_xiaoc_self_metrics.py tests/test_xiaoc_self_evidence.py tests/test_xiaoc_life_state.py::test_functional_identity_receipt_uses_original_sql_ledger tests/test_xiaoc_life_state.py::test_due_identity_readback_refreshes_after_policy_change_without_consumption tests/test_xiaoc_life_state.py::test_self_cost_reads_original_request_and_not_reservations tests/test_xiaoc_life_state.py::test_self_audit_mapping_keeps_all_existing_anchors_unverified tests/test_xiaoc_life_state.py::test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery
       - name: Enforce original Black/isort conventions for newly bound evidence
         run: |
-          black --check --diff modstore_server/xiaoc_self_evidence.py tests/test_xiaoc_self_evidence.py
+          black --check --diff modstore_server/xiaoc_self_evidence.py tests/test_xiaoc_self_evidence.py tests/test_xiaoc_life_state.py
           isort --check-only --diff modstore_server/xiaoc_self_evidence.py tests/test_xiaoc_self_evidence.py
