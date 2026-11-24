@@ -27,7 +27,7 @@ class Case(Contract):
     task: str = Field(min_length=1, max_length=100)
     source: Digest
     group: Digest
-    partition: Literal["development", "holdout"]
+    partition: Literal["development", "validation", "holdout"]
     condition: Literal["sufficient", "missing", "ambiguous", "outside_capability"]
     expected_action: Action
     evidence: tuple[str, ...]
@@ -231,7 +231,15 @@ def evaluate(protocol: Protocol, *, frozen_sha256: str, observations: tuple[Obse
         paired_brier_delta = float(
             brier_score_loss(y_candidate, p_candidate) - brier_score_loss(y_base, p_base)
         )
-    ready_for_review = sample_floor and coverage_complete and len(calibration_pairs) == all_pairs
+    partition_counts = {
+        partition: sum(case.partition == partition for case in protocol.cases)
+        for partition in ("development", "validation", "holdout")
+    }
+    partition_coverage = all(partition_counts.values())
+    ready_for_review = (
+        sample_floor and coverage_complete and partition_coverage
+        and len(calibration_pairs) == all_pairs
+    )
     return {
         "scope": "offline_research_not_capability_score_or_authority",
         "status": "pending_human_review" if ready_for_review else "insufficient_evidence",
@@ -241,6 +249,8 @@ def evaluate(protocol: Protocol, *, frozen_sha256: str, observations: tuple[Obse
         "independent_source_groups": groups,
         "distinct_source_digests": sources,
         "sample_floor_met": sample_floor,
+        "dataset_partition_counts": partition_counts,
+        "dataset_partitions_present": partition_coverage,
         "condition_group_counts": condition_groups,
         "condition_coverage_met": coverage_complete,
         "matched_calibration_pairs": len(calibration_pairs),

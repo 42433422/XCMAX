@@ -69,14 +69,36 @@ def test_unknown_result_is_not_a_failure_or_success():
 
 
 @pytest.mark.parametrize("field", ["source", "group", "evidence"])
-def test_development_holdout_overlap_rejected(field):
+@pytest.mark.parametrize("left,right", [
+    ("development", "holdout"), ("validation", "holdout"),
+    ("development", "validation"),
+])
+def test_partition_overlap_rejected(field, left, right):
+    protocol, observations, receipts = fixture()
+    case = protocol.cases[0].model_copy(update={"partition": left})
+    other = case.model_copy(update={
+        "task": "other", "partition": right, "source": digest("other"),
+        "group": digest("other-group"), "evidence": (digest("other-ref"),),
+        field: getattr(case, field),
+    })
+    with pytest.raises(ValueError, match="partition_leakage"):
+        run(protocol.model_copy(update={"cases": (case, other)}), observations, receipts)
+
+
+@pytest.mark.parametrize("partition", ["development", "validation"])
+def test_nonholdout_observation_rejected(partition):
     protocol, observations, receipts = fixture()
     case = protocol.cases[0]
-    dev = case.model_copy(update={"task": "dev", "partition": "development", "source": digest("dev"),
-                                  "group": digest("dev-group"), "evidence": (digest("dev-ref"),),
-                                  field: getattr(case, field)})
-    with pytest.raises(ValueError, match="partition_leakage"):
-        run(protocol.model_copy(update={"cases": (case, dev)}), observations, receipts)
+    other = case.model_copy(update={
+        "task": "other", "partition": partition, "source": digest("other"),
+        "group": digest("other-group"), "evidence": (digest("other-ref"),),
+    })
+    protocol = protocol.model_copy(update={"cases": (case, other)})
+    frozen = fingerprint(protocol)
+    obs = observations[0].model_copy(update={"protocol_sha256": frozen, "task": "other"})
+    receipt = receipts[0].model_copy(update={"observation_sha256": fingerprint(obs)})
+    with pytest.raises(ValueError, match="unexpected_or_duplicate_trial"):
+        run(protocol, (obs,), (receipt,))
 
 
 @pytest.mark.parametrize("change,match", [
@@ -143,6 +165,8 @@ def test_missing_confidence_is_excluded_from_paired_comparison():
     ("one_condition", True, False, "insufficient_evidence"),
     ("one_source", False, True, "insufficient_evidence"),
     ("missing_confidence", True, True, "insufficient_evidence"),
+    ("no_development", True, True, "insufficient_evidence"),
+    ("no_validation", True, True, "insufficient_evidence"),
 ])
 def test_sample_and_condition_coverage(mode, expected_floor, expected_coverage, expected_status):
     protocol, _, _ = fixture()
@@ -153,7 +177,14 @@ def test_sample_and_condition_coverage(mode, expected_floor, expected_coverage, 
                        condition=conditions[0 if mode == "one_condition" else i % 4],
                        expected_action=actions[0 if mode == "one_condition" else i % 4],
                        evidence=(digest(f"evidence-{i}"),)) for i in range(100))
-    protocol = protocol.model_copy(update={"cases": cases})
+    nonholdout = tuple(
+        Case(task=partition, source=digest(f"{partition}-source"),
+             group=digest(f"{partition}-group"), partition=partition,
+             condition="sufficient", expected_action="direct",
+             evidence=(digest(f"{partition}-evidence"),))
+        for partition in ("development", "validation") if mode != f"no_{partition}"
+    )
+    protocol = protocol.model_copy(update={"cases": cases + nonholdout})
     frozen = fingerprint(protocol)
     observations = tuple(Observation(protocol_sha256=frozen, task=case.task, arm=arm, seed=seed,
                                      strategy_revision=protocol.baseline_revision if arm == "baseline" else protocol.candidate_revision,
@@ -168,6 +199,12 @@ def test_sample_and_condition_coverage(mode, expected_floor, expected_coverage, 
     report = run(protocol, observations, receipts)
     assert report["sample_floor_met"] is expected_floor
     assert report["condition_coverage_met"] is expected_coverage
+    assert report["dataset_partitions_present"] is (mode not in ("no_development", "no_validation"))
+    assert report["dataset_partition_counts"] == {
+        "development": int(mode != "no_development"),
+        "validation": int(mode != "no_validation"),
+        "holdout": 100,
+    }
     assert report["status"] == expected_status
     assert report["review_required"] is True
     assert report["paired_outcomes"] == {"same": 300}
