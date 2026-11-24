@@ -1603,7 +1603,9 @@ class TestExecuteExcelImportRecords:
         assert result["requires_reconciliation"] is True
         assert result["safe_to_retry"] is False
 
-    @pytest.mark.parametrize("entrypoint", ["import_records", "execute_import"])
+    @pytest.mark.parametrize(
+        "entrypoint", ["import_records", "execute_import"], ids=["registered", "execute_import"]
+    )
     @pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
     def test_committed_customer_with_failed_receipt_requires_reconciliation(
         self, tmp_path, entrypoint, error_type
