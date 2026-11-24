@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install independent fixture-only test dependencies
-        run: python -m pip install pytest==9.0.2
+        run: python -m pip install pytest==9.0.2 pytest-asyncio==1.4.0
       - name: Verify 18-domain 108-anchor catalog and generated view
         run: python scripts/dev/audit_benchmark_ssot.py check
       - name: Exercise non-self-certifying verdict and trend guards
