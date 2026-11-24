@@ -240,6 +240,18 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        data["self_fixture_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_fixture_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
