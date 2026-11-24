@@ -2,6 +2,9 @@ import os
 import sys
 from logging.config import fileConfig
 
+from alembic.operations import Operations
+from alembic.runtime.migration import RevisionStep
+from alembic.script import ScriptDirectory
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
@@ -132,7 +135,27 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            _preflight_delivery_downgrade()
             context.run_migrations()
+
+
+def _preflight_delivery_downgrade() -> None:
+    """Run the existing loss guard before any newer branch can move its stamp."""
+    migration = context.get_context()
+    if not migration.opts.get("destination_rev"):
+        return
+    plan = migration.opts["fn"](migration.get_current_heads(), migration)
+    if any(
+        isinstance(step, RevisionStep)
+        and not step.is_upgrade
+        and step.revision.revision == "2026_11_15_delivery_slices_merge"
+        for step in plan
+    ):
+        guard = ScriptDirectory.from_config(config).get_revision("2026_11_15_delivery_slices_merge")
+        if guard is None:
+            raise RuntimeError("Delivery downgrade safety revision is unavailable")
+        with Operations.context(migration):
+            guard.module.downgrade()
 
 
 if context.is_offline_mode():

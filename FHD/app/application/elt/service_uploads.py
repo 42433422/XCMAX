@@ -25,7 +25,6 @@ from app.application.elt.service_support import (
 from app.application.elt.upload_content_gate import check_declared_mime, check_stored_content
 from app.db.models.elt import EltUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
@@ -95,6 +94,7 @@ class UploadServiceMixin:
         digest = hashlib.sha256()
         total = 0
         created = False
+        written = False
         try:
             with destination.open("xb") as handle:
                 created = True
@@ -108,10 +108,10 @@ class UploadServiceMixin:
                         )
                     digest.update(chunk)
                     handle.write(chunk)
-        except RECOVERABLE_ERRORS:
-            if created:
+            written = True
+        finally:
+            if created and not written:
                 destination.unlink(missing_ok=True)
-            raise
         if total == 0:
             destination.unlink(missing_ok=True)
             raise EltError("ELT_FILE_EMPTY", "上传文件为空")

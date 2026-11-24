@@ -60,7 +60,7 @@ def receipt_secret():
     return secret
 
 
-def proof(payload):
+def proof(payload) -> str:
     return hmac.new(
         receipt_secret().encode(), encoded(payload).encode(), hashlib.sha256
     ).hexdigest()
@@ -79,10 +79,17 @@ def receipt_payload(db, key):
     ):
         raise ValueError("original catalog receipt unavailable")
     envelope = json.loads(record.runtime_context)
+    if (
+        not isinstance(envelope, dict)
+        or not isinstance(envelope.get("payload"), dict)
+        or not isinstance(envelope.get("proof"), str)
+        or not envelope["proof"].isascii()
+    ):
+        raise ValueError("original catalog receipt unavailable")
     payload = envelope["payload"]
     if not hmac.compare_digest(envelope["proof"], proof(payload)):
         raise ValueError("original catalog receipt proof differs")
-    if payload["binding"] != db.info.get("elt_owned_source"):
+    if "binding" not in payload or payload["binding"] != db.info.get("elt_owned_source"):
         raise ValueError("original catalog receipt source differs")
     return payload
 

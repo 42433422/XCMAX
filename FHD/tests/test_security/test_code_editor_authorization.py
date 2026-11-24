@@ -414,6 +414,7 @@ def test_installed_http_stack_preserves_code_bytes_and_sql_scope(editor_http, mo
     )
     (root / "note.txt").write_text(original, encoding="utf-8")
     monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
+    monkeypatch.setenv("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "0")
     monkeypatch.setattr(factory, "_app_singleton", None)
     app = factory.create_fastapi_app(TestingConfig, enable_cors=False, enable_docs=False)
     with TestClient(app) as client:

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local' } }))
+const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local', fromRuntime: false } }))
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { speakText, stopSpeaking } from '@/utils/tts'
 import { useChatMessageUi } from './useChatMessageUi'
@@ -42,12 +42,15 @@ vi.mock('@/constants/industryPresets', () => ({
   isIndustryWelcomePlainText: (text: string) => text.startsWith('你好，我是业务助手。'),
 }))
 
-vi.mock('@/utils/chatStorageKeys', () => ({
-  resolveChatIdentity: (modId = '') => `identity:${modId}`,
-  resolveChatStorageScope: () => chatStorageScope.value,
-  buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
-  buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
-}))
+vi.mock('@/utils/chatStorageKeys', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/utils/chatStorageKeys')>()
+  return {
+    resolveChatIdentity: (modId = '') => `identity:${modId}`,
+    resolveChatStorageScope: () => chatStorageScope.fromRuntime ? actual.resolveChatStorageScope() : chatStorageScope.value,
+    buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
+    buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
+  }
+})
 
 vi.mock('@/utils/tts', () => ({
   speakText: vi.fn().mockResolvedValue(undefined),
@@ -834,6 +837,51 @@ describe('required initial conversation readiness', () => {
     await expect(chat.syncFromServer({ required: true })).resolves.toBe(true)
     expect(chat.messages.value.some(row => row.content.includes('locally retained draft'))).toBe(true)
   })
+
+  it.each(['required-empty', 'required-nonempty', 'earlier'] as const)(
+    'keeps an in-flight %s read across same-owner profile hydration', async page => {
+      const api = (await import('@/api/chat')).default
+      const { setRuntimeTenantStorageScopeInput } = await import('@/utils/tenantStorageScopeRuntime')
+      const { resolveChatStorageScope } = await import('@/utils/chatStorageKeys')
+      const { productReadAccountEpoch } = await import('@/utils/productReadAccountScope')
+      const { captureAuthSession } = await import('@/utils/authSessionCache')
+      const owner = { localUserId: 41, accountKind: 'personal' }
+      const scope = effectScope()
+      chatStorageScope.fromRuntime = true
+      setRuntimeTenantStorageScopeInput(owner)
+      try {
+        const chat = scope.run(() => useChatMessages(ref('hydrated-session')))!
+        if (page === 'earlier') chat.loadMessages([
+          { role: 'ai', content: 'latest reply', time: '', persistence: { id: 'server:4', status: 'saved' } },
+        ], { revision: 0, has_more: true, next_before_id: 4 })
+        const before = JSON.stringify(chat.messages.value)
+        const identity = [activeModIdRef.value, productReadAccountEpoch.value, resolveChatStorageScope()]
+        const authenticated = captureAuthSession()
+        let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+        vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+        const pending = (page === 'earlier' ? chat.loadEarlierMessages() : chat.syncFromServer({ required: true }))
+          .then(value => ({ ok: true, value }), error => ({ ok: false, error }))
+        // /auth/me hydration publishes a fresh identity object for the same owner.
+        setRuntimeTenantStorageScopeInput({ ...owner })
+        expect([activeModIdRef.value, productReadAccountEpoch.value, resolveChatStorageScope()]).toEqual(identity)
+        expect(authenticated()).toBe(true)
+        expect(JSON.stringify(chat.messages.value)).toBe(before)
+        const loading = chat.earlierMessagesLoading.value
+        finish({ success: true, id: 'hydrated-session', revision: 0, has_more: false,
+          messages: page === 'required-empty' ? [] : [{ id: 1, role: 'ai', content: 'hydrated server reply' }],
+        } as never)
+        expect(await pending).toEqual({ ok: true, value: page === 'earlier' ? undefined : true })
+        expect(loading).toBe(page === 'earlier')
+        if (page === 'required-empty') expect(JSON.stringify(chat.messages.value)).toBe(before)
+        else expect(chat.messages.value.map(row => row.content)).toEqual(page === 'earlier'
+          ? ['hydrated server reply', 'latest reply'] : ['hydrated server reply'])
+      } finally {
+        scope.stop()
+        chatStorageScope.fromRuntime = false
+        setRuntimeTenantStorageScopeInput(null)
+      }
+    },
+  )
 
   it.each([
     { success: false, messages: [] },

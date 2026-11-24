@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import stat
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +14,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-@lru_cache(maxsize=512)
-def _archive_digest(path: str, identity: tuple[int, ...]) -> str:
-    return sha256_file(Path(path))
 
 
 def archive_path(filename: Any, expected_sha256: Any, roots: tuple[Path, ...]) -> Path | None:
@@ -42,7 +36,7 @@ def archive_path(filename: Any, expected_sha256: Any, roots: tuple[Path, ...]) -
                 before.st_mtime_ns,
                 before.st_ctime_ns,
             )
-            if _archive_digest(str(path), identity) != digest:
+            if sha256_file(path) != digest:
                 continue
             after = path.lstat()
             if identity == (

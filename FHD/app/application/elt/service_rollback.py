@@ -17,7 +17,7 @@ from app.application.elt.operation_owner import (
 )
 from app.application.elt.service_support import dump_json, load_json, safe_error, utcnow
 from app.db.models.elt import EltRunRow
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class RollbackServiceMixin:
             db.commit()
             self._record_rollback_metric(run.target_type, "success")
             return cast("dict[str, Any]", self.run_dict(run, file_name=upload.file_name))
-        except RECOVERABLE_ERRORS as exc:
+        except BOUNDARY_ERRORS as exc:  # Persist failed rollback; never replay unknown effects.
             code, message = safe_error(exc)
             if fail_operation(
                 db, operation, code=code, message=message, outcome_unknown=external_started

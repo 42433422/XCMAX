@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 from ..artifact_constants import ARTIFACT_BUNDLE, normalize_artifact
 from ..manifest import ModMetadata
@@ -178,7 +178,7 @@ class ModLifecycle:
         if instance and hasattr(instance, "cleanup"):
             try:
                 instance.cleanup()
-            except RECOVERABLE_ERRORS as e:
+            except BOUNDARY_ERRORS as e:
                 self._ports.logger.error("Error cleaning up mod %s: %s", mod_id, e)
         registry.unregister_mod(mod_id)
         if mod_id in self._state._loaded_mods:
@@ -187,7 +187,7 @@ class ModLifecycle:
             from app.infrastructure.mods.comms import get_mod_comms
 
             get_mod_comms().unregister_all(mod_id)
-        except RECOVERABLE_ERRORS as e:
+        except BOUNDARY_ERRORS as e:
             self._ports.logger.warning("Mod comms cleanup failed for %s: %s", mod_id, e)
         self._ports.logger.info("Mod unloaded: %s", mod_id)
         return True
