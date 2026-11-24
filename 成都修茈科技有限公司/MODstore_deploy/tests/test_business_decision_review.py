@@ -54,7 +54,10 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
     snapshot = {
         "opportunity_id": "op-1",
         "hypothesis": target,
-        "evidence": {"value": 0.8, "evidence_sha256": digest("source")},
+        "evidence": {
+            "value": 0.8, "evidence_sha256": digest("source"),
+            "source": "slo-report", "observed_at": end.isoformat(),
+        },
         "verdict": "miss",
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
@@ -63,8 +66,14 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
     snapshot["snapshot_sha256"] = digest(snapshot)
     task = {
         "status": "completed",
-        "calls": {"a": {"status": "settled"}},
+        "calls": {"a": {
+            "status": "settled", "accrued_cost_cents": 15,
+            "cost_basis": "approved_tariff_accrual",
+        }},
         "started_at": start.isoformat(),
+        "completed_at": end.isoformat(),
+        "result_sha256": digest("worker-receipt"),
+        "cost_basis": "approved_tariff_accrual",
         "accrued_cost_cents": 15,
     }
     state = {"tasks": {"op-1": task}, "hypothesis_outcomes": {"op-1": snapshot}}
@@ -73,6 +82,24 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
     task["calls"]["a"]["status"] = "unknown"
     assert review.closed_sample(item, state, end) is None
     task["calls"]["a"]["status"] = "settled"
+    task["accrued_cost_cents"] = 16
+    assert review.closed_sample(item, state, end) is None
+    task["accrued_cost_cents"] = 15
+    task["completed_at"] = (end + timedelta(days=1)).isoformat()
+    assert review.closed_sample(item, state, end) is None
+    task["completed_at"] = end.isoformat()
+    for changes in (
+        {"source": ""},
+        {"observed_at": (end + timedelta(days=1)).isoformat()},
+        {"observed_at": None},
+    ):
+        invalid = {**snapshot, "evidence": {**snapshot["evidence"], **changes}}
+        invalid["snapshot_sha256"] = digest({
+            k: v for k, v in invalid.items() if k != "snapshot_sha256"
+        })
+        assert review.closed_sample(
+            item, {**state, "hypothesis_outcomes": {"op-1": invalid}}, end
+        ) is None
     snapshot["evidence"]["value"] = 0.99
     assert review.closed_sample(item, state, end) is None
 
@@ -151,3 +178,31 @@ def test_high_risk_cannot_become_executable_and_no_action_remains(database, monk
     assert response["decision"] is None
     assert response["decision_review"]["selected_for_approval"] == "no_action"
     assert not response["decision_review"]["options"][1]["feasible"]
+
+
+def test_money_and_acceptance_require_original_metric_source():
+    from modstore_server.strategy_bets import BetHypothesis
+
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    end = start + timedelta(days=1)
+    common = dict(
+        hypothesis="check outcome", threshold=0.5, direction="max",
+        window_days=1, kill_criteria=["miss"],
+    )
+    money = BetHypothesis(metric_id="revenue_monthly", **common)
+    evidence = {
+        "value": 200.0, "source": "python_payment_orders",
+        "basis": "attributed_verified_payments_in_approved_window",
+    }
+    assert review._measured_source(money, evidence, start, end)
+    assert not review._measured_source(money, {**evidence, "source": "model"}, start, end)
+    assert not review._measured_source(money, {**evidence, "value": -1}, start, end)
+    acceptance = BetHypothesis(metric_id="customer_acceptance_ratio", **common)
+    evidence = {
+        "value": 0.5, "source": "CustomerValueReceipt:verified_outcome_and_customer_acceptance",
+        "basis": "approved_goals_with_completed_artifact_and_customer_acceptance",
+        "accepted_goals": 1, "target_goals": 2,
+    }
+    assert review._measured_source(acceptance, evidence, start, end)
+    assert not review._measured_source(acceptance, {**evidence, "value": 0.9}, start, end)
+    assert not review._measured_source(acceptance, {**evidence, "target_goals": 0}, start, end)
