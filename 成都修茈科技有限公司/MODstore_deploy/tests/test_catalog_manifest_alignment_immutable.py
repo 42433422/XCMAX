@@ -47,19 +47,20 @@ def test_aligned_employee_manifest_is_read_only_and_accepted(tmp_path):
     with zipfile.ZipFile(archive_path, "w") as archive:
         archive.writestr("manifest.json", json.dumps(manifest))
     original = archive_path.read_bytes()
-    assert package_manifest_alignment_errors(
-        {"id": "employee", "version": "1.0.0", "artifact": "employee_pack"},
-        archive_path,
-    ) == []
+    assert (
+        package_manifest_alignment_errors(
+            {"id": "employee", "version": "1.0.0", "artifact": "employee_pack"},
+            archive_path,
+        )
+        == []
+    )
     assert archive_path.read_bytes() == original
 
 
 def test_wrong_package_identity_fails_closed_without_mutation(tmp_path):
     archive_path = tmp_path / "employee.xcemp"
     with zipfile.ZipFile(archive_path, "w") as archive:
-        archive.writestr(
-            "manifest.json", json.dumps({"id": "other", "version": "1.0.0"})
-        )
+        archive.writestr("manifest.json", json.dumps({"id": "other", "version": "1.0.0"}))
     original = archive_path.read_bytes()
     assert package_manifest_alignment_errors(
         {"id": "expected", "version": "1.0.0", "artifact": "employee_pack"},
