@@ -334,7 +334,7 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
 
 
 @pytest.fixture
-def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
+def recovered_bound_receipts(bridge_setup, local_tools, monkeypatch, tmp_path):
     """Original host rejection and independently read-back write, both actually approved."""
     from app.application.agent_orchestrator.approval_consumption_repository import (
         SQLAlchemyApprovalConsumptionRepository,
