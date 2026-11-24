@@ -1203,9 +1203,7 @@ def test_postgres_backend_disconnect_preserves_original_lease(monkeypatch):
             pid = session.scalar(text("SELECT pg_backend_pid()"))
             assert type(pid) is int
             with admin.begin() as ctl:
-                assert ctl.scalar(
-                    text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}
-                ) is True
+                assert ctl.scalar(text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}) is True
             with pytest.raises(DBAPIError):
                 session.execute(text("SELECT 1"))
             session.rollback()
