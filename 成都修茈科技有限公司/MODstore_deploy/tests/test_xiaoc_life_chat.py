@@ -256,7 +256,11 @@ async def test_router_manual_scope_disables_unchecked_retries(
             if kwargs.get("stream"):
 
                 async def chunks():
-                    yield SimpleNamespace(choices=[], usage={})
+                    yield SimpleNamespace(
+                        choices=[],
+                        usage={},
+                        model_dump=lambda **kwargs: {"choices": [], "usage": {}},
+                    )
 
                 return chunks()
             return SimpleNamespace(

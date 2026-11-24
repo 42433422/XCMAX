@@ -588,7 +588,7 @@ class LangGraphExecutionMixin:
         if self._callback is not None:
             try:
                 self._callback(event)
-            except RECOVERABLE_ERRORS:
+            except BOUNDARY_ERRORS:
                 logger.exception("state callback failed node=%s", result.node_id)
         if self._publisher is not None:
             try:

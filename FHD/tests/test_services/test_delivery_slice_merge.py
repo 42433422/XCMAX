@@ -55,6 +55,24 @@ def _assert_current_head(engine, config):
         ).scalar_one() == _current_head(config)
 
 
+@pytest.mark.parametrize("target", ["base", "2026_11_15_stock_posting_key"])
+def test_metadata_stamp_does_not_run_schema_downgrade(_db_url, target):
+    engine, config, _original = _from_history(_db_url, _PRIORS[0])
+    try:
+        before = _rows(engine)
+        command.stamp(config, target)
+        with engine.connect() as connection:
+            revisions = (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version")
+                .scalars()
+                .all()
+            )
+        assert revisions == ([] if target == "base" else [target])
+        assert _rows(engine) == before
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("prior", _PRIORS)
 @pytest.mark.parametrize("target", ["2026_11_11_agent_permissions", "2026_11_15_stock_posting_key"])
 def test_combined_downgrade_guards_legal_splits_before_either_branch(_db_url, prior, target):

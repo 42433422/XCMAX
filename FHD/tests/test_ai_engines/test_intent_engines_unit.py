@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from app.ai_engines.deepseek.intent_service import (
@@ -131,7 +132,7 @@ class TestDeepseekIntentClassifier:
             mock_cache.get.return_value = None
             with patch(
                 "app.infrastructure.llm.invoke.chat_completion_openai_format",
-                side_effect=RuntimeError("api down"),
+                side_effect=httpx.ConnectError("api down"),
             ):
                 out = await clf.recognize("开单")
         assert out["intent"] == "unk"

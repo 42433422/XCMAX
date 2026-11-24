@@ -951,8 +951,13 @@ class TestBusinessDbRouter:
 
 
 class TestDatasetRagRouter:
+    @pytest.fixture(autouse=True)
+    def authenticated_dataset_owner(self, trusted_actor):
+        actor = trusted_actor(permissions=["dataset.read", "dataset.write"])
+        self.context = actor.context
+
     def test_missing_dataset_id(self):
-        result = _registered_router_dataset_rag("ingest_document", {}, {}, "admin", "")
+        result = _registered_router_dataset_rag("ingest_document", {}, self.context, "admin", "")
         assert result["success"] is False
         assert "dataset_id" in result["message"]
 
@@ -965,7 +970,7 @@ class TestDatasetRagRouter:
                 "deleted_memories": 2,
             }
             result = _registered_router_dataset_rag(
-                "clear_dataset", {"dataset_id": "persy-knowledge"}, {}, "admin", ""
+                "clear_dataset", {"dataset_id": "persy-knowledge"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["deleted_memories"] == 2
@@ -979,7 +984,7 @@ class TestDatasetRagRouter:
                 "deleted_documents": 3,
             }
             result = _registered_router_dataset_rag(
-                "clear_dataset", {"dataset_id": "docs"}, {}, "admin", ""
+                "clear_dataset", {"dataset_id": "docs"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["deleted_documents"] == 3
@@ -990,13 +995,15 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.ingest_document.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "ingest_document", {"dataset_id": "ds1", "text": "hello"}, {}, "admin", ""
+                "ingest_document", {"dataset_id": "ds1", "text": "hello"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["dataset_id"] == "ds1"
 
     def test_query_missing_query(self):
-        result = _registered_router_dataset_rag("query", {"dataset_id": "ds1"}, {}, "admin", "")
+        result = _registered_router_dataset_rag(
+            "query", {"dataset_id": "ds1"}, self.context, "admin", ""
+        )
         assert result["success"] is False
 
     def test_query_with_answer(self):
@@ -1005,7 +1012,7 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.answer.return_value = {"success": True, "answer": "A"}
             result = _registered_router_dataset_rag(
-                "query", {"dataset_id": "ds1", "query": "what?"}, {}, "admin", ""
+                "query", {"dataset_id": "ds1", "query": "what?"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
@@ -1017,7 +1024,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "query",
                 {"dataset_id": "ds1", "query": "what?", "include_answer": "false"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1025,14 +1032,14 @@ class TestDatasetRagRouter:
 
     def test_diff_versions_missing_source(self):
         result = _registered_router_dataset_rag(
-            "diff_versions", {"dataset_id": "ds1"}, {}, "admin", ""
+            "diff_versions", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
         assert "source" in result["message"]
 
     def test_diff_versions_missing_from_version(self):
         result = _registered_router_dataset_rag(
-            "diff_versions", {"dataset_id": "ds1", "source": "doc1"}, {}, "admin", ""
+            "diff_versions", {"dataset_id": "ds1", "source": "doc1"}, self.context, "admin", ""
         )
         assert result["success"] is False
         assert "from_version" in result["message"]
@@ -1045,7 +1052,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "diff_versions",
                 {"dataset_id": "ds1", "source": "doc1", "from_version": "v1"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1053,7 +1060,7 @@ class TestDatasetRagRouter:
 
     def test_rollback_version_missing_source(self):
         result = _registered_router_dataset_rag(
-            "rollback_version", {"dataset_id": "ds1"}, {}, "admin", ""
+            "rollback_version", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1061,7 +1068,7 @@ class TestDatasetRagRouter:
         result = _registered_router_dataset_rag(
             "rollback_version",
             {"dataset_id": "ds1", "source": "doc1"},
-            {},
+            self.context,
             "admin",
             "",
         )
@@ -1075,7 +1082,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "rollback_version",
                 {"dataset_id": "ds1", "source": "doc1", "target_version": "v2"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1087,13 +1094,13 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.start_rebuild_index.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "rebuild_index", {"dataset_id": "ds1"}, {}, "admin", ""
+                "rebuild_index", {"dataset_id": "ds1"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
     def test_cancel_rebuild_missing_job_id(self):
         result = _registered_router_dataset_rag(
-            "cancel_rebuild", {"dataset_id": "ds1"}, {}, "admin", ""
+            "cancel_rebuild", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1103,13 +1110,13 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.cancel_rebuild_job.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "cancel_rebuild", {"dataset_id": "ds1", "job_id": "job1"}, {}, "admin", ""
+                "cancel_rebuild", {"dataset_id": "ds1", "job_id": "job1"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
     def test_delete_document_missing_id(self):
         result = _registered_router_dataset_rag(
-            "delete_document", {"dataset_id": "ds1"}, {}, "admin", ""
+            "delete_document", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1121,14 +1128,16 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "delete_document",
                 {"dataset_id": "ds1", "document_id": "doc1"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
         assert result["success"] is True
 
     def test_unknown_action(self):
-        result = _registered_router_dataset_rag("fly", {"dataset_id": "ds1"}, {}, "admin", "")
+        result = _registered_router_dataset_rag(
+            "fly", {"dataset_id": "ds1"}, self.context, "admin", ""
+        )
         assert result["success"] is False
 
     def test_access_context_with_explicit_context(self):
@@ -1143,7 +1152,7 @@ class TestDatasetRagRouter:
                     "text": "hello",
                     "access_context": {"tenant_id": "t1", "actor_id": "a1"},
                 },
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1157,7 +1166,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "ingest_document",
                 {"dataset_id": "ds1", "text": "hello", "dataset_admin": "true"},
-                {},
+                self.context,
                 "admin",
                 "",
             )

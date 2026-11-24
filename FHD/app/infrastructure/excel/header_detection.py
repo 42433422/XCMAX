@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 try:  # openpyxl 对损坏文件抛 InvalidFileException，不属于 OSError 族。
     from openpyxl.utils.exceptions import InvalidFileException
 
-    _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (InvalidFileException,)
+    # Missing workbook ZIP members are reported by openpyxl as KeyError.
+    _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (InvalidFileException, KeyError)
 except ImportError:
     _OPENPYXL_ERRORS = ()
 

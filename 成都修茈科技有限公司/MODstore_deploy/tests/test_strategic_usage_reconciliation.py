@@ -236,6 +236,72 @@ def persist(engine, events):
             )
 
 
+@pytest.mark.parametrize("matching_count", [2, 4])
+def test_accounting_query_keeps_json_dialect_and_original_request_limit(
+    tmp_path, monkeypatch, matching_count
+):
+    from sqlalchemy import event
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    url = f"sqlite:///{tmp_path / 'query.db'}"
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                'CREATE TABLE "LiteLLM_AccountingEvent" '
+                "(event_id TEXT PRIMARY KEY, kind TEXT, schema_version INTEGER, payload TEXT)"
+            )
+        )
+    request_id = "original-accounting-request"
+    rows = [
+        ("unrelated", "outbound_usage", "other-request"),
+        ("other-kind", "cost", request_id),
+        *(
+            (f"original-{index}", "outbound_usage" if index else "inbound_usage", request_id)
+            for index in range(matching_count)
+        ),
+    ]
+    persist(
+        engine,
+        [
+            {
+                "event_id": identity,
+                "kind": kind,
+                "schema_version": 1,
+                "payload": {"event": {"request_id": original}},
+            }
+            for identity, kind, original in rows
+        ],
+    )
+    statements = []
+    event.listen(
+        engine,
+        "before_execute",
+        lambda _conn, statement, _many, _params, _options: statements.append(statement),
+    )
+    monkeypatch.setattr(source, "ledger_source", lambda: (url, "query-source"))
+    monkeypatch.setattr(source, "_accounting_engine", lambda _: engine)
+    found = source._events({"request_id": request_id, "ledger_source_sha256": "query-source"})
+    assert len(found) == min(matching_count, 3)
+    assert {row["event_id"] for row in found} <= {
+        f"original-{index}" for index in range(matching_count)
+    }
+    assert all(row["kind"] in {"inbound_usage", "outbound_usage"} for row in found)
+    assert len(statements) == 1
+    # The same executed query must retain JSON1 support on older SQLite,
+    # while the production PostgreSQL source extracts a parameterized text ID.
+    sqlite_query = statements[0].compile(dialect=sqlite.dialect())
+    assert "->" not in str(sqlite_query)
+    pg_query = statements[0].compile(
+        dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True}
+    )
+    assert "->>" in str(pg_query) and "JSON_EXTRACT" not in str(pg_query)
+    assert request_id not in str(pg_query)
+    assert {"event", "request_id", request_id, "inbound_usage", "outbound_usage", 3} <= set(
+        pg_query.params.values()
+    )
+
+
 def test_lost_ack_settles_original_usage_and_original_execution_without_replay(
     database, gateway, monkeypatch
 ):

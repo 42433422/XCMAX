@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar, cast
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.utils.performance.combined_optimization import (
     combined_optimization as _compose_optimization,
 )
@@ -210,7 +210,7 @@ def monitored(name: str | None = None, slow_threshold_ms: float = 1000.0):
 
                 return result
 
-            except RECOVERABLE_ERRORS as e:
+            except BOUNDARY_ERRORS as e:
                 duration_ms = (time.perf_counter() - start_time) * 1000
                 monitor.record_metric(metric_name, duration_ms, success=False, error=str(e)[:200])
                 raise

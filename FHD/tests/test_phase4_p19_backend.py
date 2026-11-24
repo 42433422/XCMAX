@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.customer_app_service import CustomerApplicationService
 from app.db.models.purchase_unit import PurchaseUnit
@@ -78,7 +80,7 @@ def test_get_all_with_keyword(svc) -> None:
 
 def test_get_all_error(svc) -> None:
     s = MagicMock()
-    s.query.side_effect = RuntimeError("db down")
+    s.query.side_effect = OperationalError(None, None, sqlite3.OperationalError("db down"))
     with _bind(svc, s):
         out = svc.get_all()
     assert out["success"] is False
@@ -198,7 +200,7 @@ def test_check_shipment_associations(svc) -> None:
 
 def test_check_shipment_associations_error(svc) -> None:
     db = MagicMock()
-    db.query.side_effect = RuntimeError("oops")
+    db.query.side_effect = OperationalError(None, None, sqlite3.OperationalError("oops"))
     with patch("app.db.session.get_db", lambda: _fake_db(db)):
         out = svc._check_shipment_associations("七彩")
     assert out["has_associations"] is None

@@ -7,10 +7,12 @@ engine/SessionLocal properties.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.customer_app_service import (
     CustomerApplicationService,
@@ -22,6 +24,10 @@ from app.application.customer_app_service import (
 # ---------------------------------------------------------------------------
 # CustomerApplicationService — properties
 # ---------------------------------------------------------------------------
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
 
 
 class TestCustomerAppServiceProperties:
@@ -46,7 +52,7 @@ class TestCustomerAppServiceProperties:
 class TestGetAllErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.get_all()
         assert result["success"] is False
         assert result["message"] == "获取客户列表失败"
@@ -62,7 +68,7 @@ class TestGetAllErrorPath:
 class TestGetByIdErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.get_by_id(1)
         assert result["success"] is False
         assert result["message"] == "获取客户失败"
@@ -77,7 +83,7 @@ class TestGetByIdErrorPath:
 class TestCreateErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.create({"customer_name": "test"})
         assert result["success"] is False
         assert result["message"] == "创建客户失败"
@@ -91,7 +97,7 @@ class TestCreateErrorPath:
 class TestUpdateErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.update(1, {"customer_name": "test"})
         assert result["success"] is False
         assert result["message"] == "更新客户失败"
@@ -105,7 +111,7 @@ class TestUpdateErrorPath:
 class TestDeleteErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.delete(1)
         assert result["success"] is False
         assert result["message"] == "删除客户失败"
@@ -120,7 +126,7 @@ class TestDeleteErrorPath:
 class TestBatchDeleteErrorPath:
     def test_recoverable_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.batch_delete([1, 2])
         assert result["success"] is False
         assert result["message"] == "删除客户失败"
@@ -131,7 +137,7 @@ class TestBatchDeleteErrorPath:
 
         svc = CustomerApplicationService()
         session = MagicMock()
-        session.query.side_effect = RuntimeError("db read error")
+        session.query.side_effect = _db_error("db read error")
         with tenant_scope(1), patch.object(svc, "_get_session", return_value=session):
             result = svc.batch_delete([1, 2])
         assert result["success"] is False
@@ -246,7 +252,7 @@ class TestImportDataExtended:
         svc = CustomerApplicationService()
         mock_session = MagicMock()
         # Force an error in the query
-        mock_session.query.side_effect = RuntimeError("query error")
+        mock_session.query.side_effect = _db_error("query error")
         with patch.object(svc, "_get_session", return_value=mock_session):
             result = svc.import_data([{"customer_name": "TestCo"}])
         assert result["success"] is True
@@ -254,7 +260,7 @@ class TestImportDataExtended:
 
     def test_import_outer_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("outer error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("outer error")):
             result = svc.import_data([{"customer_name": "TestCo"}])
         assert result["success"] is False
         assert result["imported"] == 0
@@ -284,7 +290,7 @@ class TestImportFromExcelExtended:
 
         with (
             patch("app.db.sqlite_write_guard.sqlite_write_guard", return_value=mock_guard),
-            patch.object(svc, "_import_from_excel_locked", side_effect=RuntimeError("inner error")),
+            patch.object(svc, "_import_from_excel_locked", side_effect=OSError("inner error")),
         ):
             result = svc.import_from_excel(None)
         assert result["success"] is False
@@ -351,7 +357,7 @@ class TestImportFromExcelLockedExtended:
 
     def test_load_workbook_error(self):
         svc = CustomerApplicationService()
-        with patch("openpyxl.load_workbook", side_effect=RuntimeError("load error")):
+        with patch("openpyxl.load_workbook", side_effect=FileNotFoundError("load error")):
             result = svc._import_from_excel_locked("/nonexistent.xlsx")
         assert result["success"] is False
 
@@ -430,16 +436,14 @@ class TestExportToExcelExtended:
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
             patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
-            patch(
-                "app.application.get_template_app_service", side_effect=RuntimeError("tpl error")
-            ),
+            patch("app.application.get_template_app_service", side_effect=OSError("tpl error")),
         ):
             result = svc.export_to_excel(template_id="1")
         assert result["success"] is True  # Should fall back to no template
 
     def test_outer_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.export_to_excel()
         assert result["success"] is False
 
@@ -487,7 +491,7 @@ class TestGetPurchaseUnitByNameExtended:
 
     def test_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.get_purchase_unit_by_name("TestCo")
         assert result is None
 
@@ -549,7 +553,7 @@ class TestMatchPurchaseUnitExtended:
 
     def test_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.match_purchase_unit("TestCo")
         assert result is None
 

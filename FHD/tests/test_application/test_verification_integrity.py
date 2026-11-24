@@ -219,23 +219,21 @@ def _saved_preview(parallel_repository, monkeypatch):
     )
     run.plan_id = plan.plan_id
     run.metadata["plan"] = plan_to_dict(plan)
-    # Repository invariants isolate business admission; the grant still binds the full real plan.
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.tool_permission.actor_tool_denial", lambda *_: None
-    )
+    # Repository invariants isolate readback; the grant still binds the full real plan.
     monkeypatch.setattr(
         "app.application.agent_orchestrator.verification_readback.verify_independent_result",
-        lambda **_: {
+        lambda **kwargs: {
             "status": "verified",
-            "code": "verified_elt_preview_admission",
+            "code": "result_preview_verified",
             "checks": [
                 {
                     "check_id": "preview",
-                    "source": "elt_preview_snapshot",
+                    "source": "elt_preview",
                     "status": "passed",
                     "evidence": {
-                        "verification_scope": "preview_snapshot",
+                        "scope": "preview_only",
                         "business_effect_verified": False,
+                        "resume_params": copy.deepcopy(kwargs["output"]["resume_params"]),
                     },
                 }
             ],
@@ -250,10 +248,15 @@ def _saved_preview(parallel_repository, monkeypatch):
 
 def _prepare_bound_preview(run):
     from app.application.agent_orchestrator.approval_grant import approval_receipt_claims
-    from app.application.agent_orchestrator.run_lifecycle import prepare_user_decision_params
+    from app.application.agent_orchestrator.result_verification import preview_continuation_params
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 
     step = run.steps[0]
-    assert prepare_user_decision_params(run, step, {}) == ""
+    proposed = preview_continuation_params(run, step, run.tool_calls[-1])
+    assert proposed == {**step.params, **step.output["resume_params"]}
+    step.params = proposed
+    run.metadata["plan"]["nodes"][0]["params"] = copy.deepcopy(proposed)
+    run.metadata["plan_sha256"] = plan_fingerprint(plan_from_dict(run.metadata["plan"]))
     run.metadata["approval_receipt"] = {
         "step_id": step.step_id,
         "tool_id": step.tool_id,

@@ -82,6 +82,15 @@ def native_graph(tmp_path, monkeypatch):
                 account_state="active",
             )
         )
+        db.add(
+            models.User(
+                id=2,
+                username="native-other",
+                password_hash="test-only",
+                is_admin=False,
+                account_state="active",
+            )
+        )
         db.commit()
     state = {
         "consumer": consumer,

@@ -13,7 +13,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import JSON, column, create_engine, select, table
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
@@ -80,14 +80,20 @@ def _events(binding: dict[str, Any]) -> list[dict[str, Any]]:
         with engine.connect() as connection:
             # Exact request identity, bounded results, no access to prompts or
             # responses. More than one outbound attempt remains unresolved.
+            events = table(
+                "LiteLLM_AccountingEvent",
+                column("event_id"),
+                column("kind"),
+                column("schema_version"),
+                column("payload", JSON),
+            )
             rows = connection.execute(
-                text(
-                    "SELECT event_id, kind, schema_version, payload "
-                    'FROM "LiteLLM_AccountingEvent" '
-                    "WHERE kind IN ('inbound_usage', 'outbound_usage') "
-                    "AND payload -> 'event' ->> 'request_id' = :request_id LIMIT 3"
-                ),
-                {"request_id": binding["request_id"]},
+                select(events)
+                .where(
+                    events.c.kind.in_(("inbound_usage", "outbound_usage")),
+                    events.c.payload["event"]["request_id"].as_string() == binding["request_id"],
+                )
+                .limit(3)
             ).mappings()
             return [dict(row) for row in rows]
     finally:

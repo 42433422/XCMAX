@@ -11,14 +11,21 @@ from __future__ import annotations
 
 import inspect
 import json
+import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.ports import PersonaProfileRepository
 from app.domain.persona.value_objects import PersonaAxes, PersonaIdentity, RapportScore
 from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
+
 
 # ---------------------------------------------------------------------------
 # 接口契约测试
@@ -172,7 +179,7 @@ class TestPersonaRepositoryImplFind:
     async def test_db_exception_returns_none(self):
         """DB 异常时降级返回 None（不抛异常）。"""
         session = _make_mock_session()
-        session.get.side_effect = RuntimeError("DB down")
+        session.get.side_effect = _db_error("DB down")
 
         repo = PersonaRepositoryImpl(redis=None, session_factory=lambda: session)
         result = await repo.find_by_user_id("u-003")
@@ -250,7 +257,7 @@ class TestPersonaRepositoryImplSave:
     async def test_db_failure_does_not_raise(self):
         """DB 保存失败时不抛异常（缓存已持有最新画像）。"""
         session = _make_mock_session()
-        session.merge.side_effect = RuntimeError("DB write failed")
+        session.merge.side_effect = _db_error("DB write failed")
 
         repo = PersonaRepositoryImpl(redis=None, session_factory=lambda: session)
         # 不应抛异常
@@ -329,11 +336,14 @@ class TestPersonaRepositoryImplEvents:
     async def test_append_event_db_failure_swallowed(self):
         """append_event DB 失败时不抛异常。"""
         session = _make_mock_session()
-        session.add.side_effect = RuntimeError("DB down")
+        session.commit.side_effect = _db_error("DB down")
 
         repo = PersonaRepositoryImpl(redis=None, session_factory=lambda: session)
         # 不应抛异常
         await repo.append_event("u-014", "chat", {"msg": "test"})
+        session.add.assert_called_once()
+        session.commit.assert_called_once()
+        session.close.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_recent_events_returns_empty(self):

@@ -253,28 +253,20 @@ class PerformanceMonitor:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 start_time = time.perf_counter()
+                status_code = 500
                 try:
                     result = func(*args, **kwargs)
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    self.record_api_call(
-                        endpoint=func.__name__,
-                        method="SYNC",
-                        status_code=200,
-                        duration_ms=duration_ms,
-                        user_id=None,
-                        ip=None,
-                    )
+                    status_code = 200
                     return result
-                except RECOVERABLE_ERRORS:
+                finally:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_api_call(
                         endpoint=func.__name__,
                         method="SYNC",
-                        status_code=500,
+                        status_code=status_code,
                         duration_ms=duration_ms,
                         ip=None,
                     )
-                    raise
 
             return wrapper
 

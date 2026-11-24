@@ -20,10 +20,12 @@ Focus on REMAINING uncovered lines:
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.customer_app_service import (
     CustomerApplicationService,
@@ -36,6 +38,10 @@ from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.shipment import ShipmentRecord
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
 
 
 def _shared_setup_case_0(case_value_1, case_value_2):
@@ -79,13 +85,13 @@ class TestGetCustomersSessionAdditional:
             result = get_customers_session()
         assert result is mock_session_local
 
-    def test_resolve_customers_session_runtime_error_fallback(self):
-        """Test that RuntimeError falls back to SessionLocal."""
+    def test_resolve_customers_session_storage_error_fallback(self):
+        """A classified session I/O failure falls back to SessionLocal."""
         mock_session_local = MagicMock()
         with (
             patch(
                 "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=RuntimeError("runtime error"),
+                side_effect=_db_error("runtime error"),
             ),
             patch("app.db.SessionLocal", return_value=mock_session_local),
         ):
@@ -542,7 +548,7 @@ class TestCheckShipmentAssociationsAdditional:
 
     def test_error_path(self):
         svc = CustomerApplicationService()
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_db", side_effect=_db_error("db error")):
             result = svc._check_shipment_associations("TestCo")
         assert result["has_associations"] is None
         assert result["shipment_count"] == 0
@@ -661,7 +667,7 @@ class TestBatchDeleteAdditional:
         service, actor = customer_rows
         session = actor.factory()
         monkeypatch.setattr(service, "_get_session", lambda: session)
-        monkeypatch.setattr(session, "commit", Mock(side_effect=RuntimeError("storage failed")))
+        monkeypatch.setattr(session, "commit", Mock(side_effect=_db_error("storage failed")))
         result = service.batch_delete([1, 2], force=True, runtime_context=actor.context)
         assert result["success"] is False
         assert result["deleted_count"] == 0
@@ -946,7 +952,7 @@ class TestImportFromExcelLockedAdditional:
     def test_error_path(self, tmp_path):
         """Test error path in _import_from_excel_locked."""
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc._import_from_excel_locked("nonexistent.xlsx")
         assert result["success"] is False
         assert result["message"] == "客户导入失败"
@@ -976,7 +982,7 @@ class TestExportToExcelAdditional:
 
     def test_export_error_path(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.export_to_excel()
         assert result["success"] is False
         assert result["message"] == "客户导出失败"
@@ -1041,7 +1047,7 @@ class TestExportToExcelAdditional:
             patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch(
                 "app.application.get_template_app_service",
-                side_effect=RuntimeError("template error"),
+                side_effect=OSError("template error"),
             ),
         ):
             result = svc.export_to_excel(template_id="1")
@@ -1102,7 +1108,7 @@ class TestGetPurchaseUnitByNameAdditional:
 
     def test_error_path(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.get_purchase_unit_by_name("TestCo")
         assert result is None
 
@@ -1211,7 +1217,7 @@ class TestMatchPurchaseUnitAdditional:
 
     def test_error_path(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db error")):
             result = svc.match_purchase_unit("TestCo")
         assert result is None
 

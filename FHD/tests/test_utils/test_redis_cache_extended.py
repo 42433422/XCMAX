@@ -7,6 +7,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 import app.utils.performance.redis_cache as rc
 
@@ -173,7 +174,7 @@ class TestExists:
         assert cache.exists("k1") is True
 
     def test_exists_redis_error(self, cache, fake_redis):
-        fake_redis.exists.side_effect = RuntimeError("boom")
+        fake_redis.exists.side_effect = RedisConnectionError("boom")
         assert cache.exists("k1") is False
 
     def test_exists_no_redis(self):
@@ -209,7 +210,7 @@ class TestIncr:
         assert c.incr("counter") == 0
 
     def test_incr_error(self, cache, fake_redis):
-        fake_redis.pipeline.side_effect = RuntimeError("boom")
+        fake_redis.pipeline.return_value.execute.side_effect = RedisConnectionError("boom")
         assert cache.incr("counter") == 0
 
 
@@ -228,7 +229,7 @@ class TestExpireAndTtl:
         assert c.expire("k", 60) is False
 
     def test_expire_error(self, cache, fake_redis):
-        fake_redis.expire.side_effect = RuntimeError("boom")
+        fake_redis.expire.side_effect = RedisConnectionError("boom")
         assert cache.expire("k", 60) is False
 
     def test_ttl_success(self, cache, fake_redis):
@@ -240,7 +241,7 @@ class TestExpireAndTtl:
         assert c.ttl("k") == -1
 
     def test_ttl_error(self, cache, fake_redis):
-        fake_redis.ttl.side_effect = RuntimeError("boom")
+        fake_redis.ttl.side_effect = RedisConnectionError("boom")
         assert cache.ttl("k") == -1
 
 
@@ -296,7 +297,7 @@ class TestClearPattern:
         assert c.clear_pattern("prefix:*") == 0
 
     def test_clear_pattern_error(self, cache, fake_redis):
-        fake_redis.scan.side_effect = RuntimeError("boom")
+        fake_redis.scan.side_effect = RedisConnectionError("boom")
         assert cache.clear_pattern("prefix:*") == 0
 
     def test_clear_pattern_multiple_scans(self, cache, fake_redis):
@@ -392,7 +393,7 @@ class TestCacheDecorator:
         assert call_count == 0
 
     def test_cache_error_fallback(self, cache, fake_redis):
-        fake_redis.get.side_effect = RuntimeError("boom")
+        fake_redis.get.side_effect = RedisConnectionError("boom")
         call_count = 0
 
         @rc.cache_decorator(cache, ttl=60, key_prefix="test:")
