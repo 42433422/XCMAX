@@ -14,7 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.neuro_bus.events.events_base import NeuroEvent
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 from .storage.event_codec import EventCodec
 from .storage.event_journal import EventJournal, EventState, initialize_event_store
@@ -397,7 +397,7 @@ class EventStore:
             for callback in self._append_callbacks:
                 try:
                     callback(stored)
-                except RECOVERABLE_ERRORS as error:
+                except BOUNDARY_ERRORS as error:
                     logger.error("[EventStore] 回调失败: %s", error)
 
     def trim_memory(self, max_kept: int = 5000) -> int:

@@ -162,6 +162,7 @@ def _capability_request(body: ContextRequest) -> dict:
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.capability_catalog import discover_capabilities
     from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.fastapi_routes.tools_execute import _capability_http_receipt
     from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
 
     context = _execution_context(body.market_user_id)
@@ -189,7 +190,8 @@ def _capability_request(body: ContextRequest) -> dict:
     receipt = json.loads(result)
     if not isinstance(receipt, dict):
         raise HTTPException(502, "能力执行回执格式无效")
-    return receipt
+    public_receipt, _ = _capability_http_receipt(receipt)
+    return receipt if public_receipt.get("success") is True else public_receipt
 
 
 def _view(record: dict) -> dict:

@@ -35,6 +35,21 @@ def fresh_recognizer(monkeypatch: pytest.MonkeyPatch) -> UnifiedIntentRecognizer
     return r
 
 
+@pytest.fixture
+def bert_sdk():
+    from app.domain.shared_services.bert_intent_service import BertIntentClassifier
+
+    classifier = object.__new__(BertIntentClassifier)
+    classifier._torch = MagicMock()
+    classifier.model = MagicMock()
+    classifier.tokenizer = MagicMock(return_value={})
+    classifier.max_length = 64
+    classifier.device = "cpu"
+    classifier.use_fp16 = False
+    classifier.id2label = {0: "order"}
+    return classifier
+
+
 class TestRecognizeQuickPath:
     def test_quick_recognize_hit_returns_early(
         self, fresh_recognizer: UnifiedIntentRecognizer
@@ -101,13 +116,15 @@ class TestRecognizeQuickPath:
             patch(
                 "app.domain.shared_services.intent_service.quick_recognize",
                 side_effect=RuntimeError("quick fail"),
-            ),
+            ) as quick,
             patch.object(
                 UnifiedIntentRecognizer, "_recognize_rule", return_value=None
             ) as mock_rule,
         ):
-            fresh_recognizer.recognize("msg", context_data={"k": "v"})
-        mock_rule.assert_called_once()
+            with pytest.raises(RuntimeError, match="^quick fail$"):
+                fresh_recognizer.recognize("msg", context_data={"k": "v"})
+        quick.assert_called_once_with("msg", {"k": "v"})
+        mock_rule.assert_not_called()
 
 
 class TestRecognizeRulePath:
@@ -126,9 +143,10 @@ class TestRecognizeRulePath:
         with patch(
             "app.domain.shared_services.intent_service.recognize_intents",
             side_effect=RuntimeError("rule fail"),
-        ):
-            result = fresh_recognizer._recognize_rule("msg")
-        assert result is None
+        ) as rule:
+            with pytest.raises(RuntimeError, match="^rule fail$"):
+                fresh_recognizer._recognize_rule("msg")
+        rule.assert_called_once_with("msg")
 
 
 class TestRecognizeFromContext:
@@ -205,8 +223,9 @@ class TestRecognizeFromContext:
         # Force an attribute access error inside the try block
         ctx = MagicMock()
         ctx.get = MagicMock(side_effect=RuntimeError("ctx fail"))
-        result = fresh_recognizer._recognize_from_context("msg", ctx)
-        assert result is None
+        with pytest.raises(RuntimeError, match="^ctx fail$"):
+            fresh_recognizer._recognize_from_context("msg", ctx)
+        ctx.get.assert_called_once_with("pending_confirmation")
 
 
 class TestRecognizeDistilled:
@@ -234,11 +253,20 @@ class TestRecognizeDistilled:
         assert result is None
 
     def test_distilled_recoverable_error(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
-        mock_distilled = MagicMock()
-        mock_distilled.recognize.side_effect = RuntimeError("distilled fail")
-        fresh_recognizer._distilled_recognizer = mock_distilled
-        result = fresh_recognizer._recognize_distilled("msg")
+        from app.domain.shared_services.distilled_intent_service import DistilledIntentRecognizer
+
+        distilled = object.__new__(DistilledIntentRecognizer)
+        distilled.model = MagicMock(side_effect=RuntimeError("distilled fail"))
+        distilled.tokenizer = MagicMock(return_value={})
+        fresh_recognizer._distilled_recognizer = distilled
+        torch = MagicMock()
+        with patch.dict(
+            "sys.modules",
+            {"torch": torch, "torch.nn": torch.nn, "torch.nn.functional": torch.nn.functional},
+        ):
+            result = fresh_recognizer._recognize_distilled("msg")
         assert result is None
+        distilled.model.assert_called_once_with()
 
 
 class TestRecognizeBert:
@@ -265,12 +293,53 @@ class TestRecognizeBert:
         result = fresh_recognizer._recognize_bert("msg")
         assert result is None
 
-    def test_bert_recoverable_error(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
-        mock_bert = MagicMock()
-        mock_bert.predict.side_effect = RuntimeError("bert fail")
-        fresh_recognizer._bert_recognizer = mock_bert
+    @pytest.mark.parametrize("stage", ["tokenizer", "model", "softmax"])
+    def test_bert_recoverable_error(
+        self, fresh_recognizer: UnifiedIntentRecognizer, bert_sdk, stage
+    ) -> None:
+        operation = {
+            "tokenizer": bert_sdk.tokenizer,
+            "model": bert_sdk.model,
+            "softmax": bert_sdk._torch.softmax,
+        }[stage]
+        operation.side_effect = RuntimeError("bert fail")
+        fresh_recognizer._bert_recognizer = bert_sdk
         result = fresh_recognizer._recognize_bert("msg")
         assert result is None
+        operation.assert_called_once()
+
+    def test_bert_internal_runtime_error_propagates(self, bert_sdk) -> None:
+        class InvalidTensorMap(dict):
+            def items(self):
+                raise RuntimeError("invalid tensor map")
+
+        bert_sdk.tokenizer.return_value = InvalidTensorMap()
+        with pytest.raises(RuntimeError, match="^invalid tensor map$"):
+            bert_sdk.predict("msg")
+        bert_sdk.model.assert_not_called()
+
+    @pytest.mark.parametrize("stage", ["tokenizer", "device", "eval"])
+    def test_bert_failed_load_is_unavailable(self, bert_sdk, tmp_path, stage) -> None:
+        tokenizer_type = MagicMock()
+        model_type = MagicMock()
+        model = model_type.from_pretrained.return_value
+        operation = {
+            "tokenizer": tokenizer_type.from_pretrained,
+            "device": model.to,
+            "eval": model.eval,
+        }[stage]
+        failure = RuntimeError("load failed")
+        operation.side_effect = failure
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
+            return_value=(bert_sdk._torch, model_type, tokenizer_type),
+        ):
+            with pytest.raises(OSError, match="BERT 运行库调用失败") as caught:
+                bert_sdk._load_model(str(tmp_path), local_files_only=True)
+        assert caught.value.__cause__ is failure
+        assert bert_sdk.model is None
+        assert bert_sdk.tokenizer is None
+        operation.assert_called_once()
 
 
 class TestRecognizeDeepseek:
@@ -283,8 +352,9 @@ class TestRecognizeDeepseek:
         mock_ds = MagicMock()
         mock_ds.recognize.side_effect = RuntimeError("ds fail")
         fresh_recognizer._deepseek_recognizer = mock_ds
-        result = fresh_recognizer._recognize_deepseek("msg")
-        assert result is None
+        with pytest.raises(RuntimeError, match="^ds fail$"):
+            fresh_recognizer._recognize_deepseek("msg")
+        mock_ds.recognize.assert_called_once_with("msg", None)
 
     def test_deepseek_no_intent(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         mock_ds = MagicMock()

@@ -52,6 +52,8 @@ from app.fastapi_routes.voice_model_source import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+_TRANSCRIBE_ERRORS: tuple[type[Exception], ...] = (RuntimeError,) + RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
@@ -99,7 +101,10 @@ def _load_model():
     )
     try:
         model_source = _resolve_model_source(model_name)
-        instance = WhisperModel(model_source, device=device, compute_type=compute_type)
+        try:
+            instance = WhisperModel(model_source, device=device, compute_type=compute_type)
+        except RuntimeError as exc:
+            raise OSError("faster-whisper 模型初始化失败") from exc
     except RECOVERABLE_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
         logger.exception("加载 faster-whisper 模型失败")
         raise HTTPException(
@@ -149,20 +154,23 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
 
     beam = max(1, int(_env("XCAGI_CHAT_ASR_BEAM", "1")))
     lang = (language or _env("XCAGI_CHAT_ASR_LANGUAGE", "zh")).strip() or None
+    transcribe = model.transcribe
+    audio_path = str(path)
 
     try:
-        segments_iter, info = model.transcribe(
-            str(path),
+        transcription = transcribe(
+            audio_path,
             language=lang,
             beam_size=beam,
             vad_filter=False,  # 前端已按住才录音，完全不需要再做 VAD 切分
             condition_on_previous_text=False,
             without_timestamps=True,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except _TRANSCRIBE_ERRORS as exc:
         logger.exception("faster-whisper 转写失败")
         raise HTTPException(status_code=500, detail="语音识别执行失败，请稍后重试") from exc
 
+    segments_iter, info = transcription
     parts = [(seg.text or "").strip() for seg in segments_iter]
     text = "".join(parts).strip()
 

@@ -11,7 +11,8 @@
 
 import logging
 import os
-from typing import Any
+from collections.abc import Callable
+from typing import Any, ParamSpec, TypeVar
 
 from app.utils.distillation_paths import get_distillation_checkpoints_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -54,6 +55,23 @@ DEFAULT_INTENT_LABELS = [
 ]
 
 
+_ModelParams = ParamSpec("_ModelParams")
+_ModelResult = TypeVar("_ModelResult")
+
+
+def _call_model_sdk(
+    operation: Callable[_ModelParams, _ModelResult],
+    /,
+    *args: _ModelParams.args,
+    **kwargs: _ModelParams.kwargs,
+) -> _ModelResult:
+    """Normalize runtime failures only at a Transformers/PyTorch SDK call."""
+    try:
+        return operation(*args, **kwargs)
+    except RuntimeError as exc:
+        raise OSError(f"模型运行库调用失败：{exc}") from exc
+
+
 class DistilledIntentRecognizer:
     """蒸馏模型意图识别器"""
 
@@ -80,6 +98,8 @@ class DistilledIntentRecognizer:
 
     def _load_model(self):
         """加载蒸馏模型"""
+        self.model = None
+        self.tokenizer = None
         if not os.path.exists(self.model_path):
             logger.warning("蒸馏模型不存在：%s，将使用 fallback", self.model_path)
             self._initialized = True
@@ -128,17 +148,23 @@ class DistilledIntentRecognizer:
                 self.id2label = {i: label for i, label in enumerate(DEFAULT_INTENT_LABELS)}
                 self.label2id = {v: k for k, v in self.id2label.items()}
 
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, local_files_only=True)
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_path, local_files_only=True
+            tokenizer = _call_model_sdk(
+                AutoTokenizer.from_pretrained, self.model_path, local_files_only=True
+            )
+            model = _call_model_sdk(
+                AutoModelForSequenceClassification.from_pretrained,
+                self.model_path,
+                local_files_only=True,
             )
 
             if os.environ.get("USE_CUDA", "0") == "1":
-                self.model = self.model.to("cuda")
+                model = _call_model_sdk(model.to, "cuda")
 
-            self.model.eval()
+            _call_model_sdk(model.eval)
 
             logger.info("蒸馏模型加载成功：%s", self.model_path)
+            self.tokenizer = tokenizer
+            self.model = model
             self._initialized = True
 
         except RECOVERABLE_ERRORS as e:
@@ -164,7 +190,8 @@ class DistilledIntentRecognizer:
         import torch.nn.functional as F
 
         try:
-            inputs = self.tokenizer(
+            inputs = _call_model_sdk(
+                self.tokenizer,
                 text,
                 max_length=128,
                 padding="max_length",
@@ -174,16 +201,16 @@ class DistilledIntentRecognizer:
 
             if hasattr(self.model, "device"):
                 device = self.model.device
-                inputs = {k: v.to(device) for k, v in inputs.items()}
+                inputs = {k: _call_model_sdk(v.to, device) for k, v in inputs.items()}
 
             with torch.no_grad():
-                outputs = self.model(**inputs)
+                outputs = _call_model_sdk(self.model, **inputs)
                 logits = outputs.logits
-                probs = F.softmax(logits, dim=-1)
-                confidence, predicted_idx = torch.max(probs, dim=-1)
+                probs = _call_model_sdk(F.softmax, logits, dim=-1)
+                confidence, predicted_idx = _call_model_sdk(torch.max, probs, dim=-1)
 
-            predicted_idx = predicted_idx.item()
-            confidence = confidence.item()
+            predicted_idx = _call_model_sdk(predicted_idx.item)
+            confidence = _call_model_sdk(confidence.item)
             label_map = self.id2label or {}
             predicted_label = label_map.get(predicted_idx, "unk")
 

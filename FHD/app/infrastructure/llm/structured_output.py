@@ -16,10 +16,13 @@ import threading
 from dataclasses import dataclass
 from typing import Any, cast
 
+from openai import APIError
+
 from app.infrastructure.llm import invoke
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_PROVIDER_ERRORS: tuple[type[Exception], ...] = (APIError,) + RECOVERABLE_ERRORS
 
 _REPAIR_TEMPLATE = (
     "你上次返回的内容未通过 JSON Schema 校验。\n"
@@ -153,7 +156,7 @@ async def complete_structured(
                 profile=profile,
                 **routing,
             )
-        except RECOVERABLE_ERRORS as exc:
+        except _PROVIDER_ERRORS as exc:
             from app.infrastructure.llm.model_admission import (
                 ModelCircuitOpenError,
                 ModelConcurrencyLimitError,

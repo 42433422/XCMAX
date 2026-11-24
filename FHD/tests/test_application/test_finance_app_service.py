@@ -19,6 +19,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.application.finance_app_service import FinanceAppService, _parse_dt
 
@@ -440,7 +441,7 @@ class TestCreateTransaction:
             ):
                 with patch(
                     "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed",
-                    side_effect=RuntimeError("bus down"),
+                    side_effect=RedisConnectionError("bus down"),
                 ):
                     result = svc.create_transaction(
                         {"transaction_type": "receipt", "amount": "100"}
@@ -565,7 +566,7 @@ class TestUpdateTransaction:
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed",
-                side_effect=RuntimeError("bus down"),
+                side_effect=RedisConnectionError("bus down"),
             ):
                 result = svc.update_transaction(1, {"status": "completed"})
 
@@ -638,7 +639,7 @@ class TestDeleteTransaction:
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed",
-                side_effect=RuntimeError("bus down"),
+                side_effect=RedisConnectionError("bus down"),
             ):
                 result = svc.delete_transaction(1)
 

@@ -13,6 +13,7 @@ from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.fastapi_routes.knowledge.schemas import DatasetQueryRequest
 from app.infrastructure.llm.embedding_service import EmbeddingService
 from app.infrastructure.rag import RetrievedChunk
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _ctx() -> DatasetAccessContext:
@@ -168,11 +169,12 @@ def test_multi_query_mmr_spans_datasets(mmr_service: DatasetRagApplicationServic
     }
 
 
-def test_dispatcher_passes_mmr_lambda() -> None:
+def test_dispatcher_passes_mmr_lambda(trusted_actor) -> None:
     from app.domain.shared_services.tools_workflow_memory_rag import (
         _registered_router_dataset_rag,
     )
 
+    actor = trusted_actor(permissions=["dataset.read"])
     with patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service") as mock_get:
         mock_get.return_value.query.return_value = {"success": True, "chunks": []}
         _registered_router_dataset_rag(
@@ -183,7 +185,7 @@ def test_dispatcher_passes_mmr_lambda() -> None:
                 "include_answer": "false",
                 "mmr_lambda": 0.6,
             },
-            {},
+            actor.context,
             "admin",
             "",
         )

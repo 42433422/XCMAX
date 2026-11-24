@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import urllib.error
 import urllib.request
 from types import SimpleNamespace
@@ -192,7 +193,7 @@ def test_record_change_success() -> None:
 
 
 def test_record_change_failure_returns_minus_one() -> None:
-    with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("boom")):
+    with patch("app.db.xcmax_sync.SyncDb", side_effect=sqlite3.OperationalError("boom")):
         assert svc.record_change("attendance", "1", "insert", {}) == -1
 
 

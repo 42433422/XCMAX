@@ -3,16 +3,36 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from contextlib import nullcontext
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+from openai import APIConnectionError, APITimeoutError
 
 from app.domain.persona.value_objects import PersonaAxes
 from app.domain.shared_services.persona.llm_inferencer import LlmInferencer, LlmInferResult
+from app.infrastructure.persona.llm_client_adapter import PersonaLlmClient
 
 
 class TestLlmInferencer:
     """L3 LLM 推断器测试。"""
+
+    @pytest.fixture
+    def sdk_client(self):
+        client = MagicMock()
+        with (
+            patch(
+                "app.infrastructure.llm.client.get_openai_compatible_client", return_value=client
+            ),
+            patch("app.infrastructure.llm.client.resolve_chat_model", return_value="test-model"),
+            patch(
+                "app.infrastructure.llm.model_admission.model_call_slot",
+                return_value=nullcontext(),
+            ),
+            patch("app.infrastructure.llm.model_admission.admit_model_call"),
+        ):
+            yield PersonaLlmClient(), client.chat.completions.create
 
     @pytest.fixture
     def mock_llm_client(self):
@@ -58,9 +78,13 @@ class TestLlmInferencer:
         assert result.confidence == 0.0
 
     @pytest.mark.asyncio
-    async def test_infer_llm_failure_returns_neutral(self, mock_llm_client):
-        mock_llm_client.chat_completion = AsyncMock(side_effect=RuntimeError("LLM down"))
-        inferencer = LlmInferencer(mock_llm_client)
+    @pytest.mark.parametrize("error_type", [APIConnectionError, APITimeoutError])
+    async def test_infer_llm_failure_returns_neutral(self, sdk_client, error_type):
+        client, create = sdk_client
+        create.side_effect = error_type(
+            request=httpx.Request("POST", "https://provider.invalid/v1/chat/completions")
+        )
+        inferencer = LlmInferencer(client)
         result = await inferencer.infer(
             "user-1",
             [{"role": "user", "content": "你好"}],
@@ -69,6 +93,17 @@ class TestLlmInferencer:
         # 容错：返回中性值，不抛异常
         assert result.axes.warmth == 0.5
         assert result.confidence == 0.0
+        create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_infer_unknown_sdk_runtime_error_propagates(self, sdk_client):
+        client, create = sdk_client
+        create.side_effect = RuntimeError("unknown SDK failure")
+        with pytest.raises(RuntimeError, match="^unknown SDK failure$"):
+            await LlmInferencer(client).infer(
+                "user-1", [{"role": "user", "content": "你好"}], PersonaAxes()
+            )
+        create.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_infer_invalid_json_returns_neutral(self, mock_llm_client):
