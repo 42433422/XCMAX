@@ -871,3 +871,38 @@ def test_checkpointer_connection_loss_blocks_before_any_model_call(ports, monkey
     assert result["actual_tokens"] == 0
     assert store.claimed and len(store.finished) == 1
     assert not calls and not store.claim.get("outbound_attempted")
+
+
+def test_customer_gap_scheduler_creates_review_only_candidate_without_chat(ports, monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server import strategy_planner, strategic_portfolio
+
+    store, calls, *_ = ports
+    monkeypatch.setattr(
+        strategy_planner,
+        "collect_context",
+        lambda: {
+            "customer_value": {
+                "status": "ok",
+                "source_owner": "python_payment_orders",
+                "observed_at": datetime.now(UTC).isoformat(),
+                "window_days": 90,
+                "value_ledger_ready": True,
+                "lifecycle_gaps": {"acceptance": 3},
+            }
+        },
+    )
+    monkeypatch.setattr(
+        strategic_portfolio,
+        "create_portfolio_proposal",
+        lambda **_: pytest.fail("a discovered issue must not create approval or dispatch"),
+    )
+    result = asyncio.run(runtime.tick_async())
+    assert not calls
+    goal = result["goals"][0]
+    assert goal["status"] == "proposed" and "decision_id" not in goal
+    assert goal["candidate_owner_user_id"] == 17
+    assert goal["acceptance"]["baseline"] == 3
+    assert goal["evidence_refs"] == [result["details"]["sources"][0]["ref"]]
+    assert result["actual_tokens"] == 0

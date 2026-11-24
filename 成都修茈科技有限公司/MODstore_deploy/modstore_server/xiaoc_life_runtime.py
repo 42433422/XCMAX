@@ -15,6 +15,12 @@ from typing import Any, TypedDict
 from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
+from modstore_server.xiaoc_goal_management import (
+    candidate_gate,
+    discover_goal_candidate,
+    portfolio_goal_closed,
+    project_goal_steps,
+)
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
@@ -59,6 +65,7 @@ class LifeCycle(TypedDict, total=False):
     portfolio: dict[str, Any]
     evolution: dict[str, Any]
     goals: list[dict[str, Any]]
+    discovered_goals: list[dict[str, Any]]
     interests: list[dict[str, Any]]
     self_model: dict[str, Any]
     summary: str
@@ -187,7 +194,9 @@ def _cycle_reservation(state: dict[str, Any], domain: str) -> int:
             record = portfolio_status(goal["decision_id"], owner_user_id=owner)
         except PortfolioError:
             continue
-        if record["status"] not in {"approved", "executing"} or record.get("halted"):
+        if record["status"] not in {"approved", "executing"} or portfolio_goal_closed(
+            record, now=datetime.now(UTC)
+        ):
             continue
         ready = _ready_portfolio_tasks(record)
         company = bool(record.get("limits", {}).get("company_budget_id"))
@@ -248,7 +257,9 @@ class CyclePorts:
                 )
             ):
                 continue
-            if status["status"] in {"approved", "executing"} and not status.get("halted"):
+            if status["status"] in {"approved", "executing"} and not portfolio_goal_closed(
+                status, now=datetime.now(UTC)
+            ):
                 return {"goal": goal, "snapshot": status}
         return None
 
@@ -276,6 +287,15 @@ class CyclePorts:
         from modstore_server.strategy_planner import collect_context
 
         context = await asyncio.to_thread(collect_context)
+        if self.domain == "enterprise":
+            candidate = discover_goal_candidate(
+                context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
+            )
+            if candidate is not None:
+                goal, fact = candidate
+                self.evidence = [fact["ref"]]
+                self.details["sources"] = [fact]
+                return {"facts": [fact], "discovered_goals": [goal]}
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
         # Keep pending comparisons visible to reviewers, not to cognition.
@@ -454,7 +474,7 @@ class CyclePorts:
 
     async def decide(self, state: LifeCycle) -> LifeCycle:
         self.active()
-        if state.get("portfolio") or state.get("evolution"):
+        if state.get("portfolio") or state.get("evolution") or state.get("discovered_goals"):
             return {}
         from fastapi import HTTPException
 
@@ -571,6 +591,12 @@ class CyclePorts:
                 "goals": [goal],
                 "status": "completed",
                 "summary": "已将原改进批准接入公司工程预算提案，等待原审批。",
+            }
+        if state.get("discovered_goals"):
+            return {
+                "goals": state["discovered_goals"],
+                "status": "completed",
+                "summary": "已从原客户价值账本形成待审核经营候选，未生成或执行员工任务。",
             }
         decision = state["decision"]
         if decision["action"] == "wait":
@@ -734,6 +760,31 @@ class CyclePorts:
         before = binding["snapshot"]
         decision_id = before["decision_id"]
         owner = self.claim["owner_user_id"]
+        from modstore_server.strategy_business_context import customer_value_context
+        from modstore_server.xiaoc_goal_management import ORIGIN
+
+        gate = None
+        if binding["goal"].get("candidate_origin") == ORIGIN:
+            observation = await asyncio.to_thread(customer_value_context)
+            self.active()
+            gate = candidate_gate(binding["goal"], owner, observation, now=datetime.now(UTC))
+            self.details["operating_gate"] = gate
+            self.evidence = [*binding["goal"]["evidence_refs"], gate["evidence_ref"]]
+            if gate["status"] != "eligible":
+                return {
+                    "goals": [{
+                        "id": binding["goal"]["id"],
+                        "evidence_refs": binding["goal"]["evidence_refs"],
+                        "operating_gate": gate,
+                    }],
+                    "status": "blocked",
+                    "summary": "原经营候选等待有效缺口证据；未派发新任务，保留原回执。",
+                }
+            self.claim["operating_goal_admission"] = {
+                "decision_id": decision_id,
+                "goal_id": binding["goal"]["id"],
+                "gate": gate,
+            }
         plan_portfolio(decision_id, owner_user_id=owner)
         current = portfolio_status(decision_id, owner_user_id=owner)
         pending = _ready_portfolio_tasks(current)
@@ -804,16 +855,26 @@ class CyclePorts:
         }
         selected = after.get("plan", {}).get("selected", [])
         selected_tasks = [after.get("tasks", {}).get(key, {}) for key in selected]
+        step_projection = project_goal_steps(binding["goal"], after)
+        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
         remaining_ready = company and bool(_ready_portfolio_tasks(after))
         goal_status = "active"
-        if after.get("halted"):
+        if portfolio_goal_closed(after, now=datetime.now(UTC)):
             goal_status = "stopped"
         elif (
             not remaining_ready
             and selected_tasks
             and all(task.get("status") == "completed" for task in selected_tasks)
+            and all_steps_verified
         ):
             goal_status = "execution_verified"
+        elif (
+            step_projection
+            and not remaining_ready
+            and selected_tasks
+            and all(task.get("status") == "completed" for task in selected_tasks)
+        ):
+            goal_status = "blocked"
         elif (
             not remaining_ready
             and selected_tasks
@@ -837,6 +898,9 @@ class CyclePorts:
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),
         }
+        if gate is not None:
+            goal["operating_gate"] = gate
+            goal["step_projection"] = step_projection
         if goal_status == "execution_verified":
             goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         elif remaining_ready:

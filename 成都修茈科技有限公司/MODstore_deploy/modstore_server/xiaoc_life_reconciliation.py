@@ -235,6 +235,7 @@ def reconcile_usage() -> dict[str, int]:
 
 
 def reconcile_goals() -> dict[str, Any]:
+    from modstore_server.xiaoc_goal_management import portfolio_goal_closed, project_goal_steps
     from modstore_server.xiaoc_life_cognition import goal_review_projection, portfolio_feedback
     from modstore_server.xiaoc_life_reflection import (
         candidate_id,
@@ -255,13 +256,16 @@ def reconcile_goals() -> dict[str, Any]:
         selected = record.get("plan", {}).get("selected", [])
         tasks = record.get("tasks", {})
         states = [tasks.get(key, {}).get("status", "pending") for key in selected]
-        if record.get("halted"):
+        closed = portfolio_goal_closed(record, now=utcnow())
+        step_projection = project_goal_steps(goal, record)
+        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
+        if closed:
             status, label = "stopped", "原组合已停止"
         elif states and all(state == "completed" for state in states):
-            status, label = (
-                "execution_verified",
-                "原员工执行回执已核验",
-            )
+            if all_steps_verified:
+                status, label = "execution_verified", "原员工执行回执已核验"
+            else:
+                status, label = "blocked", "原子目标或依赖交接回执尚未完整核验"
         elif any(state in {"failed", "unknown"} for state in states):
             status, label = "blocked", "原任务已停止或回执待核对"
         elif record["status"] in {"approved", "executing"}:
@@ -276,6 +280,8 @@ def reconcile_goals() -> dict[str, Any]:
                 states,
                 record.get("halted", False),
                 feedback["evidence_ref"],
+                *([step_projection] if step_projection else []),
+                *(["authority_closed"] if closed and not record.get("halted") else []),
             ]
         )
         review = goal_review_projection(
@@ -286,9 +292,12 @@ def reconcile_goals() -> dict[str, Any]:
             feedback=feedback,
         )
         reflection, candidates = review_experiences(record)
+        if step_projection and not all_steps_verified:
+            candidates = []
         if (
             goal.get("execution_receipt") != receipt
             or goal.get("goal_review") != review
+            or (step_projection and goal.get("step_projection") != step_projection)
             or candidates
         ):
             previous = (
@@ -296,6 +305,7 @@ def reconcile_goals() -> dict[str, Any]:
                 goal.get("outcome_ref"),
                 goal.get("status"),
                 goal.get("goal_review"),
+                goal.get("step_projection"),
             )
             updates.append(
                 (
@@ -309,6 +319,7 @@ def reconcile_goals() -> dict[str, Any]:
                     review,
                     reflection,
                     candidates,
+                    step_projection,
                 )
             )
 
@@ -328,6 +339,7 @@ def reconcile_goals() -> dict[str, Any]:
             review,
             reflection,
             candidates,
+            step_projection,
         ) in updates:
             target = next(
                 (
@@ -344,6 +356,7 @@ def reconcile_goals() -> dict[str, Any]:
                 target.get("outcome_ref"),
                 target.get("status"),
                 target.get("goal_review"),
+                target.get("step_projection"),
             ):
                 continue  # A newer reconciliation or live cycle already changed this goal.
             for candidate in candidates:
@@ -368,7 +381,11 @@ def reconcile_goals() -> dict[str, Any]:
                             "candidate_sha256": digest(candidate),
                         },
                     )
-            if target.get("execution_receipt") == receipt and target.get("goal_review") == review:
+            if (
+                target.get("execution_receipt") == receipt
+                and target.get("goal_review") == review
+                and (not step_projection or target.get("step_projection") == step_projection)
+            ):
                 continue
             target.update(
                 status=status,
@@ -378,6 +395,8 @@ def reconcile_goals() -> dict[str, Any]:
                 outcome_ref=feedback["evidence_ref"],
                 goal_review=review,
             )
+            if step_projection:
+                target["step_projection"] = step_projection
             event_id = "execution:" + receipt
             if session.get(XiaoCLifeEvent, event_id) is None:
                 _event(

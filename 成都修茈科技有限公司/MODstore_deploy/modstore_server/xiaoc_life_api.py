@@ -19,7 +19,13 @@ from modstore_server.strategic_portfolio import (
     create_portfolio_proposal,
     digest,
 )
-from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate
+from modstore_server.xiaoc_goal_management import (
+    ORIGIN,
+    GoalStepAllocation,
+    build_goal_opportunities,
+    check_candidate_promotion,
+)
+from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError, LifeUpdate, utcnow
 from modstore_server.xiaoc_life_store import (
     _event,
     _event_dict,
@@ -46,6 +52,7 @@ class PromoteGoal(RevisionBody):
     employee_id: str = Field(min_length=1, max_length=128)
     limits: PortfolioLimits
     input_data: dict[str, Any] = Field(default_factory=dict)
+    step_allocations: list[GoalStepAllocation] = Field(default_factory=list, max_length=2)
 
     @field_validator("input_data")
     @classmethod
@@ -158,6 +165,11 @@ def promote_goal(
         raise HTTPException(
             409, "原改进目标须先完成原派工审批，由 L6 循环生成绑定原任务的工程预算提案"
         )
+    if (
+        goal.get("candidate_origin") == ORIGIN
+        and goal.get("candidate_owner_user_id") != int(admin.id)
+    ):
+        raise HTTPException(409, "经营候选不属于当前授权人")
     if goal.get("decision_id"):
         return {"decision_id": goal["decision_id"], "life": state}
     if body.employee_id not in {item.get("id") for item in _load_all_employee_profiles()}:
@@ -165,6 +177,17 @@ def promote_goal(
     if not goal.get("evidence_refs"):
         raise HTTPException(409, "没有实际来源的想法不能转为执行提案")
     limits = body.limits.model_dump()
+    if goal.get("candidate_origin") == ORIGIN:
+        from modstore_server.strategy_business_context import customer_value_context
+
+        _call(
+            check_candidate_promotion,
+            goal,
+            int(admin.id),
+            limits,
+            customer_value_context(),
+            now=utcnow(),
+        )
     opportunity = Opportunity(
         opportunity_id="life-" + digest(goal_id)[:24],
         title=goal["title"][:200],
@@ -179,15 +202,28 @@ def promote_goal(
         risk="medium",
         source_refs=goal["evidence_refs"][:32],
     )
+    step_bindings = {}
+    opportunities = [opportunity.model_dump()]
+    if body.step_allocations:
+        profiles = {item.get("id") for item in _load_all_employee_profiles()}
+        if any(row.employee_id not in profiles for row in body.step_allocations):
+            raise HTTPException(422, "请选择现有可执行员工")
+        opportunities, step_bindings = _call(
+            build_goal_opportunities, goal, body.step_allocations, limits
+        )
     proposal = _call(
         create_portfolio_proposal,
         owner_user_id=int(admin.id),
         goal=goal["title"],
         period="xiaoc-life:" + goal_id[:45],
         limits=limits,
-        opportunities=[opportunity.model_dump()],
+        opportunities=opportunities,
         idempotency_key="xiaoc-life:"
-        + digest([goal_id, limits, body.employee_id, body.input_data]),
+        + digest(
+            [goal_id, ORIGIN]
+            if goal.get("candidate_origin") == ORIGIN
+            else [goal_id, limits, body.employee_id, body.input_data]
+        ),
     )
     decision_id = proposal["decision"]["decision_id"]
 
@@ -197,9 +233,22 @@ def promote_goal(
         ):
             raise LifePolicyError("设置已变化，提案保留待审核，未启动任何任务")
         target = next(item for item in current["goals"] if item["id"] == goal_id)
+        if goal.get("candidate_origin") == ORIGIN and (
+            target.get("candidate_owner_user_id") != int(admin.id)
+            or target.get("observation") != goal.get("observation")
+            or (not target.get("decision_id") and target.get("status") != "proposed")
+        ):
+            raise LifePolicyError("原经营候选已改变，提案未绑定")
         if target.get("decision_id") not in (None, "", decision_id):
             raise LifePolicyError("目标已绑定另一个提案")
+        if target.get("decision_id") == decision_id:
+            return  # A repeated promotion cannot reset an approved or terminal goal.
         target.update(decision_id=decision_id, status="awaiting_approval")
+        if step_bindings:
+            target.update(
+                step_bindings=step_bindings,
+                subgoals_status="bound_to_original_portfolio",
+            )
         event_id = "portfolio:" + digest([goal_id, decision_id])[:64]
         if session.get(XiaoCLifeEvent, event_id) is None:
             _event(

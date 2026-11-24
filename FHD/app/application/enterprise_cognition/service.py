@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.domain.enterprise_cognition.contracts import INPUT_MODELS
 
 
@@ -67,6 +68,72 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
         return {"goal_id": goal["goal_id"], "status": "unknown", "target_met": None}
 
 
+def _goal_gap(
+    goal: dict[str, Any], snapshot: dict[str, Any], progress: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A read-only candidate on an existing actor-bound objective, never a new approval."""
+    if (
+        progress.get("target_met") is not False
+        or progress.get("goal_id") != goal.get("goal_id")
+        or snapshot.get("freshness") != "fresh"
+        or str(goal.get("tenant_id")) != snapshot.get("tenant_id")
+        or goal.get("actor_id") != snapshot.get("actor_id")
+        or goal.get("mod_id") != snapshot.get("mod_id")
+        or goal.get("entity_type") != snapshot.get("entity_type")
+        or goal.get("entity_id") != snapshot.get("entity_id")
+        or not snapshot.get("evidence")
+    ):
+        return None
+    try:
+        now = datetime.now(UTC)
+        observed = datetime.fromisoformat(snapshot["observed_at"].replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(snapshot["expires_at"].replace("Z", "+00:00"))
+        version = snapshot["source_version"]
+        binding = goal["binding_sha256"]
+        if (
+            not observed <= now < expires
+            or progress["source_version"] != version
+            or not isinstance(version, str)
+            or not version.startswith("sha256:")
+            or len(version) != 71
+            or any(char not in "0123456789abcdef" for char in version[7:])
+            or not isinstance(binding, str)
+            or len(binding) != 64
+            or any(char not in "0123456789abcdef" for char in binding)
+        ):
+            return None
+        current, target = Decimal(progress["current"]), Decimal(progress["target"])
+        gap = target - current if goal["direction"] == "increase" else current - target
+        if not gap.is_finite() or gap <= 0:
+            return None
+    except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation):
+        return None
+    evidence = {
+        "goal_binding_sha256": binding,
+        "source_version": version,
+        "observed_at": snapshot["observed_at"],
+        "expires_at": snapshot["expires_at"],
+        "current": progress["current"],
+        "target": progress["target"],
+        "unit": progress["unit"],
+        "gap": str(gap),
+    }
+    return {
+        "candidate_id": "erp-gap:" + canonical_hash([binding, version]),
+        "goal_id": goal["goal_id"],
+        "entity_type": goal["entity_type"],
+        "entity_id": goal["entity_id"],
+        "status": "review_only",
+        "reason": "bound_objective_not_met",
+        "deadline_missed": progress.get("goal_deadline_missed"),
+        "deadline_source": progress.get("deadline_source"),
+        "evidence": evidence,
+        "evidence_sha256": canonical_hash(evidence),
+        "requires_original_approval": True,
+        "execution_authorized": False,
+    }
+
+
 class EnterpriseCognitionService:
     def __init__(self, *, projections=None, goals=None, execution=None, outcomes=None):
         self._projections = projections
@@ -109,12 +176,20 @@ class EnterpriseCognitionService:
         ids = {snapshot["entity_id"] for snapshot in snapshots}
         goals = self.goals.list(entity_type=entity_type, entity_ids=ids, **scope) if ids else []
         states = {row["entity_id"]: row for row in snapshots}
+        progress = [_goal_progress(goal, states[goal["entity_id"]]) for goal in goals]
+        gaps = [
+            candidate
+            for goal, measured in zip(goals, progress, strict=True)
+            if (candidate := _goal_gap(goal, states[goal["entity_id"]], measured)) is not None
+        ]
         return {
             "snapshots": snapshots,
             "goals": goals,
             "goal_scope": "current_actor_visible_recent_50_for_selected_entities",
             "goals_may_be_truncated": len(goals) == 50,
-            "goal_progress": [_goal_progress(goal, states[goal["entity_id"]]) for goal in goals],
+            "goal_progress": progress,
+            "operating_gap_candidates": gaps,
+            "gap_scope": "current_actor_visible_bound_goals_not_company_wide_scan",
             "observations": [
                 {"entity_id": row["entity_id"], **_order_observation(row)}
                 for row in snapshots

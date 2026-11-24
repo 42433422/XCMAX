@@ -1020,6 +1020,34 @@ def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict
         raise LifePolicyError("当前自主活动额度不足以覆盖已批准任务")
 
 
+def require_operating_goal_admission(decision_id: str, proposal: dict[str, Any]) -> None:
+    """Require a fresh same-goal observation before the original SQL task claim."""
+    from modstore_server.xiaoc_goal_management import ORIGIN
+
+    if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
+        return
+    binding = next(
+        (goal for goal in read_state()["goals"] if goal.get("decision_id") == decision_id),
+        None,
+    )
+    if not binding or binding.get("candidate_origin") != ORIGIN:
+        return  # The original portfolio life guard still owns generic life work.
+    claim = _CLAIM.get()
+    admission = (claim or {}).get("operating_goal_admission") or {}
+    gate = admission.get("gate") or {}
+    if (
+        claim is None
+        or not cycle_active(claim)
+        or admission.get("decision_id") != decision_id
+        or admission.get("goal_id") != binding["id"]
+        or gate.get("owner_user_id") != claim["owner_user_id"]
+        or gate.get("status") != "eligible"
+        or not utcnow() - timedelta(minutes=5) <= parse_time(gate["as_of"]) <= utcnow()
+        or parse_time(binding["review_deadline"]) <= utcnow()
+    ):
+        raise LifePolicyError("原经营候选缺少当前有效观察，禁止新派工")
+
+
 def require_life_task_capacity(proposal: dict[str, Any], tokens: int) -> None:
     from modstore_server.strategic_remote_life import require_new_task
 
