@@ -1,5 +1,5 @@
 {
-  "lines": 2732916,
+  "lines": 2732915,
   "updated": "2026-11-25",
-  "note": "PR #3558: maintainer authorized the exact measured candidate of 2,732,916 lines, with no headroom, for the cognition integration and PostgreSQL receipt-only recovery regression; counted paths and exclusions unchanged."
+  "note": "棘轮下调"
 }

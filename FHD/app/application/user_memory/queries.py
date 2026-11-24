@@ -14,7 +14,6 @@ from app.application.user_memory.protocols import (
 )
 from app.application.user_memory.relation_retrieval import select_effective_records
 from app.domain.user_memory.analysis import memory_summary
-from app.domain.user_memory.policy import is_recallable_memory
 
 
 @dataclass(frozen=True)
