@@ -18,6 +18,7 @@ from modstore_server.customer_value_evidence import (
     classify_payment_order,
 )
 from modstore_server.customer_value_evidence_api import router
+from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
 from modstore_server.customer_value_reconciler import reconcile_paid_customer_value
 
 NOW = datetime(2026, 7, 22, 6, 0, tzinfo=timezone.utc)
@@ -610,3 +611,109 @@ def test_scoped_paid_outcome_requires_same_owner_goal_artifact_and_time(tmp_path
     assert verify(55, digest, NOW)["verified_paid_amount_cents"] == 0
     assert verify(54, "d" * 64, NOW)["verified_paid_amount_cents"] == 0
     assert verify(54, digest, NOW + timedelta(seconds=1))["paid_acceptance_count"] == 0
+
+def test_provider_payment_breakdown_separates_topups_from_product_payment(tmp_path, monkeypatch):
+    sf = _init_db(tmp_path, monkeypatch)
+    orders = [
+        _verified_payment("wallet-1", order_kind="wallet", provider_trade_no="t1"),
+        _verified_payment("plan-1", order_kind="plan", provider_trade_no="t2"),
+        _verified_payment("service-1", order_kind="custom_delivery", provider_trade_no="t3"),
+        _verified_payment("other-1", provider_trade_no="t4"),
+        _verified_payment("refund-1", refunded=True, provider_trade_no="t5"),
+    ]
+    result = build_customer_value_evidence(
+        orders=orders + [dict(orders[0])], session_factory=sf, now=NOW
+    )
+    assert result["verified_paid_count"] == 4
+    assert result["verified_paid_amount_cents"] == 39600
+    assert result["provider_payment_breakdown_cents"] == {
+        "wallet_topup": 9900,
+        "product_service": 19800,
+        "other": 9900,
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"provider_trade_no": "provider_trade_001"},
+        {"currency": "USD", "provider_trade_no": "another"},
+        {"paid_at": "2027-01-01T00:00:00+00:00", "provider_trade_no": "another"},
+    ],
+)
+def test_ambiguous_provider_money_is_not_an_operating_fact(tmp_path, monkeypatch, overrides):
+    sf = _init_db(tmp_path, monkeypatch)
+    result = build_customer_value_evidence(
+        orders=[_verified_payment(), _verified_payment("other-1", **overrides)],
+        session_factory=sf,
+        now=NOW,
+    )
+    assert result["provider_payment_breakdown_cents"] is None
+
+
+def test_conflicting_duplicate_order_is_not_an_operating_fact(tmp_path, monkeypatch):
+    sf = _init_db(tmp_path, monkeypatch)
+    result = build_customer_value_evidence(
+        orders=[_verified_payment(), _verified_payment(amount_cents=10000)],
+        session_factory=sf,
+        now=NOW,
+    )
+    assert result["provider_payment_breakdown_cents"] is None
+
+
+@pytest.mark.parametrize(
+    "pages",
+    [
+        [{"total": 0, "orders": [{"out_trade_no": "one"}]}],
+        [{"orders": []}],
+        [{"total": True, "orders": [{"out_trade_no": "one"}]}],
+        [{"total": 3, "orders": [{"out_trade_no": "one"}]}],
+        [
+            {"total": 3, "orders": [{"out_trade_no": "one"}, {"out_trade_no": "two"}]},
+            {"total": 4, "orders": [{"out_trade_no": "three"}, {"out_trade_no": "four"}]},
+        ],
+        [
+            {"total": 3, "orders": [{"out_trade_no": "one"}, {"out_trade_no": "two"}]},
+            {"total": 3, "orders": [{"out_trade_no": "one"}]},
+        ],
+    ],
+)
+def test_java_payment_incomplete_or_ambiguous_snapshot_is_unavailable(monkeypatch, pages):
+    from modstore_server import customer_value_payment_source as source
+
+    monkeypatch.setenv("PAYMENT_BACKEND", "java")
+    monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "unit-test-internal-key")
+    monkeypatch.setattr(source, "_JAVA_PAGE_SIZE", 2)
+    responses = iter(pages)
+    client = Mock()
+    client.__enter__ = Mock(return_value=client)
+    client.__exit__ = Mock(return_value=None)
+
+    def get(*args, **kwargs):
+        response = Mock()
+        response.json.return_value = {
+            "ok": True,
+            "source": "java_postgresql",
+            **next(responses),
+        }
+        return response
+
+    client.get.side_effect = get
+    monkeypatch.setattr(source.httpx, "Client", lambda **kwargs: client)
+    observed = load_authoritative_payment_orders(90)
+    assert observed["source_available"] is False
+    assert observed["source_authoritative"] is False
+    assert observed["orders"] == []
+
+
+def test_local_payment_truncation_is_not_authoritative(monkeypatch):
+    from modstore_server import customer_value_payment_source as source
+
+    monkeypatch.setattr(source.payment_orders, "is_local_source_of_truth", lambda: True)
+    monkeypatch.setattr(
+        source.payment_orders, "list_orders", lambda **kwargs: ([_verified_payment()], 2)
+    )
+    observed = load_authoritative_payment_orders(90)
+    assert observed["source_available"] is False
+    assert observed["source_authoritative"] is False
+    assert observed["orders"] == []

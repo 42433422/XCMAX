@@ -124,6 +124,40 @@ def classify_payment_order(
     return True, "eligible"
 
 
+def provider_payment_breakdown(
+    orders: dict[str, dict[str, Any]], *, now: datetime
+) -> dict[str, int] | None:
+    """Partition eligible CNY provider payments, never recognition or bank settlement.
+
+    Both existing payment readers use CNY amounts when currency is absent.
+    Explicit non-CNY rows and ambiguous provider transaction IDs make the
+    monetary observation unavailable; never silently convert or double count.
+    """
+    totals = dict(wallet_topup=0, product_service=0, other=0)
+    seen: set[tuple[str, str]] = set()
+    for order in orders.values():
+        if str(order.get("currency") or "CNY").upper() != "CNY":
+            return None
+        paid_at = parse_datetime(order.get("paid_at"))
+        if paid_at is None or paid_at > now:
+            return None
+        provider = text(order.get("payment_provider") or order.get("provider"), 32).lower()
+        if provider == "wechatpay":
+            provider = "wechat"
+        trade = (provider, text(order.get("provider_trade_no") or order.get("trade_no"), 128))
+        if not all(trade) or trade in seen:
+            return None
+        seen.add(trade)
+        kind = text(order.get("order_kind"), 32).lower()
+        bucket = (
+            "wallet_topup"
+            if kind == "wallet"
+            else "product_service" if kind in {"item", "plan", "custom_delivery"} else "other"
+        )
+        totals[bucket] += amount_cents(order)
+    return totals
+
+
 def sanitize_evidence(value: Any, *, depth: int = 0) -> Any:
     if depth > 4:
         return "<truncated>"

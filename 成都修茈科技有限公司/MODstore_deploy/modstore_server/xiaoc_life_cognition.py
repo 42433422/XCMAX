@@ -90,7 +90,12 @@ execution_verified is only an execution receipt; business_verified means the
 measurement is verified, not that ROI is positive or the goal succeeded. Matched
 paid orders use verified artifact acceptance and outcome receipts; zero matched
 orders does not establish successful customer acceptance. Attributed revenue/ROI is not incremental
-causal profit; accrued tariff cost is not a supplier invoice. Preserve observation
+causal profit; accrued tariff cost is not a supplier invoice. The provider payment
+observation partitions eligible CNY orders into wallet top-ups, product/service
+payments and unclassified payments. None proves recognized revenue, wallet
+balance, refund settlement, bank deposits, total cost or profit. Those facts are
+unknown without independent authoritative accounting and settlement evidence;
+never substitute payment volume or a missing value for them. Preserve observation
 windows, missing evidence, hypothesis verdicts and stop decisions. Reflection
 changes proposals and memory only; do not claim model-weight training or improvement.
 """
