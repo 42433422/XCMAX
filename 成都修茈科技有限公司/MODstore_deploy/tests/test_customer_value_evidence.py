@@ -612,6 +612,7 @@ def test_scoped_paid_outcome_requires_same_owner_goal_artifact_and_time(tmp_path
     assert verify(54, "d" * 64, NOW)["verified_paid_amount_cents"] == 0
     assert verify(54, digest, NOW + timedelta(seconds=1))["paid_acceptance_count"] == 0
 
+
 def test_provider_payment_breakdown_separates_topups_from_product_payment(tmp_path, monkeypatch):
     sf = _init_db(tmp_path, monkeypatch)
     orders = [

@@ -56,9 +56,12 @@ def test_identity_proof_current_only_and_narrow(state):
     evidence = self_model.current_identity_evidence(scope, [proof(scope)], now=NOW)
     assert evidence["status"] == "verified"
     assert evidence["scope"] == "persistent_identity_only"
-    assert self_model.current_identity_evidence(
-        scope, [proof(scope, verdict="fail")], now=NOW
-    )["status"] == "unavailable"
+    assert (
+        self_model.current_identity_evidence(scope, [proof(scope, verdict="fail")], now=NOW)[
+            "status"
+        ]
+        == "unavailable"
+    )
 
 
 @pytest.mark.parametrize(
@@ -75,9 +78,10 @@ def test_policy_and_authority_change_invalidate_proof(state, key, value):
     scope = self_model.execution_scope(state, now=NOW)
     changed = self_model.execution_scope({**state, key: value}, now=NOW)
     assert scope != changed
-    assert self_model.current_identity_evidence(
-        changed, [proof(scope)], now=NOW
-    )["status"] == "unverified"
+    assert (
+        self_model.current_identity_evidence(changed, [proof(scope)], now=NOW)["status"]
+        == "unverified"
+    )
 
 
 def test_release_artifact_host_and_expiry_change_invalidate(state, monkeypatch):
@@ -96,15 +100,23 @@ def test_release_artifact_host_and_expiry_change_invalidate(state, monkeypatch):
 
 def test_unbound_expired_future_and_model_hypotheses_do_not_verify(state):
     scope = self_model.execution_scope(state, now=NOW)
-    assert self_model.current_identity_evidence(None, [proof(scope)], now=NOW)["status"] == "unverified"
+    assert (
+        self_model.current_identity_evidence(None, [proof(scope)], now=NOW)["status"]
+        == "unverified"
+    )
     for checked in (NOW - timedelta(days=2), NOW + timedelta(seconds=1)):
-        assert self_model.current_identity_evidence(
-            scope, [proof(scope, checked=checked)], now=NOW
-        )["status"] == "unverified"
+        assert (
+            self_model.current_identity_evidence(scope, [proof(scope, checked=checked)], now=NOW)[
+                "status"
+            ]
+            == "unverified"
+        )
     fake = {**proof(scope), "kind": "reflection", "status": "pass"}
     assert self_model.current_identity_evidence(scope, [fake], now=NOW)["status"] == "unverified"
     state["self_model"] = {"status": "verified", "title": "invented mastery"}
-    assert self_model.project(state)["self_assessment"]["status"] == "hypothesis_not_capability_proof"
+    assert (
+        self_model.project(state)["self_assessment"]["status"] == "hypothesis_not_capability_proof"
+    )
 
 
 def test_performance_deduplicates_and_excludes_other_release_and_unknown(state):
@@ -155,5 +167,8 @@ def test_promptfoo_candidate_is_historical_not_current_proof(state):
     state["self_promptfoo_checks"] = [event]
     result = self_model.project(state)
     assert result["identity_readback"]["status"] == "unverified"
-    assert result["historical_evaluations"][0]["status"] == "historical_measurement_not_current_capability"
+    assert (
+        result["historical_evaluations"][0]["status"]
+        == "historical_measurement_not_current_capability"
+    )
     assert result["historical_evaluations"][0]["candidate"]["pass"] == 2

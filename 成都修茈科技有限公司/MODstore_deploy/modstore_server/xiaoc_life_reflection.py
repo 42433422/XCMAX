@@ -1,4 +1,5 @@
 """Review-only experience candidates from the existing strategic/life ledgers."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -104,14 +105,19 @@ def _task_candidate(
     business_end = _time(review["business"].get("window_end"))
     if (
         metric is None
-        or started is None or finished is None
-        or start is None or end is None or reviewed is None or report_at is None
+        or started is None
+        or finished is None
+        or start is None
+        or end is None
+        or reviewed is None
+        or report_at is None
         or type(days) is not int
         or not 1 <= days <= 365
         or started != start
         or end != start + timedelta(days=days)
         or not started <= finished <= end <= reviewed <= report_at
-        or business_start is None or business_end is None
+        or business_start is None
+        or business_end is None
         or not business_start <= start <= end <= business_end
         or not _sha(evidence.get("evidence_sha256"))
         or not isinstance(evidence.get("source"), str)
@@ -120,7 +126,10 @@ def _task_candidate(
         return None
     metric_id = metric["metric_id"]
     if metric_id == CUSTOMER_ACCEPTANCE_METRIC:
-        if evidence.get("basis") != "approved_goals_with_completed_artifact_and_customer_acceptance":
+        if (
+            evidence.get("basis")
+            != "approved_goals_with_completed_artifact_and_customer_acceptance"
+        ):
             return None
     elif metric_id == REVENUE_METRIC:
         if evidence.get("basis") != "attributed_verified_payments_in_approved_window":
@@ -159,7 +168,8 @@ def _task_candidate(
         "window_end": snapshot["window_end"],
         "finding_type": "observed_threshold_comparison_not_causal",
         "review_suggestion": (
-            "review_execution_failure" if task["status"] == "failed"
+            "review_execution_failure"
+            if task["status"] == "failed"
             else "review_missed_target" if failure else "review_repeatability"
         ),
     }
@@ -170,10 +180,14 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
     from modstore_server.strategic_customer_outcomes import KNOWN_DELIVERY_ATTRIBUTIONS
 
     summary: dict[str, Any] = {
-        "outcome": "unknown", "finding_type": "unknown", "candidate_count": 0,
+        "outcome": "unknown",
+        "finding_type": "unknown",
+        "candidate_count": 0,
     }
     owner, decision, proposal = (
-        record.get("owner_user_id"), record.get("decision_id"), record.get("proposal_sha256")
+        record.get("owner_user_id"),
+        record.get("decision_id"),
+        record.get("proposal_sha256"),
     )
     authorization = record.get("authorization") or {}
     reviews = record.get("reviews") or []
@@ -181,13 +195,16 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
     business = review.get("business") or {}
     selected = record.get("plan", {}).get("selected") or []
     start, end, reviewed = (
-        _time(business.get("window_start")), _time(business.get("window_end")),
+        _time(business.get("window_start")),
+        _time(business.get("window_end")),
         _time(review.get("at")),
     )
     revenue, cost = _cost(business.get("revenue_cents")), _cost(review.get("accrued_cost_cents"))
     if (
-        type(owner) is not int or owner <= 0
-        or not isinstance(decision, str) or not decision
+        type(owner) is not int
+        or owner <= 0
+        or not isinstance(decision, str)
+        or not decision
         or not _sha(proposal)
         or type(authorization.get("user_id")) is not int
         or authorization.get("user_id") != owner
@@ -198,10 +215,15 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
         or business.get("status") != "verified"
         or business.get("attribution") not in KNOWN_DELIVERY_ATTRIBUTIONS
         or not _sha(business.get("order_refs_sha256"))
-        or revenue is None or cost is None
+        or revenue is None
+        or cost is None
         or review.get("cost_basis") != "approved_tariff_accrual_not_supplier_invoice"
-        or start is None or end is None or reviewed is None or not start < end <= reviewed
-        or not isinstance(selected, list) or not selected
+        or start is None
+        or end is None
+        or reviewed is None
+        or not start < end <= reviewed
+        or not isinstance(selected, list)
+        or not selected
         or any(not isinstance(key, str) or not key.strip() for key in selected)
         or len(set(selected)) != len(selected)
     ):
@@ -228,7 +250,8 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
         candidate_count=len(candidates),
         selected_count=len(selected),
         outcome=(
-            "failure" if any(c["outcome"] == "failure" for c in candidates)
+            "failure"
+            if any(c["outcome"] == "failure" for c in candidates)
             else "success" if candidate_ids == set(selected) else "no_conclusion"
         ),
     )
@@ -258,8 +281,11 @@ def experience_candidate_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
             or not all(
                 _sha(candidate.get(key))
                 for key in (
-                    "proposal_sha256", "result_sha256", "snapshot_sha256",
-                    "metric_evidence_sha256", "business_evidence_sha256",
+                    "proposal_sha256",
+                    "result_sha256",
+                    "snapshot_sha256",
+                    "metric_evidence_sha256",
+                    "business_evidence_sha256",
                 )
             )
             or not all(
@@ -283,8 +309,13 @@ def experience_candidate_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
                 "experience_candidate": {
                     key: candidate[key]
                     for key in (
-                        "outcome", "execution_status", "metric_id", "target", "actual",
-                        "review_suggestion", "finding_type",
+                        "outcome",
+                        "execution_status",
+                        "metric_id",
+                        "target",
+                        "actual",
+                        "review_suggestion",
+                        "finding_type",
                     )
                 },
             }

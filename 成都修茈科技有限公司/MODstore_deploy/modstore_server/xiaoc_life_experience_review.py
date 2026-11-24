@@ -32,9 +32,7 @@ def _validated(
 def _current_candidate(session: Any, candidate: dict[str, Any]) -> bool:
     """Read the original portfolio in the same SQL session, not the life cache."""
     try:
-        row, proposal, ledger = _row(
-            session, candidate["decision_id"], candidate["owner_user_id"]
-        )
+        row, proposal, ledger = _row(session, candidate["decision_id"], candidate["owner_user_id"])
     except PortfolioError:
         return False
     from modstore_server.business_decision_review import proposal_content
@@ -148,7 +146,11 @@ def review_experience(
                 "reviewer_user_id": actor_user_id,
             },
         )
-        return {"candidate_id": candidate_id, "status": target_status, "revision": state["revision"]}
+        return {
+            "candidate_id": candidate_id,
+            "status": target_status,
+            "revision": state["revision"],
+        }
 
     return _mutate(apply)
 
@@ -177,7 +179,9 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         candidate, fact = validated
         status = _review_status(session, event)
-        if status not in ("confirmed", "pending_review") or not _current_candidate(session, candidate):
+        if status not in ("confirmed", "pending_review") or not _current_candidate(
+            session, candidate
+        ):
             continue
         if status == "confirmed":
             fact = {

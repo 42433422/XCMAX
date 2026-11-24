@@ -204,7 +204,8 @@ def test_prompt_deduplicates_sources_before_limit_without_rewriting_receipts():
     messages, refs = cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
     observed = json.loads(messages[1]["content"])["observations"]
     assert [{k: v for k, v in row.items() if k != "evidence_status"} for row in observed] == [
-        facts[0], facts[-1]
+        facts[0],
+        facts[-1],
     ]
     assert observed[0]["evidence_status"] == "observed_source_not_verified_claim"
     assert observed[1]["evidence_status"] == "measurement_pending"
@@ -630,6 +631,7 @@ def test_blocked_reason_is_actionable_without_exposing_arbitrary_text(
     assert expected in result["summary"]
     assert result["details"]["reason"] == reason
 
+
 def test_cognition_deduplicates_and_bounds_attention():
     state = {"identity_id": "test", "level": 6}
     facts = [{"ref": "observed:1", "text": "original"}] * 15
@@ -690,9 +692,7 @@ def test_alternatives_remain_distinct_cited_review_suggestions():
 def test_reflection_keeps_measurement_and_completion_distinct(status, tokens, complete, expected):
     feedback = portfolio_feedback(reviewed_record(observation_complete=complete))
     refs = [feedback["evidence_ref"]]
-    receipt = reflection_receipt(
-        feedback, evidence_refs=refs, status=status, actual_tokens=tokens
-    )
+    receipt = reflection_receipt(feedback, evidence_refs=refs, status=status, actual_tokens=tokens)
     assert receipt["status"] == expected
     if expected == "measurement_verified":
         assert receipt["hypothesis_verdicts"]["miss"] == 1
@@ -785,7 +785,9 @@ def test_cognitive_review_deduplicates_measurements_and_respects_original_stop()
     )
 
 
-@pytest.mark.parametrize("change", ["wrong_owner", "forged_fingerprint", "wrong_verdict", "open_window"])
+@pytest.mark.parametrize(
+    "change", ["wrong_owner", "forged_fingerprint", "wrong_verdict", "open_window"]
+)
 def test_cognitive_review_rejects_unverified_calibration(change):
     record = _measured_review_record()
     target = record["reviews"][0]["hypotheses"][0]
@@ -825,7 +827,9 @@ def test_real_cognition_graph_reads_historical_review_without_new_execution_auth
     result = asyncio.run(runtime.tick_async())
     assert len(calls) == 1
     payload = json.loads(calls[0]["messages"][1]["content"])
-    review = next(row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row)
+    review = next(
+        row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row
+    )
     assert review["verdict_counts"]["miss"] == 1
     assert result["goals"][0]["status"] == "proposed"
     assert "decision_id" not in result["goals"][0]
@@ -866,8 +870,11 @@ def test_goal_review_evolves_with_original_receipts_without_changing_approval():
 
     def project(original, status="execution_verified"):
         return goal_review_projection(
-            owner=7, goal_id="g1", decision_id=decision_id,
-            status=status, feedback=portfolio_feedback(original),
+            owner=7,
+            goal_id="g1",
+            decision_id=decision_id,
+            status=status,
+            feedback=portfolio_feedback(original),
         )
 
     pending = copy.deepcopy(record)

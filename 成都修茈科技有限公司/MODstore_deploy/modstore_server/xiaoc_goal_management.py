@@ -42,7 +42,8 @@ def _gaps(value: Any, now: datetime) -> dict[str, int]:
         not isinstance(value, dict)
         or value.get("status") != "ok"
         or value.get("value_ledger_ready") is not True
-        or value.get("source_owner") not in {
+        or value.get("source_owner")
+        not in {
             "python_payment_orders",
             "java_postgresql_internal_api",
         }
@@ -60,19 +61,22 @@ def _gaps(value: Any, now: datetime) -> dict[str, int]:
     if not isinstance(gaps, dict):
         return {}
     return {
-        stage: gaps[stage]
-        for stage in STAGES
-        if type(gaps.get(stage)) is int and gaps[stage] > 0
+        stage: gaps[stage] for stage in STAGES if type(gaps.get(stage)) is int and gaps[stage] > 0
     }
 
 
 def _previous_expired_candidate(
-    goals: list[dict[str, Any]], owner: int, stage: str, value: dict[str, Any],
-    *, now: datetime,
+    goals: list[dict[str, Any]],
+    owner: int,
+    stage: str,
+    value: dict[str, Any],
+    *,
+    now: datetime,
 ) -> tuple[bool, str | None]:
     """Only renew expired, unbound review material, never an approved or stopped goal."""
     prior = [
-        goal for goal in goals
+        goal
+        for goal in goals
         if isinstance(goal, dict)
         and goal.get("candidate_origin") == ORIGIN
         and goal.get("candidate_owner_user_id") == owner
@@ -175,7 +179,11 @@ def discover_goal_candidate(
             },
             "subgoals": [
                 {"id": "inspect", "depends_on": [], "description": "核对原记录及缺失证据"},
-                {"id": "plan", "depends_on": ["inspect"], "description": "提交处理建议与成本风险评审"},
+                {
+                    "id": "plan",
+                    "depends_on": ["inspect"],
+                    "description": "提交处理建议与成本风险评审",
+                },
                 {"id": "verify", "depends_on": ["plan"], "description": "独立回读核验原结果"},
             ],
             "subgoals_status": "review_only_not_dispatched",
@@ -188,8 +196,12 @@ def discover_goal_candidate(
 
 
 def check_candidate_promotion(
-    goal: dict[str, Any], owner: int, limits: dict[str, Any], context: dict[str, Any],
-    *, now: datetime,
+    goal: dict[str, Any],
+    owner: int,
+    limits: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    now: datetime,
 ) -> None:
     """Recheck a deterministic candidate at the ORIGINAL human promotion route."""
     if goal.get("candidate_origin") != ORIGIN:
@@ -242,9 +254,8 @@ def candidate_gate(
             and value.get("status") == "ok"
             and value.get("value_ledger_ready") is True
             and value.get("source_owner") == source.get("source_owner")
-            and value.get("source_owner") in {
-                "python_payment_orders", "java_postgresql_internal_api"
-            }
+            and value.get("source_owner")
+            in {"python_payment_orders", "java_postgresql_internal_api"}
             and value.get("window_days") == source.get("window_days") == 90
             and max(original_at, now - timedelta(days=1)) <= observed <= now
         ):
@@ -286,8 +297,8 @@ def build_goal_opportunities(
     goal: dict[str, Any], allocations: list[GoalStepAllocation], limits: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """Compile the fixed review DAG to the existing CP-SAT opportunity contract."""
-    from modstore_server.strategic_portfolio import Opportunity, RESOURCES
-    from modstore_server.strategy_bets import BetHypothesis, CUSTOMER_ACCEPTANCE_METRIC
+    from modstore_server.strategic_portfolio import RESOURCES, Opportunity
+    from modstore_server.strategy_bets import CUSTOMER_ACCEPTANCE_METRIC, BetHypothesis
 
     if goal.get("candidate_origin") != ORIGIN:
         raise LifePolicyError("仅原经营候选支持此依赖分解")
@@ -304,9 +315,7 @@ def build_goal_opportunities(
     cohort = [row.customer_goal_id for row in plan.customer_goal_bindings]
     if len(cohort) != len(set(cohort)):
         raise LifePolicyError("固定客户验收目标不能重复")
-    ids = {
-        step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS
-    }
+    ids = {step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS}
     descriptions = {
         "inspect": "核对原客户价值链缺口及同口径原记录；提交来源与缺失证据。",
         "plan": "依据原核对任务结果提交处理建议及成本风险；不执行业务变更。",
@@ -350,8 +359,10 @@ def build_goal_opportunities(
 
 
 def _valid_sha(value: Any) -> bool:
-    return isinstance(value, str) and len(value) == 64 and all(
-        char in "0123456789abcdef" for char in value
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
     )
 
 
@@ -406,21 +417,25 @@ def operating_dependency_handoff(
                     and type(item.get("size_bytes")) is int
                     and item["size_bytes"] >= 0
                 ):
-                    artifacts.append({
-                        "artifact_sha256": item["artifact_sha256"],
-                        "size_bytes": item["size_bytes"],
-                    })
+                    artifacts.append(
+                        {
+                            "artifact_sha256": item["artifact_sha256"],
+                            "size_bytes": item["size_bytes"],
+                        }
+                    )
                 if len(artifacts) >= 32:
                     break
             if len(artifacts) >= 32:
                 break
-        result.append({
-            "opportunity_id": key,
-            "result_sha256": task["result_sha256"],
-            "receipt_sha256": digest(receipt),
-            "artifact_receipts": artifacts,
-            "scope": "verified_predecessor_receipt_metadata_not_current_artifact_bytes",
-        })
+        result.append(
+            {
+                "opportunity_id": key,
+                "result_sha256": task["result_sha256"],
+                "receipt_sha256": digest(receipt),
+                "artifact_receipts": artifacts,
+                "scope": "verified_predecessor_receipt_metadata_not_current_artifact_bytes",
+            }
+        )
     return result
 
 
@@ -442,9 +457,12 @@ def _fixed_cohort_acceptance(
         key = item["opportunity_id"]
         authorization = record["authorization"]
         if (
-            not ids or len(ids) != len(set(ids)) or set(ids) != set(item["customer_goal_ids"])
+            not ids
+            or len(ids) != len(set(ids))
+            or set(ids) != set(item["customer_goal_ids"])
             or target["metric_id"] != CUSTOMER_ACCEPTANCE_METRIC
-            or target["threshold"] != 1.0 or target["direction"] != "max"
+            or target["threshold"] != 1.0
+            or target["direction"] != "max"
             or not _valid_sha(record.get("proposal_sha256"))
             or authorization.get("proposal_sha256") != record["proposal_sha256"]
             or authorization.get("user_id") != record["owner_user_id"]
@@ -457,27 +475,36 @@ def _fixed_cohort_acceptance(
         task = record["tasks"][key]
         evidence = snapshot["evidence"]
         accepted, total, value = (
-            evidence.get("accepted_goals"), evidence.get("target_goals"), evidence.get("value")
+            evidence.get("accepted_goals"),
+            evidence.get("target_goals"),
+            evidence.get("value"),
         )
         start, end, reviewed = (
-            parse_time(snapshot["window_start"]), parse_time(snapshot["window_end"]),
+            parse_time(snapshot["window_start"]),
+            parse_time(snapshot["window_end"]),
             parse_time(snapshot["reviewed_at"]),
         )
         if (
             task.get("status") != "completed"
             or not _valid_sha(task.get("result_sha256"))
-            or snapshot["opportunity_id"] != key or snapshot["hypothesis"] != target
+            or snapshot["opportunity_id"] != key
+            or snapshot["hypothesis"] != target
             or digest({k: v for k, v in snapshot.items() if k != "snapshot_sha256"})
             != snapshot.get("snapshot_sha256")
             or start != parse_time(task["started_at"])
             or end != start + timedelta(days=target["window_days"])
             or not start <= parse_time(task["completed_at"]) <= end <= reviewed <= datetime.now(UTC)
-            or evidence.get("source") != "CustomerValueReceipt:verified_outcome_and_customer_acceptance"
-            or evidence.get("basis") != "approved_goals_with_completed_artifact_and_customer_acceptance"
+            or evidence.get("source")
+            != "CustomerValueReceipt:verified_outcome_and_customer_acceptance"
+            or evidence.get("basis")
+            != "approved_goals_with_completed_artifact_and_customer_acceptance"
             or not _valid_sha(evidence.get("evidence_sha256"))
-            or type(total) is not int or total != len(ids)
-            or type(accepted) is not int or not 0 <= accepted <= total
-            or type(value) not in (int, float) or value != accepted / total
+            or type(total) is not int
+            or total != len(ids)
+            or type(accepted) is not int
+            or not 0 <= accepted <= total
+            or type(value) not in (int, float)
+            or value != accepted / total
             or snapshot["verdict"] != judge(CUSTOMER_ACCEPTANCE_METRIC, value, 1.0, "max")
         ):
             return unknown, {}
@@ -509,9 +536,7 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
         or len(set(bindings.values())) != len(EXECUTION_STEPS)
     ):
         return {"status": "binding_mismatch"}
-    opportunities = {
-        row["opportunity_id"]: row for row in record.get("opportunities", [])
-    }
+    opportunities = {row["opportunity_id"]: row for row in record.get("opportunities", [])}
     if (
         set(opportunities) != set(bindings.values())
         or opportunities[bindings["inspect"]].get("depends_on") != []
@@ -523,15 +548,16 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
     for step in EXECUTION_STEPS:
         opportunity_id = bindings[step]
         task = tasks.get(opportunity_id) or {}
-        steps.append({
-            "step_id": step,
-            "opportunity_id": opportunity_id,
-            "task_status": task.get("status", "pending"),
-            "result_sha256": task.get("result_sha256"),
-        })
+        steps.append(
+            {
+                "step_id": step,
+                "opportunity_id": opportunity_id,
+                "task_status": task.get("status", "pending"),
+                "result_sha256": task.get("result_sha256"),
+            }
+        )
     all_verified = all(
-        step["task_status"] == "completed" and _valid_sha(step["result_sha256"])
-        for step in steps
+        step["task_status"] == "completed" and _valid_sha(step["result_sha256"]) for step in steps
     )
     handoff = "pending"
     if all_verified:
@@ -546,9 +572,7 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
             if expected and tasks[bindings["plan"]].get("dependency_handoff") == expected
             else "unverified"
         )
-    acceptance, acceptance_proof = _fixed_cohort_acceptance(
-        opportunities[bindings["plan"]], record
-    )
+    acceptance, acceptance_proof = _fixed_cohort_acceptance(opportunities[bindings["plan"]], record)
     if acceptance == "verified_all_accepted" and not (all_verified and handoff == "verified"):
         acceptance = "unknown_dependency_not_verified"
     return {

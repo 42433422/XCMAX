@@ -12,8 +12,10 @@ from modstore_server.xiaoc_life_reflection import _sha, _time
 
 
 def _bounded_id(value: Any) -> bool:
-    return isinstance(value, str) and 0 < len(value) <= 128 and all(
-        c.isascii() and (c.isalnum() or c in "-_.:") for c in value
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 128
+        and all(c.isascii() and (c.isalnum() or c in "-_.:") for c in value)
     )
 
 
@@ -79,10 +81,16 @@ def frozen_experiment_projection(
         or decision not in ("promote", "rollback", "hold")
         or decision != measured.get("evaluated_decision")
         or progress.get("traffic") != ("candidate" if decision == "promote" else "control")
-        or deployed is None or started is None or exposure_end is None
-        or ready is None or observed is None or closed is None
+        or deployed is None
+        or started is None
+        or exposure_end is None
+        or ready is None
+        or observed is None
+        or closed is None
         or not deployed <= started < exposure_end <= ready <= observed <= closed
-        or effect is None or not isinstance(interval, list) or len(interval) != 2
+        or effect is None
+        or not isinstance(interval, list)
+        or len(interval) != 2
     ):
         return unknown
     low, high = (_number(value) for value in interval)
@@ -120,15 +128,17 @@ def original_experiment_projection(row: Any, delivery: dict[str, Any]) -> dict[s
     progress = effects.get("experiment")
     if not isinstance(progress, dict):
         return {"status": "unknown", "finding_type": "unknown"}
-    return frozen_experiment_projection(
-        spec, progress, delivery, policy_digest=_digest(spec)
-    )
-
+    return frozen_experiment_projection(spec, progress, delivery, policy_digest=_digest(spec))
 
 
 def bound_portfolio_experiment(
-    session: Any, decision_id: str, proposal: dict[str, Any], state: dict[str, Any],
-    item: dict[str, Any], *, now: Any,
+    session: Any,
+    decision_id: str,
+    proposal: dict[str, Any],
+    state: dict[str, Any],
+    item: dict[str, Any],
+    *,
+    now: Any,
 ) -> dict[str, Any] | None:
     """Read the original approved experiment tied to this exact strategic worker.
 
@@ -145,7 +155,8 @@ def bound_portfolio_experiment(
         return None
     opportunity_id = item.get("opportunity_id")
     unknown = {
-        "status": "unknown", "opportunity_id": opportunity_id,
+        "status": "unknown",
+        "opportunity_id": opportunity_id,
         "finding_type": "unverified_original_experiment",
     }
     try:
@@ -157,7 +168,8 @@ def bound_portfolio_experiment(
         receipt = task["execution_receipt"]
         start, completed = _time(task["started_at"]), _time(task["completed_at"])
         if (
-            type(owner) is not int or owner <= 0
+            type(owner) is not int
+            or owner <= 0
             or not _sha(proposal_sha)
             or digest(proposal_content(proposal)) != proposal_sha
             or state.get("proposal_sha256") != proposal_sha
@@ -188,7 +200,9 @@ def bound_portfolio_experiment(
             or receipt.get("truncated")
             or digest(receipt) != task["result_sha256"]
             or (receipt.get("ok") is True) != (task["status"] == "completed")
-            or start is None or completed is None or not start <= completed <= now
+            or start is None
+            or completed is None
+            or not start <= completed <= now
         ):
             return unknown
         request = {**remote, "binding": worker}
@@ -202,7 +216,9 @@ def bound_portfolio_experiment(
         if (
             result.get("status") not in ("measured", "inconclusive")
             or not _sha(result.get("snapshot_sha256"))
-            or began is None or observed is None or closed is None
+            or began is None
+            or observed is None
+            or closed is None
             or not start <= began <= observed <= closed <= completed
         ):
             return unknown

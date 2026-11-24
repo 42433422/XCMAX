@@ -610,8 +610,10 @@ def build_customer_value_evidence(
         # customer-value counts and cannot prove revenue, cash or profit.
         "provider_payment_breakdown_cents": (
             provider_payment_breakdown(eligible_orders, now=current)
-            if source_available and source_authoritative
-            and append_only_store_available and not ambiguous_orders
+            if source_available
+            and source_authoritative
+            and append_only_store_available
+            and not ambiguous_orders
             else None
         ),
         "customer_goal_count": len(customer_goal_ids),

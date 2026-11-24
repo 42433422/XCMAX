@@ -51,8 +51,15 @@ def treatment_id(item: dict[str, Any]) -> str:
         {
             key: item.get(key)
             for key in (
-                "title", "task", "employee_id", "execution_binding", "input_data",
-                "hypothesis", "customer_goal_ids", "customer_goal_bindings", *RESOURCES,
+                "title",
+                "task",
+                "employee_id",
+                "execution_binding",
+                "input_data",
+                "hypothesis",
+                "customer_goal_ids",
+                "customer_goal_bindings",
+                *RESOURCES,
             )
         }
     )
@@ -87,7 +94,8 @@ def _measured_source(
         total = evidence.get("target_goals")
         return (
             source == "CustomerValueReceipt:verified_outcome_and_customer_acceptance"
-            and evidence.get("basis") == "approved_goals_with_completed_artifact_and_customer_acceptance"
+            and evidence.get("basis")
+            == "approved_goals_with_completed_artifact_and_customer_acceptance"
             and type(accepted) is int
             and type(total) is int
             and 0 <= accepted <= total
@@ -339,34 +347,37 @@ def compare_options(
         task = alt.get("task")
         normalized = " ".join(task.split()).casefold() if isinstance(task, str) else ""
         if not normalized or normalized in normalized_tasks:
-            rejected.append({
-                "option_id": "review-" + digest(alt)[:20],
-                "title": alt["title"],
-                "evidence_refs": alt["evidence_refs"],
-                "feasible": False,
-                "reason": "missing_distinct_executable_task",
-                "forecast": {"status": "unknown_not_executable"},
-            })
+            rejected.append(
+                {
+                    "option_id": "review-" + digest(alt)[:20],
+                    "title": alt["title"],
+                    "evidence_refs": alt["evidence_refs"],
+                    "feasible": False,
+                    "reason": "missing_distinct_executable_task",
+                    "forecast": {"status": "unknown_not_executable"},
+                }
+            )
             continue
         requested_caps = alt.get("resource_caps")
         if requested_caps is not None and (
             not isinstance(requested_caps, dict)
             or set(requested_caps) != set(RESOURCES)
             or any(
-                type(requested_caps[key]) is not int
-                or not 0 <= requested_caps[key] <= primary[key]
+                type(requested_caps[key]) is not int or not 0 <= requested_caps[key] <= primary[key]
                 for key in RESOURCES
             )
             or requested_caps["compute_seconds"] <= 0
         ):
-            rejected.append({
-                "option_id": "review-" + digest(alt)[:20],
-                "title": alt["title"],
-                "evidence_refs": alt["evidence_refs"],
-                "feasible": False,
-                "reason": "alternative_exceeds_original_task_reservation",
-                "forecast": {"status": "unknown_not_executable"},
-            })
+            rejected.append(
+                {
+                    "option_id": "review-" + digest(alt)[:20],
+                    "title": alt["title"],
+                    "evidence_refs": alt["evidence_refs"],
+                    "feasible": False,
+                    "reason": "alternative_exceeds_original_task_reservation",
+                    "forecast": {"status": "unknown_not_executable"},
+                }
+            )
             continue
         normalized_tasks.add(normalized)
         candidate = {
@@ -381,14 +392,16 @@ def compare_options(
         try:
             candidate = freeze_execution(owner, Opportunity.model_validate(candidate).model_dump())
         except (PortfolioError, ValueError):
-            rejected.append({
-                "option_id": candidate["opportunity_id"],
-                "title": alt["title"],
-                "evidence_refs": alt["evidence_refs"],
-                "feasible": False,
-                "reason": "original_execution_contract_rejected",
-                "forecast": {"status": "unknown_not_executable"},
-            })
+            rejected.append(
+                {
+                    "option_id": candidate["opportunity_id"],
+                    "title": alt["title"],
+                    "evidence_refs": alt["evidence_refs"],
+                    "feasible": False,
+                    "reason": "original_execution_contract_rejected",
+                    "forecast": {"status": "unknown_not_executable"},
+                }
+            )
             continue
         candidates.append(candidate)
     feasible: list[dict[str, Any]] = []
@@ -402,31 +415,39 @@ def compare_options(
             and effective["max_parallel"] > 0
             and candidate["risk"] != "high"
             and all(candidate[key] <= effective[key] for key in RESOURCES)
-            and candidate["opportunity_id"] in optimize_portfolio(
-                [{**candidate, "value_score": 1, "confidence_bps": 1}], effective,
+            and candidate["opportunity_id"]
+            in optimize_portfolio(
+                [{**candidate, "value_score": 1, "confidence_bps": 1}],
+                effective,
                 max_selected=1,
             )["selected"]
         )
         treatment = treatment_id(candidate)
-        predicted = forecast(historical.get(treatment, [])) if admitted else {
-            "status": "unknown_infeasible"
-        }
-        options.append({
-            "option_id": candidate["opportunity_id"],
-            "title": candidate["title"],
-            "task": candidate["task"],
-            "evidence_refs": candidate["source_refs"],
-            "treatment_sha256": treatment,
-            "execution_sha256": digest(candidate),
-            "evaluation_target": candidate.get("hypothesis"),
-            "feasible": admitted,
-            "reason": "solver_capacity_and_execution_contract" if admitted else "capacity_or_risk",
-            "reservation_cap": {key: candidate[key] for key in RESOURCES},
-            "reservation_basis": "hard_caps_not_cost_estimate",
-            "execution_binding_sha256": digest(candidate.get("execution_binding") or {}),
-            "policy_risk": candidate["risk"],
-            "forecast": predicted,
-        })
+        predicted = (
+            forecast(historical.get(treatment, []))
+            if admitted
+            else {"status": "unknown_infeasible"}
+        )
+        options.append(
+            {
+                "option_id": candidate["opportunity_id"],
+                "title": candidate["title"],
+                "task": candidate["task"],
+                "evidence_refs": candidate["source_refs"],
+                "treatment_sha256": treatment,
+                "execution_sha256": digest(candidate),
+                "evaluation_target": candidate.get("hypothesis"),
+                "feasible": admitted,
+                "reason": (
+                    "solver_capacity_and_execution_contract" if admitted else "capacity_or_risk"
+                ),
+                "reservation_cap": {key: candidate[key] for key in RESOURCES},
+                "reservation_basis": "hard_caps_not_cost_estimate",
+                "execution_binding_sha256": digest(candidate.get("execution_binding") or {}),
+                "policy_risk": candidate["risk"],
+                "forecast": predicted,
+            }
+        )
         if admitted:
             feasible.append(candidate)
     # All action alternatives use the same target. Prefer a stronger verified
@@ -435,16 +456,21 @@ def compare_options(
     known = {
         row["option_id"]: row["forecast"]
         for row in options
-        if row.get("feasible") and row["forecast"].get("status")
-        == "historical_constant_rate_temporally_checked"
+        if row.get("feasible")
+        and row["forecast"].get("status") == "historical_constant_rate_temporally_checked"
     }
     selected = feasible[:1]
     ranking = "unranked_experiment_for_human_review"
     if feasible and len(known) == len(feasible):
-        selected = [max(feasible, key=lambda item: (
-            known[item["opportunity_id"]]["probability_of_target"],
-            -known[item["opportunity_id"]]["expected_accrued_cost_cents"],
-        ))]
+        selected = [
+            max(
+                feasible,
+                key=lambda item: (
+                    known[item["opportunity_id"]]["probability_of_target"],
+                    -known[item["opportunity_id"]]["expected_accrued_cost_cents"],
+                ),
+            )
+        ]
         ranking = "historical_target_rate_not_comparison_to_counterfactual"
     if not selected:
         ranking = "no_action_no_feasible_option"
@@ -458,7 +484,9 @@ def compare_options(
             key: effective[key] for key in (*RESOURCES, "max_parallel", "stop_loss_cents")
         },
         "capacity_constraint": "remaining_company_and_original_caps_with_stop_loss",
-        "capacity_basis": "company_remaining_at_review" if capacity is not None else "proposal_caps_only",
+        "capacity_basis": (
+            "company_remaining_at_review" if capacity is not None else "proposal_caps_only"
+        ),
         "options": options + rejected,
         "selected_for_approval": selected[0]["opportunity_id"] if selected else "no_action",
         "selection_basis": ranking,
@@ -484,7 +512,9 @@ def evaluate_review(
         return None
     selected = review.get("selected_for_approval")
     option = next((row for row in review["options"] if row["option_id"] == selected), None)
-    item = next((row for row in proposal["opportunities"] if row["opportunity_id"] == selected), None)
+    item = next(
+        (row for row in proposal["opportunities"] if row["opportunity_id"] == selected), None
+    )
     if not option or not item or option["execution_sha256"] != digest(item):
         return None
     sample = closed_sample(item, state, now)

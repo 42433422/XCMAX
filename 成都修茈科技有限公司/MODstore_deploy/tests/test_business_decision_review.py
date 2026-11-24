@@ -15,16 +15,18 @@ def test_unknown_and_nonoverlapping_temporal_evidence():
     rows = []
     for index in range(40):
         left = start + timedelta(days=index * 2)
-        rows.append({
-            "decision_id": str(index),
-            "snapshot_sha256": digest(["snapshot", index]),
-            "evidence_sha256": digest(["source", index]),
-            "window_start": left.isoformat(),
-            "window_end": (left + timedelta(days=1)).isoformat(),
-            "value": float(index % 2),
-            "hit": index % 2,
-            "accrued_cost_cents": 100,
-        })
+        rows.append(
+            {
+                "decision_id": str(index),
+                "snapshot_sha256": digest(["snapshot", index]),
+                "evidence_sha256": digest(["source", index]),
+                "window_start": left.isoformat(),
+                "window_end": (left + timedelta(days=1)).isoformat(),
+                "value": float(index % 2),
+                "hit": index % 2,
+                "accrued_cost_cents": 100,
+            }
+        )
     assert review.forecast(rows[:39])["probability_of_target"] is None
     assert review.forecast(rows[:1] * 50)["sample_count"] == 1
     result = review.forecast(rows)
@@ -55,8 +57,10 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
         "opportunity_id": "op-1",
         "hypothesis": target,
         "evidence": {
-            "value": 0.8, "evidence_sha256": digest("source"),
-            "source": "slo-report", "observed_at": end.isoformat(),
+            "value": 0.8,
+            "evidence_sha256": digest("source"),
+            "source": "slo-report",
+            "observed_at": end.isoformat(),
         },
         "verdict": "miss",
         "window_start": start.isoformat(),
@@ -66,10 +70,13 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
     snapshot["snapshot_sha256"] = digest(snapshot)
     task = {
         "status": "completed",
-        "calls": {"a": {
-            "status": "settled", "accrued_cost_cents": 15,
-            "cost_basis": "approved_tariff_accrual",
-        }},
+        "calls": {
+            "a": {
+                "status": "settled",
+                "accrued_cost_cents": 15,
+                "cost_basis": "approved_tariff_accrual",
+            }
+        },
         "started_at": start.isoformat(),
         "completed_at": end.isoformat(),
         "result_sha256": digest("worker-receipt"),
@@ -94,12 +101,13 @@ def test_independent_measurement_checks_original_snapshot_and_settlement():
         {"observed_at": None},
     ):
         invalid = {**snapshot, "evidence": {**snapshot["evidence"], **changes}}
-        invalid["snapshot_sha256"] = digest({
-            k: v for k, v in invalid.items() if k != "snapshot_sha256"
-        })
-        assert review.closed_sample(
-            item, {**state, "hypothesis_outcomes": {"op-1": invalid}}, end
-        ) is None
+        invalid["snapshot_sha256"] = digest(
+            {k: v for k, v in invalid.items() if k != "snapshot_sha256"}
+        )
+        assert (
+            review.closed_sample(item, {**state, "hypothesis_outcomes": {"op-1": invalid}}, end)
+            is None
+        )
     snapshot["evidence"]["value"] = 0.99
     assert review.closed_sample(item, state, end) is None
 
@@ -121,7 +129,9 @@ def test_review_is_part_of_original_proposal_content():
     assert "decision_review" not in review.proposal_content(proposal)
 
 
-def test_original_sql_approval_freezes_options_and_never_executes_alternative(database, monkeypatch):
+def test_original_sql_approval_freezes_options_and_never_executes_alternative(
+    database, monkeypatch
+):
     seed_owner(database)
     monkeypatch.setattr(review, "get_session_factory", lambda: database)
     options = {
@@ -137,8 +147,12 @@ def test_original_sql_approval_freezes_options_and_never_executes_alternative(da
         "evidence_refs": ["incident:1"],
     }
     kwargs = dict(
-        owner_user_id=7, goal="Improve delivery", period="decision-review",
-        limits=limits(), opportunities=[opportunity()], idempotency_key="same-review",
+        owner_user_id=7,
+        goal="Improve delivery",
+        period="decision-review",
+        limits=limits(),
+        opportunities=[opportunity()],
+        idempotency_key="same-review",
         decision_options=options,
     )
     first = portfolio.create_portfolio_proposal(**kwargs)
@@ -157,7 +171,9 @@ def test_original_sql_approval_freezes_options_and_never_executes_alternative(da
     with pytest.raises(portfolio.PortfolioError):
         portfolio.plan_portfolio(decision_id, owner_user_id=7)
     portfolio.authorize_portfolio(
-        decision_id, owner_user_id=7, actor="admin",
+        decision_id,
+        owner_user_id=7,
+        actor="admin",
         expected_proposal_sha256=status["proposal_sha256"],
     )
     plan = portfolio.plan_portfolio(decision_id, owner_user_id=7)
@@ -168,10 +184,15 @@ def test_high_risk_cannot_become_executable_and_no_action_remains(database, monk
     seed_owner(database)
     monkeypatch.setattr(review, "get_session_factory", lambda: database)
     response = portfolio.create_portfolio_proposal(
-        owner_user_id=7, goal="Improve delivery", period="blocked-review", limits=limits(),
-        opportunities=[opportunity(risk="high")], idempotency_key="blocked-review",
+        owner_user_id=7,
+        goal="Improve delivery",
+        period="blocked-review",
+        limits=limits(),
+        opportunities=[opportunity(risk="high")],
+        idempotency_key="blocked-review",
         decision_options={
-            "alternatives": [], "context_sha256": digest("observed world"),
+            "alternatives": [],
+            "context_sha256": digest("observed world"),
             "evidence_refs": ["incident:1"],
         },
     )
@@ -186,12 +207,16 @@ def test_money_and_acceptance_require_original_metric_source():
     start = datetime(2025, 1, 1, tzinfo=UTC)
     end = start + timedelta(days=1)
     common = dict(
-        hypothesis="check outcome", threshold=0.5, direction="max",
-        window_days=1, kill_criteria=["miss"],
+        hypothesis="check outcome",
+        threshold=0.5,
+        direction="max",
+        window_days=1,
+        kill_criteria=["miss"],
     )
     money = BetHypothesis(metric_id="revenue_monthly", **common)
     evidence = {
-        "value": 200.0, "source": "python_payment_orders",
+        "value": 200.0,
+        "source": "python_payment_orders",
         "basis": "attributed_verified_payments_in_approved_window",
     }
     assert review._measured_source(money, evidence, start, end)
@@ -199,44 +224,65 @@ def test_money_and_acceptance_require_original_metric_source():
     assert not review._measured_source(money, {**evidence, "value": -1}, start, end)
     acceptance = BetHypothesis(metric_id="customer_acceptance_ratio", **common)
     evidence = {
-        "value": 0.5, "source": "CustomerValueReceipt:verified_outcome_and_customer_acceptance",
+        "value": 0.5,
+        "source": "CustomerValueReceipt:verified_outcome_and_customer_acceptance",
         "basis": "approved_goals_with_completed_artifact_and_customer_acceptance",
-        "accepted_goals": 1, "target_goals": 2,
+        "accepted_goals": 1,
+        "target_goals": 2,
     }
     assert review._measured_source(acceptance, evidence, start, end)
     assert not review._measured_source(acceptance, {**evidence, "value": 0.9}, start, end)
     assert not review._measured_source(acceptance, {**evidence, "target_goals": 0}, start, end)
 
 
-def test_lower_alternative_reservation_uses_real_capacity_and_original_solver(database, monkeypatch):
+def test_lower_alternative_reservation_uses_real_capacity_and_original_solver(
+    database, monkeypatch
+):
     from modstore_server import strategic_company_resources
 
     seed_owner(database)
     monkeypatch.setattr(review, "get_session_factory", lambda: database)
     monkeypatch.setattr(
-        strategic_company_resources, "remaining",
+        strategic_company_resources,
+        "remaining",
         lambda *_args: {"cost_cents": 20, "tokens": 20_000, "compute_seconds": 60, "slots": 1},
     )
     cap = {"cost_cents": 10, "tokens": 10_000, "compute_seconds": 30}
     alt = {
-        "title": "limited review", "task": "other approved bounded task",
-        "tradeoff": "smaller hard cap, feasibility only", "evidence_refs": ["incident:1"],
+        "title": "limited review",
+        "task": "other approved bounded task",
+        "tradeoff": "smaller hard cap, feasibility only",
+        "evidence_refs": ["incident:1"],
         "resource_caps": cap,
     }
     response = portfolio.create_portfolio_proposal(
-        owner_user_id=7, goal="Improve delivery", period="bounded-review",
-        limits=limits(), opportunities=[opportunity()], idempotency_key="bounded-review",
+        owner_user_id=7,
+        goal="Improve delivery",
+        period="bounded-review",
+        limits=limits(),
+        opportunities=[opportunity()],
+        idempotency_key="bounded-review",
         decision_options={
             "alternatives": [
-                alt, {**alt, "title": "excess", "task": "excess request",
-                      "resource_caps": {**cap, "cost_cents": 51}},
+                alt,
+                {
+                    **alt,
+                    "title": "excess",
+                    "task": "excess request",
+                    "resource_caps": {**cap, "cost_cents": 51},
+                },
             ],
-            "context_sha256": digest("observed world"), "evidence_refs": ["incident:1"],
+            "context_sha256": digest("observed world"),
+            "evidence_refs": ["incident:1"],
         },
     )
     comparison = response["decision_review"]
     assert comparison["options"][1]["feasible"] is False
-    selected = next(row for row in comparison["options"] if row["option_id"] == comparison["selected_for_approval"])
+    selected = next(
+        row
+        for row in comparison["options"]
+        if row["option_id"] == comparison["selected_for_approval"]
+    )
     assert selected["reservation_cap"] == cap
     assert selected["reservation_basis"] == "hard_caps_not_cost_estimate"
     assert comparison["options"][-1]["reason"] == "alternative_exceeds_original_task_reservation"
@@ -248,10 +294,15 @@ def test_decision_comparison_never_reserves_more_than_stop_loss(database, monkey
     seed_owner(database)
     monkeypatch.setattr(review, "get_session_factory", lambda: database)
     response = portfolio.create_portfolio_proposal(
-        owner_user_id=7, goal="Improve delivery", period="stop-loss-review",
-        limits=limits(stop_loss_cents=10), opportunities=[opportunity()],
-        idempotency_key="stop-loss-review", decision_options={
-            "alternatives": [], "context_sha256": digest("observed world"),
+        owner_user_id=7,
+        goal="Improve delivery",
+        period="stop-loss-review",
+        limits=limits(stop_loss_cents=10),
+        opportunities=[opportunity()],
+        idempotency_key="stop-loss-review",
+        decision_options={
+            "alternatives": [],
+            "context_sha256": digest("observed world"),
             "evidence_refs": ["incident:1"],
         },
     )

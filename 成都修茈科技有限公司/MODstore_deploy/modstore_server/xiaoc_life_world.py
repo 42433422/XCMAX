@@ -3,6 +3,7 @@
 The SQL life state remains the only authority. Predictions and calibration are
 advisory, never permission, KPI acceptance, or proof of causal improvement.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,9 +58,8 @@ class Evaluation(Contract):
     def verify_outcome(self) -> Evaluation:
         if (
             not self.forecast.issued_at < self.actual.observed_at <= self.forecast.expires_at
-            or self.actual.source_sha256 in {
-                row.source_sha256 for row in self.forecast.training_samples
-            }
+            or self.actual.source_sha256
+            in {row.source_sha256 for row in self.forecast.training_samples}
         ):
             raise ValueError("world forecast outcome is not prospective")
         return self
@@ -141,7 +141,8 @@ def advance_review(
                 )
             ):
                 series.evaluations = [
-                    *series.evaluations, Evaluation(forecast=pending, actual=sample)
+                    *series.evaluations,
+                    Evaluation(forecast=pending, actual=sample),
                 ][-8:]
                 series.pending = None
             elif now >= pending.expires_at:
@@ -185,7 +186,9 @@ def review_projection(previous: dict[str, Any] | None, owner: Any) -> dict[str, 
             }
         if evaluated:
             row["median_mae"] = fmean(abs(x.actual.value - x.forecast.expected) for x in evaluated)
-            row["last_value_mae"] = fmean(abs(x.actual.value - x.forecast.baseline) for x in evaluated)
+            row["last_value_mae"] = fmean(
+                abs(x.actual.value - x.forecast.baseline) for x in evaluated
+            )
             row["last_actual"] = evaluated[-1].actual.model_dump(mode="json")
         projection[metric] = row
     return projection

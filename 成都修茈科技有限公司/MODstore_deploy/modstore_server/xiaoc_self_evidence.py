@@ -80,10 +80,9 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
             key = (trial.get("kind"), trial.get("seed"))
             if key not in expected_trial_keys or key in seen:
                 raise ValueError("independent_fixture_unexpected_trial")
-            if (
-                trial.get("node") != expected[ident].get(trial["kind"])
-                or trial.get("status") not in {"PASS", "FAIL", "BLOCKED"}
-            ):
+            if trial.get("node") != expected[ident].get(trial["kind"]) or trial.get(
+                "status"
+            ) not in {"PASS", "FAIL", "BLOCKED"}:
                 raise ValueError("independent_fixture_frozen_test_mismatch")
             seen.add(key)
             if trial["status"] == "PASS" and (
@@ -94,9 +93,7 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
             actual = "NOT RUN"
         elif any(trial["status"] == "FAIL" for trial in trials):
             actual = "FAIL"
-        elif seen == expected_trial_keys and all(
-            trial["status"] == "PASS" for trial in trials
-        ):
+        elif seen == expected_trial_keys and all(trial["status"] == "PASS" for trial in trials):
             actual = "PASS"
         else:
             actual = "BLOCKED"

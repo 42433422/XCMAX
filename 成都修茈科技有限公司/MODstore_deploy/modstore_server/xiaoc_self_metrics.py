@@ -77,9 +77,11 @@ def completion_review(scope: str | None, events: list[dict[str, Any]]) -> dict[s
         "status": (
             "review_recommended"
             if any(row["status"] == "observed_completion_drop" for row in samples)
-            else "no_drop_observed"
-            if any(row["status"] == "no_threshold_drop_observed" for row in samples)
-            else "insufficient_evidence"
+            else (
+                "no_drop_observed"
+                if any(row["status"] == "no_threshold_drop_observed" for row in samples)
+                else "insufficient_evidence"
+            )
         ),
     }
 
@@ -240,18 +242,21 @@ def with_cycle_receipts(state: dict[str, Any]) -> dict[str, Any]:
                 steps = details.get("steps")
                 sanitized_steps = (
                     [
-                        {
-                            key: step[key]
-                            for key in (
-                                "kind",
-                                "request_id",
-                                "owner_user_id",
-                                "decision_id",
-                                "opportunity_id",
-                            )
-                            if key in step
-                        }
-                        if isinstance(step, dict) else {}
+                        (
+                            {
+                                key: step[key]
+                                for key in (
+                                    "kind",
+                                    "request_id",
+                                    "owner_user_id",
+                                    "decision_id",
+                                    "opportunity_id",
+                                )
+                                if key in step
+                            }
+                            if isinstance(step, dict)
+                            else {}
+                        )
                         for step in steps
                     ]
                     if isinstance(steps, list)
@@ -264,9 +269,11 @@ def with_cycle_receipts(state: dict[str, Any]) -> dict[str, Any]:
                         "status": row.status,
                         "model": row.model,
                         "actual_tokens": row.actual_tokens,
-                        "created_at": row.created_at.isoformat()
-                        if row.created_at.tzinfo
-                        else row.created_at.isoformat() + "+00:00",
+                        "created_at": (
+                            row.created_at.isoformat()
+                            if row.created_at.tzinfo
+                            else row.created_at.isoformat() + "+00:00"
+                        ),
                         "details": {
                             "execution_scope": details.get("execution_scope"),
                             "owner_user_id": details.get("owner_user_id"),

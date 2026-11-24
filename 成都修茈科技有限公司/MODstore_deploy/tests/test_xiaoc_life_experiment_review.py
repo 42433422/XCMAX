@@ -78,8 +78,18 @@ def test_frozen_experiment_is_observation_only(decision):
 @pytest.mark.parametrize(
     "change",
     [
-        "policy", "release", "identity", "source", "rollout", "snapshot",
-        "decision", "early", "sample", "metric", "interval", "measurement",
+        "policy",
+        "release",
+        "identity",
+        "source",
+        "rollout",
+        "snapshot",
+        "decision",
+        "early",
+        "sample",
+        "metric",
+        "interval",
+        "measurement",
     ],
 )
 def test_experiment_with_unverified_evidence_is_unknown(change):
@@ -110,10 +120,10 @@ def test_experiment_with_unverified_evidence_is_unknown(change):
         }[change]
         progress["measurement"][key] = value
         progress["final_measurement"][key] = value
-    assert frozen_experiment_projection(
-        spec, progress, delivery, policy_digest="c" * 64
-    ) == {"status": "unknown", "finding_type": "unknown"}
-
+    assert frozen_experiment_projection(spec, progress, delivery, policy_digest="c" * 64) == {
+        "status": "unknown",
+        "finding_type": "unknown",
+    }
 
 
 def test_portfolio_experiment_requires_same_frozen_approval_worker_and_terminal(monkeypatch):
@@ -133,43 +143,62 @@ def test_portfolio_experiment_requires_same_frozen_approval_worker_and_terminal(
     }
     item = {"opportunity_id": "op-1", "input_data": {"remote_execution": remote}}
     proposal = {
-        "schema": "xcagi.strategic_portfolio/v1", "owner_user_id": 7, "goal": "verify effect",
-        "period": "one", "limits": {"company_budget_id": "approved"},
+        "schema": "xcagi.strategic_portfolio/v1",
+        "owner_user_id": 7,
+        "goal": "verify effect",
+        "period": "one",
+        "limits": {"company_budget_id": "approved"},
         "opportunities": [item],
     }
     proposal["proposal_sha256"] = digest(proposal_content(proposal))
     sha = proposal["proposal_sha256"]
     receipt = {"ok": True, "remote_receipt": {"delivery": delivery}}
     task = {
-        "status": "completed", "result_sha256": digest(receipt), "execution_receipt": receipt,
-        "calls": {}, "lease_token": "lease",
+        "status": "completed",
+        "result_sha256": digest(receipt),
+        "execution_receipt": receipt,
+        "calls": {},
+        "lease_token": "lease",
         "started_at": "2026-11-19T01:00:00+00:00",
         "completed_at": "2026-11-21T03:00:00+00:00",
         "worker_binding": {
-            "decision_id": "d1", "opportunity_id": "op-1", "owner_user_id": 7,
-            "proposal_sha256": sha, "adapter": strategic_workspace_bridge.KIND,
-            "receipt_id": "request-1", "lease_token": "lease",
+            "decision_id": "d1",
+            "opportunity_id": "op-1",
+            "owner_user_id": 7,
+            "proposal_sha256": sha,
+            "adapter": strategic_workspace_bridge.KIND,
+            "receipt_id": "request-1",
+            "lease_token": "lease",
         },
     }
     state = {
         "authorization": {"user_id": 7, "actor": "admin", "proposal_sha256": sha},
-        "proposal_sha256": sha, "plan": {"selected": ["op-1"]}, "tasks": {"op-1": task},
+        "proposal_sha256": sha,
+        "plan": {"selected": ["op-1"]},
+        "tasks": {"op-1": task},
     }
     calls = []
     monkeypatch.setattr(
-        strategic_workspace_bridge, "original",
+        strategic_workspace_bridge,
+        "original",
         lambda *_args, **_kwargs: (SimpleNamespace(id="request-1"), {}, {"experiment": progress}),
     )
     monkeypatch.setattr(
-        strategic_workspace_receipts, "validate_terminal",
+        strategic_workspace_receipts,
+        "validate_terminal",
         lambda *_args: calls.append("terminal"),
     )
     monkeypatch.setattr(
-        review, "original_experiment_projection",
+        review,
+        "original_experiment_projection",
         lambda _row, release: frozen_experiment_projection(
-            spec, progress, release, policy_digest="c" * 64,
+            spec,
+            progress,
+            release,
+            policy_digest="c" * 64,
         ),
     )
+
     def project():
         return review.bound_portfolio_experiment(None, "d1", proposal, state, item, now=now)
 

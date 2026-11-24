@@ -1,4 +1,5 @@
 """Regression cases for verified reflection candidates."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -7,56 +8,81 @@ import pytest
 
 from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.strategic_portfolio import digest
-from tests.test_xiaoc_life_feedback import approved_life_portfolio as approved_life_portfolio  # noqa: PLC0414
-from tests.test_strategic_portfolio import database as database  # noqa: PLC0414
-
 from modstore_server.xiaoc_life_reflection import (
-    candidate_id, candidate_refs, experience_candidate_facts, review_experiences,
+    candidate_id,
+    candidate_refs,
+    experience_candidate_facts,
+    review_experiences,
+)
+from tests.test_strategic_portfolio import database as database  # noqa: PLC0414
+from tests.test_xiaoc_life_feedback import (  # noqa: PLC0414
+    approved_life_portfolio as approved_life_portfolio,
 )
 
 
 def record(*, failed=False, value=2.0):
     target = {
-        "metric_id": "revenue_monthly", "threshold": 1.0,
-        "direction": "max", "window_days": 1,
+        "metric_id": "revenue_monthly",
+        "threshold": 1.0,
+        "direction": "max",
+        "window_days": 1,
     }
     start, end = "2026-11-20T10:00:00+00:00", "2026-11-21T10:00:00+00:00"
     snapshot = {
-        "opportunity_id": "a", "hypothesis": target,
+        "opportunity_id": "a",
+        "hypothesis": target,
         "evidence": {
-            "value": value, "source": "authoritative-payment",
+            "value": value,
+            "source": "authoritative-payment",
             "basis": "attributed_verified_payments_in_approved_window",
             "evidence_sha256": "a" * 64,
         },
         "verdict": "hit" if value >= 1 else "miss",
-        "window_start": start, "window_end": end, "reviewed_at": end,
+        "window_start": start,
+        "window_end": end,
+        "reviewed_at": end,
     }
     snapshot["snapshot_sha256"] = digest(snapshot)
     task = {
         "status": "failed" if failed else "completed",
         "execution_receipt": {
-            "ok": not failed, "status": "failed" if failed else "completed",
+            "ok": not failed,
+            "status": "failed" if failed else "completed",
         },
-        "result_sha256": "b" * 64, "calls": {},
-        "started_at": start, "completed_at": start,
-        "cost_basis": "approved_tariff_accrual", "accrued_cost_cents": 3,
+        "result_sha256": "b" * 64,
+        "calls": {},
+        "started_at": start,
+        "completed_at": start,
+        "cost_basis": "approved_tariff_accrual",
+        "accrued_cost_cents": 3,
     }
     return {
-        "owner_user_id": 7, "decision_id": "decision-1", "proposal_sha256": "c" * 64,
+        "owner_user_id": 7,
+        "decision_id": "decision-1",
+        "proposal_sha256": "c" * 64,
         "authorization": {"user_id": 7, "actor": "admin:7", "proposal_sha256": "c" * 64},
         "opportunities": [{"opportunity_id": "a", "hypothesis": target, "cost_cents": 2}],
-        "plan": {"selected": ["a"]}, "tasks": {"a": task},
+        "plan": {"selected": ["a"]},
+        "tasks": {"a": task},
         "hypothesis_outcomes": {"a": snapshot},
-        "reviews": [{
-            "at": end, "usage_complete": True, "observation_complete": True,
-            "cost_basis": "approved_tariff_accrual_not_supplier_invoice",
-            "accrued_cost_cents": 3, "hypotheses": [snapshot],
-            "business": {
-                "status": "verified", "attribution": VERIFIED_DELIVERY_ATTRIBUTION,
-                "revenue_cents": 200, "order_refs_sha256": "d" * 64,
-                "window_start": start, "window_end": end,
-            },
-        }],
+        "reviews": [
+            {
+                "at": end,
+                "usage_complete": True,
+                "observation_complete": True,
+                "cost_basis": "approved_tariff_accrual_not_supplier_invoice",
+                "accrued_cost_cents": 3,
+                "hypotheses": [snapshot],
+                "business": {
+                    "status": "verified",
+                    "attribution": VERIFIED_DELIVERY_ATTRIBUTION,
+                    "revenue_cents": 200,
+                    "order_refs_sha256": "d" * 64,
+                    "window_start": start,
+                    "window_end": end,
+                },
+            }
+        ],
     }
 
 
@@ -71,11 +97,21 @@ def test_reflection_outcome(failed, value, outcome):
     assert candidates[0]["deviation_from_target"] == value - 1.0
 
 
-@pytest.mark.parametrize("change", [
-    "unknown_task", "missing_metric", "unsettled_usage", "open_window",
-    "wrong_owner", "tampered_snapshot", "missing_business_proof", "stopped",
-    "late_task", "unselected",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "unknown_task",
+        "missing_metric",
+        "unsettled_usage",
+        "open_window",
+        "wrong_owner",
+        "tampered_snapshot",
+        "missing_business_proof",
+        "stopped",
+        "late_task",
+        "unselected",
+    ],
+)
 def test_unknown_or_unbound_cannot_be_an_experience(change):
     row = record()
     task, review = row["tasks"]["a"], row["reviews"][0]
@@ -154,14 +190,19 @@ def test_pending_candidate_identity_and_readback():
     changed["business_evidence_sha256"] = "e" * 64
     assert candidate_id(candidate) == candidate_id(changed)
     event = {
-        "id": candidate_id(candidate), "kind": "experience_candidate",
-        "status": "pending_review", "evidence_refs": candidate_refs(candidate),
+        "id": candidate_id(candidate),
+        "kind": "experience_candidate",
+        "status": "pending_review",
+        "evidence_refs": candidate_refs(candidate),
         "details": {
-            "goal_id": "g1", "candidate": candidate, "candidate_sha256": digest(candidate),
+            "goal_id": "g1",
+            "candidate": candidate,
+            "candidate_sha256": digest(candidate),
         },
     }
     state = {
-        "owner_user_id": 7, "events": [event, event],
+        "owner_user_id": 7,
+        "events": [event, event],
         "goals": [{"id": "g1", "decision_id": "decision-1"}],
     }
     assert len(experience_candidate_facts(state)) == 1
@@ -193,9 +234,7 @@ def test_late_receipt_registers_one_pending_candidate_in_original_sql_ledger(
     row["reviews"][0]["observation_complete"] = True
     reconciliation.reconcile_goals()
     saved = life.read_state()
-    candidates = [
-        event for event in saved["events"] if event["kind"] == "experience_candidate"
-    ]
+    candidates = [event for event in saved["events"] if event["kind"] == "experience_candidate"]
     assert len(candidates) == 1 and candidates[0]["status"] == "pending_review"
     assert saved["paused"] and saved["budget"] == before["budget"]
     assert experience_candidate_facts(saved)[0]["ref"] == candidates[0]["id"]
@@ -212,13 +251,14 @@ def test_late_receipt_registers_one_pending_candidate_in_original_sql_ledger(
     assert again["budget"] == before["budget"]
 
 
-
 @pytest.mark.parametrize("frozen_review", [False, True])
 def test_original_owner_review_and_revocation_are_idempotent(
     approved_life_portfolio, monkeypatch, database, frozen_review
 ):
     import json
+
     from sqlalchemy import select
+
     from modstore_server import xiaoc_life_reconciliation as reconciliation
     from modstore_server import xiaoc_life_store as life
     from modstore_server.db.strategic import StrategicDecision
@@ -248,10 +288,17 @@ def test_original_owner_review_and_revocation_are_idempotent(
         synthetic["authorization"]["proposal_sha256"] = proposal_hash
         row.decision_payload_json = json.dumps(proposal)
         row.execution_result_json = json.dumps(
-            {k: synthetic[k] for k in (
-                "authorization", "proposal_sha256", "plan", "tasks", "reviews",
-                "hypothesis_outcomes",
-            )}
+            {
+                k: synthetic[k]
+                for k in (
+                    "authorization",
+                    "proposal_sha256",
+                    "plan",
+                    "tasks",
+                    "reviews",
+                    "hypothesis_outcomes",
+                )
+            }
         )
         row.status = "executing"
         session.commit()
@@ -290,14 +337,14 @@ def test_original_owner_review_and_revocation_are_idempotent(
         row.execution_result_json = json.dumps(saved)
         session.commit()
     assert not life.read_state()["experience_review_facts"]
-    revoked = review_experience(
-        **{**args, "expected_revision": after["revision"]}, action="revoke"
-    )
+    revoked = review_experience(**{**args, "expected_revision": after["revision"]}, action="revoke")
     assert revoked["status"] == "revoked"
     assert review_experience(**args, action="revoke") == revoked
     assert not life.read_state()["experience_review_facts"]
     with database() as session:
-        reviews = list(session.scalars(
-            select(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "experience_review")
-        ))
+        reviews = list(
+            session.scalars(
+                select(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "experience_review")
+            )
+        )
     assert sorted(row.status for row in reviews) == ["confirmed", "revoked"]

@@ -345,7 +345,9 @@ class CyclePorts:
                         if (
                             isinstance(payments, dict)
                             and set(payments) == {"wallet_topup", "product_service", "other"}
-                            and all(type(amount) is int and amount >= 0 for amount in payments.values())
+                            and all(
+                                type(amount) is int and amount >= 0 for amount in payments.values()
+                            )
                             and sum(payments.values()) == original.get("verified_paid_amount_cents")
                         ):
                             facts.insert(
@@ -721,15 +723,22 @@ class CyclePorts:
                     decision_options=(
                         {
                             "alternatives": decision.get("alternatives", []),
-                            "context_sha256": _digest([
-                                self.details.get("attention", {}).get("selected_refs", []),
-                                [fact for fact in state.get("facts", []) if fact.get("ref") in self.evidence],
-                                self.state.get("identity_id"),
-                                self.state.get("self_model", {}),
-                            ]),
+                            "context_sha256": _digest(
+                                [
+                                    self.details.get("attention", {}).get("selected_refs", []),
+                                    [
+                                        fact
+                                        for fact in state.get("facts", [])
+                                        if fact.get("ref") in self.evidence
+                                    ],
+                                    self.state.get("identity_id"),
+                                    self.state.get("self_model", {}),
+                                ]
+                            ),
                             "evidence_refs": sorted(self.evidence or goal["evidence_refs"]),
                         }
-                        if self.domain == "enterprise" else None
+                        if self.domain == "enterprise"
+                        else None
                     ),
                     idempotency_key="xiaoc-life:"
                     + _digest(
@@ -799,11 +808,13 @@ class CyclePorts:
             self.evidence = [*binding["goal"]["evidence_refs"], gate["evidence_ref"]]
             if gate["status"] != "eligible":
                 return {
-                    "goals": [{
-                        "id": binding["goal"]["id"],
-                        "evidence_refs": binding["goal"]["evidence_refs"],
-                        "operating_gate": gate,
-                    }],
+                    "goals": [
+                        {
+                            "id": binding["goal"]["id"],
+                            "evidence_refs": binding["goal"]["evidence_refs"],
+                            "operating_gate": gate,
+                        }
+                    ],
                     "status": "blocked",
                     "summary": "原经营候选等待有效缺口证据；未派发新任务，保留原回执。",
                 }
@@ -883,7 +894,9 @@ class CyclePorts:
         selected = after.get("plan", {}).get("selected", [])
         selected_tasks = [after.get("tasks", {}).get(key, {}) for key in selected]
         step_projection = project_goal_steps(binding["goal"], after)
-        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
+        all_steps_verified = (
+            not step_projection or step_projection.get("all_steps_verified") is True
+        )
         remaining_ready = company and bool(_ready_portfolio_tasks(after))
         goal_status = "active"
         if portfolio_goal_closed(after, now=datetime.now(UTC)):
@@ -1218,7 +1231,6 @@ async def tick_async() -> dict[str, Any]:
         reconcile_goals,
         reconcile_usage,
     )
-
     from modstore_server.xiaoc_self_model import execution_scope, record_identity_check
 
     with life_operation("tick"):

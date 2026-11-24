@@ -281,28 +281,68 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "hypotheses": hypotheses[:4],
     }
     evaluation = review.get("decision_evaluation")
-    if isinstance(evaluation, dict) and evaluation.get("status") == "independent_measurement_verified":
+    if (
+        isinstance(evaluation, dict)
+        and evaluation.get("status") == "independent_measurement_verified"
+    ):
         metrics["decision_evaluation"] = {
             key: evaluation[key]
             for key in (
-                "status", "option_id", "snapshot_sha256", "metric_id", "window_start", "window_end",
-                "actual_metric_value", "actual_accrued_cost_cents", "hit", "predicted_probability",
-                "predicted_metric_value", "brier", "metric_error", "forecast_status",
-                "metric_evidence_sha256", "execution_result_sha256", "cost_basis",
-                "predicted_accrued_cost_cents", "cost_error_cents", "counterfactual_status",
-                "verification_scope", "experiment_snapshot_sha256", "experiment_scope",
+                "status",
+                "option_id",
+                "snapshot_sha256",
+                "metric_id",
+                "window_start",
+                "window_end",
+                "actual_metric_value",
+                "actual_accrued_cost_cents",
+                "hit",
+                "predicted_probability",
+                "predicted_metric_value",
+                "brier",
+                "metric_error",
+                "forecast_status",
+                "metric_evidence_sha256",
+                "execution_result_sha256",
+                "cost_basis",
+                "predicted_accrued_cost_cents",
+                "cost_error_cents",
+                "counterfactual_status",
+                "verification_scope",
+                "experiment_snapshot_sha256",
+                "experiment_scope",
             )
             if key in evaluation
         }
     experiments = review.get("experiment_evaluations")
     if isinstance(experiments, list):
         metrics["experiment_evaluations"] = [
-            {key: entry[key] for key in (
-                "status", "finding_type", "opportunity_id", "decision_id", "proposal_sha256",
-                "execution_result_sha256", "original_request_id", "experiment_id", "snapshot_id",
-                "snapshot_sha256", "metric_id", "sample_size", "lift", "interval", "direction",
-                "decision", "observation_start", "observation_end", "observed_at", "scope",
-            ) if key in entry}
+            {
+                key: entry[key]
+                for key in (
+                    "status",
+                    "finding_type",
+                    "opportunity_id",
+                    "decision_id",
+                    "proposal_sha256",
+                    "execution_result_sha256",
+                    "original_request_id",
+                    "experiment_id",
+                    "snapshot_id",
+                    "snapshot_sha256",
+                    "metric_id",
+                    "sample_size",
+                    "lift",
+                    "interval",
+                    "direction",
+                    "decision",
+                    "observation_start",
+                    "observation_end",
+                    "observed_at",
+                    "scope",
+                )
+                if key in entry
+            }
             for entry in experiments[:4]
             if isinstance(entry, dict)
             and entry.get("decision_id") == record["decision_id"]
@@ -466,10 +506,9 @@ def _readback_measurement(
         return None
     feedback = details.get("outcome_feedback")
     measured = _measurement_receipt(feedback, evidence_refs=evidence)
-    if (
-        measured["status"] != "measurement_verified"
-        or feedback["evidence_ref"] != _portfolio_outcome_ref(decision_id, feedback["metrics"])
-    ):
+    if measured["status"] != "measurement_verified" or feedback[
+        "evidence_ref"
+    ] != _portfolio_outcome_ref(decision_id, feedback["metrics"]):
         return None
     if not any(
         isinstance(goal, dict)
@@ -569,7 +608,8 @@ def _closed_hypothesis(row: Any) -> dict[str, Any] | None:
     metric, direction = row.get("metric_id"), row.get("direction")
     if (
         not isinstance(metric, str)
-        or metric not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
+        or metric
+        not in {*METRIC_SOURCES, REVENUE_METRIC, DOMAIN_METRIC, CUSTOMER_ACCEPTANCE_METRIC}
         or direction not in ("min", "max")
     ):
         return None
@@ -587,7 +627,10 @@ def _closed_hypothesis(row: Any) -> dict[str, Any] | None:
     if not all(times):
         return None
     start, end, reviewed = (datetime.fromisoformat(item) for item in times)
-    if any(item.utcoffset() is None for item in (start, end, reviewed)) or not start < end <= reviewed:
+    if (
+        any(item.utcoffset() is None for item in (start, end, reviewed))
+        or not start < end <= reviewed
+    ):
         return None
     verdict = judge(metric, float(value), float(threshold), direction)
     if verdict not in ("hit", "miss") or row.get("verdict") != verdict:
@@ -685,7 +728,10 @@ def goal_review_projection(
         recommendation = "respect_recorded_stop"
     elif status in ("failed", "blocked"):
         recommendation = "review_original_failure"
-    elif measured["status"] != "measurement_verified" or metrics.get("decision") == "wait_for_measurement":
+    elif (
+        measured["status"] != "measurement_verified"
+        or metrics.get("decision") == "wait_for_measurement"
+    ):
         recommendation = "await_original_evidence"
     elif any(
         sample is not None and sample["verdict"] == "miss"
@@ -748,8 +794,7 @@ def prior_self_assessment(state: dict[str, Any]) -> dict[str, str]:
         return {}
     owner = state.get("owner_user_id")
     if owner is not None and (
-        type(assessment.get("owner_user_id")) is not int
-        or assessment["owner_user_id"] != owner
+        type(assessment.get("owner_user_id")) is not int or assessment["owner_user_id"] != owner
     ):
         return {"status": "unbound_or_previous_owner_hypothesis"}
     return {
@@ -836,7 +881,10 @@ def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> 
     decision = LifeDecision.model_validate_json(content)
     cited = list(decision.evidence_refs)
     for item in [
-        decision.goal, decision.self_assessment, *decision.interests, *decision.alternatives
+        decision.goal,
+        decision.self_assessment,
+        *decision.interests,
+        *decision.alternatives,
     ]:
         if item is not None:
             cited.extend(item.evidence_refs)

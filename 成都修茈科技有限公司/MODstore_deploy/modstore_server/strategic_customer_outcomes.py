@@ -256,10 +256,9 @@ def customer_delivery_evidence(
             )
         ):
             identity = (str(row.customer_goal_id), str(row.customer_ref), str(row.order_no))
-            if (
-                agreements.get(identity) == str(row.receipt_id)
-                and agreement_digests.get(identity) == str(row.evidence_digest)
-            ):
+            if agreements.get(identity) == str(row.receipt_id) and agreement_digests.get(
+                identity
+            ) == str(row.evidence_digest):
                 verified_agreements.add(identity)
                 goal_evidence[str(row.receipt_id)] = _receipt_evidence(row)
                 evidence.append((str(row.receipt_id), str(row.evidence_digest)))

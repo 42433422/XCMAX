@@ -87,8 +87,17 @@ def _validated_body(entry: Any) -> dict[str, Any] | None:
         return None
     body = {key: value for key, value in entry.items() if key != "sha256"}
     if set(body) != {
-        "schema", "cycle_id", "owner_user_id", "policy_revision", "phase", "recorded_at",
-        "reported_status", "reported_tokens", "evidence_refs", "result_refs", "reflection_status",
+        "schema",
+        "cycle_id",
+        "owner_user_id",
+        "policy_revision",
+        "phase",
+        "recorded_at",
+        "reported_status",
+        "reported_tokens",
+        "evidence_refs",
+        "result_refs",
+        "reflection_status",
     }:
         return None
     try:

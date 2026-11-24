@@ -9,11 +9,13 @@ METRIC = "intent_accuracy"
 
 
 def observation(day, value, digest):
-    return {METRIC: {
-        "observed_at": (DAY + timedelta(days=day)).isoformat(),
-        "value": value,
-        "source_sha256": digest * 64,
-    }}
+    return {
+        METRIC: {
+            "observed_at": (DAY + timedelta(days=day)).isoformat(),
+            "value": value,
+            "source_sha256": digest * 64,
+        }
+    }
 
 
 def advance(previous, day, data, owner=7):
@@ -61,7 +63,18 @@ def test_expired_forecast_is_unknown_and_not_reissued_without_new_data():
     assert advance(expired, 10, {}) == expired
 
 
-@pytest.mark.parametrize("value,digest,day", [(True, "c", 2), (float("nan"), "c", 2), (1.2, "c", 2), (0.5, "z", 2), (0.5, "c", 3), (0.5, "a", 2), (0.5, "c", 1)])
+@pytest.mark.parametrize(
+    "value,digest,day",
+    [
+        (True, "c", 2),
+        (float("nan"), "c", 2),
+        (1.2, "c", 2),
+        (0.5, "z", 2),
+        (0.5, "c", 3),
+        (0.5, "a", 2),
+        (0.5, "c", 1),
+    ],
+)
 def test_invalid_future_duplicate_or_same_timestamp_evidence_is_ignored(value, digest, day):
     state = two_samples()
     assert advance(state, 2, observation(day, value, digest)) == state

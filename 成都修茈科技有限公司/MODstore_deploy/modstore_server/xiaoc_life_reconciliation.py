@@ -258,7 +258,9 @@ def reconcile_goals() -> dict[str, Any]:
         states = [tasks.get(key, {}).get("status", "pending") for key in selected]
         closed = portfolio_goal_closed(record, now=utcnow())
         step_projection = project_goal_steps(goal, record)
-        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
+        all_steps_verified = (
+            not step_projection or step_projection.get("all_steps_verified") is True
+        )
         if closed:
             status, label = "stopped", "原组合已停止"
         elif states and all(state == "completed" for state in states):

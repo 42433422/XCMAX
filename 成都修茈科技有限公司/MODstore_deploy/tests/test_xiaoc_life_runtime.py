@@ -876,7 +876,7 @@ def test_checkpointer_connection_loss_blocks_before_any_model_call(ports, monkey
 def test_customer_gap_scheduler_creates_review_only_candidate_without_chat(ports, monkeypatch):
     from datetime import UTC, datetime
 
-    from modstore_server import strategy_planner, strategic_portfolio
+    from modstore_server import strategic_portfolio, strategy_planner
 
     store, calls, *_ = ports
     monkeypatch.setattr(

@@ -6,7 +6,11 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
-from modstore_server.xiaoc_self_metrics import accrual_projection, audit_projection, completion_review
+from modstore_server.xiaoc_self_metrics import (
+    accrual_projection,
+    audit_projection,
+    completion_review,
+)
 
 SCOPE = "exact-scope"
 
@@ -103,6 +107,7 @@ def test_unknown_and_unversioned_receipts_are_not_success_or_failure():
     assert result["status"] == "insufficient_evidence"
     assert result["excluded_unmeasured"] == 1
 
+
 def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tmp_path):
     from modstore_server import strategy_bets, strategy_planner
 
@@ -123,6 +128,7 @@ def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tm
         "domain_count": 18,
         "domains": domains,
     }
+
     def persist():
         catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
 

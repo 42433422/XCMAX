@@ -79,8 +79,17 @@ def get_life(_admin: User = Depends(require_admin)) -> dict[str, Any]:
 
 @router.get("/self-model")
 async def get_self_model(admin: User = Depends(require_admin)) -> dict[str, Any]:
-    from modstore_server.xiaoc_self_metrics import audit_projection, read_accrual, with_cycle_receipts
-    from modstore_server.xiaoc_self_model import execution_scope, model_inventory, project, registry_inventory
+    from modstore_server.xiaoc_self_metrics import (
+        audit_projection,
+        read_accrual,
+        with_cycle_receipts,
+    )
+    from modstore_server.xiaoc_self_model import (
+        execution_scope,
+        model_inventory,
+        project,
+        registry_inventory,
+    )
 
     state = await asyncio.to_thread(read_state)
     state = await asyncio.to_thread(with_cycle_receipts, state)
@@ -204,9 +213,8 @@ def promote_goal(
         raise HTTPException(
             409, "原改进目标须先完成原派工审批，由 L6 循环生成绑定原任务的工程预算提案"
         )
-    if (
-        goal.get("candidate_origin") == ORIGIN
-        and goal.get("candidate_owner_user_id") != int(admin.id)
+    if goal.get("candidate_origin") == ORIGIN and goal.get("candidate_owner_user_id") != int(
+        admin.id
     ):
         raise HTTPException(409, "经营候选不属于当前授权人")
     if goal.get("decision_id"):

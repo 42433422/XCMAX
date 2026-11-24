@@ -620,9 +620,7 @@ def test_rejected_effect_requires_actual_rollback_receipt(reflection):
             if change:
                 from modstore_server.strategic_workspace_receipts import _evidence, _terminal
 
-                assert _terminal(
-                    {"original_request_id": request_id}, _evidence(row)
-                ) is None
+                assert _terminal({"original_request_id": request_id}, _evidence(row)) is None
     evolution.reconcile()
     observed = life.read_state()["goals"][0]["evolution_outcome"]
     assert observed["status"] == "evolution_failed"

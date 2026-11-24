@@ -276,7 +276,6 @@ def create_portfolio_proposal(
     if decision_options is not None:
         from modstore_server.business_decision_review import compare_options, proposal_content
         from modstore_server.strategic_layer.decision_ledger import _model_to_record
-
         from modstore_server.xiaoc_life_cognition import ProposalAlternative
 
         refs = decision_options.get("evidence_refs")
@@ -305,7 +304,9 @@ def create_portfolio_proposal(
         ):
             raise PortfolioError("decision option refers to unobserved evidence")
         decision_options = {
-            "alternatives": alternatives, "context_sha256": context_sha, "evidence_refs": refs
+            "alternatives": alternatives,
+            "context_sha256": context_sha,
+            "evidence_refs": refs,
         }
         request_sha = digest([proposal, decision_options])
         stable_id = "dec-" + hashlib.sha256(record_key.encode()).hexdigest()[:16]
@@ -361,10 +362,9 @@ def create_portfolio_proposal(
         from modstore_server.business_decision_review import proposal_content
 
         stored = record.decision_payload
-        if (
-            stored.get("decision_review", {}).get("request_sha256") != request_sha
-            or digest(proposal_content(stored)) != stored.get("proposal_sha256")
-        ):
+        if stored.get("decision_review", {}).get("request_sha256") != request_sha or digest(
+            proposal_content(stored)
+        ) != stored.get("proposal_sha256"):
             raise PortfolioError("idempotency key already belongs to a different decision")
         return {
             "schema": SCHEMA,
@@ -581,7 +581,11 @@ def portfolio_status(decision_id: str, *, owner_user_id: int | None = None) -> d
             "opportunities": proposal["opportunities"],
             "proposal_sha256": proposal["proposal_sha256"],
             **state,
-            **({"decision_review": proposal["decision_review"]} if "decision_review" in proposal else {}),
+            **(
+                {"decision_review": proposal["decision_review"]}
+                if "decision_review" in proposal
+                else {}
+            ),
         }
 
 

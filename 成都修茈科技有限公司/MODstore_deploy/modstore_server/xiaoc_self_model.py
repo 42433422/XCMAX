@@ -131,9 +131,7 @@ def current_identity_evidence(
     return {"status": "unverified", "reason": "no_current_independent_identity_check"}
 
 
-def performance(
-    scope: str | None, events: list[dict[str, Any]]
-) -> dict[str, Any]:
+def performance(scope: str | None, events: list[dict[str, Any]]) -> dict[str, Any]:
     """Only exact-scope original cycle receipts; no business-success inference."""
     counts: Counter[str] = Counter()
     failures: Counter[str] = Counter()
@@ -417,13 +415,19 @@ def historical_evaluations(events: list[dict[str, Any]]) -> list[dict[str, Any]]
         {
             "status": "historical_measurement_not_current_capability",
             "evidence_ref": row["id"],
-            **{k: row["details"][k] for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256")},
+            **{
+                k: row["details"][k]
+                for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256")
+            },
         }
         for row in events
         if row.get("kind") == "self_promptfoo_check"
         and row.get("status") == "historical_measurement"
         and isinstance(row.get("details"), dict)
-        and all(k in row["details"] for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256"))
+        and all(
+            k in row["details"]
+            for k in ("engine", "baseline", "candidate", "bundle_sha256", "results_sha256")
+        )
     ][:20]
 
 
@@ -470,7 +474,10 @@ def record_promptfoo_measurement(bundle_path: Path, result_path: Path) -> dict[s
                 kind="self_promptfoo_check",
                 status="historical_measurement",
                 summary="离线成对回归测量，不能证明当前版本能力或授权上线。",
-                evidence_refs=["sha256:" + details["bundle_sha256"], "sha256:" + details["results_sha256"]],
+                evidence_refs=[
+                    "sha256:" + details["bundle_sha256"],
+                    "sha256:" + details["results_sha256"],
+                ],
                 details=details,
             )
         return {"status": "historical_measurement", "evidence_ref": event_id}
