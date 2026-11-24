@@ -334,7 +334,7 @@ def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only)
 
 
 @pytest.fixture
-def recovered_bound_receipts(bridge_setup, local_tools, monkeypatch, tmp_path):
+def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     """Original host rejection and independently read-back write, both actually approved."""
     from app.application.agent_orchestrator.approval_consumption_repository import (
         SQLAlchemyApprovalConsumptionRepository,
@@ -343,6 +343,14 @@ def recovered_bound_receipts(bridge_setup, local_tools, monkeypatch, tmp_path):
     from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
 
     setup = bridge_setup
+    # This regression asserts persisted receipt recovery, not process isolation:
+    # run the real tool in-process so host-specific worker spawn cannot fail setup.
+    executor = setup.bridge.orchestrator._tool_executor
+
+    def execute_in_process(step, *, runtime_context, deadline_monotonic):
+        return executor.execute(step, runtime_context=runtime_context)
+
+    executor.execute_with_deadline = execute_in_process
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "original-claims.sqlite"))
     monkeypatch.setattr(
         "app.application.customer_app_service.get_customers_session", setup.actor.factory

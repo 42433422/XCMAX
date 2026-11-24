@@ -1,5 +1,5 @@
 {
-  "lines": 2732938,
+  "lines": 2732946,
   "updated": "2026-11-25",
-  "note": "PR #3558: report recoverable write failure fields in the receipt regression."
+  "note": "PR #3558: run the receipt recovery fixture through a bounded in-process executor."
 }
