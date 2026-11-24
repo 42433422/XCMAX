@@ -170,8 +170,9 @@ def test_late_receipt_registers_one_pending_candidate_in_original_sql_ledger(
 
 
 
+@pytest.mark.parametrize("frozen_review", [False, True])
 def test_original_owner_review_and_revocation_are_idempotent(
-    approved_life_portfolio, monkeypatch, database
+    approved_life_portfolio, monkeypatch, database, frozen_review
 ):
     import json
     from sqlalchemy import select
@@ -190,7 +191,15 @@ def test_original_owner_review_and_revocation_are_idempotent(
         )
         proposal = json.loads(row.decision_payload_json)
         proposal["opportunities"] = synthetic["opportunities"]
-        proposal_hash = digest({k: v for k, v in proposal.items() if k != "proposal_sha256"})
+        if frozen_review:
+            proposal["decision_review"] = {
+                "schema": "xcagi.xiaoc_decision_review/v1",
+                "selected_for_approval": "a",
+                "options": [{"option_id": "a", "forecast": {"status": "unknown"}}],
+            }
+        from modstore_server.business_decision_review import proposal_content
+
+        proposal_hash = digest(proposal_content(proposal))
         proposal["proposal_sha256"] = proposal_hash
         synthetic["proposal_sha256"] = proposal_hash
         synthetic["authorization"]["proposal_sha256"] = proposal_hash

@@ -268,6 +268,9 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
                 "status", "option_id", "snapshot_sha256", "metric_id", "window_start", "window_end",
                 "actual_metric_value", "actual_accrued_cost_cents", "hit", "predicted_probability",
                 "predicted_metric_value", "brier", "metric_error", "forecast_status",
+                "metric_evidence_sha256", "execution_result_sha256", "cost_basis",
+                "predicted_accrued_cost_cents", "cost_error_cents", "counterfactual_status",
+                "verification_scope",
             )
             if key in evaluation
         }

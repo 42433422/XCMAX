@@ -37,10 +37,14 @@ def _current_candidate(session: Any, candidate: dict[str, Any]) -> bool:
         )
     except PortfolioError:
         return False
-    keys = ("schema", "owner_user_id", "goal", "period", "limits", "opportunities")
+    from modstore_server.business_decision_review import proposal_content
+
+    try:
+        canonical_hash = digest(proposal_content(proposal))
+    except (KeyError, TypeError, ValueError):
+        return False
     if (
-        any(key not in proposal for key in keys)
-        or digest({key: proposal[key] for key in keys}) != candidate["proposal_sha256"]
+        canonical_hash != candidate["proposal_sha256"]
         or proposal.get("proposal_sha256") != candidate["proposal_sha256"]
         or ledger.get("proposal_sha256") != candidate["proposal_sha256"]
         or row.decided_by not in ("user", "council-vote")
