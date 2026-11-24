@@ -225,6 +225,7 @@ def _public_memory_record(record: dict[str, Any], scope: str) -> dict[str, Any]:
             "correction_count",
             "revision",
             "recorded_at_utc",
+            "conflict_review",
             "history",
         )
     }

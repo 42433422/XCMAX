@@ -489,7 +489,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         selected = scored[: max(1, min(int(top_k or 5), 20))]
 
         dropped = 0
-        if selected and (paths or review_only):
+        if selected:
             # A second authority read fences changes while building paths. Each returned
             # result still identifies its source revision, never a new business authorization.
             fresh = self.list_memories(access_context=access, status="active", limit=1000)

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from app.application.user_memory.policy import is_scoped_memory_owner
 from app.application.user_memory.preferences import sync_preference_projection
 from app.application.user_memory.projections import project_after_commit
 from app.application.user_memory.protocols import (
@@ -17,7 +18,10 @@ from app.application.user_memory.protocols import (
     MemoryStatusUpdate,
     memory_transaction,
 )
-from app.application.user_memory.relation_retrieval import validate_relation_value
+from app.application.user_memory.relation_retrieval import (
+    relation_write_conflicts,
+    validate_relation_value,
+)
 from app.domain.user_memory.records import UserMemory
 
 
@@ -29,6 +33,15 @@ def _advance_revision(record: JsonObject, updated: JsonObject, *, action: str, a
         *record.get("history", []),
         {"action": action, "at": at, "previous": previous},
     ]
+
+
+def _conflict_response(conflicts: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error_code": "memory_relation_review_required",
+        "message": "单值关系有效期重叠，请审核原记忆或明确不重叠的有效期",
+        "conflicts": conflicts,
+    }
 
 
 @dataclass(frozen=True)
@@ -89,12 +102,14 @@ class CandidateMemory:
                 "rejected",
             }:
                 return {"success": True, "created": False, "candidate": dict(record)}
-            if personal_capture and (
+            # Scoped owner revocations and superseded revisions survive repeated capture.
+            if is_scoped_memory_owner(user_id) and (
                 (record.get("fingerprint") == fingerprint and record.get("status") == "deleted")
                 or any(
                     (revision.get("previous") or {}).get("fingerprint") == fingerprint
                     for revision in record.get("history") or []
-                    if revision.get("action") == "correct"
+                    if revision.get("action") in {"correct", "confirm"}
+                    and record.get("fingerprint") != fingerprint
                 )
             ):
                 return {"success": True, "created": False}
@@ -125,6 +140,11 @@ class CandidateMemory:
         if candidate["status"] == "rejected":
             candidate["rejected_at"] = now
             candidate["rejected_reason"] = "source_policy_blocked"
+        if candidate["status"] == "pending":
+            conflicts = relation_write_conflicts(memory.memory_v2_records, candidate)
+            if conflicts:
+                candidate["conflict_review"] = conflicts
+                activate = False
         if activate:
             candidate.update(
                 status="active",
@@ -183,6 +203,10 @@ class CandidateMemory:
         invalid = validate_relation_value(updated.get("value"))
         if invalid is not None:
             return invalid
+        conflicts = relation_write_conflicts(memory.memory_v2_records, updated)
+        if conflicts:
+            return _conflict_response(conflicts)
+        updated.pop("conflict_review", None)
         now = self.access.now()
         updated["status"] = "active"
         updated["confirmed_at"] = now
@@ -269,6 +293,13 @@ class CandidateMemory:
         invalid = validate_relation_value(updated.get("value"))
         if invalid is not None:
             return invalid
+        conflicts = relation_write_conflicts(memory.memory_v2_records, updated)
+        if updated["status"] == "active" and conflicts:
+            return _conflict_response(conflicts)
+        if conflicts:
+            updated["conflict_review"] = conflicts
+        else:
+            updated.pop("conflict_review", None)
         now = self.access.now()
         updated["updated_at"] = now
         updated["last_correction_reason"] = reason
