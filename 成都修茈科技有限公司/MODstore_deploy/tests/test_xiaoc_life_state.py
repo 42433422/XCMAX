@@ -868,7 +868,9 @@ def test_self_audit_mapping_keeps_all_existing_anchors_unverified(monkeypatch):
     assert all(row["status"] == "unverified" for row in result["anchors"])
     assert result["historical_domains"]["autonomy"]["status"] == "PASS"
 
-def test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery(database, tmp_path):
+def test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery(
+    database, tmp_path
+):
     import hashlib
 
     from modstore_server.xiaoc_self_evidence import (
