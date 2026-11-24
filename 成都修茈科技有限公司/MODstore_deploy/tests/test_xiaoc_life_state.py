@@ -221,7 +221,9 @@ def test_late_receipts_settle_once_without_learning_or_advancing_goals(
                 "status": "hypothesis",
                 "owner_user_id": claim["owner_user_id"],
                 "assessment_event_id": "cycle:" + claim["cycle_id"],
-            } if learned else before["self_model"]
+            }
+            if learned
+            else before["self_model"]
         )
         assert state.get("goal_cursors", {}) == ({"enterprise": "original-goal"} if fresh else {})
         events = [event for event in state["events"] if event["id"] == "cycle:" + claim["cycle_id"]]
@@ -717,11 +719,15 @@ def test_world_forecast_settles_across_real_sql_cycles_without_new_authority(dat
         claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
         state = finish(
             claim,
-            details={"world_observations": {"intent_accuracy": {
-                "observed_at": now.isoformat(),
-                "value": value,
-                "source_sha256": digest * 64,
-            }}},
+            details={
+                "world_observations": {
+                    "intent_accuracy": {
+                        "observed_at": now.isoformat(),
+                        "value": value,
+                        "source_sha256": digest * 64,
+                    }
+                }
+            },
         )
         assert finish(claim)["world_review"] == state["world_review"]
         return state
@@ -746,11 +752,15 @@ def test_world_forecast_does_not_learn_after_pause(database):
     )
     result = finish(
         claim,
-        details={"world_observations": {"intent_accuracy": {
-            "observed_at": store.utcnow().isoformat(),
-            "value": 0.5,
-            "source_sha256": "a" * 64,
-        }}},
+        details={
+            "world_observations": {
+                "intent_accuracy": {
+                    "observed_at": store.utcnow().isoformat(),
+                    "value": 0.5,
+                    "source_sha256": "a" * 64,
+                }
+            }
+        },
     )
     assert "world_review" not in result
     assert result["budget"]["used_tokens"] == 50
@@ -869,6 +879,7 @@ def test_self_audit_mapping_keeps_all_existing_anchors_unverified(monkeypatch):
     assert result["anchor_count"] == 108
     assert all(row["status"] == "unverified" for row in result["anchors"])
     assert result["historical_domains"]["autonomy"]["status"] == "PASS"
+
 
 def test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery(
     database, tmp_path
