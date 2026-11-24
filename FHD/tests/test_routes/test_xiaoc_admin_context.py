@@ -213,7 +213,8 @@ def test_admin_capability_discovery_uses_the_live_host_grant(capability_bridge):
     result = _call(client, "capabilities", limit=500).json()
     assert result["success"]
     catalog = {row["capability_id"]: row for row in result["capabilities"]}
-    assert "customers.query" not in catalog and "customers.create" not in catalog
+    assert "customers.query" in catalog
+    assert "customers.create" not in catalog
     assert catalog["business_db.read"]["input_schema"]["properties"]["entity"]["enum"] == [
         "customers"
     ]
@@ -262,3 +263,83 @@ def test_admin_enterprise_read_and_execution_use_the_same_bound_chain(
         _call(client, "execute_capability", tool_id="customers", action="query").status_code == 422
     )
     assert len(observed) == 2
+
+
+@pytest.mark.parametrize(
+    ("receipt", "public_fields"),
+    [
+        ({"success": True, "result": {"records": [{"id": 7}]}}, None),
+        (
+            {
+                "success": False,
+                "error_code": "schema_validation_failed",
+                "error": "数量必须为正数",
+                "result": {"row_count": 0},
+                "http_status_code": 422,
+            },
+            {
+                "success": False,
+                "error_code": "schema_validation_failed",
+                "agent_status": "",
+                "message": "工具执行尚未完成，请查看任务状态",
+            },
+        ),
+        (
+            {
+                "success": False,
+                "pending_approval": True,
+                "approval_request_id": "approval-original",
+            },
+            {
+                "success": False,
+                "pending_approval": True,
+                "approval_request_id": "approval-original",
+                "error_code": "approval_required",
+                "agent_status": "waiting_user",
+                "message": "工具执行需要审批",
+            },
+        ),
+        (
+            {"success": False, "execution_state": "unknown", "retryable": False},
+            {
+                "success": False,
+                "execution_state": "unknown",
+                "agent_status": "unknown",
+                "retryable": False,
+                "reconciliation_required": True,
+                "message": "工具结果待核对，请查询原任务，勿重复提交",
+            },
+        ),
+    ],
+    ids=["success", "failed", "approval", "unknown"],
+)
+def test_admin_capability_preserves_public_receipt_contract(
+    capability_bridge, monkeypatch, receipt, public_fields
+):
+    import json
+
+    client, _ = capability_bridge
+    identity = {
+        "task_id": "task-original",
+        "request_id": "original-turn:0",
+        "root_task_id": "root-original",
+        "attempt": 2,
+        "run_id": "run-original",
+    }
+    original = {**identity, **receipt}
+    execute = Mock(return_value=json.dumps(original))
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        execute,
+    )
+    response = _call(
+        client,
+        "execute_capability",
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers"},
+        request_id="original-turn:0",
+    )
+    assert response.status_code == 200
+    assert response.json() == (original if public_fields is None else {**identity, **public_fields})
+    execute.assert_called_once()

@@ -14,10 +14,14 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-try:  # openpyxl 对损坏文件抛 InvalidFileException，不属于 OSError 族。
+try:  # openpyxl 对损坏文件或缺失 ZIP 部件抛出这些库边界异常。
     from openpyxl.utils.exceptions import InvalidFileException
 
-    _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (InvalidFileException,)
+    _OPENPYXL_ERRORS: tuple[type[Exception], ...] = (
+        InvalidFileException,
+        KeyError,
+        zipfile.BadZipFile,
+    )
 except ImportError:
     _OPENPYXL_ERRORS = ()
 

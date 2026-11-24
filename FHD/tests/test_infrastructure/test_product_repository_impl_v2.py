@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.repositories.product_repository_impl import (
     SQLAlchemyProductRepository,
@@ -680,7 +682,7 @@ class TestFindProductUnits:
 
             with patch(
                 "app.application.customer_app_service.get_customers_session",
-                side_effect=RuntimeError("session error"),
+                side_effect=OperationalError(None, None, sqlite3.OperationalError("session error")),
             ):
                 result = repo.find_product_units()
 

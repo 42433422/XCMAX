@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from app.neuro_bus.events.events_base import NeuroEvent
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 from .dead_letter_policies import ReplayLedger
 from .replay_claim import ReplayClaim
@@ -77,8 +78,9 @@ class ReplayDelivery:
             for callback in self.callbacks:
                 try:
                     callback(entry.original_event)
-                except self.runtime.errors() as error:
+                except BOUNDARY_ERRORS as error:
                     self.runtime.log().error("[DeadLetterQueue] 重播回调失败: %s", error)
+                    raise
             self.ledger.mark_replayed(entry_id, replay_count)
             with self.lock:
                 self.stats["replayed"] += 1

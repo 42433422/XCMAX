@@ -475,13 +475,14 @@ class ContextWindowManager:
             nonlocal interrupted
             self._validate_context(context)
             call = LLMCall(
+                status="failed",
                 metadata={
                     "source": "context_window_manager.summarize",
                     "trace_id": trace_id or "",
                     "user_id": user_id,
                     "input_message_count": batch_count,
                     "boundary_component": "openhands-condenser",
-                }
+                },
             )
             calls.append(call)
             started = time.perf_counter()

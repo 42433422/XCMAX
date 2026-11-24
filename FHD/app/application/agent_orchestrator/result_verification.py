@@ -297,6 +297,22 @@ def verify_step_result(
         report.update(status="inconclusive", code="verification_source_unavailable", checks=[])
     report["accepted"] = report["status"] in ACCEPTED_STATUSES
     report["evidence_sha256"] = canonical_hash(report["checks"])
+    from app.application.agent_orchestrator.verification_integrity import (
+        _catalog_observation_proof,
+    )
+
+    try:
+        observation_proof = _catalog_observation_proof(call, report)
+        if observation_proof is not None:
+            report["catalog_observation_proof"] = observation_proof
+    except (TypeError, ValueError):
+        report.update(
+            status="inconclusive",
+            accepted=False,
+            code="verification_source_unavailable",
+            checks=[],
+            evidence_sha256=canonical_hash([]),
+        )
     report["report_sha256"] = canonical_hash(report)
     call.metadata["verification"] = copy.deepcopy(report)
     return report
@@ -320,9 +336,25 @@ def _evaluate(run, step, call, context, contract) -> dict[str, Any]:
         plan_admission_receipt(call.output)
     )
     pending = pending_execution_receipt(call.output)
+    # A settled catalog rejection or historical save still needs signed readback.
+    catalog_terminal = (
+        step.tool_id == "catalog_products_v1"
+        and step.action in {"append_price", "correct_price"}
+        and call.output.get("success") is False
+        and (call.output.get("outcome"), call.output.get("operation_outcome"))
+        in {("historical_saved", "saved"), ("rejected_no_effect", "rejected_no_effect")}
+        and call.output.get("fresh_save") is False
+        and call.output.get("retryable") is False
+        and not execution_result_pending_state(call.output)
+        and not any(
+            row.get("error") or row.get("error_code")
+            for row in execution_result_envelopes(call.output)
+        )
+    )
     if (
         not delivery_observation
         and not pending
+        and not catalog_terminal
         and (
             call.output.get("success") is not True
             or (execution_result_error(call.output) and not child_admission)

@@ -96,8 +96,9 @@ def verify(case, output=None):
     )
 
 
+@pytest.mark.parametrize("via_executor", [False, True])
 def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
-    owner, tmp_path, monkeypatch
+    owner, trusted_actor, tmp_path, monkeypatch, via_executor
 ):
     from openpyxl import load_workbook
 
@@ -105,6 +106,8 @@ def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
     from app.application.customer_app_service import CustomerApplicationService
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    if via_executor:
+        owner = trusted_actor(permissions=["customer.view"])
     case = invocation(owner, action="export", params={"keyword": "Receipt"})
     context = {
         **case.context,
@@ -118,10 +121,16 @@ def test_customer_export_uses_original_owned_file_and_rejects_changed_receipts(
     ):
         with tenant_scope(tenant), owner.factory.begin() as db:
             db.add(PurchaseUnit(tenant_id=tenant, unit_name=name))
-    with tenant_scope(owner.tenant_id):
-        output = CustomerApplicationService().export_to_excel(
-            keyword="Receipt", runtime_context=context
-        )
+    if via_executor:
+        from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+        with tenant_scope(owner.tenant_id + 1):
+            output = AgentToolExecutor().execute(case.step, runtime_context=context)
+    else:
+        with tenant_scope(owner.tenant_id):
+            output = CustomerApplicationService().export_to_excel(
+                keyword="Receipt", runtime_context=context
+            )
     assert output["success"] is True
     path = Path(output["file_path"])
     book = load_workbook(path, read_only=True)

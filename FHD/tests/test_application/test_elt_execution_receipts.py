@@ -187,7 +187,7 @@ def test_commit_acknowledgement_is_read_back_without_replaying(
         nonlocal opened
         opened += 1
         if opened > 1 and not readback_available:
-            raise RuntimeError("synthetic unavailable independent readback")
+            raise OSError("synthetic unavailable independent readback")
         db = store.factory()
         commit = db.commit
 
@@ -198,7 +198,7 @@ def test_commit_acknowledgement_is_read_back_without_replaying(
                 interrupted = True
                 if committed:
                     commit()
-                raise RuntimeError("synthetic lost commit acknowledgement")
+                raise OSError("synthetic lost commit acknowledgement")
             return commit()
 
         monkeypatch.setattr(db, "commit", lose_ack)

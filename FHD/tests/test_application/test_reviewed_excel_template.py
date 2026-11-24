@@ -2498,7 +2498,7 @@ def test_platform_initialization_outage_returns_failure_without_rule_candidates(
     from app.application.reviewed_excel_template import _template_platform_complete
 
     def unavailable(**_):
-        raise RuntimeError("synthetic-private-provider-initialization")
+        raise ImportError("synthetic-private-provider-initialization")
 
     monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setattr(sessions, "current_owner_market_provider", unavailable)

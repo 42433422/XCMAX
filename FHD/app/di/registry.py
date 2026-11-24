@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from app.domain.shared_services.session_service import SessionService
     from app.domain.shared_services.user_preference_service import UserPreferenceService
     from app.domain.shared_services.user_service import UserService
+    from app.infrastructure.session.session_manager import SessionManager
 
 _lock = threading.RLock()
 _registry: Optional[ServiceContainer] = None
@@ -90,6 +91,12 @@ class ServiceContainer:
         return getattr(self, attr)
 
     # --- core HTTP / session services ---
+
+    @property
+    def session_manager(self) -> SessionManager:
+        from app.infrastructure.session.session_manager import get_session_manager
+
+        return get_session_manager()
 
     @property
     def session_service(self) -> SessionService:

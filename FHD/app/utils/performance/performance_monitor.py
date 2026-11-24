@@ -13,6 +13,7 @@
 import functools
 import logging
 import os
+import sys
 import time
 from collections import deque
 from collections.abc import Callable
@@ -20,8 +21,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
-
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -198,17 +197,16 @@ class PerformanceMonitor:
                 result = db.session.query(...)
         """
         start_time = time.perf_counter()
-        error_occurred = False
+        succeeded = False
 
         try:
             yield
-        except RECOVERABLE_ERRORS as e:
-            error_occurred = True
-            metadata["error"] = str(e)
-            raise
+            succeeded = True
         finally:
+            if not succeeded and (error := sys.exception()) is not None:
+                metadata["error"] = str(error)
             duration_ms = (time.perf_counter() - start_time) * 1000
-            self.record_metric(name, duration_ms, success=not error_occurred, **metadata)
+            self.record_metric(name, duration_ms, success=succeeded, **metadata)
 
     def timer(self, name: str | None = None, include_args: bool = False):
         """
@@ -227,18 +225,8 @@ class PerformanceMonitor:
                 if include_args:
                     metric_name = f"{metric_name}:{str(args)[:50]}"
 
-                start_time = time.perf_counter()
-
-                try:
-                    result = func(*args, **kwargs)
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    self.record_metric(metric_name, duration_ms, success=True)
-                    return result
-
-                except RECOVERABLE_ERRORS as e:
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    self.record_metric(metric_name, duration_ms, success=False, error=str(e))
-                    raise
+                with self.track(metric_name):
+                    return func(*args, **kwargs)
 
             return wrapper
 
@@ -253,28 +241,20 @@ class PerformanceMonitor:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 start_time = time.perf_counter()
+                status_code = 500
                 try:
                     result = func(*args, **kwargs)
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    self.record_api_call(
-                        endpoint=func.__name__,
-                        method="SYNC",
-                        status_code=200,
-                        duration_ms=duration_ms,
-                        user_id=None,
-                        ip=None,
-                    )
+                    status_code = 200
                     return result
-                except RECOVERABLE_ERRORS:
+                finally:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_api_call(
                         endpoint=func.__name__,
                         method="SYNC",
-                        status_code=500,
+                        status_code=status_code,
                         duration_ms=duration_ms,
                         ip=None,
                     )
-                    raise
 
             return wrapper
 

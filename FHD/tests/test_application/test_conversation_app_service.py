@@ -9,6 +9,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 
 def _mock_db_ctx(mock_db):
@@ -87,7 +88,7 @@ class TestSaveMessage:
             patch("app.application.conversation_app_service.AIConversation", return_value=mock_msg),
             patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_conversation_message_saved",
-                side_effect=RuntimeError("bus down"),
+                side_effect=RedisConnectionError("bus down"),
             ),
         ):
             # Should not raise — error is caught by RECOVERABLE_ERRORS

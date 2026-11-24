@@ -341,7 +341,7 @@ class TestPrintRoutesPrinters:
 
     def test_get_printers_exception_returns_500(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
-            svc.return_value.get_printers.side_effect = RuntimeError("boom")
+            svc.return_value.get_printers.side_effect = OSError("boom")
             r = print_client.get("/api/print/printers")
         assert r.status_code == 500, r.text
         assert r.json()["message"] == "打印服务暂时不可用，请稍后重试"
@@ -1653,7 +1653,7 @@ class TestDeactivateOtherOpenIndustryMods:
             mods_root = str(tmp_path)
 
             def unload_mod(self, mod_id: str) -> bool:
-                raise RuntimeError("unload fail")
+                raise OSError("unload fail")
 
         monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         rows = deactivate_other_open_industry_mods(keep, remove_files=False)
@@ -1676,7 +1676,7 @@ class TestSeedIndustryMod:
             mods_root = str(mods_root_path)
 
             def load_mod(self, mod_id: str) -> bool:
-                raise RuntimeError("load fail")
+                raise OSError("load fail")
 
             def unload_mod(self, mod_id: str) -> bool:
                 return True
@@ -1836,7 +1836,7 @@ class TestInstallIndustrySeedWithFallback:
         )
         monkeypatch.setattr(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            AsyncMock(side_effect=RuntimeError("net down")),
+            AsyncMock(side_effect=OSError("net down")),
         )
         result = await install_industry_seed_with_fallback("涂料")
         assert result["success"] is False

@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from huggingface_hub.errors import LocalEntryNotFoundError
 
 from app.fastapi_routes.voice_routes import (
     _MAX_UPLOAD_BYTES,
@@ -250,11 +251,17 @@ class TestGetModel:
             patch(
                 "app.fastapi_routes.voice_routes._resolve_model_source",
                 return_value="small",
-            ),
+            ) as model_source,
         ):
             with pytest.raises(HTTPException) as exc_info:
                 _get_model()
             assert exc_info.value.status_code == 503
+            assert mod._model_holder["instance"] is None
+            assert mod._model_holder["signature"] is None
+            model_source.side_effect = RuntimeError("resolver failed")
+            with pytest.raises(RuntimeError, match="^resolver failed$"):
+                _get_model()
+            mock_whisper_cls.assert_called_once()
 
     def test_cache_hit_returns_cached_instance(self, monkeypatch):
         import app.fastapi_routes.voice_routes as mod
@@ -323,11 +330,14 @@ class TestResolveModelSource:
         with (
             patch(
                 "faster_whisper.utils.download_model",
-                side_effect=RuntimeError("not cached"),
+                side_effect=LocalEntryNotFoundError("not cached"),
             ),
             patch(
                 "huggingface_hub.snapshot_download",
-                side_effect=[RuntimeError("official unavailable"), "/tmp/mirror-whisper"],
+                side_effect=[
+                    LocalEntryNotFoundError("official unavailable"),
+                    "/tmp/mirror-whisper",
+                ],
             ) as snapshot_download,
         ):
             assert _resolve_model_source("tiny") == "/tmp/mirror-whisper"
@@ -344,7 +354,7 @@ class TestResolveModelSource:
         with (
             patch(
                 "faster_whisper.utils.download_model",
-                side_effect=RuntimeError("not cached"),
+                side_effect=LocalEntryNotFoundError("not cached"),
             ),
             patch(
                 "huggingface_hub.snapshot_download",

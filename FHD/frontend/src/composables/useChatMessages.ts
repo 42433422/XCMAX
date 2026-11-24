@@ -806,7 +806,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   // 切换当前扩展（Mod）时：同一会话 ID 下不同 Mod 的消息缓存相互隔离，
   // 切换后应重新读取当前 Mod 对应的本地消息（若无缓存则展示欢迎语）。
   watch(
-    () => [String(activeModId.value || ''), productReadAccountEpoch.value, resolveChatStorageScope()] as const,
+    [() => String(activeModId.value || ''), () => productReadAccountEpoch.value, () => resolveChatStorageScope()],
     () => {
       // 每个缓存键都是独立单例：身份从临时作用域切到已登录作用域时，
       // 直接切到新键自己的缓存，不把临时欢迎语复制过去。
