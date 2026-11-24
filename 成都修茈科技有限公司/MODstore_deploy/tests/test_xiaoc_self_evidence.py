@@ -10,6 +10,7 @@ import pytest
 
 from modstore_server.xiaoc_self_evidence import (
     annotate_unverified_catalog,
+    fixture_trend,
     read_fixture_summary,
 )
 
@@ -181,3 +182,36 @@ def test_history_must_match_standard_digest_and_bound_event_identity():
     ):
         result = annotate_unverified_catalog(copy.deepcopy(catalog), [tampered], current_sha=None)
         assert "fixture_history" not in result["anchors"][0]
+
+def test_release_fixture_trend_never_claims_actual_capability_decline():
+    report, standard = sample()
+    summary = read_fixture_summary(encode(report), standard)
+
+    def event(key, source, statuses):
+        details = copy.deepcopy(summary)
+        details["source_sha"] = source
+        details["report_sha256"] = sha(key)
+        for scenario, state in statuses.items():
+            details["scenarios"][scenario]["integration"] = state
+        return {
+            "id": "self-fixture:" + details["report_sha256"],
+            "kind": "self_fixture_check",
+            "status": "historical_fixture",
+            "details": details,
+        }
+
+    old = event("old", "c" * 40, {"memory": "PASS", "business": "PASS"})
+    current = event("new", "a" * 40, {"memory": "FAIL", "business": "BLOCKED"})
+    trend = fixture_trend([current, old], current_sha="a" * 40)
+    assert trend["status"] == "comparable_fixture_only_not_capability_degradation"
+    assert trend["fixture_regressions_to_review"] == ["memory"]
+    assert trend["fixture_evidence_lost"] == ["business"]
+
+    drifted = copy.deepcopy(old)
+    drifted["details"]["dataset_sha256"] = sha("different")
+    assert fixture_trend(
+        [current, drifted], current_sha="a" * 40
+    )["status"] == "insufficient_comparable_fixture_evidence"
+    assert fixture_trend(
+        [old], current_sha="a" * 40
+    )["status"] == "insufficient_comparable_fixture_evidence"
