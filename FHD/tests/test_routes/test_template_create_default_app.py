@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
