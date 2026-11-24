@@ -591,7 +591,6 @@
           "idempotent": true,
           "required_params": [],
           "availability": "shared",
-          "data_scope": "legacy_global",
           "permission": "customer.view"
         },
         "ensure_exists": {

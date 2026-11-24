@@ -6,6 +6,7 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 import app.domain.shared_services.deepseek_intent_service as ds
@@ -340,7 +341,7 @@ class TestRecognizeAsyncDeep:
         with (
             patch(
                 "app.infrastructure.llm.invoke.chat_completion_openai_format",
-                new=AsyncMock(side_effect=RuntimeError("always fail")),
+                new=AsyncMock(side_effect=httpx.ConnectError("always fail")),
             ),
             patch("asyncio.sleep", new=AsyncMock()),
         ):
@@ -476,10 +477,11 @@ class TestHybridRecognizeDeep:
                 h.deepseek_recognizer,
                 "recognize",
                 new=AsyncMock(side_effect=RuntimeError("ds fail")),
-            ),
+            ) as recognize,
         ):
-            out = await h.recognize("msg")
-        assert out["intent_source"] == "rule"
+            with pytest.raises(RuntimeError, match="^ds fail$"):
+                await h.recognize("msg")
+        recognize.assert_awaited_once_with("msg", None)
 
 
 # ─_extract_slots_from_rule deep ─────────────────────────────────────────────
@@ -557,18 +559,22 @@ class TestRecognizeSyncDeep:
     def test_recognize_sync_recoverable_error(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         with (
-            patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
+            patch.object(
+                h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))
+            ) as recognize,
             patch(
                 "app.domain.shared_services.intent_service.recognize_intents",
                 return_value={"primary_intent": "fallback"},
-            ),
+            ) as rule,
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
             ),
         ):
-            out = h.recognize_sync("msg")
-        assert out["primary_intent"] == "fallback"
+            with pytest.raises(RuntimeError, match="^sync fail$"):
+                h.recognize_sync("msg")
+        recognize.assert_awaited_once_with("msg")
+        rule.assert_not_called()
 
 
 # ── cn_to_number module-level deep ───────────────────────────────────────────

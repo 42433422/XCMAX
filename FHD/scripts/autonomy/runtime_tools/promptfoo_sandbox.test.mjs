@@ -127,6 +127,14 @@ test('fixed native replay policy denies network and preserves the namespace/writ
   assert.ok(policy.filesystem.denyRead.includes('/'));
   assert.ok(policy.filesystem.allowRead.includes(wrapper));
   assert.ok(policy.filesystem.allowRead.includes(join(dirname(wrapper), 'opencode_agent.mjs')));
+  const databaseSource = join(hostApp, 'infrastructure/database/database_manager.py');
+  assert.ok(policy.filesystem.allowRead.includes(databaseSource));
+  assert.ok(policy.filesystem.denyRead.includes(dirname(databaseSource)));
+  const policyDirectory = join(dirname(hostApp), 'config');
+  for (const name of ['risk_actions.registry.json', 'autonomy_boundaries.yaml']) {
+    assert.ok(policy.filesystem.allowRead.includes(join(policyDirectory, name)), name);
+  }
+  assert.ok(!policy.filesystem.allowRead.includes(policyDirectory));
   assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
   assert.ok(!policy.filesystem.allowRead.includes(spec.project));
   assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../packages')));
@@ -285,7 +293,8 @@ def get_assert(output, context):
         raise AssertionError('controller data must stay unreadable')
     assert 'XCAGI_LLM_API_KEY' not in os.environ
     passed = output == 'CANDIDATE_PASS'
-    return {'pass': passed, 'score': int(passed), 'reason': 'candidate verified' if passed else 'baseline output'}
+    return {'pass': passed, 'score': int(passed),
+            'reason': 'native_candidate_match' if passed else 'native_baseline_mismatch'}
 `);
   }
   writeFileSync(config, JSON.stringify({ sharing: false, writeLatestResults: false,
@@ -344,4 +353,10 @@ def get_assert(output, context):
   const rows = JSON.parse(readFileSync(output, 'utf8')).results.results;
   assert.equal(rows.filter(row => row.success).length, 1, JSON.stringify(rows, null, 2));
   assert.equal(rows.filter(row => !row.success).length, 1);
+  if (native) {
+    assert.equal(rows.find(row => row.success).gradingResult.componentResults[0].reason,
+      'native_candidate_match');
+    assert.equal(rows.find(row => !row.success).gradingResult.componentResults[0].reason,
+      'native_baseline_mismatch');
+  }
 });

@@ -148,6 +148,40 @@ def test_verified_rejection_stays_not_saved_and_nonretryable(catalog, monkeypatc
     assert "已核验无副作用" in projected["summary"]
 
 
+@pytest.mark.parametrize("change", ["unsigned", "changed_observation", "missing_key"])
+def test_terminal_observation_requires_its_original_host_proof(
+    catalog, monkeypatch, tmp_path, change
+):
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.result_verification import bind_execution_receipt
+    from app.application.agent_orchestrator.verification_integrity import (
+        unchanged_receipt_observation,
+    )
+
+    run, _ = prepare(catalog)
+    with catalog.factory() as db:
+        db.connection().exec_driver_sql("UPDATE products SET name='changed-after-review'")
+        db.commit()
+    result, run = dispatch(catalog, run)
+    rejected, _, _ = consume(catalog, run, result, monkeypatch, tmp_path)
+    current = deepcopy(rejected.tool_calls[0])
+    previous = deepcopy(current)
+    bind_execution_receipt(previous)
+    report = current.metadata["verification"]
+    assert report["status"] == "verified"
+    assert unchanged_receipt_observation(previous, current) == report
+    if change == "unsigned":
+        report.pop("catalog_observation_proof")
+    elif change == "changed_observation":
+        report["observed_at"] = "different-observation"
+    else:
+        monkeypatch.delenv("SECRET_KEY")
+    report["report_sha256"] = canonical_hash(
+        {key: value for key, value in report.items() if key != "report_sha256"}
+    )
+    assert unchanged_receipt_observation(previous, current) is None
+
+
 def completed_shape(run, output):
     run = deepcopy(run)
     step = run.steps[0]

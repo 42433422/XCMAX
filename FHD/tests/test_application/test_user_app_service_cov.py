@@ -2,10 +2,17 @@ from __future__ import annotations
 
 """Branch coverage for app/application/user_app_service.py."""
 
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy.exc import OperationalError
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
 
 
 def _make_mock_user(
@@ -173,7 +180,7 @@ class TestUserApplicationServiceCreate:
     def test_create_user_db_error(self):
         class FailDB(_FakeDB):
             def commit(self):
-                raise RuntimeError("DB fail")
+                raise _db_error("DB fail")
 
         db = FailDB()
         with (
@@ -196,12 +203,12 @@ class TestUserApplicationServiceCreate:
             patch("app.application.user_app_service.User", return_value=created_user),
             patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_user_changed",
-                side_effect=RuntimeError("bus down"),
+                side_effect=RedisConnectionError("bus down"),
             ),
         ):
             svc = self._svc()
             result = svc.create_user("alice", "pass")
-        # neuro error is swallowed — create should still succeed
+        # Recoverable bus transport failure leaves the committed user intact.
         assert result["success"] is True
 
 
@@ -253,7 +260,7 @@ class TestUserApplicationServiceUpdate:
     def test_update_user_db_error(self):
         class FailDB(_FakeDB):
             def commit(self):
-                raise RuntimeError("error")
+                raise _db_error("error")
 
         user = _make_mock_user()
         with (
@@ -295,7 +302,7 @@ class TestUserApplicationServiceDelete:
     def test_delete_user_db_error(self):
         class FailDB(_FakeDB):
             def commit(self):
-                raise RuntimeError("fail")
+                raise _db_error("fail")
 
         user = _make_mock_user()
         with (

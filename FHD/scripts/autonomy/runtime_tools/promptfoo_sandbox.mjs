@@ -46,8 +46,14 @@ export function replayPolicy(spec) {
   const programs = [join(spec.project, 'modstore_server'), join(spec.project, 'modman'),
     resolve(dirname(entry), '../../../app'), ...sourcePackages];
   const resource = join(spec.project, 'modstore_server/data/commerce_terms.generated.json');
-  if ([...programs, resource].some(path => realpathSync(path) !== path)
-      || !statSync(resource).isFile()) throw new Error('training_replay_source_boundary_changed');
+  // The SDK imports this module from a namespace directory without __init__.py.
+  const databaseSource = join(repository, 'FHD/app/infrastructure/database/database_manager.py');
+  const riskPolicies = ['risk_actions.registry.json', 'autonomy_boundaries.yaml']
+    .map(name => join(repository, 'FHD/config', name));
+  if ([...programs, resource, databaseSource, ...riskPolicies].some(path => realpathSync(path) !== path)
+      || [resource, databaseSource, ...riskPolicies].some(path => !statSync(path).isFile())) {
+    throw new Error('training_replay_source_boundary_changed');
+  }
   // One read-only mount per program tree avoids SRT's 9000-argument limit.
   // Deny every adjacent non-source entry, including unknown extensions and
   // symlinks; preserve only the declared resource as a read exception.
@@ -71,7 +77,8 @@ export function replayPolicy(spec) {
         typeof path === 'string' && resolve(path) === path && existsSync(path))) {
     throw new Error('training_replay_python_identity_changed');
   }
-  settings.filesystem.allowRead.push(entry, spec.runtime.root, ...python.read_paths, ...programs, resource);
+  settings.filesystem.allowRead.push(entry, spec.runtime.root, ...python.read_paths,
+    ...programs, resource, databaseSource, ...riskPolicies);
   settings.filesystem.denyRead.push(...programs.flatMap(path =>
     nonPrograms(path, sourcePackages.includes(path))));
   // Runtime state stays denied even when it contains Python package markers.

@@ -610,7 +610,7 @@ class TestImportUnitProducts:
 
         @contextmanager
         def _ctx(path):
-            raise RuntimeError("DB connection lost")
+            raise sqlite3.OperationalError("DB connection lost")
 
         mock_sqlite_conn.side_effect = _ctx
 

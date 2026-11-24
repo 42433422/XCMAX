@@ -3,17 +3,18 @@
 import asyncio
 import threading
 from contextvars import ContextVar
-from types import SimpleNamespace
 
 import pytest
 from starlette.requests import Request
+
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "route_name", ["ocr_recognize", "ocr_recognize_and_extract", "ingest_excel_vector"]
 )
-async def test_blocking_agent_runs_off_loop_with_context(route_name, monkeypatch):
+async def test_blocking_agent_runs_off_loop_with_context(route_name, monkeypatch, trusted_actor):
     from app.fastapi_routes import excel_vector, ocr
 
     request_context = ContextVar("offload_request_context", default="missing")
@@ -26,17 +27,21 @@ async def test_blocking_agent_runs_off_loop_with_context(route_name, monkeypatch
         observed.append((threading.get_ident(), request_context.get()))
         entered.set()
         release.wait(timeout=3)
-        return SimpleNamespace(status="completed", run_id="offload-test")
+        return {"success": True, "run_id": "offload-test"}, 200
 
     async def receive():
         return {"type": "http.request", "body": b'{"file_path":"/synthetic.xlsx"}'}
 
+    actor = trusted_actor()
     request = Request(
         {
             "type": "http",
             "method": "POST",
             "path": "/test",
-            "headers": [(b"content-type", b"application/json")],
+            "headers": [
+                (b"content-type", b"application/json"),
+                *((key.lower().encode(), value.encode()) for key, value in actor.headers.items()),
+            ],
         },
         receive,
     )
