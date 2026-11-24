@@ -70,7 +70,18 @@ def check_programming_errors_excluded() -> list[str]:
     if not SSOT_MODULE.exists():
         return []  # The export check reports the missing module.
     namespace = runpy.run_path(str(SSOT_MODULE))
-    bugs = (LookupError, KeyError, IndexError, TypeError, AttributeError, RuntimeError)
+    bugs = (
+        LookupError,
+        KeyError,
+        IndexError,
+        TypeError,
+        AttributeError,
+        RuntimeError,
+        ArithmeticError,
+        ZeroDivisionError,
+        OverflowError,
+        FloatingPointError,
+    )
     problems = []
     for name in (*REQUIRED_EXPORTS, "OPERATIONAL_ERRORS"):
         errors = namespace.get(name, ())

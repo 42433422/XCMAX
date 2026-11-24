@@ -15,7 +15,19 @@ from app.utils.operational_errors import (
 
 
 @pytest.mark.parametrize(
-    "failure", [LookupError, KeyError, IndexError, TypeError, AttributeError, RuntimeError]
+    "failure",
+    [
+        LookupError,
+        KeyError,
+        IndexError,
+        TypeError,
+        AttributeError,
+        RuntimeError,
+        ArithmeticError,
+        ZeroDivisionError,
+        OverflowError,
+        FloatingPointError,
+    ],
 )
 @pytest.mark.parametrize(
     "errors", [DATA_SHAPE, INFRA_TRANSIENT, RECOVERABLE_ERRORS, OPERATIONAL_ERRORS]
@@ -62,3 +74,20 @@ def test_ci_gate_rejects_indirect_programming_error_membership(tmp_path):
     assert any("RECOVERABLE_ERRORS" in item and "KeyError" in item for item in problems)
     assert any("RECOVERABLE_ERRORS" in item and "IndexError" in item for item in problems)
     assert any("INFRA_TRANSIENT" in item and "RuntimeError" in item for item in problems)
+
+
+def test_ci_gate_rejects_indirect_arithmetic_error_membership(tmp_path):
+    gate = runpy.run_path(
+        str(Path(__file__).resolve().parents[2] / "scripts/ci/check_operational_errors_gate.py")
+    )
+    source = tmp_path / "errors.py"
+    source.write_text(
+        "INFRA_TRANSIENT = (OSError, ArithmeticError)\\n"
+        "DATA_SHAPE = (ValueError,)\\n"
+        "RECOVERABLE_ERRORS = INFRA_TRANSIENT + DATA_SHAPE\\n"
+    )
+    check = gate["check_programming_errors_excluded"]
+    check.__globals__["SSOT_MODULE"] = source
+    problems = check()
+    assert any("ZeroDivisionError" in item for item in problems)
+    assert any("ArithmeticError" in item for item in problems)

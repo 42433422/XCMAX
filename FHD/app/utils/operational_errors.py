@@ -3,8 +3,8 @@
 Route-level catch-all lives in ``app.middleware.error_handler``; inner code should
 only handle operational failures and let unexpected errors propagate.
 
-Type, attribute and lookup failures, and unclassified ``RuntimeError``, are not
-recoverable. They must reach the HTTP boundary as 500s; a caller that handles a
+Type, attribute, lookup and arithmetic failures, and unclassified ``RuntimeError``,
+are not recoverable. They must reach the HTTP boundary as 500s; a caller that handles a
 known domain failure must name that exception explicitly at its boundary.
 """
 
@@ -59,7 +59,6 @@ INFRA_TRANSIENT: tuple[type[Exception], ...] = (
     ConnectionError,
     TimeoutError,
     ImportError,
-    ArithmeticError,
     *_operational_extra,
     *_httpx_extra,
     *_aiohttp_extra,
