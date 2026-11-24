@@ -65,18 +65,44 @@ def test_trends_do_not_compare_different_data_and_separate_missing_evidence():
         "dataset_sha256": "dataset",
         "environment_sha256": "environment",
         "seeds": [17, 29, 43],
+        "auditor_source_sha": "a" * 40,
+        "protocol_version": "digital-life-fixture/v1",
+        "scoring_version": "ssot-v1",
         "scenarios": [
             {"id": key, "layers": {"integration": "PASS"}} for key in ("a", "b")
         ],
     }
     current = copy.deepcopy(old)
+    current["source_sha"] = "b" * 40
     current["scenarios"][0]["layers"]["integration"] = "FAIL"
     current["scenarios"][1]["layers"]["integration"] = "BLOCKED"
     assert evaluator.compare(old, current) == {
         "status": "COMPARABLE_FIXTURE_ONLY", "regressions": ["a"], "evidence_lost": ["b"]
     }
-    current["dataset_sha256"] = "changed"
-    assert evaluator.compare(old, current)["status"] == "INCOMPARABLE"
+    for key in (
+        "standard_sha256", "dataset_sha256", "environment_sha256",
+        "auditor_source_sha", "protocol_version", "scoring_version",
+    ):
+        changed = copy.deepcopy(current)
+        changed[key] = "different"
+        assert evaluator.compare(old, changed)["status"] == "INCOMPARABLE"
+    changed = copy.deepcopy(current)
+    changed["seeds"] = [1, 2, 3]
+    assert evaluator.compare(old, changed)["status"] == "INCOMPARABLE"
+
+    # Legacy reports lacking the independent auditor identity are not comparable.
+    legacy = copy.deepcopy(old)
+    del legacy["auditor_source_sha"]
+    assert evaluator.compare(legacy, current)["status"] == "INCOMPARABLE"
+
+    # Malformed or duplicated scenario IDs cannot silently replace a PASS case.
+    changed = copy.deepcopy(current)
+    changed["scenarios"].append(copy.deepcopy(changed["scenarios"][0]))
+    assert evaluator.compare(old, changed)["status"] == "INCOMPARABLE"
+    changed = copy.deepcopy(current)
+    changed["scenarios"][0]["layers"]["integration"] = "self_reported_pass"
+    assert evaluator.compare(old, changed)["status"] == "INCOMPARABLE"
+
 
 
 def test_higher_evidence_layers_are_never_promoted(monkeypatch, tmp_path):
