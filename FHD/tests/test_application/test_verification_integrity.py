@@ -249,14 +249,22 @@ def _saved_preview(parallel_repository, monkeypatch):
 def _prepare_bound_preview(run):
     from app.application.agent_orchestrator.approval_grant import approval_receipt_claims
     from app.application.agent_orchestrator.result_verification import preview_continuation_params
-    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+    from app.application.workflow.workflow_types import (
+        plan_fingerprint,
+        plan_from_dict,
+        plan_to_dict,
+    )
 
-    step = run.steps[0]
-    proposed = preview_continuation_params(run, step, run.tool_calls[-1])
-    assert proposed == {**step.params, **step.output["resume_params"]}
+    step, call = run.steps[0], run.tool_calls[-1]
+    proposed = preview_continuation_params(run, step, call)
+    assert proposed == {**call.params, **call.output["resume_params"]}
+    plan = plan_from_dict(run.metadata["plan"])
+    assert plan is not None
+    node = next(node for node in plan.nodes if node.node_id == step.node_id)
     step.params = proposed
-    run.metadata["plan"]["nodes"][0]["params"] = copy.deepcopy(proposed)
-    run.metadata["plan_sha256"] = plan_fingerprint(plan_from_dict(run.metadata["plan"]))
+    node.params = copy.deepcopy(proposed)
+    run.metadata["plan"] = plan_to_dict(plan)
+    run.metadata["plan_sha256"] = plan_fingerprint(plan)
     run.metadata["approval_receipt"] = {
         "step_id": step.step_id,
         "tool_id": step.tool_id,

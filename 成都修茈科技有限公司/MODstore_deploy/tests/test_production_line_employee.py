@@ -87,7 +87,7 @@ def native_graph(tmp_path, monkeypatch):
                 id=2,
                 username="native-other",
                 password_hash="test-only",
-                is_admin=False,
+                is_admin=True,
                 account_state="active",
             )
         )

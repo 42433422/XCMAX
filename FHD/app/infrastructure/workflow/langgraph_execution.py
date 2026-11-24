@@ -601,5 +601,5 @@ class LangGraphExecutionMixin:
                         payload=event,
                     )
                 )
-            except RECOVERABLE_ERRORS:
+            except BOUNDARY_ERRORS:
                 logger.exception("state publisher failed node=%s", result.node_id)

@@ -236,6 +236,36 @@ def persist(engine, events):
             )
 
 
+def test_readback_query_filters_original_request_before_bounding_rows(gateway):
+    binding = {
+        "ledger_source_sha256": "isolated-upstream",
+        "request_id": "original-request",
+    }
+    records = [
+        ("unrelated", "inbound_usage", "another-request"),
+        ("cost", "cost", binding["request_id"]),
+        *[(f"matching-{index}", "outbound_usage", binding["request_id"]) for index in range(5)],
+    ]
+    persist(
+        gateway,
+        [
+            {
+                "event_id": event_id,
+                "kind": kind,
+                "schema_version": 1,
+                "payload": {"event": {"request_id": request_id}},
+            }
+            for event_id, kind, request_id in records
+        ],
+    )
+    rows = source._events(binding)
+    assert len(rows) == 3
+    assert {row["event_id"] for row in rows} <= {f"matching-{index}" for index in range(5)}
+    assert all(row["kind"] == "outbound_usage" for row in rows)
+    assert source._events({**binding, "request_id": "absent"}) == []
+    assert source._events({**binding, "ledger_source_sha256": "another-ledger"}) == []
+
+
 @pytest.mark.parametrize("matching_count", [2, 4])
 def test_accounting_query_keeps_json_dialect_and_original_request_limit(
     tmp_path, monkeypatch, matching_count
@@ -277,7 +307,9 @@ def test_accounting_query_keeps_json_dialect_and_original_request_limit(
     event.listen(
         engine,
         "before_execute",
-        lambda _conn, statement, _many, _params, _options: statements.append(statement),
+        lambda _conn, statement, _many, params, _options: statements.append(
+            (statement, dict(params))
+        ),
     )
     monkeypatch.setattr(source, "ledger_source", lambda: (url, "query-source"))
     monkeypatch.setattr(source, "_accounting_engine", lambda _: engine)
@@ -290,9 +322,11 @@ def test_accounting_query_keeps_json_dialect_and_original_request_limit(
     assert len(statements) == 1
     # The same executed query must retain JSON1 support on older SQLite,
     # while the production PostgreSQL source extracts a parameterized text ID.
-    sqlite_query = statements[0].compile(dialect=sqlite.dialect())
+    executed, parameters = statements[0]
+    statement = executed.params(**parameters)
+    sqlite_query = statement.compile(dialect=sqlite.dialect())
     assert "->" not in str(sqlite_query)
-    pg_query = statements[0].compile(
+    pg_query = statement.compile(
         dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True}
     )
     assert "->>" in str(pg_query) and "JSON_EXTRACT" not in str(pg_query)

@@ -15,6 +15,7 @@ from sqlalchemy import Column, MetaData, Table, and_, insert, literal_column, se
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import DropTable
 
+from app.desktop_runtime.database_generation_registry import GenerationObservationError
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -253,7 +254,7 @@ class DatabaseService(NeuroEventPublisherMixin):
         except _RestoreAuditReferenceError as error:
             logger.warning("数据库恢复被审计关联阻断：%s", error)
             return {"success": False, "message": str(error)}
-        except RECOVERABLE_ERRORS:
+        except RECOVERABLE_ERRORS + (GenerationObservationError,):
             logger.exception("数据库恢复失败")
             return {"success": False, "message": "数据库恢复失败"}
 

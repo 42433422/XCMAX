@@ -98,6 +98,20 @@ class TestGetCustomersSessionAdditional:
             result = get_customers_session()
         assert result is mock_session_local
 
+    def test_resolve_customers_session_runtime_error_does_not_switch_repository(self):
+        """An unexpected adapter failure must not silently select another repository."""
+        mock_session_local = MagicMock()
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                side_effect=RuntimeError("runtime error"),
+            ),
+            patch("app.db.SessionLocal", return_value=mock_session_local) as fallback,
+        ):
+            with pytest.raises(RuntimeError, match="runtime error"):
+                get_customers_session()
+        fallback.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # reset_customers_engine
@@ -1034,7 +1048,8 @@ class TestExportToExcelAdditional:
             result = svc.export_to_excel(template_id="1")
         assert result["success"] is True
 
-    def test_export_with_template_id_error(self, tmp_path):
+    @pytest.mark.parametrize("failure_site", ["factory", "query"])
+    def test_export_with_template_id_error(self, tmp_path, failure_site):
         """Test export with template_id where template lookup fails."""
         svc = CustomerApplicationService()
         mock_session = MagicMock()
@@ -1045,11 +1060,14 @@ class TestExportToExcelAdditional:
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
             patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
-            patch(
-                "app.application.get_template_app_service",
-                side_effect=OSError("template error"),
-            ),
+            patch("app.application.get_template_app_service") as get_templates,
         ):
+            if failure_site == "factory":
+                get_templates.side_effect = OSError("template service unavailable")
+            else:
+                get_templates.return_value.get_templates.side_effect = _db_error(
+                    "template database unavailable"
+                )
             result = svc.export_to_excel(template_id="1")
         # Should still succeed (template error is caught)
         assert result["success"] is True

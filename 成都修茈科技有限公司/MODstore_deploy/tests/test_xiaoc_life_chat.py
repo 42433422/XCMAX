@@ -246,6 +246,8 @@ async def test_stream_rechecks_before_first_outbound(state, monkeypatch):
 async def test_router_manual_scope_disables_unchecked_retries(
     state, monkeypatch, user, streaming, provider
 ):
+    from openai.types.chat import ChatCompletionChunk
+
     from modstore_server import llm_litellm_router as router
 
     calls = {}
@@ -256,10 +258,12 @@ async def test_router_manual_scope_disables_unchecked_retries(
             if kwargs.get("stream"):
 
                 async def chunks():
-                    yield SimpleNamespace(
+                    yield ChatCompletionChunk(
+                        id="manual-scope-fixture",
+                        created=0,
+                        model="test",
+                        object="chat.completion.chunk",
                         choices=[],
-                        usage={},
-                        model_dump=lambda **kwargs: {"choices": [], "usage": {}},
                     )
 
                 return chunks()

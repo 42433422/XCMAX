@@ -13,7 +13,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, column, create_engine, select, table
+from sqlalchemy import JSON, bindparam, column, create_engine, select, table, type_coerce
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
@@ -85,15 +85,18 @@ def _events(binding: dict[str, Any]) -> list[dict[str, Any]]:
                 column("event_id"),
                 column("kind"),
                 column("schema_version"),
-                column("payload", JSON),
+                column("payload"),
             )
+            # Compile JSON access for the dialect without changing payload's result type.
+            request_id = type_coerce(events.c.payload, JSON)["event"]["request_id"].as_string()
             rows = connection.execute(
                 select(events)
                 .where(
                     events.c.kind.in_(("inbound_usage", "outbound_usage")),
-                    events.c.payload["event"]["request_id"].as_string() == binding["request_id"],
+                    request_id == bindparam("request_id"),
                 )
-                .limit(3)
+                .limit(3),
+                {"request_id": binding["request_id"]},
             ).mappings()
             return [dict(row) for row in rows]
     finally:

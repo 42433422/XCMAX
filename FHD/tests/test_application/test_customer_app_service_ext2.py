@@ -274,10 +274,7 @@ class TestImportDataExtended:
 class TestImportFromExcelExtended:
     def test_outer_error(self):
         svc = CustomerApplicationService()
-        with patch(
-            "app.db.sqlite_write_guard.sqlite_write_guard",
-            side_effect=RuntimeError("guard error"),
-        ):
+        with patch.dict("sys.modules", {"app.desktop_runtime.desktop_runtime_paths": None}):
             result = svc.import_from_excel(None)
         assert result["success"] is False
         assert result["imported"] == 0
@@ -425,7 +422,8 @@ class TestExportToExcelExtended:
             result = svc.export_to_excel(template_id="1")
         assert result["success"] is True
 
-    def test_template_lookup_error(self, tmp_path):
+    @pytest.mark.parametrize("failure_site", ["factory", "query"])
+    def test_template_lookup_error(self, tmp_path, failure_site):
         svc = CustomerApplicationService()
         mock_session = MagicMock()
         mock_query = MagicMock()
@@ -436,8 +434,14 @@ class TestExportToExcelExtended:
         with (
             patch.object(svc, "_get_session", return_value=mock_session),
             patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
-            patch("app.application.get_template_app_service", side_effect=OSError("tpl error")),
+            patch("app.application.get_template_app_service") as get_templates,
         ):
+            if failure_site == "factory":
+                get_templates.side_effect = OSError("template service unavailable")
+            else:
+                get_templates.return_value.get_templates.side_effect = _db_error(
+                    "template database unavailable"
+                )
             result = svc.export_to_excel(template_id="1")
         assert result["success"] is True  # Should fall back to no template
 

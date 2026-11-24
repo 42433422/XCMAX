@@ -953,11 +953,13 @@ class TestBusinessDbRouter:
 class TestDatasetRagRouter:
     @pytest.fixture(autouse=True)
     def authenticated_dataset_owner(self, trusted_actor):
-        actor = trusted_actor(permissions=["dataset.read", "dataset.write"])
-        self.context = actor.context
+        self.actor = trusted_actor(permissions=["dataset.read", "dataset.write"])
+        self.context = self.actor.context
 
-    def test_missing_dataset_id(self):
-        result = _registered_router_dataset_rag("ingest_document", {}, self.context, "admin", "")
+    @pytest.mark.parametrize("authenticated", [False, True], ids=["empty", "bound"])
+    def test_missing_dataset_id(self, authenticated):
+        context = self.context if authenticated else {}
+        result = _registered_router_dataset_rag("ingest_document", {}, context, "admin", "")
         assert result["success"] is False
         assert "dataset_id" in result["message"]
 
@@ -1157,6 +1159,10 @@ class TestDatasetRagRouter:
                 "",
             )
         assert result["success"] is True
+        access = mock_get.return_value.ingest_document.call_args.kwargs["access_context"]
+        assert access.actor_id == str(self.actor.user_id)
+        assert access.tenant_id == str(self.actor.tenant_id)
+        assert access.is_admin is False
 
     def test_access_context_with_admin_flag(self):
         with patch(
@@ -1171,6 +1177,10 @@ class TestDatasetRagRouter:
                 "",
             )
         assert result["success"] is True
+        access = mock_get.return_value.ingest_document.call_args.kwargs["access_context"]
+        assert access.actor_id == str(self.actor.user_id)
+        assert access.tenant_id == str(self.actor.tenant_id)
+        assert access.is_admin is False
 
 
 # ===========================================================================

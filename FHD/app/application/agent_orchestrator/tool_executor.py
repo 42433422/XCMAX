@@ -179,6 +179,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
     )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
     from app.application.tool_execution_deadline import check_invocation_deadline
+    from app.desktop_runtime.database_generation_registry import GenerationObservationError
     from app.infrastructure.tenant_scope import tenant_scope
     from app.mod_sdk.catalog_product_store import (
         execute_catalog_price,
@@ -227,7 +228,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         return verify_catalog_action(params, context, release=existing is None)
     except (WorkerLeaseLost, TimeoutError, PermissionError):
         raise
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS + (GenerationObservationError,):
         if claim is not None:
             try:
                 ledger.mark_unknown(claim, context)
