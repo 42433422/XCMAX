@@ -3,8 +3,8 @@
 import copy
 import threading
 import uuid
-from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
