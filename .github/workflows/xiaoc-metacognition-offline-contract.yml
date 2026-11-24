@@ -1,0 +1,27 @@
+name: XiaoC D04-D05 Offline Contract
+on:
+  push:
+    branches: [codex/xiaoc-metacognition-offline-review-20261124]
+  pull_request:
+    branches: [codex/xiaoc-evidence-cognition-ce197738, main]
+    paths:
+      - "成都修茈科技有限公司/MODstore_deploy/research/xiaoc_metacognition/**"
+      - ".github/workflows/xiaoc-metacognition-offline-contract.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-research-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install locked offline research test dependencies
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/research/xiaoc_metacognition
+        run: python -m pip install -r requirements.txt
+      - name: Validate both research arms and fail-closed reports (synthetic contracts only)
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/research/xiaoc_metacognition
+        run: python -m pytest -q -W error test_xiaoc_metacognition_eval.py
