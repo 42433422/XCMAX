@@ -18,6 +18,7 @@ from modstore_server.customer_value_evidence import (
     classify_payment_order,
 )
 from modstore_server.customer_value_evidence_api import router
+from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
 from modstore_server.customer_value_reconciler import reconcile_paid_customer_value
 
 NOW = datetime(2026, 7, 22, 6, 0, tzinfo=timezone.utc)
@@ -658,3 +659,61 @@ def test_conflicting_duplicate_order_is_not_an_operating_fact(tmp_path, monkeypa
         now=NOW,
     )
     assert result["provider_payment_breakdown_cents"] is None
+
+
+@pytest.mark.parametrize(
+    "pages",
+    [
+        [{"total": 0, "orders": [{"out_trade_no": "one"}]}],
+        [{"orders": []}],
+        [{"total": True, "orders": [{"out_trade_no": "one"}]}],
+        [{"total": 3, "orders": [{"out_trade_no": "one"}]}],
+        [
+            {"total": 3, "orders": [{"out_trade_no": "one"}, {"out_trade_no": "two"}]},
+            {"total": 4, "orders": [{"out_trade_no": "three"}, {"out_trade_no": "four"}]},
+        ],
+        [
+            {"total": 3, "orders": [{"out_trade_no": "one"}, {"out_trade_no": "two"}]},
+            {"total": 3, "orders": [{"out_trade_no": "one"}]},
+        ],
+    ],
+)
+def test_java_payment_incomplete_or_ambiguous_snapshot_is_unavailable(monkeypatch, pages):
+    from modstore_server import customer_value_payment_source as source
+
+    monkeypatch.setenv("PAYMENT_BACKEND", "java")
+    monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "unit-test-internal-key")
+    monkeypatch.setattr(source, "_JAVA_PAGE_SIZE", 2)
+    responses = iter(pages)
+    client = Mock()
+    client.__enter__ = Mock(return_value=client)
+    client.__exit__ = Mock(return_value=None)
+
+    def get(*args, **kwargs):
+        response = Mock()
+        response.json.return_value = {
+            "ok": True,
+            "source": "java_postgresql",
+            **next(responses),
+        }
+        return response
+
+    client.get.side_effect = get
+    monkeypatch.setattr(source.httpx, "Client", lambda **kwargs: client)
+    observed = load_authoritative_payment_orders(90)
+    assert observed["source_available"] is False
+    assert observed["source_authoritative"] is False
+    assert observed["orders"] == []
+
+
+def test_local_payment_truncation_is_not_authoritative(monkeypatch):
+    from modstore_server import customer_value_payment_source as source
+
+    monkeypatch.setattr(source.payment_orders, "is_local_source_of_truth", lambda: True)
+    monkeypatch.setattr(
+        source.payment_orders, "list_orders", lambda **kwargs: ([_verified_payment()], 2)
+    )
+    observed = load_authoritative_payment_orders(90)
+    assert observed["source_available"] is False
+    assert observed["source_authoritative"] is False
+    assert observed["orders"] == []

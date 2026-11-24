@@ -81,6 +81,12 @@ def test_unavailable_source_does_not_look_like_zero_business(monkeypatch, missin
     "mutation",
     [
         lambda row: row.update(source_owner="injected"),
+        lambda row: row.update(window_days=30),
+        lambda row: row.update(window_days="90"),
+        lambda row: row.pop("window_days"),
+        lambda row: row.update(six_stage_counts=None),
+        lambda row: row.update(lifecycle_gaps=[]),
+        lambda row: row.pop("lifecycle_gaps"),
         lambda row: row.update(verified_paid_count=True),
         lambda row: row.update(verified_paid_amount_cents=-1),
         lambda row: row.update(provider_payment_breakdown_cents=None),

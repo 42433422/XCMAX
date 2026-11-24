@@ -36,6 +36,8 @@ def customer_value_context() -> dict[str, Any]:
         if owner not in _SOURCES:
             return result
         result["source_owner"] = owner
+        if type(evidence.get("window_days")) is not int or evidence["window_days"] != 90:
+            return result
         observed_at = datetime.fromisoformat(evidence["generated_at"])
         if observed_at.tzinfo is None or observed_at > datetime.now(UTC):
             return result
@@ -59,11 +61,12 @@ def customer_value_context() -> dict[str, Any]:
             or sum(payments.values()) != counts["verified_paid_amount_cents"]
         ):
             return result
-        stages = {key: evidence.get("six_stage_counts", {}).get(key) for key in _STAGES}
-        gaps = {
-            key: evidence.get("lifecycle_gaps", {}).get(key, 0)
-            for key in (*_STAGES, "sequence", "enterprise_subject")
-        }
+        raw_stages = evidence.get("six_stage_counts")
+        raw_gaps = evidence.get("lifecycle_gaps")
+        if not isinstance(raw_stages, dict) or not isinstance(raw_gaps, dict):
+            return result
+        stages = {key: raw_stages.get(key) for key in _STAGES}
+        gaps = {key: raw_gaps.get(key, 0) for key in (*_STAGES, "sequence", "enterprise_subject")}
         if any(
             type(value) is not int or value < 0
             for value in (*counts.values(), *stages.values(), *gaps.values())
