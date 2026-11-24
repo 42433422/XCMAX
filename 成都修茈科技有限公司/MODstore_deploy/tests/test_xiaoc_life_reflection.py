@@ -100,8 +100,51 @@ def test_unknown_or_unbound_cannot_be_an_experience(change):
     elif change == "unselected":
         row["plan"]["selected"] = ["b"]
     result, candidates = review_experiences(row)
-    assert result["outcome"] == "no_conclusion"
+    unknown = {"open_window", "wrong_owner", "missing_business_proof"}
+    assert result["outcome"] == ("unknown" if change in unknown else "no_conclusion")
     assert candidates == []
+
+
+@pytest.mark.parametrize("selected", [["a"], ["a", "b"]])
+def test_duplicate_opportunity_cannot_attest_success_or_generate_experience(selected):
+    row = record()
+    row["plan"]["selected"] = selected
+    row["opportunities"].append(deepcopy(row["opportunities"][0]))
+    result, candidates = review_experiences(row)
+    assert result["outcome"] == "unknown"
+    assert result["candidate_count"] == 0
+    assert candidates == []
+
+
+@pytest.mark.parametrize("selected", [["a", "a"], "a", [["a"]], [" "]])
+def test_invalid_selection_identity_remains_unknown(selected):
+    row = record()
+    row["plan"]["selected"] = selected
+    result, candidates = review_experiences(row)
+    assert result["outcome"] == "unknown"
+    assert candidates == []
+
+
+def test_success_requires_every_selected_identity():
+    row = record()
+    row["plan"]["selected"] = ["a", "b"]
+    result, candidates = review_experiences(row)
+    assert result["outcome"] == "no_conclusion"
+    assert [candidate["opportunity_id"] for candidate in candidates] == ["a"]
+
+    other = deepcopy(row["opportunities"][0])
+    other["opportunity_id"] = "b"
+    row["opportunities"].append(other)
+    snapshot = deepcopy(row["hypothesis_outcomes"]["a"])
+    snapshot["opportunity_id"] = "b"
+    del snapshot["snapshot_sha256"]
+    snapshot["snapshot_sha256"] = digest(snapshot)
+    row["hypothesis_outcomes"]["b"] = snapshot
+    row["reviews"][0]["hypotheses"].append(snapshot)
+    row["tasks"]["b"] = deepcopy(row["tasks"]["a"])
+    result, candidates = review_experiences(row)
+    assert result["outcome"] == "success"
+    assert {candidate["opportunity_id"] for candidate in candidates} == {"a", "b"}
 
 
 def test_pending_candidate_identity_and_readback():

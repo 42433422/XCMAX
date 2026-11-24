@@ -170,7 +170,7 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
     from modstore_server.strategic_customer_outcomes import KNOWN_DELIVERY_ATTRIBUTIONS
 
     summary: dict[str, Any] = {
-        "outcome": "no_conclusion", "finding_type": "unknown", "candidate_count": 0,
+        "outcome": "unknown", "finding_type": "unknown", "candidate_count": 0,
     }
     owner, decision, proposal = (
         record.get("owner_user_id"), record.get("decision_id"), record.get("proposal_sha256")
@@ -201,15 +201,25 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
         or revenue is None or cost is None
         or review.get("cost_basis") != "approved_tariff_accrual_not_supplier_invoice"
         or start is None or end is None or reviewed is None or not start < end <= reviewed
-        or not selected or len(set(selected)) != len(selected)
+        or not isinstance(selected, list) or not selected
+        or any(not isinstance(key, str) or not key.strip() for key in selected)
+        or len(set(selected)) != len(selected)
     ):
         return summary, []
+    opportunities = record.get("opportunities", [])
+    if not isinstance(opportunities, list) or any(
+        not isinstance(item, dict) for item in opportunities
+    ):
+        return summary, []
+    chosen = [item for item in opportunities if item.get("opportunity_id") in selected]
+    if len({item["opportunity_id"] for item in chosen}) != len(chosen):
+        return summary, []
     candidates = []
-    for opportunity in record.get("opportunities", []):
-        if opportunity.get("opportunity_id") in selected:
-            candidate = _task_candidate(record, opportunity, review)
-            if candidate is not None:
-                candidates.append(candidate)
+    for opportunity in chosen:
+        candidate = _task_candidate(record, opportunity, review)
+        if candidate is not None:
+            candidates.append(candidate)
+    candidate_ids = {c["opportunity_id"] for c in candidates}
     summary.update(
         finding_type="observed_business_measurement_not_causal",
         attributed_revenue_cents=revenue,
@@ -219,7 +229,7 @@ def review_experiences(record: dict[str, Any]) -> tuple[dict[str, Any], list[dic
         selected_count=len(selected),
         outcome=(
             "failure" if any(c["outcome"] == "failure" for c in candidates)
-            else "success" if len(candidates) == len(selected) else "no_conclusion"
+            else "success" if candidate_ids == set(selected) else "no_conclusion"
         ),
     )
     return summary, candidates
