@@ -1,5 +1,5 @@
 {
-  "lines": 2732932,
+  "lines": 2732938,
   "updated": "2026-11-25",
-  "note": "PR #3558: run the conflict round-trip regression in-process; worker transport stays covered by test_tool_process."
+  "note": "PR #3558: report recoverable write failure fields in the receipt regression."
 }

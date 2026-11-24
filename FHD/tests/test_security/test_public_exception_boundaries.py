@@ -386,7 +386,13 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
                 rate_limiter._rate_limiters, endpoint, rate_limiter._InMemoryRateLimiter(120)
             )
         else:
-            assert receipt["success"] is True and receipt["verified"] is True, receipt
+            assert receipt["success"] is True and receipt["verified"] is True, (
+                receipt.get("status"),
+                receipt.get("error_code"),
+                receipt.get("error_type"),
+                receipt.get("error"),
+                receipt.get("execution"),
+            )
     return setup
 
 
