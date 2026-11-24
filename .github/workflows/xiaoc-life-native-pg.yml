@@ -7,6 +7,7 @@ on:
       - main
       - codex/xiaoc-evidence-cognition-ce197738
       - codex/integrate-open-prs-20261121-36690872
+      - integration/cognition-closeout-20261124
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py'
       - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_life_*.py'
@@ -85,6 +86,13 @@ jobs:
             tests/test_xiaoc_life_checkpoint.py \
             tests/test_xiaoc_life_state.py \
             tests/test_xiaoc_life_runtime.py
+
+      - name: Recover the original PostgreSQL thread after a committed strategic action
+        if: ${{ always() }}
+        run: |
+          test -n "$MODSTORE_TEST_POSTGRES_URL"
+          python -m pytest -q --tb=short \
+            tests/test_xiaoc_life_integration.py
 
   persy-readback:
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.base_ref == 'codex/integrate-open-prs-20261121-36690872'

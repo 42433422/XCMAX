@@ -6,15 +6,21 @@ import asyncio
 import csv
 import hashlib
 import json
+import multiprocessing
+import os
 import sys
 import zipfile
 from datetime import timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from modstore_server import (
     auth_service,
@@ -30,7 +36,9 @@ from modstore_server import xiaoc_life_reconciliation as reconciliation
 from modstore_server import xiaoc_life_runtime as runtime
 from modstore_server import xiaoc_life_store as life
 from modstore_server.db.catalog import CatalogItem
+from modstore_server.db.db_base import Base, get_session_factory
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
+from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.employee_runtime import load_employee_pack_resolved as resolve_catalog_pack
 from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
 from modstore_server.xiaoc_life_cognition import cognition_messages
@@ -41,8 +49,9 @@ database = portfolio_fixtures.database
 
 
 @pytest.fixture
-def csv_management(database, monkeypatch, tmp_path):
+def csv_management(request, monkeypatch, tmp_path):
     """Use the reference contract test's actual CSV archive and SQL catalog resolver."""
+    database = request.getfixturevalue(getattr(request, "param", "database"))
     employee_id = "csv-generate-employee"
     source_root = Path(__file__).resolve().parents[3] / "FHD/mods/_employees" / employee_id
     manifest = json.loads((source_root / "manifest.json").read_text())
@@ -139,12 +148,9 @@ def csv_management(database, monkeypatch, tmp_path):
                 sys.modules.pop(name, None)
 
 
-def test_management_csv_goal_executes_original_employee_once_and_feeds_reflection(
-    csv_management, database, monkeypatch
-):
+def _approve_csv_goal(case, monkeypatch):
     from modstore_server import customer_value_payment_source, strategy_planner
 
-    case = csv_management
     client = case["client"]
     # Only external observations are supplied. Authentication, approval,
     # planning, employee execution, filesystem writes and both SQL ledgers are real.
@@ -249,6 +255,15 @@ def test_management_csv_goal_executes_original_employee_once_and_feeds_reflectio
         client.post("/life/wake", json={"expected_revision": current["revision"]}).status_code
         == 200
     )
+    return goal_id, decision_id, opportunity_id
+
+
+def test_management_csv_goal_executes_original_employee_once_and_feeds_reflection(
+    csv_management, database, monkeypatch
+):
+    case = csv_management
+    client = case["client"]
+    goal_id, decision_id, opportunity_id = _approve_csv_goal(case, monkeypatch)
     state = asyncio.run(runtime.tick_async())
     observed_goal = next(goal for goal in state["goals"] if goal["id"] == goal_id)
     record = client.get(f"/portfolios/{decision_id}").json()
@@ -362,3 +377,151 @@ def test_management_csv_goal_executes_original_employee_once_and_feeds_reflectio
             )
             == 1
         )
+
+
+@pytest.fixture
+def postgres_database(monkeypatch, tmp_path):
+    url = make_url(os.environ["MODSTORE_TEST_POSTGRES_URL"])
+    schema = f"xiaoc_action_{uuid4().hex}"
+    admin = create_engine(url)
+    assert admin.dialect.name == "postgresql"
+    with admin.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    try:
+        schema_url = url.update_query_dict({"options": f"-csearch_path={schema}"})
+        monkeypatch.delenv("MODSTORE_PYTEST_USE_SQLITE", raising=False)
+        monkeypatch.setenv("DATABASE_URL", schema_url.render_as_string(hide_password=False))
+        monkeypatch.setenv(
+            "MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "workspaces" / "{user_id}")
+        )
+        factory = get_session_factory()
+        engine = factory.kw["bind"]
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT current_schema()")) == schema
+        Base.metadata.create_all(engine)
+        yield factory
+    finally:
+        try:
+            with admin.begin() as connection:
+                connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        finally:
+            admin.dispose()
+
+
+def _crash_after_original_action_commit(claim):
+    from modstore_server import strategic_portfolio_runtime
+
+    finish = strategic_portfolio_runtime._finish
+
+    def commit_then_exit(*args, **kwargs):
+        finish(*args, **kwargs)
+        # The SQL commit returned; neither act checkpoint has run yet.
+        os._exit(73)
+
+    strategic_portfolio_runtime._finish = commit_then_exit
+    asyncio.run(runtime.run_claimed_cycle(claim))
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MODSTORE_TEST_POSTGRES_URL"),
+    reason="requires isolated PostgreSQL for native action recovery",
+)
+@pytest.mark.parametrize("csv_management", ["postgres_database"], indirect=True)
+def test_postgres_recovers_after_original_action_commit(
+    csv_management, postgres_database, monkeypatch
+):
+    case = csv_management
+    goal_id, decision_id, opportunity_id = _approve_csv_goal(case, monkeypatch)
+    claim = life.claim_cycle(domain="enterprise", reserve_tokens=100_000)
+    assert claim is not None
+    event_id = f"cycle:{claim['cycle_id']}"
+    config = runtime.native_thread_config(claim)
+    thread_id = config["configurable"]["thread_id"]
+
+    async def read_native():
+        async with runtime.native_life_checkpointer() as saver:
+            graph = runtime.build_life_graph(runtime.CyclePorts(claim), checkpointer=saver)
+            snapshot = await graph.aget_state(config)
+        assert snapshot.config["configurable"]["thread_id"] == thread_id
+        return snapshot
+
+    worker = multiprocessing.get_context("spawn").Process(
+        target=_crash_after_original_action_commit, args=(claim,)
+    )
+    worker.start()
+    try:
+        worker.join(90)
+        assert worker.exitcode == 73, "worker did not exit at the post-commit boundary"
+    finally:
+        if worker.is_alive():
+            worker.kill()
+            worker.join()
+        worker.close()
+
+    output = case["workspace"] / "outputs/output.csv"
+    with output.open(encoding="utf-8-sig", newline="") as generated:
+        assert list(csv.DictReader(generated)) == [{"order": "A-7", "quantity": "3"}]
+    original_output = output.stat().st_mtime_ns, hashlib.sha256(output.read_bytes()).hexdigest()
+    reader = create_engine(postgres_database.kw["bind"].url, poolclass=NullPool)
+
+    def read_effect():
+        with Session(reader) as session:
+            row = session.scalars(
+                select(StrategicActionItem).where(StrategicActionItem.decision_id == decision_id)
+            ).one()
+            assert row.status == "completed"
+            task = json.loads(row.result_json)
+            assert task["opportunity_id"] == opportunity_id
+            receipt = task["execution_receipt"]
+            assert evaluate_execution_receipt(receipt).status == "completed"
+            assert receipt["result"]["outputs"][0]["handler"] == "direct_python"
+            artifact = receipt["result"]["outputs"][0]["output"]["artifacts"][0]
+            assert artifact["artifact_sha256"] == original_output[1]
+            assert task["result_sha256"] and task["calls"] == {} and task["actual_tokens"] == 0
+            session.scalars(
+                select(models.EmployeeExecutionMetric).where(
+                    models.EmployeeExecutionMetric.user_id == 7,
+                    models.EmployeeExecutionMetric.employee_id == case["employee_id"],
+                )
+            ).one()
+            events = session.scalars(
+                select(XiaoCLifeEvent).where(
+                    XiaoCLifeEvent.id.in_([event_id, f"reconciled:{event_id}"])
+                )
+            ).all()
+            return row.action_id, task, [(event.id, event.actual_tokens) for event in events]
+
+    try:
+        action_id, original_task, events = read_effect()
+        assert events == []
+        before = asyncio.run(read_native())
+        assert before.next == ("act",)
+        before_id = before.config["configurable"]["checkpoint_id"]
+        interrupted = life.read_state()
+        assert interrupted["activity"]["id"] == claim["cycle_id"]
+        assert interrupted["activity"]["checkpoint_phase"] not in {"act", "reflect"}
+        assert interrupted["budget"]["reserved_tokens"] == 100_000
+
+        async def forbid_replay(*_args, **_kwargs):
+            pytest.fail("recovery must never enter the original act")
+
+        monkeypatch.setattr(runtime.CyclePorts, "act", forbid_replay)
+        recovered = asyncio.run(runtime.recover_native_act())
+        assert recovered is not None, "committed action left the original native thread pending"
+        assert recovered["activity"] is None
+        assert recovered["budget"]["reserved_tokens"] == recovered["budget"]["used_tokens"] == 0
+        goal = next(goal for goal in recovered["goals"] if goal["id"] == goal_id)
+        assert goal["status"] == "execution_verified"
+        terminal = asyncio.run(read_native())
+        assert terminal.next == ()
+        terminal_id = terminal.config["configurable"]["checkpoint_id"]
+        assert terminal_id != before_id
+
+        assert asyncio.run(runtime.recover_native_act()) is None
+        assert asyncio.run(read_native()).config["configurable"]["checkpoint_id"] == terminal_id
+        assert read_effect() == (action_id, original_task, [(event_id, 0)])
+        assert (output.stat().st_mtime_ns, hashlib.sha256(output.read_bytes()).hexdigest()) == (
+            original_output
+        )
+    finally:
+        reader.dispose()
