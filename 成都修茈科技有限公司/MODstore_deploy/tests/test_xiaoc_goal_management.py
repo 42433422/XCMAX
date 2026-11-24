@@ -215,3 +215,60 @@ def test_renewal_requires_new_authoritative_observation(observation):
         assert discover_goal_candidate(
             {"customer_value": {**value, **changes}}, state, 17, now=later
         ) is None
+
+
+def test_operating_dependency_handoff_requires_verified_settled_original_receipt():
+    from modstore_server.strategic_portfolio import PortfolioError
+    from modstore_server.xiaoc_goal_management import operating_dependency_handoff
+
+    child = {"opportunity_id": "life-step-plan", "depends_on": ["life-step-inspect"]}
+    parent = {
+        "status": "completed",
+        "result_sha256": "a" * 64,
+        "calls": {},
+        "execution_receipt": {"ok": True, "status": "completed"},
+    }
+    tasks = {"life-step-inspect": parent}
+    result, = operating_dependency_handoff(child, tasks)
+    assert result["result_sha256"] == parent["result_sha256"]
+    assert len(result["receipt_sha256"]) == 64
+    assert result["artifact_receipts"] == []
+    assert operating_dependency_handoff({"opportunity_id": "legacy"}, tasks) == []
+    for changes in (
+        {"status": "waiting"},
+        {"result_sha256": None},
+        {"calls": {"a": {"status": "unknown"}}},
+        {"execution_receipt": {"ok": True, "status": "completed", "truncated": True}},
+        {"execution_receipt": {"ok": True, "status": "pending"}},
+    ):
+        with pytest.raises(PortfolioError):
+            operating_dependency_handoff(child, {"life-step-inspect": {**parent, **changes}})
+
+
+def test_partial_or_unbound_handoff_is_not_verified(observation):
+    from modstore_server.xiaoc_goal_management import operating_dependency_handoff
+
+    now, value, state = observation
+    goal, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
+    goal.update(decision_id="d1", step_bindings={"inspect": "life-step-i", "plan": "life-step-p"})
+    parent = {
+        "status": "completed",
+        "result_sha256": "a" * 64,
+        "calls": {},
+        "execution_receipt": {"ok": True, "status": "completed"},
+    }
+    child = {"opportunity_id": "life-step-p", "depends_on": ["life-step-i"]}
+    record = {
+        "decision_id": "d1", "owner_user_id": 17,
+        "opportunities": [{"opportunity_id": "life-step-i", "depends_on": []}, child],
+        "tasks": {"life-step-i": parent},
+    }
+    assert project_goal_steps(goal, record)["all_steps_verified"] is False
+    record["tasks"]["life-step-p"] = {"status": "completed", "result_sha256": "b" * 64}
+    assert project_goal_steps(goal, record)["all_steps_verified"] is False
+    record["tasks"]["life-step-p"]["dependency_handoff"] = operating_dependency_handoff(
+        child, record["tasks"]
+    )
+    assert project_goal_steps(goal, record)["all_steps_verified"] is True
+    parent["execution_receipt"]["status"] = "pending"
+    assert project_goal_steps(goal, record)["all_steps_verified"] is False

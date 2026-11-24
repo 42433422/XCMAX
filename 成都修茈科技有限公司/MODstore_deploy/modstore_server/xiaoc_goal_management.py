@@ -322,6 +322,81 @@ def build_goal_opportunities(
     return rows, ids
 
 
+def _valid_sha(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        char in "0123456789abcdef" for char in value
+    )
+
+
+def operating_dependency_handoff(
+    opportunity: dict[str, Any], tasks: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Read completed predecessor evidence from the same original portfolio only.
+
+    The projection is evidence metadata, not new executable inputs or arbitrary
+    worker text. Existing approved workspace and file contracts remain unchanged.
+    """
+    from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
+    from modstore_server.strategic_portfolio import PortfolioError, digest
+
+    if not str(opportunity.get("opportunity_id", "")).startswith("life-step-"):
+        return []
+    result = []
+    for key in opportunity.get("depends_on", []):
+        task = tasks.get(key)
+        receipt = task.get("execution_receipt") if isinstance(task, dict) else None
+        calls = task.get("calls") if isinstance(task, dict) else None
+        if (
+            not isinstance(task, dict)
+            or task.get("status") != "completed"
+            or not _valid_sha(task.get("result_sha256"))
+            or not isinstance(receipt, dict)
+            or receipt.get("truncated")
+            or evaluate_execution_receipt(receipt).status != "completed"
+            or not isinstance(calls, dict)
+            or any(
+                not isinstance(call, dict) or call.get("status") != "settled"
+                for call in calls.values()
+            )
+        ):
+            raise PortfolioError("operating dependency has no verified terminal receipt")
+        inner = receipt.get("result")
+        inner = inner if isinstance(inner, dict) else receipt
+        artifacts = []
+        for output in inner.get("outputs", []) if isinstance(inner.get("outputs"), list) else []:
+            if not isinstance(output, dict) or output.get("handler") != "direct_python":
+                continue
+            body = output.get("output")
+            if not isinstance(body, dict) or body.get("status") != "completed":
+                continue
+            rows = body.get("artifacts")
+            if not isinstance(rows, list):
+                continue
+            for item in rows:
+                if (
+                    isinstance(item, dict)
+                    and _valid_sha(item.get("artifact_sha256"))
+                    and type(item.get("size_bytes")) is int
+                    and item["size_bytes"] >= 0
+                ):
+                    artifacts.append({
+                        "artifact_sha256": item["artifact_sha256"],
+                        "size_bytes": item["size_bytes"],
+                    })
+                if len(artifacts) >= 32:
+                    break
+            if len(artifacts) >= 32:
+                break
+        result.append({
+            "opportunity_id": key,
+            "result_sha256": task["result_sha256"],
+            "receipt_sha256": digest(receipt),
+            "artifact_receipts": artifacts,
+            "scope": "verified_predecessor_receipt_metadata_not_current_artifact_bytes",
+        })
+    return result
+
+
 def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     """Read back exact original opportunities/tasks; do not equate review with success."""
     bindings = goal.get("step_bindings")
@@ -342,19 +417,39 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
         or opportunities[bindings["plan"]].get("depends_on") != [bindings["inspect"]]
     ):
         return {"status": "binding_mismatch"}
+    tasks = record.get("tasks") or {}
     steps = []
     for step in EXECUTION_STEPS:
         opportunity_id = bindings[step]
-        task = (record.get("tasks") or {}).get(opportunity_id) or {}
+        task = tasks.get(opportunity_id) or {}
         steps.append({
             "step_id": step,
             "opportunity_id": opportunity_id,
             "task_status": task.get("status", "pending"),
             "result_sha256": task.get("result_sha256"),
         })
+    all_verified = all(
+        step["task_status"] == "completed" and _valid_sha(step["result_sha256"])
+        for step in steps
+    )
+    handoff = "pending"
+    if all_verified:
+        from modstore_server.strategic_portfolio import PortfolioError
+
+        try:
+            expected = operating_dependency_handoff(opportunities[bindings["plan"]], tasks)
+        except PortfolioError:
+            expected = []
+        handoff = (
+            "verified"
+            if expected and tasks[bindings["plan"]].get("dependency_handoff") == expected
+            else "unverified"
+        )
     return {
         "status": "original_task_projection",
         "decision_id": record["decision_id"],
         "steps": steps,
+        "all_steps_verified": all_verified and handoff == "verified",
+        "dependency_handoff": handoff,
         "independent_acceptance": "pending_fixed_cohort_verification",
     }

@@ -84,6 +84,9 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 tasks.get(dep, {}).get("status") != "completed" for dep in opportunity["depends_on"]
             ):
                 continue
+            from modstore_server.xiaoc_goal_management import operating_dependency_handoff
+
+            dependency_handoff = operating_dependency_handoff(opportunity, tasks)
             reservation = {field: opportunity[field] for field in RESOURCES}
             from modstore_server.xiaoc_life_store import (
                 LifePolicyError,
@@ -110,6 +113,8 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 "deadline": (now + timedelta(seconds=reservation["compute_seconds"])).isoformat(),
                 "calls": {},
             }
+            if dependency_handoff:
+                task["dependency_handoff"] = dependency_handoff
             tasks[key] = task
             action = session.execute(
                 select(StrategicActionItem).where(
@@ -141,6 +146,7 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 "owner_user_id": proposal["owner_user_id"],
                 "lease_token": token,
                 "deadline": task["deadline"],
+                **({"dependency_handoff": dependency_handoff} if dependency_handoff else {}),
             }
         return None
 

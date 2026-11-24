@@ -785,6 +785,8 @@ class CyclePorts:
         }
         selected = after.get("plan", {}).get("selected", [])
         selected_tasks = [after.get("tasks", {}).get(key, {}) for key in selected]
+        step_projection = project_goal_steps(binding["goal"], after)
+        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
         remaining_ready = company and bool(_ready_portfolio_tasks(after))
         goal_status = "active"
         if portfolio_goal_closed(after, now=datetime.now(UTC)):
@@ -793,8 +795,16 @@ class CyclePorts:
             not remaining_ready
             and selected_tasks
             and all(task.get("status") == "completed" for task in selected_tasks)
+            and all_steps_verified
         ):
             goal_status = "execution_verified"
+        elif (
+            step_projection
+            and not remaining_ready
+            and selected_tasks
+            and all(task.get("status") == "completed" for task in selected_tasks)
+        ):
+            goal_status = "blocked"
         elif (
             not remaining_ready
             and selected_tasks
@@ -820,7 +830,7 @@ class CyclePorts:
         }
         if gate is not None:
             goal["operating_gate"] = gate
-            goal["step_projection"] = project_goal_steps(goal, after)
+            goal["step_projection"] = step_projection
         if goal_status == "execution_verified":
             goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         elif remaining_ready:

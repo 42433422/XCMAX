@@ -192,13 +192,15 @@ def reconcile_goals() -> dict[str, Any]:
         tasks = record.get("tasks", {})
         states = [tasks.get(key, {}).get("status", "pending") for key in selected]
         closed = portfolio_goal_closed(record, now=utcnow())
+        step_projection = project_goal_steps(goal, record)
+        all_steps_verified = not step_projection or step_projection.get("all_steps_verified") is True
         if closed:
             status, label = "stopped", "原组合已停止"
         elif states and all(state == "completed" for state in states):
-            status, label = (
-                "execution_verified",
-                "原员工执行回执已核验",
-            )
+            if all_steps_verified:
+                status, label = "execution_verified", "原员工执行回执已核验"
+            else:
+                status, label = "blocked", "原子目标或依赖交接回执尚未完整核验"
         elif any(state in {"failed", "unknown"} for state in states):
             status, label = "blocked", "原任务已停止或回执待核对"
         elif record["status"] in {"approved", "executing"}:
@@ -224,7 +226,8 @@ def reconcile_goals() -> dict[str, Any]:
             feedback=feedback,
         )
         reflection, candidates = review_experiences(record)
-        step_projection = project_goal_steps(goal, record)
+        if step_projection and not all_steps_verified:
+            candidates = []
         if (
             goal.get("execution_receipt") != receipt
             or goal.get("goal_review") != review

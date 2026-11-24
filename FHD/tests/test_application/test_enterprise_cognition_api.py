@@ -125,7 +125,7 @@ def test_goal_deadline_is_user_objective_not_invented_order_due_date(enterprise_
     assert query["observations"][0]["delay_status"] == "unknown"
     candidate, = query["operating_gap_candidates"]
     assert candidate["goal_id"] == _goal(order_id)["goal_id"]
-    assert candidate["evidence"]["gap"] == "6"
+    assert Decimal(candidate["evidence"]["gap"]) == 6
     assert candidate["deadline_missed"] is True
     assert candidate["execution_authorized"] is False
     assert candidate["requires_original_approval"] is True
