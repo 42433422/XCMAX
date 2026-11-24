@@ -422,6 +422,21 @@ class CyclePorts:
             facts = await self.research() + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
+        from modstore_server.xiaoc_self_metrics import with_cycle_receipts
+        from modstore_server.xiaoc_self_model import cognition_projection, employee_preflight
+
+        self_snapshot = await asyncio.to_thread(with_cycle_receipts, self.state)
+        self.active()
+        projection = cognition_projection(self_snapshot)
+        employee = self.state.get("policy", {}).get("employee_id")
+        if employee:
+            preflight = await asyncio.to_thread(
+                employee_preflight, employee, self.claim["owner_user_id"]
+            )
+            self.active()
+            projection["configured_employee"] = preflight["status"]
+        # Preserve the original observed context requirement and first evidence.
+        facts.insert(1, _fact("functional_self", projection, functional_self_projection=True))
         self.evidence = [row["ref"] for row in facts]
         self.details["sources"] = facts
         return {"facts": facts}
@@ -664,8 +679,22 @@ class CyclePorts:
                 from modstore_server.strategic_portfolio import (
                     create_portfolio_proposal,
                 )
+                from modstore_server.xiaoc_self_model import employee_preflight
 
                 self.active()
+                preflight = await asyncio.to_thread(
+                    employee_preflight, employee, self.claim["owner_user_id"]
+                )
+                self.active()
+                self.details["employee_capability_preflight"] = preflight
+                if preflight["status"] != "registered_unverified":
+                    goal["blocked_reason"] = preflight["reason"]
+                    goals.append(goal)
+                    return {
+                        "goals": goals,
+                        "status": "blocked",
+                        "summary": "员工能力来源不可用或未知，未创建执行提案。",
+                    }
                 proposal = create_portfolio_proposal(
                     owner_user_id=self.claim["owner_user_id"],
                     goal=goal["title"],
@@ -1192,6 +1221,8 @@ async def tick_async() -> dict[str, Any]:
         reconcile_usage,
     )
 
+    from modstore_server.xiaoc_self_model import execution_scope, record_identity_check
+
     with life_operation("tick"):
         with life_operation("reconcile"):
             reconcile_usage()
@@ -1201,19 +1232,27 @@ async def tick_async() -> dict[str, Any]:
             return resumed
         store = _store()
         state = store.read_state()
+        # Revalidate only the persistent identity against the original SQL ledger.
+        # This is not a model call, budget action or grant of new permission.
+        if execution_scope(state) is not None:
+            checked = await asyncio.to_thread(record_identity_check, only_if_due=True)
+            if checked["status"] != "not_due":
+                state = store.read_state()
         for domain in _domain_order(state):
             claim = store.claim_cycle(
                 domain=domain, reserve_tokens=_cycle_reservation(state, domain)
             )
             if claim is not None:
                 claim["state"]["events"] = state.get("events", [])
-                # A concurrent human review can advance the policy revision after
-                # the snapshot; stale review facts must not enter the new claim.
+                # Do not pass revision-bound evidence from a stale snapshot to a new claim.
+                same_revision = state["revision"] == claim["policy_revision"]
                 claim["state"]["experience_review_facts"] = (
-                    state.get("experience_review_facts", [])
-                    if state["revision"] == claim["policy_revision"]
-                    else []
+                    state.get("experience_review_facts", []) if same_revision else []
                 )
+                claim["state"]["self_identity_checks"] = (
+                    state.get("self_identity_checks", []) if same_revision else []
+                )
+                claim["state"]["self_promptfoo_checks"] = state.get("self_promptfoo_checks", [])
                 return await run_claimed_cycle(claim)
         return {"status": "idle", "identity_id": state["identity_id"]}
 

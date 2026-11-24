@@ -236,6 +236,43 @@ def read_state() -> dict[str, Any]:
             blockers.extend(_admission_blockers(data))
         if active and active["policy_revision"] != data["revision"]:
             blockers.append("原运行授权已改变，等待原回执结算")
+        data["self_authority_active"] = _active_principal(session, data.get("owner_user_id"))
+        data["self_promptfoo_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_promptfoo_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
+        data["self_identity_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_identity_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
+        data["self_fixture_checks"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "self_fixture_check",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(20)
+            )
+        ]
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
@@ -504,7 +541,10 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         reserved = min(reserve_tokens, max(0, lane_cap - lane_used))
         if reserve_tokens and reserved <= 0:
             return None
+        from modstore_server.xiaoc_self_model import execution_scope
+
         cycle = {
+            "execution_scope": execution_scope(data, now=now, owner_active=True),
             "cycle_id": uuid.uuid4().hex,
             "lease_token": uuid.uuid4().hex,
             "policy_revision": data["revision"],
@@ -528,7 +568,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         data["next_wake_at"] = (
             now + timedelta(seconds=policy["wake_interval_seconds"])
         ).isoformat()
-        return {**cycle, "state": copy.deepcopy(data)}
+        return {**cycle, "state": {**copy.deepcopy(data), "self_authority_active": True}}
 
     return _mutate(claim)
 
@@ -706,6 +746,7 @@ def finish_cycle(
                 **(details or {}),
                 **world_receipt,
                 "policy_revision": claim["policy_revision"],
+                "execution_scope": active.get("execution_scope"),
                 "reservation": reserved,
                 "learning_applied": safe,
                 "owner_user_id": claim["owner_user_id"],

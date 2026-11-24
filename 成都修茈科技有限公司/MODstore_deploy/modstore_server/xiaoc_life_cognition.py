@@ -95,6 +95,9 @@ Alternatives are for propose only; the runtime adds a no-action baseline. Never
 supply numeric probabilities, scores, costs or estimated returns as actual facts.
 Evidence status describes observations, not certainty about their contents.
 Historical measured outcomes do not establish success or subjective consciousness.
+A functional self projection describes identity and narrow independent checks only.
+Registered tools, skills, models and employees are not verified mastery. A missing,
+unavailable or stale capability must not be presented as currently possessed.
 A cognitive review is historical ledger consistency, not a future prediction,
 causal proof, model ability score or permission to change an approved goal.
 An experience candidate awaits review; it is not an adopted memory or causal proof.
@@ -362,6 +365,8 @@ class CognitionContextError(ValueError):
 
 def observation_status(row: dict[str, Any]) -> str:
     """Project existing evidence stages without making a second truth store."""
+    if row.get("functional_self_projection") is True:
+        return "functional_self_projection_not_general_capability_proof"
     business = row.get("business_feedback")
     if isinstance(business, dict):
         if (

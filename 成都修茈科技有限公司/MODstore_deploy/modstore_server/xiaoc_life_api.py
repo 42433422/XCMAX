@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -74,6 +75,44 @@ def _call(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 @router.get("")
 def get_life(_admin: User = Depends(require_admin)) -> dict[str, Any]:
     return read_state()
+
+
+@router.get("/self-model")
+async def get_self_model(admin: User = Depends(require_admin)) -> dict[str, Any]:
+    from modstore_server.xiaoc_self_metrics import audit_projection, read_accrual, with_cycle_receipts
+    from modstore_server.xiaoc_self_model import execution_scope, model_inventory, project, registry_inventory
+
+    state = await asyncio.to_thread(read_state)
+    state = await asyncio.to_thread(with_cycle_receipts, state)
+    result = project(state)
+    inventory = await asyncio.to_thread(registry_inventory, state, admin)
+    inventory["models"] = await model_inventory()
+    result["inventory"] = inventory
+    result["inventory_status"] = "point_in_time_registry_not_independent_proof"
+    costs = await asyncio.to_thread(read_accrual, state)
+    result["performance"]["cost_cents"] = costs["cost_cents"]
+    result["performance"]["cost_status"] = costs["status"]
+    result["cost_evidence"] = costs
+    from modstore_server.xiaoc_self_evidence import annotate_unverified_catalog, fixture_trend
+
+    catalog = await asyncio.to_thread(audit_projection)
+    result["audit_catalog"] = annotate_unverified_catalog(
+        catalog,
+        state.get("self_fixture_checks", []),
+        current_sha=result["identity"]["release"]["git_sha"],
+    )
+    result["fixture_trend"] = fixture_trend(
+        state.get("self_fixture_checks", []),
+        current_sha=result["identity"]["release"]["git_sha"],
+    )
+    current = await asyncio.to_thread(read_state)
+    if (
+        current["revision"] != state["revision"]
+        or execution_scope(current) != execution_scope(state)
+        or current.get("self_authority_active") != state.get("self_authority_active")
+    ):
+        raise HTTPException(409, "自我状态已变化，请重新读取")
+    return result
 
 
 @router.put("")
