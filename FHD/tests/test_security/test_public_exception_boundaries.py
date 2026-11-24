@@ -348,13 +348,7 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     executor = setup.bridge.orchestrator._tool_executor
 
     def execute_in_process(step, *, runtime_context, deadline_monotonic):
-        try:
-            return executor.execute(step, runtime_context=runtime_context)
-        except BaseException:
-            import traceback
-
-            traceback.print_exc()
-            raise
+        return executor.execute(step, runtime_context=runtime_context)
 
     executor.execute_with_deadline = execute_in_process
     for target in (
