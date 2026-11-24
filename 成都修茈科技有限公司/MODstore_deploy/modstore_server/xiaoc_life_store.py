@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import copy
+import hashlib
 import json
 import uuid
 from datetime import UTC, timedelta
@@ -250,30 +251,35 @@ def read_state() -> dict[str, Any]:
         data["status"] = (
             "stopped"
             if data["stopped"]
-            else "paused"
-            if data["paused"]
             else (
-                "blocked"
-                if blockers
+                "paused"
+                if data["paused"]
                 else (
-                    (
-                        "waiting"
-                        if active.get("awaiting_worker")
-                        else {
-                            "observe": "thinking",
-                            "decide": "thinking",
-                            "act": "acting",
-                            "reflect": "reflecting",
-                        }.get(active.get("phase"), "thinking")
+                    "blocked"
+                    if blockers
+                    else (
+                        (
+                            "waiting"
+                            if active.get("awaiting_worker")
+                            else {
+                                "observe": "thinking",
+                                "decide": "thinking",
+                                "act": "acting",
+                                "reflect": "reflecting",
+                            }.get(active.get("phase"), "thinking")
+                        )
+                        if active
+                        else "idle" if data["level"] < 4 else data["last_status"]
                     )
-                    if active
-                    else "idle" if data["level"] < 4 else data["last_status"]
                 )
             )
         )
         data["activity"] = (
             {
                 "id": active["cycle_id"],
+                "trace_cycle_sha256": hashlib.sha256(
+                    active["cycle_id"].encode("utf-8")
+                ).hexdigest(),
                 "domain": active["domain"],
                 "started_at": active["started_at"],
                 "status": data["status"],
@@ -287,9 +293,11 @@ def read_state() -> dict[str, Any]:
                 "summary": (
                     "原运行已禁止新增动作，保留原回执及预算核对"
                     if data["status"] in {"paused", "stopped", "blocked"}
-                    else "等待原队列任务的执行回执"
-                    if active.get("awaiting_worker")
-                    else "正在处理已认领的自主活动"
+                    else (
+                        "等待原队列任务的执行回执"
+                        if active.get("awaiting_worker")
+                        else "正在处理已认领的自主活动"
+                    )
                 ),
             }
             if active
@@ -436,9 +444,7 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
             + (
                 "，自主活动已停止"
                 if data.get("stopped")
-                else "，自主活动已暂停"
-                if data["paused"]
-                else ""
+                else "，自主活动已暂停" if data["paused"] else ""
             ),
             evidence_refs=[f"admin:{actor_user_id}", f"policy:{data['revision']}"],
             details={
@@ -943,6 +949,7 @@ def mark_model_attempt(claim: dict[str, Any]) -> None:
     An empty action journal cannot later be interpreted as no provider call
     when the process crashes between transport and durable reservation receipt.
     """
+
     def mark(data: dict[str, Any], session: Session) -> None:
         if not _claim_active(data, session, claim):
             raise LifePolicyError("原模型授权已失效，禁止新增外呼")

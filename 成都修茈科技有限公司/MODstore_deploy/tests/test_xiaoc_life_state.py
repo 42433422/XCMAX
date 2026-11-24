@@ -229,7 +229,9 @@ def test_late_receipts_settle_once_without_learning_or_advancing_goals(
                 "status": "hypothesis",
                 "owner_user_id": claim["owner_user_id"],
                 "assessment_event_id": "cycle:" + claim["cycle_id"],
-            } if learned else before["self_model"]
+            }
+            if learned
+            else before["self_model"]
         )
         assert state.get("goal_cursors", {}) == ({"enterprise": "original-goal"} if fresh else {})
         events = [event for event in state["events"] if event["id"] == "cycle:" + claim["cycle_id"]]
@@ -725,11 +727,15 @@ def test_world_forecast_settles_across_real_sql_cycles_without_new_authority(dat
         claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
         state = finish(
             claim,
-            details={"world_observations": {"intent_accuracy": {
-                "observed_at": now.isoformat(),
-                "value": value,
-                "source_sha256": digest * 64,
-            }}},
+            details={
+                "world_observations": {
+                    "intent_accuracy": {
+                        "observed_at": now.isoformat(),
+                        "value": value,
+                        "source_sha256": digest * 64,
+                    }
+                }
+            },
         )
         assert finish(claim)["world_review"] == state["world_review"]
         return state
@@ -754,11 +760,15 @@ def test_world_forecast_does_not_learn_after_pause(database):
     )
     result = finish(
         claim,
-        details={"world_observations": {"intent_accuracy": {
-            "observed_at": store.utcnow().isoformat(),
-            "value": 0.5,
-            "source_sha256": "a" * 64,
-        }}},
+        details={
+            "world_observations": {
+                "intent_accuracy": {
+                    "observed_at": store.utcnow().isoformat(),
+                    "value": 0.5,
+                    "source_sha256": "a" * 64,
+                }
+            }
+        },
     )
     assert "world_review" not in result
     assert result["budget"]["used_tokens"] == 50
@@ -772,6 +782,7 @@ def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(databas
     assert running["state_version"] > initial["state_version"]
     assert running["activity"]["phase"] == "observe"
     assert "lease_token" not in running["activity"]
+    assert len(running["activity"]["trace_cycle_sha256"]) == 64
     stopped = store.update_settings(
         LifeUpdate(expected_revision=running["revision"], stopped=True), actor_user_id=7
     )
@@ -796,7 +807,9 @@ def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(databas
     assert restarted["budget"]["used_tokens"] == 50
     assert not restarted["stopped"] and not restarted["paused"]
     assert not store.cycle_active(claim)
-    assert store.claim_cycle(domain="enterprise", reserve_tokens=100)["cycle_id"] != claim["cycle_id"]
+    assert (
+        store.claim_cycle(domain="enterprise", reserve_tokens=100)["cycle_id"] != claim["cycle_id"]
+    )
 
 
 def test_budget_exhaustion_blocks_even_zero_token_new_cycle(database):
@@ -828,7 +841,12 @@ def test_phase_does_not_skip_or_rewind_and_original_receipt_is_preserved(databas
 
 @pytest.mark.parametrize(
     "field,value",
-    [("domain", "exploration"), ("owner_user_id", 8), ("reserved_tokens", 9999), ("deadline", "forged")],
+    [
+        ("domain", "exploration"),
+        ("owner_user_id", 8),
+        ("reserved_tokens", 9999),
+        ("deadline", "forged"),
+    ],
 )
 def test_wrong_lease_binding_cannot_journal_or_settle(database, field, value):
     configure()
@@ -897,7 +915,9 @@ def test_revoked_cycle_can_record_receipt_only_reflection(database):
     assert state["events"][0]["status"] == "policy_changed"
 
 
-def test_recovery_counts_new_calls_on_existing_task_and_requires_journal_receipt(database, monkeypatch):
+def test_recovery_counts_new_calls_on_existing_task_and_requires_journal_receipt(
+    database, monkeypatch
+):
     calls = {
         "before": {"status": "settled", "actual_tokens": 10},
         "new": {"status": "settled", "actual_tokens": 25},
@@ -941,6 +961,7 @@ def _process_claim_life(db_url, start, output, connect_args):
 
 def _spawn_claims(database, connect_args):
     import multiprocessing
+
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     output = ctx.Queue()
@@ -1116,7 +1137,6 @@ def test_native_postgres_process_claim_checkpoint_and_pool_release(monkeypatch):
                 connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         finally:
             admin.dispose()
-
 
 
 def test_unreceipted_provider_attempt_cannot_be_reconciled_as_zero(database, monkeypatch):

@@ -360,7 +360,8 @@ class CyclePorts:
                 isinstance(event, dict)
                 and event.get("summary")
                 and event.get("kind") not in ("experience_candidate", "experience_review")
-                and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
+                and (event.get("details") or {}).get("owner_user_id")
+                == self.state.get("owner_user_id")
             ):
                 facts.append(
                     _fact(
@@ -992,7 +993,8 @@ async def _continue_at_act(
         ports.actual_tokens = usage
         ports.model = str(receipt.get("model") or "")[:256]
         ports.evidence = [
-            ref for ref in receipt.get("evidence_refs", [])
+            ref
+            for ref in receipt.get("evidence_refs", [])
             if isinstance(ref, str) and 0 < len(ref) <= 256
         ][:32]
     if not _store().admit_cycle_act(ports.claim):
@@ -1015,8 +1017,9 @@ async def recover_native_act() -> dict[str, Any] | None:
         config = native_thread_config(claim)
         # Restore the same authority context used by normal execution.
         # The remote employee/model gates must see this original lease.
-        with life_operation("graph", cycle_id=claim["cycle_id"]), _store().life_execution_scope(
-            claim
+        with (
+            life_operation("graph", cycle_id=claim["cycle_id"]),
+            _store().life_execution_scope(claim),
         ):
             result = await _continue_at_act(graph, config, ports, restoring=True)
             if result is None:
@@ -1031,16 +1034,15 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
         return dict(_store().read_state())
     ports = CyclePorts(claim)
     try:
-        with life_operation("graph", cycle_id=claim["cycle_id"]), _store().life_execution_scope(
-            claim
+        with (
+            life_operation("graph", cycle_id=claim["cycle_id"]),
+            _store().life_execution_scope(claim),
         ):
             async with native_life_checkpointer() as saver:
                 graph = build_life_graph(ports, checkpointer=saver)
                 config = native_thread_config(claim)
                 await graph.ainvoke({}, config, durability="sync")
-                result = await _continue_at_act(
-                    graph, config, ports, restoring=False
-                )
+                result = await _continue_at_act(graph, config, ports, restoring=False)
                 if result is None:
                     # Another worker won the pre-act CAS, or an unverified
                     # model receipt prevents effects. Do not finish its lease.
@@ -1083,7 +1085,9 @@ async def tick_async() -> dict[str, Any]:
         store = _store()
         state = store.read_state()
         for domain in _domain_order(state):
-            claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
+            claim = store.claim_cycle(
+                domain=domain, reserve_tokens=_cycle_reservation(state, domain)
+            )
             if claim is not None:
                 claim["state"]["events"] = state.get("events", [])
                 # A concurrent human review can advance the policy revision after

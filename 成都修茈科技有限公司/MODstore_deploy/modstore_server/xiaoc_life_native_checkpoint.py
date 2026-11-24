@@ -47,9 +47,8 @@ async def native_life_checkpointer() -> AsyncIterator[Any]:
     if dialect == "postgresql":
         import re
 
-        from sqlalchemy import text
-
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from sqlalchemy import text
 
         # The business engine may set search_path through connect_args rather
         # than the URL. Discover the effective schema with the SAME role, then
@@ -63,14 +62,11 @@ async def native_life_checkpointer() -> AsyncIterator[Any]:
             .update_query_dict({"options": f"-csearch_path={schema}"})
             .render_as_string(hide_password=False)
         )
-        async with AsyncPostgresSaver.from_conn_string(
-            conn_string, serde=serde
-        ) as saver:
+        async with AsyncPostgresSaver.from_conn_string(conn_string, serde=serde) as saver:
             await saver.setup()
             yield saver
     elif dialect == "sqlite":
         import aiosqlite
-
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
         db_path = url.database or ":memory:"

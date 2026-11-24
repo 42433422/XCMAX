@@ -533,6 +533,8 @@ def test_same_goal_across_cycles_preserves_execution_identity(ports, monkeypatch
     store.state["goals"] = [goal]
     store.claimed = False
     store.claim["cycle_id"] = "second-cycle"
+    store.graph_started = False
+    store.act_admitted = False
     # This unit fixture has no strategic_decisions database. Exercise the
     # original-goal identity contract without pretending it has a real ledger.
     monkeypatch.setattr(runtime, "_cycle_reservation", lambda state, domain: 32768)
@@ -809,7 +811,6 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
         check_company_receipt()
     finally:
         engine.dispose()
-
 
 
 def test_model_timeout_without_receipt_keeps_unknown_cost(ports, monkeypatch):

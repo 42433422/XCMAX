@@ -101,6 +101,9 @@ def test_otel_and_prometheus_observe_return_error_and_cancel_without_payload(mon
         assert trace_span.attributes["xiaoc.cycle_sha256"] != "secret-cycle-id"
         assert len(trace_span.attributes["xiaoc.cycle_sha256"]) == 64
         assert "secret-cycle-id" not in str(trace_span.attributes)
+        with telemetry.life_operation("tick"):
+            pass
+        assert telemetry.PROCESS_CPU_SECONDS._value.get() >= 0
     finally:
         provider.shutdown()
 

@@ -63,7 +63,11 @@ def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
             if step.get("decision_id"):
                 # Every journaled portfolio call must have an original settled
                 # ledger entry, including calls on an already-known task.
-                if (step["decision_id"], step.get("opportunity_id"), request_id) not in verified_calls:
+                if (
+                    step["decision_id"],
+                    step.get("opportunity_id"),
+                    request_id,
+                ) not in verified_calls:
                     return None
                 continue
             if request_id in direct_calls:
@@ -190,9 +194,7 @@ def reconcile_usage() -> dict[str, int]:
                     or running.get("lease_token") != item["lease_token"]
                     or running.get("steps", []) != steps
                     or running.get("graph_checkpoints", {}) != item.get("graph_checkpoints", {})
-                    or not (
-                        running.get("awaiting_worker") or waiting_deadline(current) <= utcnow()
-                    )
+                    or not (running.get("awaiting_worker") or waiting_deadline(current) <= utcnow())
                 ):
                     return False
                 current["active_cycle"] = None
@@ -284,7 +286,11 @@ def reconcile_goals() -> dict[str, Any]:
             feedback=feedback,
         )
         reflection, candidates = review_experiences(record)
-        if goal.get("execution_receipt") != receipt or goal.get("goal_review") != review or candidates:
+        if (
+            goal.get("execution_receipt") != receipt
+            or goal.get("goal_review") != review
+            or candidates
+        ):
             previous = (
                 goal.get("execution_receipt"),
                 goal.get("outcome_ref"),
@@ -292,8 +298,18 @@ def reconcile_goals() -> dict[str, Any]:
                 goal.get("goal_review"),
             )
             updates.append(
-                (goal["id"], decision_id, status, label, receipt, feedback, previous, review,
-                 reflection, candidates)
+                (
+                    goal["id"],
+                    decision_id,
+                    status,
+                    label,
+                    receipt,
+                    feedback,
+                    previous,
+                    review,
+                    reflection,
+                    candidates,
+                )
             )
 
     def apply(data: dict[str, Any], session: Any) -> int:
@@ -302,8 +318,16 @@ def reconcile_goals() -> dict[str, Any]:
         changed = 0
         registered: set[str] = set()
         for (
-            goal_id, decision_id, status, label, receipt, feedback, previous, review,
-            reflection, candidates,
+            goal_id,
+            decision_id,
+            status,
+            label,
+            receipt,
+            feedback,
+            previous,
+            review,
+            reflection,
+            candidates,
         ) in updates:
             target = next(
                 (
