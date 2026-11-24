@@ -129,6 +129,17 @@ def test_unregistered_legacy_upload_is_never_adopted(owned, monkeypatch, tmp_pat
             assert db.query(EltUpload).filter(EltUpload.storage_path == str(shared)).count() == 0
 
 
+def test_prefixed_chat_upload_path_resolves_by_original_file_name(owned):
+    context, file = owned
+    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+
+    with tenant_scope(int(context["tenant_id"])):
+        assert (
+            resolve_owned_upload_path("uploads/chat/7a9193dba432-price.csv", context)
+            == str(file)
+        )
+
+
 def test_registered_upload_round_trip_and_missing_tenant(owned):
     import io
 

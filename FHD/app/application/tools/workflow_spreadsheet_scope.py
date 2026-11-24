@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import os
+import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
@@ -106,6 +107,16 @@ def _fresh_upload_cutoff():
     return utc_now_naive() - timedelta(hours=hours)
 
 
+def _upload_basename_candidates(value: str) -> list[str]:
+    """聊天上传返回的文件路径带随机前缀，这里同时保留原名候选。"""
+    name = Path(value).name
+    candidates = [name]
+    unprefixed = re.fullmatch(r"[0-9a-fA-F]{8,32}-(.+)", name)
+    if unprefixed is not None and unprefixed.group(1) != name:
+        candidates.append(unprefixed.group(1))
+    return candidates
+
+
 def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
     """把用户可见的文件名换成当前账号自己的上传存储路径。
 
@@ -129,7 +140,7 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
                 return str(exact.storage_path or exact.id)
             by_name = (
                 query.filter(
-                    EltUpload.file_name == Path(value).name,
+                    EltUpload.file_name.in_(_upload_basename_candidates(value)),
                     EltUpload.storage_path != "",
                     EltUpload.expires_at > utc_now_naive(),
                     # 只认刚上传的文件：历史同名文件不能被静默当成本次输入。
