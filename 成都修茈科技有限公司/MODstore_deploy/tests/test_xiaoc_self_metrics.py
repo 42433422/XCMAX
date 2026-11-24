@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 
-from modstore_server.xiaoc_self_metrics import accrual_projection, completion_review
+from modstore_server.xiaoc_self_metrics import accrual_projection, audit_projection, completion_review
 
 SCOPE = "exact-scope"
 
@@ -100,3 +102,51 @@ def test_unknown_and_unversioned_receipts_are_not_success_or_failure():
     result = completion_review(SCOPE, rows + [unknown, cycle("old", scope="old", day=31)])
     assert result["status"] == "insufficient_evidence"
     assert result["excluded_unmeasured"] == 1
+
+def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tmp_path):
+    from modstore_server import strategy_bets, strategy_planner
+
+    catalog_dir = tmp_path / "FHD" / "config"
+    catalog_dir.mkdir(parents=True)
+    catalog_path = catalog_dir / "audit_benchmark_ssot.json"
+    domains = [
+        {
+            "id": f"D{i:02d}",
+            "anchor_60": [{"id": f"D{i:02d}-A{j}"} for j in range(3)],
+            "anchor_90": [{"id": f"D{i:02d}-B{j}"} for j in range(3)],
+        }
+        for i in range(18)
+    ]
+    catalog = {
+        "standard_version": "fixture-v1",
+        "scoring_version": "fixture-score-v1",
+        "domain_count": 18,
+        "domains": domains,
+    }
+    def persist():
+        catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+
+    persist()
+    monkeypatch.setattr(strategy_bets, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        strategy_planner,
+        "_domain_status",
+        lambda: {"domains": [{"domain_id": "D00", "status": "PASS"}]},
+    )
+    report = audit_projection()
+    assert report["status"] == "catalog_only"
+    assert report["domain_count"] == 18
+    assert report["anchor_count"] == 108
+    assert report["standard_sha256"] == hashlib.sha256(catalog_path.read_bytes()).hexdigest()
+    assert report["historical_domains"]["D00"]["status"] == "PASS"
+    assert all(item["status"] == "unverified" for item in report["anchors"])
+
+    # A shorter catalog cannot quietly improve measured coverage by dropping a test.
+    catalog["domains"][0]["anchor_60"].pop()
+    persist()
+    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+
+    # Duplicated anchors do not count as independently registered capabilities.
+    catalog["domains"][0]["anchor_60"].append(catalog["domains"][1]["anchor_60"][0])
+    persist()
+    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
