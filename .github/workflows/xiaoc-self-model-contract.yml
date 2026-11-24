@@ -12,6 +12,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: xiaoc-d04-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   self-model-contract:
     runs-on: ubuntu-22.04
