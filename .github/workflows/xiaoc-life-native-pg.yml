@@ -1,0 +1,84 @@
+name: XiaoC Native Life Recovery (PostgreSQL)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - codex/xiaoc-evidence-cognition-ce197738
+    paths:
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_life_*.py'
+      - '.github/workflows/xiaoc-life-native-pg.yml'
+  push:
+    branches: [main]
+    paths:
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_life_*.py'
+      - '.github/workflows/xiaoc-life-native-pg.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xiaoc-life-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  native-recovery:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: component-test-only
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MODSTORE_TEST_POSTGRES_URL: postgresql+psycopg2://postgres:component-test-only@127.0.0.1:5432/postgres
+    defaults:
+      run:
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+    steps:
+      - name: Checkout exact PR merge tree
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install original vendored LangGraph and backend dependencies
+        run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          python -m pip install --upgrade pip
+          python -m pip install "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_core" \
+            "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint" \
+            "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" \
+            "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" \
+            "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_prebuilt" \
+            "$GITHUB_WORKSPACE/FHD/packages/xcagi_langgraph_sdk" \
+            -e "$GITHUB_WORKSPACE/packages/retort_engine" \
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]" "$pytest_pin"
+
+      - name: Check formatting without weakening original gates
+        run: |
+          black --check modstore_server/xiaoc_life_native_checkpoint.py \
+            modstore_server/xiaoc_life_runtime.py modstore_server/xiaoc_life_store.py \
+            tests/test_xiaoc_life_native_checkpoint.py tests/test_xiaoc_life_runtime.py \
+            tests/test_xiaoc_life_state.py
+          isort --check-only modstore_server/xiaoc_life_native_checkpoint.py \
+            modstore_server/xiaoc_life_runtime.py modstore_server/xiaoc_life_store.py \
+            tests/test_xiaoc_life_native_checkpoint.py tests/test_xiaoc_life_runtime.py \
+            tests/test_xiaoc_life_state.py
+
+      - name: Real SQLite and PostgreSQL cross-process life regression
+        run: |
+          python -m pytest -q --tb=short \
+            tests/test_xiaoc_life_native_checkpoint.py \
+            tests/test_xiaoc_life_checkpoint.py \
+            tests/test_xiaoc_life_state.py \
+            tests/test_xiaoc_life_runtime.py
