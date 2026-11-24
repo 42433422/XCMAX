@@ -119,7 +119,9 @@ def record_fixture_report(report_path: Path, standard_path: Path) -> dict[str, s
     def record(_data: dict[str, Any], session: Any) -> dict[str, str]:
         if session.get(XiaoCLifeEvent, event_id) is None:
             _event(
-                session, event_id, kind="self_fixture_check",
+                session,
+                event_id,
+                kind="self_fixture_check",
                 status="historical_fixture",
                 summary="独立隔离回归报告登记，不证明模型、业务、生产或当前能力。",
                 evidence_refs=["sha256:" + summary["report_sha256"]],
@@ -144,8 +146,10 @@ def annotate_unverified_catalog(
         details = event.get("details") or {}
         ref = event.get("id")
         if (
-            not isinstance(ref, str) or not ref.startswith("self-fixture:")
-            or ref in seen or not _sha(details.get("report_sha256"))
+            not isinstance(ref, str)
+            or not ref.startswith("self-fixture:")
+            or ref in seen
+            or not _sha(details.get("report_sha256"))
             or ref != "self-fixture:" + details["report_sha256"]
             or details.get("standard_sha256") != catalog.get("standard_sha256")
             or not isinstance(details.get("scenarios"), dict)
@@ -161,13 +165,15 @@ def annotate_unverified_catalog(
             anchor.setdefault("fixture_history", [])
             if len(anchor["fixture_history"]) >= 3:
                 continue
-            anchor["fixture_history"].append({
-                "scenario": key,
-                "reported_integration": row["integration"],
-                "evidence_ref": ref,
-                "release_match": bool(current_sha and current_sha == details.get("source_sha")),
-                "status": "unverified_fixture_claim_not_capability",
-            })
+            anchor["fixture_history"].append(
+                {
+                    "scenario": key,
+                    "reported_integration": row["integration"],
+                    "evidence_ref": ref,
+                    "release_match": bool(current_sha and current_sha == details.get("source_sha")),
+                    "status": "unverified_fixture_claim_not_capability",
+                }
+            )
     return catalog
 
 def fixture_trend(events: list[dict[str, Any]], *, current_sha: str | None) -> dict[str, Any]:
