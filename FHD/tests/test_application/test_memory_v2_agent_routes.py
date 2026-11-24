@@ -412,21 +412,24 @@ def test_memory_readback_requires_original_durable_proof(memory_case, missing):
     assert memory_case.path.read_bytes() == original
 
 
-def test_memory_readback_rejects_fabricated_output(memory_case):
+@pytest.mark.parametrize("field", ["value", "recorded_at_utc"])
+def test_memory_readback_rejects_fabricated_output(memory_case, field):
     output = deepcopy(memory_case.run.tool_calls[0].output)
-    output["candidate"]["value"] = "forged"
+    output["candidate"][field] = "forged"
     report = _memory_readback(memory_case.run, output=output)
     assert report["status"] == "failed"
     assert report["code"] == "result_memory_receipt_mismatch"
 
 
-@pytest.mark.parametrize("tamper", ["value", "revision", "owner", "missing", "symlink", "store"])
+@pytest.mark.parametrize(
+    "tamper", ["value", "revision", "recorded_at_utc", "owner", "missing", "symlink", "store"]
+)
 def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch, tmp_path, tamper):
     import app.domain.shared_services.user_memory_service as memory_mod
 
     payload = json.loads(memory_case.path.read_text())
     owner = next(iter(payload))
-    if tamper in {"value", "revision"}:
+    if tamper in {"value", "revision", "recorded_at_utc"}:
         payload[owner]["memory_v2_records"][0][tamper] = "changed"
         memory_case.path.write_text(json.dumps(payload))
     elif tamper == "owner":
@@ -451,6 +454,7 @@ def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch
         == {
             "value": "result_memory_state_mismatch",
             "revision": "result_memory_state_mismatch",
+            "recorded_at_utc": "result_memory_state_mismatch",
             "owner": "result_memory_owner_unavailable",
             "missing": "result_memory_owner_unavailable",
             "symlink": "result_evidence_mismatch",
@@ -715,6 +719,7 @@ def test_memory_rejection_verifies_original_history_and_preserves_terminal_recor
         "revision",
         "eligible",
         "rejected_at",
+        "recorded_at_utc",
         "history_action",
         "history_previous",
         "history_prefix",
@@ -737,6 +742,8 @@ def test_memory_rejection_readback_requires_the_frozen_transition(
             record["eligible_for_planner"] = True
         elif tamper == "rejected_at":
             record["rejected_at"] = "unrelated rejection time"
+        elif tamper == "recorded_at_utc":
+            record["recorded_at_utc"] = "2026-11-24T00:00:00"
         elif tamper == "history_action":
             record["history"][-1]["action"] = "deleted"
         elif tamper == "history_previous":

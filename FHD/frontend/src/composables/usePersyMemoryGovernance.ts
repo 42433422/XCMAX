@@ -19,6 +19,17 @@ export function usePersyMemoryGovernance(options: {
   const memoryDraftSubject = ref('')
   const memoryDraftPredicate = ref('')
   const memoryDraftObject = ref('')
+  const memoryDraftSubjectType = ref('concept')
+  const memoryDraftObjectType = ref('concept')
+  const memoryDraftCardinality = ref<'' | 'one' | 'many'>('')
+  const memoryDraftEffectiveFrom = ref('')
+  const memoryDraftEffectiveUntil = ref('')
+  const memoryEntityTypes = [
+    { value: 'person', label: '人物' }, { value: 'organization', label: '组织' },
+    { value: 'project', label: '项目' }, { value: 'product', label: '产品' },
+    { value: 'place', label: '地点' }, { value: 'concept', label: '未明确类型' },
+    { value: 'literal', label: '属性值' }, { value: 'preference', label: '偏好' },
+  ]
 
   const selectedMemory = computed(() => {
     const memoryId = String(selectedNode.value?.metadata?.memory_id || '')
@@ -38,6 +49,13 @@ export function usePersyMemoryGovernance(options: {
     memoryDraftSubject.value = String(value.subject || '').trim()
     memoryDraftPredicate.value = String(value.predicate || '').trim()
     memoryDraftObject.value = String(value.object || '').trim()
+    const subjectEntity = value.entities?.find(entity => entity.role === 'subject') || value.entities?.[0]
+    const objectEntity = value.entities?.find(entity => entity.role === 'object') || value.entities?.[1]
+    memoryDraftSubjectType.value = String(subjectEntity?.type || 'concept')
+    memoryDraftObjectType.value = String(objectEntity?.type || 'concept')
+    memoryDraftCardinality.value = value.relation_cardinality || ''
+    memoryDraftEffectiveFrom.value = value.relation_validity?.effective_from || ''
+    memoryDraftEffectiveUntil.value = value.relation_validity?.effective_until || ''
     memoryMessage.value = ''
     memoryEditing.value = true
   }
@@ -95,6 +113,8 @@ export function usePersyMemoryGovernance(options: {
     memoryMessage.value = ''
     try {
       const previous = memoryValue(memory)
+      const previousSubject = previous.entities?.find(entity => entity.role === 'subject') || previous.entities?.[0]
+      const previousObject = previous.entities?.find(entity => entity.role === 'object') || previous.entities?.[1]
       const value: PersyMemoryValue = {
         ...previous,
         subject,
@@ -104,11 +124,26 @@ export function usePersyMemoryGovernance(options: {
         entities: [
           {
             name: subject,
-            type: String(previous.entities?.[0]?.type || 'concept'),
+            type: memoryDraftSubjectType.value,
             role: 'subject',
+            ...(previousSubject?.name === subject && previousSubject?.type === memoryDraftSubjectType.value && previousSubject?.entity_id
+              ? { entity_id: previousSubject.entity_id } : {}),
           },
-          { name: object, type: String(previous.entities?.[1]?.type || 'concept'), role: 'object' },
+          {
+            name: object, type: memoryDraftObjectType.value, role: 'object',
+            ...(previousObject?.name === object && previousObject?.type === memoryDraftObjectType.value && previousObject?.entity_id
+              ? { entity_id: previousObject.entity_id } : {}),
+          },
         ],
+      }
+      delete value.relation_cardinality
+      delete value.relation_validity
+      if (memoryDraftCardinality.value) value.relation_cardinality = memoryDraftCardinality.value
+      if (memoryDraftEffectiveFrom.value || memoryDraftEffectiveUntil.value) {
+        value.relation_validity = {
+          ...(memoryDraftEffectiveFrom.value ? { effective_from: memoryDraftEffectiveFrom.value } : {}),
+          ...(memoryDraftEffectiveUntil.value ? { effective_until: memoryDraftEffectiveUntil.value } : {}),
+        }
       }
       const result = await knowledgeBaseApi.updateMemory(activeDatasetId.value, memory.memory_id, {
         key: `${subject}.${predicate}`,
@@ -146,6 +181,12 @@ export function usePersyMemoryGovernance(options: {
     memoryDraftSubject,
     memoryDraftPredicate,
     memoryDraftObject,
+    memoryEntityTypes,
+    memoryDraftSubjectType,
+    memoryDraftObjectType,
+    memoryDraftCardinality,
+    memoryDraftEffectiveFrom,
+    memoryDraftEffectiveUntil,
     selectedMemory,
     orderedMemories,
     pendingMemoryCount,

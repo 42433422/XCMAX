@@ -304,6 +304,10 @@ class Mem0LongTermMemory:
             )
         hits = authority.filter_recalled_memories(user_id, hits)
         ranked = rank_hits(hits, query=text, limit=top_k)
+        from app.application.user_memory.retrieve import merge_relation_hits, relation_recall_hits
+
+        related = relation_recall_hits(user_id, text, memory_service=authority)
+        ranked = merge_relation_hits(ranked, related, limit=top_k)
         observe_memory_recall(
             outcome="hit" if ranked else "empty",
             duration_ms=(time.perf_counter() - started) * 1000,
@@ -639,6 +643,8 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
     budget = (
         int(_env_float(_ENV_MAX_CHARS, _DEFAULT_PROMPT_CHARS)) if max_chars is None else max_chars
     )
+    from app.application.user_memory.retrieve import format_relation_evidence
+
     lines = ["【长期记忆】以下为历史会话中可能相关的片段，仅作参考，不要当成本轮已核实的事实："]
     for index, hit in enumerate(hits, start=1):
         if not isinstance(hit, dict):
@@ -649,7 +655,7 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
         metadata = hit.get("metadata")
         meta: dict[str, Any] = metadata if isinstance(metadata, dict) else {}
         prefix = "事实：" if str(meta.get("memory_type") or "") == "fact" else ""
-        line = f"{index}. {prefix}{content}"
+        line = f"{index}. {prefix}{content}{format_relation_evidence(hit)}"
         if len("\n".join([*lines, line])) > budget:
             break
         lines.append(line)

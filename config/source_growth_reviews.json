@@ -495,14 +495,14 @@
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
       "base_file": "FHD/frontend/src/views/PersyKnowledgeView.vue",
-      "base_blob": "d8029632bcfa07439dd3a4c60c5d575615e3bc00",
-      "head_blob": "32b37f4b665221cc35211fe0b565901b5ae6ecc9",
-      "before_lines": 1007,
-      "after_lines": 1010,
-      "reason": "整合PR #3293，在既有知识库视图中增加内容区包裹层，使图谱和资料内容占剩余高度，提问框作为独立底行而不再覆盖图谱。",
-      "boundary": "仅模板结构新增3行，数据加载、权限、知识问答和所有现有视图不变；尺寸规则保留在现有persy-knowledge.css中，不新建组件模块。",
-      "validation": "知识页、图谱和布局3文件31项测试通过，完整vue-tsc和目标ESLint通过；本地Chromium因socket权限未完成几何验收，CI现有浏览器测试待运行。",
-      "follow_up": "@42433422 复核内容区与输入区的窗口尺寸适配；本次只是既有页面结构修复，无需仅为行数拆分组件，后续布局变更继续在独立CSS中维护。",
+      "base_blob": "bfc06e308e744a76bdaee4f1851d19f72cb37023",
+      "head_blob": "8e54e85693dc0ab179b5a9be46f392e2054000e6",
+      "before_lines": 993,
+      "after_lines": 1024,
+      "reason": "PR #3528 在现有 Persy 知识库视图接入关系与修订时间复核入口，原视图从 993 行增至 1024 行；此次补齐与实际主线和作者文件完全对应的增长评审请求。",
+      "boundary": "保留作者原 31 行视图增量，复用既有知识库、MemoryV2、PersyMemoryTemporalReview 和治理 composable；不添加第二套数据权威或扩大读写权限，修复工作未改动该 Vue 文件。",
+      "validation": "原增长检查确认 base/head blob 与 993→1024 行完全匹配；原记忆正常生命周期及读回合同 8 项通过、原断言未改。前端交互和全量 CI 尚待原正式门禁验证，这条记录不表示已完成前端或生产验收。",
+      "follow_up": "@42433422 继续复核现有知识库视图的组件边界与关系、历史复核入口，并以该 PR 最新提交的前端检查和真实场景证据确认；本项为架构评审请求，不是批准。",
       "review_owner": "@42433422"
     },
     "FHD/mobile-flutter-poc/lib/src/data/local_workspace.dart": {

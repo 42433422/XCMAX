@@ -103,6 +103,8 @@ class PersyMemoryGraphMixin:
                             "created_at",
                             "updated_at",
                             "last_recalled_at",
+                            "revision",
+                            "recorded_at_utc",
                             "recall_count",
                             "requires_user_confirmation",
                         )
@@ -132,7 +134,14 @@ class PersyMemoryGraphMixin:
                 if not name:
                     continue
                 entity_type = str(entity.get("type") or "concept")
-                entity_id = _entity_node_id(entity_type, name)
+                scope = str(row.get("scope") or "")
+                raw_identity = entity.get("entity_id")
+                identity = (
+                    f"id:{raw_identity.strip()}"
+                    if isinstance(raw_identity, str) and 0 < len(raw_identity.strip()) <= 160
+                    else f"name:{name.casefold()}"
+                )
+                entity_id = _entity_node_id(entity_type, f"{scope}:{identity}")
                 entity_nodes.setdefault(
                     entity_id,
                     {
