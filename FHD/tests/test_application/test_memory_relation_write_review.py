@@ -159,3 +159,25 @@ def test_shared_memory_review_and_revocation_cross_actor_but_not_mod(governed_me
         "success"
     ]
     assert service.query(access_context=bob, query="Northwind")["chunks"] == []
+
+
+def test_write_review_is_owner_scoped_and_never_blocks_on_revoked_relation():
+    old = {
+        "memory_id": "old",
+        "revision": 3,
+        "scope": "owner",
+        "status": "active",
+        "eligible_for_planner": True,
+        "source_policy": "trusted_pending",
+        "value": _value("Alice"),
+    }
+    proposed = {
+        "memory_id": "new",
+        "scope": "owner",
+        "value": _value("Bob"),
+    }
+    assert relation_write_conflicts([old], proposed) == [
+        {"memory_id": "old", "revision": 3}
+    ]
+    assert relation_write_conflicts([old], {**proposed, "scope": "tenant"}) == []
+    assert relation_write_conflicts([{**old, "status": "deleted"}], proposed) == []
