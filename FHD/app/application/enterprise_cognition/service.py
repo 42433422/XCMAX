@@ -202,7 +202,26 @@ class EnterpriseCognitionService:
             if action == "catalog":
                 from app.domain.enterprise_cognition.catalog import entity_catalog
 
-                return {"entities": entity_catalog(), "read_only_sources": True}
+                return {
+                    "entities": entity_catalog(),
+                    "read_only_sources": True,
+                    # Exposing transaction and journal rows does not prove an aggregate.
+                    "unverified_aggregate_metrics": [
+                        {
+                            "metric": metric,
+                            "knowledge_kind": "unknown",
+                            "reason_code": "not_verified_by_current_projection",
+                        }
+                        for metric in (
+                            "cash_balance",
+                            "accounts_receivable_balance",
+                            "accounts_payable_balance",
+                            "available_inventory_balance",
+                            "production_capacity",
+                            "customer_satisfaction",
+                        )
+                    ],
+                }
             if action == "query":
                 return self.query(parsed, **scope)
             if action == "goals":

@@ -240,6 +240,14 @@ def test_model_and_http_share_strict_catalog_contract(enterprise_http):
         "journal_entry",
     }
     assert data["read_only_sources"] is True
+    unknowns = data["unverified_aggregate_metrics"]
+    assert {row["metric"] for row in unknowns} >= {
+        "cash_balance",
+        "accounts_receivable_balance",
+        "accounts_payable_balance",
+        "available_inventory_balance",
+    }
+    assert all(row["knowledge_kind"] == "unknown" for row in unknowns)
     spec = get_tool_action_spec("enterprise_cognition", "query")
     assert spec.read_only and spec.idempotent
     assert validate_tool_call(
