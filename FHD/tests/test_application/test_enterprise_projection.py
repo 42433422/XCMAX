@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from app.db.models import (
     AiEmployeeProfile,
     Customer,
     EnterpriseEventCursor,
+    EnterpriseStateProjection,
     FinancialTransaction,
     SalesOrder,
     SalesOrderItem,
@@ -744,3 +746,35 @@ def test_procurement_references_are_unverified_pointers_not_facts_about_targets(
     assert all(row["target_visibility_verified"] is False for row in refs)
     assert all(row["evidence"] == source["evidence"] for row in refs)
     assert relationship_references({**source, "knowledge_kind": "unknown"}) == []
+
+
+def test_tampered_current_projection_is_not_reused_as_authoritative_fact(world):
+    service, sessions, *_ = world
+    original = get(service)
+    assert original["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        row = db.scalar(select(EnterpriseStateProjection))
+        saved = row.snapshot_json
+        decoded = json.loads(saved)
+        decoded["state"]["remaining_quantity"] = "999"
+        row.snapshot_json = json.dumps(decoded, ensure_ascii=False)
+    unsafe = get(service)
+    assert unsafe["knowledge_kind"] == "unknown"
+    assert unsafe["reason_code"] == "observation_history_unavailable"
+    assert unsafe["evidence"] == []
+    with sessions.begin() as db:
+        db.scalar(select(EnterpriseStateProjection)).snapshot_json = saved
+    assert get(service)["state"]["remaining_quantity"] == original["state"]["remaining_quantity"]
+
+
+def test_tampered_history_cannot_validate_a_cached_current_fact(world):
+    service, sessions, *_ = world
+    assert get(service)["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        row = db.scalar(select(EnterpriseStateProjection))
+        tampered = json.loads(row.snapshot_json)
+        tampered["_observation_history"][0]["state"]["remaining_quantity"] = "1000"
+        row.snapshot_json = json.dumps(tampered, ensure_ascii=False)
+    unsafe = get(service)
+    assert unsafe["knowledge_kind"] == "unknown"
+    assert unsafe["reason_code"] == "observation_history_unavailable"

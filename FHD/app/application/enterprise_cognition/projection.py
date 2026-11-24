@@ -23,6 +23,7 @@ from app.domain.enterprise_cognition.catalog import definition_for
 from app.domain.enterprise_cognition.world_observation import (
     historical_observation,
     public_snapshot,
+    read_observations,
     record_observation,
 )
 from app.http.request_context import (
@@ -167,8 +168,11 @@ class ProjectionService:
                         if isinstance(cached, dict) and all(
                             cached.get(key) == value for key, value in base.items()
                         ):
+                            # Validate the stored authority digest, scope and the
+                            # current envelope before a cached observation is a fact.
+                            read_observations(row.snapshot_json, base)
                             return {**public_snapshot(cached), "retrieved_from": "projection"}
-                    except ValueError:
+                    except (ValueError, KeyError, TypeError):
                         logger.warning("enterprise derived snapshot invalid; querying authority")
                 authority = self.reader.read(db, definition, scope, entity_id)
                 if authority is None:

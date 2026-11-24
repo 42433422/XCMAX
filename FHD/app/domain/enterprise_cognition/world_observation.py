@@ -59,6 +59,10 @@ def read_observations(
         if item["source_version"] != "sha256:" + digest:
             raise ValueError("observation_digest_mismatch")
         observation_time(item)
+    # A valid history cannot authorize an altered current cache envelope.
+    # This detects stale/tampered current state, provenance, source version and scope.
+    if decoded.get("freshness") == "fresh" and public_snapshot(decoded) not in history:
+        raise ValueError("current_observation_history_mismatch")
     return history, decoded.get(_TRUNCATED_KEY) is True
 
 
