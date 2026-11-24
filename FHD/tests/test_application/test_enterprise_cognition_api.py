@@ -334,3 +334,27 @@ def test_goal_inference_keeps_strategic_goal_provenance():
     assert result["goal_assertion_kind"] == "strategic_plan"
     assert result["source_knowledge_kind"] == "fact"
     assert result["target_met"] is False
+
+
+def test_empty_authorized_world_query_is_unknown_not_a_verified_fact():
+    from app.application.enterprise_cognition.service import (
+        EnterpriseCognitionService,
+        cognition_result_verified,
+    )
+
+    class NoVisibleRecords:
+        def list_refs(self, entity_type, *, limit, **scope):
+            return {"refs": [], "has_more": False}
+
+    class NoGoals:
+        def list(self, **scope):
+            raise AssertionError("empty source must not synthesize a goal")
+
+    query = {"entity_type": "order", "entity_id": None, "limit": 10, "force_refresh": False}
+    result = EnterpriseCognitionService(
+        projections=NoVisibleRecords(), goals=NoGoals()
+    ).query(query, tenant_id="11", actor_id="1", mod_id="")
+    assert result["snapshots"] == []
+    assert result["current_state_verified"] is False
+    assert result["reason_code"] == "no_visible_source_records"
+    assert cognition_result_verified("query", query, result) is False

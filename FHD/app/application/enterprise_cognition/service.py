@@ -166,9 +166,12 @@ class EnterpriseCognitionService:
             ],
             "scope": "current_actor_visible_recent" if not entity_id else "requested_entity",
             "has_more": references.get("has_more", False),
-            "current_state_verified": references.get("freshness", "fresh") == "fresh"
+            # Empty SELECT results are not positive evidence of an enterprise state.
+            "current_state_verified": bool(snapshots)
+            and references.get("freshness", "fresh") == "fresh"
             and all(row["freshness"] == "fresh" for row in snapshots),
             "reference_status": references.get("freshness", "fresh"),
+            "reason_code": "no_visible_source_records" if not snapshots else None,
             "business_data_written": False,
         }
 
