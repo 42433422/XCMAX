@@ -1,0 +1,14 @@
+name: XCMAX dedicated runner smoke
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/xcmax-grok-box-smoke.yml]
+permissions: {}
+jobs:
+  hello:
+    if: github.repository == '42433422/XCMAX' && github.ref_protected
+    runs-on: [self-hosted, xcmax-grok-box]
+    timeout-minutes: 2
+    steps:
+      - shell: bash
+        run: printf '%s\n' 'xcmax-grok-box smoke OK'
