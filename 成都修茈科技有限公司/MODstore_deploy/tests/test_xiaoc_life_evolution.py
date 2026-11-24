@@ -499,6 +499,76 @@ def test_rejected_effect_requires_actual_rollback_receipt(reflection):
         row.snapshot_json = json.dumps(snapshot)
         session.commit()
     evolution.reconcile()
+    assert life.read_state()["goals"][0]["status"] == "waiting_recovery"
+
+    from modstore_server.retort_feedback_recovery import _immutable_recovery
+
+    def identity(sha):
+        return {
+            "git_sha": sha,
+            "artifact_sha256": "f" * 64,
+            "image_digest": "",
+            "product_version": "1.0.0",
+            "release_id": f"xcagi-1.0.0-{sha}",
+        }
+
+    request_id = linked["retort_request_id"]
+    expected, target = identity("d" * 40), identity("a" * 40)
+    policy = {"mode": "restore_previous_release", "target": target}
+    reader = _immutable_recovery()
+    payload = reader.request_payload(
+        {
+            "request_id": f"retort:{request_id}:rollback",
+            "expected_identity": expected,
+            "target_identity": target,
+            "reason": "experiment_regression",
+        }
+    )
+    receipt = {
+        **payload,
+        "status": "rollback_verified",
+        "identity": target,
+        "request_sha256": reader._request_digest(payload),
+    }
+    with factory() as session:
+        row = session.get(RetortEvolutionRun, request_id)
+        snapshot = json.loads(row.snapshot_json)
+        effects = json.loads(row.effects_json)
+        snapshot["impact"]["reason"] = payload["reason"]
+        snapshot["delivery"] = {
+            "status": "deployment_verified",
+            "release_sha": expected["git_sha"],
+            "identity": expected,
+        }
+        effects["customer_feedback"] = {"recovery": policy}
+        effects["plan"] = {"feedback_policy": {"recovery": policy}}
+        session.commit()
+        # Even matching checkpoint and SQL projections must prove the exact
+        # original request, target, and canonical rollback request digest.
+        for change in (
+            {"request_id": "retort:other:rollback"},
+            {"identity": expected},
+            {"request_sha256": "0" * 64},
+            {},
+        ):
+            recovery = {
+                "status": "rollback_verified",
+                "request_id": request_id,
+                "identity": target,
+                "receipt": {**receipt, **change},
+                "verified_at": "2026-11-24T00:00:00+00:00",
+            }
+            snapshot["recovery"] = effects["recovery"] = recovery
+            row.snapshot_json = json.dumps(snapshot)
+            row.effects_json = json.dumps(effects)
+            session.commit()
+            if change:
+                from modstore_server.strategic_workspace_receipts import _evidence, _terminal
+
+                assert _terminal(
+                    {"original_request_id": request_id}, _evidence(row)
+                ) is None
+    evolution.reconcile()
     observed = life.read_state()["goals"][0]["evolution_outcome"]
     assert observed["status"] == "evolution_failed"
     assert observed["metrics"]["recovery_status"] == "rollback_verified"
