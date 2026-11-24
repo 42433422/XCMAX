@@ -359,22 +359,31 @@ def build_goal_opportunities(
 
 
 def _valid_sha(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(char in "0123456789abcdef" for char in value)
-    )
+    return isinstance(value, str) and len(value) == 64 and set(value) <= set("0123456789abcdef")
+
+
+def _terminal_task_receipt(task: Any) -> dict[str, Any] | None:
+    from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
+
+    if not isinstance(task, dict) or task.get("status") != "completed":
+        return None
+    receipt, calls = task.get("execution_receipt"), task.get("calls")
+    if (
+        _valid_sha(task.get("result_sha256"))
+        and isinstance(receipt, dict)
+        and not receipt.get("truncated")
+        and evaluate_execution_receipt(receipt).status == "completed"
+        and isinstance(calls, dict)
+        and all(isinstance(c, dict) and c.get("status") == "settled" for c in calls.values())
+    ):
+        return receipt
+    return None
 
 
 def operating_dependency_handoff(
     opportunity: dict[str, Any], tasks: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Read completed predecessor evidence from the same original portfolio only.
-
-    The projection is evidence metadata, not new executable inputs or arbitrary
-    worker text. Existing approved workspace and file contracts remain unchanged.
-    """
-    from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
+    """Read only predecessor receipt metadata, not executable inputs or current artifact bytes."""
     from modstore_server.strategic_portfolio import PortfolioError, digest
 
     if not str(opportunity.get("opportunity_id", "")).startswith("life-step-"):
@@ -382,21 +391,7 @@ def operating_dependency_handoff(
     result = []
     for key in opportunity.get("depends_on", []):
         task = tasks.get(key)
-        receipt = task.get("execution_receipt") if isinstance(task, dict) else None
-        calls = task.get("calls") if isinstance(task, dict) else None
-        if (
-            not isinstance(task, dict)
-            or task.get("status") != "completed"
-            or not _valid_sha(task.get("result_sha256"))
-            or not isinstance(receipt, dict)
-            or receipt.get("truncated")
-            or evaluate_execution_receipt(receipt).status != "completed"
-            or not isinstance(calls, dict)
-            or any(
-                not isinstance(call, dict) or call.get("status") != "settled"
-                for call in calls.values()
-            )
-        ):
+        if (receipt := _terminal_task_receipt(task)) is None:
             raise PortfolioError("operating dependency has no verified terminal receipt")
         inner = receipt.get("result")
         inner = inner if isinstance(inner, dict) else receipt
@@ -556,13 +551,15 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
                 "result_sha256": task.get("result_sha256"),
             }
         )
-    all_verified = all(
-        step["task_status"] == "completed" and _valid_sha(step["result_sha256"]) for step in steps
-    )
-    handoff = "pending"
-    if all_verified:
-        from modstore_server.strategic_portfolio import PortfolioError
+    all_verified, handoff = False, "pending"
+    if all(s["task_status"] == "completed" and _valid_sha(s["result_sha256"]) for s in steps):
+        from modstore_server.strategic_portfolio import PortfolioError, digest
 
+        all_verified = all(
+            (receipt := _terminal_task_receipt(tasks[s["opportunity_id"]])) is not None
+            and digest(receipt) == s["result_sha256"]
+            for s in steps
+        )
         try:
             expected = operating_dependency_handoff(opportunities[bindings["plan"]], tasks)
         except PortfolioError:

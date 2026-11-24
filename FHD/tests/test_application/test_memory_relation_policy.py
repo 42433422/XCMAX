@@ -95,6 +95,22 @@ def test_agent_relation_path_rejects_revoked_or_changed_intermediate():
     assert filter_recalled_memories(owner, hits, memory_service=service) == []
 
 
+@pytest.mark.parametrize("floor,expected", [(0.5, ["a", "b"]), (0.45, ["a", "c"])])
+def test_vector_recall_reserves_slots_only_for_eligible_relations(monkeypatch, floor, expected):
+    from app.application.user_memory import retrieve
+    from app.application.user_memory_vector_app_service import UserMemoryRagApplicationService
+
+    a, b, c = (
+        {"score": score, "metadata": {"source_memory_id": mid}}
+        for mid, score in zip("abc", (0.9, 0.8, 0.48), strict=True)
+    )
+    store = MagicMock(**{"query.return_value": [a, b]})
+    monkeypatch.setattr(retrieve, "filter_recalled_memories", lambda *_: [a, b])
+    monkeypatch.setattr(retrieve, "relation_recall_hits", lambda *_: [c])
+    hits = UserMemoryRagApplicationService(vector_store=store).query("u1", "Acme", 2, floor)["hits"]
+    assert [hit["metadata"]["source_memory_id"] for hit in hits] == expected
+
+
 @pytest.mark.parametrize(
     "timestamp",
     ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"],
@@ -102,9 +118,7 @@ def test_agent_relation_path_rejects_revoked_or_changed_intermediate():
 def test_utc_conversion_overflow_stays_a_validation_error(timestamp):
     with pytest.raises(ValueError, match="UTC conversion is out of range"):
         parse_as_of(timestamp)
-    outcome = validate_relation_value(
-        {"relation_validity": {"effective_from": timestamp}}
-    )
+    outcome = validate_relation_value({"relation_validity": {"effective_from": timestamp}})
     assert outcome is not None
     assert outcome["success"] is False
     assert outcome["error_code"] == "memory_invalid_relation_validity"

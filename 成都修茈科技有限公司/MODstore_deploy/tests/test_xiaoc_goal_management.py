@@ -255,33 +255,36 @@ def test_operating_dependency_handoff_requires_verified_settled_original_receipt
             operating_dependency_handoff(child, {"life-step-inspect": {**parent, **changes}})
 
 
-def test_partial_or_unbound_handoff_is_not_verified(observation):
+@pytest.mark.parametrize("plan_evidence", ["verified", "missing", "mismatched", "pending"])
+def test_partial_or_unbound_handoff_is_not_verified(plan_evidence):
+    from modstore_server.strategic_portfolio import digest
     from modstore_server.xiaoc_goal_management import operating_dependency_handoff
 
-    now, value, state = observation
-    goal, _ = discover_goal_candidate({"customer_value": value}, state, 17, now=now)
-    goal.update(decision_id="d1", step_bindings={"inspect": "life-step-i", "plan": "life-step-p"})
-    parent = {
-        "status": "completed",
-        "result_sha256": "a" * 64,
-        "calls": {},
-        "execution_receipt": {"ok": True, "status": "completed"},
-    }
-    child = {"opportunity_id": "life-step-p", "depends_on": ["life-step-i"]}
-    record = {
-        "decision_id": "d1",
-        "owner_user_id": 17,
-        "opportunities": [{"opportunity_id": "life-step-i", "depends_on": []}, child],
-        "tasks": {"life-step-i": parent},
-    }
-    assert project_goal_steps(goal, record)["all_steps_verified"] is False
-    record["tasks"]["life-step-p"] = {"status": "completed", "result_sha256": "b" * 64}
-    assert project_goal_steps(goal, record)["all_steps_verified"] is False
-    record["tasks"]["life-step-p"]["dependency_handoff"] = operating_dependency_handoff(
-        child, record["tasks"]
+    inspect, plan = "life-step-i", "life-step-p"
+    goal = dict(
+        decision_id="d1", candidate_owner_user_id=17, step_bindings=dict(inspect=inspect, plan=plan)
     )
-    assert project_goal_steps(goal, record)["all_steps_verified"] is True
-    parent["execution_receipt"]["status"] = "pending"
+    parent_receipt = dict(ok=True, status="completed")
+    child_status = "pending" if plan_evidence == "pending" else "completed"
+    child_receipt = dict(ok=True, status=child_status, plan=True)
+    parent = dict(status="completed", result_sha256=digest(parent_receipt), calls={})
+    parent["execution_receipt"] = parent_receipt
+    tasks = {inspect: parent}
+    child = dict(opportunity_id=plan, depends_on=[inspect])
+    opportunities = [dict(opportunity_id=inspect, depends_on=[]), child]
+    record = dict(decision_id="d1", owner_user_id=17, tasks=tasks, opportunities=opportunities)
+    assert project_goal_steps(goal, record)["all_steps_verified"] is False
+    tasks[plan] = dict(status="completed", result_sha256=digest(child_receipt), calls={})
+    if plan_evidence != "missing":
+        receipt = parent_receipt if plan_evidence == "mismatched" else child_receipt
+        tasks[plan]["execution_receipt"] = receipt
+    assert project_goal_steps(goal, record)["all_steps_verified"] is False
+    tasks[plan]["dependency_handoff"] = operating_dependency_handoff(child, tasks)
+    projected = project_goal_steps(goal, record)
+    assert projected["dependency_handoff"] == "verified"
+    assert projected["all_steps_verified"] is (plan_evidence == "verified")
+    parent["result_sha256"] = digest(child_receipt)
+    tasks[plan]["dependency_handoff"] = operating_dependency_handoff(child, tasks)
     assert project_goal_steps(goal, record)["all_steps_verified"] is False
 
 
