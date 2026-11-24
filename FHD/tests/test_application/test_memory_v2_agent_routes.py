@@ -144,7 +144,14 @@ def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
             assert first.status_code == 200, first.json()
             first_id = first.json()["candidate"]["memory_id"]
             confirmed = client.post(f"/memory/v2/{first_id}/confirm", json={"user_id": "7"})
-            assert confirmed.status_code == 200, confirmed.json()
+            if confirmed.status_code != 200:
+                body = confirmed.json()
+                output = body.get("output") if isinstance(body.get("output"), dict) else {}
+                pytest.fail(
+                    "worker status="
+                    f"{confirmed.status_code} code={body.get('error_code')} "
+                    f"exc={body.get('exception_type') or output.get('exception_type')}"
+                )
             active = confirmed.json()["memory"]
             if omit_conflict:
                 service = memory_mod.get_user_memory_service()

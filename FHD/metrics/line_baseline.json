@@ -1,5 +1,5 @@
 {
-  "lines": 2732924,
+  "lines": 2732931,
   "updated": "2026-11-25",
-  "note": "PR #3558: +6 lines for governed mem0 backend fixtures and optional snapshot observed_at; no baseline policy change."
+  "note": "PR #3558: diagnostic failure detail for the real-worker memory confirm regression (+3 lines)."
 }
