@@ -52,28 +52,28 @@ class TestXcagiChatHttpExcExtended:
         assert result.status_code == 503
 
     def test_authentication_error(self):
-        from openai import AuthenticationError
+        from app.fastapi_routes.xcagi_compat_chat_models import AuthenticationError
 
         exc = AuthenticationError(message="invalid key", response=Mock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 401
 
     def test_rate_limit_error(self):
-        from openai import RateLimitError
+        from app.fastapi_routes.xcagi_compat_chat_models import RateLimitError
 
         exc = RateLimitError(message="rate limited", response=Mock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 429
 
     def test_api_connection_error(self):
-        from openai import APIConnectionError
+        from app.fastapi_routes.xcagi_compat_chat_models import APIConnectionError
 
         exc = APIConnectionError(request=Mock())
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
 
     def test_api_error(self):
-        from openai import APIError
+        from app.fastapi_routes.xcagi_compat_chat_models import APIError
 
         exc = APIError(message="api error", request=Mock(), body=None)
         result = ch._xcagi_chat_http_exc(exc)

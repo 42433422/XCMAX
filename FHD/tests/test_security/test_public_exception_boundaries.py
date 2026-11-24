@@ -348,9 +348,23 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     executor = setup.bridge.orchestrator._tool_executor
 
     def execute_in_process(step, *, runtime_context, deadline_monotonic):
-        return executor.execute(step, runtime_context=runtime_context)
+        try:
+            return executor.execute(step, runtime_context=runtime_context)
+        except BaseException:
+            import traceback
+
+            traceback.print_exc()
+            raise
 
     executor.execute_with_deadline = execute_in_process
+    for target in (
+        "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+        "app.application.customer_app_service.get_customers_session",
+        "app.application.customer_crud_mixin.get_customers_session",
+        "app.application.customer_relationship_mixin.get_customers_session",
+        "app.application.customer_transfer_mixin.get_customers_session",
+    ):
+        monkeypatch.setattr(target, setup.actor.factory, raising=False)
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "original-claims.sqlite"))
     monkeypatch.setattr(
         "app.application.customer_app_service.get_customers_session", setup.actor.factory

@@ -1,5 +1,5 @@
 {
-  "lines": 2732946,
+  "lines": 2732960,
   "updated": "2026-11-25",
-  "note": "PR #3558: run the receipt recovery fixture through a bounded in-process executor."
+  "note": "PR #3558: isolate receipt fixture sessions and bind chat exception tests to the mapped classes."
 }
