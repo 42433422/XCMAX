@@ -80,14 +80,12 @@ def life_operation(stage: str, *, cycle_id: str | None = None) -> Iterator[None]
                 yield
             except asyncio.CancelledError:
                 outcome = "cancelled"
-                span.set_status(Status(StatusCode.ERROR))
-                raise
-            except Exception:
-                span.set_status(Status(StatusCode.ERROR))
                 raise
             else:
                 outcome = "returned"
             finally:
+                if outcome != "returned":
+                    span.set_status(Status(StatusCode.ERROR))
                 # Fixed vocabulary only: no IDs, prompts, secrets or error text.
                 span.set_attribute("xiaoc.stage", stage)
                 span.set_attribute("xiaoc.outcome", outcome)

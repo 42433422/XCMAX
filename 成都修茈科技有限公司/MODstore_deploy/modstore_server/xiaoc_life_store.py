@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.identity import User
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
+from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_checkpoint import make_checkpoint, same_checkpoint
 from modstore_server.xiaoc_life_policy import (
     IDENTITY_ID,
@@ -597,7 +598,7 @@ def try_cycle_lock(cycle_id: str) -> Iterator[bool]:
                 connection.execute(
                     text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))"), params
                 )
-            except Exception:
+            except BOUNDARY_ERRORS:
                 connection.invalidate()
                 raise
 
