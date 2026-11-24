@@ -8,16 +8,21 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
+from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.models.finance import FinancialTransaction
 from app.db.models.sales import SalesOrder
 from app.db.models.user import User
+from app.domain.employee.capability import parse_capabilities
 from app.domain.enterprise_cognition.catalog import EntityDefinition
+from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+from app.domain.task_lifecycle.machine import TERMINAL
 from app.infrastructure.auth.enterprise_scope import SourceScope
 
 _T = TypeVar("_T")
@@ -257,9 +262,85 @@ class AuthorityReader:
             }
             if definition.entity_type == "order":
                 self._order_quantities(row, scope, state)
+            elif definition.entity_type == "employee":
+                self._employee_observation(source, row, scope, state)
             return {"state": state, "source_last_changed": json_value(row.updated_at)}
 
         return self._in_source(db, definition, load)
+
+    def _employee_observation(self, source, row, scope, state):
+        """Bind observations to the existing profile, never infer execution grants."""
+        identity = source.scalar(
+            select(User).where(User.id == row.user_id, User.tenant_id == scope.tenant_id)
+        )
+        state["role"] = (
+            identity.role if identity is not None and identity.role == "ai_employee" else None
+        )
+        state["identity_active"] = (
+            bool(identity.is_active) if state["role"] == "ai_employee" else None
+        )
+        state["capability_evidence"] = {
+            "status": "unknown",
+            "source": "installed_employee_pack",
+            "declared": [],
+            "independent_verified": False,
+        }
+        state["workload"] = {
+            "status": "unknown",
+            "source": "employee_run_logs",
+            "scope": "current_actor_employee_active_store",
+            "capacity_verified": False,
+        }
+        # A host view of another Mod's employee cannot attribute its local ledger
+        # or registry observations to that Mod.
+        if (row.mod_id or "") != scope.mod_id:
+            return
+        from app.infrastructure.mods.employee_registry import get_employee_registry
+
+        try:
+            packs = [
+                pack
+                for pack in get_employee_registry().list_packs()
+                if pack.get("pack_id") == row.employee_id
+            ]
+            if len(packs) == 1:
+                declared = parse_capabilities({"employee": packs[0].get("employee")})
+                state["capability_evidence"].update(
+                    status="declared",
+                    pack_version=str(packs[0].get("version") or ""),
+                    declared=[item.key for item in declared],
+                )
+        except (OSError, ValueError, TypeError):
+            # Registry unavailable is not evidence of missing capabilities.
+            pass
+
+        try:
+            with self.business_session_factory() as business:
+                grouped = business.execute(
+                    select(EmployeeRunLog.status, func.count(EmployeeRunLog.id))
+                    .where(
+                        EmployeeRunLog.employee_id == row.employee_id,
+                        EmployeeRunLog.tenant_id == scope.tenant_id,
+                        EmployeeRunLog.user_id == int(scope.actor_id),
+                    )
+                    .group_by(EmployeeRunLog.status)
+                ).all()
+        except SQLAlchemyError:
+            return
+        counts: dict[str, int] = {}
+        for status, count in grouped:
+            try:
+                canonical = canonicalize("employee", status)
+            except LegacyTransitionError:
+                canonical = "unknown"
+            counts[canonical] = counts.get(canonical, 0) + int(count)
+        state["workload"].update(
+            status="observed" if counts else "no_history",
+            counts=counts,
+            open_count=sum(count for key, count in counts.items() if key not in TERMINAL),
+            running_count=counts.get("running", 0),
+            unresolved_count=counts.get("unknown", 0),
+        )
 
     @staticmethod
     def _order_quantities(row, scope, state):

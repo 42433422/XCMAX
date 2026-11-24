@@ -24,6 +24,7 @@ from app.db.models import (
     SalesOrderItem,
     User,
 )
+from app.db.models.employee_run_log import EmployeeRunLog
 from app.domain.enterprise_cognition.catalog import entity_catalog
 from app.infrastructure.enterprise_cognition_sources import AuthorityReader
 from app.infrastructure.tenant_scope import tenant_scope
@@ -451,3 +452,90 @@ async def test_committed_orm_change_reaches_running_neurobus_and_refreshes(world
             ("after_soft_rollback", source_events._rolled_back),
         ):
             event.remove(Session, name, handler)
+
+
+def test_employee_observation_reads_scoped_role_declarations_and_persisted_load(world, monkeypatch):
+    service, sessions, clock, _ = world
+    from app.infrastructure.mods import employee_registry
+
+    class Registry:
+        def list_packs(self):
+            return [
+                {
+                    "pack_id": "employee-a",
+                    "version": "1.2.3",
+                    "employee": {"capabilities": ["Excel", "Finance review", "excel"]},
+                },
+                {
+                    "pack_id": "unrelated",
+                    "employee": {"capabilities": ["unrelated-capability"]},
+                },
+            ]
+
+    monkeypatch.setattr(employee_registry, "get_employee_registry", Registry)
+    with sessions() as db:
+        db.add(
+            User(
+                id=10,
+                username="ai-employee:employee-a",
+                password="hash",
+                tenant_id=11,
+                role="ai_employee",
+                is_active=True,
+            )
+        )
+        for status in ("running", "pending", "awaiting_approval", "unknown", "success"):
+            db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=1, status=status))
+        db.add_all(
+            [
+                EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=3, status="running"),
+                EmployeeRunLog(employee_id="employee-a", tenant_id=22, user_id=2, status="running"),
+                EmployeeRunLog(employee_id="other", tenant_id=11, user_id=1, status="running"),
+            ]
+        )
+        db.commit()
+    first = get(service, "employee", "employee-a", force_refresh=True)
+    state = first["state"]
+    assert state["role"] == "ai_employee" and state["identity_active"] is True
+    assert state["capability_evidence"] == {
+        "status": "declared",
+        "source": "installed_employee_pack",
+        "declared": ["excel", "finance_review"],
+        "pack_version": "1.2.3",
+        "independent_verified": False,
+    }
+    assert state["workload"]["open_count"] == 4
+    assert state["workload"]["running_count"] == 1
+    assert state["workload"]["unresolved_count"] == 1
+    assert state["workload"]["capacity_verified"] is False
+    assert state["workload"]["counts"]["succeeded"] == 1
+    with sessions() as db:
+        db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=1, status="running"))
+        db.commit()
+    clock[0] += 31
+    second = get(service, "employee", "employee-a")
+    assert second["state"]["workload"]["open_count"] == 5
+    assert second["source_version"] != first["source_version"]
+
+
+def test_employee_observation_missing_evidence_does_not_prove_availability(world, monkeypatch):
+    service, sessions, *_ = world
+    from app.infrastructure.mods import employee_registry
+
+    class Registry:
+        def list_packs(self):
+            return []
+
+    monkeypatch.setattr(employee_registry, "get_employee_registry", Registry)
+    state = get(service, "employee", "employee-a", force_refresh=True)["state"]
+    assert state["role"] is None and state["identity_active"] is None
+    assert state["capability_evidence"]["status"] == "unknown"
+    assert state["workload"]["status"] == "no_history"
+    assert state["workload"]["capacity_verified"] is False
+    with sessions() as db:
+        db.scalar(select(AiEmployeeProfile)).mod_id = "sales"
+        db.commit()
+    state = get(service, "employee", "employee-a", force_refresh=True)["state"]
+    assert state["workload"]["status"] == "unknown"
+    assert "open_count" not in state["workload"]
+    assert state["capability_evidence"]["status"] == "unknown"
