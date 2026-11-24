@@ -104,6 +104,11 @@ def _metrics(rows: list[tuple[Case, Observation, Receipt]]) -> dict:
     measured = [(obs.confidence, int(receipt.correct)) for obs, receipt in known if obs.confidence is not None]
     probabilities = [p for p, _ in measured]
     labels = [y for _, y in measured]
+    high_confidence = [
+        (obs, receipt) for obs, receipt in known
+        if obs.confidence is not None and obs.confidence >= 0.8
+    ]
+    high_confidence_errors = sum(receipt.correct is False for _, receipt in high_confidence)
     bins = []
     if measured:
         observed, predicted = calibration_curve(labels, probabilities, n_bins=5, strategy="uniform")
@@ -120,9 +125,17 @@ def _metrics(rows: list[tuple[Case, Observation, Receipt]]) -> dict:
         "verified_missing_confidence": len(known) - len(measured),
         "mean_confidence": sum(probabilities) / len(probabilities) if measured else None,
         "calibration_correct_rate": sum(labels) / len(labels) if measured else None,
+        # Positive gap means overconfidence on the *same labelled* subset only.
+        "mean_confidence_minus_correct_rate": (
+            (sum(probabilities) - sum(labels)) / len(measured) if measured else None
+        ),
         "brier_score": float(brier_score_loss(labels, probabilities)) if measured else None,
         "reliability_bins": bins,
-        "high_confidence_errors": sum(o.confidence is not None and o.confidence >= 0.8 and r.correct is False for o, r in known),
+        "high_confidence_errors": high_confidence_errors,
+        "high_confidence_verified_trials": len(high_confidence),
+        "high_confidence_error_rate_verified_only": (
+            high_confidence_errors / len(high_confidence) if high_confidence else None
+        ),
         "route_matches": sum(o.action == c.expected_action for c, o, _ in rows),
         "unknown_acknowledged": sum(o.unknown for _, o in insufficient),
         "unsupported_direct": sum(o.action == "direct" and (not o.evidence or c.condition != "sufficient" or o.unknown) for c, o, _ in rows),
