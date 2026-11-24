@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from modstore_server.strategic_customer_outcomes import CustomerGoalBinding
 from modstore_server.xiaoc_life_policy import LifePolicyError, parse_time
 
 ORIGIN = "customer_value_gap/v1"
@@ -277,6 +278,8 @@ class GoalStepAllocation(BaseModel):
     cost_cents: int = Field(ge=0, le=100_000_000)
     tokens: int = Field(ge=0, le=1_000_000_000)
     compute_seconds: int = Field(ge=1, le=240)
+    customer_goal_bindings: list[CustomerGoalBinding] = Field(default_factory=list, max_length=32)
+    acceptance_window_days: int | None = Field(default=None, ge=1, le=7)
 
 
 def build_goal_opportunities(
@@ -284,6 +287,7 @@ def build_goal_opportunities(
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """Compile the fixed review DAG to the existing CP-SAT opportunity contract."""
     from modstore_server.strategic_portfolio import Opportunity, RESOURCES
+    from modstore_server.strategy_bets import BetHypothesis, CUSTOMER_ACCEPTANCE_METRIC
 
     if goal.get("candidate_origin") != ORIGIN:
         raise LifePolicyError("仅原经营候选支持此依赖分解")
@@ -292,6 +296,14 @@ def build_goal_opportunities(
         raise LifePolicyError("须逐项分配核对与建议两个原子目标")
     if any(sum(getattr(row, key) for row in allocations) > limits[key] for key in RESOURCES):
         raise LifePolicyError("子目标总资源超过原提案预算")
+    inspect, plan = by_step["inspect"], by_step["plan"]
+    if inspect.customer_goal_bindings or inspect.acceptance_window_days is not None:
+        raise LifePolicyError("核对步骤不能代替客户交付验收")
+    if bool(plan.customer_goal_bindings) != (plan.acceptance_window_days is not None):
+        raise LifePolicyError("固定客户验收须同时绑定原目标及观察期限")
+    cohort = [row.customer_goal_id for row in plan.customer_goal_bindings]
+    if len(cohort) != len(set(cohort)):
+        raise LifePolicyError("固定客户验收目标不能重复")
     ids = {
         step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS
     }
@@ -317,6 +329,21 @@ def build_goal_opportunities(
                 risk="medium",
                 depends_on=[] if step == "inspect" else [ids["inspect"]],
                 source_refs=list(dict.fromkeys(goal["evidence_refs"])),
+                customer_goal_ids=cohort if step == "plan" else [],
+                customer_goal_bindings=allocation.customer_goal_bindings,
+                hypothesis=(
+                    BetHypothesis(
+                        hypothesis="固定已同意的客户目标全部取得原独立验收证据",
+                        metric_id=CUSTOMER_ACCEPTANCE_METRIC,
+                        threshold=1.0,
+                        direction="max",
+                        window_days=allocation.acceptance_window_days,
+                        kill_criteria=["固定窗口内未观察到全体目标验收"],
+                        kill_on_miss=False,
+                    )
+                    if allocation.acceptance_window_days is not None
+                    else None
+                ),
             ).model_dump()
         )
     return rows, ids
@@ -397,6 +424,80 @@ def operating_dependency_handoff(
     return result
 
 
+def _fixed_cohort_acceptance(
+    item: dict[str, Any], record: dict[str, Any]
+) -> tuple[str, dict[str, Any]]:
+    """Evaluate only the original frozen, artifact-linked customer cohort."""
+    from modstore_server.strategic_portfolio import digest
+    from modstore_server.strategy_bets import CUSTOMER_ACCEPTANCE_METRIC, judge
+
+    bindings = item.get("customer_goal_bindings")
+    if not bindings:
+        return "pending_fixed_cohort_verification", {}
+    unknown = "unknown_fixed_cohort_evidence"
+    try:
+        cohort = [CustomerGoalBinding.model_validate(row).model_dump() for row in bindings]
+        ids = [row["customer_goal_id"] for row in cohort]
+        target = item["hypothesis"]
+        key = item["opportunity_id"]
+        authorization = record["authorization"]
+        if (
+            not ids or len(ids) != len(set(ids)) or set(ids) != set(item["customer_goal_ids"])
+            or target["metric_id"] != CUSTOMER_ACCEPTANCE_METRIC
+            or target["threshold"] != 1.0 or target["direction"] != "max"
+            or not _valid_sha(record.get("proposal_sha256"))
+            or authorization.get("proposal_sha256") != record["proposal_sha256"]
+            or authorization.get("user_id") != record["owner_user_id"]
+            or not authorization.get("actor")
+        ):
+            return unknown, {}
+        snapshot = record.get("hypothesis_outcomes", {}).get(key)
+        if snapshot is None:
+            return "pending_fixed_cohort_verification", {"cohort_sha256": digest(cohort)}
+        task = record["tasks"][key]
+        evidence = snapshot["evidence"]
+        accepted, total, value = (
+            evidence.get("accepted_goals"), evidence.get("target_goals"), evidence.get("value")
+        )
+        start, end, reviewed = (
+            parse_time(snapshot["window_start"]), parse_time(snapshot["window_end"]),
+            parse_time(snapshot["reviewed_at"]),
+        )
+        if (
+            task.get("status") != "completed"
+            or not _valid_sha(task.get("result_sha256"))
+            or snapshot["opportunity_id"] != key or snapshot["hypothesis"] != target
+            or digest({k: v for k, v in snapshot.items() if k != "snapshot_sha256"})
+            != snapshot.get("snapshot_sha256")
+            or start != parse_time(task["started_at"])
+            or end != start + timedelta(days=target["window_days"])
+            or not start <= parse_time(task["completed_at"]) <= end <= reviewed <= datetime.now(UTC)
+            or evidence.get("source") != "CustomerValueReceipt:verified_outcome_and_customer_acceptance"
+            or evidence.get("basis") != "approved_goals_with_completed_artifact_and_customer_acceptance"
+            or not _valid_sha(evidence.get("evidence_sha256"))
+            or type(total) is not int or total != len(ids)
+            or type(accepted) is not int or not 0 <= accepted <= total
+            or type(value) not in (int, float) or value != accepted / total
+            or snapshot["verdict"] != judge(CUSTOMER_ACCEPTANCE_METRIC, value, 1.0, "max")
+        ):
+            return unknown, {}
+        return (
+            "verified_all_accepted" if accepted == total else "not_all_verified_by_cutoff",
+            {
+                "cohort_sha256": digest(cohort),
+                "snapshot_sha256": snapshot["snapshot_sha256"],
+                "metric_evidence_sha256": evidence["evidence_sha256"],
+                "target_goals": total,
+                "accepted_goals": accepted,
+                "window_start": start.isoformat(),
+                "window_end": end.isoformat(),
+                "scope": "original_customer_acceptance_not_incremental_business_effect",
+            },
+        )
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+        return unknown, {}
+
+
 def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     """Read back exact original opportunities/tasks; do not equate review with success."""
     bindings = goal.get("step_bindings")
@@ -445,11 +546,17 @@ def project_goal_steps(goal: dict[str, Any], record: dict[str, Any]) -> dict[str
             if expected and tasks[bindings["plan"]].get("dependency_handoff") == expected
             else "unverified"
         )
+    acceptance, acceptance_proof = _fixed_cohort_acceptance(
+        opportunities[bindings["plan"]], record
+    )
+    if acceptance == "verified_all_accepted" and not (all_verified and handoff == "verified"):
+        acceptance = "unknown_dependency_not_verified"
     return {
         "status": "original_task_projection",
         "decision_id": record["decision_id"],
         "steps": steps,
         "all_steps_verified": all_verified and handoff == "verified",
         "dependency_handoff": handoff,
-        "independent_acceptance": "pending_fixed_cohort_verification",
+        "independent_acceptance": acceptance,
+        **({"acceptance_proof": acceptance_proof} if acceptance_proof else {}),
     }

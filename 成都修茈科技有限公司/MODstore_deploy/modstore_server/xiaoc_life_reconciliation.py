@@ -215,6 +215,7 @@ def reconcile_goals() -> dict[str, Any]:
                 states,
                 record.get("halted", False),
                 feedback["evidence_ref"],
+                *([step_projection] if step_projection else []),
                 *(["authority_closed"] if closed and not record.get("halted") else []),
             ]
         )
