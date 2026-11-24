@@ -21,6 +21,7 @@ from app.db import HostSessionLocal, get_host_engine
 from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
 from app.db.models.user import User
 from app.domain.shared_services.kellai_copilot_llm import (
+    KellaiCopilotError,
     content_from_completion,
     parse_json_content,
 )
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 
 logger = logging.getLogger(__name__)
+_COMPLETION_ERRORS: tuple[type[Exception], ...] = (KellaiCopilotError,) + RECOVERABLE_ERRORS
 
 _TRANSFER_PHRASES = (
     "转人工",
@@ -643,7 +645,7 @@ class EnterpriseCsAutomationService:
                 parsed = parse_json_content(content_from_completion(completion))
                 if not parsed:
                     raise ValueError("empty customer service completion")
-        except RECOVERABLE_ERRORS as error:
+        except _COMPLETION_ERRORS as error:
             failure: dict[str, Any] = {"reason": "completion_failed"}
             if isinstance(error, httpx.HTTPStatusError):
                 failure["status_code"] = error.response.status_code

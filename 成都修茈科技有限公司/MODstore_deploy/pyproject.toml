@@ -11,7 +11,7 @@ web = [
     "fastapi>=0.115",
     # Model capabilities and routing are part of every web deployment.
     "litellm==1.109.3",
-    # Account Responses uses the same reviewed SDK as the strategic adapter.
+    # Account Responses and stream receipts share the reviewed SDK in every web install.
     "openai==3.57.0",
     "uvicorn[standard]>=0.27",
     "websockets>=15,<17",
@@ -34,6 +34,8 @@ web = [
     "python-pptx>=0.6.23",
     # Signed private deliveries execute FHD's Mod SDK in a fresh interpreter.
     "pandas>=2.0",
+    # Customer workflow replays verify actual workbook bytes on the API host too.
+    "openpyxl==3.1.5",
     "PyYAML>=6.0",
     "paramiko>=3.4",
     "cryptography>=50.0.2",

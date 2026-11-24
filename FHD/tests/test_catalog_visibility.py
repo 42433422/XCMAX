@@ -1,6 +1,6 @@
 """远端 Catalog 可见性过滤。"""
 
-from app.domain.shared_services.catalog_visibility import (
+from app.infrastructure.mods.catalog_visibility import (
     is_planned_duty_employee_pack,
     is_public_catalog_row,
 )

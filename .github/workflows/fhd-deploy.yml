@@ -32,7 +32,12 @@ on:
         type: string
         default: ""
       release_sha:
-        description: Required for apply-latest in either environment; exact 40-character release commit
+        description: Exact release commit; required for apply-latest in either environment
+        required: false
+        type: string
+        default: ""
+      release_artifact_sha256:
+        description: Artifact digest bound by automated staging dispatch
         required: false
         type: string
         default: ""
@@ -94,6 +99,17 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
 
+      - name: Check out the trusted security controller
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - name: Verify exact production release input
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
         env:
@@ -131,10 +147,20 @@ jobs:
 
       - name: Enforce fresh exact-SHA security clearance
         if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
         run: |
-          python FHD/scripts/security/verify_security_scan_pair.py \
+          set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
             --previous-dir "${{ runner.temp }}/security-reports/previous" \
             --current-dir "${{ runner.temp }}/security-reports/current" \
+            --repository "${{ github.repository }}" \
+            --current-run-id "${{ inputs.security_scan_run_id }}" \
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" \
             --release-sha "${{ inputs.release_sha }}"
 
       - name: Require CVM SSH secrets
@@ -248,9 +274,20 @@ jobs:
           ACTION: ${{ inputs.action }}
           ACTION_ID: ${{ inputs.action_id }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_ARTIFACT_SHA256: ${{ inputs.release_artifact_sha256 }}
           PRESERVE_RELEASE_HISTORY: ${{ inputs.preserve_release_history && '1' || '0' }}
         run: |
           set -euo pipefail
+          if [ -n "$RELEASE_SHA" ]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 64
+          fi
+          if [ -n "$RELEASE_ARTIFACT_SHA256" ]; then
+            [[ "$RELEASE_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 64
+          fi
+          if [ "$TARGET_ENV" = "staging" ] && [ "$ACTION" = "apply-latest" ] && [ -n "$ACTION_ID" ]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 64
+            [[ "$RELEASE_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 64
+          fi
           if [ "$PRESERVE_RELEASE_HISTORY" = "1" ] \
             && { [ "$TARGET_ENV" != "production" ] || [ "$ACTION" != "apply-latest" ]; }; then
             echo "::error::preserve_release_history is only valid for production apply-latest"
@@ -349,9 +386,9 @@ jobs:
               exit 1
             fi
           else
-            RELEASE_FIELDS="\$(python3 - "${MANIFEST}" "${RELEASE_SHA}" "${TARGET_ENV}" "${ACTION}" <<'PY'
+            RELEASE_FIELDS="\$(python3 - "${MANIFEST}" "${RELEASE_SHA}" "${TARGET_ENV}" "${ACTION}" "${RELEASE_ARTIFACT_SHA256}" <<'PY'
           import base64, json, re, sys
-          manifest_path, authorized_sha, environment, action = sys.argv[1:]
+          manifest_path, authorized_sha, environment, action, authorized_artifact = sys.argv[1:]
           with open(manifest_path, encoding="utf-8") as stream:
               doc = json.load(stream)
           git_sha = str(doc.get("git_sha") or "")
@@ -368,6 +405,8 @@ jobs:
               raise SystemExit("manifest artifact is not a safe FHD tarball basename")
           if action == "apply-latest" and git_sha != authorized_sha:
               raise SystemExit("manifest git_sha differs from authorized release_sha")
+          if authorized_artifact and digest != authorized_artifact:
+              raise SystemExit("manifest artifact differs from dispatched release_artifact_sha256")
           snapshot = base64.b64encode(json.dumps(doc).encode("utf-8")).decode("ascii")
           print("|".join((git_sha, artifact, digest, verifier_sha, snapshot)))
           PY
@@ -409,7 +448,9 @@ jobs:
             AUTO="\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"
             test -x "\$AUTO"
             # Keep old identity stamps intact for archive ownership checks and rollback.
-            FHD_FORCE_APPLY=1 bash "\$AUTO"
+            FHD_EXPECTED_RELEASE_SHA="\$EXPECTED_SHA" \
+              FHD_EXPECTED_ARTIFACT_SHA256="\$EXPECTED_ARCHIVE_SHA" \
+              FHD_FORCE_APPLY=1 bash "\$AUTO"
             DEPLOYED_SHA="\$(cat "${DEPLOY_ROOT}/.deploy-git-sha" 2>/dev/null || true)"
             if [ "\$DEPLOYED_SHA" != "\$EXPECTED_SHA" ]; then
               echo "Deployed SHA mismatch: expected=\$EXPECTED_SHA actual=\${DEPLOYED_SHA:-missing}" >&2

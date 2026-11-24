@@ -29,7 +29,7 @@ _PRIVATE_CONTROL_MARKERS = (
 @pytest.fixture
 def control_setup(trusted_actor, monkeypatch):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(permissions=["tool.customers.create", "product.view"])
+    actor = trusted_actor(permissions=["customer.edit", "product.view"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     set_agent_run_repository_for_tests(repository)
     set_task_execution_repository_for_tests(InMemoryTaskExecutionRepository())

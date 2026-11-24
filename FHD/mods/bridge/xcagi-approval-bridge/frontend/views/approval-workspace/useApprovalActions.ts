@@ -1,32 +1,31 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, onScopeDispose, watch, type Ref } from 'vue'
 import { approvalApi, type ApprovalRequest } from '@/api/approval'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import {
   FINAL_STATUSES, isFinalStatus, getStatusLabel, formatRequestTitle, buildWorkflowExecutionAlert,
 } from './awHelpers'
 
-/**
- * 拆分自 ApprovalWorkspaceView.vue 脚本（原第 316–320、425–554 行）；
- * 逻辑逐字迁移，行为不变。审批动作与列表/详情状态联动，相关 ref 经 deps 注入。
- */
 export function useApprovalActions(deps: {
   getCurrentUserId: () => number
   loadData: () => Promise<void>
   closeDetails: () => void
+  viewDetails: (requestId: number) => Promise<void>
   initiatedRequests: Ref<ApprovalRequest[]>
-  selectedRequest: Ref<ApprovalRequest | null>
-  canApprove: Ref<boolean>
-  showDetails: Ref<boolean>
 }) {
   const {
-    getCurrentUserId, loadData, closeDetails,
-    initiatedRequests, selectedRequest, canApprove, showDetails,
+    getCurrentUserId, loadData, closeDetails, viewDetails, initiatedRequests,
   } = deps
 
   // 清理
   const cleanupLoading = ref(false)
   const actioningId = ref(0)
   const batchActioning = ref(false)
+  let active = true
+  const accountScope = () => JSON.stringify([getAuthSessionEpoch(), productReadScopeKey('xcagi-approval-bridge')])
+  watch(accountScope, () => { actioningId.value = 0; batchActioning.value = false }, { flush: 'sync' })
+  onScopeDispose(() => { active = false })
   const completedInitiatedCount = computed(
     () => initiatedRequests.value.filter((r) => isFinalStatus(r.status)).length
   )
@@ -38,33 +37,29 @@ export function useApprovalActions(deps: {
   // 审批操作
   const approve = async (requestId: number, request?: ApprovalRequest) => {
     if (actioningId.value) return
+    const scope = accountScope(), userId = getCurrentUserId()
+    const current = () => active && scope === accountScope() && userId === getCurrentUserId()
+    if (!userId) return
     const opinion = await appPrompt(approveMessage(request), '同意', { title: '审批通过' })
-    if (opinion === null || !String(opinion).trim()) return
+    if (!current() || opinion === null || !String(opinion).trim()) return
 
-    const userId = getCurrentUserId()
     actioningId.value = requestId
     try {
       const res = await approvalApi.approve(requestId, userId, String(opinion).trim())
-      if (res.success) {
+      if (!current()) return
+      if (res.success || res.accepted === true) {
         const updatedRequest = res.data as ApprovalRequest | undefined
         const workflowExecution = updatedRequest?.workflow_execution
-        await appAlert(`审批通过！${buildWorkflowExecutionAlert(workflowExecution)}`)
+        await appAlert(`${res.success ? '审批通过！' : res.message || '审批已受理，执行结果待核对。'}${buildWorkflowExecutionAlert(workflowExecution)}`)
+        if (!current()) return
         await loadData()
-        if (workflowExecution && updatedRequest) {
-          selectedRequest.value = updatedRequest
-          canApprove.value = false
-          showDetails.value = true
-        } else {
-          closeDetails()
-        }
-      } else if (res.accepted === true) {
-        // 202：审批已放行，执行交给调度器，不是失败。
-        await appAlert(res.message || '审批已通过，执行已交给调度器')
-        await loadData()
-        closeDetails()
+        if (!current()) return
+        if (workflowExecution) await viewDetails(requestId)
+        else closeDetails()
       } else {
         // 失败也要刷新：避免列表停留在旧状态，用户反复点击同一个失效单。
         await loadData()
+        if (!current()) return
         if (res.expired) {
           await appAlert(res.message || '该审批已失效，已自动关闭，请重新发起任务。')
           closeDetails()
@@ -73,43 +68,49 @@ export function useApprovalActions(deps: {
         }
       }
     } catch (error) {
-      console.error('审批失败:', error)
-      await appAlert('审批失败，请重试')
+      if (current()) { console.error('审批失败:', error); await appAlert('审批结果读取失败，请刷新原审批核对。') }
     } finally {
-      actioningId.value = 0
+      if (current()) actioningId.value = 0
     }
   }
 
   /** 批量通过：同一审批意见依次提交，失败项保留在列表中等待重试。 */
   const approveMany = async (ids: number[]) => {
     if (batchActioning.value || !ids.length) return
+    const scope = accountScope(), userId = getCurrentUserId()
+    const current = () => active && scope === accountScope() && userId === getCurrentUserId()
+    if (!userId) return
     const opinion = await appPrompt(
       `将批量通过 ${ids.length} 条审批，请填写统一审批意见：`,
       '同意',
       { title: '批量通过' },
     )
-    if (opinion === null || !String(opinion).trim()) return
-    const userId = getCurrentUserId()
+    if (!current() || opinion === null || !String(opinion).trim()) return
     batchActioning.value = true
-    let done = 0
+    let done = 0, accepted = 0
     const failed: string[] = []
     try {
       for (const id of ids) {
+        if (!current()) return
         try {
           const res = await approvalApi.approve(id, userId, String(opinion).trim())
+          if (!current()) return
           if (res.success) done += 1
+          else if (res.accepted === true) accepted += 1
           else failed.push(`#${id} ${res.message || '审批失败'}`)
         } catch {
           failed.push(`#${id} 审批失败`)
         }
       }
+      if (!current()) return
       await appAlert(
-        `批量通过完成：成功 ${done} 条${failed.length ? `，失败 ${failed.length} 条\n${failed.join('\n')}` : ''}`,
+        `批量审批：通过 ${done} 条${accepted ? `，已受理待核对 ${accepted} 条` : ''}${failed.length ? `，失败 ${failed.length} 条\n${failed.join('\n')}` : ''}`,
       )
+      if (!current()) return
       await loadData()
-      closeDetails()
+      if (current()) closeDetails()
     } finally {
-      batchActioning.value = false
+      if (current()) batchActioning.value = false
     }
   }
 

@@ -2,17 +2,23 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const native = { skip: process.platform === 'win32', timeout: 20000 };
-const rows = file => existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+const rows = file => {
+  let content;
+  try { content = readFileSync(file, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  // Another process can still be appending the last JSONL record during polling.
+  return content.split('\n').slice(0, -1).filter(Boolean).map(JSON.parse);
+};
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 async function waitFor(check, diagnostics, timeout = 10000) {
@@ -20,6 +26,37 @@ async function waitFor(check, diagnostics, timeout = 10000) {
   while (Date.now() < deadline) { const value = check(); if (value) return value; await delay(20); }
   assert.fail('Timed out awaiting native agent evidence: ' + diagnostics());
 }
+
+test('JSONL evidence waits for the newline before consuming an appended record', t => {
+  const root = mkdtempSync(join(tmpdir(), 'para-jsonl-readback-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'transport.jsonl');
+  const first = { type: 'task_progress', status: 'running' };
+  const terminal = { type: 'task_progress', status: 'failed', message: 'insufficient_quota' };
+  const encoded = JSON.stringify(terminal);
+  assert.deepEqual(rows(file), []);
+  writeFileSync(file, encoded.slice(0, -2));
+  assert.deepEqual(rows(file), []);
+  writeFileSync(file, JSON.stringify(first) + '\n' + encoded.slice(0, -2));
+  assert.deepEqual(rows(file), [first]);
+  appendFileSync(file, encoded.slice(-2));
+  assert.deepEqual(rows(file), [first], 'even valid JSON is pending until its newline arrives');
+  appendFileSync(file, '\n');
+  assert.deepEqual(rows(file), [first, terminal]);
+});
+
+test('JSONL evidence rejects a malformed newline-terminated record', t => {
+  const root = mkdtempSync(join(tmpdir(), 'para-jsonl-readback-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'transport.jsonl');
+  writeFileSync(file, '{"type":"task_progress","status":"running"}\n{"status":"fail\n');
+  assert.throws(() => rows(file), SyntaxError);
+  for (const content of ['{"ok":true}\n  \n', ' \n{"ok":true}\n']) {
+    writeFileSync(file, content);
+    assert.throws(() => rows(file), SyntaxError, 'complete whitespace records are invalid JSON');
+  }
+  assert.throws(() => rows(root), { code: 'EISDIR' });
+});
 
 /** The device transport and model are local test doubles; the actual agent, CLI subprocess,
  * workspace clone, git publication, claim file and report outbox all run unmodified. */
@@ -233,6 +270,27 @@ test('legacy startup entry shares successful report-only sandbox and native rece
   assert.equal(current.calls()[0].sandbox, 'read-only');
   assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
 });
+
+test('installed compatibility agent preserves complete startup dependencies and native receipts',
+  { ...native, timeout: 90000 }, async t => {
+    const root = mkdtempSync(join(tmpdir(), 'para-installed-contract-'));
+    const target = join(root, 'installed'), entry = join(root, 'linked-install');
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    mkdirSync(target);
+    execFileSync('bash', [join(directory, 'install_e2e_agent.sh')], {
+      cwd: target, encoding: 'utf8', timeout: 45000,
+      env: { PATH: process.env.PATH, E2E_AGENT_DEST_DIR: target },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    symlinkSync(target, entry, 'dir');
+    const current = await worker(t, { mode: 'success', reportOnly: true, managed: true,
+      entry: relative(directory, join(entry, 'e2e-agent.mjs')) });
+    assert.equal((await current.terminal()).status, 'completed');
+    assert.equal(current.receipt().thread_id, 'original-fixture-thread');
+    assert.equal(current.calls()[0].sandbox, 'read-only');
+    assert.equal(current.calls().filter(row => !row.probe).length, 1);
+    assert.equal(git(current.remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/devfleet'), '');
+  });
 
 test('only probes may select another model, then the selected real task executes once', native, async t => {
   const current = await worker(t, { mode: 'probe-selection', managed: true, env: { DEVFLEET_CODEX_MODEL_PROBE: '1' } });

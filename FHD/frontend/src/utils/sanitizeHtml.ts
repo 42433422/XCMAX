@@ -75,9 +75,6 @@ const CHAT_BUBBLE_CONFIG: Config = {
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
 const CHAT_MARKDOWN_CONFIG: Config = {
   ...CHAT_BUBBLE_CONFIG,
-  // 生图工具以 data:image 内联返回图片，仅放行常用位图格式。
-  ALLOWED_URI_REGEXP:
-    /^(?:(?:https?|mailto):|data:image\/(?:png|jpeg|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
   ALLOWED_TAGS: [...(CHAT_BUBBLE_CONFIG.ALLOWED_TAGS as string[]), 'img', 'button'],
   ALLOWED_ATTR: [
     ...(CHAT_BUBBLE_CONFIG.ALLOWED_ATTR as string[]),
@@ -91,6 +88,15 @@ const CHAT_MARKDOWN_CONFIG: Config = {
     'aria-label',
     'role',
   ],
+}
+
+function chatMarkdownImageAttrHook(node: Element, event: UponSanitizeAttributeHookEvent) {
+  if (node.tagName !== 'IMG' || event.attrName !== 'src') return
+  const value = event.attrValue.trim()
+  // DOMPurify's data-URI image exception bypasses ALLOWED_URI_REGEXP.
+  if (/^data:/i.test(value) && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(value)) {
+    event.keepAttr = false
+  }
 }
 
 const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
@@ -113,27 +119,6 @@ const SALES_CONTRACT_SANITIZE_CONFIG: Config = {
   ],
 }
 
-function salesContractInteractiveAttrHook(currentNode: Element, hookEvent: UponSanitizeAttributeHookEvent, _config: Config) {
-  const name = String(hookEvent.attrName || '')
-  if (!name.startsWith('on')) return
-  const tag = currentNode.tagName
-  const inPreview = currentNode.closest?.('.sales-contract-excel-preview')
-  if (!inPreview) return
-  const el = currentNode as HTMLElement
-  if (tag === 'BUTTON' && name === 'onclick' && el.classList.contains('sales-contract-row-action-btn')) {
-    hookEvent.forceKeepAttr = true
-    return
-  }
-  if (tag === 'INPUT' && name === 'onchange') {
-    if (
-      el.classList.contains('sales-contract-excel-preview__model-input') ||
-      el.classList.contains('sales-contract-excel-preview__qty-input')
-    ) {
-      hookEvent.forceKeepAttr = true
-    }
-  }
-}
-
 export function sanitizeChatBubbleHtml(raw: string | undefined | null): string {
   const dirty = String(raw ?? '')
   if (!dirty) return ''
@@ -145,7 +130,12 @@ export function sanitizeChatBubbleMarkdown(raw: string | undefined | null): stri
   const stripped = stripInternalMarkers(String(raw ?? ''))
   if (!stripped) return ''
   const html = renderMarkdown(stripped)
-  return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
+  DOMPurify.addHook('uponSanitizeAttribute', chatMarkdownImageAttrHook)
+  try {
+    return DOMPurify.sanitize(html, CHAT_MARKDOWN_CONFIG)
+  } finally {
+    DOMPurify.removeHook('uponSanitizeAttribute', chatMarkdownImageAttrHook)
+  }
 }
 
 function sanitizedHtmlToPlainText(sanitizedHtml: string): string {
@@ -181,12 +171,7 @@ export function sanitizeTaskSummaryHtml(task: TaskSummarySanitizeInput): string 
   if (!dirty) return ''
   const t = String(task.type || '')
   if (t === 'sales_contract' && dirty.includes('sales-contract-excel-preview')) {
-    DOMPurify.addHook('uponSanitizeAttribute', salesContractInteractiveAttrHook)
-    try {
-      return DOMPurify.sanitize(dirty, SALES_CONTRACT_SANITIZE_CONFIG)
-    } finally {
-      DOMPurify.removeHook('uponSanitizeAttribute', salesContractInteractiveAttrHook)
-    }
+    return DOMPurify.sanitize(dirty, SALES_CONTRACT_SANITIZE_CONFIG)
   }
   return DOMPurify.sanitize(dirty, CHAT_BUBBLE_CONFIG)
 }

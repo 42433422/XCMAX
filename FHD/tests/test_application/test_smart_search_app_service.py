@@ -60,7 +60,7 @@ class TestSmartSearchApplicationService:
         self, mock_get: MagicMock, svc: SmartSearchApplicationService
     ):
         mock_get.return_value.list_indexes.return_value = {"indexes": [{"id": "idx2"}]}
-        mock_get.return_value.query.side_effect = RuntimeError("vec down")
+        mock_get.return_value.query.side_effect = ConnectionError("vec down")
         out = svc.search_excel_vector("q")
         assert out["success"] is False
         assert out["index_id"] == "idx2"
@@ -95,7 +95,7 @@ class TestSmartSearchApplicationService:
     def test_search_products_failure_still_returns_block(
         self, mock_prod: MagicMock, svc: SmartSearchApplicationService
     ):
-        mock_prod.side_effect = RuntimeError("db")
+        mock_prod.side_effect = ConnectionError("db")
         out = svc.search("x", scope="products")
         assert out["results"]["products"]["success"] is False
 

@@ -82,7 +82,7 @@ def test_run_once_passes_interval_to_service() -> None:
 
 def test_run_once_swallows_recoverable_errors() -> None:
     def _boom(**_kwargs):
-        raise RuntimeError("store unavailable")
+        raise OSError("store unavailable")
 
     fake = SimpleNamespace(refresh_all_due_sources=_boom)
     with patch(

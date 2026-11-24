@@ -147,7 +147,7 @@ def try_execute_native_planner_tool(
                 for parameter in signature.parameters.values()
             ):
                 kwargs["runtime_context"] = runtime_context
-            elif runtime_context:
+            else:
                 return (
                     json.dumps(
                         {
@@ -161,7 +161,7 @@ def try_execute_native_planner_tool(
                     ),
                     mod_id,
                 )
-            # Inspect compatibility before execution. Retrying a TypeError from
+            # Validate the context-aware contract before execution. Retrying a TypeError from
             # inside a handler can repeat a write which already completed.
             signature.bind(tool, args, **kwargs)
             handler_started = True
@@ -182,8 +182,8 @@ def try_execute_native_planner_tool(
                         "error_code": "native_tool_failed",
                         "mod_id": mod_id,
                         "outcome": "unknown" if handler_started else "not_started",
+                        "execution_state": "unknown" if handler_started else "not_started",
                         "execution_status": ("unknown" if handler_started else "not_started"),
-                        "execution_state": ("unknown" if handler_started else "not_started"),
                         "retryable": False,
                         "reconciliation_required": handler_started,
                     },

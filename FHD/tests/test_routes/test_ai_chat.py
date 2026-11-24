@@ -83,7 +83,7 @@ def test_intent_test_missing_message(client: TestClient) -> None:
 def test_intent_test_recognizer_raises(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.domain.app_pure.ai_chat_helpers.recognize_intents",
-        MagicMock(side_effect=RuntimeError("意图识别错误")),
+        MagicMock(side_effect=OSError("意图规则读取失败")),
     )
     r = client.post("/api/ai/intent/test", json={"message": "测试"})
     assert r.status_code == 500

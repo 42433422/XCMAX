@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
+    CognitionContextError,
     cognition_messages,
     feedback_facts,
     parse_decision,
@@ -328,7 +329,7 @@ class CyclePorts:
                     )
                 )
         if self.domain == "exploration":
-            facts.extend(await self.research())
+            facts = (await self.research()) + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
         self.evidence = [row["ref"] for row in facts]
@@ -385,18 +386,24 @@ class CyclePorts:
         self.active()
         if state.get("portfolio") or state.get("evolution"):
             return {}
-        from modstore_server.services.llm import (
-            chat_dispatch_via_platform_only,
-            resolve_platform_bench_llm,
-        )
+        from fastapi import HTTPException
+
+        from modstore_server.llm_api import resolve_default_llm_route
+        from modstore_server.models import get_session_factory
+        from modstore_server.services.llm import chat_dispatch_via_platform_only
         from modstore_server.strategic_portfolio_usage import (
             planning_admission,
             planning_usage_scope,
         )
 
-        provider, model = resolve_platform_bench_llm()
-        if not provider or not model:
-            raise LifeBlocked("platform_model_not_configured")
+        try:
+            with get_session_factory()() as session:
+                route = await resolve_default_llm_route(
+                    session, self.claim["owner_user_id"], platform_only=True
+                )
+        except HTTPException as exc:
+            raise LifeBlocked("platform_model_not_configured") from exc
+        provider, model = route["provider"], route["model"]
         admission = await planning_admission(
             provider, model, owner_user_id=self.claim["owner_user_id"]
         )
@@ -406,7 +413,10 @@ class CyclePorts:
         admission["max_total_tokens"] = min(
             admission["max_total_tokens"], self.claim["reserved_tokens"]
         )
-        messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        try:
+            messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+        except CognitionContextError as exc:
+            raise LifeBlocked(str(exc)) from exc
         prompt_bound = (
             len(
                 json.dumps(

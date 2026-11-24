@@ -202,18 +202,12 @@ def _register_scheduler_phase_04():
         from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, logger
 
         try:
-            from modstore_server.strategy_planner import plan_strategy
+            from modstore_server.strategy_planner import plan_strategy, public_summary
 
             out = _run_tracked_scheduler_job("strategy_planner", plan_strategy)
-            logger.info(
-                "strategy plan: status=%s candidates=%s registered=%s dispatched=%s",
-                out.get("status"),
-                len(out.get("candidates") or []),
-                len(out.get("registered") or []),
-                len(out.get("dispatched") or []),
-            )
+            logger.info("strategy plan: %s", public_summary(out))
         except RECOVERABLE_ERRORS:
-            logger.exception("strategy planner job failed")
+            logger.error("strategy planner job failed")
 
     try:
         _scheduler.add_job(

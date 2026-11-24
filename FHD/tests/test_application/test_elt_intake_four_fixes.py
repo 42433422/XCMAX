@@ -76,7 +76,7 @@ def test_refresh_business_maps_completed_zero_rows_to_completed_empty(monkeypatc
 
     monkeypatch.setattr(ais, "_load_ledger", fake_load)
     monkeypatch.setattr(ais, "_save_ledger", fake_save)
-    monkeypatch.setattr(ais, "_LOCK", __import__("threading").RLock())
+    monkeypatch.setattr(ais, "_ledger_lock", lambda _tenant: MagicMock())
 
     out = service._refresh_business(dict(batch))
     assert out["status"] == "completed_empty"
@@ -123,7 +123,7 @@ def test_refresh_business_maps_completed_with_rows_to_applied(monkeypatch):
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: FakeElt())
     monkeypatch.setattr(ais, "_load_ledger", lambda _t: {"batches": {"b2": dict(batch)}})
     monkeypatch.setattr(ais, "_save_ledger", lambda *_a, **_k: None)
-    monkeypatch.setattr(ais, "_LOCK", __import__("threading").RLock())
+    monkeypatch.setattr(ais, "_ledger_lock", lambda _tenant: MagicMock())
 
     out = service._refresh_business(dict(batch))
     assert out["status"] == "applied"
@@ -165,7 +165,7 @@ def test_refresh_business_without_full_coverage_is_partial(monkeypatch):
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: FakeElt())
     monkeypatch.setattr(ais, "_load_ledger", lambda _t: {"batches": {"b3": dict(batch)}})
     monkeypatch.setattr(ais, "_save_ledger", lambda *_a, **_k: None)
-    monkeypatch.setattr(ais, "_LOCK", __import__("threading").RLock())
+    monkeypatch.setattr(ais, "_ledger_lock", lambda _tenant: MagicMock())
 
     out = service._refresh_business(dict(batch))
     assert out["status"] == "partial"

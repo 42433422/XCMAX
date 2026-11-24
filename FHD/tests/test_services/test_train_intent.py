@@ -129,7 +129,7 @@ class TestTrainModel:
         mock_torch.cuda.is_available.return_value = False
 
         mock_trainer = MagicMock()
-        mock_trainer.train_intent_model.side_effect = RuntimeError("OOM")
+        mock_trainer.train_intent_model.side_effect = OSError("training data unavailable")
 
         with patch.dict(
             sys.modules,

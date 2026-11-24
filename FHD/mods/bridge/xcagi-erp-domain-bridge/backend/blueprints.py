@@ -101,8 +101,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return _invoke("products", "product_names_search", keyword=keyword)
 
     @router.post("/products/batch")
-    def mod_products_batch(body: dict | None = Body(default=None)):
-        return _invoke("products", "batch", body=body or {})
+    def mod_products_batch(request: Request, body: dict | None = Body(default=None)):
+        return _invoke("products", "batch", request=request, body=body or {})
 
     # ── 客户（G2：domain_handlers）──────────────────────────────────
     from app.mod_sdk.erp_customers_facade import customers_export

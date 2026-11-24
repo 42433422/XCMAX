@@ -29,6 +29,7 @@ def attention_for_status(status: str) -> TaskAttention:
         TaskAttention,
         {
             "waiting_user": "approval_required",
+            "unknown": "blocked",
             "blocked": "blocked",
             "failed": "failed",
             "completed": "result_unread",

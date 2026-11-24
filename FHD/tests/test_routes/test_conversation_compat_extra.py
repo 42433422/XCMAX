@@ -78,7 +78,7 @@ class TestXcagiRequestUserId:
     def test_mod_request_context_error_falls_back(self):
         with patch(
             "app.legacy.routes.conversation.compat_extra.get_request_active_mod_id",
-            side_effect=RuntimeError("no ctx"),
+            side_effect=ImportError("mod request context unavailable"),
         ):
             scope = _xcagi_resolve_session_scope("u1", None)
         assert scope[1] == ""

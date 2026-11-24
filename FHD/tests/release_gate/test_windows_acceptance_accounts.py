@@ -255,7 +255,8 @@ def test_workflow_wires_validated_pool_and_preserves_release_provenance():
     assert "Candidate receipt SHA mismatch" in acceptance["run"]
     assert "run.head_sha !== sha" in text and "run.head_branch !== 'main'" in text
     publish = (ROOT / ".github/workflows/release-desktop.yml").read_text("utf-8")
-    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in publish
+    assert "verify_upgrade_rollback_evidence.py" in publish
+    assert "--windows-native-dir" in publish
 
 
 def test_gui_checks_cloud_identity_before_business_and_names_fixtures_by_mode():
@@ -493,3 +494,123 @@ console.log(JSON.stringify({...result, attempts, clock, outerOptions, events}));
                 "missing": "Version element missing",
             }[scenario]
         )
+
+
+def test_gui_acceptance_reads_the_frozen_candidate_version_after_controller_advances():
+    harness = r"""
+import fs from 'node:fs'; import vm from 'node:vm'; import assert from 'node:assert/strict';
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const step = source.split('\n').find(line => line.includes("await step('visible_version'"));
+const {visibleVersion} = await import(process.argv[2]);
+const events = [];
+const context = {
+  phase: 'business', root: '/controller', process: {env: {XCAGI_GUI_PRODUCT_VERSION: '1.0.0.7'}},
+  fs: {readFileSync: () => JSON.stringify({product_version: '1.0.0.8'})},
+  path: {join: (...parts) => parts.join('/')},
+  step: async (id, action) => {events.push(await action())}, nav: async () => {},
+  page: {locator: () => ({scrollIntoViewIfNeeded: async () => {}, innerText: async () => '1.0.0.7'})},
+  expect: value => typeof value === 'function' ? {toPass: async () => value()}
+    : typeof value === 'object' ? {toHaveText: async expected => assert.equal(expected, '1.0.0.7')}
+    : {toBe: expected => assert.equal(value, expected)},
+  visibleVersion,
+};
+await vm.runInNewContext('(async () => {' + step + '\n})()', context);
+assert.equal(events[0].expected_version, '1.0.0.7');
+assert.equal(events[0].visible_version, '1.0.0.7');
+context.page.locator = () => ({scrollIntoViewIfNeeded: async () => {}, innerText: async () => '1.0.0.8'});
+await assert.rejects(vm.runInNewContext('(async () => {' + step + '\n})()', context));
+for (const value of [undefined, '', '1.0.0', 'latest']) {
+  context.process.env.XCAGI_GUI_PRODUCT_VERSION = value;
+  await assert.rejects(vm.runInNewContext('(async () => {' + step + '\n})()', context));
+}
+"""
+    subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            harness,
+            str(ROOT / "scripts/dev/record_enterprise_desktop_init.mjs"),
+            EVIDENCE_MODULE.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+
+@pytest.mark.skipif(
+    not shutil.which("pwsh"), reason="PowerShell is required for the native workflow step"
+)
+@pytest.mark.parametrize("corruption", [None, "version", "git_sha", "sha256", "source"])
+def test_candidate_workflow_binds_receipt_bytes_and_frozen_version_before_install(
+    tmp_path, corruption
+):
+    root = tmp_path / "FHD"
+    package = root / "scripts/package"
+    package.mkdir(parents=True)
+    for args in (
+        ("init", "-q"),
+        ("config", "user.name", "fixture"),
+        ("config", "user.email", "fixture@example.invalid"),
+    ):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    version_file = root / "VERSION.md"
+    version_file.write_text("**XCAGI 稳定产品版本** | `1.0.0.7`\n", encoding="utf-8")
+    subprocess.run(["git", "add", "FHD/VERSION.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "frozen candidate"], cwd=tmp_path, check=True)
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True).strip()
+    version_file.write_text("**XCAGI 稳定产品版本** | `1.0.0.8`\n", encoding="utf-8")
+    subprocess.run(["git", "commit", "-qam", "new controller version"], cwd=tmp_path, check=True)
+    shutil.copyfile(ROOT / "scripts/package/product-version.ps1", package / "product-version.ps1")
+    # Execute the original collector admission, then stop before Windows installation.
+    collector = (ROOT / "scripts/package/accept-windows-candidate.ps1").read_text("utf-8-sig")
+    (package / "accept-windows-candidate.ps1").write_text(
+        collector.split("$accountMode =", 1)[0]
+        + "@{version=$productVersion; sha=$CandidateSha} | ConvertTo-Json | Set-Content admitted.json",
+        encoding="utf-8-sig",
+    )
+    directory = root / "candidate"
+    directory.mkdir()
+    (directory / "XCAGI-Enterprise-Setup-1.0.0.7-x64.exe").write_bytes(b"synthetic installer")
+    receipt = {
+        "version": "1.0.0.7",
+        "git_sha": sha,
+        "sha256": hashlib.sha256(b"synthetic installer").hexdigest(),
+    }
+    if corruption in receipt:
+        receipt[corruption] = {"version": "1.0.0.8", "git_sha": "f" * 40, "sha256": "e" * 64}[
+            corruption
+        ]
+    if corruption == "source":
+        receipt["git_sha"] = "f" * 40
+    (directory / "delivery-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
+    )
+    step = next(
+        item
+        for item in workflow["jobs"]["isolated-install"]["steps"]
+        if "scripts/package/accept-windows-candidate.ps1 @args" in item.get("run", "")
+    )
+    result = subprocess.run(
+        [shutil.which("pwsh"), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", step["run"]],
+        cwd=root,
+        env={
+            **process_env(),
+            "CANDIDATE_SHA": "f" * 40 if corruption == "source" else sha,
+            "MODE": "Clean",
+            "CURRENT_RELEASE_ATTEMPT": "",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    admitted = root / "admitted.json"
+    if corruption is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(admitted.read_text("utf-8-sig")) == {"version": "1.0.0.7", "sha": sha}
+    else:
+        assert result.returncode != 0
+        assert not admitted.exists()

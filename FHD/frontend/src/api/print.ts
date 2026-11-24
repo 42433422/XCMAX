@@ -33,7 +33,7 @@ export interface PrintOperationResult {
 
 export interface LabelJob {
   id: string
-  status: 'generated' | 'generation_failed' | 'submitting' | 'submitted' | 'failed' | 'outcome_unknown'
+  status: 'generated' | 'generation_failed' | 'waiting_approval' | 'submitting' | 'submitted' | 'failed' | 'outcome_unknown'
   message: string
   product_id: number
   product_name: string
@@ -43,9 +43,12 @@ export interface LabelJob {
   paper_width_mm: number
   paper_height_mm: number
   printer?: string
+  run_id?: string
+  task_id?: string
+  approval_request_id?: string
 }
 export interface LabelJobResponse { success: boolean; job: LabelJob; message?: string }
-export interface LabelConfirmation extends LabelJobResponse { confirm_token: string; confirm_prompt: string }
+export interface LabelConfirmation extends LabelJobResponse { confirm_token: string; confirm_prompt: string; request_id: string }
 
 export const printApi = {
   getLabelProducts(params: { keyword: string; page: number; per_page: number }): Promise<ApiResponse<{ id: number; name: string; model_number?: string; specification?: string }[]>> {
@@ -63,8 +66,8 @@ export const printApi = {
   confirmLabelJob(id: string): Promise<LabelConfirmation> {
     return api.post(`/api/print/label-jobs/${encodeURIComponent(id)}/confirmation`)
   },
-  submitLabelJob(id: string, confirmToken: string): Promise<LabelJobResponse> {
-    return api.post(`/api/print/label-jobs/${encodeURIComponent(id)}/submit`, { confirm_token: confirmToken })
+  submitLabelJob(id: string, confirmToken: string, requestId: string): Promise<LabelJobResponse> {
+    return api.post(`/api/print/label-jobs/${encodeURIComponent(id)}/submit`, { confirm_token: confirmToken }, { idempotencyKey: requestId })
   },
   getPrinters(): Promise<ApiResponse<Printer[]>> {
     return api.get<ApiResponse<Printer[]>>('/api/printers')

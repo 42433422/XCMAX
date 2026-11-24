@@ -88,9 +88,18 @@ print(json.load(open(sys.argv[1], encoding="utf-8")).get("git_sha", ""))
 PY
   )"
   [[ "$active_sha" == "$SHA" ]] || fail 1 "MODstore 生产运行 SHA=$active_sha，拒绝同步请求 SHA=$SHA"
-  git -C "$SOURCE_ROOT" archive --format=tar.gz \
-    --output="$staging/modstore-source.tar.gz" \
-    "$SHA" -- "成都修茈科技有限公司"
+  # Match the immutable production artifact byte for byte before transport
+  # compression; partial re-archives cannot prove the manifest's artifact hash.
+  git -C "$SOURCE_ROOT" -c tar.umask=0002 archive --format=tar "$SHA" |
+    gzip -n >"$staging/modstore-source.tar.gz"
+  expected_artifact_sha="$(python3 - "$MODSTORE_CURRENT/.xcmax-release.json" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact_sha256"])
+PY
+  )"
+  [[ "$(gzip -dc "$staging/modstore-source.tar.gz" | sha256sum | awk '{print $1}')" == "$expected_artifact_sha" ]] ||
+    fail 1 "MODstore Git archive 与生产不可变制品哈希不一致"
   runtime_dist="$MODSTORE_CURRENT/成都修茈科技有限公司/MODstore_deploy/market/dist"
   [[ -f "$runtime_dist/index.html" ]] || fail 1 "MODstore 生产前端产物不存在: $runtime_dist/index.html"
   tar -C "$(dirname "$runtime_dist")" -czf \

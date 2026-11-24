@@ -434,8 +434,16 @@ def plan_to_dict(plan: PlanGraph) -> dict[str, Any]:
 
 def plan_fingerprint(plan: PlanGraph) -> str:
     """Stable digest used to bind approvals and resumable checkpoints to one graph."""
+    payload = plan_to_dict(plan)
+    # Timings and diagnostic attempt counters cannot change execution authority.
+    # The reviewed goal evidence and every business/approval field remain bound;
+    # the durable run snapshot CAS still includes all observational metadata.
+    metadata = dict(payload.get("metadata") or {})
+    for key in ("planning_diagnostics", "goal_coverage_trace", "plan_shape_repair_trace"):
+        metadata.pop(key, None)
+    payload["metadata"] = metadata
     encoded = json.dumps(
-        plan_to_dict(plan), ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
     )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 

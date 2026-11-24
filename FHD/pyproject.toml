@@ -476,7 +476,7 @@ namespaces = false
 [tool.setuptools.package-data]
 "app.infrastructure.llm._vendor.openhands_condenser" = ["LICENSE", "PROVENANCE.json"]
 
-# Incremental contracts: scope only the migrated sync slice, not all legacy modules.
+# Incremental contracts cover migrated boundaries without exempting legacy imports.
 [tool.importlinter]
 root_package = "app"
 include_external_packages = true
@@ -495,3 +495,103 @@ name = "Sync DAO cannot depend on services or application entrypoints"
 type = "forbidden"
 source_modules = ["app.db.xcmax_sync"]
 forbidden_modules = ["app.services", "app.application", "app.fastapi_routes", "app.fastapi_app"]
+
+[[tool.importlinter.contracts]]
+id = "approval-domain-no-infrastructure"
+name = "Approval rules remain independent of application and infrastructure"
+type = "forbidden"
+source_modules = ["app.domain.approval"]
+forbidden_modules = [
+    "app.application", "app.infrastructure", "app.fastapi_routes", "app.services",
+    "app.utils.operational_errors", "sqlalchemy", "httpx", "redis",
+]
+
+[[tool.importlinter.contracts]]
+id = "workflow-domain-ports-independent"
+name = "Workflow domain ports cannot depend on their implementations"
+type = "forbidden"
+source_modules = ["app.domain.workflow"]
+forbidden_modules = [
+    "app.application", "app.infrastructure", "app.fastapi_routes", "app.services",
+    "app.neuro_bus", "langgraph", "langgraph_sdk", "sqlalchemy", "fastapi", "openpyxl",
+]
+
+[[tool.importlinter.contracts]]
+id = "workflow-application-ports-independent"
+name = "Workflow application ports and plan types cannot import infrastructure"
+type = "forbidden"
+source_modules = ["app.application.workflow.ports", "app.application.workflow.workflow_types"]
+forbidden_modules = [
+    "app.infrastructure", "app.neuro_bus", "langgraph", "langgraph_sdk",
+    "sqlalchemy", "fastapi", "openpyxl",
+]
+
+[[tool.importlinter.contracts]]
+id = "product-domain-no-entrypoints"
+name = "Product entities and pricing rules stay independent of request entrypoints"
+type = "forbidden"
+source_modules = ["app.domain.product"]
+forbidden_modules = [
+    "app.application", "app.infrastructure", "app.fastapi_routes", "app.legacy",
+    "app.services", "app.neuro_bus", "fastapi",
+]
+
+[[tool.importlinter.contracts]]
+id = "runtime-result-rules-independent"
+name = "Runtime result decisions cannot depend on execution or infrastructure"
+type = "forbidden"
+source_modules = ["app.domain.task_lifecycle.agent_runtime_results"]
+forbidden_modules = [
+    "app.application", "app.infrastructure", "app.fastapi_routes", "app.services",
+    "app.legacy", "app.neuro_bus", "sqlalchemy", "fastapi", "httpx",
+]
+
+# These preserve the former direct-import boundaries. Application code may reach
+# implementations through the composition root, and the event bridge owns its
+# two existing NeuroBus imports. Pure domain contracts above remain transitive.
+[[tool.importlinter.contracts]]
+id = "no-langgraph-outside-infra-workflow"
+name = "Only workflow infrastructure imports the LangGraph runtime"
+type = "protected"
+protected_modules = ["langgraph"]
+allowed_importers = [
+    "app.infrastructure.workflow.checkpoint_bridge",
+    "app.infrastructure.workflow.langgraph_execution",
+    "app.infrastructure.workflow.langgraph_runtime",
+]
+
+[[tool.importlinter.contracts]]
+id = "host-does-not-use-remote-langgraph-sdk"
+name = "The host does not import an unused remote LangGraph SDK"
+type = "forbidden"
+source_modules = ["app"]
+forbidden_modules = ["langgraph_sdk"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "neuro-bus-only-in-infra-workflow-bridge"
+name = "Workflow infrastructure accesses NeuroBus through its existing bridge"
+type = "forbidden"
+source_modules = ["app.infrastructure.workflow"]
+forbidden_modules = ["app.neuro_bus"]
+allow_indirect_imports = true
+ignore_imports = [
+    "app.infrastructure.workflow.neuro_bus_bridge -> app.neuro_bus.bus",
+    "app.infrastructure.workflow.neuro_bus_bridge -> app.neuro_bus.events.events_base",
+]
+
+[[tool.importlinter.contracts]]
+id = "application-must-not-import-infra-workflow"
+name = "Application code obtains workflow infrastructure through composition"
+type = "forbidden"
+source_modules = ["app.application"]
+forbidden_modules = ["app.infrastructure.workflow"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "receipt-readback-no-coordinator-internals"
+name = "Receipt readback uses shared rules instead of coordinator internals"
+type = "forbidden"
+source_modules = ["app.infrastructure.codex.receipts", "app.infrastructure.codex.receipt_projection"]
+forbidden_modules = ["app.application.agent_runtime.codex_runtime"]
+allow_indirect_imports = true

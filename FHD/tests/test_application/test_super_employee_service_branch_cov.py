@@ -51,7 +51,11 @@ from app.application.super_employee_service import (
     _trae_cli_command,
     _utc_now,
 )
-from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
+from app.domain.app_pure.execution_scope import (
+    CONTEXT_TOKEN_KEY,
+    CapabilityGrant,
+    ExecutionScope,
+)
 from tests.pure_builders import error_runner as _error_runner
 from tests.pure_builders import super_employee_request as _make_request
 
@@ -201,13 +205,16 @@ class TestInvokeStream:
             patch.object(svc, "_cli_path", return_value="/fake/codex"),
             patch.object(svc, "_is_task_intent", return_value=True),
             patch.object(svc, "_dev_loop_enabled", return_value=True),
-            patch.object(svc, "_run_dev_task_loop", side_effect=RuntimeError("boom")),
+            patch.object(svc, "_run_dev_task_loop", side_effect=OSError("boom")),
         ):
             events = _run_agen(
                 svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"})
             )
         assert events[-1]["type"] == "error"
-        assert "boom" in events[-1]["message"]
+        assert "boom" not in json.dumps(events)
+        assert events[-1]["error_code"] == "development_execution_failed"
+        assert events[-1]["outcome"] == "unknown"
+        assert events[-1]["reconciliation_required"] is True
 
     def test_cli_streaming_flow(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_DEV_LOOP", "0")
@@ -1306,9 +1313,10 @@ class TestRunConversationTurn:
         ):
             svc._run_conversation_turn("/cli", "hello", {})
         assert error.value.receipt["exit_code"] == 2
-        assert error.value.receipt["stderr_present"] is True
-        assert "stderr text" not in str(error.value)
-        assert "stderr" not in error.value.payload()
+        assert error.value.receipt["stderr"] == ""
+        assert error.value.receipt["outcome"] == "unknown"
+        assert "stderr text" not in error.value.body
+        assert "stderr text" not in json.dumps(error.value.event())
 
     def test_resume_without_success_receipt_is_not_replayed(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
@@ -1578,7 +1586,7 @@ class TestPreparePersistentWorktree:
 
     def test_exception_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_git", side_effect=RuntimeError("crash")):
+        with patch.object(svc, "_git", side_effect=OSError("crash")):
             assert (
                 svc._prepare_persistent_worktree(str(tmp_path), str(tmp_path / "wt"), "branch")
                 is None

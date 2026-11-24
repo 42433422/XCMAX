@@ -48,6 +48,16 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
 
+      - name: Check out the trusted security controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -79,10 +89,20 @@ jobs:
 
       - name: Enforce exact-SHA two-day security clearance
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
         run: |
-          python scripts/security/verify_security_scan_pair.py `
+          $ErrorActionPreference = 'Stop'
+          if ($env:CONTROLLER_REF -ne 'refs/heads/main') { throw 'Security controller must come from main' }
+          if ((git -C ../release-controller rev-parse HEAD).Trim() -ne $env:CONTROLLER_SHA) { throw 'Security controller checkout drift' }
+          python ../release-controller/FHD/scripts/security/verify_security_scan_pair.py `
             --previous-dir "${{ runner.temp }}/security-reports/previous" `
             --current-dir "${{ runner.temp }}/security-reports/current" `
+            --repository "${{ github.repository }}" `
+            --current-run-id "${{ inputs.security_scan_run_id }}" `
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" `
             --release-sha "${{ inputs.release_sha }}"
 
       - uses: actions/setup-node@v7

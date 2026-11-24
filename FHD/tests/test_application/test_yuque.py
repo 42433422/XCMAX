@@ -116,7 +116,7 @@ def test_ingest_route_records_yuque_coordinates() -> None:
         title="退款规则",
         url="https://www.yuque.com/team/docs/refund",
     )
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)

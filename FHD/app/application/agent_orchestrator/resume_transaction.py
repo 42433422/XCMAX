@@ -123,6 +123,7 @@ def retry_and_enqueue(
                 or recovery.get("lease_token") != verification_lease_token
                 or float(recovery.get("lease_until") or 0) <= now
                 or principal_id != run.user_id
+                or execution is None
                 or (execution.task_id, execution.user_id, execution.tenant_id)
                 != (_task_id_of(run), run.user_id, tenant_id_of_run(run))
                 or runtime_context

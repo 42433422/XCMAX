@@ -8,8 +8,11 @@ redis=None 时仅走 DB，结果确定性。
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -94,7 +97,7 @@ class TestPersonaRepositoryRoundtrip:
         """DB 不可用（session 工厂抛错）时，save/find 不抛异常，返回空画像。"""
 
         def broken_factory():
-            raise RuntimeError("DB down")
+            raise OperationalError(None, None, sqlite3.OperationalError("DB down"))
 
         broken_repo = PersonaRepositoryImpl(redis=None, session_factory=broken_factory)
         # save 吞掉 DB 错误（缓存层为 None 时直接静默降级）

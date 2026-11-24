@@ -83,7 +83,7 @@ class TestInstalledEmployeePackIds:
     def test_returns_empty_when_mod_manager_raises(self):
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("no mods"),
+            side_effect=FileNotFoundError("no mods"),
         ):
             result = _installed_employee_pack_ids()
         assert result == set()
@@ -140,7 +140,7 @@ class TestInstalledEmployeePackIds:
 
     def test_all_mods_roots_raises_falls_back(self):
         mock_mgr = MagicMock()
-        mock_mgr.all_mods_roots.side_effect = RuntimeError("fail")
+        mock_mgr.all_mods_roots.side_effect = OSError("fail")
         mock_mgr.mods_root = "/tmp/primary"
         mock_mgr.list_loaded_mods.return_value = []
 
@@ -187,18 +187,14 @@ class TestInstalledEmployeePackIds:
         assert "loaded-emp-2" in result
         assert "loaded-other" not in result
 
-    def test_loaded_mods_raises_returns_collected(self):
+    def test_loaded_mods_lookup_unavailable_returns_collected(self):
         mock_mgr = MagicMock()
         mock_mgr.all_mods_roots.return_value = ["/tmp/mods"]
-        mock_mgr.list_loaded_mods.return_value = []
-
-        mock_mgr_2 = MagicMock()
-        mock_mgr_2.list_loaded_mods.side_effect = RuntimeError("fail")
 
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=[mock_mgr, mock_mgr_2],
+                side_effect=[mock_mgr, PermissionError("MOD directory inaccessible")],
             ),
             patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
         ):

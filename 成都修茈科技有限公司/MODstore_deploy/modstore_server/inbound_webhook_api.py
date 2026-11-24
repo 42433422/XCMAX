@@ -36,7 +36,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from modstore_server.api.xss_sanitizer import _sanitize_value
 from modstore_server.models import OnDemandOrchestrateJob, User, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -254,7 +253,7 @@ async def receive_github_webhook(
     if not _verify_github_signature(secret, body, x_hub_signature_256):
         raise HTTPException(401, "GitHub 签名校验失败")
     try:
-        payload = _sanitize_value(json.loads(body or b"{}"))
+        payload = json.loads(body or b"{}")
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     event = (x_github_event or "").strip().lower() or "unknown"
@@ -312,11 +311,10 @@ async def receive_feishu_webhook(request: Request):
     if payload.get("type") == "url_verification":
         if (payload.get("token") or "") != expected_token:
             raise HTTPException(401, "verify token 不匹配")
-        return {"challenge": _sanitize_value(payload.get("challenge"))}
+        return {"challenge": payload.get("challenge")}
     header = payload.get("header") or {}
     if (header.get("token") or payload.get("token") or "") != expected_token:
         raise HTTPException(401, "飞书 token 校验失败")
-    payload = _sanitize_value(payload)
     header = payload.get("header") or {}
     desc = _summarize_feishu_payload(payload)
     uid = _resolve_actor_user_id()
@@ -373,7 +371,7 @@ async def receive_dingtalk_webhook(
         raise HTTPException(401, "钉钉签名校验失败")
     body = await request.body()
     try:
-        payload = _sanitize_value(json.loads(body or b"{}"))
+        payload = json.loads(body or b"{}")
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = _summarize_dingtalk_payload(payload)
@@ -414,7 +412,7 @@ async def receive_generic_webhook(
         raise HTTPException(401, "token 不匹配")
     body = await request.body()
     try:
-        payload = _sanitize_value(json.loads(body or b"{}"))
+        payload = json.loads(body or b"{}")
     except RECOVERABLE_ERRORS:
         raise HTTPException(400, "payload 不是合法 JSON")
     desc = (

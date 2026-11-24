@@ -28,6 +28,20 @@ _DB_SESSION = Depends(get_db)
 _CURRENT_USER = Depends(_get_current_user)
 
 
+async def _bill_workflow(request: Request, user_id: int, workflow_id: int) -> None:
+    # Keep the original wallet boundary; an uncertain call is never replayed by recovery.
+    try:
+        from modstore_server.llm_billing import authorization_header, bill_internal_llm_floor
+
+        await bill_internal_llm_floor(
+            authorization_header(request), user_id=user_id, label=f"workflow:{workflow_id}"
+        )
+    except BOUNDARY_ERRORS as bill_err:
+        logger.warning(
+            "workflow execute billing failed (user=%s wf=%s): %s", user_id, workflow_id, bill_err
+        )
+
+
 @router.post("/{workflow_id}/execute", summary="执行工作流")
 async def execute_workflow(
     workflow_id: int,
@@ -117,26 +131,8 @@ async def execute_workflow(
             execution.status = "completed"
             execution.output_data = output_json
             execution.completed_at = completed_at
-        # 统一计费 + 防免费洞：删计次后，java 后端经 JavaWallet 结算、python 后端扣钱包，
-        # 永不免费（见 llm_billing.bill_internal_llm_floor）。
-        try:
-            from modstore_server.llm_billing import (
-                authorization_header,
-                bill_internal_llm_floor,
-            )
-
-            await bill_internal_llm_floor(
-                authorization_header(request),
-                user_id=user.id,
-                label=f"workflow:{workflow_id}",
-            )
-        except BOUNDARY_ERRORS as bill_err:
-            logger.warning(
-                "workflow execute billing failed (user=%s wf=%s): %s",
-                user.id,
-                workflow_id,
-                bill_err,
-            )
+        if returned_customer is None:
+            await _bill_workflow(request, owner_user_id, workflow_id)
     except RECOVERABLE_ERRORS as e:
         returned_customer = None
         failure_message = str(e)
@@ -181,6 +177,9 @@ async def execute_workflow(
         completed_customer = finalize_returned_customer_workflow(
             db, returned_customer, session_factory=sf
         )
+        # Seal the actual returned graph before another external await can lose it.
+        # Business completion does not assert that the separate wallet call settled.
+        await _bill_workflow(request, owner_user_id, workflow_id)
     elif failed_execution is None:
         complete_execution_feedback(db, execution)
         db.commit()

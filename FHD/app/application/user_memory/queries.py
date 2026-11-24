@@ -8,12 +8,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.policy import is_recallable_memory
 from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,
 )
 from app.domain.user_memory.analysis import memory_summary
+from app.domain.user_memory.policy import is_recallable_memory
 
 
 @dataclass(frozen=True)

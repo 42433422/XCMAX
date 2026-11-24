@@ -182,12 +182,17 @@ def _current_goal(db, contract):
     row = db.scalar(
         select(CustomerValueReceipt).where(CustomerValueReceipt.receipt_id == goal["receipt_id"])
     )
-    if row is None or row.evidence_digest != goal["goal_evidence_sha256"]:
+    if (
+        row is None
+        or row.evidence_digest != goal["goal_evidence_sha256"]
+        or _digest(json_loads(row.evidence_json, {})) != row.evidence_digest
+    ):
         raise ValueError("workflow_customer_agreement_unavailable")
     return json_loads(row.evidence_json, {})
 
 
-def _measured(db, execution, binding, due):
+def classify_customer_outcome(db, execution, binding, due):
+    """Read the original fixed-window evidence without inferring model fault from silence."""
     from modstore_server.strategy_bets import _number, judge
     from modstore_server.workflow_customer_delivery import (
         load_completed_delivery,
@@ -197,11 +202,12 @@ def _measured(db, execution, binding, due):
     contract = binding["customer_delivery"]
     agreed = _current_goal(db, contract)
     if execution.status == "failed":
-        return (
-            False,
-            _digest({"execution_id": execution.id, "status": "failed"}),
-            "workflow_execution_failed",
-        )
+        return {
+            "success": False,
+            "classification": "execution_failure",
+            "evidence_sha256": _digest({"execution_id": execution.id, "status": "failed"}),
+            "reason": "workflow_execution_failed",
+        }
     original, produced = load_completed_delivery(db, execution.id)
     if original != binding:
         raise ValueError("workflow_customer_execution_identity_changed")
@@ -209,10 +215,8 @@ def _measured(db, execution, binding, due):
         parse_datetime(execution.completed_at), parse_datetime(produced["completed_at"])
     )
     goal = contract["goal"]
-    artifacts = {
-        (item["artifact_id"], item["artifact_sha256"])
-        for item in required_delivery_artifacts(contract, produced)
-    }
+    required = required_delivery_artifacts(contract, produced)
+    artifacts = {(item["artifact_id"], item["artifact_sha256"]) for item in required}
     receipts = list(
         db.scalars(
             select(CustomerValueReceipt).where(
@@ -225,29 +229,45 @@ def _measured(db, execution, binding, due):
             )
         )
     )
-    outcomes, acceptances, evidence = {}, {}, []
+    outcomes, misses, acceptances, evidence = {}, set(), {}, []
     for row in receipts:
-        occurred, recorded = parse_datetime(row.occurred_at), parse_datetime(row.recorded_at)
+        occurred, recorded = (
+            parse_datetime(row.occurred_at),
+            parse_datetime(row.recorded_at),
+        )
         if not occurred or not recorded or not completed <= occurred <= due or recorded > due:
             continue
         body = json_loads(row.evidence_json, {})
+        if _digest(body) != row.evidence_digest:
+            raise ValueError("workflow_customer_receipt_changed")
         artifact = (row.artifact_id, str(body.get("artifact_sha256") or "").lower())
         if artifact not in artifacts:
             continue
         if row.receipt_kind == "outcome":
             if any(
                 body.get(key) != agreed.get(key)
-                for key in ("baseline", "target", "comparison", "unit", "measurement_window")
+                for key in (
+                    "baseline",
+                    "target",
+                    "comparison",
+                    "unit",
+                    "measurement_window",
+                )
             ):
                 continue
             direction = {"ge": "max", "le": "min"}.get(agreed.get("comparison"), "")
             target = _number(agreed.get("target"))
-            if (
-                target is None
-                or judge("customer_goal", body.get("measured_value"), target, direction) != "hit"
-            ):
+            verdict = (
+                judge("customer_goal", body.get("measured_value"), target, direction)
+                if target is not None
+                else "inconclusive"
+            )
+            if verdict == "inconclusive":
                 continue
-            outcomes[artifact] = min(outcomes.get(artifact, occurred), occurred)
+            if verdict == "miss":
+                misses.add(artifact)
+            else:
+                outcomes[artifact] = min(outcomes.get(artifact, occurred), occurred)
         elif body.get("customer_confirmed") is True or (
             len(str(body.get("signed_document_sha256") or "")) == 64
             and all(
@@ -274,9 +294,30 @@ def _measured(db, execution, binding, due):
         )
     )
     evidence.extend([row.receipt_id, row.evidence_digest] for row in refunds)
-    return (
-        successful,
-        _digest(
+    if successful:
+        classification, reason = "success", ""
+    elif refunds:
+        classification, reason = "business_failure", "verified_customer_refund"
+    elif misses.difference(outcomes):
+        classification, reason = "business_failure", "customer_goal_not_met"
+    elif artifacts and artifacts.issubset(outcomes):
+        classification, reason = (
+            "pending_acceptance",
+            "customer_acceptance_not_verified",
+        )
+    else:
+        classification, reason = "evidence_missing", "customer_outcome_evidence_missing"
+    return {
+        "success": successful,
+        "classification": classification,
+        "reason": reason,
+        "contract_sha256": contract["contract_sha256"],
+        "customer_policy": contract["policy"],
+        "goal": goal,
+        "due_at": due.isoformat(),
+        "receipt_refs": sorted(evidence),
+        "required_artifacts": required,
+        "evidence_sha256": _digest(
             {
                 "contract_sha256": contract["contract_sha256"],
                 "produced": produced,
@@ -285,8 +326,12 @@ def _measured(db, execution, binding, due):
                 "due_at": due.isoformat(),
             }
         ),
-        "" if successful else "customer_outcome_not_verified_before_deadline",
-    )
+    }
+
+
+def _measured(db, execution, binding, due):
+    result = classify_customer_outcome(db, execution, binding, due)
+    return result["success"], result["evidence_sha256"], result["reason"]
 
 
 def reconcile_customer_executions(request_id):
@@ -365,7 +410,7 @@ def reconcile_customer_executions(request_id):
                 counts["archived"] += 1
                 continue
             try:
-                success, evidence, reason = _measured(db, execution, binding, due)
+                outcome = classify_customer_outcome(db, execution, binding, due)
             except (HTTPException, ValueError):
                 counts["pending"] += 1  # Unreadable payment/goal/producer is not negative data.
                 continue
@@ -373,12 +418,15 @@ def reconcile_customer_executions(request_id):
                 db,
                 {
                     **original,
-                    "customer_outcome_evidence_sha256": evidence,
+                    "customer_outcome_evidence_sha256": outcome["evidence_sha256"],
                     "customer_outcome_due_at": due.isoformat(),
+                    "customer_outcome_classification": outcome["classification"],
+                    "customer_outcome_reason": outcome["reason"],
                 },
-                result={"ok": success, "error": reason},
+                result={"ok": outcome["success"], "error": outcome["reason"]},
                 duration_ms=max(
-                    0, (due - parse_datetime(binding["started_at"])).total_seconds() * 1000
+                    0,
+                    (due - parse_datetime(binding["started_at"])).total_seconds() * 1000,
                 ),
             )
             counts["observed"] += 1

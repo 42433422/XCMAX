@@ -141,7 +141,7 @@ def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> 
             }
         )
 
-    retest_url = str(scenario.get("retest_url") or "")
+    retest_url = str(scenario.get("retest_url") or "").strip()
     if retest_url:
         url = retest_url if retest_url.startswith("http") else f"{base}{retest_url}"
         checks.append(_check(base_url, "scenario_retest", url, ok_status_lt=400))
@@ -149,6 +149,8 @@ def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> 
     command_check = _run_command(scenario)
     if command_check:
         checks.append(command_check)
+    elif not retest_url:
+        checks.append({"name": "scenario_required", "ok": False, "error": "no_executable_scenario"})
 
     verdict = "pass" if checks and all(c["ok"] for c in checks) else "fail"
     return {

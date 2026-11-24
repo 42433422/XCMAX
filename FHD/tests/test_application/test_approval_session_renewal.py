@@ -494,7 +494,7 @@ def test_http_renews_real_actor_and_mod_sessions(
     elif operation == "retry":
         run.status = "failed"
         step = run.steps[0]
-        step.status, step.tool_id, step.action = "pending", "products", "query"
+        step.status, step.tool_id, step.action = "pending", "shipment_records", "query"
         step.params, step.idempotent = {"keyword": "query after renewal"}, True
         plan = PlanGraph(
             plan_id="session-retry",
@@ -544,7 +544,7 @@ def test_http_renews_real_actor_and_mod_sessions(
         )
         result = AgentToolExecutor().execute(renewed.steps[0], runtime_context=context)
         assert result["success"], result
-        assert calls == [("products", "query")]
+        assert calls == [("shipment_records", "query")]
     with task.first.factory() as db:
         assert db.query(AgentApprovalConsumption).count() == (1 if operation == "continue" else 0)
 

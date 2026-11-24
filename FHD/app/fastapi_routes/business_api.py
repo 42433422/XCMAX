@@ -1,22 +1,19 @@
-"""FHD 业务能力 HTTP 出口：通过神经域 emit / NeuroBus publish 触发既有流水线。
+"""Business HTTP projections of the authenticated capability execution contract.
 
-供 MODstore 员工或其它内网客户端调用。若设置环境变量 ``FHD_BUSINESS_API_KEY``，
-则须在请求头携带 ``X-FHD-Business-Key``；未设置时仅依赖现有 LAN 门禁（生产务必配置密钥）。"""
+A configured X-FHD-Business-Key remains an additional gateway check. Business
+execution always requires a bound account and the shared permission policy.
+"""
 
 from __future__ import annotations
 
-import logging
 import os
-import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
-
-logger = logging.getLogger(__name__)
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
 router = APIRouter(prefix="/api/business", tags=["business-bridge"])
 
@@ -53,14 +50,13 @@ async def business_print_label(
     request: Request,
     body: PrintLabelBody,
     _: BusinessKeyDep,
-) -> dict[str, Any]:
-    run = _run_business_event_agent(
+) -> JSONResponse:
+    return _run_business_event_agent(
         request=request,
         action="print_label",
         params=body.model_dump(),
         route_path="/api/business/print/label",
     )
-    return _agent_node_output(run, "business_event_print_label")
 
 
 class InventoryUpdateBody(BaseModel):
@@ -78,14 +74,13 @@ async def business_inventory_update(
     request: Request,
     body: InventoryUpdateBody,
     _: BusinessKeyDep,
-) -> dict[str, Any]:
-    run = _run_business_event_agent(
+) -> JSONResponse:
+    return _run_business_event_agent(
         request=request,
         action="inventory_update",
         params=body.model_dump(),
         route_path="/api/business/inventory/update",
     )
-    return _agent_node_output(run, "business_event_inventory_update")
 
 
 class OcrRecognizeBody(BaseModel):
@@ -94,17 +89,6 @@ class OcrRecognizeBody(BaseModel):
     request_id: str | None = None
     image_url: str
     ocr_type: str = "general"
-    user_id: str = "system"
-
-
-def _business_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "business-api"
-    ).strip()
 
 
 def _run_business_event_agent(
@@ -113,107 +97,18 @@ def _run_business_event_agent(
     action: str,
     params: dict[str, Any],
     route_path: str,
-) -> Any:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("business_event") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        raise HTTPException(status_code=400, detail=f"unregistered business event action: {action}")
-
-    node_id = f"business_event_{action}"
-    user_id = _business_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 发布业务事件 business_event.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="business_event",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "high")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Publish business event {action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "high")),
-        metadata={"source": "business_api", "route": route_path},
-    )
-    runtime_context = {
-        "source": "business_api",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=f"Business event: {action}",
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "business-api",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return run
-
-
-def _run_business_ocr_request_agent(
-    *,
-    request: Request,
-    request_id: str,
-    image_url: str,
-    ocr_type: str,
-    user_id: str,
-) -> Any:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    plan = PlanGraph(
-        plan_id="business_ocr_request",
-        intent="business_ocr_request",
-        todo_steps=["通过 AgentOrchestrator 发布业务 OCR 请求"],
-        nodes=[
-            WorkflowNode(
-                node_id="business_ocr_request",
-                tool_id="ocr",
-                action="request",
-                params={
-                    "request_id": request_id,
-                    "image_url": image_url,
-                    "ocr_type": ocr_type,
-                    "user_id": user_id,
-                },
-                risk="low",
-                idempotent=True,
-                description="Publish a business OCR request through the unified Agent runtime.",
-            )
-        ],
-        risk_level="low",
-        metadata={"source": "business_api", "route": "/api/business/ocr/recognize"},
-    )
-    return AgentOrchestrator().start_run_from_plan(
-        user_id=user_id,
-        message=f"Business OCR request: {image_url}",
-        plan=plan,
-        runtime_context={
-            "source": "business_api",
-            "request_path": str(request.url.path),
-            "request_id": request_id,
-            "user_id": user_id,
+) -> JSONResponse:
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={
+            "tool_id": "business_event",
+            "action": action,
+            "params": params,
+            "request_id": params.get("request_id"),
         },
+        route_path=route_path,
     )
+    return JSONResponse(result, status_code=status)
 
 
 @router.post("/ocr/recognize")
@@ -221,17 +116,23 @@ async def business_ocr_recognize(
     request: Request,
     body: OcrRecognizeBody,
     _: BusinessKeyDep,
-) -> dict[str, Any]:
-    rid = (body.request_id or "").strip() or str(uuid.uuid4())
-    user_id = body.user_id.strip() or "system"
-    run = _run_business_ocr_request_agent(
+) -> JSONResponse:
+    request_id = (body.request_id or request.headers.get("Idempotency-Key") or "").strip()
+    result, status = run_tools_execute_agent(
         request=request,
-        request_id=rid,
-        image_url=body.image_url.strip(),
-        ocr_type=(body.ocr_type or "general").strip(),
-        user_id=user_id,
+        body={
+            "tool_id": "ocr",
+            "action": "request",
+            "request_id": request_id,
+            "params": {
+                "request_id": request_id,
+                "image_url": body.image_url.strip(),
+                "ocr_type": (body.ocr_type or "general").strip(),
+            },
+        },
+        route_path="/api/business/ocr/recognize",
     )
-    return _agent_node_output(run, "business_ocr_request")
+    return JSONResponse(result, status_code=status)
 
 
 class ShipmentCreateBody(BaseModel):
@@ -248,20 +149,19 @@ async def business_shipment_create(
     request: Request,
     body: ShipmentCreateBody,
     _: BusinessKeyDep,
-) -> dict[str, Any]:
+) -> JSONResponse:
     payload = {
         "unit_name": body.unit_name.strip(),
         "items": body.items,
         "contact_person": body.contact_person.strip(),
         "contact_phone": body.contact_phone.strip(),
     }
-    run = _run_business_event_agent(
+    return _run_business_event_agent(
         request=request,
         action="shipment_create",
         params=payload,
         route_path="/api/business/shipment/create",
     )
-    return _agent_node_output(run, "business_event_shipment_create")
 
 
 @router.get("/health")

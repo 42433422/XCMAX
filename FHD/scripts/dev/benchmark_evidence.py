@@ -14,16 +14,35 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def recorded_provenance(report: dict[str, Any]) -> dict[str, Any]:
+    """Project a saved sample without promoting generation time to test evidence.
+
+    Committed views describe the recorded source. Current-source acceptance must
+    separately bind the expected SHA and validate the raw receipts with require_reports.
+    """
+    return {
+        "source_sha": report.get("source_sha") or report.get("commit") or report.get("sha"),
+        "captured_at": report.get("captured_at") or report.get("observed_at"),
+        "scope": "recorded_source_only",
+        "current_source_status": "UNVERIFIED",
+    }
+
+
 def report_directory() -> Path:
     configured = os.environ.get("XCAGI_BENCHMARK_REPORT_DIR", "").strip()
     return Path(configured) if configured else PROJECT_ROOT / "test_reports"
 
 
-def gate_policy() -> tuple[str, float]:
-    mode = os.environ.get("TASK_BENCHMARK_MODE", "gate").strip()
+def gate_policy(
+    *,
+    minimum_env: str = "TASK_BENCHMARK_MIN_PASS",
+    default_minimum: float = 1.0,
+    default_mode: str = "gate",
+) -> tuple[str, float]:
+    mode = os.environ.get("TASK_BENCHMARK_MODE", default_mode).strip()
     if mode not in {"gate", "observe"}:
         raise ValueError("TASK_BENCHMARK_MODE must be gate or observe")
-    minimum = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "1.0"))
+    minimum = float(os.environ.get(minimum_env, str(default_minimum)))
     if not math.isfinite(minimum) or not 0 <= minimum <= 1:
         raise ValueError("TASK_BENCHMARK_MIN_PASS must be finite and within [0, 1]")
     if mode == "gate" and minimum == 0:
@@ -97,17 +116,28 @@ def trial_artifact(path: Path) -> dict[str, str]:
     return {"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def validate_task_artifacts(directory: Path, report: dict[str, Any], dataset: Path) -> None:
+def validate_task_artifacts(
+    directory: Path,
+    report: dict[str, Any],
+    dataset: Path,
+    *,
+    require_gate: bool = True,
+) -> list[list[dict[str, Any]]]:
     from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
 
     trials = report.get("trials")
     artifacts = report.get("trial_artifacts") or []
-    if type(trials) is not int or trials < 3 or len(artifacts) != trials:
+    if (
+        type(trials) is not int
+        or trials < 3
+        or not isinstance(artifacts, list)
+        or len(artifacts) != trials
+    ):
         raise ValueError("task evidence requires all independent trial artifacts")
     rows = []
     for number, artifact in enumerate(artifacts):
         filename = f"task_benchmark_trial_{number}.jsonl"
-        if artifact.get("path") != filename:
+        if not isinstance(artifact, dict) or artifact.get("path") != filename:
             raise ValueError("task trial artifact identity is invalid")
         path = directory / filename
         if trial_artifact(path) != artifact:
@@ -117,10 +147,18 @@ def validate_task_artifacts(directory: Path, report: dict[str, Any], dataset: Pa
     if any(report.get(key) != value for key, value in measured.items()):
         raise ValueError("task summary differs from the actual trial outcomes")
     minimum = report.get("min_required")
-    if not isinstance(minimum, (int, float)) or not 0 < minimum <= 1:
+    mode = report.get("acceptance_mode")
+    if (
+        mode not in {"gate", "observe"}
+        or type(minimum) not in (int, float)
+        or not math.isfinite(minimum)
+        or not 0 <= minimum <= 1
+        or (mode == "gate" and minimum == 0)
+    ):
         raise ValueError("task evidence has no valid acceptance threshold")
-    if not passes_gate(measured, minimum):
+    if require_gate and (mode != "gate" or not passes_gate(measured, minimum)):
         raise ValueError("task artifacts did not pass acceptance")
+    return rows
 
 
 def main() -> int:

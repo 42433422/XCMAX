@@ -6,17 +6,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _project_agent_node_output
-
-
-def agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    output = _project_agent_node_output(run, node_id, include_run_error=False)
-    if not output.get("success"):
-        output.setdefault("message", "出货单操作失败")
-        output.pop("error", None)
-        output.pop("traceback", None)
-    return output
+from app.application.agent_orchestrator.trace_payloads import agent_node_output as agent_node_output
 
 
 def _run_shipment_agent(
@@ -28,85 +18,21 @@ def _run_shipment_agent(
     route_path: str,
     default_risk: str,
 ) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
-    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
-    principal = require_agent_principal(request, x_user_id=None)
-    # Ownership comes from the authenticated session, never compatibility-body
-    # aliases carried alongside mutable shipment fields.
+    # Compatibility bodies may carry ownership aliases, but only the authenticated
+    # session may bind the durable run and its tenant-scoped mutation.
     params = {
         key: value
         for key, value in params.items()
         if key not in {"tenant_id", "tenantId", "user_id", "userId"}
     }
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get(tool_id) or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 {tool_id} 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"{tool_id}_{action}"
-    user_id = principal.user_id
-    risk = normalize_workflow_risk(str(action_meta.get("risk") or default_risk))
-    source = f"{tool_id}_route"
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 {tool_id}.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id=tool_id,
-                action=action,
-                params=dict(params or {}),
-                risk=risk,
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute {tool_id}.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=risk,
-        metadata={"source": source, "route": route_path},
+    payload, _ = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": tool_id, "action": action, "params": dict(params)},
+        route_path=route_path,
     )
-    runtime_context = {
-        "source": source,
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "tenant_id": principal.tenant_id,
-        "_mod_authorization": principal.mod_authorization,
-        "route_confirmed": True,
-        "service_source": f"fastapi_{source}",
-    }
-    if str(request.url.path).startswith("/api/mod/"):
-        from app.infrastructure.auth.dependencies import get_logged_in_user
-
-        actor = get_logged_in_user(request)
-        user_id = str(actor.id)
-        runtime_context.update(user_id=user_id, tenant_id=str(actor.tenant_id))
-    runtime_context = authenticated_runtime_context(runtime_context, principal)
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"{tool_id.replace('_', ' ').title()} {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id,
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return agent_node_output(run, node_id)
+    return payload
 
 
 def run_shipment_records_agent(

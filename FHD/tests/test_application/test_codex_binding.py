@@ -255,7 +255,13 @@ def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_ac
     with pytest.raises(CodexBindingError) as error:
         store.claim_call(run.run_id, "other", **{**options, "params": {"unit_name": "another"}})
     assert error.value.code == "call_in_progress"
-    receipt = {"status": "completed", "ai_cost_units_total": 4}
+    store.record_call(run.run_id, "a", child_run_id="fixture-budget-child")
+    receipt = {
+        "task_id": call["child_task_id"],
+        "run_id": "fixture-budget-child",
+        "status": "completed",
+        "ai_cost_units_total": 4,
+    }
     for call_id in ("a", "a"):
         store.record_call(run.run_id, call_id, receipt=receipt)
     alias, created = store.claim_call(run.run_id, "new-model-call-id", **options)
@@ -278,7 +284,7 @@ def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)
     )
-    store.claim_call(
+    call, _ = store.claim_call(
         run.run_id,
         "a",
         tool_id="customers",
@@ -288,7 +294,16 @@ def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
         generation=grant.binding.metadata["generation"],
         cost_units=2,
     )
-    store.record_call(run.run_id, "a", receipt={"status": "unknown", "ai_cost_units_total": 3})
+    store.record_call(
+        run.run_id,
+        "a",
+        receipt={
+            "task_id": call["child_task_id"],
+            "run_id": "",
+            "status": "unknown",
+            "ai_cost_units_total": 3,
+        },
+    )
     parent = store.get(run.run_id)
     assert parent.run.metadata["ai_cost_units_total"] == 3
     assert parent.run.metadata["reserved_cost_units"] == 7
@@ -356,7 +371,15 @@ def test_real_model_admission_and_child_claim_share_one_budget(
         _claim(store, grant.model_token, route, "m2")
     assert error.value.status_code == 402
     store.record_call(
-        run.run_id, "child", receipt={"status": "completed", "ai_cost_units_total": 2}
+        run.run_id,
+        "child",
+        child_run_id="fixture-budget-child",
+        receipt={
+            "task_id": child["child_task_id"],
+            "run_id": "fixture-budget-child",
+            "status": "completed",
+            "ai_cost_units_total": 2,
+        },
     )
     _claim(store, grant.model_token, route, "m2")
     assert store.get(run.run_id).run.metadata["ai_cost_units_total"] == spent + 2
@@ -394,3 +417,24 @@ def test_missing_ancestor_cannot_create_a_runtime_grant(trusted_actor):
     with pytest.raises(CodexBindingError) as error:
         make_binding(trusted_actor(), parent_run_id="missing-native-parent")
     assert error.value.code == "owner_changed"
+
+
+@pytest.mark.parametrize("version", [2, True, "1", None])
+def test_unsupported_saved_binding_cannot_be_reissued_or_projected(trusted_actor, version):
+    actor = trusted_actor()
+    store, run, grant = make_binding(actor)
+    store.update(run.run_id, lambda _run, metadata: metadata.update(version=version))
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    for check in (
+        lambda: reopened.authenticate(grant.mcp_token),
+        lambda: reopened.receipt_snapshot(run.run_id),
+    ):
+        with pytest.raises(CodexBindingError) as error:
+            check()
+        assert error.value.code == "runtime_contract_unsupported"
+    # Stopping and reading original history remain available across upgrades.
+    reopened.close(run.run_id, "interrupted")
+    with pytest.raises(CodexBindingError) as error:
+        reopened.create(run.run_id)
+    assert error.value.code == "runtime_contract_unsupported"
+    assert reopened.get(run.run_id).metadata["version"] == version

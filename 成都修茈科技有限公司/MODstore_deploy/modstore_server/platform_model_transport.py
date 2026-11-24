@@ -3,12 +3,77 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
+from httpx import AsyncByteStream
 
+from modstore_server import llm_gateway_contract as stream_contract
 from modstore_server.platform_model_config import PlatformApiKey
+
+MAX_MODEL_STREAM_BYTES = stream_contract.MAX_STREAM_BYTES
+
+
+class _ModelStreamBytes:
+    def __init__(self, source: Any):
+        self.source = source
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        size = 0
+        async for chunk in self.source:
+            size += len(chunk)
+            if size > MAX_MODEL_STREAM_BYTES:
+                raise stream_contract.StreamLimitError("model stream wire byte limit exceeded")
+            yield chunk
+
+    async def aclose(self) -> None:
+        if not self.closed:
+            self.closed = True
+            await self.source.aclose()
+
+
+class _HttpxModelStream(_ModelStreamBytes, AsyncByteStream):
+    pass
+
+
+async def bound_model_response(response: Any) -> None:
+    """Bound raw SSE bytes before either pinned HTTP client's parser buffers a line.
+
+    Request identity encoding and reject a nonconforming compressed response
+    before decoding; checking after HTTPX decompression cannot bound expansion.
+    HTTPX owns response cleanup when a response hook raises.
+    """
+    if response.headers.get("content-encoding", "").strip().lower() not in {"", "identity"}:
+        raise stream_contract.StreamLimitError("model stream content encoding is not identity")
+    if response.is_stream_consumed:
+        if len(response.content) > MAX_MODEL_STREAM_BYTES:
+            raise stream_contract.StreamLimitError("model stream wire byte limit exceeded")
+        return
+    if isinstance(response.stream, _ModelStreamBytes):
+        return
+    stream_type: type[_ModelStreamBytes] = _HttpxModelStream
+    if not isinstance(response, httpx.Response):
+        # OpenAI's pinned SDK uses HTTPX2. Both public stream interfaces retain
+        # the same ownership contract; no SDK parser or private decoder changes.
+        from httpx2 import AsyncByteStream as SDKAsyncByteStream
+
+        class _SDKModelStream(_ModelStreamBytes, SDKAsyncByteStream):
+            pass
+
+        stream_type = _SDKModelStream
+    response.stream = stream_type(response.stream)
+
+
+def bound_model_stream_client(client: Any) -> Any:
+    """Keep the caller's transport and hooks while applying the stream boundary."""
+    client.headers["Accept-Encoding"] = "identity"
+    hooks = client.event_hooks["response"]
+    if bound_model_response not in hooks:
+        hooks.insert(0, bound_model_response)
+    return client
 
 
 def redact_key(value: Any, api_key: str) -> Any:
@@ -35,6 +100,8 @@ async def llm_http_response(
 ):
     if method not in {"GET", "POST"}:
         raise ValueError("unsupported provider request method")
+    if stream:
+        headers = {**headers, "Accept-Encoding": "identity"}
     managed = isinstance(api_key, PlatformApiKey) and api_key.managed
     options: dict[str, Any] = {"follow_redirects": False, "trust_env": False} if managed else {}
     async with httpx.AsyncClient(timeout=timeout, limits=limits, **options) as client:
@@ -59,7 +126,9 @@ async def llm_http_response(
             response = await client.send(request, stream=True)
             upstream = response
             try:
-                if not stream:
+                if stream:
+                    await bound_model_response(response)
+                else:
                     content = bytearray()
                     async for chunk in response.aiter_bytes():
                         content.extend(chunk)
@@ -81,6 +150,7 @@ async def llm_http_response(
         elif stream:
             request_body = {"json": body} if method != "GET" else {}
             async with client.stream(method, url, headers=headers, **request_body) as response:
+                await bound_model_response(response)
                 yield response
         elif method == "GET":
             yield await client.get(url, headers=headers)

@@ -14,14 +14,16 @@ from typing import Any, cast
 
 import pandas as pd
 
-from app.application.tools.workflow_tools.contracts import ExcelIO, NaturalQuery, Payload
-from app.infrastructure.excel.date_norm import date_like_columns, normalize_excel_dates
+from app.application.tools.workflow_tools.contracts import ExcelIO, Payload
+from app.infrastructure.excel.date_norm import cn_date, date_like_columns, to_number
+from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _EXCEL_ANALYSIS_DEFAULT_PAGE_ROWS = 1000
 _EXCEL_ANALYSIS_MAX_PAGE_ROWS = 5000
-# 只有依赖列语义的动作才自动探测表头；read/query 保持用户可见的默认第 1 行。
-_AUTO_HEADER_ACTIONS = frozenset({"excel_query", "statistics", "structure", "aggregate"})
+# 依赖列语义的动作和自然语言问题需要确认表头；原始读取和显式筛选沿用指定表头。
+_AUTO_HEADER_ACTIONS = frozenset({"statistics", "structure", "aggregate"})
 _TOTAL_ROW_MARKERS = ("合计", "总计", "小计", "累计")
 
 
@@ -100,13 +102,10 @@ def _clean_header_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def auto_header_row(path: Path, sheet_name: str | None) -> int | None:
-    """未显式给表头时用 openpyxl 探测；探测失败保持 pandas 默认行为。"""
+    """Infer an unspecified header; model failures remain failures at the tool boundary."""
     from app.infrastructure.excel.header_detection import detect_header_row_1based
 
-    try:
-        return detect_header_row_1based(path, sheet_name)
-    except RECOVERABLE_ERRORS:
-        return None
+    return detect_header_row_1based(path, sheet_name)
 
 
 def _suspected_total_rows(df: pd.DataFrame, limit: int = 20) -> list[int]:
@@ -290,21 +289,85 @@ def aggregate_frame(df: pd.DataFrame, args: Payload) -> pd.DataFrame:
     return result
 
 
+def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Compose existing bounded filtering and aggregation; never execute model code."""
+    from app.application.tools.safe_dataframe_query import safe_filter_dataframe
+    from app.infrastructure.excel.schema_service import load_query_plan
+
+    plan = load_query_plan(value)
+    if plan.get("unsupported_reason"):
+        raise ValueError("query is not supported by the read-only table operations")
+    result = df.copy()
+    result.columns = [str(column) for column in df.columns]
+    if not result.columns.is_unique:
+        raise ValueError("query requires unique column names")
+    for conversion in plan.get("conversions", []):
+        column = conversion["column"]
+        if column not in result.columns:
+            raise ValueError(f"unknown dataframe column: {column}")
+        result[column] = (
+            cn_date(result[column], default_year=conversion.get("default_year"))
+            if conversion["kind"] == "date"
+            else to_number(result[column])
+        )
+    # Stable aliases handle arbitrary Excel labels without extending the filter grammar.
+    aliases = {f"c{index}": name for index, name in enumerate(result.columns)}
+    result.columns = list(aliases)
+    result = safe_filter_dataframe(result, plan.get("query_expression", ""))
+    result = result.rename(columns=aliases)
+    if plan.get("metrics"):
+        result = aggregate_frame(result, plan)
+    elif plan.get("group_by"):
+        raise ValueError("missing_aggregation_metrics")
+    for field in ("columns", "sort_by"):
+        if any(column not in result.columns for column in plan.get(field, [])):
+            raise ValueError(f"unknown dataframe column in {field}")
+    if plan.get("sort_by"):
+        result = result.sort_values(plan["sort_by"], ascending=plan.get("ascending", True))
+    if plan.get("columns"):
+        result = result.loc[:, plan["columns"]]
+    if "limit" in plan:
+        result = result.head(plan["limit"])
+    if not result.columns.is_unique:
+        raise ValueError("query result has ambiguous column names")
+    return result
+
+
 @dataclass(frozen=True)
 class ExcelAnalysis:
     io: ExcelIO
-    query: NaturalQuery
     filter_frame: Callable[[pd.DataFrame, str], pd.DataFrame]
     customer_hint: Callable[[str, str | None], str]
     logger: logging.Logger
 
     def analyze(self, args: Payload, workspace_root: str | None = None) -> Payload:
+        from app.infrastructure.excel.header_detection import HeaderConfirmationRequired
+
         file_path = str(args.get("file_path") or "")
         action = str(args.get("action") or "read")
         sheet = args.get("sheet_name")
         header = self.io.header(args)
         if not file_path:
             return {"success": False, "error": "file_path is required"}
+        expression = args.get("query_expression")
+        question = args.get("question")
+        if action == "query" and "query_expression" in args and "question" in args:
+            return {
+                "success": False,
+                "error_code": "ambiguous_query_input",
+                "message": "查询问题与筛选表达式只能选择一种",
+            }
+        if action == "query" and not (
+            isinstance(expression, str)
+            and expression.strip()
+            or isinstance(question, str)
+            and question.strip()
+        ):
+            return {
+                "success": False,
+                "error_code": "missing_query_expression",
+                "message": "查询需要非空的问题或受限筛选表达式",
+            }
         root = workspace_root or str(Path.cwd())
         if action == "export":
             return self.export_table(args, root)
@@ -325,10 +388,21 @@ class ExcelAnalysis:
                 "workspace_root": root,
                 "resolved_path": str(path),
             }
-        if header is None and action in _AUTO_HEADER_ACTIONS:
-            header = auto_header_row(path, str(sheet).strip() if sheet else None)
         try:
+            infer_header = action in _AUTO_HEADER_ACTIONS or (
+                action == "query" and isinstance(question, str) and bool(question.strip())
+            )
+            if header is None and infer_header:
+                header = auto_header_row(path, str(sheet).strip() if sheet else None)
             df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
+        except HeaderConfirmationRequired as exc:
+            return {
+                "success": False,
+                "error": "header_confirmation_required",
+                "message": str(exc),
+                "required_field": "header_row",
+                "header_candidates": list(exc.candidate_rows),
+            }
         except RECOVERABLE_ERRORS:
             return {
                 "success": False,
@@ -338,20 +412,25 @@ class ExcelAnalysis:
                 "sheet_name": sheet,
                 "header_row": header,
             }
-        df = normalize_excel_dates(df)
         offset, max_rows = page_budget(args)
-        if action == "excel_query":
-            out = self.query(
-                df,
-                str(args.get("natural_language") or "").strip(),
-                file_path=file_path,
-                offset=offset,
-                max_rows=max_rows,
-            )
-            out["action"] = "excel_query"
-            out["header_row"] = header
-            return out
         base = {"success": True, "action": action, "file_path": file_path}
+        if action == "structure":
+            snapshot = dataframe_schema_snapshot(df)
+            return {
+                **base,
+                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
+                "header_row": header if header is not None else 1,
+                "data": json_safe(snapshot),
+                "row_count": snapshot["row_count"],
+                "columns": snapshot["columns"],
+                "dtypes": snapshot["dtypes"],
+                "sample_rows": snapshot["sample_rows"],
+                "numeric_columns": [
+                    str(name) for name in df.select_dtypes(include="number").columns
+                ],
+                "date_like_columns": date_like_columns(df),
+                "suspected_total_rows": _suspected_total_rows(df),
+            }
         if action == "read":
             out = {
                 **base,
@@ -371,7 +450,26 @@ class ExcelAnalysis:
             out["header_row"] = header if header is not None else 1
             return out
         if action == "query":
-            result = self.filter_frame(df, str(args.get("query_expression") or "").strip())
+            if isinstance(question, str) and question.strip():
+                from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
+
+                result = natural_language_query(
+                    df,
+                    question.strip(),
+                    LLMPandasTranslator().translate,
+                    execute_query_plan,
+                    offset=offset,
+                    max_rows=max_rows,
+                )
+                return {**base, "header_row": header, **result}
+            try:
+                result = self.filter_frame(df, str(expression).strip())
+            except ValueError as exc:
+                return {
+                    "success": False,
+                    "error_code": "invalid_query_expression",
+                    "message": str(exc),
+                }
             return {**base, **table_result(result, offset=offset, max_rows=max_rows)}
         if action == "aggregate":
             try:
@@ -389,24 +487,6 @@ class ExcelAnalysis:
                 **base,
                 **table_result(result, offset=offset, max_rows=max_rows),
                 "source_row_count": len(df),
-            }
-        if action == "structure":
-            from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
-
-            snapshot = dataframe_schema_snapshot(df)
-            return {
-                **base,
-                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
-                "header_row": header,
-                "row_count": snapshot["row_count"],
-                "columns": snapshot["columns"],
-                "dtypes": snapshot["dtypes"],
-                "sample_rows": snapshot["sample_rows"],
-                "numeric_columns": [
-                    str(name) for name in df.select_dtypes(include="number").columns
-                ],
-                "date_like_columns": date_like_columns(df),
-                "suspected_total_rows": _suspected_total_rows(df),
             }
         if action == "statistics":
             numeric = df.select_dtypes(include="number")

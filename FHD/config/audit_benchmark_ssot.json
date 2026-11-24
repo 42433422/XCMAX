@@ -500,7 +500,7 @@
       "id": "intent-routing",
       "number": 5,
       "name": "AI 意图与工具路由",
-      "xcmax_scope": "FHD/app/application/chat_business_safety_core.py",
+      "xcmax_scope": "FHD/app/domain/app_pure/chat_business_safety_core.py",
       "commercial_90": [
         {
           "id": "dialogflow",

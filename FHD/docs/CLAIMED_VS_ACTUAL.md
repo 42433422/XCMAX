@@ -1,23 +1,25 @@
 # 对外声称 vs 实测（CLAIMED_VS_ACTUAL）
 
-> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-11-23T07:45:22Z
+> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-11-24T10:00:19Z
 
-> 本文为「对外声称 vs 实测」对照的**单一事实来源（SSOT）**，由 `scripts/dev/gen_claimed_vs_actual.py` 从 `metrics/` 自动汇编。覆盖率唯一数字 SSOT 见 [`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)。
+> 本文为「对外声称 vs 实测」对照的**单一事实来源（SSOT）**，由 `scripts/dev/gen_claimed_vs_actual.py` 从 `metrics/` 自动汇编。覆盖率唯一数字 SSOT 见 [`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)。生成时间只表示汇编时间；采样版本和日期取自原始凭据，不能作为当前 HEAD 的测试结果。
 
 ## 声称 vs 实测对照表
 
 | 维度 | 声称 | 实测 | 数据源 | 状态 |
 |---|---|---|---|---|
-| 后端行覆盖率 | ≥90%（目标） | 88.19% | coverage-dual-summary.json#committed_head.backend_line_pct | 🟡 |
-| 后端分支覆盖率 | ≥85%（目标） | 81.5% | coverage-dual-summary.json#committed_head.backend_branch_pct | 🟡 |
-| 前端行覆盖率 | ≥80%（目标） | 93.21% | coverage-dual-summary.json#committed_head.frontend_line_pct | 🟢 |
-| 前端分支覆盖率 | ≥75%（目标） | 82.45% | coverage-dual-summary.json#committed_head.frontend_branch_pct | 🟢 |
-| 前端函数覆盖率 | ≥90%（floor） | 91.39% | coverage-dual-summary.json#committed_head.frontend_function_pct | 🟢 |
+| 覆盖率证据范围 | 当前版本需独立验证 | 采集 2026-07-25T11:34:00Z / 来源 SHA 92505cab6；仅该采样版本，本版未验证 | coverage-dual-summary.json#committed_head | 🟡 |
+| 后端行覆盖率（历史样本） | ≥90%（目标） | 88.19% | coverage-dual-summary.json#committed_head.backend_line_pct | 🟡 |
+| 后端分支覆盖率（历史样本） | ≥85%（目标） | 81.5% | coverage-dual-summary.json#committed_head.backend_branch_pct | 🟡 |
+| 前端行覆盖率（历史样本） | ≥80%（目标） | 93.21% | coverage-dual-summary.json#committed_head.frontend_line_pct | 🟡 |
+| 前端分支覆盖率（历史样本） | ≥75%（目标） | 82.45% | coverage-dual-summary.json#committed_head.frontend_branch_pct | 🟡 |
+| 前端函数覆盖率（历史样本） | ≥90%（floor） | 91.39% | coverage-dual-summary.json#committed_head.frontend_function_pct | 🟡 |
+| 真实模型任务验收 | 当前版本需绑定 SHA 与原始任务凭据 | 本版未验证；历史状态 UNVERIFIED / 模型实测标记 False / 采集 2026-11-16T18:41:16.463750+08:00 / 来源 SHA a018ae4b793629c0d61978f64bcdb043e2d1c1e2；XCAGI_SKIP_INTENT_LLM=1（规则引擎口径），本报告不构成 LLM 实测验收 | benchmark_run_mode.json | 🟡 |
 | 后端行 floor（fail_under 交叉校验） | 棘轮 floor=78 | pyproject fail_under=78 | pyproject.toml fail_under vs coverage-dual-summary.json#ratchet_floors.backend_line | 🟢 |
-| 覆盖率趋势（最新 2026-06-26） | 趋势上行 | 后端行 90.69% / 前端行 93.21% | coverage-history.jsonl（最后一行） | 🟡 |
+| 覆盖率趋势（历史 2026-06-26） | 保留历史采样，不代表当前版本 | 后端行 90.69% / 前端行 93.21% | coverage-history.jsonl（最后一行） | 🟡 |
 | 健康探针 /api/health | P50 < 500ms 预算 | 11.23ms（status 200） | sla-snapshot.json#probe.probe_result.health | 🟢 |
-| DORA 部署频率 | 持续交付 | 环境 production / 窗口 7d / 事件 4 / 频率 0.4286/d / 采集日 2026-11-23 | dora-20261123.json | 🟢 |
-| DORA 平均恢复时长 | 仅以明确恢复回执计量 | 未知 / 有效恢复样本 0 | dora-20261123.json | 🟡 |
+| DORA 部署频率 | 持续交付 | 环境 production / 窗口 7d / 事件 4 / 频率 0.4286/d / 采集日 2026-11-24 | dora-20261124.json | 🟢 |
+| DORA 平均恢复时长 | 仅以明确恢复回执计量 | 未知 / 有效恢复样本 0 | dora-20261124.json | 🟡 |
 | 前端 E2E spec 数 | 有 E2E 套件 | 19 个 spec | frontend/e2e/*.spec.ts | 🟢 |
 | Android 端交付等级 | 实验骨架 | 实验骨架·非签约级 | VERSION.md『各端交付等级』vs docs/guides/MOBILE_ANDROID.md | 🟢 |
 

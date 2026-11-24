@@ -10,6 +10,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
+from tests.test_application.test_registered_capabilities import (
+    capability_runner as capability_runner,
+)
+
 
 def request(sid=None, mod=None, cookie=False):
     headers = [(b"x-user-id", b"999")]
@@ -38,6 +42,7 @@ def request(sid=None, mod=None, cookie=False):
 def sessions(tmp_path, monkeypatch):
     import app.db as db_module
     from app.db.db_base import Base
+    from app.db.models.permission import Permission, Role
     from app.db.models.user import Session, User
     from app.domain.shared_services.session_service import SessionService
     from app.utils.time import utc_now_naive
@@ -53,6 +58,9 @@ def sessions(tmp_path, monkeypatch):
         "app.application.facades.session_facade.get_session_service", SessionService
     )
     with factory() as db:
+        db.add(
+            Role(name="user", permissions=[Permission(code="product.view", name="View products")])
+        )
         db.add_all(
             [
                 User(
@@ -89,20 +97,21 @@ def sessions(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("cookie", [False, True])
-def test_tools_real_session_overrides_payload_identity(sessions, monkeypatch, cookie):
-    from app.application.agent_orchestrator import AgentOrchestrator
+def test_tools_real_session_overrides_payload_identity(
+    sessions, capability_runner, monkeypatch, cookie
+):
     from app.fastapi_routes.tools_execute import tools_execute_route
     from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 
     captured = []
+    runner, _execute = capability_runner
+    original_start = runner.start_run_from_plan
 
-    def start(self, **kwargs):
+    def start(**kwargs):
         captured.append(kwargs)
-        return SimpleNamespace(
-            status="completed", run_id="synthetic-run", final_output={}, steps=[]
-        )
+        return original_start(**kwargs)
 
-    monkeypatch.setattr(AgentOrchestrator, "start_run_from_plan", start)
+    monkeypatch.setattr(runner, "start_run_from_plan", start)
     response = tools_execute_route(
         request("valid", cookie=cookie),
         {

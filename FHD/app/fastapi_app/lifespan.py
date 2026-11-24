@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -31,7 +32,7 @@ from app.fastapi_app.asset_install_lifecycle import (
     stop_paid_asset_installs,
 )
 from app.fastapi_app.event_loop_noise import install_proactor_reset_filter
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 from .node_role import passive_node_enabled
 from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_db_file_from_url
@@ -146,6 +147,18 @@ def _log_ai_capability_status() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Drain telemetry when the application lifespan exits, even after cleanup failure."""
+    try:
+        async with _application_lifespan(app):
+            yield
+    finally:
+        trace_store = sys.modules.get("app.infrastructure.llm.trace_store")
+        if trace_store is not None:
+            await asyncio.to_thread(trace_store.reset_trace_store)
+
+
+@asynccontextmanager
+async def _application_lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
     if getattr(app.state, "catalog_admission", None) is not None:
         from .guarded_catalog import lifespan as guarded_lifespan
@@ -208,7 +221,7 @@ async def lifespan(app: FastAPI):
 
             if start_auto_sync_scheduler():
                 logger.info("✅ 知识库来源定时同步已启动")
-        except RECOVERABLE_ERRORS as exc:
+        except BOUNDARY_ERRORS as exc:
             logger.warning("知识库来源定时同步启动失败: %s", exc)
 
     start_paid_asset_installs()
@@ -296,7 +309,7 @@ async def lifespan(app: FastAPI):
                 from app.application.elt.stale_watchdog import stop_stale_watchdog
 
                 await asyncio.to_thread(stop_stale_watchdog)
-            except RECOVERABLE_ERRORS as exc:
+            except BOUNDARY_ERRORS as exc:
                 logger.warning("ELT 看门狗关闭失败: %s", exc)
         try:
             from app.application.dataset_rag.auto_sync_scheduler import (
@@ -304,7 +317,7 @@ async def lifespan(app: FastAPI):
             )
 
             stop_auto_sync_scheduler()
-        except RECOVERABLE_ERRORS as exc:
+        except BOUNDARY_ERRORS as exc:
             logger.warning("知识库来源定时同步关闭失败: %s", exc)
         await stop_paid_asset_installs()
         from app.fastapi_app.resource_cleanup import close_llm_http_clients

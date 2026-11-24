@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application.knowledge.http_port_contracts import DatasetAction
+from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 from app.infrastructure.document_parsing.errors import DocumentSourceError
 
 from .schemas import (
@@ -20,7 +20,7 @@ from .schemas import (
     DatasetMultiQueryRequest,
     DatasetQueryRequest,
 )
-from .uploads import DocumentUpload, _accepted_input
+from .uploads import DocumentUpload, stage_knowledge_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class DocumentRoutes:
         self,
         *,
         dispatch: Callable[[], DatasetAction],
-        uploads: Callable[[Callable[[], str | Path]], DocumentUpload],
+        uploads: Callable[[], DocumentUpload],
     ) -> None:
         router = self.ingestion = APIRouter()
 
@@ -50,7 +50,6 @@ class DocumentRoutes:
             file_path = req.file_path
             source = req.source
             document_id = req.document_id
-            staged_path: Path | None = None
             extra_metadata: dict[str, object] = {}
             if req.url.strip():
                 from app.infrastructure.document_parsing.web_fetch import fetch_url_text
@@ -73,6 +72,7 @@ class DocumentRoutes:
                     parse_s3_uri,
                 )
 
+                context = request_runtime_context(request)
                 try:
                     _bucket, key = parse_s3_uri(req.s3_uri)
                     raw_suffix = Path(key).suffix.lower()
@@ -90,20 +90,13 @@ class DocumentRoutes:
                             content={"detail": f"不支持的对象类型：{raw_suffix or '无扩展名'}"},
                         )
                     fetched = fetch_object(req.s3_uri)
-                    from app.utils.path_io.path_utils import get_upload_dir
-
-                    base = Path(get_upload_dir()).resolve()
-                    # Dataset identity stays in dispatch params; staging paths are server-owned.
-                    upload_dir = (base / "knowledge").resolve()
-                    if not upload_dir.is_relative_to(base) or upload_dir == base:
-                        raise DocumentSourceError("资料上传目录无效")
-                    upload_dir.mkdir(parents=True, exist_ok=True)
-                    with NamedTemporaryFile(dir=upload_dir, suffix=suffix, delete=False) as target:
-                        staged_path = Path(target.name)
-                        target.write(fetched.data)
+                    staged_path = stage_knowledge_input(
+                        fetched.data,
+                        f"object{suffix}",
+                        context,
+                        suffixes=_DATASET_UPLOAD_EXTENSIONS,
+                    )
                 except (ValueError, OSError) as exc:
-                    if staged_path is not None:
-                        staged_path.unlink(missing_ok=True)
                     return _source_error(exc, "对象暂存失败")
                 file_path = str(staged_path)
                 source = source or fetched.filename
@@ -187,33 +180,26 @@ class DocumentRoutes:
                 metadata.setdefault("chunk_overlap", req.chunk_overlap)
             if req.acl:
                 metadata["acl"] = req.acl
-            retained = False
-            try:
-                response = dispatch()(
-                    request=request,
-                    action="ingest_document",
-                    route_path="/api/knowledge/v1/datasets/{dataset_id}/documents",
-                    params={
-                        "dataset_id": dataset_id,
-                        "source": source,
-                        "text": text,
-                        "file_path": file_path,
-                        "document_id": document_id,
-                        "chunk_strategy": req.chunk_strategy,
-                        "chunk_size": req.chunk_size,
-                        "chunk_overlap": req.chunk_overlap,
-                        "metadata": metadata,
-                        "tenant_id": req.tenant_id,
-                        "version": req.version,
-                        "version_label": req.version_label,
-                        "allow_duplicate": req.allow_duplicate,
-                    },
-                )
-                retained = _accepted_input(response)
-                return response
-            finally:
-                if staged_path is not None and not retained:
-                    staged_path.unlink(missing_ok=True)
+            return dispatch()(
+                request=request,
+                action="ingest_document",
+                route_path="/api/knowledge/v1/datasets/{dataset_id}/documents",
+                params={
+                    "dataset_id": dataset_id,
+                    "source": source,
+                    "text": text,
+                    "file_path": file_path,
+                    "document_id": document_id,
+                    "chunk_strategy": req.chunk_strategy,
+                    "chunk_size": req.chunk_size,
+                    "chunk_overlap": req.chunk_overlap,
+                    "metadata": metadata,
+                    "tenant_id": req.tenant_id,
+                    "version": req.version,
+                    "version_label": req.version_label,
+                    "allow_duplicate": req.allow_duplicate,
+                },
+            )
 
         self.ingest_dataset_document = ingest_dataset_document
 
@@ -228,9 +214,7 @@ class DocumentRoutes:
             version_label: str = Form(""),
             chunk_strategy: str = Form("semantic"),
         ) -> JSONResponse:
-            from app.utils.path_io.path_utils import get_upload_dir
-
-            upload = uploads(get_upload_dir)
+            upload = uploads()
             return await upload.ingest(
                 dataset_id,
                 request,

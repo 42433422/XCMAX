@@ -76,16 +76,17 @@ def test_active_pointer_temporary_file_is_private_before_writing(
         assert Path(stream.name).read_bytes() == b""
         if os.name != "nt":
             assert stat.S_IMODE(os.fstat(stream.fileno()).st_mode) == 0o600
+        if interrupt_write:
+            write = stream.write
+
+            def interrupted_write(ciphertext):
+                write(ciphertext[:16])
+                raise OSError("interrupted write")
+
+            stream.write = interrupted_write
         return stream
 
     monkeypatch.setattr(active.tempfile, "NamedTemporaryFile", private_file)
-    if interrupt_write:
-
-        def interrupted_dump(_payload, stream, **_kwargs):
-            stream.write("private-partial-pointer")
-            raise OSError("interrupted write")
-
-        monkeypatch.setattr(active.json, "dump", interrupted_dump)
     previous_mask = os.umask(0)
     try:
         remember_active_conversation(_ctx("private-pointer", "1"))

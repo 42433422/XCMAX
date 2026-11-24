@@ -5,6 +5,30 @@ import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { restoreRuntimeContinuation } from '@/utils/chatRuntimeContinuation'
 
+export const CHAT_HISTORY_PAGE_SIZE = 80
+const CONFIRMED_CACHE_CHARS = 256 * 1024 // Serialized UTF-16 code units, excluding unconfirmed rows.
+
+/** Keep one server page locally; pending/legacy/live rows remain complete regardless of budget. */
+export function boundedChatMessageCache(messages: UiChatMessage[]): UiChatMessage[] {
+  const retained: UiChatMessage[] = []
+  let confirmed = 0, chars = 2
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index], persistence = message.persistence
+    const recoverable = persistence?.status === 'saved' && persistence.durable === true
+      && !persistence.request && Number.isSafeInteger(message.serverMessageId) && Number(message.serverMessageId) > 0
+      && !message.streamingShell && !['submitted', 'streaming'].includes(message.streamStatus || '')
+    if (recoverable) {
+      if (confirmed >= CHAT_HISTORY_PAGE_SIZE) continue
+      const size = JSON.stringify(message).length + 1
+      if (chars + size > CONFIRMED_CACHE_CHARS) { confirmed = CHAT_HISTORY_PAGE_SIZE; continue }
+      chars += size
+      confirmed += 1
+    }
+    retained.push(message)
+  }
+  return retained.reverse()
+}
+
 export function localMessagePersistence(): NonNullable<UiChatMessage['persistence']> {
   return { id: createBusinessHarnessId('message'), status: 'local' }
 }
@@ -65,6 +89,8 @@ export function useChatMessagePersistence(deps: {
         if (deps.scope() !== scope) return
         if (response?.success !== true || response.saved !== true) throw new Error('save not acknowledged')
         state.status = response.durable === true ? 'saved' : 'local'
+        if (response.durable === true) state.durable = true
+        else delete state.durable
         state.error = response.durable === true ? '' : '服务端未确认持久保存，当前仅保留本机副本。'
         if (state.status === 'saved') {
           const ids = response.message_ids
@@ -73,7 +99,8 @@ export function useChatMessagePersistence(deps: {
           delete state.request
           if (request.turn_id && ids?.length) {
             for (const row of list) if (row.turnId === request.turn_id && row !== message) {
-              row.persistence = { id: `server:${row.role === 'user' ? ids[0] : ids[ids.length - 1]}`, status: 'saved' }
+              row.serverMessageId = row.role === 'user' ? ids[0] : ids[ids.length - 1]
+              row.persistence = { id: `server:${row.serverMessageId}`, status: 'saved', durable: true }
             }
           }
         }

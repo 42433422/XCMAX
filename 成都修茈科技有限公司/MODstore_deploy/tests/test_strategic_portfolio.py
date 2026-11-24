@@ -24,6 +24,7 @@ from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
 def database(tmp_path, monkeypatch):
     from modstore_server import (
         db,
+        employee_executor,
         employee_runtime,
         models,
     )
@@ -56,6 +57,13 @@ def database(tmp_path, monkeypatch):
                 }
             ),
         },
+    )
+    # Restore both the source and its executor facade after each test. Loading
+    # the facade while only the source is patched otherwise keeps that fake.
+    monkeypatch.setattr(
+        employee_executor,
+        "load_employee_pack_resolved",
+        employee_runtime.load_employee_pack_resolved,
     )
     yield factory
     engine.dispose()
@@ -389,6 +397,26 @@ def test_outcome_rejects_unrelated_future_refunded_or_wrong_customer_payments(
     business = runtime._business_outcome(p.portfolio_status(decision_id))
     assert business["revenue_cents"] == 100
     assert business["paid_order_count"] == 1
+    from modstore_server.xiaoc_life_cognition import feedback_facts, portfolio_feedback
+
+    feedback = portfolio_feedback(
+        {
+            "decision_id": decision_id,
+            "reviews": [
+                {"business": business, "usage_complete": True, "observation_complete": True}
+            ],
+        }
+    )
+    facts = feedback_facts({"events": [{"details": {"outcome_feedback": feedback}}]})
+    observed = facts[0]["business_feedback"]
+    assert observed["outcome_status"] == "business_verified"
+    assert observed["revenue_cents"] == 100 and observed["paid_order_count"] == 1
+    assert (
+        observed["attribution"] == "artifact_acceptance_and_order_outcome_not_incremental_causality"
+    )
+    assert observed["window_start"] == business["window_start"]
+    assert observed["window_end"] == business["window_end"]
+    assert "revenue-a" not in json.dumps(facts)
 
 
 def test_review_reallocates_released_resources_without_new_authorization(database, monkeypatch):

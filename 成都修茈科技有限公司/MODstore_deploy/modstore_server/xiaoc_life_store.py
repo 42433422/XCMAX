@@ -259,26 +259,106 @@ def read_state() -> dict[str, Any]:
         return cast(dict[str, Any], data)
 
 
+def _settled_owner_goals(
+    data: dict[str, Any], session: Session
+) -> list[tuple[dict[str, Any], str]] | None:
+    """Keep original execution/usage holds; completed history is not ownership."""
+    from modstore_server.strategic_portfolio import PortfolioError, _row
+
+    if (
+        data.get("active_cycle")
+        or data.get("unknown_usage")
+        or any(
+            data["budget"].get(field, 0) > 0
+            for field in ("reserved_tokens", "exploration_reserved_tokens")
+        )
+    ):
+        return None
+    settled = []
+    for goal in data["goals"]:
+        reflection_status = None
+        if goal.get("retort_request_id"):
+            from modstore_server.xiaoc_life_evolution import feedback
+
+            owner = goal.get("evolution_owner_user_id", data["owner_user_id"])
+            if type(owner) is not int:
+                return None
+            try:
+                observed = feedback(session, goal, owner)
+            except (LifePolicyError, PortfolioError, KeyError):
+                return None
+            if observed["metrics"].get("terminal_verified") is not True:
+                return None
+            reflection_status = observed["status"]
+        if not (decision_id := goal.get("decision_id")):
+            if reflection_status:
+                settled.append((goal, reflection_status))
+            continue
+        try:
+            row, proposal, state = _row(session, decision_id)
+        except PortfolioError:
+            return None  # Missing original evidence cannot release its authority.
+        tasks = state.get("tasks", {})
+        for task in tasks.values():
+            calls = task.get("calls")
+            if task.get("status") not in {"completed", "failed"} or not isinstance(calls, dict):
+                return None
+            if any(
+                call.get("status") != "settled"
+                or any(
+                    type(call.get(field)) is not int or call[field] < 0
+                    for field in ("actual_tokens", "accrued_cost_cents")
+                )
+                for call in calls.values()
+            ):
+                return None
+        stopped = bool(
+            row.status in {"rejected", "withdrawn"}
+            or state.get("halted")
+            or parse_time(proposal["limits"]["expires_at"]) <= utcnow()
+        )
+        selected = state.get("plan", {}).get("selected")
+        if selected is None:
+            selected = [item["opportunity_id"] for item in proposal["opportunities"]]
+        if (
+            row.status in {"approved", "executing"}
+            and not stopped
+            and any(key not in tasks for key in selected)
+        ):
+            return None
+        status = "execution_verified"
+        if row.status == "proposed" and not tasks and not stopped:
+            status = "awaiting_approval"
+        elif stopped or not tasks:
+            status = "stopped"
+        elif any(task["status"] == "failed" for task in tasks.values()):
+            status = "failed"
+        settled.append((goal, reflection_status or status))
+    return settled
+
+
 def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
     def change(data: dict[str, Any], session: Session) -> None:
         if not _active_principal(session, actor_user_id):
             raise LifePolicyError("需要有效的管理员身份")
         if data["revision"] != body.expected_revision:
             raise LifePolicyError("全企业自主设置已变动，请刷新后重试")
+        previous_owner = data.get("owner_user_id")
         if body.policy is not None:
             policy = LifePolicy.model_validate({**data["policy"], **body.policy})
             expiry = policy.authorization_expires_at
             if expiry and not utcnow() < parse_time(expiry) <= utcnow() + timedelta(days=31):
                 raise LifePolicyError("预算授权到期时间须在未来 31 天内")
-            if data.get("owner_user_id") not in (None, actor_user_id) and (
-                data.get("active_cycle")
-                or data.get("unknown_usage")
-                or any(
-                    goal.get("decision_id") or goal.get("retort_request_id")
-                    for goal in data["goals"]
-                )
-            ):
-                raise LifePolicyError("已有运行或任务预算仍属于原管理员，请由原授权人调整")
+            if previous_owner not in (None, actor_user_id):
+                settled = _settled_owner_goals(data, session)
+                if settled is None:
+                    raise LifePolicyError("原授权任务或模型用量尚未结清，请先核对执行与用量回执")
+                for goal, status in settled:
+                    # Old approvals must not keep prioritizing the enterprise lane
+                    # after its original owner and execution ledger are settled.
+                    goal["status"] = status
+                    if goal.get("retort_request_id"):
+                        goal.setdefault("evolution_owner_user_id", previous_owner)
             if policy.retort_template_id:
                 from modstore_server.xiaoc_life_evolution import reflection_template
 
@@ -301,6 +381,10 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
             summary=f"全企业小 C 自主模式更新为 L{data['level']}"
             + ("，自主活动已暂停" if data["paused"] else ""),
             evidence_refs=[f"admin:{actor_user_id}", f"policy:{data['revision']}"],
+            details={
+                "previous_owner_user_id": previous_owner,
+                "owner_user_id": data["owner_user_id"],
+            },
         )
 
     _mutate(change)
@@ -426,7 +510,7 @@ def _merge(
             and item.get("decision_id", previous["decision_id"]) != previous["decision_id"]
         ):
             raise LifePolicyError("an existing goal cannot change its portfolio binding")
-        for binding in ("retort_request_id", "evolution_source_sha256"):
+        for binding in ("retort_request_id", "evolution_source_sha256", "evolution_owner_user_id"):
             if previous.get(binding) and item.get(binding, previous[binding]) != previous[binding]:
                 raise LifePolicyError(
                     "an existing goal cannot change its original evolution binding"
@@ -486,7 +570,7 @@ def finish_cycle(
             raise LifePolicyError("lifecycle receipt does not own this run")
         budget = data["budget"]
         reserved = active["reserved_tokens"]
-        fresh = data["revision"] == claim["policy_revision"] and not data["paused"]
+        fresh = _claim_active(data, session, claim)
         if actual_tokens is None:
             data["unknown_usage"] = True
         else:
@@ -498,7 +582,8 @@ def finish_cycle(
             if actual_tokens > reserved:
                 data["unknown_usage"] = True
         safe = fresh and actual_tokens is not None and actual_tokens <= reserved
-        _advance_goal_cursor(data, claim, details)
+        if fresh:
+            _advance_goal_cursor(data, claim, details)
         if safe:
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)

@@ -81,6 +81,8 @@ def _http(
     provider="openai",
     headers=None,
     repeated_terminal=False,
+    stream_frames=None,
+    stream_chunks=None,
 ):
     import openai
 
@@ -94,10 +96,16 @@ def _http(
         "responses": [],
         "waiting": asyncio.Event(),
         "cancelled": False,
+        "body_chunks": 0,
     }
 
     class Body(transport.AsyncByteStream):
         async def __aiter__(self):
+            if stream_chunks is not None:
+                for chunk in stream_chunks:
+                    seen["body_chunks"] += 1
+                    yield chunk
+                return
             created = _result(status="in_progress")
             created["output"], created["usage"] = [], None
             frames = [
@@ -118,6 +126,8 @@ def _http(
                 frames.append(
                     {"type": "response.completed", "sequence_number": 3, "response": _result()}
                 )
+            if stream_frames is not None:
+                frames = stream_frames
             for frame in frames:
                 yield ("event: " + frame["type"] + "\ndata: " + json.dumps(frame) + "\n\n").encode()
             if pause:
@@ -286,6 +296,96 @@ async def test_stream_requires_terminal_response_even_with_normal_eof(mandate, m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("limit", ["single", "bytes", "events", "after_terminal", "invalid_text"])
+async def test_stream_resource_limit_stops_before_forwarding_and_keeps_original_hold(
+    mandate, monkeypatch, limit
+):
+    from modstore_server import llm_gateway_contract as contract
+
+    delta = {
+        "type": "response.function_call_arguments.delta",
+        "sequence_number": 1,
+        "item_id": "fc-orders",
+        "output_index": 0,
+        "delta": "汉字" * 40,
+    }
+    size = len(json.dumps(delta, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    assert size > len(json.dumps(delta, ensure_ascii=False, separators=(",", ":")))
+    frames = [delta, delta, delta]
+    accepted = 1
+    if limit == "single":
+        monkeypatch.setattr(contract, "MAX_STREAM_BYTES", size - 1)
+        accepted = 0
+    elif limit == "bytes":
+        monkeypatch.setattr(contract, "MAX_STREAM_BYTES", size)
+    elif limit == "invalid_text":
+        delta["delta"] = "\ud800"
+        accepted = 0
+    else:
+        monkeypatch.setattr(contract, "MAX_STREAM_EVENTS", 1)
+        if limit == "after_terminal":
+            frames[0] = {
+                "type": "response.completed",
+                "sequence_number": 0,
+                "response": _result(),
+            }
+    seen = _http(monkeypatch, mandate, stream_frames=frames)
+    forwarded = []
+    error = portfolio.PortfolioError if limit == "after_terminal" else ValueError
+    with _scope(mandate), pytest.raises(error, match="model stream"):
+        async for event in responses.budgeted_responses_stream(_payload(), provider="openai"):
+            forwarded.append(event)
+    assert len(forwarded) == accepted
+    state, calls = _calls(mandate)
+    assert len(seen["requests"]) == len(calls) == 1
+    assert state["halted"] and calls[0]["status"] == "unknown"
+    assert calls[0]["reserved_tokens"] > 0 and calls[0]["reserved_cost_cents"] > 0
+    assert "actual_tokens" not in calls[0]
+    _closed(seen)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["partial_line", "comments", "after_terminal", "compressed"])
+async def test_native_sdk_stops_wire_overflow_before_decoding_or_reading_tail(
+    mandate, monkeypatch, kind
+):
+    import gzip
+
+    from modstore_server import platform_model_transport as transport
+    from modstore_server.llm_gateway_contract import StreamLimitError
+
+    terminal = {"type": "response.completed", "sequence_number": 0, "response": _result()}
+    terminal_bytes = ("data: " + json.dumps(terminal) + "\n\n").encode()
+    prefix = b'data: {"incomplete": "' if kind == "partial_line" else b": keepalive\n\n"
+    overflow = b"x" * 60 if kind == "partial_line" else b": " + b"x" * 60 + b"\n\n"
+    chunks = [prefix, overflow, b"tail-must-not-be-read"]
+    limit = len(prefix) + len(overflow) - 1
+    accepted, consumed = 0, 2
+    headers = None
+    if kind == "after_terminal":
+        chunks = [terminal_bytes, *chunks]
+        limit += len(terminal_bytes)
+        accepted, consumed = 1, 3
+    elif kind == "compressed":
+        chunks = [gzip.compress(terminal_bytes)]
+        headers, consumed = {"content-encoding": "gzip"}, 0
+    monkeypatch.setattr(transport, "MAX_MODEL_STREAM_BYTES", limit)
+    seen = _http(monkeypatch, mandate, stream_chunks=chunks, headers=headers)
+    forwarded = []
+    with _scope(mandate), pytest.raises(StreamLimitError):
+        async for event in responses.budgeted_responses_stream(_payload(), provider="openai"):
+            forwarded.append(event)
+    assert len(forwarded) == accepted and seen["body_chunks"] == consumed
+    state, calls = _calls(mandate)
+    assert len(seen["requests"]) == len(calls) == 1
+    assert seen["requests"][0].headers["accept-encoding"] == "identity"
+    assert state["halted"] and calls[0]["status"] == "unknown"
+    assert calls[0]["reserved_tokens"] > 0 and calls[0]["reserved_cost_cents"] > 0
+    assert "actual_tokens" not in calls[0]
+    _closed(seen)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_pending", [False, True])
 async def test_stream_cleanup_closes_sdk_and_preserves_unknown_spend(
     mandate, monkeypatch, cancel_pending
@@ -339,16 +439,41 @@ async def test_second_terminal_cannot_replace_an_invalid_or_completed_original_r
     mandate, monkeypatch, first_usage
 ):
     seen = _http(monkeypatch, mandate, meter=first_usage, repeated_terminal=True)
-    with _scope(mandate):
-        events = [
-            event
-            async for event in responses.budgeted_responses_stream(_payload(), provider="openai")
-        ]
-    assert sum(event["type"] == "response.completed" for event in events) == 2
+    events = []
+    with _scope(mandate), pytest.raises(portfolio.PortfolioError, match="terminal response"):
+        async for event in responses.budgeted_responses_stream(_payload(), provider="openai"):
+            events.append(event)
+    assert sum(event["type"] == "response.completed" for event in events) == 1
     state, calls = _calls(mandate)
     assert len(seen["requests"]) == len(calls) == 1
     assert calls[0]["status"] == "unknown" and state["halted"]
     assert "actual_tokens" not in calls[0]
+    _closed(seen)
+
+
+@pytest.mark.asyncio
+async def test_completed_receipt_cannot_settle_or_forward_later_function_arguments(
+    mandate, monkeypatch
+):
+    frames = [
+        {"type": "response.completed", "sequence_number": 0, "response": _result()},
+        {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 1,
+            "item_id": "fc-late",
+            "output_index": 1,
+            "delta": '{"late":true}',
+        },
+    ]
+    seen = _http(monkeypatch, mandate, stream_frames=frames)
+    forwarded = []
+    with _scope(mandate), pytest.raises(portfolio.PortfolioError, match="terminal response"):
+        async for event in responses.budgeted_responses_stream(_payload(), provider="openai"):
+            forwarded.append(event)
+    assert [event["type"] for event in forwarded] == ["response.completed"]
+    state, calls = _calls(mandate)
+    assert state["halted"] and calls[0]["status"] == "unknown"
+    assert len(seen["requests"]) == len(calls) == 1 and "actual_tokens" not in calls[0]
     _closed(seen)
 
 

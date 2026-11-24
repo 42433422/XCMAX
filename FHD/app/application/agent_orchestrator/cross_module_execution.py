@@ -11,6 +11,8 @@ import hashlib
 import logging
 import os
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,26 @@ def raise_if_tx_fault(point: str) -> None:
     mode = os.environ.get("XCAGI_TX_FAULT", "").strip()
     if mode and mode == point:
         raise InjectedTransactionFault(point)
+
+
+@contextmanager
+def _cross_module_scope(context: dict[str, Any]) -> Iterator[None]:
+    from app.http.request_context import reset_current_http_request, set_current_http_request
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor, agent_mod_execution_scope
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    mod_token = set_request_active_mod_id("")
+    request_token = set_current_http_request(None)
+    try:
+        actor = _bound_actor(context)
+        with (
+            agent_mod_execution_scope(context.get("_mod_authorization")),
+            tenant_scope(actor.tenant_id),
+        ):
+            yield
+    finally:
+        reset_current_http_request(request_token)
+        reset_request_active_mod_id(mod_token)
 
 
 def _import_approved_products(
@@ -161,10 +183,15 @@ def _persist_http_result(
     )
 
 
-def load_cross_module_http_result(tenant_id: str, idempotency_key: str) -> dict[str, Any] | None:
+def load_cross_module_http_result(
+    tenant_id: str, idempotency_key: str, *, runtime_context: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """Read the committed response. Missing rows are not an execution."""
     from app.application.agent_orchestrator import cross_module_chain as chain
 
+    if runtime_context is not None:
+        with _cross_module_scope(runtime_context):
+            return load_cross_module_http_result(tenant_id, idempotency_key)
     if not str(tenant_id or "").strip() or not str(idempotency_key or "").strip():
         return None
     from app.db.session import get_db
@@ -183,9 +210,10 @@ def resume_cross_module_http(
     from app.application.agent_orchestrator import cross_module_chain as chain
 
     try:
-        return _resume_cross_module_http(
-            workflow, request_id=request_id, loaded_from_storage=loaded_from_storage
-        )
+        with _cross_module_scope(workflow.get("runtime_context") or {}):
+            return _resume_cross_module_http(
+                workflow, request_id=request_id, loaded_from_storage=loaded_from_storage
+            )
     except chain._IMPORT_ERRORS as exc:
         logging.getLogger(__name__).warning(
             "cross-module resume failed type=%s", type(exc).__name__
@@ -196,6 +224,28 @@ def resume_cross_module_http(
 
 
 def execute_claimed_cross_module(
+    orchestrator: AgentOrchestrator,
+    run: AgentRun,
+    *,
+    owner: str,
+    queue: Any,
+    request_id: str,
+    finish: bool,
+) -> dict[str, Any]:
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
+
+    try:
+        with _cross_module_scope(run.metadata.get("runtime_context") or {}):
+            return _execute_claimed_cross_module(
+                orchestrator, run, owner=owner, queue=queue, request_id=request_id, finish=finish
+            )
+    except AgentModAuthorizationError:
+        if finish:
+            queue.finish(run.run_id, owner, "failed", error_code="tool_identity_required")
+        raise
+
+
+def _execute_claimed_cross_module(
     orchestrator: AgentOrchestrator,
     run: AgentRun,
     *,
@@ -225,7 +275,7 @@ def execute_claimed_cross_module(
     try:
         raise_if_tx_fault("crash_before_import")
         with get_db() as db, tenant_scope(int(tenant_text)):
-            imported, stored_count = _import_approved_products(db, checkpoint, products)
+            imported, stored_count = _execute_elt_import(db, checkpoint, products, context)
             _, source_body = chain._source_bytes(source, user_id=user_id, db=db)
             if hashlib.sha256(source_body).hexdigest() != original_hash:
                 raise ValueError("上传文件已变化，已回滚导入")
@@ -347,7 +397,7 @@ def execute_claimed_cross_module(
         return receipt
     except InjectedTransactionFault:
         raise
-    except chain._IMPORT_ERRORS as exc:
+    except (EltError,) + chain._IMPORT_ERRORS as exc:
         if finish:
             queue.finish(
                 run.run_id,
@@ -360,6 +410,87 @@ def execute_claimed_cross_module(
         raise
 
 
+def _execute_elt_import(
+    db: Session,
+    checkpoint: dict[str, Any],
+    products: list[dict[str, Any]],
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], int]:
+    from app.application.agent_orchestrator import cross_module_chain as chain
+    from app.application.elt.audit import record_elt_audit
+    from app.application.elt.operation_owner import bind_owner, claim_operation, finish_operation
+    from app.application.elt.preview_confirmation import record_confirmation, verify_execution
+    from app.application.elt.service_support import dump_json, load_json, utcnow
+
+    # A committed delivery is only read back; revocation must not cause a new write.
+    prior = SessionBook(db).get(
+        chain._DELIVERY_MODULE, checkpoint["tenant_id"], checkpoint["run_id"]
+    )
+    if prior.get("delivery") is not None:
+        return _import_approved_products(db, checkpoint, products)
+    params = checkpoint.get("elt_params")
+    if not isinstance(params, dict):
+        raise ValueError("导入缺少原 ELT 预演和确认版本")
+    run, _upload, _rows = chain._owned_elt_preview(db, params, context)
+    operation = claim_operation(
+        db, run, "execute", allowed_statuses={"preview_ready"}, require_unrolled_back=True
+    )
+    bind_owner(db, operation)
+    db.refresh(run)
+    run, _upload, rows = chain._owned_elt_preview(db, params, context)
+    selected = [row for row in rows if row.final_action == "new"]
+    if [load_json(row.normalized_json, {}) for row in selected] != products:
+        raise ValueError("ELT 预演与已批准产品快照不一致")
+    revision = str(params["preview_revision"])
+    valid_only = params.get("valid_rows_only") is True
+    record_confirmation(run, revision, valid_rows_only=valid_only)
+    verify_execution(db, run, valid_rows_only=valid_only)
+    imported, count = _import_approved_products(db, checkpoint, products)
+    delivery = SessionBook(db).get(
+        chain._DELIVERY_MODULE, checkpoint["tenant_id"], checkpoint["run_id"]
+    )
+    for row, written in zip(selected, delivery["delivery"]["written"], strict=True):
+        row.match_ref = str(written["match_ref"])
+        row.after_json = dump_json(written["after"])
+        row.execution_status = "success"
+    run.status = run.stage = "completed"
+    run.progress, run.executed_rows = 100, count
+    run.confirmed_at = run.executed_at = utcnow()
+    run.receipt_json = dump_json(
+        {
+            "run_id": run.id,
+            "target_type": run.target_type,
+            "executed_rows": count,
+            "new_rows": run.new_rows,
+            "update_rows": 0,
+            "skip_rows": run.skip_rows,
+            "error_rows": run.error_rows,
+            "partial": bool(run.error_rows),
+            "reversible": True,
+            "rows_written": True,
+            "cross_module_run_id": checkpoint["run_id"],
+        }
+    )
+    for action in ("elt_confirm", "elt_submit"):
+        record_elt_audit(
+            db,
+            actor=run.owner_user_id,
+            action=action,
+            payload={
+                "run_id": run.id,
+                "upload_id": run.upload_id,
+                "file_sha256": run.file_sha256,
+                "target_type": "products",
+                "preview_revision": revision,
+                "valid_rows_only": valid_only,
+                "executed_rows": count,
+                "outcome": "partial" if run.error_rows else "success",
+            },
+        )
+    finish_operation(db, operation)
+    return imported, count
+
+
 def _stored_receipt(run: AgentRun, request_id: str) -> dict[str, Any] | None:
     from app.application.agent_orchestrator import cross_module_chain as chain
 
@@ -368,6 +499,7 @@ def _stored_receipt(run: AgentRun, request_id: str) -> dict[str, Any] | None:
     stored = load_cross_module_http_result(
         str(checkpoint.get("tenant_id") or ""),
         str(checkpoint.get("idempotency_key") or ""),
+        runtime_context=context,
     )
     if stored is None:
         return None

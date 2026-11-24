@@ -47,6 +47,13 @@ assert_vendored_sources()
 __all__ = ["END", "START", "StateGraph", "XCAGILangGraphRuntime"]
 
 
+def summary_runtime() -> Any:
+    """Native context for the pinned LangChain summarization middleware."""
+    from langgraph.runtime import Runtime
+
+    return Runtime(context=None)
+
+
 def _merge_dict(a: dict[str, Any] | None, b: dict[str, Any] | None) -> dict[str, Any]:
     out = dict(a or {})
     out.update(dict(b or {}))

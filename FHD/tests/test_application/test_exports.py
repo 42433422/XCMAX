@@ -39,6 +39,7 @@ def _shared_scope_case_0(mock_svc):
 def _configured_workspace_root(tmp_path, monkeypatch):
     """Run file-export tests inside the same explicit root used by production."""
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path.resolve()))
 
 
 class TestHandlePriceListExport:
@@ -54,7 +55,7 @@ class TestHandlePriceListExport:
     def test_product_fetch_error_returns_failure(self):
         with patch(
             "app.application.get_product_app_service",
-            side_effect=RuntimeError("db down"),
+            side_effect=ConnectionError("db down"),
         ):
             result = exports.handle_price_list_export({"customer_name": "Acme"})
         assert result["success"] is False
@@ -70,7 +71,7 @@ class TestHandlePriceListExport:
             ),
             patch(
                 "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
-                side_effect=RuntimeError("template missing"),
+                side_effect=FileNotFoundError("template missing"),
             ),
         ):
             result = exports.handle_price_list_export({"customer_name": "Acme"})
@@ -132,12 +133,13 @@ class TestHandlePriceListExport:
         assert result["product_count"] == 2
         mock_svc.get_products.assert_called_once()
 
-    def test_success_without_workspace_root_uses_tempdir(self):
+    def test_success_without_workspace_root_uses_managed_output_dir(self, tmp_path):
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = []
         with _shared_scope_case_0(mock_svc):
             result = exports.handle_price_list_export({"customer_name": "Acme"})
         assert result["success"] is True
+        assert Path(result["file_path"]).is_relative_to(tmp_path.resolve())
 
     def test_customer_name_cannot_escape_export_directory(self, tmp_path):
         mock_svc = MagicMock()

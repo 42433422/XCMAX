@@ -12,6 +12,7 @@ from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.fastapi_routes.knowledge.schemas import DatasetQueryRequest
 from app.infrastructure.rag import RetrievedChunk
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _ctx() -> DatasetAccessContext:
@@ -126,11 +127,12 @@ def test_schema_bounds_channel_weights() -> None:
         DatasetQueryRequest(query="退款", keyword_weight=-0.5)
 
 
-def test_dispatcher_passes_retrieval_mode() -> None:
+def test_dispatcher_passes_retrieval_mode(trusted_actor) -> None:
     from app.domain.shared_services.tools_workflow_memory_rag import (
         _registered_router_dataset_rag,
     )
 
+    actor = trusted_actor(permissions=["dataset.read"])
     with patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service") as mock_get:
         mock_get.return_value.query.return_value = {"success": True, "chunks": []}
         _registered_router_dataset_rag(
@@ -143,7 +145,7 @@ def test_dispatcher_passes_retrieval_mode() -> None:
                 "vector_weight": 2.5,
                 "keyword_weight": 0.5,
             },
-            {},
+            actor.context,
             "admin",
             "",
         )

@@ -10,6 +10,7 @@ import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/cha
 import { chatMessageExtrasFromServerRow, resetChatMessageStores, useChatMessages } from './useChatMessages'
 import { persistDetachedPlannerResult } from './useChatSessionActivity'
 import { useChatRequest } from './useChatRequest'
+import { useChatResponseAttach } from './useChatResponseAttach'
 
 vi.mock('@/api/chat', () => ({ default: {
   sendUnifiedChat: vi.fn().mockResolvedValue({ success: true }),
@@ -35,8 +36,7 @@ function setupChat() {
     const chat = useChatMessages(sessionId)
     const request = useChatRequest({
       messages: chat.messages, sessionId,
-      lastRequestContextSummary: ref(''), plannerWriteUnlockResumeDraft: ref(''),
-      resolveChatDbTokensForPayload: () => ({}),
+      lastRequestContextSummary: ref(''),
       injectExcelContextPayload: () => false,
       consumeMultimodalIntoPlannerContext: () => {},
       captureArtifacts: () => ({ ids: [], complete: () => {} }),
@@ -170,5 +170,22 @@ describe('runtime continuation through message history and chat requests', () =>
     await nextTick()
     expect(chat.messages.value.at(-1)?.runtimeContinuation).toEqual(pointer)
     expect(request.buildPlannerChatRequestPayload('客户甲').body.context).toHaveProperty('agent_runtime_run_id', 'parent-1')
+  })
+
+  it('keeps the canonical unknown state when attaching or saving a runtime wait', async () => {
+    const { chat } = setupChat()
+    chat.loadMessages([{ role: 'ai', content: '请核对原回执', time: '' }])
+    const payload = { ...waiting, data: { reconciliation_required: true } }
+    const attach = useChatResponseAttach({
+      messages: chat.messages, lastRequestContextSummary: ref(''), taskList: ref([]),
+      upsertTask: vi.fn(), createTaskId: prefix => prefix,
+    })
+    attach.attachWorkflowTraceToLastAiMessage(payload)
+    expect(chat.messages.value.at(-1)).toMatchObject({ workflowAction: 'unknown', runtimeContinuation: pointer })
+    const save = vi.fn().mockResolvedValue(undefined)
+    await persistDetachedPlannerResult(payload, 'room-1', save)
+    expect(save).toHaveBeenCalledWith('ai', '请补充客户名称', 'room-1', expect.objectContaining({
+      workflowAction: 'unknown', runtimeContinuation: pointer,
+    }))
   })
 })

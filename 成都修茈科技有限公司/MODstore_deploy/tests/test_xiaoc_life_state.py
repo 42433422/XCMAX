@@ -162,6 +162,74 @@ def test_downgrade_cancels_new_actions_but_settles_real_cost_and_keeps_identity(
     assert result["events"][0]["status"] == "policy_changed"
 
 
+@pytest.mark.parametrize(
+    "authority", ["active", "revoked_admin", "expired_lease", "expired_authorization"]
+)
+@pytest.mark.parametrize("actual_tokens", [50, None])
+def test_late_receipts_settle_once_without_learning_or_advancing_goals(
+    database, monkeypatch, authority, actual_tokens
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    expiry = now + (
+        timedelta(minutes=1) if authority == "expired_authorization" else timedelta(days=1)
+    )
+    configure(authorization_expires_at=expiry.isoformat())
+    original_goal = {"id": "original-goal", "decision_id": "original-decision"}
+    store._mutate(lambda data, session: data["goals"].append(original_goal))
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert store.cycle_active(claim)
+    before = store.read_state()
+    if authority == "revoked_admin":
+        with database() as session:
+            session.get(User, 7).is_admin = False
+            session.commit()
+    elif authority.startswith("expired_"):
+        later = now + timedelta(minutes=6 if authority == "expired_lease" else 2)
+        monkeypatch.setattr(store, "utcnow", lambda: later)
+    fresh = authority == "active"
+    assert store.cycle_active(claim) is fresh
+    goal = {
+        "id": "learned-goal",
+        "title": "New learning",
+        "evidence_refs": ["receipt:one"],
+    }
+    interest = {"topic": "Learning", "evidence_refs": ["receipt:one"]}
+    self_model = {"assessment": "Learning", "evidence_refs": ["receipt:one"]}
+    selection = {
+        "goal_id": original_goal["id"],
+        "decision_id": original_goal["decision_id"],
+    }
+    for _ in range(2):
+        state = finish(
+            claim,
+            actual_tokens=actual_tokens,
+            goals=[goal],
+            interests=[interest],
+            self_model=self_model,
+            details={"portfolio_selection": selection},
+        )
+        learned = fresh and actual_tokens is not None
+        assert state["budget"]["used_tokens"] == (actual_tokens or 0)
+        assert state["budget"]["reserved_tokens"] == (200 if actual_tokens is None else 0)
+        assert state["unknown_usage"] is (actual_tokens is None)
+        assert state["goals"] == ([original_goal, goal] if learned else before["goals"])
+        assert state["interests"] == ([interest] if learned else before["interests"])
+        assert state["self_model"] == (
+            {**self_model, "status": "hypothesis"} if learned else before["self_model"]
+        )
+        assert state.get("goal_cursors", {}) == ({"enterprise": "original-goal"} if fresh else {})
+        events = [event for event in state["events"] if event["id"] == "cycle:" + claim["cycle_id"]]
+        assert len(events) == 1
+        assert events[0]["actual_tokens"] == actual_tokens
+        assert events[0]["evidence_refs"] == ["receipt:one"]
+        assert events[0]["details"]["learning_applied"] is learned
+        assert events[0]["details"]["portfolio_selection"] == selection
+        assert events[0]["status"] == (
+            "unknown" if actual_tokens is None else "completed" if fresh else "policy_changed"
+        )
+
+
 def test_pausing_background_does_not_block_explicit_manual_tools(database):
     configure()
     state = store.read_state()
@@ -303,12 +371,13 @@ def test_authorization_expiry_is_checked_before_a_new_claim(database, monkeypatc
     assert store.read_state()["status"] == "blocked"
 
 
-def test_crash_reconciliation_uses_original_model_receipt_without_replaying(database, monkeypatch):
-    import json
-
-    from modstore_server import xiaoc_life_reconciliation as reconcile
-
-    monkeypatch.setattr(reconcile, "get_session_factory", lambda: database)
+@pytest.mark.parametrize("next_day", [False, True])
+def test_crash_reconciliation_uses_original_model_receipt_without_replaying(
+    database, monkeypatch, next_day
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    monkeypatch.setattr(reconcile, "utcnow", lambda: now)
     configure()
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
     store.record_cycle_step(claim, kind="model", details={"request_id": "original-paid-call"})
@@ -323,7 +392,7 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(data
             )
         )
         session.commit()
-    later = store.utcnow() + timedelta(minutes=6)
+    later = now + timedelta(days=int(next_day), minutes=6)
     monkeypatch.setattr(store, "utcnow", lambda: later)
     monkeypatch.setattr(reconcile, "utcnow", lambda: later)
     assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 1}
@@ -338,6 +407,25 @@ def test_crash_reconciliation_uses_original_model_receipt_without_replaying(data
     with database() as session:
         persisted = json.loads(session.get(XiaoCLifeState, store.IDENTITY_ID).state_json)
     assert persisted["budget"]["used_tokens"] == 63
+    state = store.read_state()
+    assert state["budget"]["date"] == store._day()
+    assert state["budget"]["used_tokens"] == (0 if next_day else 63)
+    assert state["budget"]["reserved_tokens"] == 0
+    assert state["unknown_usage"] is False
+    assert state["events"][0]["kind"] == "reconciliation"
+    assert state["events"][0]["actual_tokens"] == 63
+    original_day = date.fromisoformat(persisted["budget"]["date"])
+    for offset, used in ((0, 63), (1, 0)):
+        day = (original_day + timedelta(days=offset)).isoformat()
+        monkeypatch.setattr(store, "_day", lambda: day)
+        state = store.read_state()
+        assert state["budget"]["date"] == day
+        assert state["budget"]["used_tokens"] == used
+        assert state["budget"]["reserved_tokens"] == 0
+        assert state["unknown_usage"] is False
+        assert state["events"][0]["kind"] == "reconciliation"
+        assert state["events"][0]["actual_tokens"] == 63
+
     original_day = date.fromisoformat(persisted["budget"]["date"])
     for offset, used in ((0, 63), (1, 0)):
         day = (original_day + timedelta(days=offset)).isoformat()
@@ -378,6 +466,48 @@ def test_unknown_finished_cycle_reconciles_once_and_preserves_original_fact(data
     assert state["budget"]["reserved_tokens"] == 0
     original = next(row for row in state["events"] if row["id"] == "cycle:" + claim["cycle_id"])
     assert original["actual_tokens"] is None and original["status"] == "unknown"
+
+
+def test_reconciled_history_cannot_starve_later_unknown_cycle(database, monkeypatch):
+    from modstore_server import xiaoc_life_reconciliation as reconcile
+
+    monkeypatch.setattr(reconcile, "get_session_factory", lambda: database)
+    configure()
+    with database() as session:
+        for index in range(100):
+            event_id = f"cycle:historical-{index}"
+            store._event(
+                session,
+                event_id,
+                kind="enterprise",
+                status="unknown",
+                summary="Original uncertain call",
+                evidence_refs=[],
+                actual_tokens=None,
+            )
+            store._event(
+                session,
+                "reconciled:" + event_id,
+                kind="reconciliation",
+                status="verified",
+                summary="Original receipt recovered",
+                evidence_refs=[event_id],
+                actual_tokens=0,
+            )
+        session.commit()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    finish(claim, actual_tokens=None)
+    assert store.read_state()["budget"]["reserved_tokens"] == 200
+
+    assert reconcile.reconcile_usage() == {"resolved": 1, "waiting": 0}
+    assert reconcile.reconcile_usage() == {"resolved": 0, "waiting": 0}
+    state = store.read_state()
+    assert state["budget"]["reserved_tokens"] == state["budget"]["used_tokens"] == 0
+    assert state["unknown_usage"] is False
+    with database() as session:
+        original = session.get(XiaoCLifeEvent, "cycle:" + claim["cycle_id"])
+        assert original.actual_tokens is None and original.status == "unknown"
+        assert session.get(XiaoCLifeEvent, "reconciled:" + original.id) is not None
 
 
 @pytest.mark.parametrize(

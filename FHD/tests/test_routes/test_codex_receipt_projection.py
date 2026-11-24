@@ -65,6 +65,8 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
                 "retryable": False,
                 "reconciliation_required": True,
             }
+        if state.outcome == "pending":
+            return {**result, "success": state.acknowledged_success, "execution_state": "pending"}
         return result
 
     monkeypatch.setattr(
@@ -288,6 +290,53 @@ def test_approved_child_continues_original_parent_and_requires_independent_revie
     assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
     assert state.repository.get(state.parent_id).to_dict() == before
     assert state.effect_count() == 1
+
+
+@pytest.mark.parametrize("acknowledged_success", [False, True])
+def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent(
+    receipt_task, monkeypatch, acknowledged_success
+):
+    from app.application.agent_orchestrator import verification_readback
+    from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+
+    state = receipt_task
+    state.outcome, state.acknowledged_success = "pending", acknowledged_success
+    readback = verification_readback.verify_independent_result
+    source_available = False
+
+    def delayed_readback(**kwargs):
+        if not source_available:
+            return {"status": "inconclusive", "code": "source_pending", "checks": []}
+        return readback(**kwargs)
+
+    monkeypatch.setattr(verification_readback, "verify_independent_result", delayed_readback)
+    state.complete_child()
+    child = state.repository.get(state.child_id)
+    assert child.status == "blocked" and child.metadata["recovery"]["state"] == "result_pending"
+    original = copy.deepcopy(child.tool_calls[0].output)
+    assert original["execution_state"] == "pending" and state.effect_count() == 1
+    response = state.client.get(f"/api/agent/runs/{state.parent_id}")
+    assert response.status_code == 200, response.text
+    parent = state.repository.get(state.parent_id)
+    assert parent.status == "running", parent.final_output
+    assert parent.final_output["codex_result"]["business_completed"] is False
+    assert not parent.final_output["codex_result"].get("reconciliation_required")
+    assert resume_ready_codex_runs(repository=state.repository) == 0
+    source_available = True
+    response = state.client.post(f"/api/agent/runs/{state.child_id}/verify")
+    assert response.status_code == 200, response.text
+    assert response.json()["verification"]["accepted"] is True
+    child = state.drain(state.child_id)
+    assert child.status == "completed", child.to_dict()
+    assert child.tool_calls[0].output == original and len(child.tool_calls) == 1
+    assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
+    assert resume_ready_codex_runs(repository=state.repository) == 1
+    assert resume_ready_codex_runs(repository=state.repository) == 0
+    parent = state.drain(state.parent_id)
+    assert parent.status == "completed", parent.final_output
+    assert parent.final_output["codex_result"]["business_completed"] is True
+    assert state.resume_count == 1 and state.effect_count() == 1
+    assert state.queue.get(parent.run_id).state == "succeeded"
 
 
 def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same_task(

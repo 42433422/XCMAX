@@ -19,6 +19,7 @@ from app.infrastructure.auth import business_scope_gate
 from app.legacy.routes import legacy_compat
 from app.legacy.routes.openapi_route_compat import iter_effective_routes
 from app.legacy.routes.product import compat_routes
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 PRODUCT_PATHS = (
     ("DELETE", "/api/products/{product_id}"),
@@ -44,7 +45,7 @@ def local_compat(monkeypatch):
 
 @pytest.mark.parametrize("debug_gap", [False, True])
 def test_product_paths_mount_once_and_dispatch_without_a_second_api(
-    local_compat, monkeypatch, tmp_path, debug_gap
+    local_compat, monkeypatch, tmp_path, debug_gap, trusted_actor
 ):
     app = FastAPI()
     legacy_compat._register_xcagi_compat_routes(app)
@@ -72,13 +73,17 @@ def test_product_paths_mount_once_and_dispatch_without_a_second_api(
         "app.infrastructure.auth.db_token.verify_db_read_token_header", lambda _r: None
     )
     monkeypatch.setattr(compat_routes, "_products_compat_preflight", lambda *_args: None)
-    compat_update = Mock(return_value={"success": True, "source": "named-compat"})
+    compat_update = Mock(return_value=({"success": True, "source": "named-compat"}, 200))
     monkeypatch.setattr(compat_routes, "_run_products_compat_agent", compat_update)
+    actor = trusted_actor()
     with TestClient(app) as client:
+        assert client.post("/api/products/import/price-list-template").status_code == 401
         for method, path in PRODUCT_PATHS:
             kwargs = {"json": {"products": [{"name": "test"}]}} if method != "GET" else {}
-            response = client.request(method, path.replace("{product_id}", "7"), **kwargs)
             expected = 400 if path.endswith("/price-list-template") else 200
+            if expected == 400:
+                kwargs["headers"] = actor.headers
+            response = client.request(method, path.replace("{product_id}", "7"), **kwargs)
             assert response.status_code == expected, (method, path, response.text)
         response = client.post("/api/products/update", json={"id": 7, "name": "updated"})
         assert response.status_code == 200 and response.json()["source"] == "named-compat"

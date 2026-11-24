@@ -376,7 +376,7 @@ def test_stream_stop_keeps_internal_error_private_and_preserves_unknown_hold(rem
     assert events[-1] == {
         "type": "error",
         "code": "strategic_budget_stopped",
-        "message": "Model stream stopped because authorization or budget is no longer available.",
+        "message": "Model stream stopped because authorization, budget, or the upstream receipt could not be verified.",
     }
     assert len(checks) == 2 and len(seen["requests"]) == 1
     assert all(client.is_closed() for client in seen["clients"])
@@ -498,6 +498,106 @@ def test_execution_deadline_rejects_new_call_and_native_failure_is_terminal(remo
     remote.github.run_state, remote.github.conclusion = "completed", "failure"
     assert receipts.reconcile_request(remote.request_id)
     assert p.portfolio_status(remote.decision_id)["tasks"]["a"]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers", [[], [(b"content-length", b"1")]])
+async def test_chunked_request_limit_stops_before_tail_or_model_reservation(remote, headers):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from modstore_server.strategic_remote_api import responses
+
+    claim(remote)
+    chunks = [b" " * 1_000_000, b" " * 1_000_001]
+    reads = []
+
+    async def receive():
+        reads.append(len(reads))
+        assert len(reads) <= len(chunks), "oversized body tail must not be read"
+        return {"type": "http.request", "body": chunks[len(reads) - 1], "more_body": True}
+
+    with pytest.raises(HTTPException) as error:
+        await responses(
+            remote.request_id,
+            Request({"type": "http", "headers": headers}, receive),
+            remote.model_headers["Authorization"],
+        )
+    assert error.value.status_code == 413
+    assert len(reads) == 2
+    assert p.portfolio_status(remote.decision_id)["tasks"]["a"]["calls"] == {}
+    assert len(remote.github.writes) == 1
+
+
+@pytest.mark.asyncio
+async def test_chunked_request_at_byte_boundary_preserves_unicode_and_original_call(
+    remote, monkeypatch
+):
+    from starlette.requests import Request
+
+    from modstore_server.strategic_remote_api import responses
+
+    claim(remote)
+    seen = _http(monkeypatch, (remote.decision_id, remote.task, remote.factory))
+    body = json.dumps(_payload(input="核对原订单"), ensure_ascii=False).encode()
+    split = body.index("核".encode()) + 1
+    chunks = [body[:split], body[split:], b" " * (2_000_000 - len(body))]
+    reads = []
+
+    async def receive():
+        reads.append(len(reads))
+        return {
+            "type": "http.request",
+            "body": chunks[len(reads) - 1],
+            "more_body": len(reads) < len(chunks),
+        }
+
+    result = await responses(
+        remote.request_id,
+        Request({"type": "http", "headers": []}, receive),
+        remote.model_headers["Authorization"],
+    )
+    assert result["id"] == "resp-orders"
+    assert len(reads) == 3 and len(seen["requests"]) == 1
+    assert json.loads(seen["requests"][0].content)["input"] == "核对原订单"
+    calls = list(p.portfolio_status(remote.decision_id)["tasks"]["a"]["calls"].values())
+    assert len(calls) == 1 and calls[0]["status"] == "settled"
+    assert calls[0]["actual_tokens"] == 13
+
+
+@pytest.mark.parametrize("max_events", [0, 1])
+def test_stream_limit_returns_public_error_and_preserves_original_unknown_call(
+    remote, monkeypatch, max_events
+):
+    from modstore_server import llm_gateway_contract
+
+    claim(remote)
+    seen = _http(monkeypatch, (remote.decision_id, remote.task, remote.factory))
+    monkeypatch.setattr(llm_gateway_contract, "MAX_STREAM_EVENTS", max_events)
+    response = remote.client.post(
+        remote.control + "/v1/responses",
+        json=_payload(stream=True),
+        headers=remote.model_headers,
+    )
+    if max_events:
+        assert response.status_code == 200
+        events = [
+            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+        ]
+        assert [event["type"] for event in events] == ["response.created", "error"]
+        error = events[-1]
+    else:
+        assert response.status_code == 502
+        error = response.json()["detail"]
+    assert error["code"] == "model_stream_limit_exceeded"
+    assert "stream event limit" not in response.text
+    assert len(seen["requests"]) == 1
+    assert all(client.is_closed() for client in seen["clients"])
+    assert all(upstream.is_closed for upstream in seen["responses"])
+    state = p.portfolio_status(remote.decision_id)
+    calls = list(state["tasks"]["a"]["calls"].values())
+    assert state["halted"] and len(calls) == 1 and calls[0]["status"] == "unknown"
+    assert calls[0]["reserved_tokens"] > 0 and "actual_tokens" not in calls[0]
     assert receipts.reconcile_request(remote.request_id) is False
     assert len(remote.github.writes) == 1
 

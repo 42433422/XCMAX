@@ -256,16 +256,22 @@ def test_persisted_attempt_count_and_unknown_receipts_cannot_be_reset_by_large_p
 
 
 @pytest.mark.asyncio
-async def test_aiopen_catalog_is_read_only_but_requires_its_original_runtime(monkeypatch):
+async def test_aiopen_catalog_is_read_only_but_requires_its_original_runtime(
+    monkeypatch, trusted_actor
+):
     from fastapi import FastAPI
 
     from app.application.aiopen import service
+    from app.infrastructure.aiopen.principal_context import execution_context_scope
 
     spec = get_tool_action_spec("aiopen", "api_catalog")
     assert spec is not None and spec.read_only
     before = copy.deepcopy(service.AIOPEN_STATE)
-    first = await service.invoke_tool("api_catalog", {}, FastAPI())
-    second = await service.invoke_tool("api_catalog", {}, FastAPI())
+    anonymous = await service.invoke_tool("api_catalog", {}, FastAPI())
+    assert anonymous["error_code"] == "capability_discovery_denied"
+    with execution_context_scope(trusted_actor().context):
+        first = await service.invoke_tool("api_catalog", {}, FastAPI())
+        second = await service.invoke_tool("api_catalog", {}, FastAPI())
     assert first == second and first["success"] is True
     assert before == service.AIOPEN_STATE
     calls = []

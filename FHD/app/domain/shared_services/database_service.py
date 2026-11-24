@@ -15,6 +15,7 @@ from sqlalchemy import Column, MetaData, Table, and_, insert, literal_column, se
 from sqlalchemy.dialects.sqlite import dialect
 from sqlalchemy.schema import DropTable
 
+from app.desktop_runtime.database_generation_registry import GenerationObservationError
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -30,6 +31,7 @@ _LIVE_AUDIT_TABLES = frozenset(
         "agent_task_commands",
         "agent_task_executions",
         "agent_approval_consumptions",
+        "code_edit_proposals",
         "approval_requests",
         "approval_records",
         "approval_flows",
@@ -84,10 +86,15 @@ class DatabaseService(NeuroEventPublisherMixin):
                 return {**failure, "message": f"数据库文件不存在：{db_path}"}
 
             backup_dir = self._get_backup_dir()
-            backup_filename = f"{os.path.basename(db_path)}.{datetime.now():%Y%m%d_%H%M%S}.bak"
-            backup_path = os.path.join(backup_dir, backup_filename)
+            prefix = f"{os.path.basename(db_path)}.{datetime.now():%Y%m%d_%H%M%S}."
+            with tempfile.NamedTemporaryFile(
+                dir=backup_dir, prefix=prefix, suffix=".bak", delete=False
+            ) as snapshot:
+                backup_path = snapshot.name
+            backup_filename = os.path.basename(backup_path)
 
             if not self._hot_backup(db_path, backup_path):
+                Path(backup_path).unlink(missing_ok=True)
                 return {
                     **failure,
                     "message": f"在线热备份失败（数据库可能损坏或被锁定）：{db_path}",
@@ -247,7 +254,7 @@ class DatabaseService(NeuroEventPublisherMixin):
         except _RestoreAuditReferenceError as error:
             logger.warning("数据库恢复被审计关联阻断：%s", error)
             return {"success": False, "message": str(error)}
-        except RECOVERABLE_ERRORS:
+        except RECOVERABLE_ERRORS + (GenerationObservationError,):
             logger.exception("数据库恢复失败")
             return {"success": False, "message": "数据库恢复失败"}
 

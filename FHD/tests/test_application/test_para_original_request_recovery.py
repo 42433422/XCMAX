@@ -96,22 +96,41 @@ def test_read_only_recovery_never_dispatches_remaining_devices(tmp_path, monkeyp
     create, requests, created, state = server(tmp_path, monkeypatch, devices=2)
     context = {"request_id": "partly-sent", "mode": "code", "para_tier": 2}
     first = create().invoke(user_id=7, message="修复登录问题", context=context)
-    original = Path(first["dispatch"]["outbox_path"]).read_bytes()
+    outbox = Path(first["dispatch"]["outbox_path"])
+    original = json.loads(outbox.read_text(encoding="utf-8"))
+    pending = original.pop("dispatch_receipt")
+    assert pending["status"] == "dispatch_unknown"
     state["available"] = True
     before = len(requests)
     result = create().read_dispatch_receipt(user_id=7, request_id=context["request_id"], task_id="")
     assert result["dispatch"]["status"] == "dispatch_pending"
     assert result["dispatch"]["accepted"] is False
     assert result["dispatch"]["reconciliation_required"] is False
-    assert all(method == "GET" for method, _, _ in requests[before:])
-    assert Path(first["dispatch"]["outbox_path"]).read_bytes() == original
+    assert requests[before:] == [
+        ("GET", "para.test", f"/api/tasks/by-request/{pending['pending_request_id']}"),
+        ("GET", "para.test", "/api/tasks/task-original"),
+    ]
+    saved = json.loads(outbox.read_text(encoding="utf-8"))
+    reconciled = saved.pop("dispatch_receipt")
+    assert saved == original
+    assert reconciled["status"] == "dispatch_pending"
+    assert reconciled["accepted"] is False
+    assert reconciled["reconciliation_required"] is False
+    assert reconciled["task_id"] == "task-original"
+    assert [(row["device_id"], row["subtask_id"]) for row in reconciled["devices"]] == [
+        ("device-0", "sub-1")
+    ]
+    assert "pending_request_id" not in reconciled
+    assert reconciled["plan"] == pending["plan"]
+    assert reconciled["plan_sha256"] == pending["plan_sha256"]
     assert len(created) == 1
     # An authorized continuation sends only the previously unsent frozen plan.
     monkeypatch.setenv("MODSTORE_PARA_BASE_BRANCH", "different-after-restart")
     resumed = create().invoke(user_id=7, message="修复登录问题", context=context)
     assert resumed["dispatch"]["accepted"] is True
     bodies = [entry[0] for entry in created.values()]
-    assert len(bodies) == 2 and bodies[1]["task_id"] == "task-original"
+    assert [body["device_id"] for body in bodies] == ["device-0", "device-1"]
+    assert bodies[1]["task_id"] == "task-original"
     assert bodies[1]["branch"] == bodies[0]["branch"]
     assert requests.count(("POST", "para.test", "/api/tasks")) == 2
 

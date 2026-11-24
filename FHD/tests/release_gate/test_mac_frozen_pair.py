@@ -245,7 +245,15 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
 
 
 @pytest.mark.parametrize(
-    "guard", ["approved", "disabled", "wrong-owner-sha", "failed-check", "not-on-main"]
+    "guard",
+    [
+        "approved",
+        "disabled",
+        "wrong-owner-sha",
+        "failed-check",
+        "not-on-main",
+        "wrong-controller-ref",
+    ],
 )
 def test_publication_requires_explicit_owner_authorization_and_current_checks(tmp_path, guard):
     import yaml
@@ -257,34 +265,84 @@ def test_publication_requires_explicit_owner_authorization_and_current_checks(tm
         if s.get("name") == "Validate main identity and publication authorization"
     )
     source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=FHD, text=True).strip()
-    (tmp_path / "compare").write_text("diverged\n" if guard == "not-on-main" else "ahead\n")
-    (tmp_path / "protection").write_text(json.dumps({"contexts": ["gate"]}))
-    (tmp_path / "checks").write_text(
-        json.dumps(
-            [
-                {
-                    "check_runs": [
-                        {
-                            "name": "gate",
-                            "id": 2,
-                            "conclusion": "failure" if guard == "failed-check" else "success",
-                        }
-                    ]
-                }
-            ]
-        )
+    candidate = tmp_path / "candidate"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--shared", "--no-checkout", str(FHD.parent), str(candidate)],
+        check=True,
     )
+    working = candidate / "FHD"
+    working.mkdir()
+    controller = candidate / "release-controller/FHD/scripts/ci"
+    controller.mkdir(parents=True)
+    (controller / "measure_required_checks.py").write_bytes(
+        (FHD / "scripts/ci/measure_required_checks.py").read_bytes()
+    )
+    # The frozen product checkout deliberately has no current gate script.
+    # Only the trusted controller checkout can enforce the current contract.
+    (tmp_path / "compare").write_text("diverged\n" if guard == "not-on-main" else "ahead\n")
+    run = {
+        "id": 7,
+        "run_attempt": 1,
+        "head_sha": source_sha,
+        "head_branch": "main",
+        "event": "push",
+        "workflow_id": 5,
+        "path": ".github/workflows/check.yml",
+        "check_suite_id": 8,
+        "status": "completed",
+        "conclusion": "success",
+        "created_at": "2026-11-23T00:00:00Z",
+        "updated_at": "2026-11-23T00:01:00Z",
+        "repository": {"full_name": "synthetic/repo"},
+        "head_repository": {"full_name": "synthetic/repo"},
+    }
+    check = {
+        "id": 9,
+        "name": "gate",
+        "head_sha": source_sha,
+        "app": {"id": 15368},
+        "check_suite": {"id": 8},
+        "status": "completed",
+        "conclusion": "failure" if guard == "failed-check" else "success",
+        "completed_at": "2026-11-23T00:01:00Z",
+    }
+    job = {
+        **check,
+        "id": 10,
+        "run_id": 7,
+        "run_attempt": 1,
+        "started_at": "2026-11-23T00:00:00Z",
+        "check_run_url": "https://api.github.com/repos/synthetic/repo/check-runs/9",
+        "steps": [],
+    }
+    for name, payload in {
+        "main": {"ref": "refs/heads/main", "object": {"sha": "c" * 40}},
+        "ancestry": {"status": "ahead", "merge_base_commit": {"sha": source_sha}},
+        "protection": {"contexts": ["gate"], "checks": [{"context": "gate", "app_id": 15368}]},
+        "checks": [{"total_count": 1, "check_runs": [check]}],
+        "runs": [{"total_count": 1, "workflow_runs": [run]}],
+        "empty_runs": [{"total_count": 0, "workflow_runs": []}],
+        "run": run,
+        "jobs": [{"total_count": 1, "jobs": [job]}],
+    }.items():
+        (tmp_path / name).write_text(json.dumps(payload))
     # An older success status must not override a currently failing protected check.
     (tmp_path / "statuses").write_text(
         json.dumps([[{"context": "gate", "id": 1, "state": "success"}]])
     )
     gh = tmp_path / "gh"
-    gh.write_text("""#!/bin/bash
+    gh.write_text(r"""#!/bin/bash
 case "$*" in
- *compare/*) cat "$FAKE_API/compare" ;;
+ *compare/*...main*) cat "$FAKE_API/compare" ;;
+ *compare/*) cat "$FAKE_API/ancestry" ;;
+ *git/ref/heads/main*) cat "$FAKE_API/main" ;;
  *required_status_checks*) cat "$FAKE_API/protection" ;;
  *check-runs*) cat "$FAKE_API/checks" ;;
  *statuses*) cat "$FAKE_API/statuses" ;;
+ *actions/runs\?*event=push*) cat "$FAKE_API/runs" ;;
+ *actions/runs\?*) cat "$FAKE_API/empty_runs" ;;
+ *actions/runs/7/jobs\?*) cat "$FAKE_API/jobs" ;;
+ *actions/runs/7*) cat "$FAKE_API/run" ;;
  *) exit 99 ;;
 esac
 """)
@@ -299,6 +357,9 @@ esac
         "ARM_RUN": "11",
         "X64_RUN": "12",
         "PUBLISH": "true",
+        "CONTROLLER_REF": "refs/heads/feature"
+        if guard == "wrong-controller-ref"
+        else "refs/heads/main",
         "ENABLED": "false" if guard == "disabled" else "true",
         "AUTHORIZED_SHA": "b" * 40 if guard == "wrong-owner-sha" else source_sha,
         "GITHUB_REPOSITORY": "synthetic/repo",
@@ -306,9 +367,14 @@ esac
         "GH_TOKEN": "TEST_ONLY",
     }
     result = subprocess.run(
-        ["bash", "-c", step["run"]], cwd=FHD, env=env, capture_output=True, text=True
+        ["bash", "-c", step["run"]],
+        cwd=working,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
-    assert (result.returncode == 0) is (guard == "approved"), result.stderr
+    assert (result.returncode == 0) is (guard == "approved"), result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("wrong_bytes", [False, True])

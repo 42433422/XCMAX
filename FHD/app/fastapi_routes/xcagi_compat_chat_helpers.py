@@ -25,6 +25,9 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
+from app.application.planner_display_markers import (
+    _thinking_steps_from_planner_stream_text as _thinking_steps_from_planner_stream_text,
+)
 from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
 from app.domain.app_pure.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
@@ -369,27 +372,6 @@ def _observe_original_batch(request: Request, body: XcagiCompatChatBody) -> dict
         revision=snapshot["revision"],
         turn_id=turn_id,
     )
-
-
-def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
-    if not (merged or "").strip():
-        return None
-    lines: list[str] = []
-    for m in re.finditer(r"\[正在调用工具:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[工具已返回[^\]\n]*\]|\[工具未成功[^\]\n]*\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[需要授权:[^\]\n]+\]|\[请提供令牌:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    if not lines:
-        return None
-    return "\n".join(lines)
 
 
 async def _xcagi_planner_stream_bytes_async(

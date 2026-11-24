@@ -105,7 +105,7 @@ class TestInstallResolver:
 
         with patch(
             "app.infrastructure.mods.install_resolver.peek_artifact",
-            side_effect=RuntimeError("bad file"),
+            side_effect=OSError("bad file"),
         ):
             ok, msg, data = resolver.install_package_dispatch("/bad/path", "/store")
             assert ok is False

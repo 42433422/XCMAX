@@ -197,14 +197,35 @@ def test_find_waiting_step_wanted_matches_node_id():
 # ---------------------------------------------------------------------------
 
 
-def test_execute_ready_steps_skips_completed_step(trusted_actor):
-    """A completed real registered step is not executed again after recovery."""
+@pytest.mark.parametrize("has_receipt", [True, False], ids=["bound-read", "missing-receipt"])
+def test_execute_ready_steps_skips_completed_step(trusted_actor, has_receipt):
+    """Recover completed reads without replay, but only finish with an accepted receipt."""
+    from app.application.agent_orchestrator.result_verification import (
+        bind_execution_receipt,
+        freeze_verification_contract,
+        verify_step_result,
+    )
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
     actor = trusted_actor(permissions=["customer.view"])
     orch, _, executor = _make_orchestrator()
-    run = _make_run(user_id=actor.user_id)
+    run = _make_run(user_id=str(actor.user_id))
+    run.metadata["runtime_context"] = actor.context
     step = _make_step(tool_id="customers", action="query", status="completed")
     step.output = {"success": True, "data": []}
     run.steps = [step]
+    if has_receipt:
+        call = ToolCall(
+            step_id=step.step_id, node_id=step.node_id, tool_id=step.tool_id, action=step.action
+        )
+        spec = get_tool_action_spec(step.tool_id, step.action)
+        freeze_verification_contract(run, step, call, spec, actor.context)
+        call.status = "completed"
+        call.output = dict(step.output)
+        bind_execution_receipt(call)
+        run.tool_calls = [call]
+        report = verify_step_result(run=run, step=step, call=call, context=actor.context)
+        assert report["status"] == "not_required", report
     run.plan_id = "completed-read"
     run.metadata["plan"] = plan_to_dict(
         PlanGraph(
@@ -223,7 +244,8 @@ def test_execute_ready_steps_skips_completed_step(trusted_actor):
         )
     )
     orch._execute_ready_steps(run, runtime_context=actor.context)
-    assert run.status == "completed"
+    assert run.status == ("completed" if has_receipt else "blocked"), run.error
+    assert run.final_output["verification"]["accepted"] is has_receipt
     assert step.status == "completed"
     executor.execute.assert_not_called()
     executor.execute_with_deadline.assert_not_called()

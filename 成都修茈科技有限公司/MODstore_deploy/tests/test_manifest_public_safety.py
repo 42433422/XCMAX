@@ -98,13 +98,28 @@ def test_public_workflow_rows_still_reject_nested_credentials(tmp_path) -> None:
         write_manifest(mod_dir, manifest)
 
 
+@pytest.mark.parametrize("malformed", [False, True])
+def test_manifest_read_error_keeps_public_location_without_private_path(tmp_path, malformed):
+    mod_dir = tmp_path / "private-tenant-credential-marker"
+    mod_dir.mkdir()
+    if malformed:
+        (mod_dir / "manifest.json").write_text('{"id": }', encoding="utf-8")
+
+    data, error = read_manifest(mod_dir)
+
+    assert data is None and error is not None and "manifest.json" in error
+    assert "private-tenant-credential-marker" not in error and str(tmp_path) not in error
+    if malformed:
+        assert "JSON 无效" in error and "第 1 行" in error
+
+
 def test_manifest_read_diagnostics_expose_location_within_document_only(tmp_path, monkeypatch):
     mod_dir = tmp_path / "private-library"
     mod_dir.mkdir()
     assert read_manifest(mod_dir) == (None, "缺少 manifest.json")
     (mod_dir / "manifest.json").write_text('{\n"id": }', encoding="utf-8")
     data, error = read_manifest(mod_dir)
-    assert data is None and error == "manifest.json 格式无效（第 2 行，第 7 列）"
+    assert data is None and error == "manifest.json JSON 无效（第 2 行，第 7 列）"
     assert str(tmp_path) not in error
 
     def private_decoder(*args, **kwargs):
@@ -113,5 +128,5 @@ def test_manifest_read_diagnostics_expose_location_within_document_only(tmp_path
     monkeypatch.setattr(json, "loads", private_decoder)
     assert read_manifest(mod_dir) == (
         None,
-        "manifest.json 格式无效（第 1 行，第 2 列）",
+        "manifest.json JSON 无效（第 1 行，第 2 列）",
     )

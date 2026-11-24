@@ -23,13 +23,14 @@ from modstore_server.retort_training_candidates import training_plan
 from tests import test_retort_evolution as evolution
 from tests import test_retort_rag_consumer as consumer
 from tests.promptfoo_local_only import local_only_environment
+from tests.test_capability_trainer import corpus_key as corpus_key
 
 setup = evolution.setup
 rag_call = consumer.rag_call
 
 
 @pytest.fixture
-def rag_training(setup, rag_call, tmp_path, monkeypatch):
+def rag_training(setup, rag_call, tmp_path, monkeypatch, corpus_key):
     token = "rag-training-" + "s" * 32
     monkeypatch.setenv(
         "MODSTORE_PARA_DISPATCH_TOKEN_SHA256", hashlib.sha256(token.encode()).hexdigest()

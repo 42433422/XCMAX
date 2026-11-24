@@ -117,7 +117,28 @@ def _codex_employee_tool_scope(
             raise ValueError(f"员工工具 {name} 的参数契约无效") from exc
         validator = Draft202012Validator(schema, registry=Registry())
         has_action = "action" in properties
-        if name in aliases:
+        if name == "execute_erp_capability":
+            branches = schema.get("anyOf")
+            if not isinstance(branches, list) or not branches:
+                raise ValueError("员工能力投影缺少具体动作")
+            keys = []
+            for branch in branches:
+                fields = branch.get("properties") if isinstance(branch, dict) else None
+                if not isinstance(fields, dict):
+                    raise ValueError("员工能力投影缺少明确身份")
+                identity = []
+                for field in ("tool_id", "action"):
+                    descriptor = fields.get(field)
+                    values = descriptor.get("enum") if isinstance(descriptor, dict) else None
+                    if (
+                        not isinstance(values, list)
+                        or len(values) != 1
+                        or not isinstance(values[0], str)
+                    ):
+                        raise ValueError("员工能力投影身份必须唯一")
+                    identity.append(values[0])
+                keys.append(tuple(identity))
+        elif name in aliases:
             if has_action:
                 raise ValueError(f"员工工具 {name} 的固定动作不能被参数覆盖")
             keys = [aliases[name]]
@@ -158,10 +179,13 @@ def _codex_employee_tool_scope(
             return {"ok": False, "reason": "工具动作不在员工授权范围内"}
         name, validator, has_action = binding
         arguments = deepcopy(params)
-        if "action" in arguments and (not has_action or arguments["action"] != action):
-            return {"ok": False, "reason": "工具参数与已授权动作不一致"}
-        if has_action:
-            arguments["action"] = action
+        if name == "execute_erp_capability":
+            arguments = {"tool_id": tool_id, "action": action, "params": arguments}
+        else:
+            if "action" in arguments and (not has_action or arguments["action"] != action):
+                return {"ok": False, "reason": "工具参数与已授权动作不一致"}
+            if has_action:
+                arguments["action"] = action
         try:
             if next(validator.iter_errors(arguments), None) is not None:
                 return {"ok": False, "reason": "工具参数不符合员工契约"}

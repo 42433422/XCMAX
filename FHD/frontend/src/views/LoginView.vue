@@ -71,7 +71,6 @@ const {
   formatLoginFailurePayload,
   selectAdminLogin,
   submitLogin,
-  submitOfflineLogin,
   startOidcLogin,
 } = actions
 const { completeLoginSuccess } = session
@@ -154,7 +153,8 @@ onUnmounted(() => {
         </div>
 
         <form v-if="loginMode !== 'qr'" class="login-form" aria-describedby="login-data-processing-notice" @submit.prevent="submitLogin" novalidate>
-          <template v-if="loginMode === 'password'">
+          <template v-if="loginMode === 'password' || loginMode === 'offline'">
+            <p v-if="loginMode === 'offline'" class="login-hint" role="status">{{ $t('login.offlinePasswordHint') }}</p>
             <div class="login-field" :class="{ 'is-focused': usernameFocused }">
               <label class="login-label" for="lv-username">{{ $t('login.labelUsername') }}</label>
               <input
@@ -181,7 +181,7 @@ onUnmounted(() => {
                 :type="showPassword ? 'text' : 'password'"
                 class="login-input"
                 name="password"
-                autocomplete="current-password"
+                :autocomplete="loginMode === 'offline' ? 'off' : 'current-password'"
                 :placeholder="passwordPlaceholder"
                 :disabled="loading"
                 :aria-invalid="Boolean(errorMessage) && !password ? 'true' : undefined"
@@ -208,11 +208,11 @@ onUnmounted(() => {
               </button>
             </div>
 
-            <label v-if="accountKind === 'enterprise'" class="login-field">
+            <label v-if="accountKind === 'enterprise' && loginMode !== 'offline'" class="login-field">
               <span class="login-label">企业邀请码（首次加入时填写）</span>
               <input id="lv-invitation-code" v-model.trim="invitationCode" type="text" class="login-input" autocomplete="off" :disabled="loading" />
             </label>
-            <div class="login-options" role="group" :aria-label="$t('login.loginOptions')">
+            <div v-if="loginMode !== 'offline'" class="login-options" role="group" :aria-label="$t('login.loginOptions')">
               <label class="login-option">
                 <input v-model="autoLogin" type="checkbox" class="login-option-input" :disabled="loading" />
                 <span>{{ $t('login.autoLogin') }}</span>
@@ -230,7 +230,7 @@ onUnmounted(() => {
           </div>
 
           <button class="login-submit" type="submit" aria-describedby="login-data-processing-notice" :disabled="loading">
-            <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
+            <span>{{ loading ? $t('login.submitting') : $t(loginMode === 'offline' ? 'login.offlineLogin' : 'login.submit') }}</span>
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
             <svg v-else viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
               <path
@@ -241,11 +241,11 @@ onUnmounted(() => {
             </svg>
           </button>
           <button
-            v-if="isDesktopShell()"
+            v-if="isDesktopShell() && loginMode !== 'offline'"
             type="button"
             class="login-sso login-offline"
             :disabled="loading"
-            @click="submitOfflineLogin"
+            @click="switchLoginMode('offline')"
           >
             {{ $t('login.offlineLogin') }}
           </button>
@@ -264,7 +264,7 @@ onUnmounted(() => {
 
 
         <!-- SSO 仅在启用时显示 -->
-        <div v-if="oidcEnabled && accountKind === 'enterprise'" class="login-alt">
+        <div v-if="oidcEnabled && accountKind === 'enterprise' && loginMode !== 'offline'" class="login-alt">
           <div class="login-divider">
             <span>{{ $t('login.orDivider') }}</span>
           </div>

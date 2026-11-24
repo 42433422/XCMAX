@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.customer_value_evidence import (
@@ -125,8 +125,8 @@ class KpiAgreementReceiptBody(BaseModel):
     order_no: str = Field(..., min_length=4, max_length=96)
     customer_goal_id: str = Field(..., min_length=4, max_length=128)
     idempotency_key: str = Field(..., min_length=16, max_length=192)
-    baseline: float
-    target: float
+    baseline: FiniteFloat = Field(..., strict=True)
+    target: FiniteFloat = Field(..., strict=True)
     comparison: Literal["ge", "le"]
     unit: str = Field(..., min_length=1, max_length=64)
     measurement_window: str = Field(..., min_length=3, max_length=128)
@@ -152,9 +152,9 @@ class OutcomeReceiptBody(BaseModel):
     idempotency_key: str = Field(..., min_length=16, max_length=192)
     outcome_id: str = Field(..., min_length=4, max_length=256)
     artifact_sha256: str = Field(..., pattern="^[0-9a-fA-F]{64}$")
-    baseline: float
-    target: float
-    measured_value: float
+    baseline: FiniteFloat = Field(..., strict=True)
+    target: FiniteFloat = Field(..., strict=True)
+    measured_value: FiniteFloat = Field(..., strict=True)
     comparison: Literal["ge", "le"]
     unit: str = Field(..., min_length=1, max_length=64)
     measurement_window: str = Field(..., min_length=3, max_length=128)

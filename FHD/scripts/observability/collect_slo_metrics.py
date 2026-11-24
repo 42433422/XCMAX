@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -227,7 +228,12 @@ def measure_retention_days(
         flags = _prom_get(base_url, "/api/v1/status/flags", {}, bearer_token, ssh)
     except (OSError, ValueError, TypeError):
         return None
-    raw = str((flags.get("data") or {}).get("storage.tsdb.retention.time") or "")
+    if not isinstance(flags, dict) or flags.get("status") != "success":
+        return None
+    data = flags.get("data")
+    if not isinstance(data, dict):
+        return None
+    raw = str(data.get("storage.tsdb.retention.time") or "")
     parts = re.findall(r"(\d+)(ms|y|w|d|h|m|s)", raw)
     if not parts or "".join(n + u for n, u in parts) != raw:
         return None
@@ -244,81 +250,296 @@ def prom_query(
     backoff_seconds: float = 0.75,
     ssh: SshTransport | None = None,
 ) -> str | None:
+    from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_incrementing
+
     params = {"query": expr}
     if query_at is not None:
         params["time"] = query_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    last_error: Exception | None = None
-    for attempt in range(1, max(attempts, 1) + 1):
-        try:
+    for attempt in Retrying(
+        retry=retry_if_exception_type(_TRANSIENT_QUERY_ERRORS),
+        stop=stop_after_attempt(max(attempts, 1)),
+        wait=wait_incrementing(start=backoff_seconds, increment=backoff_seconds),
+        sleep=time.sleep,
+        reraise=True,
+    ):
+        with attempt:
             data = _prom_get(base_url, "/api/v1/query", params, bearer_token, ssh)
-            if data.get("status") != "success":
+            if not isinstance(data, dict) or data.get("status") != "success":
                 raise RuntimeError("prometheus_query_failed")
-            results = data.get("data", {}).get("result", [])
+            content = data.get("data")
+            if not isinstance(content, dict) or not isinstance(content.get("result"), list):
+                raise ValueError("prometheus_query_invalid_vector")
+            results = content["result"]
             if not results:
                 return None
-            return str(results[0]["value"][1])
-        except _TRANSIENT_QUERY_ERRORS as exc:
-            last_error = exc
-            if attempt >= max(attempts, 1):
-                break
-            time.sleep(backoff_seconds * attempt)
-    assert last_error is not None
-    raise last_error
+            # Aggregate expressions must yield exactly one series; selecting
+            # only the first could certify a healthy subset of failing targets.
+            if len(results) != 1:
+                raise ValueError("prometheus_query_ambiguous_series")
+            sample = results[0].get("value") if isinstance(results[0], dict) else None
+            if not isinstance(sample, list) or len(sample) != 2:
+                raise ValueError("prometheus_query_invalid_sample")
+            return str(sample[1])
+    return None
 
 
 def telemetry_admissible(payload: dict[str, Any]) -> bool:
     """True only when every SLO has a real sample and scrape coverage is intact."""
     if payload.get("source_status") != "available":
         return False
-    if float(payload.get("coverage") or 0) < 1.0:
+    if _numeric(payload.get("coverage")) != 1.0 or scrape_errors(payload):
         return False
-    if float(payload.get("scrape_coverage") or 0) < 0.99:
+    if (_numeric(payload.get("scrape_coverage")) or 0) < 0.99:
+        return False
+    if (
+        payload.get("raw_metric_retention_source") != "prometheus_flags"
+        or (_numeric(payload.get("raw_metric_retention_days")) or 0) < 120
+    ):
         return False
     readings = payload.get("readings") or {}
-    if not isinstance(readings, dict) or not readings:
+    if not isinstance(readings, dict) or set(readings) != set(TARGETS):
         return False
-    for item in readings.values():
+    for slo_id, item in readings.items():
         if not isinstance(item, dict):
             return False
-        if item.get("reading_numeric") is None:
+        value = _numeric(item.get("reading_numeric"))
+        if meets_target(slo_id, value) is None:
             return False
-        if item.get("sample_count") is None:
+        if (_numeric(item.get("sample_count")) or 0) <= 0:
+            return False
+        if (
+            item.get("promql") != QUERIES[slo_id].format(w=payload.get("window"))
+            or item.get("sample_promql") != SAMPLE_QUERIES[slo_id].format(w=payload.get("window"))
+            or _numeric(item.get("reading")) != value
+        ):
             return False
     return True
 
 
-def _numeric(raw: str | None) -> float | None:
-    if raw in (None, "NaN", "nan", "+Inf", "-Inf"):
+def _numeric(raw: Any) -> float | None:
+    if isinstance(raw, bool):
         return None
-    return float(raw)
+    try:
+        value = float(raw)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def scrape_errors(payload: dict[str, Any]) -> list[str]:
+    """Recompute coverage from the fixed Prometheus inventory and raw counts."""
+    errors: list[str] = []
+    evidence = payload.get("scrape_evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    expected = SCRAPE_WINDOW_SECONDS / SCRAPE_INTERVAL_SECONDS
+    for job, instance in SCRAPE_TARGETS.items():
+        item = evidence.get(job)
+        if not isinstance(item, dict):
+            errors.append(f"{job}:scrape_evidence_missing")
+            continue
+        count = _numeric(item.get("successful_scrapes"))
+        coverage = _numeric(item.get("coverage"))
+        if (
+            item.get("instance") != instance
+            or item.get("promql") != SCRAPE_QUERIES[job]
+            or item.get("window_seconds") != SCRAPE_WINDOW_SECONDS
+            or item.get("interval_seconds") != SCRAPE_INTERVAL_SECONDS
+            or item.get("expected_scrapes") != expected
+        ):
+            errors.append(f"{job}:scrape_source_mismatch")
+        if (
+            count is None
+            or not 0 <= count <= expected + 1
+            or coverage is None
+            or not math.isclose(coverage, min(count / expected, 1.0), abs_tol=1e-12)
+            or coverage < 0.99
+        ):
+            errors.append(f"{job}:scrape_coverage:{coverage}")
+    return errors
 
 
 def meets_target(slo_id: str, value: float | None) -> bool | None:
     if value is None:
         return None
     _name, threshold, op = TARGETS[slo_id]
+    if not math.isfinite(value) or value < 0 or (threshold <= 1 and value > 1):
+        return None
     return value >= threshold if op == "ge" else value < threshold
 
 
-def _latest_chain_hash(directory: Path) -> str:
-    for path in sorted(directory.glob("*.json"), reverse=True):
+def _record_hash_is_valid(payload: dict[str, Any]) -> bool:
+    candidate = dict(payload)
+    expected = str(candidate.pop("evidence_hash", ""))
+    candidate.pop("chain_hash", None)
+    candidate.pop("all_pass", None)
+    return bool(
+        expected and expected == hashlib.sha256(_canonical_json(candidate).encode()).hexdigest()
+    )
+
+
+def _order_chain(
+    pending: list[tuple[Path, dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[str], str]:
+    pending = list(pending)
+    records: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    previous_hash = "0" * 64
+    while pending:
+        successors = [
+            item for item in pending if item[1].get("previous_chain_hash") == previous_hash
+        ]
+        if len(successors) != 1:
+            blockers.append("forked_hash_chain" if successors else "broken_hash_chain")
+            break
+        path, payload = successors[0]
+        pending.remove(successors[0])
+        expected = hashlib.sha256(
+            f"{previous_hash}:{payload['evidence_hash']}".encode()
+        ).hexdigest()
+        if payload.get("chain_hash") != expected:
+            blockers.append(f"{path.name}:invalid_chain_hash")
+        previous_hash = str(payload.get("chain_hash") or "")
+        records.append(payload)
+    return records, blockers, previous_hash
+
+
+def _legacy_preflight_audit(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
+    """Fingerprint a reachable fork of unbound preflight records, never formal history."""
+    successors: dict[str, list[str]] = {}
+    inventory: list[dict[str, str]] = []
+    hashes: set[str] = set()
+    for path, payload in records:
+        if payload.get("mode") != "preflight" or payload.get("release_id") != "":
+            raise ValueError("legacy_fork_contains_formal_or_release_bound_evidence")
+        if "chain_epoch" in payload or "legacy_chain_audit" in payload:
+            raise ValueError("legacy_fork_contains_epoch_metadata")
+        previous = str(payload.get("previous_chain_hash") or "")
+        chain_hash = str(payload.get("chain_hash") or "")
+        expected = hashlib.sha256(f"{previous}:{payload['evidence_hash']}".encode()).hexdigest()
+        if not re.fullmatch(r"[0-9a-f]{64}", previous) or chain_hash != expected:
+            raise ValueError("legacy_fork_has_invalid_chain_hash")
+        if chain_hash in hashes:
+            raise ValueError("legacy_fork_has_duplicate_record")
+        hashes.add(chain_hash)
+        successors.setdefault(previous, []).append(chain_hash)
+        inventory.append(
+            {
+                "file": path.name,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "evidence_hash": payload["evidence_hash"],
+                "chain_hash": chain_hash,
+                "previous_chain_hash": previous,
+            }
+        )
+    reached: set[str] = set()
+    pending = list(successors.get("0" * 64, []))
+    while pending:
+        chain_hash = pending.pop()
+        if chain_hash in reached:
+            raise ValueError("legacy_fork_has_cycle")
+        reached.add(chain_hash)
+        pending.extend(successors.get(chain_hash, []))
+    if reached != hashes:
+        raise ValueError("legacy_fork_has_missing_predecessor")
+    forks = [
+        {"previous_chain_hash": previous, "successors": sorted(children)}
+        for previous, children in sorted(successors.items())
+        if len(children) > 1
+    ]
+    if not forks:
+        raise ValueError("legacy_fork_audit_requires_a_fork")
+    return {
+        "schema": "xcagi.production_slo_legacy_fork_audit/v1",
+        "reason": "legacy_unbound_preflight_fork",
+        "record_count": len(inventory),
+        "records": inventory,
+        "forks": forks,
+        "tips": sorted(hashes - successors.keys()),
+    }
+
+
+def load_evidence_chain(
+    directory: Path, *, recover_preflight_fork: bool = False
+) -> tuple[list[dict[str, Any]], list[str], str, str, dict[str, Any] | None]:
+    """Validate the existing chain, including one explicitly audited legacy recovery.
+
+    Old bytes stay in place. Only a fork made entirely of unbound preflight
+    records can be archived by the first new epoch record. Its hash-bound
+    payload contains the full original inventory; later deletion, rewriting,
+    extra legacy records, or a fork in the new epoch fails closed.
+    """
+    blockers: list[str] = []
+    legacy: list[tuple[Path, dict[str, Any]]] = []
+    active: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(directory.glob("*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
+        except (OSError, TypeError, ValueError):
+            blockers.append(f"{path.name}:invalid_json")
             continue
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or not _record_hash_is_valid(payload):
+            blockers.append(f"{path.name}:invalid_evidence_hash")
             continue
-        value = str(payload.get("chain_hash") or "")
-        if len(value) == 64:
-            return value
-    return "0" * 64
+        try:
+            stamp = datetime.fromisoformat(str(payload.get("generated_at")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            stamp = None
+        if (
+            payload.get("schema") != "xcagi.production_slo_evidence/v1"
+            or payload.get("environment") != "production"
+            or stamp is None
+            or stamp.tzinfo is None
+        ):
+            blockers.append(f"{path.name}:invalid_production_record")
+        (active if "chain_epoch" in payload else legacy).append((path, payload))
+
+    if not active:
+        records, errors, tip = _order_chain(legacy)
+        if recover_preflight_fork and not blockers and errors == ["forked_hash_chain"]:
+            try:
+                audit = _legacy_preflight_audit(legacy)
+            except ValueError as exc:
+                errors.append(str(exc))
+            else:
+                epoch = hashlib.sha256(_canonical_json(audit).encode()).hexdigest()
+                return [], [], "0" * 64, epoch, audit
+        return records, blockers + errors, tip, "", None
+
+    records, errors, tip = _order_chain(active)
+    blockers.extend(errors)
+    audit = None
+    epoch = ""
+    try:
+        audit = _legacy_preflight_audit(legacy)
+    except ValueError as exc:
+        blockers.append(str(exc))
+    else:
+        epoch = hashlib.sha256(_canonical_json(audit).encode()).hexdigest()
+        if any(payload.get("chain_epoch") != epoch for _path, payload in active):
+            blockers.append("legacy_chain_epoch_mismatch")
+        roots = [
+            payload for _path, payload in active if payload.get("previous_chain_hash") == "0" * 64
+        ]
+        if len(roots) != 1 or roots[0].get("legacy_chain_audit") != audit:
+            blockers.append("legacy_chain_audit_mismatch")
+        if any(
+            "legacy_chain_audit" in payload for _path, payload in active if payload not in roots
+        ):
+            blockers.append("unexpected_legacy_chain_audit")
+    # Audited preflight observations remain visible in the daily ledger. The
+    # formal verifier still counts only the requested release's formal samples.
+    return [payload for _path, payload in legacy] + records, blockers, tip, epoch, audit
 
 
 def _write_immutable(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        raise FileExistsError(f"refusing to overwrite SLO evidence: {path}")
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as exc:
+        raise FileExistsError(f"refusing to overwrite SLO evidence: {path}") from exc
 
 
 def collect(
@@ -356,6 +577,8 @@ def collect(
         measured = measure_retention_days(prom_url, prom_token, ssh)
         if measured is not None:
             raw_retention_days, retention_source = measured, "prometheus_flags"
+    if retention_source != "prometheus_flags":
+        errors.append("raw_metric_retention_not_measured")
     if raw_retention_days < 120:
         errors.append(f"raw_metric_retention_below_120_days:{raw_retention_days}")
 
@@ -470,20 +693,34 @@ def collect(
         "errors": sorted(set(errors)),
         "readings": readings,
     }
-    previous_hash = _latest_chain_hash(out_path.parent)
-    payload["previous_chain_hash"] = previous_hash
-    payload["evidence_hash"] = hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
-    payload["chain_hash"] = hashlib.sha256(
-        f"{previous_hash}:{payload['evidence_hash']}".encode()
-    ).hexdigest()
     all_pass = (
         source_status == "available"
         and not errors
         and coverage == 1.0
         and all(item["passes"] is True for item in readings.values())
     )
-    payload["all_pass"] = all_pass
-    _write_immutable(out_path, payload)
+    # One append owns both the predecessor and exclusive publication. filelock
+    # is already pinned by the runtime; simultaneous collectors cannot fork it.
+    from filelock import FileLock
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with FileLock(out_path.parent / ".slo-evidence.lock", timeout=30):
+        _records, blockers, previous_hash, epoch, audit = load_evidence_chain(
+            out_path.parent, recover_preflight_fork=True
+        )
+        if blockers:
+            raise ValueError("SLO evidence chain is invalid: " + ";".join(blockers))
+        if epoch:
+            payload["chain_epoch"] = epoch
+            if previous_hash == "0" * 64:
+                payload["legacy_chain_audit"] = audit
+        payload["previous_chain_hash"] = previous_hash
+        payload["evidence_hash"] = hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
+        payload["chain_hash"] = hashlib.sha256(
+            f"{previous_hash}:{payload['evidence_hash']}".encode()
+        ).hexdigest()
+        payload["all_pass"] = all_pass
+        _write_immutable(out_path, payload)
     return payload, all_pass
 
 

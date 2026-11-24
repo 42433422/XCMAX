@@ -205,7 +205,7 @@ async def test_handle_product_created_publish_raises_recoverable(
     patch_product_events: None,
 ) -> None:
     event = _make_event({"product_id": "P2", "unit_name": "乙公司", "product_name": "漆"})
-    mock_bus.publish.side_effect = RuntimeError("bus down")
+    mock_bus.publish.side_effect = OSError("bus down")
     handlers._bus = mock_bus
     out = await handlers.handle_product_created(event)
     assert out["success"] is False
@@ -334,7 +334,7 @@ async def test_handle_product_updated_publish_raises_recoverable(
     patch_product_events: None,
 ) -> None:
     event = _make_event({"product_id": "P5", "unit_name": "戊", "changed_fields": ["name"]})
-    mock_bus.publish.side_effect = LookupError("lookup failed")
+    mock_bus.publish.side_effect = OSError("lookup failed")
     handlers._bus = mock_bus
     out = await handlers.handle_product_updated(event)
     assert out["success"] is False
@@ -385,7 +385,7 @@ async def test_handle_product_deleted_publish_raises_recoverable(
     patch_product_events: None,
 ) -> None:
     event = _make_event({"product_id": "P2"})
-    mock_bus.publish.side_effect = RuntimeError("redis down")
+    mock_bus.publish.side_effect = OSError("redis down")
     handlers._bus = mock_bus
     out = await handlers.handle_product_deleted(event)
     assert out["success"] is False
@@ -766,7 +766,7 @@ def test_build_agent_tools_recoverable_error_denies() -> None:
     agent = EmployeeAgent("emp-1")
     import app.application.employee_runtime.tool_scope as ts_mod
 
-    with patch.object(ts_mod, "resolve_employee_tools", side_effect=RuntimeError("boom")):
+    with patch.object(ts_mod, "resolve_employee_tools", side_effect=OSError("boom")):
         out = agent._build_agent_tools({}, {})
     assert out == []
 
@@ -805,7 +805,9 @@ def test_build_agent_gate_all_imports_fail_denies() -> None:
         "workspace_guard.build_employee_gate",
     ],
 )
-@pytest.mark.parametrize("error", [ImportError("unavailable"), RuntimeError("failed")])
+@pytest.mark.parametrize(
+    "error", [ImportError("unavailable"), ValueError("invalid workspace policy")]
+)
 def test_build_agent_gate_partial_failure_denies(target, error):
     with patch("app.application.employee_runtime." + target, side_effect=error):
         gate = EmployeeAgent("emp-1")._build_agent_gate({}, {}, None, {})
@@ -893,7 +895,7 @@ def test_run_upstream_collaboration_recoverable_error_fails_closed() -> None:
     agent = EmployeeAgent("emp-1")
     mock_orch = MagicMock()
     mock_orch.depends_on.return_value = ["dep-1"]
-    mock_orch.run_upstream.side_effect = RuntimeError("orch down")
+    mock_orch.run_upstream.side_effect = OSError("orch down")
     with (
         patch(
             "app.application.employee_runtime.orchestrator.EmployeeOrchestrator",
@@ -932,7 +934,7 @@ def test_perceive_import_error_falls_back_to_executor() -> None:
 def test_perceive_recoverable_error_falls_back_to_executor() -> None:
     agent = EmployeeAgent("emp-1")
     mock_pipeline_cls = MagicMock()
-    mock_pipeline_cls.return_value.process.side_effect = RuntimeError("perceive boom")
+    mock_pipeline_cls.return_value.process.side_effect = OSError("perceive boom")
     with (
         patch(
             "app.application.employee_runtime.perception.PerceptionPipeline",
@@ -1033,7 +1035,7 @@ def test_run_pack_load_runtime_error_returns_error_result() -> None:
     agent = EmployeeAgent("emp-1")
     with patch(
         "app.application.employee_runtime.agent.load_employee_pack_from_disk",
-        side_effect=RuntimeError("disk io"),
+        side_effect=OSError("disk io"),
     ):
         out = agent.run("task", input_data={})
     assert out["success"] is False
@@ -1438,15 +1440,17 @@ def test_run_collaboration_context_cognition_error_degrades_to_context() -> None
             runtime_context={"employee_collaboration_run": True},
         )
 
-    assert out["success"] is True
+    assert out["success"] is False
     assert out["degraded"] is True
     assert out["result"]["summary"] == "collaboration context"
     assert out["result"]["cognition_error"] == "llm timeout"
     assert out["result"]["outputs"][0]["handler"] == "collaboration_context"
+    assert out["result"]["outputs"][0]["ok"] is False
     assert "上游架构员工 协作上下文暂不可用" in out["result"]["outputs"][0]["output"]
     mock_upstream.assert_not_called()
     mock_actions.assert_not_called()
     mock_record.assert_called_once()
+    assert mock_record.call_args.kwargs["success"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -1659,7 +1663,7 @@ def test_run_handler_fails_trigger_publish_recoverable_error_swallowed() -> None
         patch("app.application.employee_runtime.metrics.record_employee_run"),
         patch(
             "app.application.employee_runtime.triggers.publish_employee_task_failed",
-            side_effect=RuntimeError("trigger bus down"),
+            side_effect=OSError("trigger bus down"),
         ),
     ):
         mock_scope = MagicMock()

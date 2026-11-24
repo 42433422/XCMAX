@@ -440,9 +440,15 @@ export function attachDatabaseBackupToRollback(databaseBackupPath: string): void
   if (!fs.existsSync(resolvedBackup)) {
     throw new Error(`数据库备份不存在：${databaseBackupPath}`)
   }
+  const info = fs.lstatSync(resolvedBackup)
+  if (!info.isFile() || info.isSymbolicLink() || info.size === 0 || !isPathInside(fs.realpathSync(userData), fs.realpathSync(resolvedBackup))) {
+    throw new Error('数据库备份必须是数据目录内的非空普通文件。')
+  }
   marker.databaseBackupPath = resolvedBackup
   marker.databasePath = path.join(userData, 'data', 'xcagi.db')
-  fs.writeFileSync(markerPath(), JSON.stringify(marker, null, 2), 'utf8')
+  marker.databaseOriginallyAbsent = false
+  marker.expectedDatabaseSha256 = hashFileSync(resolvedBackup)
+  persistRollbackMarker(marker)
 }
 
 export function cancelPreparedRollback(): void {
@@ -450,7 +456,7 @@ export function cancelPreparedRollback(): void {
   try { fs.unlinkSync(markerPath()) } catch {}
 }
 
-function persistWindowsRollbackMarker(marker: RollbackMarker): void {
+function persistRollbackMarker(marker: RollbackMarker): void {
   const destination = markerPath()
   const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`
   fs.writeFileSync(temporary, JSON.stringify(marker, null, 2), { encoding: 'utf8', flag: 'wx', mode: 0o600 })
@@ -461,19 +467,19 @@ function persistWindowsRollbackMarker(marker: RollbackMarker): void {
 
 export function markPreparedRollbackRecoveryRequired(): void {
   const marker = checkPendingRollback()
-  if (!marker || marker.mode !== 'windows-full') throw new Error('Windows 迁移前缺少完整恢复记录。')
+  if (!marker || !['windows-full', 'macos-full'].includes(marker.mode || '')) throw new Error('迁移前缺少完整桌面恢复记录。')
   marker.recoveryRequired = true
   // Arm and durably replace the recovery state before starting migration.
   // If persistence fails, the migration child is never launched.
   preservePreparedRollback = true
-  persistWindowsRollbackMarker(marker)
+  persistRollbackMarker(marker)
 }
 
 export function clearPreparedRollbackRecoveryRequired(): void {
   const marker = checkPendingRollback()
-  if (!marker || marker.mode !== 'windows-full') throw new Error('Windows 迁移成功但缺少完整恢复记录。')
+  if (!marker || !['windows-full', 'macos-full'].includes(marker.mode || '')) throw new Error('迁移成功但缺少完整桌面恢复记录。')
   marker.recoveryRequired = false
-  persistWindowsRollbackMarker(marker)
+  persistRollbackMarker(marker)
 }
 
 export function checkPendingRollback(): RollbackMarker | null {
@@ -487,7 +493,7 @@ export function checkPendingRollback(): RollbackMarker | null {
 
 export function commitRollback(): void {
   const marker = checkPendingRollback()
-  if (marker?.recoveryRequired) throw new Error('Windows 回滚恢复意图仍然生效，不能健康提交或清理快照。')
+  if (marker?.recoveryRequired) throw new Error('回滚恢复意图仍然生效，不能健康提交或清理快照。')
   if (marker?.mode === 'windows-full' && marker.ownedBackupRoot) {
     validateOwnedRollbackMarker(marker, rollbackDir())
   }
@@ -535,6 +541,30 @@ export interface RollbackTriggerResult {
   scheduled: boolean
 }
 
+function validateFullRollbackDatabase(marker: RollbackMarker): void {
+  const userData = path.resolve(app.getPath('userData'))
+  const database = path.join(userData, 'data', 'xcagi.db')
+  const correctTarget = marker.databasePath && isPathInside(database, marker.databasePath) && isPathInside(marker.databasePath, database)
+  const restorableAbsence = process.platform === 'win32' && marker.databaseOriginallyAbsent === true && correctTarget && !marker.databaseBackupPath
+  const databasePresent = ['', '-wal', '-shm', '-journal'].some(suffix => fs.existsSync(`${database}${suffix}`))
+  if (!marker.databaseBackupPath) {
+    if (!restorableAbsence && (marker.recoveryRequired || databasePresent || marker.databasePath)) {
+      throw new Error('数据库恢复凭据缺失，不能只恢复旧应用；当前数据库、备份和恢复标记已保留。')
+    }
+    return
+  }
+  const backup = path.resolve(marker.databaseBackupPath)
+  if (!correctTarget || !fs.existsSync(backup) || !fs.lstatSync(backup).isFile() || fs.lstatSync(backup).isSymbolicLink()
+    || !isPathInside(fs.realpathSync(userData), fs.realpathSync(backup))) {
+    throw new Error('数据库恢复凭据无效或备份丢失，已中止回滚并保留当前应用和数据。')
+  }
+  if (marker.expectedDatabaseSha256 !== undefined && (typeof marker.expectedDatabaseSha256 !== 'string'
+    || !/^[0-9a-f]{64}$/i.test(marker.expectedDatabaseSha256)
+    || hashFileSync(backup) !== marker.expectedDatabaseSha256.toLowerCase())) {
+    throw new Error('数据库恢复凭据与备份摘要不一致，已中止回滚。')
+  }
+}
+
 export async function triggerRollback(reason: string, beforeRestore?: () => Promise<void>): Promise<RollbackTriggerResult> {
   let marker = checkPendingRollback()
   if (!marker) {
@@ -555,6 +585,7 @@ export async function triggerRollback(reason: string, beforeRestore?: () => Prom
   if (process.platform === 'darwin' && (marker.mode !== 'macos-full' || !marker.appBundlePath || !marker.appBackupRelPath)) {
     throw new Error('完整旧版应用备份不足：Mac 回滚标记不完整或来自其他平台；保留当前应用、数据库和标记')
   }
+  if (marker.mode === 'windows-full' || marker.mode === 'macos-full') validateFullRollbackDatabase(marker)
   const applied: RollbackApplied & WindowsRollbackAppliedRecord = {
     ...(process.platform === 'win32' ? { operationId: marker.operationId || randomUUID() } : {}),
     appliedAt: new Date().toISOString(),

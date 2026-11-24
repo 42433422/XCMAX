@@ -64,7 +64,8 @@ function tool(name: string, args: Record<string, unknown> = {}): LLMToolCall {
 }
 
 function latestReply(): string | undefined {
-  return useAgentStore().messages.at(-1)?.content
+  const { messages } = useAgentStore()
+  return messages[messages.length - 1]?.content
 }
 
 describe('useAgentEngine behavior', () => {
@@ -129,6 +130,7 @@ describe('useAgentEngine behavior', () => {
 
     await engine.handleInput('plain request')
     const firstPayload = mocks.agentButlerChat.mock.calls[0]?.[0]
+    expect(firstPayload.request_id).toBe(useAgentStore().messages[0].id)
     expect(firstPayload.messages[0].role).toBe('system')
     expect(firstPayload.messages.at(-1)).toEqual({ role: 'user', content: 'plain request' })
     expect(useAgentStore().currentConversationId).toBe(42)
@@ -136,6 +138,8 @@ describe('useAgentEngine behavior', () => {
 
     await engine.handleInput('', { imageDataUrl: ' data:image/png;base64,upload ' })
     const secondPayload = mocks.agentButlerChat.mock.calls[1]?.[0]
+    expect(secondPayload.request_id).toBeTruthy()
+    expect(secondPayload.request_id).not.toBe(firstPayload.request_id)
     expect(secondPayload.messages.at(-1).content).toEqual([
       { type: 'text', text: '[图片]' },
       { type: 'image_url', image_url: { url: 'data:image/png;base64,upload', detail: 'low' } },
@@ -242,6 +246,78 @@ describe('useAgentEngine behavior', () => {
     expect(
       mocks.agentButlerChat.mock.calls[1]?.[0].messages.some((message: { content: string }) => message.content.includes('offline')),
     ).toBe(false)
+  })
+
+  it.each(['receipt', 'error'] as const)('拒绝账号 A 切换后的迟到 %s，不在 B 账号执行工具或兜底', async (outcome) => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: false }
+    let resolve!: (value: unknown) => void
+    let reject!: (reason: Error) => void
+    mocks.agentButlerChat.mockImplementationOnce(() => new Promise((yes, no) => { resolve = yes; reject = no }))
+    const fallback = vi.fn(async () => ({ success: true, message: 'old fallback' }))
+    mocks.matchByIntent.mockReturnValueOnce(null).mockReturnValue({ execute: fallback } as unknown as AgentSkill)
+    const store = useAgentStore()
+    const pending = useAgentEngine().handleInput('private A request')
+    auth.user = { id: 22, username: 'B', is_admin: false }
+    if (outcome === 'error') reject(new Error('old request failed'))
+    else resolve({ conversation_id: 99, text: 'private A result', tool_calls: [tool('navigate', { name: 'plans' })] })
+    await pending
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(fallback).not.toHaveBeenCalled()
+    expect(store.messages).toEqual([])
+    expect(store.currentConversationId).toBeNull()
+  })
+
+  it('清空后新对话的等待状态不受旧工具回执影响', async () => {
+    const resolvers: ((value: unknown) => void)[] = []
+    mocks.agentButlerChat.mockImplementation(() => new Promise((resolve) => { resolvers.push(resolve) }))
+    const engine = useAgentEngine()
+    const store = useAgentStore()
+    const old = engine.handleInput('old request')
+    store.clearMessages()
+    const next = engine.handleInput('new request')
+    resolvers[0]({ conversation_id: 10, tool_calls: [tool('navigate', { name: 'plans' })] })
+    await old
+    const stillWaiting = store.isLoading
+    const oldConversationLeaked = store.currentConversationId
+    resolvers[1]({ conversation_id: 20, text: 'new answer' })
+    await next
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(stillWaiting).toBe(true)
+    expect(oldConversationLeaked).toBeNull()
+    expect(store.currentConversationId).toBe(20)
+    expect(store.messages.map((message) => message.content)).toEqual(['new request', 'new answer'])
+  })
+
+  it('截图等待期间切账号，不把旧页面和问题发送到新账号', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: false }
+    let finish!: (value: unknown) => void
+    mocks.captureViewport.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = useAgentEngine().handleInput('private page A', { withScreenshot: true })
+    await vi.waitFor(() => expect(mocks.captureViewport).toHaveBeenCalledOnce())
+    auth.user = { id: 22, username: 'B', is_admin: false }
+    finish({ ok: true, kind: 'image', dataUrl: 'data:image/png;base64,private-A' })
+    await pending
+    expect(mocks.agentButlerChat).not.toHaveBeenCalled()
+    expect(useAgentStore().messages).toEqual([])
+  })
+
+  it('停止接收后保留结果未知提示，迟到工具不执行也不宣称完成', async () => {
+    let finish!: (value: unknown) => void
+    mocks.agentButlerChat.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const engine = useAgentEngine()
+    const store = useAgentStore()
+    const pending = engine.handleInput('original request')
+    store.stopRequest()
+    const stoppedReply = store.messages[store.messages.length - 1]
+    finish({ conversation_id: 99, text: 'completed', tool_calls: [tool('navigate', { name: 'plans' })] })
+    await pending
+    expect(mocks.executor.navigate).not.toHaveBeenCalled()
+    expect(store.messages[store.messages.length - 1]).toEqual(stoppedReply)
+    expect(stoppedReply?.content).toContain('结果尚未确认')
+    expect(store.currentConversationId).toBeNull()
+    expect(store.isLoading).toBe(false)
   })
 
   it('surfaces preprocessing errors and resets loading state', async () => {

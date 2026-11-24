@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -416,7 +417,7 @@ class TestMobileMeLogic:
         )
 
         def broken_get_db():
-            raise RuntimeError("database unavailable")
+            raise sqlite3.OperationalError("database unavailable")
 
         monkeypatch.setattr("app.db.session.get_host_db", broken_get_db)
 
@@ -543,7 +544,7 @@ class TestMobileMeLogic:
 
         class BrokenAuthApp:
             def get_user_permissions(self, user):
-                raise RuntimeError("permissions table missing")
+                raise sqlite3.OperationalError("permissions table missing")
 
         user = SimpleNamespace(
             id=1,

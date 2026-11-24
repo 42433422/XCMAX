@@ -12,22 +12,36 @@ import pytest
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.orm import Session
 
 from app.cli.brain_client import BrainClient
 from app.cli.brain_session import SessionStore
+from app.db.models.user import User
 from app.fastapi_routes import code_editor
 from app.infrastructure.auth import dependencies as auth_dependencies
 from app.middleware.csrf import CSRFMiddleware
+from tests.fixtures.code_editor_db import editor_database as editor_database
 
 
 @pytest.fixture
-def brain_server(tmp_path, monkeypatch):
+def brain_server(tmp_path, monkeypatch, request):
+    database = request.getfixturevalue("editor_database")
+    with Session(database) as db:
+        alice = db.get(User, 1)
+        alice.username = "alice"
+        alice.tier = "enterprise"
+        db.add_all(
+            [
+                User(id=2, username="bob", password="test-only", tenant_id=20),
+                User(id=3, username="charlie", password="test-only", tenant_id=10),
+            ]
+        )
+        db.commit()
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "note.txt").write_text("before\n", encoding="utf-8")
     monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     monkeypatch.setenv("FHD_AI_ELEVATED_TOKEN", "fixture-p2-secret")
-    code_editor._EDIT_STORE.clear()
     state = SimpleNamespace(
         calls=[],
         sessions={},
@@ -38,6 +52,7 @@ def brain_server(tmp_path, monkeypatch):
         chat_error=False,
         cloud_degraded=False,
         workspace=workspace,
+        database=database,
         me_failure=False,
         delay_apply=False,
         health_degraded=False,
@@ -49,7 +64,8 @@ def brain_server(tmp_path, monkeypatch):
         username = state.sessions.get(auth_dependencies.session_id_from_request(request))
         if not username or state.expired:
             return None
-        return SimpleNamespace(id=1, username=username, tenant_id=username, is_active=True)
+        with Session(database) as db:
+            return db.query(User).filter_by(username=username).first()
 
     monkeypatch.setattr(auth_dependencies, "resolve_session_user", session_user)
 
@@ -91,8 +107,8 @@ def brain_server(tmp_path, monkeypatch):
     def me(request: Request):
         if state.me_failure:
             return JSONResponse({"detail": "identity service unavailable"}, status_code=503)
-        username = state.sessions.get(request.cookies.get("session_id"))
-        if not username or state.expired:
+        user = session_user(request)
+        if user is None:
             return {
                 "success": False,
                 "valid": False,
@@ -101,9 +117,9 @@ def brain_server(tmp_path, monkeypatch):
         return {
             "success": True,
             "data": {
-                "user": {"id": 1, "username": username},
-                "local_user_id": 1,
-                "tenant_id": username,
+                "user": {"id": user.id, "username": user.username},
+                "local_user_id": user.id,
+                "tenant_id": user.tenant_id,
             },
         }
 
@@ -174,7 +190,6 @@ def brain_server(tmp_path, monkeypatch):
         server.should_exit = True
         thread.join(10)
         sock.close()
-        code_editor._EDIT_STORE.clear()
         assert not thread.is_alive()
 
 

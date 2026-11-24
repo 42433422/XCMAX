@@ -1,4 +1,4 @@
-"""Workbook comparison, trend estimates, schema, and indexing operations."""
+"""Workbook comparison shared by the authorized workbook read adapter."""
 
 from __future__ import annotations
 
@@ -8,13 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.application.tools.workflow_tools.contracts import (
-    ExcelIO,
-    Payload,
-    VectorIngest,
-    WorkbookSchema,
-)
-from app.infrastructure.excel.date_norm import normalize_excel_dates
+from app.application.tools.workflow_tools.contracts import ExcelIO, Payload
 
 
 def compare_frames(left: pd.DataFrame, right: pd.DataFrame, keys: list[str]) -> Payload:
@@ -33,37 +27,10 @@ def compare_frames(left: pd.DataFrame, right: pd.DataFrame, keys: list[str]) -> 
     }
 
 
-def linear_forecast(values: pd.Series, periods: int) -> Payload:
-    if len(values) < 2:
-        return {
-            "action": "forecast",
-            "future_forecast": [{"yhat": 0.0}] * periods,
-            "note": "数据不足，使用零预测",
-        }
-    x = list(range(len(values)))
-    n, sx, sy = len(x), sum(x), float(values.sum())
-    sxy = sum(xi * yi for xi, yi in zip(x, values))
-    sxx = sum(xi**2 for xi in x)
-    denominator = n * sxx - sx * sx
-    slope = (n * sxy - sx * sy) / denominator if denominator else 0
-    intercept = (sy - slope * sx) / n
-    return {
-        "action": "forecast",
-        "future_forecast": [
-            {"period": i + 1, "yhat": round(intercept + slope * (len(values) + i), 4)}
-            for i in range(periods)
-        ],
-        "model": "linear_regression",
-        "periods": periods,
-    }
-
-
 @dataclass(frozen=True)
 class WorkbookOperations:
     io: ExcelIO
     read_plain: Callable[[Path], pd.DataFrame]
-    schema_factory: Callable[[], WorkbookSchema]
-    ingest: VectorIngest
 
     def join_compare(self, args: Payload, workspace_root: str | None) -> Payload:
         action = str(args.get("action") or "join")
@@ -92,66 +59,3 @@ class WorkbookOperations:
             "row_count": len(result),
             "columns": list(result.columns.astype(str)),
         }
-
-    def forecast(self, args: Payload, workspace_root: str | None) -> Payload:
-        file_path = str(args.get("file_path") or "")
-        column = str(args.get("value_column") or args.get("y") or "").strip()
-        periods = max(1, min(30, int(args.get("periods") or 6)))
-        values = pd.Series([], dtype=float)
-        if file_path:
-            path = self.io.resolve(workspace_root or str(Path.cwd()), file_path)
-            df = self.io.read(path, sheet_name=None, header_row_1based=None)
-            if not column or column not in df.columns:
-                numeric = [
-                    c for c in df.columns if pd.to_numeric(df[c], errors="coerce").notna().sum() > 2
-                ]
-                column = numeric[0] if numeric else ""
-            if column:
-                values = pd.to_numeric(df[column], errors="coerce").dropna()
-        return linear_forecast(values, periods)
-
-    def schema(self, args: Payload, workspace_root: str | None) -> Payload:
-        file_path = str(args.get("file_path") or "")
-        sheet, header = args.get("sheet_name"), self.io.header(args)
-        root = workspace_root or str(Path.cwd())
-        path = self.io.resolve(root, file_path)
-        if not path.exists():
-            return {
-                "success": False,
-                "error": "file_not_found",
-                "message": f"找不到文件: {file_path}",
-                "hint": "请确认文件已正确上传，或重新上传文件。",
-                "workspace_root": root,
-                "resolved_path": str(path),
-            }
-        if header is None:
-            from app.application.tools.workflow_tools.excel_analysis import auto_header_row
-
-            header = auto_header_row(path, str(sheet).strip() if sheet else None)
-        df = normalize_excel_dates(self.io.read(path, sheet_name=sheet, header_row_1based=header))
-        return {
-            **self.schema_factory().understand_dataframe(df, file_path=file_path),
-            "header_row": header,
-        }
-
-    def vector_index(self, args: Payload, workspace_root: str | None) -> Payload:
-        file_path = str(args.get("file_path") or "").strip()
-        if not file_path:
-            return {"success": False, "error": "file_path is required"}
-        path = self.io.resolve(workspace_root or str(Path.cwd()), file_path)
-        if not path.exists():
-            return {
-                "success": False,
-                "error": "file_not_found",
-                "file_path": file_path,
-                "resolved_path": str(path),
-            }
-        result = self.ingest(
-            file_path=str(path),
-            index_name=str(args.get("index_name") or "").strip() or None,
-            index_id=str(args.get("index_id") or "").strip() or None,
-        )
-        if isinstance(result, dict) and result.get("success") and result.get("index_id"):
-            result["excel_vector_index_id"] = result.get("index_id")
-            result["excel_index_id"] = result.get("index_id")
-        return result

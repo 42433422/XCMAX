@@ -16,6 +16,7 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 import app.utils.performance.redis_cache as rc
 
@@ -48,7 +49,7 @@ def test_is_available_when_redis_none():
 
 def test_is_available_ping_exception():
     r = MagicMock()
-    r.ping.side_effect = RuntimeError("boom")
+    r.ping.side_effect = RedisConnectionError("boom")
     c = rc.RedisCache(redis_client=r)
     assert c.is_available is False
 
@@ -76,13 +77,13 @@ def test_get_miss(cache, fake_redis):
 
 
 def test_get_redis_error_returns_none(cache, fake_redis):
-    fake_redis.get.side_effect = RuntimeError("boom")
+    fake_redis.get.side_effect = RedisConnectionError("boom")
     assert cache.get("k") is None
     assert cache._stats["errors"] == 1
 
 
 def test_set_redis_error_returns_false(cache, fake_redis):
-    fake_redis.set.side_effect = RuntimeError("boom")
+    fake_redis.set.side_effect = RedisConnectionError("boom")
     assert cache.set("k", "v", ttl=10) is False
     assert cache._stats["errors"] == 1
 
@@ -94,7 +95,7 @@ def test_delete_success(cache, fake_redis):
 
 
 def test_delete_redis_error(cache, fake_redis):
-    fake_redis.delete.side_effect = RuntimeError("boom")
+    fake_redis.delete.side_effect = RedisConnectionError("boom")
     assert cache.delete("k") is False
 
 
@@ -187,7 +188,7 @@ def test_release_lock_mismatch(cache, fake_redis):
 
 
 def test_release_lock_redis_error(cache, fake_redis):
-    fake_redis.eval.side_effect = RuntimeError("boom")
+    fake_redis.eval.side_effect = RedisConnectionError("boom")
     assert cache.release_lock("res", "t") is False
 
 
@@ -207,7 +208,7 @@ def test_pipeline_get_many(cache, fake_redis):
 def test_pipeline_get_many_redis_error(cache, fake_redis):
     pipe = MagicMock()
     fake_redis.pipeline.return_value = pipe
-    pipe.execute.side_effect = RuntimeError("boom")
+    pipe.execute.side_effect = RedisConnectionError("boom")
     assert cache.get_many(["k1", "k2"]) == {}
 
 
@@ -221,7 +222,7 @@ def test_pipeline_set_many(cache, fake_redis):
 def test_pipeline_set_many_error(cache, fake_redis):
     pipe = MagicMock()
     fake_redis.pipeline.return_value = pipe
-    pipe.execute.side_effect = RuntimeError("boom")
+    pipe.execute.side_effect = RedisConnectionError("boom")
     assert cache.set_many({"a": 1}, ttl=60) is False
 
 

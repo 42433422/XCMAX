@@ -68,7 +68,7 @@ class TestGetStartupConfig:
     def test_windows_registry_error(self, service, monkeypatch):
         monkeypatch.setattr(sys, "platform", "win32")
         mock_winreg = MagicMock()
-        mock_winreg.OpenKey.side_effect = RuntimeError("registry error")
+        mock_winreg.OpenKey.side_effect = OSError("registry error")
         mock_winreg.HKEY_CURRENT_USER = MagicMock()
         mock_winreg.KEY_READ = MagicMock()
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
@@ -111,7 +111,7 @@ class TestEnableStartup:
     def test_windows_platform_error(self, service, monkeypatch):
         monkeypatch.setattr(sys, "platform", "win32")
         mock_winreg = MagicMock()
-        mock_winreg.OpenKey.side_effect = RuntimeError("access denied")
+        mock_winreg.OpenKey.side_effect = PermissionError("access denied")
         mock_winreg.HKEY_CURRENT_USER = MagicMock()
         mock_winreg.KEY_WRITE = MagicMock()
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
@@ -157,7 +157,7 @@ class TestDisableStartup:
     def test_windows_error(self, service, monkeypatch):
         monkeypatch.setattr(sys, "platform", "win32")
         mock_winreg = MagicMock()
-        mock_winreg.OpenKey.side_effect = RuntimeError("error")
+        mock_winreg.OpenKey.side_effect = OSError("error")
         mock_winreg.HKEY_CURRENT_USER = MagicMock()
         mock_winreg.KEY_WRITE = MagicMock()
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
@@ -180,7 +180,7 @@ class TestGetSystemInfo:
         assert "executable" in result
 
     def test_exception_returns_error(self, service, monkeypatch):
-        with patch("platform.version", side_effect=RuntimeError("err")):
+        with patch("os.getcwd", side_effect=FileNotFoundError("working directory removed")):
             result = service.get_system_info()
             assert "message" in result
 

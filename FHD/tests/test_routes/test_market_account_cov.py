@@ -81,13 +81,13 @@ class TestSaveSessionMarketToken:
         assert "sid" not in ma._MARKET_SESSION_TOKENS
 
     def test_saves_refresh_token(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("no db")):
             ma.save_session_market_token("s1", "t1", "r1")
         assert ma._MARKET_SESSION_TOKENS["s1"] == "t1"
         assert ma._MARKET_SESSION_REFRESH_TOKENS["s1"] == "r1"
 
     def test_saves_without_refresh_token(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("no db")):
             ma.save_session_market_token("s2", "t2")
         assert "s2" not in ma._MARKET_SESSION_REFRESH_TOKENS
 
@@ -123,12 +123,12 @@ class TestSaveSessionMarketToken:
 class TestClearSessionMarketToken:
     def test_clears_in_memory(self):
         ma._MARKET_SESSION_TOKENS["sid5"] = "tok5"
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("no db")):
             ma.clear_session_market_token("sid5")
         assert "sid5" not in ma._MARKET_SESSION_TOKENS
 
     def test_skips_empty_sid(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("no db")):
             ma.clear_session_market_token("")
         # No crash
 
@@ -467,7 +467,7 @@ class TestFetchMarketMembershipTier:
 
     @pytest.mark.asyncio
     async def test_exception_returns_none(self):
-        with patch.object(ma, "_proxy_json", side_effect=RuntimeError("fail")):
+        with patch.object(ma, "_proxy_json", side_effect=OSError("fail")):
             result = await ma.fetch_market_membership_tier("tok")
         assert result is None
 
@@ -651,7 +651,7 @@ class TestMarketAccountOverview:
         with patch.object(
             ma,
             "_authorization_from_request_resolved",
-            new=AsyncMock(side_effect=RuntimeError("boom")),
+            new=AsyncMock(side_effect=ConnectionError("session store unavailable")),
         ):
             resp = _client.post("/api/market/account-overview", json={})
         # Recoverable errors degrade gracefully
@@ -1195,7 +1195,7 @@ class TestSessionMarketToken:
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db error")):
             result = ma.session_market_token("err_sid")
         assert result == ""
 
@@ -1237,7 +1237,7 @@ class TestSessionMarketRefreshToken:
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("fail")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("fail")):
             result = ma.session_market_refresh_token("rf_err_sid")
         assert result == ""
 
@@ -1302,7 +1302,7 @@ class TestLatestSessionMarketRefreshToken:
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db fail")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db fail")):
             result = ma.latest_session_market_refresh_token()
         assert result == ""
 
@@ -1355,7 +1355,7 @@ class TestLatestSessionMarketToken:
         assert result == "second_tok"
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("fail")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("fail")):
             result = ma.latest_session_market_token()
         assert result == ""
 
@@ -1426,7 +1426,7 @@ class TestMarketSessionHandoff:
         with (
             patch(
                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                side_effect=RuntimeError("sensitive-context"),
+                side_effect=ConnectionError("sensitive-context"),
             ),
             patch.object(
                 ma, "latest_session_market_token", return_value="another-user-token"
@@ -2321,7 +2321,9 @@ class TestMarketAccountOverviewBranches:
             ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
         ):
             with patch.object(
-                ma, "_proxy_json", new=AsyncMock(side_effect=RuntimeError("inner boom"))
+                ma,
+                "_proxy_json",
+                new=AsyncMock(side_effect=ConnectionError("market upstream unavailable")),
             ):
                 resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200

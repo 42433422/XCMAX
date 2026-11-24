@@ -593,7 +593,7 @@ def test_startup_failure_has_durable_blocked_parent_and_no_replay(setup_gateway,
     state = setup_gateway
 
     def fail(_app):
-        raise RuntimeError("private server failed with a secret")
+        raise ConnectionError("private server failed with a secret")
 
     monkeypatch.setattr(gateway, "LocalRuntimeServer", fail)
     result = asyncio.run(state.invoke())
@@ -601,6 +601,79 @@ def test_startup_failure_has_durable_blocked_parent_and_no_replay(setup_gateway,
     assert state.repository.get(result["run_id"]).status == "blocked"
     duplicate = asyncio.run(state.invoke())
     assert duplicate["deduplicated"] is True and state.calls == []
+
+
+def test_startup_programming_error_propagates_unchanged(setup_gateway, monkeypatch):
+    state = setup_gateway
+    error = RuntimeError("synthetic startup programming failure")
+
+    def fail(_app):
+        raise error
+
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", fail)
+    with pytest.raises(RuntimeError) as raised:
+        asyncio.run(state.invoke())
+    assert raised.value is error
+    assert state.calls == []
+
+
+@pytest.mark.parametrize("thread_alive", [False, True])
+def test_unready_local_server_persists_blocked_parent_without_replay(
+    setup_gateway, monkeypatch, thread_alive
+):
+    import uvicorn
+
+    from app.infrastructure.codex import local_server
+
+    state = setup_gateway
+    thread = Mock()
+    thread.is_alive.return_value = thread_alive
+    server = SimpleNamespace(started=False, should_exit=False, run=Mock())
+    monkeypatch.setattr(uvicorn, "Server", lambda _config: server)
+    monkeypatch.setattr(local_server, "threading", SimpleNamespace(Thread=lambda **_: thread))
+    monkeypatch.setattr(
+        local_server, "time", SimpleNamespace(monotonic=Mock(side_effect=[0.0, 11.0]))
+    )
+    endpoints = []
+
+    def start(app):
+        endpoint = local_server.LocalRuntimeServer(app)
+        endpoints.append(endpoint)
+        return endpoint
+
+    monkeypatch.setattr(gateway, "LocalRuntimeServer", start)
+    result = asyncio.run(state.invoke())
+    assert result["error_code"] == "runtime_unavailable"
+    assert state.repository.get(result["run_id"]).status == "blocked"
+    assert server.should_exit is True
+    assert endpoints[0]._socket.fileno() == -1
+    thread.join.assert_called_once_with(5)
+    duplicate = asyncio.run(state.invoke())
+    assert duplicate["deduplicated"] is True and len(endpoints) == 1
+    assert state.calls == []
+
+
+def test_private_endpoint_startup_failure_is_operational_and_closes_resources(monkeypatch):
+    import uvicorn
+
+    from app.infrastructure.codex import local_server
+
+    sock = Mock()
+    sock.getsockname.return_value = ("127.0.0.1", 19113)
+    thread = Mock()
+    thread.is_alive.return_value = False
+    server = Mock(started=False)
+    monkeypatch.setattr(local_server.socket, "socket", Mock(return_value=sock))
+    monkeypatch.setattr(local_server.threading, "Thread", Mock(return_value=thread))
+    monkeypatch.setattr(uvicorn, "Config", Mock())
+    monkeypatch.setattr(uvicorn, "Server", Mock(return_value=server))
+
+    with pytest.raises(ConnectionError, match="Private runtime endpoint failed to start"):
+        with local_server.LocalRuntimeServer(object()):
+            pytest.fail("an unavailable endpoint cannot start the runtime")
+    assert server.should_exit is True
+    thread.join.assert_called_once_with(5)
+    sock.close.assert_called_once_with()
 
 
 def test_sync_entry_preserves_request_inside_running_event_loop(setup_gateway):

@@ -80,10 +80,10 @@ def test_database_url_for_active_mod_host_base_exception_fallback():
     with patch.object(db_mod, "get_request_active_mod_id", return_value="M1"):
         with patch(
             "app.db.host_base_db_api.should_use_base_database_for_path",
-            side_effect=RuntimeError("ctx"),
+            side_effect=ValueError("ctx"),
         ):
             with patch(
-                "app.http.request_context.get_current_http_request", side_effect=RuntimeError("ctx")
+                "app.http.request_context.get_current_http_request", side_effect=ValueError("ctx")
             ):
                 base = "postgresql://localhost/xcagi"
                 assert db_mod._database_url_for_active_mod(base) != ""

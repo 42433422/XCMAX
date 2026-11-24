@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import ocr
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -66,18 +67,19 @@ def test_ocr_processing_rejects_invalid_session_user(
     run.assert_not_called()
 
 
-def test_ocr_run_identity_is_taken_from_session_not_headers(client: TestClient) -> None:
-    user = SimpleNamespace(id=73, is_active=True)
-    with (
-        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
-        patch.object(ocr, "_run_ocr_agent", return_value=object()) as run,
-        patch.object(ocr, "_agent_node_output", return_value={"success": True}),
-    ):
+def test_ocr_run_identity_is_taken_from_session_not_headers(
+    client: TestClient, trusted_actor
+) -> None:
+    actor = trusted_actor(user_id=73, role="admin")
+    with patch(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        return_value='{"success": true, "execution_state": "completed", "result": {"data": {"text": "hello"}}}',
+    ) as execute:
         response = client.post(
             "/api/ocr/extract",
             json={"text": "hello"},
-            headers={"X-User-ID": "999", "X-Workspace-Id": "victim"},
+            headers={**actor.headers, "X-User-ID": "999", "X-Workspace-Id": "victim"},
         )
-    assert response.status_code == 200
-    assert response.json()["success"] is True
-    assert run.call_args.kwargs["user_id"] == "73"
+    assert response.status_code == 200 and response.json()["success"] is True
+    assert execute.call_args.kwargs["runtime_context"]["user_id"] == "73"
+    assert execute.call_args.kwargs["runtime_context"]["tenant_id"] == "7"

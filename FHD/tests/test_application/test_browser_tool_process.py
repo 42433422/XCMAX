@@ -21,8 +21,10 @@ from app.application.agent_orchestrator import browser_tool_process as workers
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
+from app.application.tool_execution_deadline import invocation_deadline
 from app.application.tools.mcp import registry
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_tool_process_cleanup import assert_owner_exit_reaps_workers
 from tests.test_infrastructure.test_mcp_persistent_sessions import _SERVER
 
 
@@ -111,6 +113,50 @@ def state(result):
     return result.get("structured_content") or json.loads(result["content"])
 
 
+@pytest.mark.parametrize("expired", [False, True])
+def test_snapshot_readback_dispatch_preserves_absolute_parent_deadline(monkeypatch, expired):
+    dispatched = []
+
+    class ExistingWorker:
+        lost = False
+        fingerprint = "owned-session"
+
+        def call(self, step, context, deadline, business_url, *, readback=False):
+            dispatched.append((deadline, readback, context["_surface_readback"]))
+            return {"success": True, "session_id": "original-generation"}
+
+    config = SimpleNamespace(name="browser-readback", timeout_seconds=15)
+    context = {"run_id": "existing-run"}
+    monkeypatch.setattr(registry, "mcp_session_scope", lambda _context: "owned-scope")
+    monkeypatch.setattr(workers, "_WORKERS", {(config.name, "owned-scope"): ExistingWorker()})
+    monkeypatch.setattr(workers, "_connection_identity", lambda *_: ("owned-session", "sqlite://"))
+    call = SimpleNamespace(
+        call_id="existing-call",
+        metadata={"verification_contract": {"contract_sha256": "frozen-contract"}},
+        output={"session_id": "original-generation"},
+    )
+    parent_deadline = time.monotonic() + (-1 if expired else 2)
+
+    with invocation_deadline(parent_deadline):
+        result = workers.read_browser_snapshot(None, None, call, context, config)
+
+    if expired:
+        assert dispatched == []
+        assert result["success"] is False
+        assert result["outcome"] == "not_started"
+    else:
+        assert len(dispatched) == 1
+        deadline, readback, request = dispatched[0]
+        assert time.monotonic() < deadline <= parent_deadline
+        assert readback is True
+        assert request == {
+            "call_id": "existing-call",
+            "contract_sha256": "frozen-contract",
+            "session_id": "original-generation",
+        }
+        assert result == {"success": True, "session_id": "original-generation"}
+
+
 def test_actual_executor_keeps_browser_across_steps_and_reaps_entire_tree(browser):
     first = call(browser, "browser_snapshot")
     current = call(browser, "browser_snapshot")
@@ -197,7 +243,7 @@ def test_dynamic_children_share_the_original_sql_parent_and_real_worker_generati
 
     try:
         first = invoke("browser_snapshot", {}, "observe")
-        assert first["verified"] is True, first
+        assert first["verified"] is True, json.dumps(first, ensure_ascii=False)
         generation = first["tool_calls"][0]["output"]["session_id"]
         original_pid = state(first["tool_calls"][0]["output"])["pid"]
         opened = log.read_text().count("opened")  # Discovery also opens a short-lived SDK session.
@@ -246,6 +292,11 @@ def test_dynamic_children_share_the_original_sql_parent_and_real_worker_generati
         set_agent_run_repository_for_tests(None)
 
 
+@pytest.mark.parametrize("phase", ["idle", "active"])
+def test_browser_worker_and_stdio_tree_stop_when_owner_exits(tmp_path, phase):
+    assert_owner_exit_reaps_workers(tmp_path, browser=True, phase=phase)
+
+
 def test_actual_executor_rechecks_revoked_host_session_between_steps(browser):
     from app.db.models.user import Session
 
@@ -290,7 +341,9 @@ def test_real_worker_keeps_captured_model_credentials_off_disk(browser, monkeypa
     first = call(browser, "browser_snapshot")
     state(first)
     worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
-    process = psutil.Process(worker.process.pid)
+    consumer_pid = worker.consumer_pid
+    assert consumer_pid is not None and consumer_pid != worker.process.pid
+    process = psutil.Process(consumer_pid)
     sent = threading.Event()
     frames = []
     send = worker.commands.send_bytes
@@ -329,7 +382,9 @@ def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, 
     first = call(browser, "browser_snapshot")
     browser_pid = state(first)["pid"]
     worker = workers._WORKERS[(first["server"], registry.mcp_session_scope(browser[1]))]
-    worker_pid = worker.process.pid
+    supervisor_pid = worker.process.pid
+    worker_pid = worker.consumer_pid
+    assert worker_pid is not None and worker_pid != supervisor_pid
     sender_threads = []
     send = worker.commands.send_bytes
 
@@ -348,9 +403,40 @@ def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, 
     assert result["success"] is False and result["retryable"] is False
     assert result["outcome"] == "unknown"
     assert sender_threads and all(not thread.is_alive() for thread in sender_threads)
-    assert not psutil.pid_exists(worker_pid) and not psutil.pid_exists(browser_pid)
+    assert all(not psutil.pid_exists(pid) for pid in (supervisor_pid, worker_pid, browser_pid))
     assert not Path(worker.folder).exists()
     assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
+
+
+def test_busy_browser_lock_respects_deadline_without_dispatch_or_session_loss(browser, monkeypatch):
+    first = call(browser, "browser_snapshot")
+    browser_pid = state(first)["pid"]
+    worker = next(iter(workers._WORKERS.values()))
+    frames = []
+    send = worker.commands.send_bytes
+
+    def observe_send(payload):
+        frames.append(payload)
+        return send(payload)
+
+    monkeypatch.setattr(worker.commands, "send_bytes", observe_send)
+    with worker.lock:
+        started = time.monotonic()
+        denied = call(browser, "browser_snapshot", timeout=0.2)
+        assert time.monotonic() - started < 1
+    assert denied == {
+        "success": False,
+        "error_code": "mcp_session_busy",
+        "retryable": False,
+        "outcome": "not_started",
+        "reconciliation_required": False,
+    }
+    assert frames == []
+    assert not worker.lost and psutil.pid_exists(browser_pid)
+    following = call(browser, "browser_snapshot")
+    assert len(frames) == 1
+    assert following["session_id"] == first["session_id"]
+    assert state(following)["pid"] == browser_pid
 
 
 @pytest.mark.parametrize("retained_foreign_worker", [False, True])
@@ -424,7 +510,7 @@ def test_browser_address_limit_does_not_change_regular_tool_limits(monkeypatch):
     import resource
 
     applied = {}
-    monkeypatch.setattr(resource, "getrlimit", lambda kind: (-1, -1))
+    monkeypatch.setattr(resource, "getrlimit", lambda kind: (resource.RLIM_INFINITY,) * 2)
     monkeypatch.setattr(resource, "setrlimit", lambda kind, pair: applied.update({kind: pair}))
     monkeypatch.delenv("XCAGI_TOOL_SANDBOX", raising=False)
     monkeypatch.delenv("XCAGI_BROWSER_ADDRESS_MB", raising=False)

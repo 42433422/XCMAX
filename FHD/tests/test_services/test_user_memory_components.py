@@ -314,8 +314,8 @@ def test_components_import_without_the_service_facade() -> None:
                     raise AssertionError("component imported service facade")
 
         sys.meta_path.insert(0, BlockFacade())
-        importlib.import_module("app.domain.user_memory.records")
-        for name in ("protocols", "policy", "retrieve",
+        from app.domain.user_memory import policy, records
+        for name in ("protocols", "retrieve",
                      "preferences", "candidates", "queries", "patterns", "feedback"):
             importlib.import_module("app.application.user_memory." + name)
         for name in ("json_storage", "persistence"):

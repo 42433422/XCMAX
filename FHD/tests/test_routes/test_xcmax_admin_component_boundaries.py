@@ -102,7 +102,7 @@ async def test_sse_resumes_from_last_delivered_cursor_after_store_failure(monkey
             calls.append((since_cursor, limit))
             attempts += 1
             if attempts == 2:
-                raise RuntimeError("temporary read failure")
+                raise OSError("temporary read failure")
             return [{"id": 17 if attempts == 1 else 19, "entity_type": "synthetic"}]
 
     monkeypatch.setattr(xcmax_sync, "SyncDb", Store)
@@ -321,7 +321,7 @@ def test_entitlement_snapshot_resolver_failure_does_not_enable_legacy_fallback(
         nonlocal lookups
         lookups += 1
         if lookups > 1:
-            raise RuntimeError("identity storage unavailable")
+            raise ConnectionError("identity storage unavailable")
         with original_db() as db:
             yield db
 
@@ -343,7 +343,7 @@ def test_entitlement_snapshot_resolver_failure_does_not_enable_legacy_fallback(
             "detail",
             "identity unavailable",
         ),
-        (RuntimeError("identity unavailable"), 500, "message", "当前账号权益同步失败"),
+        (ConnectionError("identity unavailable"), 500, "message", "当前账号权益同步失败"),
     ],
 )
 def test_entitlement_snapshot_preserves_non_authentication_errors(

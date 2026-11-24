@@ -340,7 +340,7 @@ describe('butler API', () => {
   })
 
   it('agentButlerChat', async () => {
-    await butler.agentButlerChat({ messages: [] })
+    await butler.agentButlerChat({ messages: [], request_id: 'butler-turn-1' })
     expect(mReq).toHaveBeenCalledWith('/api/agent/butler/chat', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -349,7 +349,7 @@ describe('butler API', () => {
       'fetch',
       vi.fn(() => Promise.resolve(new Response())),
     )
-    const res = await butler.agentButlerChatStream({ messages: [] })
+    const res = await butler.agentButlerChatStream({ messages: [], request_id: 'butler-turn-1' })
     expect(res).toBeDefined()
     expect(fetch).toHaveBeenCalledWith('/api/agent/butler/chat/stream', expect.objectContaining({ method: 'POST' }))
   })

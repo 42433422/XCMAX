@@ -809,10 +809,27 @@ def test_elt_stopped_original_receipt_reopens_sql_and_reverifies_without_dispatc
         assert db.query(ShipmentRecord).count() == 1
 
 
+def test_elt_finalize_claim_programming_error_propagates_unchanged(elt_runtime, monkeypatch):
+    from app.domain.shared_services.tools_workflow_elt import _finalize_import
+
+    state = elt_runtime
+    preview = _elt_preview(state.elt)
+    current = _execute_elt_business(state, preview)
+    error = RuntimeError("injected finalizer claim programming failure")
+    claim = Mock(side_effect=error)
+    monkeypatch.setattr("app.application.elt.operation_owner.claim_operation", claim)
+    with tenant_scope(state.actor.tenant_id), pytest.raises(RuntimeError) as raised:
+        _finalize_import(current, state.actor.user_id)
+    assert raised.value is error
+    claim.assert_called_once()
+    assert _elt_auxiliary(state, preview) is None
+
+
 def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, monkeypatch):
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
     from threading import Barrier, Event
 
+    from app.application.elt import operation_owner
     from app.application.elt.errors import EltConflict
     from app.db.models import ShipmentRecord
     from app.db.models.elt import EltRun
@@ -831,10 +848,17 @@ def test_elt_concurrent_finalizers_claim_once_and_exclude_rollback(elt_runtime, 
 
     ingest = Mock(side_effect=pause_writer)
     monkeypatch.setattr(state.knowledge, "ingest_document", ingest)
+    claim = operation_owner.claim_operation
+
+    def simultaneous_claim(db, run, kind, **kwargs):
+        if kind == "batch_execute":
+            arrived.wait(timeout=10)
+        return claim(db, run, kind, **kwargs)
+
+    monkeypatch.setattr(operation_owner, "claim_operation", simultaneous_claim)
 
     def finalize():
         with tenant_scope(state.actor.tenant_id):
-            arrived.wait(timeout=10)
             return _finalize_import(current, state.actor.user_id)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -1164,6 +1188,7 @@ def test_approved_elt_revision_cannot_follow_a_changed_preview(elt_runtime):
 def test_legacy_approved_unversioned_elt_task_is_blocked_without_rewriting_params(
     elt_runtime, monkeypatch
 ):
+    from app.application import capability_catalog
     from app.application.agent_orchestrator import tool_spec
     from app.db.models import ShipmentRecord
 
@@ -1178,9 +1203,15 @@ def test_legacy_approved_unversioned_elt_task_is_blocked_without_rewriting_param
     def old_spec(tool, action):
         return legacy if (tool, action) == ("elt_import", "execute") else original(tool, action)
 
+    original_catalog = capability_catalog.build_tool_specs_v2
+
+    def old_catalog():
+        return {**original_catalog(), ("elt_import", "execute"): legacy}
+
     params = {"run_id": preview["id"], "accept_suggested": True}
     with monkeypatch.context() as old_deployment:
         old_deployment.setattr(tool_spec, "get_tool_action_spec", old_spec)
+        old_deployment.setattr(capability_catalog, "build_tool_specs_v2", old_catalog)
         old_deployment.setattr("app.infrastructure.codex.tools.get_tool_action_spec", old_spec)
         pending = state.execute("legacy", "elt_import", "execute", params)
 

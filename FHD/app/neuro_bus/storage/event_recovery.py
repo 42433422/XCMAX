@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from app.neuro_bus.events.events_base import NeuroEvent
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 from .event_records import Snapshot, StoredEvent, WrongExpectedVersionError
 from .sqlite import StorageRuntime
@@ -113,9 +114,10 @@ class EventRecovery:
             if callback:
                 try:
                     callback(stored.event)
-                    count += 1
-                except self.runtime.errors() as e:
+                except BOUNDARY_ERRORS as e:
                     self.runtime.log().error("[EventStore] 重播失败: %s", e)
+                else:
+                    count += 1
             else:
                 self.runtime.log().info(
                     "[EventStore] 重播: %s (store_id=%s)", stored.event.event_type, stored.store_id

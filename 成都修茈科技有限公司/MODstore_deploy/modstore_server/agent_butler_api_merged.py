@@ -329,6 +329,23 @@ async def butler_daily_digest_artifacts(
 "Implementation extracted from the public facade module."
 
 
+async def _butler_tools_with_capabilities(
+    user: _facade().User | None,
+    messages: list[Any] | None = None,
+) -> _facade().List[_facade().Dict[str, _facade().Any]]:
+    tools = _facade()._butler_tools_for_user(user, messages)
+    if (
+        tools
+        and user is not None
+        and getattr(user, "is_admin", False) is True
+        and getattr(user, "deleted_at", None) is None
+    ):
+        from modstore_server.xiaoc_admin_context import capability_tools_for_user
+
+        return tools + await capability_tools_for_user(user)
+    return tools
+
+
 def _clip_tool_text(text: str, *, max_chars: int = 2800) -> str:
     t = (text or "").strip()
     if len(t) <= max_chars:
@@ -344,7 +361,7 @@ def _execute_admin_readonly_tool(
     db: _facade().Session,
 ) -> str:
     """执行管理员会话只读工具；强制本人数据隔离。"""
-    if not bool(getattr(user, "is_admin", False)):
+    if getattr(user, "is_admin", False) is not True or getattr(user, "deleted_at", None):
         return "错误：仅管理员会话可用此工具"
     require_admin_life_capability(user, 2)
     tool = (name or "").strip()
@@ -478,6 +495,60 @@ def _execute_admin_readonly_tool(
     return f"错误：未处理工具 {tool}"
 
 
+async def _partition_with_capabilities(
+    tool_calls: _facade().List[_facade().Dict[str, _facade().Any]],
+    *,
+    user: _facade().User,
+    db: _facade().Session,
+    request_id: str = "",
+    receipts: list[dict] | None = None,
+) -> tuple[_facade().List[_facade().Dict[str, _facade().Any]], str]:
+    """Server capabilities stay on the authenticated chain, never forwarded to the page."""
+    from modstore_server.xiaoc_admin_context import (
+        CAPABILITY_TOOL_OPERATIONS,
+        execute_capability_tool,
+    )
+
+    if getattr(user, "is_admin", False) is True and tool_calls:
+        from modstore_server.xiaoc_life_store import read_state
+
+        state = read_state()
+        if state["level"] < 2 or state["level"] == 2 and len(tool_calls) > 1:
+            return _facade()._partition_butler_tool_calls(tool_calls, user=user, db=db)
+    page_calls: _facade().List[_facade().Dict[str, _facade().Any]] = []
+    briefs: _facade().List[str] = []
+    for index, tc in enumerate(tool_calls or []):
+        name = str((tc or {}).get("name") or "").strip()
+        if name in CAPABILITY_TOOL_OPERATIONS:
+            args = (tc or {}).get("args")
+            try:
+                require_admin_life_capability(user, 2)
+                result = await execute_capability_tool(
+                    user,
+                    name,
+                    args if isinstance(args, dict) else {},
+                    request_id=f"admin-butler:{request_id}:{index}" if request_id else "",
+                )
+            except _facade().HTTPException as exc:
+                result = {
+                    "success": False,
+                    "message": str(exc.detail),
+                    "status_code": exc.status_code,
+                }
+            briefs.append(_facade().json.dumps(result, ensure_ascii=False))
+            if receipts is not None:
+                receipts.append({"tool_call_id": tc.get("id", ""), "name": name, "result": result})
+        else:
+            page, brief = _facade()._partition_butler_tool_calls([tc], user=user, db=db)
+            page_calls.extend(page)
+            if brief:
+                briefs.append(brief)
+    brief = ""
+    if briefs:
+        brief = "\n\n".join(briefs)
+    return (page_calls, brief)
+
+
 class ButlerMessageDTO(_facade().BaseModel):
     role: str
     content: _facade().Any
@@ -488,6 +559,7 @@ class ButlerChatDTO(_facade().BaseModel):
     conversation_id: _facade().Optional[int] = None
     page_context: _facade().Optional[str] = _facade().Field(None, max_length=4000)
     max_tokens: _facade().Optional[int] = _facade().Field(None, ge=1, le=8000)
+    request_id: _facade().Optional[str] = _facade().Field(None, min_length=1, max_length=160)
 
 
 class CorpChatDTO(_facade().BaseModel):
@@ -1141,7 +1213,7 @@ async def butler_chat(
         from modstore_server.llm_chat_proxy import _normalize_openai_base
 
         tool_resp = None
-        tools_schema = _api._butler_tools_for_user(user, body.messages)
+        tools_schema = await _butler_tools_with_capabilities(user, body.messages)
         if tools_schema and provider in _api.OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             try:
                 base = _normalize_openai_base(provider, base_url)
@@ -1200,8 +1272,13 @@ async def butler_chat(
             usage = raw_response.get("usage") or {}
             finish_reason = raw_response.get("finish_reason")
         _require_complete_butler_reply(text, tool_calls, finish_reason)
-        page_tool_calls, readonly_brief = _api._partition_butler_tool_calls(
-            tool_calls, user=user, db=db
+        capability_receipts: list[dict] = []
+        page_tool_calls, readonly_brief = await _partition_with_capabilities(
+            tool_calls,
+            user=user,
+            db=db,
+            request_id=body.request_id or "",
+            receipts=capability_receipts,
         )
         tool_calls = page_tool_calls
         if readonly_brief:
@@ -1237,6 +1314,7 @@ async def butler_chat(
     return {
         "text": text,
         "tool_calls": tool_calls,
+        "capability_receipts": capability_receipts,
         "conversation_id": conv.id,
         "charge_amount": float(charge),
         "billed": not is_byok,
@@ -1259,7 +1337,7 @@ async def butler_chat_stream(
             text = str(result.get("text") or "")
             if text:
                 yield f"data: {_api.json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
-            yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
+            yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or [], 'capability_receipts': result.get('capability_receipts') or []}, ensure_ascii=False)}\n\n"
 
         return _api.StreamingResponse(admin_event_stream(), media_type="text/event-stream")
     provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)

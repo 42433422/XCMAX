@@ -3,6 +3,7 @@
 """
 
 import os
+import sqlite3
 import sys
 from unittest.mock import MagicMock, Mock, patch
 
@@ -71,7 +72,7 @@ class TestExtractLogService:
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__.return_value = mock_db
 
-            mock_db.execute.side_effect = RuntimeError("Database error")
+            mock_db.execute.side_effect = sqlite3.OperationalError("Database error")
 
             log_id = service.create_log(file_name="test.xlsx", data_type="products", total_rows=100)
 
@@ -151,7 +152,7 @@ class TestExtractLogService:
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__.return_value = mock_db
 
-            mock_db.execute.side_effect = RuntimeError("Database error")
+            mock_db.execute.side_effect = sqlite3.OperationalError("Database error")
 
             result = service.update_log(log_id=1, status="completed")
 
@@ -346,7 +347,7 @@ class TestExtractLogService:
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__.return_value = mock_db
 
-            mock_db.execute.side_effect = RuntimeError("Database error")
+            mock_db.execute.side_effect = sqlite3.OperationalError("Database error")
 
             logs = service.get_logs()
 

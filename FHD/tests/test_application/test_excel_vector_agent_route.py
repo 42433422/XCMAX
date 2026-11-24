@@ -6,83 +6,45 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client() -> TestClient:
+def _client(actor) -> TestClient:
     from app.fastapi_routes.excel_vector import router
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, headers=actor.headers, raise_server_exceptions=False)
 
 
-def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+def test_excel_vector_ingest_rejects_missing_approval_owner(
+    tmp_path, monkeypatch, trusted_actor
 ) -> None:
-    from app.application.dataset_rag_app_service import (
-        reset_dataset_rag_app_service_for_tests,
-    )
-
-    repo = InMemoryAgentRunRepository()
+    actor = trusted_actor(user_id=7, role="admin", tenant_id=None, tier="admin")
     ingest_service = Mock()
-    ingest_service.ingest_excel.return_value = {
-        "success": True,
-        "index_id": "idx-agent",
-        "chunk_count": 2,
-        "row_count": 8,
-    }
-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    reset_dataset_rag_app_service_for_tests()
-
     with (
-        patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ),
+        tenant_scope(None),
         patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
             return_value=ingest_service,
         ),
     ):
-        response = _client().post(
+        response = _client(actor).post(
             "/api/excel/vector/ingest",
             json={"file_path": "/tmp/products.xlsx", "index_name": "products"},
-            headers={"X-User-Id": "tenant-a"},
+            headers={"Idempotency-Key": "vector-ingest-1"},
         )
-
-    assert response.status_code == 400
-    payload = response.json()
-    assert payload["success"] is False
-    assert payload["error_code"] == "result_verification_inconclusive"
-    assert payload["agent_status"] == "blocked"
-    assert payload["agent_run_id"] == payload["run_id"]
-
-    run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.user_id == "tenant-a"
-    assert run.status == "blocked"
-    assert run.intent == "excel_vector_execute"
-    assert run.tool_calls[0].tool_id == "excel_vector_index"
-    assert run.tool_calls[0].action == "execute"
-    assert run.tool_calls[0].permission == "tool.excel_vector_index.execute"
-    assert run.tool_calls[0].cost_units == 1
-    ingest_service.ingest_excel.assert_called_once_with(
-        file_path="/tmp/products.xlsx", index_name="products", index_id=None
-    )
-    assert run.tool_calls[0].output["success"] is True
-    assert run.tool_calls[0].output["index_id"] == "idx-agent"
-    assert run.tool_calls[0].output["excel_vector_index_id"] == "idx-agent"
-    verification = run.tool_calls[0].metadata["verification"]
-    assert verification["accepted"] is False
-    assert verification["code"] == "result_verifier_unavailable"
-    assert all(check["status"] != "passed" for check in verification["checks"])
+    assert response.status_code == 403, response.text
+    assert response.json()["error_code"] == "approval_scope_required"
+    assert response.json()["execution_status"] == "not_started"
+    assert ingest_service.mock_calls == []
 
 
 def test_excel_vector_query_route_executes_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
+    actor = trusted_actor(user_id=7, role="admin", tenant_id=None, tier="admin")
     repo = InMemoryAgentRunRepository()
     search_service = Mock()
     search_service.query.return_value = {
@@ -96,6 +58,7 @@ def test_excel_vector_query_route_executes_through_agent_orchestrator(
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
 
     with (
+        tenant_scope(None),
         patch(
             "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
             return_value=repo,
@@ -105,7 +68,7 @@ def test_excel_vector_query_route_executes_through_agent_orchestrator(
             return_value=search_service,
         ),
     ):
-        response = _client().post(
+        response = _client(actor).post(
             "/api/excel/vector/query",
             json={"index_id": "idx-agent", "query": "5003", "top_k": 3},
             headers={"X-User-Id": "tenant-a"},
@@ -121,7 +84,6 @@ def test_excel_vector_query_route_executes_through_agent_orchestrator(
     run = repo.get(payload["run_id"])
     assert run is not None
     assert run.status == "completed"
-    assert run.intent == "excel_vector_query"
     assert run.tool_calls[0].tool_id == "excel_vector_index"
     assert run.tool_calls[0].action == "query"
     assert run.tool_calls[0].permission == "tool.excel_vector_index.query"

@@ -126,15 +126,85 @@ describe('persisted chat turn observation through the real SDK and task workspac
     expect(fetchMock.mock.calls.filter(([url]) => /\/api\/ai\/chat(?:\/stream)?(?:\?|$)/.test(String(url)))).toHaveLength(0)
   })
 
-  it('keeps an explicit authorization pause instead of claiming a completed answer', async () => {
+  it.each(['waiting_auth', 'unknown'])('keeps %s when observing an authorization pause', async expectedState => {
     const reply = originalReply()
     resumed[0].emit({ type: 'requires_token', token_name: 'write', token_description: '批准原任务' })
+    if (expectedState === 'unknown') {
+      resumed[0].emit({ type: 'done', result: { success: true, execution_state: 'unknown', response: '原任务结果待核对。' } })
+    }
     resumed[0].close()
-    await vi.waitFor(() => expect(reply.workflowAction).toBe('waiting_approval'))
+    await vi.waitFor(() => expect(reply.workflowAction).toBe(expectedState))
     expect(reply.content).not.toContain('已经完成')
     expect(resumed[0].signal?.aborted).toBe(true)
     expect(receiptReads()).toHaveLength(0)
   })
+
+  it.each(['child_approval', 'authorization'])('keeps %s ahead of a runtime completion envelope when observing the original turn', async kind => {
+    const reply = originalReply()
+    resumed[0].emit({ type: 'done', result: {
+      success: true, response: '原任务仍在等待授权。', runtime: 'codex', run_id: 'original-run', execution_state: 'completed',
+      runtime_context_update: { agent_runtime_run_id: 'original-run', conversation_id: 'original', status: 'waiting_approval' },
+      ...(kind === 'child_approval'
+        ? { data: { action: 'approval_pending', data: { approval_card: { run_id: 'original-child', approval_required: true } } } }
+        : { requires_token: true }),
+    } })
+    resumed[0].close()
+    await vi.waitFor(() => expect(reply.workflowAction).toBe(kind === 'child_approval' ? 'waiting_approval' : 'waiting_auth'))
+    expect(reply.runtimeContinuation).toEqual({ runId: 'original-run', status: 'waiting_approval', sessionId: 'original' })
+    if (kind === 'child_approval') expect(reply.approvalCard?.run_id).toBe('original-child')
+    else expect(reply.approvalCard).toBeUndefined()
+    expect(api.messages.value.filter(message => message.role === 'ai')).toEqual([reply])
+    expect(resumed[0].signal?.aborted).toBe(true)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+    expect(receiptReads()).toHaveLength(0)
+  })
+
+  it.each(['waiting_auth', 'unknown'])(
+    'keeps %s without posting after a retired unlock event or sending password authorization',
+    async expectedState => {
+      sessionId.value = 'fresh'
+      await api.syncSessionMessages({ required: true })
+      await flushPromises()
+      const originalFetch = fetchMock.getMockImplementation()!
+      fetchMock.mockImplementation(async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin)
+        if (url.pathname === '/api/ai/chat/stream' && init?.method === 'POST') {
+          const result = expectedState === 'unknown'
+            ? { success: true, execution_state: 'unknown', requires_reconciliation: true, response: '原任务结果待核对。' }
+            : { success: true, response: '' }
+          return new Response(
+            'data: {"type":"requires_token","token_name":"DB_WRITE_TOKEN","run_id":"waiting-original-run"}\n\n'
+            + `data: ${JSON.stringify({ type: 'done', result })}\n\n`,
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          )
+        }
+        return originalFetch(input, init)
+      })
+      localStorage.setItem('xcagi_db_read_token', 'retired-read-secret')
+      localStorage.setItem('xcagi_db_write_token', 'retired-write-secret')
+      const prompt = vi.fn()
+      window.addEventListener('xcagi:prompt-db-write-token', prompt)
+      try {
+        await api.sendMessage('请核对本轮资料')
+        const chatPosts = () => fetchMock.mock.calls.filter(([url, init]) =>
+          String(url).includes('/api/ai/chat/stream') && init?.method === 'POST')
+        expect(chatPosts()).toHaveLength(1)
+        const body = JSON.parse(String(chatPosts()[0][1]?.body))
+        expect(body.context.turn_id).toBeTruthy()
+        expect(JSON.stringify(body)).not.toMatch(/db_read_token|db_write_token|chat_db_write_authorized|db_write_stream_resume|retired-/)
+        const postsBeforeUnlock = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').length
+        window.dispatchEvent(new CustomEvent('fhd-db-write-unlocked'))
+        window.dispatchEvent(new CustomEvent('fhd-db-write-unlocked'))
+        await flushPromises()
+        expect(chatPosts()).toHaveLength(1)
+        expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(postsBeforeUnlock)
+        expect(prompt).not.toHaveBeenCalled()
+        expect(api.messages.value.filter(message => message.role === 'ai').at(-1)?.workflowAction).toBe(expectedState)
+      } finally {
+        window.removeEventListener('xcagi:prompt-db-write-token', prompt)
+      }
+    },
+  )
 
   it('reflects waiting and blocked task states without replaying or completing the turn', async () => {
     const reply = originalReply()

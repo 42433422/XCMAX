@@ -4,6 +4,7 @@ import json
 import multiprocessing
 import time
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -25,7 +27,9 @@ def _client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def authenticated_memory_client(monkeypatch, trusted_actor):
-    actor = trusted_actor(user_id=7, role="admin", permissions=["memory_v2.write"])
+    actor = trusted_actor(
+        user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
+    )
     original = _client
 
     def client():
@@ -49,13 +53,16 @@ def _configure_runtime(monkeypatch, tmp_path) -> None:
 
     memory_dir = tmp_path / "memory"
     monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
+    monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-receipts.sqlite"))
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
-    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+    from app.application.agent_orchestrator.tool_permission import (
+        clear_idempotent_replay_for_tests,
+    )
 
     clear_idempotent_replay_for_tests()
     memory_mod.reset_user_memory_service()
@@ -81,8 +88,8 @@ def _assert_memory_run(
     assert run is not None
     assert run.user_id == "7"
     assert run.status == "completed"
-    assert run.intent == f"memory_v2_{action}"
-    assert run.steps[0].risk == risk
+    assert run.intent == f"ERP Agent 请求执行 memory_v2.{action}"
+    assert run.steps[0].risk == "high"
     assert run.tool_calls[0].tool_id == "memory_v2"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == "memory_v2.write"
@@ -98,6 +105,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
     monkeypatch,
     authenticated_memory_client,
     account_tier,
+    local_tools,
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
     from app.application.agent_task_context import scoped_personal_memory_id
@@ -112,7 +120,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
 
     try:
         with _patch_agent_repo(repo):
-            client = _client()
+            client = ApprovedCapabilityClient(_client(), repo, authenticated_memory_client)
             created = client.post(
                 "/memory/v2/candidates",
                 json={
@@ -124,7 +132,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                     "source": "settings_ui",
                     "evidence": [{"message": "总是给七彩乐园开单"}],
                 },
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-propose"},
             )
             assert created.status_code == 200, created.json()
             created_body = created.json()
@@ -140,9 +148,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             confirmed = client.post(
                 f"/memory/v2/{memory_id}/confirm",
                 json={"user_id": "7"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-confirm"},
             )
-            assert confirmed.status_code == 200
+            assert confirmed.status_code == 200, confirmed.text
             confirmed_body = confirmed.json()
             assert confirmed_body["memory"]["status"] == "active"
             _assert_memory_run(repo, confirmed_body["run_id"], action="confirm", risk="high")
@@ -158,9 +166,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                     "value": "彩虹乐园",
                     "reason": "用户纠正名称",
                 },
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-correct"},
             )
-            assert corrected.status_code == 200
+            assert corrected.status_code == 200, corrected.text
             corrected_body = corrected.json()
             assert corrected_body["memory"]["key"] == "favorite_customer"
             _assert_memory_run(repo, corrected_body["run_id"], action="correct", risk="high")
@@ -170,7 +178,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             rejected = client.post(
                 f"/memory/v2/{memory_id}/reject",
                 json={"user_id": "7", "reason": "用户拒绝"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-reject"},
             )
             assert rejected.status_code == 200, rejected.json()
             rejected_body = rejected.json()
@@ -185,9 +193,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             deleted = client.delete(
                 f"/memory/v2/{memory_id}",
                 params={"user_id": "7", "reason": "用户删除"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-delete"},
             )
-            assert deleted.status_code == 200
+            assert deleted.status_code == 200, deleted.text
             deleted_body = deleted.json()
             assert deleted_body["memory"]["status"] == "deleted"
             _assert_memory_run(repo, deleted_body["run_id"], action="delete", risk="high")
@@ -199,6 +207,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
 def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
     tmp_path,
     monkeypatch,
+    authenticated_memory_client,
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
 
@@ -207,7 +216,7 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
 
     try:
         with _patch_agent_repo(repo):
-            client = _client()
+            client = ApprovedCapabilityClient(_client(), repo, authenticated_memory_client)
             created = client.post(
                 "/memory/v2/candidates",
                 json={
@@ -237,7 +246,7 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
             run = repo.get(body["run_id"])
             assert run is not None
             assert run.status == "blocked"
-            assert run.intent == "memory_v2_confirm"
+            assert run.intent == "ERP Agent 请求执行 memory_v2.confirm"
             assert run.tool_calls[0].tool_id == "memory_v2"
             assert run.tool_calls[0].action == "confirm"
             assert run.tool_calls[0].permission == "memory_v2.write"
@@ -260,7 +269,7 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
 
 
 @pytest.fixture
-def memory_case(tmp_path, monkeypatch, local_tools):
+def memory_case(tmp_path, monkeypatch, local_tools, authenticated_memory_client):
     import app.domain.shared_services.user_memory_service as memory_mod
 
     # Fault-injection cases keep the real executor, claims and JSON transactions
@@ -268,7 +277,7 @@ def memory_case(tmp_path, monkeypatch, local_tools):
     _configure_runtime(monkeypatch, tmp_path)
     repo = InMemoryAgentRunRepository()
     with _patch_agent_repo(repo):
-        client = _client()
+        client = ApprovedCapabilityClient(_client(), repo, authenticated_memory_client)
         response = client.post(
             "/memory/v2/candidates",
             json={
@@ -294,7 +303,9 @@ def memory_case(tmp_path, monkeypatch, local_tools):
 
 
 def _memory_readback(run, *, output=None, context_changes=None):
-    from app.application.agent_orchestrator.verification_readback import verify_independent_result
+    from app.application.agent_orchestrator.verification_readback import (
+        verify_independent_result,
+    )
 
     call = run.tool_calls[0]
     step = run.steps[0]
@@ -388,7 +399,9 @@ def test_memory_readback_checks_current_owner_management_permission(
 
 @pytest.mark.parametrize("missing", ["receipt", "baseline"])
 def test_memory_readback_requires_original_durable_proof(memory_case, missing):
-    from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
+    from app.application.agent_orchestrator.tool_permission import (
+        clear_idempotent_replay_for_tests,
+    )
 
     if missing == "receipt":
         clear_idempotent_replay_for_tests()
@@ -488,9 +501,11 @@ def test_memory_readback_rejects_wrong_effect_even_when_real_claim_and_output_ma
     if action in {"confirm", "reject"}:
         response = memory_case.client.post(
             f"/memory/v2/{memory_case.memory_id}/{action}",
-            json={"user_id": "7", "correction": {field: requested}}
-            if action == "confirm"
-            else payload,
+            json=(
+                {"user_id": "7", "correction": {field: requested}}
+                if action == "confirm"
+                else payload
+            ),
         )
     else:
         response = memory_case.client.patch(f"/memory/v2/{memory_case.memory_id}", json=payload)
@@ -557,7 +572,12 @@ def test_memory_corrections_preserve_null_and_normalization_semantics(memory_cas
     )
     assert confirmed.status_code == 200, confirmed.json()
     current = confirmed.json()["memory"]
-    assert (current["memory_type"], current["key"], current["value"], current["confidence"]) == (
+    assert (
+        current["memory_type"],
+        current["key"],
+        current["value"],
+        current["confidence"],
+    ) == (
         "preference",
         "normalized",
         None,
@@ -693,7 +713,14 @@ def test_memory_rejection_verifies_original_history_and_preserves_terminal_recor
 
 @pytest.mark.parametrize(
     "tamper",
-    ["revision", "eligible", "rejected_at", "history_action", "history_previous", "history_prefix"],
+    [
+        "revision",
+        "eligible",
+        "rejected_at",
+        "history_action",
+        "history_previous",
+        "history_prefix",
+    ],
 )
 def test_memory_rejection_readback_requires_the_frozen_transition(
     memory_case, monkeypatch, local_tools, tamper
@@ -801,7 +828,12 @@ def test_memory_reads_require_session_and_reject_another_owner(path):
 
 def test_memory_write_rejects_forged_owner_before_execution():
     client = _client()
-    body = {"user_id": "other-owner", "memory_type": "preference", "key": "test", "value": "forged"}
+    body = {
+        "user_id": "other-owner",
+        "memory_type": "preference",
+        "key": "test",
+        "value": "forged",
+    }
     assert client.post("/memory/v2/candidates", json=body).status_code == 403
     client.headers.clear()
     assert client.post("/memory/v2/candidates", json=body).status_code == 401
@@ -854,3 +886,89 @@ def test_business_role_can_execute_registered_read_report_employee_chain(
     assert actor_tool_denial(tool, action, actor.context, {}) is None
     viewer = trusted_actor(user_id=9, role="viewer")
     assert actor_tool_denial(tool, action, viewer.context, {})["reason"] == "permission_denied"
+
+
+@pytest.mark.parametrize("account_tier", ["normal", "personal"])
+def test_memory_v2_lifecycle_routes_require_shared_approval(
+    tmp_path, monkeypatch, authenticated_memory_client, account_tier
+):
+    import app.domain.shared_services.user_memory_service as memory_mod
+    from app.application.agent_task_context import scoped_personal_memory_id
+    from app.db.models.user import User
+
+    actor = authenticated_memory_client
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).account_tier = account_tier
+    owner = scoped_personal_memory_id(actor.context)
+    repo = InMemoryAgentRunRepository()
+    _configure_runtime(monkeypatch, tmp_path)
+    try:
+        service = memory_mod.get_user_memory_service()
+        candidate = service.propose_memory_candidate(
+            owner, "preference", "customer", "七彩乐园", source="user_explicit"
+        )["candidate"]
+        memory_id = candidate["memory_id"]
+        before = Path(memory_mod.JSON_MEMORY_PATH).read_bytes()
+        cases = [
+            (
+                "POST",
+                "/memory/v2/candidates",
+                {
+                    "user_id": "7",
+                    "memory_type": "preference",
+                    "key": "customer",
+                    "value": "彩虹乐园",
+                    "source": "user_explicit",
+                },
+                "propose_candidate",
+            ),
+            ("POST", f"/memory/v2/{memory_id}/confirm", {"user_id": "7"}, "confirm"),
+            (
+                "POST",
+                f"/memory/v2/{memory_id}/reject",
+                {"user_id": "7", "reason": "不是偏好"},
+                "reject",
+            ),
+            (
+                "PATCH",
+                f"/memory/v2/{memory_id}",
+                {"user_id": "7", "key": "favorite_customer", "value": "彩虹乐园"},
+                "correct",
+            ),
+            (
+                "DELETE",
+                f"/memory/v2/{memory_id}?user_id=7&reason=用户删除",
+                None,
+                "delete",
+            ),
+        ]
+        with _patch_agent_repo(repo), _client() as client:
+            for method, path, body, action in cases:
+                response = client.request(
+                    method,
+                    path,
+                    json=body,
+                    headers={"Idempotency-Key": f"memory-{action}"},
+                )
+                assert response.status_code == 202, response.text
+                receipt = response.json()
+                assert receipt["success"] is False and receipt["pending_approval"] is True
+                run = repo.get(receipt["run_id"])
+                assert run.user_id == "7" and run.status == "waiting_user"
+                assert run.steps[0].tool_id == "memory_v2" and run.steps[0].action == action
+                assert "user_id" not in run.steps[0].params
+                assert not run.tool_calls
+                assert "step.approved" not in {event.event_type for event in run.events}
+                repeated = client.request(
+                    method,
+                    path,
+                    json=body,
+                    headers={"Idempotency-Key": f"memory-{action}"},
+                )
+                assert repeated.status_code == 202, repeated.text
+                assert repeated.json()["run_id"] == receipt["run_id"]
+                assert repeated.json()["approval_request_id"] == receipt["approval_request_id"]
+        assert Path(memory_mod.JSON_MEMORY_PATH).read_bytes() == before
+        assert service.get_preference(owner, "customer") is None
+    finally:
+        memory_mod.reset_user_memory_service()

@@ -71,7 +71,7 @@ def test_two_tenant_founders_and_member_cannot_reach_unscoped_business(
         create_actor = request.getfixturevalue("trusted_actor")
         legacy_write = MagicMock(side_effect=AssertionError("unscoped customer write reached"))
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert", legacy_write
+            "app.fastapi_routes.domains.customer.customer_routes._run_customers_agent", legacy_write
         )
     for user in (
         SimpleNamespace(id=11, role="user", tier="enterprise", tenant_id=7),

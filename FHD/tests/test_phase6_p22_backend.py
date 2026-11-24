@@ -61,7 +61,6 @@ from app.mod_sdk.industry_baseline import (
 )
 from app.mod_sdk.planner_tools import (
     PLANNER_FACADE_MOD_ID,
-    execute_planner_tool_from_body,
     execute_planner_workflow_tool,
     list_planner_tools_registry_detail,
     load_mod_planner_tool_extensions,
@@ -373,7 +372,10 @@ class TestAiAssistantBranches:
         output_dir.mkdir()
         (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
+            patch(
+                "app.utils.path_io.path_utils.get_app_data_dir",
+                return_value=str(tmp_path),
+            ),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -394,7 +396,10 @@ class TestAiAssistantBranches:
         output_dir.mkdir()
         (output_dir / "foo.docx").write_bytes(b"docx")
         with (
-            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)),
+            patch(
+                "app.utils.path_io.path_utils.get_app_data_dir",
+                return_value=str(tmp_path),
+            ),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
             mock_svc = MagicMock()
@@ -896,87 +901,6 @@ class TestPlannerToolsBranches:
         assert result == "host-result"
         mock_host.assert_called_once()
 
-    def test_execute_planner_tool_from_body_with_db_write_token(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """body 中包含 db_write_token → 透传到 executor。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-        monkeypatch.setenv("WORKSPACE_ROOT", "/custom/ws")
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true}',
-        ) as mock_exec:
-            result = execute_planner_tool_from_body(
-                {
-                    "tool_name": "tool1",
-                    "arguments": {"a": 1},
-                    "db_write_token": "tok-123",
-                }
-            )
-        assert result["success"] is True
-        call_kwargs = mock_exec.call_args.kwargs
-        assert call_kwargs["db_write_token"] == "tok-123"
-
-    def test_execute_planner_tool_from_body_args_from_args_field(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """args 字段作为 arguments 的回退。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true}',
-        ) as mock_exec:
-            result = execute_planner_tool_from_body(
-                {
-                    "name": "tool1",
-                    "args": {"b": 2},  # 使用 args 而非 arguments
-                }
-            )
-        assert result["success"] is True
-        # 验证 args 被透传
-        call_args = mock_exec.call_args.args
-        assert call_args[1] == {"b": 2}
-
-    def test_execute_planner_tool_from_body_mod_native_with_source_prefix(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """result JSON 含 source: mod:xxx → execution_path=mod_native。"""
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"source": "mod:custom-mod", "data": "x"}',
-        ):
-            result = execute_planner_tool_from_body({"tool_name": "tool1"})
-        assert result["execution_path"] == "mod_native"
-        assert result["mod_id"] == "custom-mod"
-        assert result["delegate"] is None
-
-    def test_execute_planner_tool_from_body_mod_native_no_colon(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """source: mod: 无后续字符 → mod_id 为 None（split 后为空字符串）。
-
-        注意：source 必须以 "mod:" 开头才进入 mod_native 分支。
-        "mod:" split(":", 1)[1] = "" → handler_mod = ""（falsy 但非 None）。
-        """
-        monkeypatch.delenv("XCAGI_DISABLE_PLANNER_MOD_TOOLS", raising=False)
-        monkeypatch.delenv("XCAGI_PLANNER_TOOLS_VIA_MOD", raising=False)
-
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"source": "mod:"}',  # mod: 后无字符
-        ):
-            result = execute_planner_tool_from_body({"tool_name": "tool1"})
-        assert result["execution_path"] == "mod_native"
-        # split(":", 1)[1] = "" → if ":" in src 为 True，handler_mod = ""
-        assert result["mod_id"] == ""
-
     def test_resolve_planner_tool_executor_via_mod_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1171,9 +1095,9 @@ class TestShipmentDomainHandlersBranches:
             ) as mock_reply,
         ):
             mock_core = MagicMock()
-            mock_core.cancel_shipment.side_effect = RuntimeError("cancel failed")
+            mock_core.cancel_shipment.side_effect = OSError("cancel failed")
             mock_core_get.return_value = mock_core
-            with pytest.raises(RuntimeError, match="cancel failed"):
+            with pytest.raises(OSError, match="cancel failed"):
                 await handlers.handle_cancelled(event)
         mock_reply.assert_called_once()
         call_kwargs = mock_reply.call_args.kwargs
@@ -1459,7 +1383,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        mock_bus.publish.side_effect = RuntimeError("bus down")
+        mock_bus.publish.side_effect = OSError("bus down")
         event = _make_event({"product_id": "P1", "unit_name": "甲公司"})
         result = await handlers.handle_product_created(event)
         assert result["success"] is False
@@ -1473,7 +1397,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        mock_bus.publish.side_effect = LookupError("lookup failed")
+        mock_bus.publish.side_effect = OSError("lookup failed")
         event = _make_event({"product_id": "P1", "changed_fields": ["name"]})
         result = await handlers.handle_product_updated(event)
         assert result["success"] is False
@@ -1899,7 +1823,7 @@ class TestEmployeeAgentBranches:
         agent = EmployeeAgent("emp-1")
         with patch(
             "app.application.employee_runtime.agent.load_employee_pack_from_disk",
-            side_effect=RuntimeError("disk io"),
+            side_effect=OSError("disk io"),
         ):
             out = agent.run("task", input_data={})
         assert out["success"] is False
@@ -2240,7 +2164,7 @@ class TestModsRoutesBranches:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("mm boom"),
+                side_effect=OSError("mm boom"),
             ),
             patch(
                 "app.enterprise.mod_entitlements.sync_entitlements_from_request",
@@ -2366,7 +2290,7 @@ class TestModsRoutesBranches:
             ),
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("mm boom"),
+                side_effect=OSError("mm boom"),
             ),
         ):
             client = TestClient(app)
@@ -2406,7 +2330,7 @@ class TestModsRoutesBranches:
             ),
             patch(
                 "app.application.mod_uninstall.uninstall_mod_for_request",
-                side_effect=RuntimeError("uninstall boom"),
+                side_effect=OSError("uninstall boom"),
             ),
         ):
             client = TestClient(app)
