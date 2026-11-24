@@ -364,6 +364,16 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
             raise
 
     executor.execute_with_deadline = execute_in_process
+    from pathlib import Path
+
+    monkeypatch.delenv("XCAGI_OWNED_SOURCE_PROFILE", raising=False)
+    owner_engine = setup.actor.factory.kw["bind"]
+    owner_path = Path(str(owner_engine.url.database))
+    owner_path.parent.mkdir(parents=True, exist_ok=True)
+    owner_path.touch(exist_ok=True)
+    from app.db.db_base import Base
+
+    Base.metadata.create_all(owner_engine, checkfirst=True)
     for target in (
         "app.mod_sdk.erp_repository_registry.resolve_customers_session",
         "app.application.customer_app_service.get_customers_session",

@@ -1,5 +1,5 @@
 {
-  "lines": 2732982,
+  "lines": 2732992,
   "updated": "2026-11-25",
-  "note": "PR #3558: print the DB target for the failing receipt tool call."
+  "note": "PR #3558: create the receipt fixture owner database before the recovered write."
 }
