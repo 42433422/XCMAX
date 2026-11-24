@@ -170,7 +170,12 @@ def reconcile_usage() -> dict[str, int]:
 
 
 def reconcile_goals() -> dict[str, Any]:
-    from modstore_server.xiaoc_life_cognition import portfolio_feedback
+    from modstore_server.xiaoc_life_cognition import goal_review_projection, portfolio_feedback
+    from modstore_server.xiaoc_life_reflection import (
+        candidate_id,
+        candidate_refs,
+        review_experiences,
+    )
 
     snapshot = read_state()
     updates = []
@@ -208,13 +213,35 @@ def reconcile_goals() -> dict[str, Any]:
                 feedback["evidence_ref"],
             ]
         )
-        if goal.get("execution_receipt") != receipt:
-            updates.append((goal["id"], decision_id, status, label, receipt, feedback))
+        review = goal_review_projection(
+            owner=snapshot["owner_user_id"],
+            goal_id=goal["id"],
+            decision_id=decision_id,
+            status=status,
+            feedback=feedback,
+        )
+        reflection, candidates = review_experiences(record)
+        if goal.get("execution_receipt") != receipt or goal.get("goal_review") != review or candidates:
+            previous = (
+                goal.get("execution_receipt"),
+                goal.get("outcome_ref"),
+                goal.get("status"),
+                goal.get("goal_review"),
+            )
+            updates.append(
+                (goal["id"], decision_id, status, label, receipt, feedback, previous, review,
+                 reflection, candidates)
+            )
 
-    def apply(data: dict[str, Any], session: Any) -> None:
+    def apply(data: dict[str, Any], session: Any) -> int:
         if data.get("owner_user_id") != snapshot.get("owner_user_id"):
-            return
-        for goal_id, decision_id, status, label, receipt, feedback in updates:
+            return 0
+        changed = 0
+        registered: set[str] = set()
+        for (
+            goal_id, decision_id, status, label, receipt, feedback, previous, review,
+            reflection, candidates,
+        ) in updates:
             target = next(
                 (
                     goal
@@ -223,7 +250,38 @@ def reconcile_goals() -> dict[str, Any]:
                 ),
                 None,
             )
-            if target is None or target.get("execution_receipt") == receipt:
+            if target is None:
+                continue
+            if previous != (
+                target.get("execution_receipt"),
+                target.get("outcome_ref"),
+                target.get("status"),
+                target.get("goal_review"),
+            ):
+                continue  # A newer reconciliation or live cycle already changed this goal.
+            for candidate in candidates:
+                experience_id = candidate_id(candidate)
+                if experience_id in registered:
+                    continue
+                registered.add(experience_id)
+                if session.get(XiaoCLifeEvent, experience_id) is None:
+                    _event(
+                        session,
+                        experience_id,
+                        kind="experience_candidate",
+                        status="pending_review",
+                        summary="原任务独立测量形成待审核经验；未采纳。",
+                        evidence_refs=candidate_refs(candidate),
+                        details={
+                            "owner_user_id": snapshot["owner_user_id"],
+                            "goal_id": goal_id,
+                            "source_execution_event_id": "execution:" + receipt,
+                            "outcome_ref": feedback["evidence_ref"],
+                            "candidate": candidate,
+                            "candidate_sha256": digest(candidate),
+                        },
+                    )
+            if target.get("execution_receipt") == receipt and target.get("goal_review") == review:
                 continue
             target.update(
                 status=status,
@@ -231,6 +289,7 @@ def reconcile_goals() -> dict[str, Any]:
                 outcome_status=feedback["outcome_status"],
                 outcome_feedback=feedback["metrics"],
                 outcome_ref=feedback["evidence_ref"],
+                goal_review=review,
             )
             event_id = "execution:" + receipt
             if session.get(XiaoCLifeEvent, event_id) is None:
@@ -245,11 +304,18 @@ def reconcile_goals() -> dict[str, Any]:
                         f"receipt:{receipt}",
                         feedback["evidence_ref"],
                     ],
-                    details={"outcome_feedback": feedback},
+                    details={
+                        "outcome_feedback": feedback,
+                        "business_reflection": reflection,
+                        "owner_user_id": snapshot["owner_user_id"],
+                        "goal_id": goal_id,
+                        "decision_id": decision_id,
+                    },
                 )
+            changed += 1
+        return changed
 
-    if updates:
-        _mutate(apply)
+    observed = _mutate(apply) if updates else 0
     from modstore_server.xiaoc_life_evolution import reconcile
 
-    return {"observed": len(updates) + reconcile()}
+    return {"observed": observed + reconcile()}

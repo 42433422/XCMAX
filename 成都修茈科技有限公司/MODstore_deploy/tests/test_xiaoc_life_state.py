@@ -216,7 +216,12 @@ def test_late_receipts_settle_once_without_learning_or_advancing_goals(
         assert state["goals"] == ([original_goal, goal] if learned else before["goals"])
         assert state["interests"] == ([interest] if learned else before["interests"])
         assert state["self_model"] == (
-            {**self_model, "status": "hypothesis"} if learned else before["self_model"]
+            {
+                **self_model,
+                "status": "hypothesis",
+                "owner_user_id": claim["owner_user_id"],
+                "assessment_event_id": "cycle:" + claim["cycle_id"],
+            } if learned else before["self_model"]
         )
         assert state.get("goal_cursors", {}) == ({"enterprise": "original-goal"} if fresh else {})
         events = [event for event in state["events"] if event["id"] == "cycle:" + claim["cycle_id"]]
@@ -288,6 +293,43 @@ def test_revoked_principal_and_expired_authorization_stop_next_model_call(databa
     assert not store.cycle_active(claim)
 
 
+@pytest.mark.parametrize("invalidate", ["revoked", "lease_expired", "authorization_expired"])
+def test_late_lifecycle_receipt_settles_without_adopting_new_learning(
+    database, monkeypatch, invalidate
+):
+    now = store.utcnow()
+    if invalidate == "authorization_expired":
+        configure(authorization_expires_at=(now + timedelta(minutes=1)).isoformat())
+    else:
+        configure()
+    claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
+    assert store.cycle_active(claim)
+    if invalidate == "revoked":
+        with database() as session:
+            session.get(User, 7).is_admin = False
+            session.commit()
+    else:
+        later = now + timedelta(minutes=2 if invalidate == "authorization_expired" else 6)
+        monkeypatch.setattr(store, "utcnow", lambda: later)
+    assert not store.cycle_active(claim)
+    result = finish(
+        claim,
+        goals=[{"id": "late", "title": "late", "evidence_refs": ["receipt:one"]}],
+        interests=[{"topic": "late", "evidence_refs": ["receipt:one"]}],
+        self_model={"title": "late", "evidence_refs": ["receipt:one"]},
+    )
+    finish(claim)
+    assert store.read_state()["budget"]["used_tokens"] == 50
+    assert result["budget"]["reserved_tokens"] == 0
+    assert result["goals"] == []
+    assert result["interests"] == []
+    assert result["self_model"] == {}
+    event = next(row for row in result["events"] if row["id"] == f"cycle:{claim['cycle_id']}")
+    assert event["status"] == "policy_changed"
+    assert event["actual_tokens"] == 50
+    assert event["details"]["learning_applied"] is False
+
+
 def test_experiences_accumulate_and_hypotheses_never_become_verified_capability(database):
     configure()
     for i in range(2):
@@ -318,6 +360,12 @@ def test_experiences_accumulate_and_hypotheses_never_become_verified_capability(
     assert len(state["interests"]) == 1
     assert state["interests"][0]["confidence"] == 0.5
     assert state["self_model"]["status"] == "hypothesis"
+    assert state["self_model"]["owner_user_id"] == 7
+    assert any(
+        row["id"] == state["self_model"]["assessment_event_id"]
+        for row in state["events"]
+        if row["kind"] == "reflection"
+    )
     assert len([event for event in state["events"] if event["kind"] == "reflection"]) == 2
 
 
@@ -655,3 +703,54 @@ def test_usage_scan_excludes_settled_history_and_rotates_unresolved_batches(
     if not historical_reconciled:
         assert reconcile.reconcile_usage()["resolved"] == 1
         assert store.read_state()["budget"]["reserved_tokens"] == 990
+
+
+def test_world_forecast_settles_across_real_sql_cycles_without_new_authority(database, monkeypatch):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    configure(authorization_expires_at=(now + timedelta(days=4)).isoformat())
+
+    def observe(day, value, digest):
+        nonlocal now
+        now = datetime(2026, 11, 23, 4, tzinfo=UTC) + timedelta(days=day)
+        store.wake(actor_user_id=7, expected_revision=store.read_state()["revision"])
+        claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
+        state = finish(
+            claim,
+            details={"world_observations": {"intent_accuracy": {
+                "observed_at": now.isoformat(),
+                "value": value,
+                "source_sha256": digest * 64,
+            }}},
+        )
+        assert finish(claim)["world_review"] == state["world_review"]
+        return state
+
+    observe(0, 0.4, "a")
+    second = observe(1, 0.8, "b")
+    frozen = second["world_review"]["series"]["intent_accuracy"]["pending"]
+    third = observe(2, 0.5, "c")
+    series = third["world_review"]["series"]["intent_accuracy"]
+    assert series["evaluations"][0]["forecast"] == frozen
+    assert series["evaluations"][0]["actual"]["value"] == 0.5
+    assert third["goals"] == [] and third["interests"] == []
+    assert third["events"][0]["details"]["world_review_snapshot"] == third["world_review"]
+
+
+def test_world_forecast_does_not_learn_after_pause(database):
+    configure()
+    claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
+    store.update_settings(
+        LifeUpdate(expected_revision=store.read_state()["revision"], paused=True),
+        actor_user_id=7,
+    )
+    result = finish(
+        claim,
+        details={"world_observations": {"intent_accuracy": {
+            "observed_at": store.utcnow().isoformat(),
+            "value": 0.5,
+            "source_sha256": "a" * 64,
+        }}},
+    )
+    assert "world_review" not in result
+    assert result["budget"]["used_tokens"] == 50

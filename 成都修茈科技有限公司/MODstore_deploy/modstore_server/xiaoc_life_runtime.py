@@ -18,9 +18,14 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
+    cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
     parse_decision,
     portfolio_feedback,
+    reflection_facts,
+    reflection_receipt,
 )
 
 
@@ -243,6 +248,13 @@ class CyclePorts:
 
     async def observe(self, _state: LifeCycle) -> LifeCycle:
         self.active()
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import read_samples
+
+            self.details["world_observations"] = await asyncio.to_thread(
+                read_samples, datetime.now(UTC)
+            )
+            self.active()
         portfolio = self.approved_portfolio()
         if portfolio is not None:
             self.details["portfolio_selection"] = {
@@ -259,6 +271,30 @@ class CyclePorts:
 
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        facts.extend(cognitive_review_facts(self.state))
+        # Keep pending comparisons visible to reviewers, not to cognition.
+        facts.extend(
+            row
+            for row in self.state.get("experience_review_facts", [])
+            if isinstance(row, dict)
+            and isinstance(row.get("reviewed_experience"), dict)
+            and "experience_candidate" not in row
+        )
+        facts.extend(reflection_facts(self.state))
+        facts.extend(goal_review_facts(self.state))
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import review_projection
+
+            try:
+                projection = review_projection(
+                    self.state.get("world_review"), self.claim["owner_user_id"]
+                )
+            except ValueError:
+                self.details["world_review_error"] = "invalid_persisted_review"
+                projection = {}
+            for metric, item in projection.items():
+                value = {"metric_id": metric, **item}
+                facts.append(_fact("world-review", value, world_forecast=value))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -321,15 +357,20 @@ class CyclePorts:
                     }
                 facts.append(_fact("company:" + key, value))
         for event in self.state.get("events", [])[:4]:
-            if isinstance(event, dict) and event.get("summary"):
+            if (
+                isinstance(event, dict)
+                and event.get("summary")
+                and event.get("kind") not in ("experience_candidate", "experience_review")
+                and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
+            ):
                 facts.append(
                     _fact(
-                        "experience",
+                        "historical_life_event",
                         {k: event.get(k) for k in ("id", "cycle_id", "status", "summary")},
                     )
                 )
         if self.domain == "exploration":
-            facts = (await self.research()) + facts
+            facts = await self.research() + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
         self.evidence = [row["ref"] for row in facts]
@@ -417,6 +458,11 @@ class CyclePorts:
             messages, refs = cognition_messages(self.state, self.domain, state["facts"])
         except CognitionContextError as exc:
             raise LifeBlocked(str(exc)) from exc
+        self.details["attention"] = {
+            "selected_refs": sorted(refs),
+            "observations_considered": len(state["facts"]),
+            "status": "bounded_context_not_authorization",
+        }
         prompt_bound = (
             len(
                 json.dumps(
@@ -463,6 +509,11 @@ class CyclePorts:
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
+        if decision.alternatives:
+            self.details["proposal_review"] = {
+                "status": "unverified_options_not_execution_authority",
+                "alternatives": [item.model_dump() for item in decision.alternatives],
+            }
         return {"decision": decision.model_dump()}
 
     async def act(self, state: LifeCycle) -> LifeCycle:
@@ -676,7 +727,10 @@ class CyclePorts:
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
+        from modstore_server.xiaoc_life_reflection import review_experiences
+
         feedback = portfolio_feedback(after)
+        self.details["business_reflection"], _ = review_experiences(after)
         self.details["outcome_feedback"] = feedback
         self.evidence = [f"strategic_portfolio:{decision_id}", feedback["evidence_ref"]]
         self.details["portfolio_receipt"] = {
@@ -709,6 +763,13 @@ class CyclePorts:
             "outcome_status": feedback["outcome_status"],
             "outcome_feedback": feedback["metrics"],
             "outcome_ref": feedback["evidence_ref"],
+            "goal_review": goal_review_projection(
+                owner=owner,
+                goal_id=binding["goal"]["id"],
+                decision_id=decision_id,
+                status=goal_status,
+                feedback=feedback,
+            ),
             "evidence_refs": list(
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),
@@ -800,8 +861,20 @@ class CyclePorts:
         return receipts
 
     async def reflect(self, state: LifeCycle) -> LifeCycle:
-        # Reflect only after actual ports have returned. Model suggestions never
-        # turn a research source, queued job or API acceptance into a completed goal.
+        # Preserve existing goal and budget authority; record only observed evidence.
+        receipt = reflection_receipt(
+            self.details.get("outcome_feedback"),
+            evidence_refs=self.evidence,
+            status=state.get("status", "failed"),
+            actual_tokens=self.actual_tokens,
+        )
+        if (
+            receipt["status"] == "unmeasured"
+            and state.get("decision")
+            and self.details.get("model_note_status") == "unverified_suggestion"
+        ):
+            receipt = {"status": "model_suggestion_only", "evidence_refs": list(self.evidence)}
+        self.details["reflection_receipt"] = receipt
         return state
 
     def finish(self, result: LifeCycle) -> dict[str, Any]:
@@ -883,6 +956,13 @@ async def tick_async() -> dict[str, Any]:
         claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
         if claim is not None:
             claim["state"]["events"] = state.get("events", [])
+            # A concurrent human review can advance the policy revision after
+            # the snapshot; stale review facts must not enter the new claim.
+            claim["state"]["experience_review_facts"] = (
+                state.get("experience_review_facts", [])
+                if state["revision"] == claim["policy_revision"]
+                else []
+            )
             return await run_claimed_cycle(claim)
     return {"status": "idle", "identity_id": state["identity_id"]}
 

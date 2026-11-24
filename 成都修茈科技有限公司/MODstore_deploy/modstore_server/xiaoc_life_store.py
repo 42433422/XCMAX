@@ -224,6 +224,9 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        from modstore_server.xiaoc_life_experience_review import review_facts
+
+        data["experience_review_facts"] = review_facts(session, data)
         data["status"] = (
             "paused"
             if data["paused"]
@@ -353,6 +356,10 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 settled = _settled_owner_goals(data, session)
                 if settled is None:
                     raise LifePolicyError("原授权任务或模型用量尚未结清，请先核对执行与用量回执")
+                # Historical events remain; the active self hypothesis is not
+                # transferred to another administrator's cognition context.
+                data["self_model"] = {}
+                data.pop("world_review", None)
                 for goal, status in settled:
                     # Old approvals must not keep prioritizing the enterprise lane
                     # after its original owner and execution ledger are settled.
@@ -570,6 +577,7 @@ def finish_cycle(
             raise LifePolicyError("lifecycle receipt does not own this run")
         budget = data["budget"]
         reserved = active["reserved_tokens"]
+        # Late receipts still settle actual consumption, but cannot grant new learning.
         fresh = _claim_active(data, session, claim)
         if actual_tokens is None:
             data["unknown_usage"] = True
@@ -588,7 +596,34 @@ def finish_cycle(
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)
             if self_model and self_model.get("evidence_refs"):
-                data["self_model"] = {**self_model, "status": "hypothesis"}
+                data["self_model"] = {
+                    **self_model,
+                    "status": "hypothesis",
+                    "owner_user_id": claim["owner_user_id"],
+                    "assessment_event_id": event_id,
+                }
+        world_receipt: dict[str, Any] = {}
+        observations = (details or {}).get("world_observations")
+        if (
+            safe
+            and status == "completed"
+            and active["domain"] == "reflection"
+            and data["level"] >= 6
+            and isinstance(observations, dict)
+        ):
+            from modstore_server.xiaoc_life_world import advance_review
+
+            previous = data.get("world_review")
+            try:
+                next_review = advance_review(
+                    previous, observations, owner=claim["owner_user_id"], now=utcnow()
+                )
+            except ValueError:
+                world_receipt = {"world_review_error": "invalid_persisted_review"}
+            else:
+                if next_review != previous:
+                    data["world_review"] = next_review
+                    world_receipt = {"world_review_snapshot": next_review}
         final_status = "unknown" if actual_tokens is None else status if fresh else "policy_changed"
         _event(
             session,
@@ -601,6 +636,7 @@ def finish_cycle(
             model=model,
             details={
                 **(details or {}),
+                **world_receipt,
                 "policy_revision": claim["policy_revision"],
                 "reservation": reserved,
                 "learning_applied": safe,
