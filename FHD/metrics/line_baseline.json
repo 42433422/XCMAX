@@ -1,5 +1,5 @@
 {
-  "lines": 2732975,
+  "lines": 2732982,
   "updated": "2026-11-25",
-  "note": "PR #3558: bind chat exception tests to realistic httpx requests and print the failing receipt tool error."
+  "note": "PR #3558: print the DB target for the failing receipt tool call."
 }

@@ -353,7 +353,14 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
         try:
             return executor.execute(step, runtime_context=runtime_context)
         except BOUNDARY_ERRORS as exc:
-            print(f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc}")
+            import os
+
+            print(
+                f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc} "
+                f"cwd={os.getcwd()} db_url={os.environ.get('DATABASE_URL')} "
+                f"data_dir={os.environ.get('XCAGI_DATA_DIR')} "
+                f"tool={step.tool_id}.{step.action}"
+            )
             raise
 
     executor.execute_with_deadline = execute_in_process
