@@ -98,8 +98,9 @@ def _assert_memory_run(
     }
 
 
+@pytest.mark.parametrize("omit_conflict", [False, True])
 def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
-    tmp_path, monkeypatch, authenticated_memory_client
+    tmp_path, monkeypatch, authenticated_memory_client, omit_conflict
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
 
@@ -133,13 +134,41 @@ def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
                 "source": "user_explicit",
                 "evidence": [{"source": "reviewed_business_record"}],
             }
-            first = client.post("/memory/v2/candidates", json={**payload, "value": relation("Alice")})
+            first = client.post(
+                "/memory/v2/candidates", json={**payload, "value": relation("Alice")}
+            )
             assert first.status_code == 200, first.json()
             first_id = first.json()["candidate"]["memory_id"]
             confirmed = client.post(f"/memory/v2/{first_id}/confirm", json={"user_id": "7"})
             assert confirmed.status_code == 200, confirmed.json()
             active = confirmed.json()["memory"]
-            second = client.post("/memory/v2/candidates", json={**payload, "value": relation("Bob")})
+            if omit_conflict:
+                service = memory_mod.get_user_memory_service()
+                propose = service.propose_memory_candidate
+                path = tmp_path / "memory" / "memory_store.json"
+
+                def omit_persisted_conflict(*args, **kwargs):
+                    output = propose(*args, **kwargs)
+                    record = {**output["candidate"]}
+                    assert record.pop("conflict_review")
+                    persisted = json.loads(path.read_text())
+                    rows = next(iter(persisted.values()))["memory_v2_records"]
+                    index = next(
+                        i for i, row in enumerate(rows) if row["memory_id"] == record["memory_id"]
+                    )
+                    rows[index] = record
+                    path.write_text(json.dumps(persisted))
+                    return {**output, "candidate": record}
+
+                monkeypatch.setattr(service, "propose_memory_candidate", omit_persisted_conflict)
+            second = client.post(
+                "/memory/v2/candidates", json={**payload, "value": relation("Bob")}
+            )
+            if omit_conflict:
+                assert second.status_code == 202, second.json()
+                report = repo.get(second.json()["run_id"]).tool_calls[0].metadata["verification"]
+                assert report["code"] == "result_memory_effect_mismatch", report
+                return
             assert second.status_code == 200, second.json()
             candidate = second.json()["candidate"]
             assert candidate["status"] == "pending"

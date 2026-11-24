@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-from app.application.user_memory.relation_retrieval import parse_as_of
+from app.application.user_memory.relation_retrieval import parse_as_of, relation_write_conflicts
 from app.application.user_memory.retrieve import (
     build_memory_context as build_memory_context,
 )
@@ -150,7 +150,7 @@ def _memory_revision_time_valid(record: dict[str, Any]) -> bool:
     return True
 
 
-def _proposed_memory_matches(policy, params, record) -> bool:
+def _proposed_memory_matches(policy, params, record, conflicts) -> bool:
     confidence = params.get("confidence")
     expected = {
         **policy.govern_candidate(
@@ -177,6 +177,8 @@ def _proposed_memory_matches(policy, params, record) -> bool:
     if expected["status"] == "rejected":
         expected["rejected_at"] = expected["created_at"]
         expected["rejected_reason"] = "source_policy_blocked"
+    elif conflicts:
+        expected["conflict_review"] = conflicts
     return (
         bool(expected["created_at"])
         and _memory_revision_time_valid(record)
@@ -287,6 +289,7 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
         policy, backend, path, source = _memory_source()
         memory = _memory_snapshot(backend, path).get(owner)
         records = memory.memory_v2_records if memory is not None and memory.user_id == owner else []
+        conflicts = None
         if step.action == "propose_candidate":
             fingerprint = policy.fingerprint(
                 policy.normalize_type(
@@ -301,6 +304,8 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
                 if row.get("fingerprint") == fingerprint
                 and row.get("status") in {"pending", "active", "rejected"}
             ]
+            if not matches:
+                conflicts = relation_write_conflicts(records, {"value": step.params.get("value")})
         else:
             target = str(step.params.get("memory_id") or step.params.get("id") or "").strip()
             matches = [row for row in records if row.get("memory_id") == target]
@@ -310,6 +315,9 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
             "store_sha256": source,
             "owner_sha256": canonical_hash(owner),
             "record": _memory_record_proof(matches[0] if matches else None),
+            "relation_conflicts_sha256": canonical_hash(conflicts)
+            if conflicts is not None
+            else None,
         }
     except (PermissionError, OSError) + RECOVERABLE_ERRORS:
         return {}
@@ -365,6 +373,14 @@ def verify_memory_mutation(step, call, output, context) -> dict[str, Any]:
     if type(revision) is not int or revision <= 0:
         return _report("failed", "result_memory_revision_mismatch", source)
     if step.action == "propose_candidate":
+        conflicts = (
+            relation_write_conflicts(
+                memory.memory_v2_records,
+                {"value": step.params.get("value"), "memory_id": record["memory_id"]},
+            )
+            if before is None
+            else []
+        )
         valid = record.get("fingerprint") == policy.fingerprint(
             policy.normalize_type(
                 str(step.params.get("memory_type") or step.params.get("type") or "preference")
@@ -377,7 +393,8 @@ def verify_memory_mutation(step, call, output, context) -> dict[str, Any]:
             if before is not None
             else (
                 output.get("created") is True
-                and _proposed_memory_matches(policy, step.params, record)
+                and baseline.get("relation_conflicts_sha256") == canonical_hash(conflicts)
+                and _proposed_memory_matches(policy, step.params, record, conflicts)
             )
         )
     else:

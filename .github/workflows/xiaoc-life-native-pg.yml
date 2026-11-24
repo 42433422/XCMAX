@@ -2,6 +2,7 @@ name: XiaoC Native Life Recovery (PostgreSQL)
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches:
       - main
       - codex/xiaoc-evidence-cognition-ce197738
@@ -86,7 +87,7 @@ jobs:
             tests/test_xiaoc_life_runtime.py
 
   persy-readback:
-    if: github.event_name == 'pull_request' && github.base_ref == 'codex/integrate-open-prs-20261121-36690872'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.base_ref == 'codex/integrate-open-prs-20261121-36690872'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     defaults:
