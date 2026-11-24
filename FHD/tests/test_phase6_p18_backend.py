@@ -16,7 +16,7 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict, empty string)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
+- Exception paths (RECOVERABLE_ERRORS: OSError, ValueError (not unclassified RuntimeError))
 """
 
 from __future__ import annotations
@@ -700,7 +700,7 @@ class TestOCRServiceInit:
         with (
             patch(
                 "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
-                side_effect=RuntimeError("paddle init fail"),
+                side_effect=OSError("paddle init fail"),
             ),
             patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
             patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract"),
@@ -730,7 +730,7 @@ class TestOCRServiceInitEasyocr:
         class FakeEasyocr:
             class Reader:
                 def __init__(self, *args, **kwargs):
-                    raise RuntimeError("init fail")
+                    raise OSError("init fail")
 
         def fake_import(name, *args, **kwargs):
             if name == "easyocr":
@@ -763,7 +763,7 @@ class TestOCRServiceInitTesseract:
         class FakePytesseract:
             @staticmethod
             def get_tesseract_version():
-                raise RuntimeError("version fail")
+                raise OSError("version fail")
 
         def fake_import(name, *args, **kwargs):
             if name == "pytesseract":
@@ -861,7 +861,7 @@ class TestOCRServiceRecognize:
         svc = OCRService.__new__(OCRService)
         svc.use_gpu = False
         svc.reader = MagicMock()
-        svc.reader.readtext.side_effect = RuntimeError("readtext fail")
+        svc.reader.readtext.side_effect = OSError("readtext fail")
         svc.tesseract_available = False
         svc._paddle_enabled = False
 
@@ -934,7 +934,7 @@ class TestOCRServiceRecognizeTextBlocks:
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
         svc.reader = MagicMock()
-        svc.reader.readtext.side_effect = RuntimeError("readtext fail")
+        svc.reader.readtext.side_effect = OSError("readtext fail")
         svc.tesseract_available = False
         svc.use_gpu = False
 
@@ -982,7 +982,7 @@ class TestOCRServiceRecognizeFile:
 
         file_path = tmp_path / "img.png"
         file_path.write_bytes(b"")
-        with patch("PIL.Image.open", side_effect=RuntimeError("open fail")):
+        with patch("PIL.Image.open", side_effect=OSError("open fail")):
             result = svc.recognize_file(str(file_path))
         assert result["success"] is False
 
@@ -1083,7 +1083,7 @@ class TestOCRServiceRecognizeFromBytes:
         svc.tesseract_available = False
         svc.use_gpu = False
 
-        with patch("PIL.Image.open", side_effect=RuntimeError("open fail")):
+        with patch("PIL.Image.open", side_effect=OSError("open fail")):
             result = svc.recognize_text_from_bytes(b"img bytes")
         assert result["success"] is False
         assert result["confidence"] == 0.0
@@ -1140,7 +1140,7 @@ class TestOCRServiceRecognizeWithDetails:
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
         svc.reader = MagicMock()
-        svc.reader.readtext.side_effect = RuntimeError("fail")
+        svc.reader.readtext.side_effect = OSError("fail")
         svc.tesseract_available = False
         svc.use_gpu = False
 
@@ -1346,7 +1346,7 @@ class TestMobileExtEnsureMobileDeviceTable:
         # RuntimeError is in RECOVERABLE_ERRORS, so it must be swallowed and
         # logged rather than propagated to the caller.
         with (
-            patch("app.db.session.get_db", side_effect=RuntimeError("db down")),
+            patch("app.db.session.get_db", side_effect=OSError("db down")),
             patch.object(ext_mod.logger, "warning") as mock_warning,
         ):
             ext_mod._ensure_mobile_device_table()  # must not raise
@@ -1461,7 +1461,7 @@ class TestMobileExtSyncRoutes:
     async def test_sync_status_error(self, ext_mod):
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("db fail")):
+        with patch("app.db.xcmax_sync.SyncDb", side_effect=OSError("db fail")):
             result = await ext_mod.mobile_sync_status(user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
@@ -1500,7 +1500,7 @@ class TestMobileExtSyncRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         body = ext_mod.SyncPullBody(since_cursor=0)
-        with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("db fail")):
+        with patch("app.db.xcmax_sync.SyncDb", side_effect=OSError("db fail")):
             result = await ext_mod.mobile_sync_pull(body=body, user=mock_user)
         assert result.status_code == 500
 
@@ -1529,7 +1529,7 @@ class TestMobileExtSyncRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         body = ext_mod.SyncPushBody(items=[])
-        with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("db fail")):
+        with patch("app.db.xcmax_sync.SyncDb", side_effect=OSError("db fail")):
             result = await ext_mod.mobile_sync_push(body=body, user=mock_user)
         assert result.status_code == 500
 
@@ -1552,7 +1552,7 @@ class TestMobileExtSyncRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         body = ext_mod.SyncAckBody(cursor=10)
-        with patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("db fail")):
+        with patch("app.db.xcmax_sync.SyncDb", side_effect=OSError("db fail")):
             result = await ext_mod.mobile_sync_ack(body=body, user=mock_user)
         assert result.status_code == 500
 
@@ -1579,7 +1579,7 @@ class TestMobileExtSyncRoutes:
     async def test_sync_conflicts_error(self, ext_mod):
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch("app.db.xcmax_sync._get_conn", side_effect=RuntimeError("db fail")):
+        with patch("app.db.xcmax_sync._get_conn", side_effect=OSError("db fail")):
             result = await ext_mod.mobile_sync_conflicts(user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
@@ -1938,7 +1938,7 @@ class TestIndustrySeedDeactivate:
                 self.mods_root = str(mods_root)
 
             def unload_mod(self, mod_id):
-                raise RuntimeError("unload fail")
+                raise OSError("unload fail")
 
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -2236,7 +2236,7 @@ class TestIndustrySeedInstallFallback:
         )
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(side_effect=RuntimeError("catalog err")),
+            new=AsyncMock(side_effect=OSError("catalog err")),
         ):
             result = await industry_seed_mod.install_industry_seed_with_fallback("涂料")
         assert result["success"] is False
