@@ -78,7 +78,7 @@ class TestSaveSessionMarketTokenWithDB:
         assert ma._MARKET_SESSION_REFRESH_TOKENS["sid1"] == "rt1"
 
     def test_save_with_db_recoverable_error(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db down")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
 
@@ -110,7 +110,7 @@ class TestClearSessionMarketTokenWithDB:
 
     def test_clear_with_db_recoverable_error(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db error")):
             ma.clear_session_market_token("sid1")
         assert "sid1" not in ma._MARKET_SESSION_TOKENS
 
@@ -141,7 +141,7 @@ class TestSessionMarketTokenWithDB:
         assert result == ""
 
     def test_db_fallback_recoverable_error(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db error")):
             result = ma.session_market_token("sid1")
         assert result == ""
 
@@ -173,7 +173,7 @@ class TestSessionMarketRefreshTokenWithDB:
 
 class TestLatestSessionMarketToken:
     def test_returns_empty_on_db_error(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db error")):
             result = ma.latest_session_market_token()
         assert result == ""
 
@@ -183,7 +183,7 @@ class TestLatestSessionMarketToken:
 
 class TestLatestSessionMarketRefreshToken:
     def test_returns_empty_on_db_error(self):
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=OSError("db error")):
             result = ma.latest_session_market_refresh_token()
         assert result == ""
 
@@ -305,7 +305,7 @@ class TestProxyJsonRetryBranches:
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
-            mock_client.request = AsyncMock(side_effect=RuntimeError("unexpected"))
+            mock_client.request = AsyncMock(side_effect=OSError("unexpected"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client

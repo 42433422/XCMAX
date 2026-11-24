@@ -414,7 +414,7 @@ class TestInstallModPackageErrors:
         mm = ModManager(mods_root=str(tmp_path))
         with patch(
             "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-            side_effect=RuntimeError("disk full"),
+            side_effect=OSError("disk full"),
         ):
             ok, msg, meta = mm.install_mod_package("/fake/path.xcmod")
         assert ok is False
@@ -477,7 +477,7 @@ class TestUninstallModEmployeePack:
         mm = ModManager(mods_root=str(tmp_path))
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_registry",
-            side_effect=RuntimeError("db error"),
+            side_effect=OSError("db error"),
         ):
             ok, msg = mm.uninstall_mod("m1")
         assert ok is False
@@ -594,7 +594,7 @@ class TestValidateModPackageAdditional:
         with (
             patch(
                 "app.infrastructure.mods.package.ModPackage.extract_package",
-                side_effect=RuntimeError("disk"),
+                side_effect=OSError("disk"),
             ),
             patch("zipfile.is_zipfile", return_value=True),
         ):
@@ -709,7 +709,7 @@ class TestRegisterSingleModHttpRoutes:
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
             patch(
                 "app.infrastructure.mods.mod_manager.import_mod_backend_py",
-                side_effect=RuntimeError("import fail"),
+                side_effect=ImportError("import fail"),
             ),
         ):
             registry = MagicMock()
@@ -746,7 +746,7 @@ class TestRestoreEntitlementsFromSessionId:
 
         with patch(
             "app.enterprise.mod_entitlements.restore_entitlements_from_session_row",
-            side_effect=RuntimeError("db error"),
+            side_effect=OSError("db error"),
         ) as mock_restore:
             # Recoverable error must be swallowed (no propagation) ...
             _restore_entitlements_from_session_id("sid123")
@@ -912,7 +912,7 @@ class TestModAllowedForApiLoad:
 
         with patch(
             "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
-            side_effect=RuntimeError("db"),
+            side_effect=OSError("db"),
         ):
             result = _mod_allowed_for_api_load("m1")
         assert result is False

@@ -397,7 +397,7 @@ class TestGetTemplateFile:
         assert resp.status_code == 200
 
     def test_handles_error(self):
-        with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
+        with patch.object(svc, "_get_template_list", side_effect=OSError("db down")):
             resp = svc.get_template_file("t1")
         assert resp.status_code == 500
         _assert_safe_service_error(resp, "db down")
@@ -424,7 +424,7 @@ class TestSaveTemplate:
     def test_handles_error(self):
         with patch(
             "app.application.get_template_app_service",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             resp = svc.save_template({})
         assert resp.status_code == 500
@@ -488,7 +488,7 @@ class TestUploadExcel:
     async def test_handles_error(self):
         mock_file = MagicMock()
         mock_file.filename = "test.xlsx"
-        mock_file.read = AsyncMock(side_effect=RuntimeError("io fail"))
+        mock_file.read = AsyncMock(side_effect=OSError("io fail"))
         resp = await svc.upload_excel(mock_file)
         assert resp.status_code == 500
         _assert_safe_service_error(resp, "io fail")
@@ -552,7 +552,7 @@ class TestGetTemplateDb:
 
         @contextmanager
         def fake_get_db():
-            raise RuntimeError("db down")
+            raise OSError("db down")
 
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.get_template(1)
@@ -612,7 +612,7 @@ class TestUpdateTemplateDb:
 
         @contextmanager
         def fake_get_db():
-            raise RuntimeError("db down")
+            raise OSError("db down")
 
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.update_template(1, {})
@@ -663,7 +663,7 @@ class TestDeleteTemplateDb:
 
         @contextmanager
         def fake_get_db():
-            raise RuntimeError("db down")
+            raise OSError("db down")
 
         with patch("app.db.session.get_db", fake_get_db):
             resp = svc.delete_template(1)
@@ -698,7 +698,7 @@ class TestListTemplatesByType:
     def test_handles_error(self):
         with patch(
             "app.application.get_template_app_service",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             # Pass active_only as a string (Query object would fail .lower())
             resp = svc.list_templates_by_type(type="标签", active_only="true")
@@ -728,7 +728,7 @@ class TestGetDefaultTemplate:
     def test_handles_error(self):
         with patch(
             "app.application.get_template_app_service",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             resp = svc.get_default_template()
         assert resp.status_code == 500
@@ -749,7 +749,7 @@ class TestListTemplatesGet:
         assert resp.status_code == 200
 
     def test_handles_error(self):
-        with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
+        with patch.object(svc, "_get_template_list", side_effect=OSError("db down")):
             resp = svc.list_templates_get()
         assert resp.status_code == 500
         _assert_safe_service_error(resp, "db down")
@@ -762,7 +762,7 @@ class TestGetTemplatesList:
         assert resp.status_code == 200
 
     def test_handles_error(self):
-        with patch.object(svc, "_get_template_list", side_effect=RuntimeError("db down")):
+        with patch.object(svc, "_get_template_list", side_effect=OSError("db down")):
             resp = svc.get_templates_list()
         assert resp.status_code == 500
         _assert_safe_service_error(resp, "db down")
