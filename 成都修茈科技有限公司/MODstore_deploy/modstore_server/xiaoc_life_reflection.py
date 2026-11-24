@@ -239,6 +239,12 @@ def experience_candidate_facts(state: dict[str, Any]) -> list[dict[str, Any]]:
             not isinstance(candidate, dict)
             or candidate.get("owner_user_id") != owner
             or candidate.get("outcome") not in ("success", "failure")
+            or candidate.get("execution_status") not in ("completed", "failed")
+            or (candidate["execution_status"] == "failed" and candidate["outcome"] != "failure")
+            or not all(
+                key in candidate
+                for key in ("metric_id", "target", "actual", "review_suggestion", "finding_type")
+            )
             or not all(
                 _sha(candidate.get(key))
                 for key in (

@@ -73,6 +73,9 @@ Historical measured outcomes do not establish success or subjective consciousnes
 A cognitive review is historical ledger consistency, not a future prediction,
 causal proof, model ability score or permission to change an approved goal.
 An experience candidate awaits review; it is not an adopted memory or causal proof.
+Human-reviewed comparisons are historical observations, not capability proof or authority.
+Frozen experiment estimates apply only to their original release, metric and cohort.
+A hold or missing experiment cannot demonstrate improvement; no causal generalization.
 Honor recorded stop decisions; suggestions never replace an existing approval.
 World forecasts concern the next recorded report only; they are not observations
 of the future, estimates of causal business benefit, or grounds for permission.
@@ -321,6 +324,8 @@ def observation_status(row: dict[str, Any]) -> str:
         return "forecast_not_observed_outcome"
     if isinstance(row.get("goal_review"), dict):
         return "current_goal_review_not_authority"
+    if isinstance(row.get("reviewed_experience"), dict):
+        return "human_reviewed_historical_comparison_not_causal"
     if isinstance(row.get("experience_candidate"), dict):
         return "verified_comparison_pending_memory_review"
     if isinstance(row.get("cognitive_review"), dict):

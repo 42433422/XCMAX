@@ -12,6 +12,7 @@ from cryptography.fernet import Fernet
 from modstore_server import employee_orchestrator as eo
 from modstore_server.cr_narrow_ci import (
     _copytree_filtered,
+    _prepare_overlay_root,
     _run_py_compile,
     infer_related_test_files,
     run_narrow_ci_validation,
@@ -74,6 +75,29 @@ def test_run_narrow_ci_validation_py_compile_ok():
     assert out.get("ok") is True
     steps = out.get("steps") or []
     assert any(s.get("step") == "py_compile" for s in steps)
+
+
+@pytest.mark.parametrize("layout", [0, 1, 2])
+def test_overlay_preserves_checkout_employee_manifests(tmp_path, layout):
+    company = tmp_path / "成都修茈科技有限公司"
+    deploy = company / "MODstore_deploy"
+    (deploy / "modstore_server").mkdir(parents=True)
+    manifest = tmp_path / "FHD/mods/_employees/excel-generate-employee/manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"id":"excel-generate-employee"}', encoding="utf-8")
+    state = manifest.parent / "customer.db"
+    state.write_bytes(b"private runtime state")
+    root = (tmp_path, company, deploy)[layout]
+
+    lease, overlay, rel = _prepare_overlay_root(root, "modstore_server/foo.py", "x = 1\n")
+    with lease:
+        proposed = overlay / rel
+        copied = proposed.parents[3] / manifest.relative_to(tmp_path)
+        assert proposed.read_text(encoding="utf-8") == "x = 1\n"
+        assert copied.read_bytes() == manifest.read_bytes()
+        assert not copied.with_name(state.name).exists()
+        copied.write_text("{}", encoding="utf-8")
+        assert manifest.read_text(encoding="utf-8") == '{"id":"excel-generate-employee"}'
 
 
 def test_run_py_compile_uses_sys_executable_and_returns_real_exit_code(monkeypatch):

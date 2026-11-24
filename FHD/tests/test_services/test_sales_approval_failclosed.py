@@ -207,7 +207,7 @@ class TestFailClosedRegistry:
         import resources.config.risk_actions_loader as loader
 
         def boom(*_a, **_k):
-            raise RuntimeError("registry unavailable")
+            raise OSError("registry unavailable")
 
         monkeypatch.setattr(loader, "get_action_approval", boom)
         monkeypatch.setattr(loader, "requires_write_approval", boom)
@@ -255,7 +255,7 @@ class TestFailClosedRegistry:
         import resources.config.risk_actions_loader as loader
 
         def boom(*_a, **_k):
-            raise RuntimeError("registry unavailable")
+            raise OSError("registry unavailable")
 
         monkeypatch.setattr(loader, "get_action_approval", boom)
         monkeypatch.setattr(loader, "requires_write_approval", boom)

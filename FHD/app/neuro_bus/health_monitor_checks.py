@@ -11,7 +11,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.health_monitor_types import HealthCheckResult, HealthStatus
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.neuro_bus.health_monitor")
 
@@ -201,10 +201,14 @@ class HealthCheckMixin:
 
         try:
             # 支持异步和同步检查
-            if asyncio.iscoroutinefunction(check_fn):
-                result = await check_fn()
-            else:
-                result = check_fn()
+            try:
+                if asyncio.iscoroutinefunction(check_fn):
+                    result = await check_fn()
+                else:
+                    result = check_fn()
+            except BOUNDARY_ERRORS as e:
+                logger.error("[HealthMonitor] 检查失败 %s: %s", name, e)
+                return None
 
             self._last_results[name] = result
             self._metrics_history[name].append(result)

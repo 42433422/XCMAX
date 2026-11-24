@@ -52,7 +52,7 @@ from app.application.workflow.workflow_types import (
     plan_to_dict,
 )
 from app.di.registry import get_service_registry
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +384,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             if auto_execute:
                 self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
             return checkpoint(run)
-        except RECOVERABLE_ERRORS:
+        except BOUNDARY_ERRORS:
             logger.exception("agent run from plan failed")
             run.status = "failed"
             run.error = _INTERNAL_RUN_ERROR

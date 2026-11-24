@@ -292,9 +292,7 @@ class CyclePorts:
                 return {"facts": [fact], "discovered_goals": [goal]}
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
         facts.extend(cognitive_review_facts(self.state))
-        from modstore_server.xiaoc_life_reflection import experience_candidate_facts
-
-        facts.extend(experience_candidate_facts(self.state))
+        facts.extend(self.state.get("experience_review_facts", []))
         facts.extend(reflection_facts(self.state))
         facts.extend(goal_review_facts(self.state))
         if self.domain == "reflection" and self.state["level"] >= 6:
@@ -375,7 +373,7 @@ class CyclePorts:
             if (
                 isinstance(event, dict)
                 and event.get("summary")
-                and event.get("kind") != "experience_candidate"
+                and event.get("kind") not in ("experience_candidate", "experience_review")
                 and (event.get("details") or {}).get("owner_user_id") == self.state.get("owner_user_id")
             ):
                 facts.append(
@@ -1005,6 +1003,13 @@ async def tick_async() -> dict[str, Any]:
         claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
         if claim is not None:
             claim["state"]["events"] = state.get("events", [])
+            # A concurrent human review can advance the policy revision after
+            # the snapshot; stale review facts must not enter the new claim.
+            claim["state"]["experience_review_facts"] = (
+                state.get("experience_review_facts", [])
+                if state["revision"] == claim["policy_revision"]
+                else []
+            )
             return await run_claimed_cycle(claim)
     return {"status": "idle", "identity_id": state["identity_id"]}
 

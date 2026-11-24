@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
@@ -43,7 +44,7 @@ class TestEmbeddingInferencer:
 
     @pytest.mark.asyncio
     async def test_infer_client_failure_returns_neutral(self, mock_client):
-        mock_client.embed_texts = AsyncMock(side_effect=RuntimeError("API down"))
+        mock_client.embed_texts = AsyncMock(side_effect=httpx.ConnectError("API down"))
         inferencer = EmbeddingInferencer(mock_client)
         result = await inferencer.infer("user-1", ["你好"])
         # 容错：返回中性值，不抛异常

@@ -545,10 +545,12 @@ def _worker(
             json.dumps(
                 {
                     "output": {
+                        "success": False,
                         "outcome": "unknown",
                         "error_code": "tool_result_transport_failed",
                         "exception_type": type(exc).__name__,
                         "retryable": False,
+                        "reconciliation_required": True,
                     },
                     "uncertain": [],
                     "llm_route_metadata": route_metadata,

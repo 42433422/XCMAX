@@ -363,6 +363,8 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
     elif row.status == "customer_impact_rejected":
         status, summary = "waiting_recovery", "真实效果未通过，等待原回滚核验，未登记改进成功。"
     delivery = state.get("delivery") or {}
+    from modstore_server.xiaoc_life_experiment_review import original_experiment_projection
+
     metrics = {
         "request_id": row.id,
         "status": status,
@@ -375,6 +377,7 @@ def feedback(session: Any, goal: dict[str, Any], owner: int) -> dict[str, Any]:
         "recovery_status": (state.get("recovery") or {}).get("status", "not_requested"),
         "terminal_verified": terminal is not None,
         "scope": "original_retort_receipt_not_model_self_assessment",
+        "experiment_reflection": original_experiment_projection(row, delivery),
     }
     return {
         "status": status,
