@@ -1050,7 +1050,7 @@ class TestShipmentConfigApprovalRoute:
     ):
         logged_in_session.tier = "admin"
         with patch("resources.config.approval_config.get_approval_config") as mock_get:
-            mock_get.side_effect = RuntimeError("db down")
+            mock_get.side_effect = OSError("db down")
             r = shipment_client.post("/api/ai/config/approval", json={})
         assert r.status_code == 500
         assert r.json()["success"] is False
@@ -1631,7 +1631,7 @@ class TestItemsFromDb:
 
     def test_query_error_returns_empty(self):
         with (
-            patch("app.db.SessionLocal", side_effect=RuntimeError("no db")),
+            patch("app.db.SessionLocal", side_effect=OSError("no db")),
             patch("app.db.models.finance.FinancialTransaction", create=True),
         ):
             items = fin_archive._items_from_db(None, track=None, limit=10)
@@ -1709,7 +1709,7 @@ class TestListLedger:
             ),
             patch(
                 "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
-                side_effect=RuntimeError("crm down"),
+                side_effect=OSError("crm down"),
             ),
             patch(
                 "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs",
@@ -1773,7 +1773,7 @@ class TestArchiveFromCrmInvoice:
     def test_archive_db_error_local_only(self):
         inv = {"id": 1, "amount_cents": 5000}
         with (
-            patch("app.db.SessionLocal", side_effect=RuntimeError("db down")),
+            patch("app.db.SessionLocal", side_effect=OSError("db down")),
             patch("app.db.models.finance.FinancialTransaction", create=True),
         ):
             result = fin_archive.archive_from_crm_invoice(inv, market_user_id=1)
@@ -2076,7 +2076,7 @@ class TestPersistSessionAccountMeta:
 
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             # Should not raise
             persist_session_account_meta("sid", account_kind="enterprise")
@@ -2125,7 +2125,7 @@ class TestLoadSessionAccountMeta:
 
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db"),
+            side_effect=OSError("db"),
         ):
             assert load_session_account_meta("sid") is None
 
@@ -2627,7 +2627,7 @@ class TestSystemServiceGetPrinterConfig:
     def test_printer_service_inner_error(self):
         svc = system_service_mod.SystemService()
         fake_printer_svc = MagicMock()
-        fake_printer_svc.list_printers.side_effect = RuntimeError("fail")
+        fake_printer_svc.list_printers.side_effect = OSError("fail")
         with patch(
             "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
@@ -2663,7 +2663,7 @@ class TestSystemServiceSetDefaultPrinter:
     def test_inner_error(self):
         svc = system_service_mod.SystemService()
         fake_printer_svc = MagicMock()
-        fake_printer_svc.set_default_printer.side_effect = RuntimeError("x")
+        fake_printer_svc.set_default_printer.side_effect = OSError("x")
         with patch(
             "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
