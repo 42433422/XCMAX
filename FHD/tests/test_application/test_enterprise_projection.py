@@ -634,6 +634,7 @@ def test_purchase_authority_read_permissions_and_committed_changes(world, observ
         db.add_all(
             [
                 Supplier(id=610, tenant_id=11, code="WORLD-S", name="Supplier A"),
+                Supplier(id=617, tenant_id=22, code="WORLD-OTHER-S", name="Foreign Supplier"),
                 Warehouse(id=611, tenant_id=11, code="WORLD-P-W", name="Purchasing warehouse"),
                 Product(id=612, tenant_id=11, name="Material"),
             ]
@@ -709,9 +710,7 @@ def test_purchase_authority_read_permissions_and_committed_changes(world, observ
     inbound = get(service, "purchase_inbound", "614")
     assert inbound["state"]["items"][0]["quantity"] == "2.0000"
     assert get(service, "purchase_order", "999")["knowledge_kind"] == "unknown"
-    assert service.get(
-        "supplier", "610", tenant_id=22, actor_id="2"
-    )["knowledge_kind"] == "unknown"
+    assert get(service, "supplier", "617")["knowledge_kind"] == "unknown"
     with sessions.begin() as db:
         db.get(PurchaseOrderItem, 615).received_quantity = Decimal(4)
     assert any(
