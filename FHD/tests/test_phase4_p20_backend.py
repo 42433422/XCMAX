@@ -112,8 +112,8 @@ def test_chat_exception_records_and_raises() -> None:
     opt = _bare_ai()
     opt._monitor = MagicMock()
     opt._service = MagicMock()
-    opt._service.chat.side_effect = RuntimeError("boom")
-    with pytest.raises(RuntimeError):
+    opt._service.chat.side_effect = ConnectionError("provider unavailable")
+    with pytest.raises(ConnectionError):
         opt.chat("u1", "hello")
     assert opt._monitor.record_metric.called
 

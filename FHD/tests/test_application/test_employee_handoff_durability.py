@@ -82,7 +82,7 @@ def test_parent_public_view_refreshes_bound_child_without_writing_or_replaying(d
         child.metadata["runtime_context"]["parent_run_id"] = "other-parent"
     read = Mock(return_value=None if drift == "missing" else child)
     if drift == "read_error":
-        read.side_effect = RuntimeError("storage unavailable")
+        read.side_effect = OSError("storage unavailable")
     view = public_run_dict(parent, read_run=read)
     result = view["metadata"]["child_results"][child.run_id]
     assert result["execution_state"] == ("unknown" if drift else "running")

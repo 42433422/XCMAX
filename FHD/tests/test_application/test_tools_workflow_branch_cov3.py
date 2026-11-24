@@ -253,7 +253,7 @@ class TestExecuteWorkflowToolMisc:
     ) -> None:
         from app.application.agent_orchestrator import InMemoryAgentRunRepository
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
-        from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+        from app.application.facades.tools_facade import execute_registered_workflow_tool
 
         actor = trusted_actor(
             role="template-preview-reader",
@@ -279,7 +279,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
+                "app.application.facades.tools_facade.execute_registered_workflow_tool",
                 wraps=execute_registered_workflow_tool,
             ) as dispatch,
             patch(
@@ -374,7 +374,7 @@ class TestExecuteWorkflowToolMisc:
             ) as native,
             patch(
                 "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
-                side_effect=RuntimeError("fail"),
+                side_effect=OSError("fail"),
                 create=True,
             ) as employee,
         ):

@@ -249,15 +249,13 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
 
 
 def test_default_delete_refuses_builtin_without_reporting_success(
-    approved_app, tmp_path, monkeypatch
+    approved_app, tmp_path, monkeypatch, local_tools
 ):
     client, _engine, _repo = approved_app
     builtin = tmp_path / "resources/templates/standard.xlsx"
     builtin.parent.mkdir(parents=True)
     builtin.write_bytes(b"synthetic standard form")
-    monkeypatch.setattr(
-        "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
-    )
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_base_dir", lambda: str(tmp_path))
     response = client.post("/api/templates/delete", json={"id": "fs:standard.xlsx"})
     assert response.status_code == 403, response.text
     assert response.json()["success"] is False

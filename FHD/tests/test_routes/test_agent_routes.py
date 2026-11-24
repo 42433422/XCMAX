@@ -1099,7 +1099,7 @@ def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     client = _client()
     with patch(
         "app.application.agent_runtime.gateway.run_runtime_task",
-        side_effect=RuntimeError("Traceback: database password=do-not-expose"),
+        side_effect=ConnectionError("Traceback: database password=do-not-expose"),
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
 

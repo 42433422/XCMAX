@@ -252,7 +252,7 @@ class TestMaterialsRouter:
 
     def test_batch_delete_with_exception(self) -> None:
         mock_svc = MagicMock()
-        mock_svc.batch_delete_materials.side_effect = RuntimeError("db down")
+        mock_svc.batch_delete_materials.side_effect = ConnectionError("db down")
         with patch("app.application.get_material_application_service", return_value=mock_svc):
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1, 2]}, _ctx(), "normal", ""
@@ -807,7 +807,7 @@ class TestPrintRouter:
                 "app.application.print_app_service.get_print_application_service"
             ) as mock_print_svc,
         ):
-            mock_get.side_effect = RuntimeError("db down")
+            mock_get.side_effect = ConnectionError("db down")
             mock_print_svc.return_value.print_single_label.return_value = {"success": True}
             result = _registered_router_print(
                 "workflow_label_dispatch", {"model_number": "M01"}, _ctx(), "normal", ""
@@ -1482,7 +1482,7 @@ class TestOcrRouter:
             assert result["success"] is False
 
     def test_recoverable_error_returns_failure(self) -> None:
-        with patch("app.fastapi_routes.ocr._get_ocr_service", side_effect=RuntimeError("boom")):
+        with patch("app.fastapi_routes.ocr._get_ocr_service", side_effect=OSError("boom")):
             result = _registered_router_ocr("recognize", {}, _ctx(), "normal", "")
             assert result["success"] is False
             assert result["error_code"] == "ocr_exception"

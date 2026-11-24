@@ -1584,30 +1584,35 @@ class TestOcrRouter:
         result = _registered_router_ocr("request", {"request_id": "r1"}, {}, "admin", "")
         assert result["success"] is False
 
-    def test_request_success(self):
+    @pytest.mark.parametrize("published,state", [(True, "pending"), (False, "failed")])
+    def test_request_publication_does_not_complete_ocr(self, published, state):
         with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
-            mock_get.return_value.emit_ocr_requested.return_value = True
+            emit = mock_get.return_value.emit_ocr_requested
+            emit.return_value = published
             result = _registered_router_ocr(
                 "request",
                 {"request_id": "r1", "image_url": "http://img.png"},
-                {},
+                {"actor_id": "7"},
                 "admin",
                 "",
             )
-        assert result["success"] is True
-        assert result["event"] == "ocr.requested"
-
-    def test_request_failure(self):
-        with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
-            mock_get.return_value.emit_ocr_requested.return_value = False
-            result = _registered_router_ocr(
-                "request",
-                {"request_id": "r1", "image_url": "http://img.png"},
-                {},
-                "admin",
-                "",
-            )
+        emit.assert_called_once_with(
+            request_id="r1", image_url="http://img.png", ocr_type="general", user_id="7"
+        )
         assert result["success"] is False
+        assert result["execution_state"] == state
+        assert result["published"] is published
+        if published:
+            assert result["event"] == "ocr.requested"
+
+    def test_request_missing_actor_is_not_published(self):
+        with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
+            result = _registered_router_ocr(
+                "request", {"request_id": "r1", "image_url": "http://img.png"}, {}, "admin", ""
+            )
+            mock_get.assert_not_called()
+        assert result["success"] is False
+        assert result["error_code"] == "tool_identity_required"
 
     def test_recognize_missing_file_path(self):
         with patch("app.fastapi_routes.ocr._get_ocr_service"):

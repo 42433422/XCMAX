@@ -27,7 +27,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 @pytest.fixture()
 def client(request, monkeypatch):
     actor = None
-    if any(action in request.node.name for action in ("create", "update", "delete")):
+    if "canonical_auth" not in request.node.name and any(
+        action in request.node.name for action in ("create", "update", "delete")
+    ):
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
         monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     app = FastAPI()

@@ -999,7 +999,7 @@ class TestLoadCrossTierCheck:
         original_module = sys.modules.get("xcagi_cross_tier_gate")
 
         bad_loader = MagicMock()
-        bad_loader.exec_module.side_effect = RuntimeError("exec failed")
+        bad_loader.exec_module.side_effect = ImportError("exec failed")
 
         bad_spec = MagicMock()
         bad_spec.loader = bad_loader
@@ -1013,7 +1013,7 @@ class TestLoadCrossTierCheck:
         # Force a clean slate
         sys.modules.pop("xcagi_cross_tier_gate", None)
 
-        with pytest.raises(RuntimeError, match="exec failed"):
+        with pytest.raises(ImportError, match="exec failed"):
             ao._load_cross_tier_check()
 
         assert "xcagi_cross_tier_gate" not in sys.modules

@@ -73,7 +73,7 @@ def test_product_paths_mount_once_and_dispatch_without_a_second_api(
         "app.infrastructure.auth.db_token.verify_db_read_token_header", lambda _r: None
     )
     monkeypatch.setattr(compat_routes, "_products_compat_preflight", lambda *_args: None)
-    compat_update = Mock(return_value={"success": True, "source": "named-compat"})
+    compat_update = Mock(return_value=({"success": True, "source": "named-compat"}, 200))
     monkeypatch.setattr(compat_routes, "_run_products_compat_agent", compat_update)
     actor = trusted_actor()
     with TestClient(app) as client:

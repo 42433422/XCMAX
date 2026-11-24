@@ -259,13 +259,12 @@ class TestOrchestratorMainLinkWiring:
 
         return AgentOrchestrator(repository=InMemoryAgentRunRepository())
 
-    def test_terminal_writeback_event_on_completed_run(self):
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
+    def test_terminal_writeback_event_on_completed_run(self, monkeypatch):
+        from tests.test_application.test_verified_result_feedback import verified_run
 
-        run = AgentRun(user_id="u1", message="查库存")
-        run.status = "completed"
-        run.final_output = {"node_outputs": {"n1": {"message": "库存充足"}}}
+        orch = self._build_orchestrator()
+        run = verified_run(monkeypatch)
+        orch._repo.save(run)
         with (
             patch(
                 "app.application.agent_runtime.pipeline.agent_runtime_hooks_enabled",
@@ -280,7 +279,7 @@ class TestOrchestratorMainLinkWiring:
 
         mock_remember.assert_called_once()
         assert mock_remember.call_args.kwargs["success"] is True
-        assert mock_remember.call_args.kwargs["summary"] == "库存充足"
+        assert mock_remember.call_args.kwargs["summary"] == "Created A"
         assert any(e.event_type == "runtime.memory_writeback" for e in run.events)
 
     def test_writeback_skipped_when_hooks_off(self):

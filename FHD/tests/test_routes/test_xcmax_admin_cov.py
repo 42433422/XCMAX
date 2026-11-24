@@ -170,7 +170,7 @@ class TestMarketAdminProxyBranches:
             ),
             patch(
                 "app.application.self_maintenance_app_service.get_yuangon_onboard_status_local",
-                new=AsyncMock(side_effect=RuntimeError("service down")),
+                new=AsyncMock(side_effect=ConnectionError("onboarding service unavailable")),
             ),
         ):
             result = await admin_routes._market_admin_proxy(
@@ -409,7 +409,7 @@ class TestDigestLocalOrProxyBranches:
             ),
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
-                new=AsyncMock(side_effect=RuntimeError("boom")),
+                new=AsyncMock(side_effect=ConnectionError("digest store unavailable")),
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
@@ -827,7 +827,7 @@ class TestCollectLocalLedger:
     def test_failure_returns_unavailable(self):
         with patch(
             "app.infrastructure.billing.model_usage.list_model_usage_entries",
-            side_effect=RuntimeError("no ledger"),
+            side_effect=FileNotFoundError("no ledger"),
         ):
             result = admin_routes._collect_local_ledger()
         assert result["available"] is False
@@ -883,7 +883,7 @@ class TestCollectCursorUsage:
             patch("os.path.exists", return_value=True),
             patch(
                 "subprocess.run",
-                side_effect=RuntimeError("run failed"),
+                side_effect=PermissionError("cursor-usage is not executable"),
             ),
         ):
             result = admin_routes._collect_cursor_usage()
@@ -1063,7 +1063,7 @@ class TestLocalEndpoints:
             ),
             patch(
                 "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(side_effect=RuntimeError("fail")),
+                new=AsyncMock(side_effect=ConnectionError("maintenance service unavailable")),
             ),
         ):
             resp = client.get("/api/xcmax/local/ops/self-maintenance/status")
@@ -1273,7 +1273,7 @@ class TestSyncEndpoints:
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
                 "app.application.xcmax_sync_app.apply_inbox",
-                side_effect=RuntimeError("apply broke"),
+                side_effect=ConnectionError("sync store unavailable"),
             ),
             patch("app.mod_sdk.audit.write_audit_event"),
         ):

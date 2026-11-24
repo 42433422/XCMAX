@@ -831,7 +831,7 @@ class TestAttachChatTraceRun:
         payload = {"success": True, "response": "done"}
         with patch(
             "app.application.agent_orchestrator.chat_trace.create_chat_trace_run",
-            side_effect=RuntimeError("unexpected crash"),
+            side_effect=OSError("trace storage unavailable"),
         ):
             result = ct.attach_chat_trace_run(payload, message="test")
         assert result is payload

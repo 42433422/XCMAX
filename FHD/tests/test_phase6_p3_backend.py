@@ -329,7 +329,7 @@ def test_apply_notify_paid_saas_plan_triggers_subscription(
     assert reason == "marked_paid"
     assert snap is not None
     mock_is_saas.assert_called_once_with("saas-pro")
-    mock_apply.assert_called_once_with(user_id=99, plan_id="saas-pro")
+    mock_apply.assert_called_once_with(user_id=99, plan_id="saas-pro", verified_payment_grant=True)
 
 
 def test_apply_notify_paid_saas_plan_without_local_user_id_logs_warning(

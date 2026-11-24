@@ -177,10 +177,12 @@ class TestExecuteWorkflowTool:
         # it had no effect. Do not invent a fallback receipt or call another impl.
         assert data["success"] is False
         assert data["error_code"] == "tool_execution_interrupted"
-        assert data["execution_state"] == "unknown"
         assert data["outcome"] == "unknown"
+        assert data["retryable"] is False
         assert data["reconciliation_required"] is True
         assert "suggestions" not in data
+        native.assert_not_called()
+        legacy.assert_not_called()
 
     def test_template_preview_dispatched(self):
         with (

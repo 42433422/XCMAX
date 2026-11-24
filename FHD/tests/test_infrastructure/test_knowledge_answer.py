@@ -65,7 +65,7 @@ def test_answer_call_none_when_provider_unavailable(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("XCAGI_KB_ANSWER_LLM", raising=False)
     with patch(
         "app.infrastructure.llm.providers.registry.get_active_provider",
-        side_effect=RuntimeError("未配置模型"),
+        return_value=None,
     ):
         assert get_kb_answer_llm_call() is None
 

@@ -1002,7 +1002,7 @@ class TestEnsureModApiReady:
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mm),
             patch(
                 "app.fastapi_app.get_fastapi_app",
-                side_effect=RuntimeError("no app"),
+                side_effect=ImportError("no app"),
             ),
         ):
             result = ensure_mod_api_ready("m1")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from contextlib import contextmanager as _shared_scope_contextmanager
 
 
@@ -325,7 +326,7 @@ class TestMarketSaveSessionToken:
         assert ma._MARKET_SESSION_TOKENS == {}
 
     def test_db_persist_swallows_recoverable_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
 
@@ -361,7 +362,7 @@ class TestMarketClearSessionToken:
 
     def test_db_clear_swallows_recoverable_error(self) -> None:
         ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             ma.clear_session_market_token("sid1")
         assert "sid1" not in ma._MARKET_SESSION_TOKENS
 
@@ -403,7 +404,7 @@ class TestMarketSessionToken:
         assert result == ""
 
     def test_session_token_db_recoverable_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             result = ma.session_market_token("sid1")
         assert result == ""
 
@@ -431,11 +432,11 @@ class TestMarketLatestSessionToken:
     """Cover ``latest_session_market_token`` / ``latest_session_market_refresh_token``."""
 
     def test_latest_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             assert ma.latest_session_market_token() == ""
 
     def test_latest_refresh_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             assert ma.latest_session_market_refresh_token() == ""
 
     def test_latest_token_returns_first_non_empty(self) -> None:
@@ -2941,7 +2942,7 @@ class TestMSAllRows:
 
     def test_all_rows_handles_exception(self) -> None:
         with patch("app.fastapi_routes.mod_store_routes.list_mod_items") as mock_list:
-            mock_list.side_effect = RuntimeError("fail")
+            mock_list.side_effect = OSError("fail")
             result = msr._all_rows()
             assert result == []
 

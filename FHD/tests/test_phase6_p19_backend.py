@@ -163,14 +163,14 @@ class TestEffectiveSingleModId:
             result = discover_mod._effective_single_mod_id()
         assert result is None
 
-    def test_returns_none_when_ctx_raises(self, monkeypatch):
+    def test_unexpected_ctx_error_propagates(self, monkeypatch):
         monkeypatch.delenv("XCAGI_SINGLE_MOD_ID", raising=False)
         with patch(
             "app.request_active_mod_ctx.get_request_active_mod_id",
             side_effect=RuntimeError("no ctx"),
         ):
-            result = discover_mod._effective_single_mod_id()
-        assert result is None
+            with pytest.raises(RuntimeError, match="no ctx"):
+                discover_mod._effective_single_mod_id()
 
 
 class TestFilterManifestRowsToSingle:

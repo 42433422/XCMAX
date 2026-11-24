@@ -241,7 +241,7 @@ def test_compat_ai_generate_recoverable_error_returns_500() -> None:
             "unit_name": "甲公司",
             "products": [{"name": "漆", "quantity": 1, "price": 10}],
         }
-        mock_svc_get.side_effect = RuntimeError("shipment service down")
+        mock_svc_get.side_effect = ConnectionError("shipment service down")
         resp = client.post(
             "/api/generate",
             json={"order_text": "甲公司 漆 1 10"},
@@ -689,7 +689,7 @@ def test_compat_print_diagnose_recoverable_error_returns_500() -> None:
     client = _ai_assistant_client()
     with patch.object(ai_assistant, "_printer_svc") as mock_svc_get:
         mock_svc = MagicMock()
-        mock_svc.get_printers.side_effect = RuntimeError("printer driver crash")
+        mock_svc.get_printers.side_effect = OSError("printer driver crash")
         mock_svc_get.return_value = mock_svc
         resp = client.get("/api/print/diagnose")
     assert resp.status_code == 500
@@ -853,7 +853,7 @@ def test_compat_print_single_label_product_lookup_failure_falls_back() -> None:
         patch("app.application.get_product_app_service") as mock_get_product,
         patch("app.application.print_app_service.get_print_application_service") as mock_get_print,
     ):
-        mock_get_product.side_effect = RuntimeError("product db down")
+        mock_get_product.side_effect = ConnectionError("product db down")
 
         mock_print_svc = MagicMock()
         mock_print_svc.print_single_label.return_value = {"success": True}

@@ -161,7 +161,7 @@ def test_check_event_queue_ignores_old_cumulative_drops(monitor):
 
 
 def test_check_event_queue_exception(monitor):
-    with patch.object(hm, "get_neuro_bus", side_effect=RuntimeError("err")):
+    with patch.object(hm, "get_neuro_bus", side_effect=ImportError("queue backend unavailable")):
         result = monitor._check_event_queue()
     assert result.status == HealthStatus.UNHEALTHY
 

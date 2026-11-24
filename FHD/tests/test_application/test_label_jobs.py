@@ -342,7 +342,7 @@ def test_submit_uses_real_agent_and_authenticated_identity(
     never = MagicMock()
     assert (
         restarted.submit(OWNER, job["id"], confirmation["confirm_token"], never)["status"]
-        == "outcome_unknown"
+        == "submitted"
     )
     never.assert_not_called()
     service.print_label(str(env.service.file(OWNER, job["id"])), "LabelPrinter", 1)

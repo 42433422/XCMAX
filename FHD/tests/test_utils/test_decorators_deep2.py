@@ -72,10 +72,10 @@ class TestGetOptimizerComponentsDeep:
             out = dec.get_optimizer_components()
         assert all(v is None for v in out.values())
 
-    def test_runtime_error_returns_defaults(self):
-        """RuntimeError is in RECOVERABLE_ERRORS and should be caught."""
+    def test_io_error_returns_defaults(self):
+        """An operational failure should return the default components."""
         fake_module = MagicMock()
-        fake_module.get_performance_optimizer.side_effect = RuntimeError("boom")
+        fake_module.get_performance_optimizer.side_effect = OSError("boom")
         with patch.dict(
             "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
         ):
@@ -468,24 +468,23 @@ class TestMonitoredDeep:
 
             assert fn() == "ok"
 
-    def test_record_metric_truncates_error(self):
-        """Error string is truncated to 200 chars in record_metric."""
-        monitor, track_ctx, fake_module = _setup_shared_0()
-        long_error = RuntimeError("x" * 300)
-        with patch.dict(
-            "sys.modules", {"app.utils.performance.performance_initializer": fake_module}
-        ):
+    def test_failed_call_records_metric_and_propagates_error(self, monkeypatch):
+        from app.utils.performance.performance_monitor import PerformanceMonitor
 
-            @dec.monitored("my_metric")
-            def fn():
-                raise long_error
+        monitor = PerformanceMonitor()
+        record = MagicMock()
+        monkeypatch.setattr(monitor, "record_metric", record)
+        monkeypatch.setattr(dec, "get_optimizer_components", lambda: {"monitor": monitor})
 
-            with pytest.raises(RuntimeError):
-                fn()
-            monitor.record_metric.assert_called_once()
-            call_kwargs = monitor.record_metric.call_args.kwargs
-            error_str = call_kwargs["error"]
-            assert len(error_str) <= 200
+        @dec.monitored("my_metric")
+        def fn():
+            raise OSError("disk unavailable")
+
+        with pytest.raises(OSError, match="disk unavailable"):
+            fn()
+        record.assert_called_once()
+        assert record.call_args.args[0] == "my_metric"
+        assert record.call_args.kwargs == {"success": False, "error": "disk unavailable"}
 
 
 # ── circuit_breaker: deep coverage ───────────────────────────────────────────

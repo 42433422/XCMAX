@@ -325,11 +325,11 @@ class TestAnalyzeTemplateErrors:
 
     def test_recoverable_error(self, tmp_path):
         excel_path = tmp_path / "test.xlsx"
-        excel_path.write_bytes(b"fake")
+        excel_path.touch()
 
         with patch(
             "openpyxl.load_workbook",
-            side_effect=RuntimeError("corrupt file"),
+            side_effect=PermissionError("workbook is not readable"),
         ):
             result = analyze_template(str(excel_path))
             assert result["success"] is False

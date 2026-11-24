@@ -53,6 +53,7 @@ def _configure_runtime(monkeypatch, tmp_path) -> None:
 
     memory_dir = tmp_path / "memory"
     monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
+    monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setattr(memory_mod, "MEMORY_DIR", str(memory_dir))
     monkeypatch.setattr(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -104,6 +105,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
     monkeypatch,
     authenticated_memory_client,
     account_tier,
+    local_tools,
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
     from app.application.agent_task_context import scoped_personal_memory_id
@@ -130,7 +132,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                     "source": "settings_ui",
                     "evidence": [{"message": "总是给七彩乐园开单"}],
                 },
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-propose"},
             )
             assert created.status_code == 200, created.json()
             created_body = created.json()
@@ -146,9 +148,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             confirmed = client.post(
                 f"/memory/v2/{memory_id}/confirm",
                 json={"user_id": "7"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-confirm"},
             )
-            assert confirmed.status_code == 200
+            assert confirmed.status_code == 200, confirmed.text
             confirmed_body = confirmed.json()
             assert confirmed_body["memory"]["status"] == "active"
             _assert_memory_run(repo, confirmed_body["run_id"], action="confirm", risk="high")
@@ -164,9 +166,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
                     "value": "彩虹乐园",
                     "reason": "用户纠正名称",
                 },
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-correct"},
             )
-            assert corrected.status_code == 200
+            assert corrected.status_code == 200, corrected.text
             corrected_body = corrected.json()
             assert corrected_body["memory"]["key"] == "favorite_customer"
             _assert_memory_run(repo, corrected_body["run_id"], action="correct", risk="high")
@@ -176,7 +178,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             rejected = client.post(
                 f"/memory/v2/{memory_id}/reject",
                 json={"user_id": "7", "reason": "用户拒绝"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-reject"},
             )
             assert rejected.status_code == 200, rejected.json()
             rejected_body = rejected.json()
@@ -191,9 +193,9 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             deleted = client.delete(
                 f"/memory/v2/{memory_id}",
                 params={"user_id": "7", "reason": "用户删除"},
-                headers={"X-User-Id": "7"},
+                headers={"Idempotency-Key": "agent-memory-delete"},
             )
-            assert deleted.status_code == 200
+            assert deleted.status_code == 200, deleted.text
             deleted_body = deleted.json()
             assert deleted_body["memory"]["status"] == "deleted"
             _assert_memory_run(repo, deleted_body["run_id"], action="delete", risk="high")

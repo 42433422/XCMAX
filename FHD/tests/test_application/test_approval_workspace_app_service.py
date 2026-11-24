@@ -1847,7 +1847,7 @@ class TestRejectRequest:
     def test_drop_pending_ai_workflow_no_raw_exc_leak(self):
         """拒绝清理工作流出错 → 响应消息不泄漏原始异常文本。"""
         svc = MagicMock()
-        svc.reject.side_effect = RuntimeError("boom-secret-db")
+        svc.reject.side_effect = ConnectionError("boom-secret-db")
         with patch("app.application.workflow.get_approval_service", return_value=svc):
             result = _drop_pending_ai_workflow_after_rejection(request_no="req-ai-1", reason="拒绝")
         assert result["workflow_executed"] is False
@@ -2689,7 +2689,7 @@ class TestHasPendingAiWorkflow:
 
     def test_exception_fail_closed(self):
         svc = MagicMock()
-        svc.get_pending_workflow.side_effect = RuntimeError("boom")
+        svc.get_pending_workflow.side_effect = ConnectionError("workflow store unavailable")
         with patch("app.application.workflow.get_approval_service", return_value=svc):
             assert _has_pending_ai_workflow("req-1") is None
 
@@ -2782,7 +2782,7 @@ class TestResumePendingAiWorkflow:
     def test_exception_safe_failure_no_leak(self):
         """异常 → 安全失败响应，且不泄漏原始异常文本。"""
         svc = MagicMock()
-        svc.approve.side_effect = RuntimeError("boom-db-secret")
+        svc.approve.side_effect = ConnectionError("boom-db-secret")
         with patch("app.application.workflow.get_approval_service", return_value=svc):
             result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
         assert result["workflow_executed"] is False

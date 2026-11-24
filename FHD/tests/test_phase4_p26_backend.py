@@ -155,14 +155,14 @@ def test_materials_batch_delete(mock_get: MagicMock) -> None:
     assert out["deleted_count"] == 1
 
 
-@patch("app.bootstrap.get_shipment_app_service")
+@patch("app.bootstrap.get_shipment_application_service_core")
 def test_shipment_records_update(mock_get: MagicMock) -> None:
     mock_get.return_value.update_shipment_record.return_value = {"success": True}
     out = _registered_router_shipment_records("update", {"id": 5, "status": "done"}, {}, "pro", "")
     assert out["success"] is True
 
 
-@patch("app.bootstrap.get_shipment_app_service")
+@patch("app.bootstrap.get_shipment_application_service_core")
 def test_shipment_records_export(mock_get: MagicMock) -> None:
     mock_get.return_value.export_shipment_records.return_value = {"success": True}
     out = _registered_router_shipment_records("export", {"unit_name": "甲"}, {}, "pro", "")

@@ -47,13 +47,17 @@ def test_read_or_receipt_permission_cannot_authorize_business_mutations(
 @pytest.mark.parametrize(
     "tool,action,params",
     [
-        ("products", "query", {}),
+        ("products", "delete", {"id": 1}),
         ("products", "create", {"name_or_model": "scoped-test"}),
-        ("customers", "query", {}),
-        ("customers", "create", {"unit_name": "scoped-test"}),
+        ("customers", "get_addresses", {"customer_id": 1}),
+        ("customers", "set_credit_limit", {"customer_id": 1, "credit_limit": 100}),
         ("materials", "list", {}),
         ("materials", "delete", {"id": 1}),
-        ("shipment_orders", "delete", {"id": 1}),
+        (
+            "unit_products_import",
+            "execute_import",
+            {"saved_name": "fixture.db", "unit_name": "scoped-test"},
+        ),
         ("print", "print_document", {"file_path": "fixture.pdf"}),
         ("excel_vector_index", "list", {}),
         ("excel_vector_index", "query", {"index_id": "original", "query": "fixture"}),
@@ -87,6 +91,25 @@ def test_legacy_store_contract_hides_and_denies_tenant_admin_before_task_admissi
     assert result["success"] is False
     assert result["error_code"] == "tool_permission_denied"
     assert result["reason"] == "legacy_store_not_scoped"
+
+
+@pytest.mark.parametrize(
+    "tool,action,permission",
+    [
+        ("products", "query", "product.view"),
+        ("customers", "query", "customer.view"),
+        ("customers", "create", "customer.edit"),
+        ("shipment_orders", "delete", "shipment.edit"),
+    ],
+)
+def test_tenant_actions_require_their_business_permission(trusted_actor, tool, action, permission):
+    assert get_tool_action_spec(tool, action).policy.get("data_scope") != "legacy_global"
+    actor = trusted_actor(permissions=[permission])
+    assert actor_tool_denial(tool, action, actor.context) is None
+    unprivileged = trusted_actor(role="unprivileged", permissions=[])
+    denial = actor_tool_denial(tool, action, unprivileged.context)
+    assert denial["error_code"] == "tool_permission_denied"
+    assert denial["reason"] == "permission_denied"
 
 
 @pytest.mark.parametrize(

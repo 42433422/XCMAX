@@ -6,10 +6,12 @@ approval/shipment/customer lists, mods, home, platform-shell, and all helper fun
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 
@@ -70,7 +72,7 @@ class TestEnsureMobileDeviceTable:
             ext_mod._ensure_mobile_device_table()
 
     def test_recoverable_error_logged(self, ext_mod):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_db", side_effect=sqlite3.OperationalError("db down")):
             ext_mod._ensure_mobile_device_table()  # should not raise
 
 
@@ -576,7 +578,7 @@ class TestMobileModItems:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("fail"),
+                side_effect=OSError("fail"),
             ),
             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"),
         ):
@@ -778,7 +780,7 @@ class TestOidcExchange:
     @pytest.mark.asyncio
     async def test_exchange_code_fails(self, ext_mod):
         async def _raise(code):
-            raise RuntimeError("OIDC down")
+            raise httpx.ConnectError("OIDC down")
 
         with (
             patch(

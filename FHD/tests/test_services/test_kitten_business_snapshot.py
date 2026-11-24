@@ -57,7 +57,7 @@ class TestFmtDt:
     def test_isoformat_error_falls_back(self):
         class BadDatetime:
             def isoformat(self):
-                raise RuntimeError("bad isoformat")
+                raise ValueError("bad isoformat")
 
         result = _fmt_dt(BadDatetime())
         assert isinstance(result, str)

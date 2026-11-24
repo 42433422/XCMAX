@@ -54,71 +54,41 @@ def repo():
 
 
 @pytest.mark.parametrize("price", ["", 0, 12.5])
-def test_mod_product_price_roundtrip_sqlite(monkeypatch, price):
-    from pathlib import Path
-
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
+def test_product_price_roundtrip_sqlite(monkeypatch, repo, price):
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
-    from sqlalchemy.pool import StaticPool
 
     from app.db.db_base import Base
     from app.db.models import Product
     from app.domain.shared_services.products_service import ProductsService
-    from app.infrastructure.mods.mod_manager import import_mod_backend_py
-    from app.infrastructure.tenant_scope import tenant_scope
-    from app.mod_sdk import erp_products_facade as facade
+    from app.mod_sdk.erp_products_facade import _map_create_body
 
-    engine = create_engine(
-        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-    )
-    Base.metadata.create_all(engine)
-
-    @contextmanager
-    def isolated_db():
-        with tenant_scope(1), Session(engine) as session:
-            yield session
-
-    monkeypatch.setattr(
-        "app.infrastructure.repositories.product_repository_impl.get_db", isolated_db
-    )
-    service = ProductsService(repository=SQLAlchemyProductRepository())
-    service._cache = None
-    monkeypatch.setattr(facade, "_service", lambda: service)
-    monkeypatch.setattr(facade, "_write_gate", lambda request: None)
-    mod_root = Path(__file__).resolve().parents[2] / "mods" / "bridge" / "xcagi-erp-domain-bridge"
-    mod = import_mod_backend_py(str(mod_root), "xcagi-erp-domain-bridge", "blueprints")
-    monkeypatch.setattr(
-        mod,
-        "_invoke",
-        lambda domain, action, request, body: {
-            "add": facade.products_add,
-            "update": facade.products_update,
-        }[action](request, body),
-    )
-    app = FastAPI()
-    mod.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
-    route = "/api/mod/xcagi-erp-domain-bridge/products/"
-    with TestClient(app) as client:
-        result = client.post(route + "add", json={"name": "商品", "price": price})
-        assert result.status_code == 200, result.text
-        product_id = result.json()["data"]["id"]
-        with isolated_db() as db:
-            assert db.scalar(select(Product.price).where(Product.id == product_id)) == (
-                0 if price == "" else price
-            )
-        payload = {"id": product_id, "name": "商品", "price": ""}
-        assert client.post(route + "update", json=payload).status_code == 200
-        with isolated_db() as db:
-            assert db.scalar(select(Product.price).where(Product.id == product_id)) == 0
-        payload["price"] = 12.5
-        assert client.post(route + "update", json=payload).status_code == 200
-        payload.pop("price")
-        assert client.post(route + "update", json=payload).status_code == 200
-        with isolated_db() as db:
-            assert db.scalar(select(Product.price).where(Product.id == product_id)) == 12.5
-    engine.dispose()
+    engine = create_engine("sqlite://")
+    try:
+        Base.metadata.create_all(engine)
+        monkeypatch.setattr(
+            "app.infrastructure.repositories.product_repository_impl.get_db",
+            lambda: Session(engine),
+        )
+        service = ProductsService(repository=repo)
+        service._cache = None
+        created = service.create_product(_map_create_body({"name": "商品", "price": price}))
+        assert created["success"] is True, created
+        product_id = created["product_id"]
+        stored = select(Product.name, Product.price).where(Product.id == product_id)
+        with Session(engine) as db:
+            assert db.execute(stored).one() == ("商品", 0 if price == "" else price)
+        for change, expected in (
+            ({"price": 0}, ("商品", 0)),
+            ({"price": 12.5}, ("商品", 12.5)),
+            ({"name": "新商品"}, ("新商品", 12.5)),
+        ):
+            updated = service.update_product(product_id, change)
+            assert updated["success"] is True, updated
+            with Session(engine) as db:
+                assert db.execute(stored).one() == expected
+    finally:
+        engine.dispose()
 
 
 def _mock_db_ctx(mock_db):

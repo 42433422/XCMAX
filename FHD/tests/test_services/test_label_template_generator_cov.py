@@ -1315,7 +1315,7 @@ class TestAnalyzeColorsExceptionPath:
     def test_exception_during_getpixel_returns_default(self):
         """If getpixel raises → fallback returned."""
         fake_rgb = MagicMock()
-        fake_rgb.getpixel.side_effect = IndexError("out of bounds")
+        fake_rgb.getpixel.side_effect = OSError("unreadable image data")
 
         fake_img = MagicMock(spec=Image.Image)
         fake_img.convert.return_value = fake_rgb

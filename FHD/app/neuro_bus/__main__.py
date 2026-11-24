@@ -15,7 +15,7 @@ import asyncio
 import sys
 import time
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 def test_imports():
@@ -93,7 +93,7 @@ def test_reflex_arc():
 
         return avg_latency < 1000
 
-    except RECOVERABLE_ERRORS as e:
+    except BOUNDARY_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         return False
 
@@ -142,7 +142,7 @@ async def test_neurobus():
 
         return len(received_events) > 0
 
-    except RECOVERABLE_ERRORS as e:
+    except BOUNDARY_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 
@@ -177,7 +177,7 @@ def test_domains():
 
         return len(domains) >= 3
 
-    except RECOVERABLE_ERRORS as e:
+    except BOUNDARY_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 
@@ -212,7 +212,7 @@ async def test_processors():
 
         return True
 
-    except RECOVERABLE_ERRORS as e:
+    except BOUNDARY_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 

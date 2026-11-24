@@ -147,7 +147,7 @@ def test_publish_employee_task_failed_bus_unavailable():
 
 
 def test_refresh_employee_triggers_no_bus():
-    with patch("app.neuro_bus.bus.get_neuro_bus", side_effect=RuntimeError("down")):
+    with patch("app.neuro_bus.bus.get_neuro_bus", side_effect=ConnectionError("down")):
         out = trig.refresh_employee_triggers()
     assert out["registered"] == []
     assert "error" in out

@@ -510,7 +510,7 @@ def test_browser_address_limit_does_not_change_regular_tool_limits(monkeypatch):
     import resource
 
     applied = {}
-    monkeypatch.setattr(resource, "getrlimit", lambda kind: (-1, -1))
+    monkeypatch.setattr(resource, "getrlimit", lambda kind: (resource.RLIM_INFINITY,) * 2)
     monkeypatch.setattr(resource, "setrlimit", lambda kind, pair: applied.update({kind: pair}))
     monkeypatch.delenv("XCAGI_TOOL_SANDBOX", raising=False)
     monkeypatch.delenv("XCAGI_BROWSER_ADDRESS_MB", raising=False)

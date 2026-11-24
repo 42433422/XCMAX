@@ -183,7 +183,7 @@ class TestViewExcelContent:
 
         with patch(
             "openpyxl.load_workbook",
-            side_effect=RuntimeError("corrupt"),
+            side_effect=PermissionError("workbook is not readable"),
         ):
             result = view_excel_content(str(excel_path))
             assert result["success"] is False

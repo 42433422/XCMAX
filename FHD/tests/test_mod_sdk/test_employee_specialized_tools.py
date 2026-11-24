@@ -226,7 +226,8 @@ async def test_api_call_exception_branch(monkeypatch):
     _install_httpx(monkeypatch, boom)
     r = await est._api_call("GET", "/x")
     assert r["ok"] is False
-    assert "connect failed" in r["error"]
+    assert r["error"] == "HTTP response unavailable"
+    assert "connect failed" not in str(r)
 
 
 # ---------------------------------------------------------------------------

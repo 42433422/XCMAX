@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from importlib import import_module
 from typing import Any
 
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
@@ -15,6 +16,8 @@ from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvid
 from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+# CPython's import-lock exception is not exposed by importlib's public stubs.
+_IMPORT_LOCK_ERRORS = RECOVERABLE_ERRORS + (import_module("importlib._bootstrap")._DeadlockError,)
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
 _PROVIDER_ID_ALIASES = {
     "xcauto": "openai_compatible",
@@ -216,7 +219,7 @@ def _register_llm_port_source() -> None:
                         adapter.auth_token = token
                         if adapter.is_configured:
                             return _maybe_instrument(ModstoreProvider(adapter))
-                except RECOVERABLE_ERRORS:
+                except _IMPORT_LOCK_ERRORS:
                     pass
             return _self.get_active_provider()
 

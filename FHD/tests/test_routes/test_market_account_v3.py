@@ -778,7 +778,7 @@ class TestMarketSessionHandoffRoute:
         with (
             patch(
                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                side_effect=RuntimeError("auth error"),
+                side_effect=ConnectionError("auth error"),
             ),
             patch.object(ma, "session_market_token", return_value="fallback_tok"),
             patch.object(ma, "latest_session_market_token", return_value=""),
@@ -796,7 +796,7 @@ class TestMarketSessionHandoffRoute:
         with (
             patch(
                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                side_effect=RuntimeError("auth error"),
+                side_effect=ConnectionError("auth error"),
             ),
             patch.object(ma, "session_market_token", return_value=""),
             patch.object(ma, "latest_session_market_token", return_value=""),

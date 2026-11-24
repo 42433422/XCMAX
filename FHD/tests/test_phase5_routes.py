@@ -131,7 +131,7 @@ def test_print_get_printers(print_client, mock_printer_service: MagicMock) -> No
 
 
 def test_print_get_printers_error(print_client, mock_printer_service: MagicMock) -> None:
-    mock_printer_service.get_printers.side_effect = RuntimeError("boom")
+    mock_printer_service.get_printers.side_effect = OSError("boom")
     r = print_client.get("/api/print/printers")
     assert r.status_code == 500
     assert r.json()["success"] is False
@@ -391,7 +391,7 @@ async def test_xcmax_remote_status(xcmax_client, monkeypatch: pytest.MonkeyPatch
 def test_xcmax_sync_status_fallback(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.db.xcmax_sync.SyncDb",
-        lambda: (_ for _ in ()).throw(RuntimeError("no db")),
+        lambda: (_ for _ in ()).throw(ConnectionError("no db")),
     )
     r = xcmax_client.get("/api/xcmax/sync/status")
     assert r.status_code == 200
@@ -401,7 +401,7 @@ def test_xcmax_sync_status_fallback(xcmax_client, monkeypatch: pytest.MonkeyPatc
 def test_xcmax_sync_changes_empty(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.db.xcmax_sync.SyncDb",
-        lambda: (_ for _ in ()).throw(RuntimeError("no db")),
+        lambda: (_ for _ in ()).throw(ConnectionError("no db")),
     )
     r = xcmax_client.get("/api/xcmax/sync/changes")
     assert r.status_code == 200
@@ -604,7 +604,7 @@ def test_debug_client_log_ok(debug_client, monkeypatch: pytest.MonkeyPatch) -> N
 def test_debug_client_log_error(debug_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.utils.logging.logging_utils.ingest_client_debug_json",
-        lambda body: (_ for _ in ()).throw(RuntimeError("fail")),
+        lambda body: (_ for _ in ()).throw(OSError("fail")),
     )
     r = debug_client.post("/api/debug/client-log", json={})
     assert r.json()["success"] is False

@@ -435,6 +435,9 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected,
     assert result["success"] is (not expected)
     assert svc.create_shipment.call_count == (0 if expected else 1)
     if not expected:
+        assert svc.create_shipment.call_args.kwargs["unit_name"] == (
+            params.get("unit_name") or params["purchase_unit"]
+        )
         for key in ("contact_person", "contact_phone"):
             assert svc.create_shipment.call_args.kwargs[key] == params[key]
 

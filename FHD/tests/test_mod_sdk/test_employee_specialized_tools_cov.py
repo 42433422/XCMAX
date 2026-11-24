@@ -357,7 +357,7 @@ class TestApiCall:
         mock_resp = Mock()
         mock_resp.is_success = True
         mock_resp.status_code = 200
-        mock_resp.json = Mock(side_effect=RuntimeError("not json"))
+        mock_resp.json = Mock(side_effect=json.JSONDecodeError("Expecting value", "not json", 0))
         mock_resp.text = "plain text"
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_resp)
@@ -1406,7 +1406,7 @@ class TestCheckWriteGate:
     async def test_exception_blocks(self):
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("module not loaded"),
+            side_effect=ImportError("write gate module unavailable"),
         ):
             r = await _check_write_gate("emp-1", "write_file", {}, {})
         # Should block on exception
@@ -1797,7 +1797,8 @@ class TestHandleSpecialized:
     async def test_tool_exception_returns_error(self):
         # handle_specialized looks up the function from TOOL_REGISTRY, not the module attribute.
         # Patch the registry entry directly so the injected side_effect is actually used.
-        with patch.dict(TOOL_REGISTRY, {"run_pytest": AsyncMock(side_effect=RuntimeError("boom"))}):
+        missing_pytest = AsyncMock(side_effect=FileNotFoundError("pytest executable not found"))
+        with patch.dict(TOOL_REGISTRY, {"run_pytest": missing_pytest}):
             r = await handle_specialized(
                 "fhd-core-maintainer",
                 {"tool": "run_pytest", "params": {}},

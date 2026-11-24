@@ -292,7 +292,7 @@ class TestIntentServiceUncoveredBranches:
         with patch.object(
             mod,
             "_recognize_intents_impl",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("intent rules could not be read"),
         ):
             result = mod.recognize_intents("hello")
 
@@ -321,7 +321,9 @@ class TestIntentServiceUncoveredBranches:
         engine.match_hint_intents.return_value = []
 
         with (
-            patch.object(mod, "_reflex_basic_intents", side_effect=RuntimeError("reflex down")),
+            patch.object(
+                mod, "_reflex_basic_intents", side_effect=TimeoutError("reflex budget exceeded")
+            ),
             patch.object(mod, "get_rule_engine", return_value=engine),
         ):
             result = mod.recognize_intents("嗯")

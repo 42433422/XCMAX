@@ -133,17 +133,16 @@ class TestGenerateBatchShipmentOrders:
     def test_retry_on_outer_error(self, mock_self):
         from app.tasks.shipment_tasks import generate_batch_shipment_orders
 
-        with (
-            patch(
-                "app.tasks.shipment_tasks.generate_shipment_order",
-                side_effect=RuntimeError("fatal"),
-            ),
-            patch.object(
-                generate_batch_shipment_orders, "retry", side_effect=MaxRetriesExceededError
-            ),
-        ):
-            result = generate_batch_shipment_orders([{"unit_name": "Co1", "products": []}])
+        class UnavailableOrders(list):
+            def __iter__(self):
+                raise OSError("could not read batch")
+
+        with patch.object(
+            generate_batch_shipment_orders, "retry", side_effect=MaxRetriesExceededError
+        ) as retry:
+            result = generate_batch_shipment_orders(UnavailableOrders())
         assert result["success"] is False
+        retry.assert_called_once()
 
     def test_inner_recoverable_error_counted_as_failed(self, mock_self):
         from app.tasks.shipment_tasks import generate_batch_shipment_orders
@@ -372,7 +371,10 @@ class TestImportProductsBatchTask:
         from app.tasks.shipment_tasks import import_products_batch_task
 
         with (
-            patch("app.services.get_products_service", side_effect=RuntimeError("fatal")),
+            patch(
+                "app.services.get_products_service",
+                side_effect=sqlite3.OperationalError("database unavailable"),
+            ),
             patch.object(import_products_batch_task, "retry", side_effect=MaxRetriesExceededError),
         ):
             result = import_products_batch_task([{"name": "P1"}], "TestCo")

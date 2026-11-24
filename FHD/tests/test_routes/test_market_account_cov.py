@@ -651,7 +651,7 @@ class TestMarketAccountOverview:
         with patch.object(
             ma,
             "_authorization_from_request_resolved",
-            new=AsyncMock(side_effect=RuntimeError("boom")),
+            new=AsyncMock(side_effect=ConnectionError("session store unavailable")),
         ):
             resp = _client.post("/api/market/account-overview", json={})
         # Recoverable errors degrade gracefully
@@ -1426,7 +1426,7 @@ class TestMarketSessionHandoff:
         with (
             patch(
                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                side_effect=RuntimeError("sensitive-context"),
+                side_effect=ConnectionError("sensitive-context"),
             ),
             patch.object(
                 ma, "latest_session_market_token", return_value="another-user-token"
@@ -2321,7 +2321,9 @@ class TestMarketAccountOverviewBranches:
             ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
         ):
             with patch.object(
-                ma, "_proxy_json", new=AsyncMock(side_effect=RuntimeError("inner boom"))
+                ma,
+                "_proxy_json",
+                new=AsyncMock(side_effect=ConnectionError("market upstream unavailable")),
             ):
                 resp = _client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200

@@ -228,7 +228,7 @@ def test_get_reliability_status_with_circuit_open():
 def test_get_reliability_status_with_circuit_can_execute_error():
     bus = bus_mod.NeuroBus(worker_threads=1)
     fake_circuit = MagicMock()
-    fake_circuit.can_execute.side_effect = RuntimeError("oops")
+    fake_circuit.can_execute.side_effect = OSError("oops")
     bus._rel_circuit = fake_circuit
     out = bus.get_reliability_status()
     assert out["circuit_open"] is None
@@ -273,7 +273,7 @@ def test_set_neuro_bus_replaces_singleton(monkeypatch):
 def test_registered_domains_returns_empty_when_registry_unavailable(monkeypatch):
     monkeypatch.setattr(
         "app.neuro_bus.domains.domains_base.get_domain_registry",
-        MagicMock(side_effect=RuntimeError("no registry")),
+        MagicMock(side_effect=OSError("no registry")),
     )
     bus = bus_mod.NeuroBus(worker_threads=1)
     assert bus.registered_domains == []

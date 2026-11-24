@@ -78,7 +78,7 @@ def test_generate_success_invalid_input_and_recoverable_fallback() -> None:
         patch.dict(sys.modules, {"barcode": fake_barcode, "barcode.writer": fake_writer}),
         patch.object(generator, "_generate_fallback_barcode", return_value=fallback) as make,
     ):
-        fake_barcode.get_barcode.side_effect = RuntimeError("broken")
+        fake_barcode.get_barcode.side_effect = OSError("broken")
         assert generator.generate("ABC") is fallback
     make.assert_called_once_with("ABC", {})
 
@@ -102,7 +102,7 @@ def test_save_and_convenience_functions(tmp_path) -> None:
 
     with patch.object(generator, "generate", return_value=None):
         assert generator.save(str(destination), "") is False
-    with patch.object(generator, "generate", side_effect=RuntimeError("broken")):
+    with patch.object(generator, "generate", side_effect=OSError("broken")):
         assert generator.save(str(destination), "ABC") is False
 
     sentinel = Image.new("RGB", (1, 1))

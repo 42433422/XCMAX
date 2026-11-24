@@ -481,7 +481,7 @@ class TestCallLlmApi:
         svc = _ConcreteApi()
         with patch(
             "app.infrastructure.llm.providers.registry.get_active_provider",
-            side_effect=RuntimeError("provider error"),
+            side_effect=ConnectionError("provider error"),
         ):
             result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
         assert result is None

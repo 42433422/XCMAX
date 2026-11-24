@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from app.fastapi_routes._route_helpers import is_ci_strict
 from app.fastapi_routes.registry import RouteRegistry
 from app.runtime_integrity import record_runtime_component
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -107,22 +107,7 @@ def _mount(
 ) -> None:
     try:
         router = loader()
-        registry.register_router(
-            name,
-            router,
-            priority=priority,
-            prefix=prefix,
-            tags=tags,
-            **kwargs,
-        )
-        if registry.app is not None:
-            record_runtime_component(
-                registry.app,
-                f"business_route:{name}",
-                ok=True,
-                required=name in _DESKTOP_REQUIRED_ROUTES,
-            )
-    except RECOVERABLE_ERRORS as exc:
+    except BOUNDARY_ERRORS as exc:
         if is_ci_strict() and required_in_ci:
             raise RuntimeError(f"Required route mount failed in CI: {name}") from exc
         if registry.app is not None:
@@ -134,6 +119,23 @@ def _mount(
                 detail=f"business route unavailable: {name}",
             )
         logger.exception("business route unavailable: %s", name)
+        return
+
+    registry.register_router(
+        name,
+        router,
+        priority=priority,
+        prefix=prefix,
+        tags=tags,
+        **kwargs,
+    )
+    if registry.app is not None:
+        record_runtime_component(
+            registry.app,
+            f"business_route:{name}",
+            ok=True,
+            required=name in _DESKTOP_REQUIRED_ROUTES,
+        )
 
 
 def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:

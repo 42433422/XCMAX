@@ -363,7 +363,7 @@ def test_mobile_home(mock_sync_cls, _shell, _mods, mobile_ext_client: TestClient
     assert "mods" in r.json()["data"]
 
 
-@patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("sync down"))
+@patch("app.db.xcmax_sync.SyncDb", side_effect=sqlite3.OperationalError("sync down"))
 def test_mobile_sync_status_error(_sync, mobile_ext_client: TestClient) -> None:
     r = mobile_ext_client.get("/sync/status")
     assert r.status_code == 200

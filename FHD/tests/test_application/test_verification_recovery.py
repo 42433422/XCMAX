@@ -219,7 +219,10 @@ def test_reopen_sqlite_receipt_and_reverify_without_execution(tmp_path, readback
     path = f"sqlite:///{tmp_path / 'runs.sqlite'}"
     engine = create_engine(path)
     original = _run()
-    SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine)).save(original)
+    factory = sessionmaker(bind=engine)
+    SQLAlchemyAgentRunRepository(session_factory=factory).save(original)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    assert queue.get(original.run_id) is None
     engine.dispose()
     reopened = create_engine(path)
     repo = SQLAlchemyAgentRunRepository(

@@ -73,7 +73,7 @@ def im_client_error():
 
     mock_db = MagicMock()
     mock_svc = MagicMock()
-    mock_svc.list_conversations.side_effect = RuntimeError("db broken")
+    mock_svc.list_conversations.side_effect = ConnectionError("db broken")
 
     with (
         patch.object(im_routes, "_ensure_schema"),

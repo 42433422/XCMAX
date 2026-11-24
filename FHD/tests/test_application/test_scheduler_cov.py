@@ -232,7 +232,7 @@ def test_employees_root_all_mods_roots_raises():
     """Branch [217,225]: all_mods_roots() raises RECOVERABLE_ERRORS → caught, roots stays []."""
     mod = _get_mod()
     mock_mgr = MagicMock()
-    mock_mgr.all_mods_roots.side_effect = RuntimeError("boom")
+    mock_mgr.all_mods_roots.side_effect = OSError("boom")
     mock_mgr.mods_root = None
 
     with (

@@ -1095,9 +1095,9 @@ class TestShipmentDomainHandlersBranches:
             ) as mock_reply,
         ):
             mock_core = MagicMock()
-            mock_core.cancel_shipment.side_effect = RuntimeError("cancel failed")
+            mock_core.cancel_shipment.side_effect = OSError("cancel failed")
             mock_core_get.return_value = mock_core
-            with pytest.raises(RuntimeError, match="cancel failed"):
+            with pytest.raises(OSError, match="cancel failed"):
                 await handlers.handle_cancelled(event)
         mock_reply.assert_called_once()
         call_kwargs = mock_reply.call_args.kwargs

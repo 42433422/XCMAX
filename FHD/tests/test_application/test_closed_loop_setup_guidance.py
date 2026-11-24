@@ -107,7 +107,7 @@ def test_resolve_warehouse_without_any_warehouse_explains_how_to_fix(tmp_path):
 
 
 def test_approval_failure_message_includes_setup_guidance():
-    req = Mock()
+    req = Mock(flow=SimpleNamespace(node_type="serial"))
     req.status = ApprovalStatus.PENDING.value
     req.id = 1
     req.request_no = "req-ai-wh"

@@ -424,10 +424,16 @@ class TestRollback:
         mod_dir.mkdir()
 
         mock_registry = MagicMock()
-        mock_registry.get_mod_metadata.side_effect = RuntimeError("registry error")
+        mock_registry.get_mod_metadata.return_value = None
 
         resolver = InstallResolver()
-        with patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry):
+        with (
+            patch("app.infrastructure.mods.registry.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.install_resolver.shutil.rmtree",
+                side_effect=PermissionError("rollback directory removal denied"),
+            ),
+        ):
             rb = [("mod_dir", str(mod_dir))]
             # Should not raise despite the error
             resolver._rollback(rb)
