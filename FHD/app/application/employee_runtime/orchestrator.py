@@ -227,6 +227,7 @@ class EmployeeOrchestrator:
                 ],
                 "user_id": user_id,
                 "tenant_id": str(ctx.get("tenant_id") or ""),
+                "mod_id": str(ctx.get("mod_id") or ""),
                 "session_id": str(ctx.get("session_id") or ctx.get("conversation_id") or ""),
                 "task_id": str(ctx.get("task_id") or ""),
                 "parent_run_id": str(ctx.get("run_id") or ctx.get("agent_run_id") or ""),
@@ -280,7 +281,7 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
 
     expected = {node.node_id: node for node in plan.nodes}
     seen: set[str] = set()
-    exact = len(run.steps) == len(expected)
+    exact = run.plan_id == plan.plan_id and len(run.steps) == len(expected)
     node_results = []
     outputs = (run.final_output or {}).get("node_outputs")
     outputs = outputs if isinstance(outputs, dict) else {}
@@ -292,6 +293,7 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
             and step.tool_id == node.tool_id
             and step.action == node.action
             and list(step.depends_on) == list(node.depends_on)
+            and step.params.get("employee_id") == node.params.get("employee_id")
         )
         exact = exact and bound
         seen.add(step.node_id)
@@ -306,6 +308,10 @@ def _project_collaboration_result(employee_id: str, plan: PlanGraph, run: Any) -
             and isinstance(output, dict)
             and isinstance(published, dict)
             and projected == published
+            and all(
+                receipt.get("employee_id", step.node_id) == step.node_id
+                for receipt in (output, published)
+            )
             and not execution_result_error(output)
             and not execution_result_pending_state(output)
             and not execution_result_error(published)

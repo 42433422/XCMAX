@@ -48,6 +48,7 @@ def _completed_run(plan):
             node_id=node.node_id,
             tool_id=node.tool_id,
             action=node.action,
+            params=dict(node.params),
             depends_on=node.depends_on,
             status="completed",
             output={"success": True, "employee_id": node.node_id},
@@ -64,7 +65,20 @@ def _completed_run(plan):
     )
 
 
-@pytest.mark.parametrize("fault", ["failed", "missing", "duplicate", "pending", "changed", "extra"])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "failed",
+        "missing",
+        "duplicate",
+        "pending",
+        "changed",
+        "extra",
+        "wrong_plan",
+        "wrong_assignment",
+        "wrong_employee_receipt",
+    ],
+)
 def test_completed_group_status_does_not_override_original_node_receipts(fault):
     plan = EmployeeOrchestrator(_graph()).build_plan("lead", "review", include_root=False)
     assert plan is not None
@@ -82,6 +96,13 @@ def test_completed_group_status_does_not_override_original_node_receipts(fault):
         outputs[run.steps[0].node_id] = dict(run.steps[0].output)
     elif fault == "changed":
         outputs[run.steps[0].node_id] = {"success": True, "employee_id": "different"}
+    elif fault == "wrong_plan":
+        run.plan_id = "unrelated-plan"
+    elif fault == "wrong_assignment":
+        run.steps[0].params["employee_id"] = "another-employee"
+    elif fault == "wrong_employee_receipt":
+        run.steps[0].output["employee_id"] = "another-employee"
+        outputs[run.steps[0].node_id] = dict(run.steps[0].output)
     else:
         outputs["foreign"] = {"success": True}
     result = _project_collaboration_result("lead", plan, run)

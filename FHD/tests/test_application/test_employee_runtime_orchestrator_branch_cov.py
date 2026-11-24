@@ -85,6 +85,7 @@ def test_run_with_dependencies_uses_agent_run_and_returns_receipts():
                 status="completed",
                 tool_id="employee",
                 action="context",
+                params={"employee_id": "worker"},
                 depends_on=[],
                 output={"ok": True},
                 error=None,
@@ -92,7 +93,11 @@ def test_run_with_dependencies_uses_agent_run_and_returns_receipts():
         ],
     )
     orchestrator = MagicMock()
-    orchestrator.start_run_from_plan.return_value = run
+    def start(**kwargs):
+        run.plan_id = kwargs["plan"].plan_id
+        return run
+
+    orchestrator.start_run_from_plan.side_effect = start
 
     with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         result = EmployeeOrchestrator(graph).run_with_dependencies(
@@ -130,6 +135,7 @@ def test_failed_agent_run_is_not_reported_as_success():
                 status="failed",
                 tool_id="employee",
                 action="context",
+                params={"employee_id": "worker"},
                 depends_on=[],
                 output={},
                 error="tool failure",
@@ -153,6 +159,7 @@ def test_default_collaboration_requires_complete_root_and_worker_receipts():
         node_id="worker",
         tool_id="employee",
         action="context",
+        params={"employee_id": "worker"},
         status="completed",
         output={"success": True, "employee_id": "worker"},
     )
@@ -160,6 +167,7 @@ def test_default_collaboration_requires_complete_root_and_worker_receipts():
         node_id="root",
         tool_id="employee",
         action="context",
+        params={"employee_id": "root"},
         depends_on=["worker"],
         status="completed",
         output={"success": True, "employee_id": "root"},
@@ -174,7 +182,11 @@ def test_default_collaboration_requires_complete_root_and_worker_receipts():
         metadata={"runtime_context": {"tenant_id": 1}},
     )
     orchestrator = MagicMock()
-    orchestrator.start_run_from_plan.return_value = run
+    def start(**kwargs):
+        run.plan_id = kwargs["plan"].plan_id
+        return run
+
+    orchestrator.start_run_from_plan.side_effect = start
     with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         result = EmployeeOrchestrator(graph).run_with_dependencies(
             "root", "task", runtime_context={"user_id": 7}

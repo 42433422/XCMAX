@@ -489,10 +489,12 @@ def test_employee_observation_reads_scoped_role_declarations_and_persisted_load(
         db.add_all(
             [
                 EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=3, status="running"),
-                EmployeeRunLog(employee_id="employee-a", tenant_id=22, user_id=2, status="running"),
                 EmployeeRunLog(employee_id="other", tenant_id=11, user_id=1, status="running"),
             ]
         )
+        db.commit()
+    with tenant_scope(22), sessions() as db:
+        db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=22, user_id=2, status="running"))
         db.commit()
     first = get(service, "employee", "employee-a", force_refresh=True)
     state = first["state"]
