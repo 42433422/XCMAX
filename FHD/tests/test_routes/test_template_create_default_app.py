@@ -80,6 +80,7 @@ def template_app(tmp_path, monkeypatch):
     client = TestClient(app)
     client.cookies.set("csrf_token", "label-test-csrf")
     client.headers["X-CSRF-Token"] = "label-test-csrf"
+    client.headers["Idempotency-Key"] = "template-acceptance"
     try:
         with tenant_scope(None):
             yield client, engine, repo
@@ -190,11 +191,13 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
             )
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
     for template_id in ("db:2", "db:3", "db:999"):
+        headers["Idempotency-Key"] = f"delete-unowned-{template_id}"
         response = client.request(
             method, "/api/templates/delete", headers=headers, json={"id": template_id}
         )
         assert response.status_code == 404, response.text
         assert response.json()["success"] is False
+    headers["Idempotency-Key"] = "delete-owned-db-1"
     for _repeat in range(2):
         response = client.request(
             method,
