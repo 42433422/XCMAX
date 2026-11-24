@@ -1,9 +1,9 @@
 """L4 relation policy and path evidence unit contracts."""
 
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
 
 from app.application.user_memory.relation_retrieval import (
     parse_as_of,
