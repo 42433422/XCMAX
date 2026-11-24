@@ -17,6 +17,7 @@ from app.db.models.customer import Customer
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import InventoryTransaction
 from app.db.models.mrp import ManufacturingOrder
+from app.db.models.purchase import PurchaseInbound, PurchaseOrder, Supplier
 from app.db.models.sales import SalesOrder
 from app.db.models.user import User
 from app.domain.enterprise_cognition.catalog import EntityDefinition
@@ -32,6 +33,9 @@ _MODELS: dict[str, Any] = {
     "fund": FinancialTransaction,
     "inventory": InventoryTransaction,
     "production": ManufacturingOrder,
+    "supplier": Supplier,
+    "purchase_order": PurchaseOrder,
+    "purchase_inbound": PurchaseInbound,
 }
 _FIELDS = {
     "order": (
@@ -89,6 +93,28 @@ _FIELDS = {
         "product_name",
         "quantity",
         "warehouse_id",
+        "status",
+    ),
+    "supplier": ("id", "code", "name", "status", "rating", "payment_terms"),
+    "purchase_order": (
+        "id",
+        "order_no",
+        "supplier_id",
+        "warehouse_id",
+        "order_date",
+        "delivery_date",
+        "total_amount",
+        "paid_amount",
+        "status",
+    ),
+    "purchase_inbound": (
+        "id",
+        "inbound_no",
+        "order_id",
+        "supplier_id",
+        "warehouse_id",
+        "inbound_date",
+        "total_amount",
         "status",
     ),
     "fund": (
@@ -288,6 +314,22 @@ class AuthorityReader:
             }
             if definition.entity_type == "order":
                 self._order_quantities(row, scope, state)
+            if definition.entity_type in {"purchase_order", "purchase_inbound"}:
+                fields = (
+                    ("id", "product_id", "quantity", "received_quantity", "unit", "status")
+                    if definition.entity_type == "purchase_order"
+                    else ("id", "product_id", "quantity", "unit", "amount")
+                )
+                items = sorted(
+                    (item for item in row.items if item.tenant_id == scope.tenant_id),
+                    key=lambda item: item.id,
+                )
+                state["items"] = [
+                    {key: json_value(getattr(item, key)) for key in fields}
+                    for item in items[:200]
+                ]
+                state["items_truncated"] = len(items) > 200
+                # Read document lines, never manufacture accounts payable or stock balances.
             if definition.entity_type == "production":
                 fields = ("id", "product_id", "quantity", "consumed_quantity", "unit")
                 state["lines"] = [

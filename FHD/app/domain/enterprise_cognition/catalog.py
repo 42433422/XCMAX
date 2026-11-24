@@ -17,6 +17,21 @@ class EntityDefinition:
 
 _DEFINITIONS = (
     EntityDefinition("order", "sales_orders", "id", "tool.sales.query", "销售订单；单号是显示编号"),
+    EntityDefinition("supplier", "suppliers", "id", "tool.purchase.query_suppliers", "供应商；不包含联系信息"),
+    EntityDefinition(
+        "purchase_order",
+        "purchase_orders",
+        "id",
+        "tool.purchase.query_orders",
+        "采购订单及分项收货数量；不推断应付或现金余额",
+    ),
+    EntityDefinition(
+        "purchase_inbound",
+        "purchase_inbounds",
+        "id",
+        "tool.purchase.query_inbounds",
+        "采购入库凭证及分项数量；不等同库存当前可用量",
+    ),
     EntityDefinition(
         "customer",
         "customers",

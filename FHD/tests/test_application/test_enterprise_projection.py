@@ -140,6 +140,9 @@ def test_catalog_names_existing_authorities():
         "fund",
         "inventory",
         "production",
+        "supplier",
+        "purchase_order",
+        "purchase_inbound",
     }
     assert catalog["task"]["id_field"] == "task_id"
     assert all(row["read_only"] for row in catalog.values())
@@ -611,3 +614,114 @@ def test_historical_query_out_of_range_utc_fails_closed(world, cutoff):
     response = get(service, as_of=cutoff)
     assert response["knowledge_kind"] == "unknown"
     assert response["reason_code"] == "observation_history_unavailable"
+
+
+def test_purchase_authority_read_permissions_and_committed_changes(world, observer):
+    from datetime import date
+
+    from app.db.models.inventory import Warehouse
+    from app.db.models.product import Product
+    from app.db.models.purchase import (
+        PurchaseInbound,
+        PurchaseInboundItem,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        Supplier,
+    )
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add_all(
+            [
+                Supplier(id=610, tenant_id=11, code="WORLD-S", name="Supplier A"),
+                Warehouse(id=611, tenant_id=11, code="WORLD-P-W", name="Purchasing warehouse"),
+                Product(id=612, tenant_id=11, name="Material"),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                PurchaseOrder(
+                    id=613,
+                    tenant_id=11,
+                    order_no="WORLD-P-613",
+                    supplier_id=610,
+                    warehouse_id=611,
+                    order_date=date(2026, 11, 24),
+                    status="approved",
+                ),
+                PurchaseInbound(
+                    id=614,
+                    tenant_id=11,
+                    inbound_no="WORLD-I-614",
+                    supplier_id=610,
+                    warehouse_id=611,
+                    order_id=613,
+                    inbound_date=date(2026, 11, 24),
+                    status="completed",
+                ),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                PurchaseOrderItem(
+                    id=615,
+                    tenant_id=11,
+                    order_id=613,
+                    product_id=612,
+                    quantity=Decimal(5),
+                    received_quantity=Decimal(2),
+                    unit="件",
+                ),
+                PurchaseInboundItem(
+                    id=616,
+                    tenant_id=11,
+                    inbound_id=614,
+                    product_id=612,
+                    quantity=Decimal(2),
+                    unit="件",
+                ),
+            ]
+        )
+    for kind, identity in (
+        ("supplier", "610"),
+        ("purchase_order", "613"),
+        ("purchase_inbound", "614"),
+    ):
+        with pytest.raises(PermissionError):
+            get(service, kind, identity)
+    permissions.update(
+        {
+            "tool.purchase.query_suppliers",
+            "tool.purchase.query_orders",
+            "tool.purchase.query_inbounds",
+        }
+    )
+    supplier = get(service, "supplier", "610")
+    assert supplier["knowledge_kind"] == "fact"
+    assert supplier["state"]["name"] == "Supplier A"
+    assert "contact_phone" not in supplier["state"]
+    purchase = get(service, "purchase_order", "613")
+    assert purchase["knowledge_kind"] == "fact"
+    assert purchase["state"]["items"][0]["received_quantity"] == "2.0000"
+    assert purchase["state"]["items_truncated"] is False
+    inbound = get(service, "purchase_inbound", "614")
+    assert inbound["state"]["items"][0]["quantity"] == "2.0000"
+    assert get(service, "purchase_order", "999")["knowledge_kind"] == "unknown"
+    assert service.get(
+        "supplier", "610", tenant_id=22, actor_id="2"
+    )["knowledge_kind"] == "unknown"
+    with sessions.begin() as db:
+        db.get(PurchaseOrderItem, 615).received_quantity = Decimal(4)
+    assert any(
+        payload["entity_type"] == "purchase_order" and payload["entity_id"] == "613"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    after = get(service, "purchase_order", "613")
+    assert after["state"]["items"][0]["received_quantity"] == "4.0000"
+    assert after["source_version"] != purchase["source_version"]
+    permissions.remove("tool.purchase.query_orders")
+    with pytest.raises(PermissionError):
+        get(service, "purchase_order", "613")
