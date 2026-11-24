@@ -139,6 +139,30 @@ def same_checkpoint(left: dict[str, Any], right: dict[str, Any]) -> bool:
     }
 
 
+def zero_usage_checkpoint_compatible(
+    records: Any, *, cycle_id: str, owner_user_id: int, policy_revision: int
+) -> bool:
+    """An empty outbound journal is not proof of zero if its receipts disagree."""
+    if not isinstance(records, dict):
+        return False
+    if not records:
+        return True
+    if set(records) not in ({"act"}, {"act", "reflect"}):
+        return False
+    for phase, entry in records.items():
+        body = _validated_body(entry)
+        if (
+            body is None
+            or body["phase"] != phase
+            or body["cycle_id"] != cycle_id
+            or body["owner_user_id"] != owner_user_id
+            or body["policy_revision"] != policy_revision
+            or body["reported_tokens"] != 0
+        ):
+            return False
+    return True
+
+
 def recover_checkpoint(
     records: Any, *, cycle_id: str, owner_user_id: int, policy_revision: int, actual_tokens: int
 ) -> dict[str, Any] | None:

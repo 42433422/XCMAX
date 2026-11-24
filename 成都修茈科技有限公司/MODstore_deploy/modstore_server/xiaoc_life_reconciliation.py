@@ -11,7 +11,10 @@ from sqlalchemy.orm import aliased
 from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
-from modstore_server.xiaoc_life_checkpoint import recover_checkpoint
+from modstore_server.xiaoc_life_checkpoint import (
+    recover_checkpoint,
+    zero_usage_checkpoint_compatible,
+)
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, utcnow
 from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
 
@@ -146,11 +149,24 @@ def reconcile_usage() -> dict[str, int]:
     resolved = 0
     for item in pending:
         steps = item.get("steps", [])
-        actual = (
-            0
-            if not steps and item.get("outbound_journal_version") == 1
-            else _verified_usage(steps, item["owner_user_id"])
-        )
+        if not isinstance(steps, list):
+            continue
+        if not steps:
+            # A returned node may contradict an empty or incomplete journal.
+            # Keep its reservation rather than inventing a verified zero charge.
+            actual = (
+                0
+                if item.get("outbound_journal_version") == 1
+                and zero_usage_checkpoint_compatible(
+                    item.get("graph_checkpoints", {}),
+                    cycle_id=item["cycle_id"],
+                    owner_user_id=item.get("owner_user_id", 0),
+                    policy_revision=item.get("policy_revision", 0),
+                )
+                else None
+            )
+        else:
+            actual = _verified_usage(steps, item["owner_user_id"])
         if actual is None or not 0 <= actual <= item["reservation"]:
             continue
 

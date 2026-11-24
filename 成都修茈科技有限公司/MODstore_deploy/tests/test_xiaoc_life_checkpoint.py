@@ -10,7 +10,12 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from modstore_server import xiaoc_life_telemetry as telemetry
-from modstore_server.xiaoc_life_checkpoint import make_checkpoint, recover_checkpoint, same_checkpoint
+from modstore_server.xiaoc_life_checkpoint import (
+    make_checkpoint,
+    recover_checkpoint,
+    same_checkpoint,
+    zero_usage_checkpoint_compatible,
+)
 
 
 def _checkpoint(phase="act", actual_tokens=10, recorded_at="2026-11-24T00:00:00+00:00"):
@@ -92,3 +97,51 @@ def test_otel_and_prometheus_observe_return_error_and_cancel_without_payload(mon
             assert telemetry.ACTIVE.labels(stage)._value.get() == 0
     finally:
         provider.shutdown()
+
+
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        ("empty", True),
+        ("zero_act", True),
+        ("zero_both", True),
+        ("nonzero", False),
+        ("unknown", False),
+        ("earlier_nonzero", False),
+        ("later_unknown", False),
+        ("reflect_without_act", False),
+        ("tampered", False),
+        ("wrong_owner", False),
+        ("wrong_cycle", False),
+        ("wrong_revision", False),
+        ("wrong_phase", False),
+        ("invalid_container", False),
+    ],
+)
+def test_empty_journal_cannot_override_returned_checkpoint(case, expected):
+    zero = _checkpoint(actual_tokens=0)
+    reflect = _checkpoint("reflect", actual_tokens=0)
+    binding = {"cycle_id": "cycle-1", "owner_user_id": 7, "policy_revision": 3}
+    records = {
+        "empty": {},
+        "zero_act": {"act": zero},
+        "zero_both": {"act": zero, "reflect": reflect},
+        "nonzero": {"act": _checkpoint(actual_tokens=10)},
+        "unknown": {"act": _checkpoint(actual_tokens=None)},
+        "earlier_nonzero": {"act": _checkpoint(), "reflect": reflect},
+        "later_unknown": {"act": zero, "reflect": _checkpoint("reflect", None)},
+        "reflect_without_act": {"reflect": reflect},
+        "tampered": {"act": {**zero, "sha256": "invalid"}},
+        "wrong_owner": {"act": zero},
+        "wrong_cycle": {"act": zero},
+        "wrong_revision": {"act": zero},
+        "wrong_phase": {"act": reflect},
+        "invalid_container": [],
+    }[case]
+    if case == "wrong_owner":
+        binding["owner_user_id"] = 8
+    elif case == "wrong_cycle":
+        binding["cycle_id"] = "other"
+    elif case == "wrong_revision":
+        binding["policy_revision"] = 4
+    assert zero_usage_checkpoint_compatible(records, **binding) is expected
