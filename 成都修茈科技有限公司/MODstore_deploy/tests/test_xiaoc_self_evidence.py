@@ -51,18 +51,20 @@ def sample():
     ]
     rows = []
     for scenario in standard["digital_life_evaluation"]["scenarios"]:
-        rows.append({
-            "id": scenario["id"],
-            "anchor": scenario["anchor"],
-            "trials": copy.deepcopy(trials),
-            "layers": {
-                "unit": "NOT RUN",
-                "integration": "PASS",
-                "real_model": "NOT RUN",
-                "real_business": "NOT RUN",
-                "production": "NOT RUN",
-            },
-        })
+        rows.append(
+            {
+                "id": scenario["id"],
+                "anchor": scenario["anchor"],
+                "trials": copy.deepcopy(trials),
+                "layers": {
+                    "unit": "NOT RUN",
+                    "integration": "PASS",
+                    "real_model": "NOT RUN",
+                    "real_business": "NOT RUN",
+                    "production": "NOT RUN",
+                },
+            }
+        )
     report = {
         "standard_sha256": hashlib.sha256(standard_raw).hexdigest(),
         "standard_version": "test-v1",
@@ -108,9 +110,9 @@ def test_report_fingerprints_are_historical_and_anchor_status_remains_unverified
     assert annotated["anchors"][0]["fixture_history"][0]["status"] == (
         "unverified_fixture_claim_not_capability"
     )
-    assert not annotate_unverified_catalog(
-        {"status": "unknown"}, [entry], current_sha=None
-    ).get("anchors")
+    assert not annotate_unverified_catalog({"status": "unknown"}, [entry], current_sha=None).get(
+        "anchors"
+    )
 
 
 @pytest.mark.parametrize(
