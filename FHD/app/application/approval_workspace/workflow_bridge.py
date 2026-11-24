@@ -283,7 +283,7 @@ class WorkflowApprovalBridge:
                 or current.plan_id != plan.plan_id
                 or stored_plan is None
                 or plan_fingerprint(stored_plan) != plan_fingerprint(plan)
-                or validate_required_params(plan, get_workflow_tool_registry())
+                or validate_required_params(plan, get_workflow_tool_registry(include_aiopen=True))
             ):
                 return self.failure(request_id, WORKFLOW_PLAN_UNAVAILABLE_CODE, agent_run_id=run_id)
             steps = {item.node_id: item for item in current.steps}
@@ -378,7 +378,11 @@ class WorkflowApprovalBridge:
                 }
             return self._request_next_approval(request_id, workflow, run, approvals, approved)
         receipt = run_execution_receipt(run)
-        if receipt["execution_accepted"] or receipt["code"] == "outcome_unknown":
+        if (
+            receipt["execution_accepted"]
+            or receipt["code"] == "outcome_unknown"
+            or receipt.get("execution_started") is False
+        ):
             return {
                 **receipt,
                 "approval_request_id": request_id,

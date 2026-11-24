@@ -91,6 +91,7 @@ class _BrowserWorker:
         self.scope, self.tool_id = scope, tool_id
         self.fingerprint = fingerprint
         self.lock, self.cleanup_lock = threading.Lock(), threading.Lock()
+        self.memory_lock = threading.Lock()
         self.lost = False
         self.clean: bool | None = None
         self.stopped = threading.Event()
@@ -104,10 +105,11 @@ class _BrowserWorker:
         commands, self.commands = ctx.Pipe(duplex=False)
         self.control, control = ctx.Pipe(duplex=False)
         self.stream, stream = ctx.Pipe(duplex=False)
-        self.process = ctx.Process(
-            target=_worker_loop,
-            args=(
-                type(executor),
+        self._owned: boundary._OwnedWorker = boundary._OwnedWorker(
+            ctx,
+            _worker_loop,
+            type(executor),
+            (
                 self.folder,
                 commands,
                 control,
@@ -116,9 +118,16 @@ class _BrowserWorker:
                 scope,
                 tool_id,
             ),
+            (commands, control, stream),
         )
+        self.process = self._owned.process
+        self.memory_guard = None
         try:
-            self.process.start()
+            self._owned.start()
+            self.memory_guard = boundary._ProcessTreeMemoryGuard(
+                self.process.pid, self.memory_limit
+            )
+            self.memory_guard.check()
             threading.Thread(target=self._watchdog, daemon=True, name="browser-watchdog").start()
         except BOUNDARY_ERRORS:
             self.close()
@@ -128,20 +137,19 @@ class _BrowserWorker:
             control.close()
             stream.close()
 
+    @property
+    def consumer_pid(self) -> int | None:
+        return self._owned.worker_pid
+
     def close(self) -> bool:
         with self.cleanup_lock:
             self.lost = True
             self.stopped.set()
             if self.clean is not None:
                 return self.clean
-            clean = True
-            if self.process.pid is not None:
-                try:
-                    clean = boundary._reap(self.process)
-                    if clean:
-                        self.process.close()
-                except (OSError, ValueError):
-                    clean = False
+            with self.memory_lock:
+                observed = self.memory_guard.descendants if self.memory_guard else ()
+            clean = self._owned.close(observed=observed)
             for connection in (self.commands, self.control, self.stream):
                 connection.close()
             if self.sender is not None and self.sender.ident is not None:
@@ -180,19 +188,26 @@ class _BrowserWorker:
             return
 
     def _memory_ok(self) -> bool:
-        root = psutil.Process(self.process.pid)
-        total = 0
-        for process in [root, *root.children(recursive=True)]:
-            try:
-                total += process.memory_info().rss
-            except psutil.NoSuchProcess:
-                pass
-        return bool(total <= self.memory_limit)
+        if self.memory_guard is None:
+            raise psutil.AccessDenied(self.process.pid)
+        try:
+            with self.memory_lock:
+                self.memory_guard.limit_bytes = self.memory_limit
+                self.memory_guard.check()
+        except boundary._WorkerResourceError as exc:
+            if exc.code == "tool_memory_limit_exceeded":
+                return False
+            raise psutil.AccessDenied(self.process.pid) from exc
+        return True
+
+    def _check_memory(self) -> None:
+        if not self._memory_ok():
+            raise MemoryError("browser worker memory limit")
 
     def _wait(self, marker: bytes, deadline: float) -> None:
         while not self.lost and time.monotonic() < deadline:
             ready = wait(
-                (self.control, self.process.sentinel),
+                (self.control, self._owned.sentinel),
                 timeout=max(0, min(0.2, deadline - time.monotonic())),
             )
             if not self._memory_ok():
@@ -201,7 +216,7 @@ class _BrowserWorker:
                 if self.control.recv_bytes(1) == marker:
                     return
                 raise RuntimeError("browser worker receipt invalid")
-            if self.process.sentinel in ready:
+            if self._owned.sentinel in ready:
                 break
         raise TimeoutError("browser worker deadline or lifetime ended")
 
@@ -249,6 +264,8 @@ class _BrowserWorker:
             if self.lost:
                 clean = self.close()  # A watchdog may still be reaping the owned tree.
                 return _failure(self.failure_code if clean else "tool_cleanup_unresolved")
+            if not self._owned.wait_ready(deadline, check=self._check_memory):
+                raise TimeoutError("browser worker startup deadline or lifetime ended")
             llm_scope = capture_worker_llm_scope(context)
             payload = json.dumps(
                 {
@@ -444,6 +461,10 @@ class _BrowserReadbackExecutor:
 
 def read_browser_snapshot(run, step, call, context, config):
     """Read only the same live browser generation; never start a replacement worker."""
+    from app.application.tool_execution_deadline import (
+        check_invocation_deadline,
+        remaining_invocation_seconds,
+    )
     from app.application.tools.mcp.registry import mcp_session_scope
 
     with _LOCK:
@@ -451,6 +472,7 @@ def read_browser_snapshot(run, step, call, context, config):
     if worker is None or worker.lost:
         return _failure("mcp_session_lost")
     try:
+        check_invocation_deadline()
         fingerprint, business_url = _connection_identity(config, context)
         if worker.fingerprint != fingerprint:
             return _failure("surface_readback_scope_changed", unknown=False)
@@ -462,10 +484,11 @@ def read_browser_snapshot(run, step, call, context, config):
                 "session_id": call.output.get("session_id"),
             },
         }
+        check_invocation_deadline()
         return worker.call(
             step,
             request_context,
-            time.monotonic() + min(15, config.timeout_seconds),
+            time.monotonic() + remaining_invocation_seconds(min(15, config.timeout_seconds)),
             business_url,
             readback=True,
         )

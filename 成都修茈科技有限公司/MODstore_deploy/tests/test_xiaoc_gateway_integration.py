@@ -83,6 +83,7 @@ def gateway_life(database, monkeypatch, tmp_path):
                         {
                             "model_name": MODEL,
                             "model_info": {
+                                "mode": "chat",
                                 "max_input_tokens": 128000,
                                 "max_output_tokens": 4096,
                             },
@@ -154,9 +155,11 @@ def gateway_life(database, monkeypatch, tmp_path):
             "interests": [],
             "self_assessment": None,
         }
+        headers = httpx.Headers(gateway["attempt_headers"])
+        headers.update(gateway.get("response_headers", {}))
         return httpx.Response(
             200,
-            headers=gateway["attempt_headers"],
+            headers=headers,
             json={
                 "id": "chatcmpl-life-gateway",
                 "object": "chat.completion",
@@ -173,6 +176,7 @@ def gateway_life(database, monkeypatch, tmp_path):
                     "completion_tokens": COMPLETION_TOKENS,
                     "total_tokens": PROMPT_TOKENS + COMPLETION_TOKENS,
                 },
+                **gateway.get("response_overrides", {}),
             },
         )
 
@@ -241,6 +245,7 @@ def test_default_gateway_cognition_settles_both_ledgers_and_repeated_ticks_are_i
         assert session.scalar(select(func.count()).select_from(XiaoCLifeState)) == 1
     paths = [request.url.path for request in gateway["calls"]]
     assert "/v1/models" in paths
+    assert "/model/info" in paths
     assert paths[-3:] == ["/global/spend", "/user/info", "/v1/chat/completions"]
     before = len(gateway["calls"])
     for _ in range(2):
@@ -306,4 +311,47 @@ def test_gateway_without_verified_budget_blocks_cognition_before_model_request(
         assert session.scalar(select(func.count()).select_from(LlmClientRequest)) == 0
     before = len(gateway["calls"])
     assert asyncio.run(runtime.tick_async())["status"] == "idle"
+    assert len(gateway["calls"]) == before
+
+
+@pytest.mark.parametrize(
+    "response_overrides,response_headers",
+    [
+        ({"usage": {}}, {}),
+        ({"usage": {"completion_tokens": COMPLETION_TOKENS}}, {}),
+        ({"model": "different-upstream-model"}, {}),
+        ({}, {"X-LiteLLM-Attempted-Fallbacks": "1"}),
+        ({}, {"X-LiteLLM-Attempted-Fallbacks": "unreported"}),
+    ],
+)
+def test_unverified_gateway_receipt_retains_both_holds_without_replaying(
+    gateway_life, database, response_overrides, response_headers
+):
+    gateway = gateway_life
+    gateway.update(response_overrides=response_overrides, response_headers=response_headers)
+    state = asyncio.run(runtime.tick_async())
+    cycle = next(event for event in state["events"] if event["id"].startswith("cycle:"))
+    assert cycle["status"] == "unknown" and cycle["actual_tokens"] is None
+    assert cycle["details"]["reason"] == "model_usage_unknown"
+    assert state["unknown_usage"] is True and not state["goals"]
+    assert state["budget"]["used_tokens"] == 0 and state["budget"]["reserved_tokens"] > 0
+    with database() as session:
+        requests = session.scalars(
+            select(LlmClientRequest).where(
+                LlmClientRequest.client_request_id.in_(
+                    [gateway["request_id"], "strategy-planning-slot"]
+                )
+            )
+        ).all()
+        assert len(requests) == 2 and all(row.state == "unknown" for row in requests)
+        for row in requests:
+            receipt = json.loads(row.done_json)
+            assert receipt == cycle["details"]["model_receipts"][0]
+            assert receipt["actual_tokens"] is None and receipt["reserved_tokens"] > 0
+        call = session.scalars(select(LlmCallLog)).one()
+        assert call.status == "strategy_planning_unknown" and call.estimated is True
+    before = len(gateway["calls"])
+    assert asyncio.run(runtime.tick_async())["status"] == "idle"
+    after = gateway["client"].get("/life").json()
+    assert after["unknown_usage"] is True and after["budget"] == state["budget"]
     assert len(gateway["calls"]) == before

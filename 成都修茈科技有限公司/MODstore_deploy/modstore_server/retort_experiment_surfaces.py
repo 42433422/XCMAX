@@ -8,6 +8,8 @@ WORKFLOW_NL_RESOURCE = "workflow_nl_generator"
 WORKFLOW_NL_MEASUREMENT = "workflow_generation_static_validation"
 WORKFLOW_EXECUTION_MEASUREMENT = "workflow_execution_terminal"
 WORKFLOW_CUSTOMER_MEASUREMENT = "workflow_customer_accepted_outcome"
+# Offline artifact verification is evidence for approval, never an online outcome.
+WORKFLOW_BUSINESS_MEASUREMENT = "workflow_business_artifact_verification"
 WORKFLOW_NL_PROMPT_PATH = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_graph.py"
 )

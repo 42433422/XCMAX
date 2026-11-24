@@ -12,29 +12,25 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.computer_use import ComputerUseService
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_canonical_catalog_only_advertises_physical_actions_on_enabled_host(monkeypatch, enabled):
-    from app.application.agent_orchestrator.tool_spec import (
-        build_tool_specs_v2,
-        invalidate_tool_specs_cache,
-    )
+def test_canonical_catalog_only_advertises_physical_actions_on_enabled_host(
+    monkeypatch, enabled, trusted_actor
+):
+    from app.application.capability_catalog import authorized_tool_specs, workflow_registry
     from app.application.workflow.planning_graph_policy import filter_registry_for_profile
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     monkeypatch.setenv("XCAGI_COMPUTER_USE_ENABLED", str(int(enabled)))
-    registry = get_workflow_tool_registry()
+    actor = trusted_actor(role="admin", tier="admin")
+    registry = workflow_registry()
     original = registry["desktop_automation"]["actions"]
     planner_registry = filter_registry_for_profile(registry, "pro_default")
     filtered = planner_registry["desktop_automation"]["actions"]
-    monkeypatch.setattr(
-        "app.services.tools_execution.registry.get_workflow_tool_registry", lambda: planner_registry
-    )
-    invalidate_tool_specs_cache()
     offered = {
         action: spec
-        for (tool, action), spec in build_tool_specs_v2().items()
+        for (tool, action), spec in authorized_tool_specs(actor.context).items()
         if tool == "desktop_automation"
     }
     physical = {"computer_observe", "computer_execute"}
@@ -46,7 +42,6 @@ def test_canonical_catalog_only_advertises_physical_actions_on_enabled_host(monk
         assert offered["computer_execute"].risk == "high"
         assert offered["computer_execute"].idempotent is False
     assert all(filtered[action] == original[action] for action in filtered)
-    invalidate_tool_specs_cache()
 
 
 class FakeBrowser:

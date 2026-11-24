@@ -15,6 +15,10 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CognitionContextError(ValueError):
+    """Observed evidence cannot form a usable context within the prompt bound."""
+
+
 class CitedSuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=120)
@@ -87,10 +91,7 @@ def _timestamp(value: Any) -> str:
 
 def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     """Project original review evidence, never customer text or a model's verdict."""
-    from modstore_server.strategic_customer_outcomes import (
-        BUSINESS_OUTCOME_ATTRIBUTION,
-        LEGACY_BUSINESS_OUTCOME_ATTRIBUTION,
-    )
+    from modstore_server.strategic_customer_outcomes import KNOWN_DELIVERY_ATTRIBUTIONS
     from modstore_server.strategy_bets import (
         CUSTOMER_ACCEPTANCE_METRIC,
         DOMAIN_METRIC,
@@ -105,6 +106,7 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     observed = review.get("observation_complete") is True
     revenue = _number(business.get("revenue_cents"), integer=True)
     verified = business.get("status") == "verified" and revenue is not None and revenue >= 0
+    attribution = business.get("attribution")
     status, summary = "business_measurement_unknown", "原经营测量仍有缺失证据。"
     if not review:
         status, summary = (
@@ -203,8 +205,8 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         "attribution": (
             "artifact_acceptance_and_order_outcome_not_incremental_causality"
             if verified
-            and business.get("attribution")
-            in (BUSINESS_OUTCOME_ATTRIBUTION, LEGACY_BUSINESS_OUTCOME_ATTRIBUTION)
+            and isinstance(attribution, str)
+            and attribution in KNOWN_DELIVERY_ATTRIBUTIONS
             else "unverified"
         ),
         "decision": (
@@ -275,12 +277,21 @@ def cognition_messages(
     state: dict[str, Any], domain: str, facts: list[dict[str, Any]]
 ) -> tuple[list[dict[str, str]], set[str]]:
     """Keep the actual prompt below the existing conservative planning bound."""
+    unique_observations: dict[str, dict[str, Any]] = {}
+    for row in facts:
+        ref = row.get("ref")
+        if isinstance(ref, str) and ref.strip() and ref not in unique_observations:
+            unique_observations[ref] = dict(row)
+            if len(unique_observations) == 12:
+                break
+    if not unique_observations:
+        raise CognitionContextError("no_observed_context")
     payload: dict[str, Any] = {
         "identity": state["identity_id"],
         "level": state["level"],
         "domain": domain,
         "mission": str(state.get("mission") or "")[:250],
-        "observations": [dict(row) for row in facts[:12]],
+        "observations": list(unique_observations.values()),
         "interests": [
             {
                 "topic": str(row.get("topic") or "")[:80],
@@ -326,10 +337,13 @@ def cognition_messages(
         else:
             payload["mission"] = payload["mission"][:50]
             break
+    content = json.dumps(payload, ensure_ascii=False)
+    if len(content.encode()) > 4200:
+        raise CognitionContextError("life_cycle_prompt_budget_exhausted")
     refs = {row["ref"] for row in payload["observations"]}
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        {"role": "user", "content": content},
     ], refs
 
 

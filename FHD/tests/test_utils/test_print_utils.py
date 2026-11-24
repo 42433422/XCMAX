@@ -205,7 +205,7 @@ class TestPrinterUtils:
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
-            mock_win32print.GetDefaultPrinter.side_effect = RuntimeError("no printer")
+            mock_win32print.GetDefaultPrinter.side_effect = OSError("no printer")
             result = pu.get_default_printer()
             assert result is None
 
@@ -213,7 +213,7 @@ class TestPrinterUtils:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")),
+            patch.object(pu, "get_available_printers", side_effect=OSError("err")),
         ):
             result = pu.get_document_printer()
             assert result is None
@@ -222,7 +222,7 @@ class TestPrinterUtils:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")),
+            patch.object(pu, "get_available_printers", side_effect=OSError("err")),
         ):
             result = pu.get_label_printer()
             assert result is None

@@ -214,15 +214,15 @@ def test_desktop_restart_interrupts_fresh_lease_without_reclaim(tmp_path, monkey
         assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 1
         stored = repo.get(run.run_id)
         assert stored is not None
-        assert stored.status == "failed"
+        assert stored.status == "unknown"
         assert stored.metadata["interrupted"]["error_code"] == "interrupted_by_restart"
-        assert repo.get_task(user_id="u1", task_id="task-live", tenant_id="").status == "failed"
+        assert repo.get_task(user_id="u1", task_id="task-live", tenant_id="").status == "unknown"
         again = executions.claim("owner-new", lease_seconds=30)
         assert again is None
         parked = executions.get(run.run_id)
         assert parked is not None
-        assert parked.state == "failed"
-        assert parked.last_error_code == "interrupted_by_restart"
+        assert parked.state == "unknown"
+        assert parked.last_error_code == "needs_verification"
         assert parked.recovery_count == 0
     finally:
         set_agent_run_repository_for_tests(None)
@@ -253,7 +253,7 @@ def test_reconcile_failure_does_not_block_dispatcher_start(monkeypatch) -> None:
     calls: list[str] = []
 
     def _boom(**kwargs):
-        raise RuntimeError("database unavailable")
+        raise sqlite3.OperationalError("database unavailable")
 
     monkeypatch.setattr(reconciler, "reconcile_stale_running_runs", _boom)
     monkeypatch.setattr(
@@ -320,7 +320,7 @@ def test_startup_recovery_requires_both_persisted_and_current_replay_safety(
                     "SELECT payload_json FROM agent_runs WHERE run_id=?", (run.run_id,)
                 ).fetchone()[0]
             )
-        assert stored["status"] == "failed"
+        assert stored["status"] == ("unknown" if unsafe else "failed")
         assert stored["steps"] == [step.to_dict()]
         assert bool(stored["metadata"].get("non_retryable")) is unsafe
         if unsafe:
@@ -418,7 +418,7 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
         assert finished.wait(5), "real dispatcher did not settle the expired original claim"
         dispatcher.stop()
         stored = repo.get(run.run_id)
-        assert stored.status == "failed" and stored.metadata["non_retryable"] is True
+        assert stored.status == "unknown" and stored.metadata["non_retryable"] is True
         assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
         if previous_recovery:
             assert stored.metadata["recovery"]["original"] == "keep"
@@ -430,12 +430,12 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
                 (run.run_id,)
             ]
             rows = reopened.execute("SELECT status,payload_json FROM agent_runs").fetchall()
-            assert len(rows) == 1 and rows[0][0] == "failed"
+            assert len(rows) == 1 and rows[0][0] == "unknown"
             payload = json.loads(rows[0][1])
             assert payload["steps"][0]["status"] == "running"
             assert payload["steps"][0]["output"] == {}
             assert len(payload["tool_calls"]) == 1
-            assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [("failed",)]
+            assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [("unknown",)]
         execution = queue.get(run.run_id)
         assert execution.state == "unknown"
         assert execution.last_error_code == "needs_verification"

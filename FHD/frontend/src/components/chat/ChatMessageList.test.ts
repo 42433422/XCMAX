@@ -90,9 +90,47 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.message-receipt__status').text()).toBe('进行中')
     messages.value[0].streamStatus = 'ready'
     messages.value[0].executionProgress![0].status = 'success'
+    messages.value[0].workflowAction = 'completed'
     await nextTick()
     expect(wrapper.find('.chat-typing-indicator').exists()).toBe(false)
     expect(wrapper.get('.message-receipt__status').text()).toBe('已完成')
+  })
+
+  it.each([
+    ['waiting_auth', '等待授权'],
+    ['waiting_approval', '待确认'],
+    ['waiting_input', '待核对'],
+    ['future_wait_state', '待核对'],
+    ['', '待核对'],
+    ['completed', '已完成'],
+    ['succeeded', '已完成'],
+    ['failed', '失败'],
+    ['cancelled', '已取消'],
+    ['interrupted', '已中断'],
+    ['rejected', '未批准'],
+    ['not_started', '未开始'],
+    ['queued', '进行中'],
+    ['running', '进行中'],
+  ])('renders %s from its receipt instead of defaulting to completion', (workflowAction, label) => {
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [{
+      role: 'ai', content: '原任务状态', time: '12:00', streamStatus: 'ready', workflowAction,
+      toolProgressLabel: '查看原任务状态',
+    }] } })
+    expect(wrapper.get('.message-receipt__status').text()).toBe(label)
+    expect(wrapper.find('[data-testid="chat-run-approve"]').exists()).toBe(false)
+  })
+
+  it.each([false, true])('keeps authorization distinct from approval and lets unknown receipts take precedence (%s)', unknown => {
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [{
+      role: 'ai', content: '原任务等待授权。', time: '12:00', streamStatus: 'ready', workflowAction: 'waiting_auth',
+      executionProgress: [{ phase: 'read', label: '查看原任务状态', status: 'waiting', at: '12:00' }],
+      liveSteps: [runningStep()],
+      ...(unknown ? { execution: { idempotencyKey: 'original', intent: 'read', committed: false, effect: 'unknown', outcome: 'unknown' } } : {}),
+    }] } })
+    expect(wrapper.get('.message-receipt__status').text()).toBe(unknown ? '待核对' : '等待授权')
+    expect(wrapper.text()).not.toContain('已完成')
+    expect(wrapper.find('[data-testid="chat-run-approve"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
   })
 
   it('keeps attachments and planning in one execution chain without a synthetic tool step', async () => {

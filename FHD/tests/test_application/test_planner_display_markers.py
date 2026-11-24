@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _mod_path = (
     Path(__file__).resolve().parents[2] / "app" / "application" / "planner_display_markers.py"
 )
@@ -42,3 +44,23 @@ class TestStripPlannerStreamMarkers:
         assert "正在调用工具:db.query" not in user
         assert "说明" in user
         assert "继续" in user
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "结果【正在调用工具:excel.read】完成",
+        "前缀[正在调用工具:search",
+        "说明正在调用工具:db.query 继续",
+        "第一段\n\n第二段  保留间距",
+        "请等候（仍在处理中，已等待 3 秒，请稍候…）",
+    ],
+)
+def test_conversation_routes_use_the_shared_display_contract(raw):
+    from app.fastapi_routes import xcagi_compat_chat_helpers as compatibility
+    from app.fastapi_routes.domains.conversation import stream_helpers
+
+    text, markers = strip_planner_stream_markers(raw)
+    assert stream_helpers.strip_planner_stream_markers(raw) == (text, markers)
+    assert stream_helpers._thinking_steps_from_planner_stream_text(raw) == markers
+    assert compatibility._thinking_steps_from_planner_stream_text(raw) == markers

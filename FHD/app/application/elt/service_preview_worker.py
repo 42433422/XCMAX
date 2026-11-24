@@ -59,12 +59,14 @@ class PreviewWorkerMixin:
                 with facade.SUBMITTED_LOCK:
                     facade.SUBMITTED.discard(run_id)
 
+        submitted = False
         try:
             facade.EXECUTOR.submit(copy_context().run, work)
-        except RECOVERABLE_ERRORS:
-            with facade.SUBMITTED_LOCK:
-                facade.SUBMITTED.discard(run_id)
-            raise
+            submitted = True
+        finally:
+            if not submitted:
+                with facade.SUBMITTED_LOCK:
+                    facade.SUBMITTED.discard(run_id)
 
     def _preview_worker(
         self, run_id: str, owner_user_id: int, *, operation_token: str | None = None

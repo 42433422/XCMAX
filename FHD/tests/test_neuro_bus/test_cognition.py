@@ -13,6 +13,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.domain.neuro.cognition.attention_selector import (
     AttentionResult,
@@ -102,7 +103,7 @@ class TestLLMPort:
         """LLM 调用异常时不抛出，返回 None。"""
         mock_provider = MagicMock()
         mock_provider.is_configured = True
-        mock_provider.chat_completion = AsyncMock(side_effect=RuntimeError("boom"))
+        mock_provider.chat_completion = AsyncMock(side_effect=ConnectionError("provider offline"))
         port = LLMPort()
         with patch(
             "app.infrastructure.llm.providers.registry.get_active_provider",
@@ -266,7 +267,7 @@ class TestWorkingMemory:
         wm = WorkingMemory(session_id="sess1")
         with patch(
             "app.domain.shared_services.conversation_service.ConversationService.get_session_messages",
-            side_effect=RuntimeError("db down"),
+            side_effect=OperationalError(None, None, OSError("db down")),
         ):
             snapshot = wm.recall()
         assert snapshot.is_empty
@@ -365,7 +366,7 @@ class TestWorkingMemory:
         wm = WorkingMemory(session_id="sess1")
         with patch(
             "app.domain.shared_services.conversation_service.ConversationService.save_message",
-            side_effect=RuntimeError("db down"),
+            side_effect=OperationalError(None, None, OSError("db down")),
         ):
             wm.remember("user", "hello")  # 不应抛异常
 
@@ -805,7 +806,7 @@ class TestConsciousLLMHandler:
         """remember 异常时不影响主流程。"""
         mock_wm = MagicMock(spec=WorkingMemory)
         mock_wm.recall.return_value = WorkingMemorySnapshot()
-        mock_wm.remember.side_effect = RuntimeError("db down")
+        mock_wm.remember.side_effect = OperationalError(None, None, OSError("db down"))
 
         handler = ConsciousLLMHandler(
             llm_port=mock_llm_port,

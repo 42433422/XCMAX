@@ -844,6 +844,7 @@ def execute_duty_graph_programmatic(
                 node.status = "running"
                 node.started_at = _facade().datetime.now(_facade().timezone.utc)
                 sess2.commit()
+                execution_node_id = int(node.id)
             t0 = _facade().time.perf_counter()
             result: _facade().Dict[str, _facade().Any] = {}
             error_text = ""
@@ -854,13 +855,23 @@ def execute_duty_graph_programmatic(
             if bench_llm_override is not None and eid == bench_llm_target_id:
                 exec_kw["bench_llm_override"] = bench_llm_override
             try:
-                run_res = runtime.execute_task(
-                    employee_id=eid,
-                    task=task_s,
-                    input_data=raw_input,
-                    user_id=int(created_by_user_id),
-                    **exec_kw,
+                from modstore_server.employee_change_request_submission import (
+                    duty_graph_change_request_context,
                 )
+
+                with duty_graph_change_request_context(
+                    run_id=int(run_id),
+                    node_id=execution_node_id,
+                    employee_id=eid,
+                    user_id=int(created_by_user_id),
+                ):
+                    run_res = runtime.execute_task(
+                        employee_id=eid,
+                        task=task_s,
+                        input_data=raw_input,
+                        user_id=int(created_by_user_id),
+                        **exec_kw,
+                    )
                 from modstore_server.employee_orchestrator import (
                     _evaluate_execution_success,
                 )

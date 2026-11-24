@@ -71,6 +71,7 @@ class LoginBackend(Protocol):
         *,
         totp_code: str | None = None,
         enforce_mfa: bool = True,
+        offline: bool = False,
     ) -> JsonObject: ...
 
     def create_session_for_username(self, username: str) -> JsonObject: ...

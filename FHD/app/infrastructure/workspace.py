@@ -40,17 +40,37 @@ def traditional_resolve_path(rel: str) -> Path:
     return target
 
 
-def resolve_safe_workspace_relpath(rel: str) -> Path:
-    base = workspace_root()
-    raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
+def resolve_safe_workspace_relpath(rel: str, *, base: Path | None = None) -> Path:
+    """Resolve below the default workspace or a verified server-selected root.
+
+    An explicit ``base`` must be a canonical absolute root selected by the
+    server, never a request-provided override. Such callers pass native relative
+    paths: URL decoding or separator rewriting could validate a different file
+    from the one their filesystem consumer uses.
+    """
+    if base is None:
+        base = workspace_root()
+        raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
+    else:
+        raw = rel or ""
+        relative = Path(raw)
+        if not base.is_absolute() or relative.is_absolute() or relative.drive or "\x00" in raw:
+            raise HTTPException(status_code=400, detail="invalid path")
     if not raw:
         raise HTTPException(status_code=400, detail="missing path")
     base_text = os.path.realpath(os.path.abspath(base))
-    target_text = os.path.realpath(os.path.abspath(os.path.join(base_text, raw)))
     base_prefix = base_text.rstrip(os.sep) + os.sep
-    if target_text != base_text and not target_text.startswith(base_prefix):
+    lexical = os.path.abspath(os.path.join(base_text, raw))
+    if lexical != base_text and not lexical.startswith(base_prefix):
         raise HTTPException(status_code=400, detail="invalid path")
-    target = Path(target_text)
+    # Preserve native symlink/parent semantics after the lexical boundary check.
+    target_text = os.path.realpath(os.path.join(base_text, raw))
+    if target_text == base_text:
+        target = Path(base_text)
+    elif target_text.startswith(base_prefix):
+        target = Path(target_text)
+    else:
+        raise HTTPException(status_code=400, detail="invalid path")
     try:
         target.relative_to(base)
     except ValueError as e:

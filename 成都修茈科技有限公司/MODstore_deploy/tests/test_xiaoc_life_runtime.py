@@ -66,6 +66,7 @@ class Store:
 @pytest.fixture
 def ports(monkeypatch):
     from modstore_server import (
+        llm_api,
         strategic_portfolio_usage,
         strategy_planner,
         xiaoc_life_reconciliation,
@@ -88,7 +89,12 @@ def ports(monkeypatch):
             "domains": {"status": "unrated", "domains": []},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "test-model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "test-model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
 
     async def admission(_provider, _model, *, owner_user_id):
         assert owner_user_id == 17
@@ -255,6 +261,8 @@ def test_research_uses_actual_sources_once_and_preserves_their_limits(ports, mon
     store = ports[0]
     store.claim["domain"] = "exploration"
     store.state["interests"] = [{"topic": "事务恢复", "evidence_refs": ["experience:1"]}]
+    history = [{"ref": f"old:{index}", "text": "历史反馈"} for index in range(12)]
+    monkeypatch.setattr(runtime, "feedback_facts", lambda _state: copy.deepcopy(history))
     queries = []
     monkeypatch.setattr(research_tools, "searxng_instance_url", lambda: "https://search.example")
 
@@ -275,7 +283,37 @@ def test_research_uses_actual_sources_once_and_preserves_their_limits(ports, mon
     web = next(row for row in sources if row["ref"].startswith("web:"))
     assert web["url"] == "https://docs.example/transactions"
     assert web["interpretation"] == "retrieved_source_not_verified_claim"
+    observations = json.loads(ports[1][0]["messages"][1]["content"])["observations"]
+    assert observations[0]["ref"] == web["ref"]
+    assert any(row["ref"] == "old:0" for row in observations)
     assert "尚未执行" in result["summary"]
+
+
+@pytest.mark.parametrize(
+    "facts,reason",
+    [
+        ([{"text": "无来源"}], "no_observed_context"),
+        (
+            [{"ref": "receipt:large", "business_feedback": {"measurement": "测" * 1500}}],
+            "life_cycle_prompt_budget_exhausted",
+        ),
+    ],
+)
+def test_invalid_cognition_context_blocks_before_model_and_learning(
+    ports, monkeypatch, facts, reason
+):
+    store, calls, *_ = ports
+    original = copy.deepcopy(store.state)
+
+    async def observe(_self, _state):
+        return {"facts": facts}
+
+    monkeypatch.setattr(runtime.CyclePorts, "observe", observe)
+    result = asyncio.run(runtime.run_claimed_cycle(store.claim))
+    assert result["status"] == "blocked" and result["details"]["reason"] == reason
+    assert result["actual_tokens"] == 0 and not calls
+    assert not result["goals"] and not result["interests"] and not result["self_model"]
+    assert store.state == original and len(store.finished) == 1
 
 
 def test_public_prompt_excludes_private_account_context_and_raw_paths(ports, monkeypatch):
@@ -470,9 +508,11 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
 
     import modstore_server.strategic_company_resources as company
     from modstore_server import (
+        llm_api,
         llm_chat_proxy,
         llm_key_resolver,
         llm_quota_monitor,
+        models,
         strategic_portfolio,
         strategic_portfolio_usage,
         strategy_planner,
@@ -488,7 +528,6 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     )
     from modstore_server.db.strategic import StrategicDecision
     from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
-    from modstore_server.services import llm
     from modstore_server.strategic_layer import decision_ledger
     from modstore_server.xiaoc_life_policy import LifeUpdate
 
@@ -515,6 +554,7 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     for module in (
         db_base,
+        models,
         xiaoc_life_store,
         xiaoc_life_reconciliation,
         strategic_portfolio,
@@ -599,7 +639,12 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
             "repo": {"status": "ok", "numeric_signals": {"failures": 1}},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "test-only-key")
 
     async def quota(**kwargs):

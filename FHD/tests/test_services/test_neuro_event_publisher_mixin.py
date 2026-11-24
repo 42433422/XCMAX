@@ -24,8 +24,6 @@ def test_publish_event_returns_event_id_when_bus_ok():
 
 
 def test_publish_event_returns_empty_string_on_failure():
-    with patch(
-        "app.neuro_bus.event_publisher_mixin.get_neuro_bus", side_effect=RuntimeError("no bus")
-    ):
+    with patch("app.neuro_bus.event_publisher_mixin.get_neuro_bus", side_effect=OSError("no bus")):
         eid = _Dummy()._publish_event("test.event", {})
     assert eid == ""

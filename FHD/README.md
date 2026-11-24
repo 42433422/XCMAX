@@ -34,13 +34,15 @@ XCAGI 位于 [XCMAX](https://github.com/42433422/XCMAX) 的 `FHD/` 子树。Wind
 
 ## 开源组件选型
 
+业务导入边界复用现有 [Import Linter 2.15](https://github.com/seddonym/import-linter/) 与 [Grimp 3.17](https://github.com/python-grimp/grimp/)（均为 BSD-2-Clause），CI 从 `uv.lock` 安装精确版本。12 条合同统一在 `pyproject.toml`，覆盖领域纯度、工作流端口、LangGraph 接入和回执读取边界；已清退旧 AST 扫描器及其 YAML 规则副本。LangGraph 由原 `ServiceContainer` 组装，缓存失效、聊天显示与流式取消分别复用原工具注册表、显示规则和 `StreamWorker`；回执分类与投影由原领域结果模块和基础设施回执模块共同承接。边界检查及其负例沿用现有 arch-fitness 门禁，运行时改动由原变更分类器触发业务合同测试。
+
 软件购买继续复用 lockfile 固定的 [Vue 3.5.45](https://github.com/vuejs/core)、[Vue Router 5.5.1](https://github.com/vuejs/router) 与 [Element Plus 2.14.8](https://github.com/element-plus/element-plus)（均为 MIT），沿原组件、登录回跳、订单与支付结果页面展示一个软件买断选项。支付履约复用 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT）的事务和已有订单幂等机制；独立支付服务沿用 [Spring Boot 4.0.8](https://github.com/spring-projects/spring-boot) 与 [WeChat Pay Java 0.2.17](https://github.com/wechatpay-apiv3/wechatpay-java)（Apache-2.0，版本见 `java_payment_service/pom.xml`）。新增适配只处理标准 SKU、历史授权兼容、固定试用到期和商业条款镜像；定制仍走确认报价后的原订单，AI 仍走原钱包，不新增计费框架。当前价格与交付边界见[账号 SSOT](docs/account_system_ssot.md#221-企业购买形态)；受控测试支付不代表生产验收。
 
 企业 Agent 的固定本地执行器复用 [OpenAI Codex Python SDK / App Server](https://github.com/openai/codex) `0.171.0`（Apache-2.0）；`uv.lock` 同时固定 `openai-codex-cli-bin`。SDK/App Server 负责唯一通用模型工具循环、会话与事件；XCMAX 负责身份、额度、工具权限、持久任务与独立结果核验。受控工具使用已锁定的 MCP Python SDK `2.3.0`（MIT）；模型流解析复用 [httpx-sse](https://github.com/florimondmanca/httpx-sse) `0.4.3`（MIT），私有回环服务使用现有 Uvicorn。标准服务器、Linux 热更新和桌面依赖均安装固定 SDK/CLI，已移除旧 `codex-runtime` 空 extra。桌面包收集 SDK 模块、CLI 资源及版本元数据，构建门禁实际启动 App Server 并核验协议版本。
 
-CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。
+CI 调度参考 [VS Code 的 PR 工作流](https://github.com/microsoft/vscode/blob/82a40f4bfe8f38e4b712be169251e23cd2f7b993/.github/workflows/pr.yml)（MIT），复用 GitHub Actions 原生事件过滤、PR 并发取消和任务输出。变更范围继续由现有 `change_classifier.py` 统一判断，完整分片及覆盖率证据保留，具体执行口径见根仓 [CI SSOT](../docs/CI_SSOT.md#分片执行与耗时观测2026-11-22)。后端质量检查、全部分片和发布验证从现有 `uv.lock` 同时读取 pytest、pytest-cov、coverage 的精确版本；锁缺失或歧义时在安装前停止，避免排队期间工具发版造成报告工具链漂移。
 
-Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-sh/setup-uv/tree/d0cc045d04ccac9d8b7881df0226f9e82c39688e)（MIT）缓存依赖下载，每次仍从当前检出源码安装并校验依赖；离线 Agent 评测通过 Python 标准库输出脱敏 JUnit，由官方 [upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)（MIT）按源码、运行和重试身份保存。过期 CI 清理复用官方 [github-script 9.0.0](https://github.com/actions/github-script/tree/3a2844b7e9c422d3c10d287c895573f7108da1b3)（MIT，Node 24）；清理调用 GitHub REST 2022-11-28 的 [force-cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#force-cancel-a-workflow-run)，本仓只增加 PR、运行和提交身份核验。可信主线的 `pull_request_target` 不检出或执行 PR 内容，仅在普通取消已有证据且同 PR 旧运行仍未结束时调用；当前提交的 `always()` 门禁保留。新增 Action 引用固定完整提交。真实 API E2E 的随机端口是构建输入，因此仍独立严格构建。
+Smoke 与真实 API E2E 使用官方 [setup-uv 6.8.0](https://github.com/astral-sh/setup-uv/tree/d0cc045d04ccac9d8b7881df0226f9e82c39688e)（MIT）缓存依赖下载，每次仍从当前检出源码安装并校验依赖；离线 Agent 评测通过 Python 标准库输出脱敏 JUnit，由官方 [upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)（MIT）按源码、运行和重试身份保存。过期 CI 清理复用官方 [github-script 9.0.0](https://github.com/actions/github-script/tree/3a2844b7e9c422d3c10d287c895573f7108da1b3)（MIT，Node 24）；清理复用 GitHub REST 2022-11-28 的 [cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#cancel-a-workflow-run) 与 [force-cancel](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#force-cancel-a-workflow-run)，本仓只增加 PR、运行和提交身份核验。可信主线的 `pull_request_target` 不检出或执行 PR 内容；新 head 冲突而未触发原生取消时，只对同 PR 旧 head 的原始 attempt 请求普通取消。强制收尾仍要求同 attempt 已有 cancelled job 证据；当前提交的 `always()` 门禁保留。新增 Action 引用固定完整提交。真实 API E2E 的随机端口是构建输入，因此仍独立严格构建。
 
 自主编程继续调用已集成的 [OpenAI Codex `rust-v0.153.4`](https://github.com/openai/codex/tree/rust-v0.153.4)（Apache-2.0），GitHub worker 的版本由既有 manifest/lock 固定；本机设备记录实际探测到的 CLI 版本，不能用云端锁版代替本机身份。`cli_output_stream.mjs` 依据同版原生 JSONL 事件与进程退出共同形成回执；`turn.completed`、退出码 0、完整事件流须同时成立，单条工具完成或文本不是整轮成功。保留可内部重试的错误事件，最终仍核对原生终态。旧安装入口转发同一 Para 执行器，真实执行开始后不因配额或工具失败重放；失败补丁保留用于核对，不能进入发布。版本、thread、usage 和执行回执沿原任务报告/outbox 回传。
 
@@ -52,17 +54,20 @@ Para 首次派工先核对 `/api/health` 的 `task_request_recovery_version=1`�
 
 Computer Use 在现有 `desktop_automation` 工具内复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0）、[PyAutoGUI 0.9.54](https://pypi.org/project/PyAutoGUI/0.9.54/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyautogui)）及 [Pyperclip 1.9.0](https://pypi.org/project/pyperclip/1.9.0/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyperclip)），版本与传递依赖锁于 `pyproject.toml` 的 `computer-use` extra 和 `uv.lock`。 Unicode 剪贴板输入仅接受可确认的纯文本格式；Linux 需 `xclip` 枚举格式，图片、富文本及未知格式均拒绝覆盖。浏览器使用独立 Context，桌面使用主屏截图、鼠标键盘与剪贴板；沿用 Agent 审批、租户归属与 `run_id`，不另建 Agent。启用条件、安装及核验边界见 [AIOPEN 的 Computer Use 说明](docs/aiopen.md#computer-use桌面与浏览器执行器)；源码回归不代表安装包或 Windows/macOS 真机验收通过。
 
-浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。未引入另一套 Agent 循环：[Playwright MCP](https://github.com/microsoft/playwright-mcp) 可作外部客户端接入，但本仓 MCP 的逐调用会话不能维持多步页面状态；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
+浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。未引入另一套 Agent 循环：[Playwright MCP](https://github.com/microsoft/playwright-mcp) 可作外部客户端接入，普通 MCP 通道保留逐调用语义，多步 AI 浏览器另由同一任务绑定的持久 MCP 会话维持页面状态，页面丢失后仍不重放操作，直接浏览器和 MCP 共用来源、定位与证据脱敏政策，各自保留原会话、审批和执行账本；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
+
+小 C 桌面浮窗复用已锁定的 [Electron 45.3.4](https://github.com/electron/electron/tree/v45.3.4)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
 浏览器进程预算复用既有 [psutil 7.2.2](https://github.com/giampaolo/psutil)（BSD-3-Clause，`uv.lock` 与部署锁均已固定）和 Agent 子进程握手、截止及回收器。真实 Chromium 对照确认 2 GiB 虚拟地址上限会阻止启动，浏览器任务因而使用整棵已观测进程树的 RSS 预算，默认仍为 2 GiB；CPU、句柄和 Chromium sandbox 保留。RSS 轮询是运行预算监督，严格内核内存隔离需部署侧 cgroup 等机制，不能把前者当成后者。
 
 Computer Use 在现有 `desktop_automation` 工具内复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0）、[PyAutoGUI 0.9.54](https://pypi.org/project/PyAutoGUI/0.9.54/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyautogui)）及 [Pyperclip 1.9.0](https://pypi.org/project/pyperclip/1.9.0/)（[BSD-3-Clause 源码](https://github.com/asweigart/pyperclip)），版本与传递依赖锁于 `pyproject.toml` 的 `computer-use` extra 和 `uv.lock`。 Unicode 剪贴板输入仅接受可确认的纯文本格式；Linux 需 `xclip` 枚举格式，图片、富文本及未知格式均拒绝覆盖。浏览器使用独立 Context，桌面使用主屏截图、鼠标键盘与剪贴板；沿用 Agent 审批、租户归属与 `run_id`，不另建 Agent。启用条件、安装及核验边界见 [AIOPEN 的 Computer Use 说明](docs/aiopen.md#computer-use桌面与浏览器执行器)；源码回归不代表安装包或 Windows/macOS 真机验收通过。
+
+浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。未引入另一套 Agent 循环：[Playwright MCP](https://github.com/microsoft/playwright-mcp) 可作外部客户端接入，普通 MCP 通道保留逐调用语义，多步 AI 浏览器另由同一任务绑定的持久 MCP 会话维持页面状态，页面丢失后仍不重放操作，直接浏览器和 MCP 共用来源、定位与证据脱敏政策，各自保留原会话、审批和执行账本；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
 浏览器执行复用 [Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)（Apache-2.0，`browser` extra 与 `uv.lock` 固定版本，与现有前端版本一致）的 BrowserContext、严格 locator、自动等待、断言、上传与下载。内部页面沿用 AIOPEN 光标；任务、模型路由、审批、租约、幂等和文件存储均复用现有 Agent。[Playwright MCP](https://github.com/microsoft/playwright-mcp) 复用原 LangGraph 和按任务保留的浏览器会话；[Browser Use](https://github.com/browser-use/browser-use) 与 [Stagehand](https://github.com/browserbase/stagehand)（均 MIT）提供更高层模型编排，本次选择更薄的 Playwright 原语适配。配置、代码边界与剩余缺口见 [浏览器执行接入](docs/aiopen.md#agent-浏览器执行闭环)。
 
-浏览器进程预算复用既有 [psutil 7.2.2](https://github.com/giampaolo/psutil)（BSD-3-Clause，`uv.lock` 与部署锁均已固定）和 Agent 子进程握手、截止及回收器。真实 Chromium 对照确认 2 GiB 虚拟地址上限会阻止启动，浏览器任务因而使用整棵已观测进程树的 RSS 预算，默认仍为 2 GiB；CPU、句柄和 Chromium sandbox 保留。RSS 轮询是运行预算监督，严格内核内存隔离需部署侧 cgroup 等机制，不能把前者当成后者。
+
 客来来工作区复用前端 lockfile 已固定的 [Vue 3.5.45](https://github.com/vuejs/core/tree/v3.5.45)、[Pinia 4.1.0](https://github.com/vuejs/pinia/tree/v4.1.0)、[Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（均为 MIT）。采用现有 tabs、table、switch、状态 store 和请求工具，不搬入 React/Tauri 页面或新增渠道 SDK；渠道协议仍由客来来统一负责。
 
-小 C 桌面浮窗复用已锁定的 [Electron 45.3.2](https://github.com/electron/electron/tree/v45.3.2)（MIT）`BrowserWindow` 和 `Tray`，沿用现有小 C 对话组件和同一登录会话。
 
 开发自动化继续使用 [LangGraph 1.2.10](https://github.com/langchain-ai/langgraph)（MIT；checkpoint 4.3.0、SQLite 3.1.2 与已吸收的 PostgreSQL 适配版本见 `packages/retort_engine/pyproject.toml`）保存审批、中断和交付等待，不增加另一套任务引擎。GitHub 执行迁移到官方 Actions 独立 job：执行候选、受信发布、恢复原验证、独立验收；[checkout 4.4.0](https://github.com/actions/checkout/tree/11d5960a326750d5838078e36cf38b85af677262)、[upload-artifact 4.6.2](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)、[setup-node 4.4.0](https://github.com/actions/setup-node/tree/49933ea5288caeca8642d1e84afbd3f7d6820020)、[setup-python 7.1.0](https://github.com/actions/setup-python/tree/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0) 均为 MIT，并在相关源 workflow 固定完整提交。候选用 Git 原生 bundle 传递，发布任务只导入对象，不执行候选代码；原共享身份发布入口保持禁用。
 
@@ -81,12 +86,14 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | 层 | 固定来源 | 复用边界 |
 |---|---|---|
 | 桌面更新 | [electron-updater 6.8.11](https://github.com/electron-userland/electron-builder/tree/electron-updater%406.8.11/packages/electron-updater)，MIT | 沿用上游频道、灰度、制品哈希校验与安装。产品 provider 在同一次清单请求上验 Ed25519。Windows 未签名候选沿用 NSIS 安装包和临时手动下载流程。 |
+| 桌面长时运行 | [psutil 7.2.2](https://github.com/giampaolo/psutil)，BSD-3-Clause；[Playwright Python 1.65.1](https://github.com/microsoft/playwright-python/tree/v1.65.1)，Apache-2.0；[electron-log 5.4.4](https://github.com/megahertz/electron-log/tree/v5.4.4)，MIT | 复用进程树采样、真实窗口/CDP 与同步文件轮转；版本固定于现有 Python 锁、原生工作流和桌面 npm 锁。产品胶水仅绑定安装身份、隔离账号、故障观察与原始工作流证据，取代旧 Bash 探针和自制日志流。运行入口、资源预算与实机证据边界见 [CI SSOT](../docs/CI_SSOT.md#桌面双平台长时运行)。 |
 | 执行卡片 | [shadcn-vue v2.9.0](https://github.com/unovue/shadcn-vue/tree/39cb0b277f009e47de2dc62c4217755fb9a27eec/apps/v4/registry/bases/reka/ui/trace)，MIT | `frontend/src/components/ui/trace/` 保留上游 Trace / Collapsible 结构及许可；仅替换样式、图标和 Vue getter，使用已有 Reka UI 2.11.0，无额外 CSS 框架。 |
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装文本和工具事件，`ChatStatus` 提供会话状态。参考 [Open WebUI 的会话任务事件](https://docs.openwebui.com/features/extensibility/plugin/development/events/) 按会话分发，产品层只绑定账号、Mod、会话和审批回执。 |
 | SSE 解析 | [eventsource-parser 4.1.3](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 员工办公室 | [Pixel Agents v1.6.0](https://github.com/pixel-agents-hq/pixel-agents/tree/4dd14d612fd37d89ffbbc977959f572395c4eec8)，MIT | 固定提交 `4dd14d612fd37d89ffbbc977959f572395c4eec8` 的 Canvas 2D 渲染、工位、精灵与动画核心；仅加 Vue/部门/任务胶水，异步加载，无新增运行时依赖。角色来源为 MetroCity CC0，原许可、源文件校验和可复现导入脚本见 [third_party/pixel-agents](third_party/pixel-agents/README.md)。 |
 | 员工任务与图谱 | [Vue Flow 1.48.2](https://github.com/bcakmakoglu/vue-flow) / [Element Plus 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)，MIT，已有 lockfile 固定 | 复用现有流程图、表单、对话框、执行记录与产物面板；空间、工作台和图谱共同读取原任务账本及认证事件流，不引入上游独立执行器。 |
-| 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0，现有 `uv.lock` 固定 | 复用 W3C Trace Context、SDK span 和 OTLP exporter；产品薄适配绑定原任务账本、工具尝试和既有执行卡片，无新增采集服务。 |
+| 执行链观测 | [OpenTelemetry Python v1.45.2](https://github.com/open-telemetry/opentelemetry-python/tree/v1.45.2)，Apache-2.0；SDK/API 1.45.2、OTLP exporter 1.45.1 由现有 `uv.lock` 固定 | W3C 身份、工具/NeuroBus span、批处理队列和关闭复用 SDK；排队属性由原生 `BoundedAttributes` 递归冻结，不增加容量或截断策略。既有 GenAI JSONL 只保留属性适配与文件 sink，共用同一 provider 生命周期。 |
+| SLO 错误预算候选规则 | [Sloth v0.16.0](https://github.com/slok/sloth/releases/tag/v0.16.0)，Apache-2.0，CI 镜像固定 `ghcr.io/slok/sloth:v0.16.0` | 复用 Sloth 的多窗口燃烧率规则生成器，针对现有 Prometheus 业务事件指标生成候选告警；不新增第二套 SLO 事实源，不自动替换线上告警。原采集器仍核对样本下限、24h 抓取率和正式发布身份，规则生成/合成测试不代表现场已启用或业务指标达标。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
@@ -99,13 +106,26 @@ ELT 仍沿原 `EltRun` / `EltRunRow` 与 Codex、LangGraph 的批准任务执行
 
 Webhook 接收方对每个业务分片须返回 HTTP 200/201 的 JSON 提交回执，原样携带 `run_id`、`chunk_index`、`idempotency_key`，并返回 `executed_rows` 与该分片行数相同、`committed: true`。202、204、明确失败、无回执或身份/行数不符进入待核对，不根据响应猜测完成或再次发送。回执的 `business_verified: false` 明确表示接收方自报提交尚不等于其业务数据库已独立对账；空分片连接测试只证明连通性。文件回读亦只证明产物字节与批准内容一致，`formulas_recalculated: false` 不冒充公式重算，客户原件 B31 对账与实际部署验收仍需另取证据。
 
+生产稳定性继续使用既有 Prometheus / Grafana 与原发布流程，组件固定如下：
+
+| 路径 | 固定来源与许可 | 产品适配与验收边界 |
+|---|---|---|
+| SLO 采集与告警 | [Prometheus 3.14.0](https://github.com/prometheus/prometheus/tree/v3.14.0)（Apache-2.0）；现有锁中的 [Tenacity 9.1.4](https://github.com/jd/tenacity/tree/9.1.4)（Apache-2.0）、[filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT） | promtool 执行真实规则；安全 GET 有界重试、证据跨进程互斥追加。按固定目标、实际采样数、完整指标和摘要核对；正式 90 天 / 99% 覆盖与近期 7 天观察保持原要求。 |
+| 压力与网络故障验收 | [k6 0.54.0](https://github.com/grafana/k6/tree/v0.54.0)（AGPL-3.0，沿用现有性能流水线版本）、[Toxiproxy 2.12.0](https://github.com/Shopify/toxiproxy/tree/v2.12.0)（MIT） | CI 校验官方二进制摘要；真实 TCP 故障接入原执行器和 SQLite 幂等账本，k6 独立回读同一持久轮次。缺工具、版本不符、未知结果和未完成时长均不能通过。 |
+| 在线备份与发布恢复 | [SQLite 在线备份 API](https://www.sqlite.org/backup.html)（Public Domain），经现有 Python 标准库 `sqlite3` 调用；原生 systemd / 原子文件替换沿用部署宿主版本 | 备份包含已提交 WAL 并检查完整性。候选发布核对原归档摘要、运行 SHA 和发布身份，失败恢复旧指针及服务；产品版本、授权和数据库模式边界由既有发布清单决定。 |
+
+遥测队列有界，退出时由 SDK 排空并关闭 exporter；短暂导出失败不永久关闭后续批次。本地查询逐行读取并只保留所需最新记录，持续运行时按日清理过期数据。遥测仍是观察数据，不能替代业务账本；强制结束进程、磁盘故障或队列溢出不承诺零丢失。网络故障与备份回归证明限定代码路径；真实生产 90 天、7 天 staging 压测及 Windows/macOS 安装恢复须提供对应原始证据，短时本地回归不能代替。
+
 对话执行卡复用同一套 Trace 组件展示规划、附件读取、工具节点、确认和回执。规划占用状态栏，步骤数来自真实工具事件或运行回执。ELT 进度直接读取已持久化的阶段数据；流结束且缺少工具回执时显示“待核对”。正文和执行进度独立更新。
 
 员工办公室遵循 `config/duty_roster.json` 的企业四部门和管理六部门，安装包显式 `enterprise_layer` 优先，部门 ID 与原成员关系保持一致。当前任务和多员工步骤由服务端投影身份、步骤状态及待核对回执；断流保留上次结果并标为过期，慢请求不覆盖较新事件，账号切换丢弃旧响应。派发、审批、暂停、恢复、取消和结果查看沿用原 API；托管开关只控制自动接单。完成数只统计当前可见服务端任务并按任务 ID 去重；地图动画不产生任务、交接或完成回执。
 
 执行链统一传递 `trace_id/span_id/parent_span_id`，保留独立 `request_id/task_id/run_id/call_id/attempt`。HTTP/SSE、后台恢复、工具子进程、结构化日志和模型 OTLP 使用原关联；历史回放不重新生成 ID。错误使用 `error_code/error_type`，业务失败回执也标记失败，重试恢复后保留各次尝试而不污染成功终态。`duration_ms` 使用单调时钟：HTTP 记录完整响应，`run.observed` 的 `duration_scope=active` 累计规划和执行段，审批等待不计入；工具累计与任务执行耗时分开，缺失测量不写零。流结束只表示传输结束。旧任务在观测增量中只派生稳定关联，不改原账本快照或放宽恢复 CAS。
 
-AIOPEN「系统地图」的能力目录直接读取 FastAPI 自动生成的 OpenAPI（框架自身能力，不另建索引表）；目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，按字符 n-gram 切分以兼容中文，不额外引入分词器或向量库；语义 overlay 使用已声明的 PyYAML（MIT）读取。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。
+
+AIOPEN、Workflow、员工与小 C 的可执行能力统一投影现有 `ToolActionSpecV2`，内置动作仍在 `risk_actions.registry.json` 定义，MCP 动态动作沿用现有注册器；重复身份直接拒绝。FastAPI OpenAPI 只提供非执行 HTTP 资源和字段元数据。目录检索复用已锁定依赖 [scikit-learn](https://github.com/scikit-learn/scikit-learn)（BSD-3-Clause）的 TF-IDF 向量化与余弦相似度，语义 overlay 由已有 PyYAML（MIT）读取，不改变契约授权。MCP 协议层沿用官方 Python SDK（`mcp==2.3.0`，MIT）同一生态的 JSON-RPC 约定，未替换现有传输实现。
+
+统一执行继续复用已有 LangGraph、SQLAlchemy 任务仓储、审批工作台和工具幂等账本。产品胶水只负责有效账号/租户/Mod/凭据绑定、同一能力契约投影、原任务回执和独立业务读回，不增加第二个调度器、权限引擎或企业数据存储。客来来适配使用已有 HTTPX 0.28.1 固定本机连接，供应方 gitlink 保留已整合的 `d680714fae8917f692e261c67856e5d266cafb05`，包含原 PR #2 后续修复；已受理不等于送达，核验必须读取原消息与回执。实现、回归入口与尚未取得的供应方/部署证据见 [流程 SSOT §2.4](docs/architecture/PROCESS_FLOW_SSOT.md#24-能力契约与调用方迁移t03t12)。
 
 桌面语音沿用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.28.1)（BSD-3-Clause）和 websockets 16.1（BSD-3-Clause），由 XCAGI 绑定配置的出站地址。通话断句使用 [Pipecat Smart Turn v3.2 CPU](https://huggingface.co/pipecat-ai/smart-turn-v3/commit/f766f81d3cfdf7737ac64aad813d91bbfd56bf93)（BSD-2-Clause），桌面后端构建校验并打包固定权重。
 
@@ -171,16 +191,16 @@ npx --no-install playwright install --with-deps chromium
 
 `session_idle_seconds` 默认 300，`max_sessions` 默认 8（每服务最多 32），另有 worker 总量上限。浏览器虚拟地址配置为 `XCAGI_BROWSER_ADDRESS_MB`（默认 1.5 TiB，仅为 V8 地址预留，非物理内存配额）；`XCAGI_BROWSER_MEMORY_MB` 默认 4096 MiB，由生命周期监测器采样 RSS 并回收超限进程树，不等同于内核 cgroup 的无超调硬限制。`XCAGI_TOOL_CPU_SECONDS` 默认 60，长寿 worker 不为每步重置 CPU 额度。300 秒为调度期限，已开始的单次模型/工具调用仍使用原调用超时，期限后不再发起新动作。
 
-Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适配原执行器和独立核验；固定源提交与未纳入范围见[源 PR 处置](../docs/autonomy.md#本轮源-pr-处置)。剩余代码边界与真实环境验收如下，候选接线不代表主线发布或生产验收。
+Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适配原执行器和独立核验；固定来源见[流程 SSOT §9.3](docs/architecture/PROCESS_FLOW_SSOT.md#93-候选身份快照与整合约束)。两个直接浏览器共用目标、定位和快照政策，MCP 会话生命周期仍独立保留；源码接入不代表 main 合入、真实业务验收或发布。
 
 | 剩余缺口 | 已有资源、候选组件与当前边界 |
 |---|---|
-| AIOPEN 内部 Agent 到宿主屏幕的可信桥接 | 已接入按 actor / tenant / screen 绑定的短效单动作 HTTP 桥和同屏幕只读核验；多 worker 屏幕路由仍未实现。 |
-| 按租户约束网络目标与页面隐私 | 原生浏览器已接租户 origin 约束、字段脱敏和截图遮罩；持久 MCP 回路仍未接相同网络出口边界，进程隔离和动作白名单不能代替它。 |
+| AIOPEN 内部 Agent 到宿主屏幕的可信桥接 | workflow router 已接入 [#3434](https://github.com/42433422/XCMAX/pull/3434) 的短效单动作桥，按原 actor / tenant / screen、审批及后续核验绑定请求，再访问持屏宿主 HTTP 入口。宿主 WebSocket 池不会自动进入工具子进程；多 worker 的部署和真实屏幕归属仍须验收。 |
+| 按租户约束网络目标与页面隐私 | 两个直接浏览器已共用 origin 约束、字段脱敏和截图遮罩；这些页面隐私政策尚未接入本持久 MCP 回路。浏览器进程隔离和动作白名单不代替网络出口边界。 |
 | 登录、SSO、验证码与人工接管 | 可复用 [Playwright authenticated state](https://playwright.dev/docs/auth) 和 [noVNC](https://github.com/novnc/noVNC)（主体 MPL-2.0）的可见会话接管；尚未接入账号凭据保险库或远程接管 UI，当前沿用澄清等待，默认 headless 不提供人工登录窗口。 |
 | 跨宿主恢复浏览器 | 可评估 Playwright 远程连接及 [Steel Browser](https://github.com/steel-dev/steel-browser)（Apache-2.0）的会话设施；Steel 当前仍标 public beta，仅作候选。已有检查点只能恢复任务控制状态，原浏览器丢失后明确停止，不宣称网页状态已恢复。 |
-| 授权上传、下载与持久制品 | 原生 `browser.execute` 已复用 [Playwright download](https://playwright.dev/docs/downloads)、原文件归属/哈希/下载接口；MCP 回路白名单仍未开放本地文件操作，生产场景仍需真实验收。 |
-| Canvas 与桌面视觉定位 | 原 `desktop_automation.computer_execute` 已接入 Playwright/PyAutoGUI 和原效果记录核验；未把桌面动作接入本 MCP 回路，像素状态不证明后台业务完成。 |
+| 授权上传、下载与持久制品 | 直接浏览器已接入 [Playwright download](https://playwright.dev/docs/downloads) 和 #3434 的制品桥，复用原文件归属、哈希与下载接口；持久 MCP 白名单仍不开放本地文件操作，完整上传下载场景须真实验收。 |
+| Canvas 与桌面视觉定位 | [#3430](https://github.com/42433422/XCMAX/pull/3430) 的 PyAutoGUI 桌面适配已纳入候选，尚未接入本持久 MCP 回路；像素状态不证明后台业务完成。 |
 | 超长页面、混合工具和多个浏览器 | 继续复用原 LangGraph 与 MCP 定位快照能力；当前每次观察最多 24,000 字符，入口仅接受单一浏览器服务的连续任务，不宣称整页覆盖，混合或多浏览器初始计划会被拒绝。 |
 | 业务数据库、付款或外发结果核验 | 须复用对应业务服务的独立查询和实际交易回执；本回路终态仅证明指定页面文本已读回。 |
 | 生产模型、客户站点和各平台交付 | 复用原模型池、客户测试环境与原发布流水线逐项验收；Linux fixture 不代替真实模型决策质量、客户 SSO、Windows/macOS 安装包或同 SHA 部署证据。 |
@@ -196,7 +216,7 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 任务详情展示核验状态、独立通过/仅契约检查步数和证据，并提供“重新核验结果”。接口为 `GET /api/agent/runs/{run_id}/verification` 和 `POST /api/agent/runs/{run_id}/verify`。`not_required` 仅用于注册为只读且输出契约通过、未声明待核验文件的动作，表示**只读契约检查**；旧记录为 `not_verified`，混合新旧步骤不能省略未覆盖步骤后宣称整任务已核验。员工结果包检查只拦截显式失败和身份不符，不能代替此独立读回。
 
-只读资格只接受宿主在 [原工具登记](config/risk_actions.registry.json) 显式登记的 `read_only=True`。核验适配以宿主 `verify_independent_result` 的实际分派为准，不再维护会随合并失效的第二份动作数量清单。旧 `query/list` 等动作若既无此标记也无独立适配器，即使执行及输出契约通过，仍会进入 `inconclusive` 并阻止完成；需逐动作审查实际实现，不能凭名称、低风险或幂等性放行。尚未补齐的范围包括部分报表汇总、库存流水、客户地址、账龄分析和 Excel 读取/统计；`excel_analysis.query` 的自然语言代码分支尚未证明无副作用，`excel_analysis.structure` 注册与实现不一致。这里说明限定链路的实现与核验范围，不能据此认定全系统达到生产 L6。
+只读资格只接受宿主在 [原工具登记](config/risk_actions.registry.json) 显式登记的 `read_only=True`。核验适配以宿主 `verify_independent_result` 的实际分派为准，不再维护会随合并失效的第二份动作数量清单。旧 `query/list` 等动作若既无此标记也无独立适配器，即使执行及输出契约通过，仍会进入 `inconclusive` 并阻止完成；需逐动作审查实际实现，不能凭名称、低风险或幂等性放行。尚未补齐的范围包括部分报表汇总、库存流水、客户地址和账龄分析。Excel 读取、结构、查询与统计已按实际只读实现登记；自然语言查询只执行经过校验的有界 JSON 计划，与受限筛选表达式互斥，不再执行模型生成的任意代码。这里说明限定链路的实现与核验范围，不能据此认定全系统达到生产 L6。
 
 | 核验范围 | 已接入的独立事实 | 尚未覆盖的条件 |
 |---|---|---|
@@ -207,10 +227,13 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 | `sales.execute_closed_loop` | 原批准客户、产品、币种、行金额、交付量、原幂等出库流水及后续库存变动链，与实际账簿和原会计凭证独立核对 | 凭据未知、历史收款缺少可验证会计归属或当前账簿不一致时不放行；账内收款不能代替银行原始到账凭据 |
 | `sales.confirm/cancel/deliver/invoice/payment/credit_note` | 执行前冻结原订单观察，执行后按原租户/Mod 读取订单状态、出库流水、收款分配及平衡分录；非原幂等键的新动作不能借用旧流水 | 需当前订单/账簿读取权限；缺失记录、并发歧义、金额/数量不符仍待核验；证明请求后置状态，不推断因果 |
 | `enterprise_cognition.bind_goal/plan/evaluate` | 原目标哈希、原父子任务准入及冻结观察对应的 MemoryV2 记录 | 方案准入不等于业务完成，待审批子任务不可被核验终结；记忆仍按原确认、拒绝、纠正流程治理 |
-| `employee.execute` 的 clerk 显式 start | 原员工账本中的服务端任务、账号、租户、工作区与创建事件；只核验准入，业务结果保持 pending/success=False | 不覆盖 execute_limit 和其他 continuity 操作；子任务实际执行与业务完成需要各自原始回执 |
+| `employee.execute` 的 clerk 显式 start | 原员工账本中的服务端任务、账号、租户、工作区与创建事件；只核验准入，业务结果保持 pending/success=False | 准入回执不证明后续执行；子任务实际执行与业务完成需要各自原始回执 |
+| `employee.execute` 的 `run_tools/child_return/chain` 收尾 | 原任务与全部必需子任务集合、父子关系、账号/租户/工作区、原计划与执行回执逐项核对，继续读取原独立核验与文件证据 | 任一必需子任务未完成、原账本/来源/权限变化或原回执缺失均不放行；不把其它 continuity 操作自动视为已核验 |
+| `purchase.create_order/update_order/approve_order/cancel_order/create_inbound` | 原租户和审批订单、价格/数量/供应商范围，以及收货、库存和应付关联按原事务与独立 SQL 读回核验；创建单号绑定原 run/step/tenant | 缺原订单、额度或归属不符时拒绝；受理与材料回执不能替代真实业务记录，结果未知时禁止重放 |
+| `elt_import.execute` 的六类 SQL 目标 | 执行前冻结原预演、审批计划及来源摘要；执行后独立回读原行级账本及 `dynamic_table`、客户、产品、客户产品、采购单、发货记录的真实字段、归属与关联 | 同内容去重仍须核对真实目标；计划、来源、租户或数据不符时不放行。考勤、导出、知识库、Webhook 等其他目标尚无本适配器，保持待核验；未知执行不能因读回成功而重放 |
 | `browser.observe/execute`、`computer_execute`、具备后置条件的 AIOPEN/MCP 写动作 | 原调用冻结断言；原制品/效果记录的实际观察与文件字节，或同一屏幕/浏览器代次的新只读观察 | 明确 DOM、像素、页面或文件范围及 `business_effect_verified=false`；历史记录不证明当前状态，缺条件、丢失会话或权限不足仍待核对 |
 | 注册只读动作 | 原输出契约检查，明确标为 `not_required` | 不宣称已证明外部业务副作用；声明文件却没有适配器仍阻断 |
-| 其他销售/出库/会计、通用 ELT 及尚未接入适配器的外部动作 | 保留已有专用执行回执与门禁 | 尚未全部接通本引擎的可信原回执和独立适配器；未覆盖的副作用返回 `inconclusive` |
+| 其他销售/出库/会计、未覆盖的 ELT 目标及尚未接入适配器的外部动作 | 保留已有专用执行回执与门禁 | 尚未全部接通本引擎的可信原回执和独立适配器；未覆盖的副作用返回 `inconclusive` |
 | 旧任务、legacy 管理端路径 | 保留历史原回执；员工台账的新 `verified` 为 false，旧值只作为 `legacy_result_valid` 展示 | 执行包检查明确标为 `execution_envelope`；无冻结契约不能补造独立通过，仍需逐入口迁移和真实业务验收 |
 
 `kellai.send` 的原渠道回执完整保存在 `data.delivery_receipt`；受理与送达分开。独立核验只读取当前账号授权的原请求回执和原客户消息，并核对请求、渠道、收件人、内容与供应商消息 ID。仅 `delivered/read` 可通过，发送受理、投影缺失、读取范围不足和权限撤销保持待核验，不能自动重发；具体外部渠道回执仍取决于已配对客来来实例。
@@ -221,9 +244,11 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 
 全链路回归沿原审批工作台/队列、SQLAlchemy 会话、报告服务和下载路由执行：不同用户申请与审批，实际写入订单/库存/会计，按原订单导出并经认证 HTTP 下载，然后只读独立核对。`test_business_full_chain_acceptance.py` 还验证越权拒绝、重复审批、重启恢复、无关订单隔离和有效格式但错误金额的文件不能完成任务。此处使用合成输入，B31 仍要求客户原件与人工对账基线，缺失时为 BLOCKED。
 
-审批恢复沿原 SQL 领取事务保存审批人与任务身份；领取前中断可从原审批重试，领取后结果未知则保留待核对并禁止重放。领取与拒绝使用原审批行的条件更新互斥，已领取的执行不能被并发拒绝覆盖。配置审批节点的最后一步先完成原任务领取，再保存原节点决定与审计，避免外层写事务阻塞 SQLite 领取。完成后的审批详情仅允许依据原任务已完成的直接依赖输出展开冻结参数，仍核对完整计划，参数或依赖被改动不能冒充原批准任务。
+审批恢复沿原 SQL 领取事务保存审批人与任务身份；领取前中断可从原审批重试，领取后结果未知则保留待核对并禁止重放。领取与拒绝、撤回使用原审批行的条件更新互斥，已领取的执行不能被并发决定或旧状态读取覆盖。配置审批节点的最后一步先完成原任务领取，再保存原节点决定与审计，避免外层写事务阻塞 SQLite 领取。完成后的审批详情仅允许依据原任务已完成的直接依赖输出展开冻结参数，仍核对完整计划，参数或依赖被改动不能冒充原批准任务。
 
-收款与原幂等请求回读都先核对整组付款及退款凭证；额外凭证、缺失分录或余额不符时拒绝新增业务记录。发票核验同时检查当前有效发票及全部历史发票与贷项的唯一配对、原客户、科目和借贷金额。报表显式传入客户或仓库编号 `0` 仍按该范围查询，不扩大为全部业务数据。以上复用既有 SQLAlchemy 事务、凭证明细合同和参数解析器，无新增账本、依赖或通用执行引擎。
+配置节点和无节点的工作流被拒绝后，均取消原 AgentRun。现役审批仅支持串行流程（`serial`）且每节点通过人数为 `1`；会签、并行或多票配置在创建、更新及已保存审批执行前返回明确提示，保留原任务等待且不写业务，不会把一次同意当成多人会签完成。
+
+收款与原幂等请求回读都先核对整组付款及退款凭证；额外凭证、缺失分录或余额不符时拒绝新增业务记录。发票核验同时检查当前有效发票及全部历史发票与贷项或原财务冲销的唯一配对、原客户、科目和借贷金额，两种冲销不能重复抵销同一原凭证。报表显式传入客户或仓库编号 `0` 仍按该范围查询，不扩大为全部业务数据。以上复用既有 SQLAlchemy 事务、凭证明细合同和参数解析器，无新增账本、依赖或通用执行引擎。
 
 | 来源与固定版本 | 许可证 | 复用决策 |
 |---|---|---|
@@ -234,8 +259,6 @@ Computer、原生浏览器、AIOPEN 与持久 MCP 已在本轮集成候选中适
 | [Promptfoo 0.126.0 快照](https://github.com/promptfoo/promptfoo/tree/1b7e4e54ae5a35587babf705000c2a034eb5091f)、[Temporal Python 1.36.1 快照](https://github.com/temporalio/sdk-python/tree/5c925a41b36b34d9ce32d03f1d1f07faa35b348a) | MIT | 分别参考[确定性断言](https://www.promptfoo.dev/docs/configuration/expected-outputs/deterministic/)与[Activity 幂等恢复](https://docs.temporal.io/activity-definition)，不新增运行时依赖或第二套任务引擎 |
 
 本轮针对成功包装掩盖失败、旧证据/身份漂移、读取故障、回执保存前后崩溃、重复核验、CAS 冲突和产物恢复增加回归。代码与本地测试通过只证明这些路径已实现；生产成熟度仍须同一主线 SHA 的 CI/安全扫描、实际部署身份、真实业务对账及长时故障恢复证据，不据此给 Codex 或 XCMax 虚构评分。
-
-<a id="version-policy"></a>
 
 ## 固定本地 Agent 执行器
 
@@ -276,6 +299,10 @@ Codex 在同一 thread 内发现能力、读取完整 JSON Schema 和 `schema_di
 产品版本与工具链映射以 [VERSION.md](VERSION.md) 为准；仓根 [GitHub workflows](../.github/workflows/) 是执行入口，生成的子树副本不独立调度。发布流程见 [CI_SSOT](../docs/CI_SSOT.md)。
 
 产品修复通过审查和必需检查后合入 `main`。交付包须来自明确的主线 SHA；包内身份、运行后台与业务验收记录必须一致。分支测试、demo 和历史包不证明新候选通过。
+
+交付验收复用现有成熟组件：安装与更新沿用 `electron-builder 26.18.0`、`electron-updater 6.8.11`（[electron-builder](https://github.com/electron-userland/electron-builder)，MIT），安装后的 UI 与进程测量沿用 lockfile 固定的 [Playwright 1.65.1](https://github.com/microsoft/playwright/tree/v1.65.1)（Apache-2.0）。构建来源复用上文已固定的 GitHub artifact attestations、GitHub REST 与原 `verify_modstore_release_approval`，工作流检查复用 `measure_required_checks`，客户交付复用原 SQLAlchemy 工作流、Outbox、订单及制品读取器。通用组件负责构建、传输、签名、浏览器操作和事务；产品适配只核对发布 SHA、原始 run/attempt、制品摘要、原订单和客户目标，不新建证据账本或自行实现更新器。
+
+正式报告按实际测量范围给结果：GitHub Windows runner 五模式记录只证明该 runner 的安装、业务和恢复；macOS 签名 DMG 的安装启动测量只证明该包能启动且身份一致。客户 Windows 10/11、真实 macOS OTA 恢复、客户原件对账和生产长期 SLO 各自需要原始证据，不能由这些局部成功推导通过。按 `release_sha` 查询客户价值时，服务端会回查已完成原工作流、同版实际安装及交付文件字节；普通历史汇总继续保留原口径。
 
 | 验收 | 入口 |
 |---|---|
@@ -329,6 +356,14 @@ cd XCMAX/FHD
 仓库技能以 [OpenHands Software Agent SDK 的 `SKILL.md` 解析格式](https://github.com/OpenHands/software-agent-sdk/blob/ae4fd87f9b86a9362943d29771192816877646a9/openhands-sdk/openhands/sdk/skills/skill.py)（参考提交 `ae4fd87f9b86a9362943d29771192816877646a9`，[MIT](https://github.com/OpenHands/software-agent-sdk/blob/ae4fd87f9b86a9362943d29771192816877646a9/LICENSE)）为协议参考；使用锁定的 [PyYAML 6.0.3](https://github.com/yaml/pyyaml/tree/6.0.3)（MIT）解析元数据。宿主仅适配 `name`、`description`、`triggers` 和 Markdown 正文，不引入另一套 Agent 运行时；仅命中的技能作为宿主指导进入原 Codex 任务，受服务端开关、路径和输入总量限制，不能用客户端 `active_skills` 冒充技能规则。此适配不宣称支持上游完整技能发现、资源调用或插件协议。
 
 ## 许可证与安全
+
+账号许可记录保存本人的业务授权及原到期时间；现有 Session 只绑定同次核验所得的更窄凭据截止，普通会话续期和共享租户套餐变化不能延长它。Alembic `2026_11_24_trial_session` 只增加 nullable 截止字段，旧记录保持未知，不回填授权；旧试用会话须重新通过真实市场登录取得证据。桌面继续使用原启动迁移与备份互斥；非桌面既有数据库须先经原 Alembic 升级入口到 head，再启用新版 ORM。受限宿主的缺列校验和冻结补列清单保持，未执行部署数据库迁移不能视为已升级。
+
+代码编辑提案复用现有 [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT、`uv.lock`）宿主会话与条件更新，文件版本比较和写入复用 [filelock 4.2.4](https://github.com/tox-dev/py-filelock/tree/4.2.4)（MIT）。多个 worker 必须使用同一宿主数据库、工作区和应用数据目录。提案绑定真实账号、租户与规范化工作区；P2 授权、原文件 SHA 和路径复核仍必需，提交领取后才写文件，中断留下待核验状态，已消费提案不能重复应用。新增提案表沿既有启动建表和 Alembic 迁移管理，没有新增状态服务。
+
+认证及全局限流共用既有 `LAN_TRUSTED_PROXIES` 地址/CIDR 配置与 `lan_ip.get_client_ip`。只有 socket peer 命中配置时才解析转发链，取从右向左遇到的首个不可信地址；直连或未配置代理时忽略转发头。仅配置实际代理网段，代理应规范追加客户端地址。原限额、Redis 分布式后端及不可用时的拒绝策略保持。
+
+JSON 请求和签名 Webhook 保留原始字节及备注、代码、特殊字符的原意，身份、租户、类型、长度和业务约束仍由原入口校验。HTML 显示沿已有 Vue 文本插值、DOMPurify 和 Markdown 渲染器处理输出，不把转义后的展示文本写回输入数据。对应回归同时检查实际 HTTP 中间件栈、原始字节验签和真实前端渲染结果。
 
 ### 工具调用、权限与重试
 

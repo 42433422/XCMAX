@@ -8,12 +8,14 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
 import pytest
 
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.super_employee.para import ParaRemoteError
 
 
 def _ack(request, *, task_id="task-original", subtask_id="sub-1"):
@@ -148,6 +150,109 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     second_service.list_messages(user_id=7)
 
 
+@pytest.mark.parametrize("status_code", [400, 503])
+def test_remote_http_failure_after_send_keeps_original_plan_unknown(
+    tmp_path, monkeypatch, status_code
+):
+    effects = []
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        return httpx.Response(status_code, json={"error": "task outcome not confirmed"})
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    context = {"request_id": "http-response-loss", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    receipt = first["dispatch"]
+    assert receipt["status"] == "dispatch_unknown"
+    assert receipt["accepted"] is receipt["queued"] is receipt["safe_to_fallback"] is False
+    assert receipt["reason"] == "task outcome not confirmed"
+    assert receipt["pending_request_id"] == effects[0]["client_request_id"]
+    before = json.loads(Path(receipt["outbox_path"]).read_text())["dispatch_receipt"]
+    second = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert second["dispatch"]["status"] == "dispatch_unknown"
+    after = json.loads(Path(receipt["outbox_path"]).read_text())["dispatch_receipt"]
+    for key in (
+        "request_id",
+        "pending_request_id",
+        "pending_payload_sha256",
+        "plan",
+        "plan_sha256",
+    ):
+        assert after[key] == before[key]
+    assert len(effects) == 1
+    assert requests.count(("POST", "para.test", "/api/tasks")) == 1
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+@pytest.mark.parametrize("entry", ["invoke", "readback"])
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError, AttributeError, KeyError])
+def test_programming_failure_during_original_lookup_propagates_without_replay(
+    tmp_path, monkeypatch, entry, error_type
+):
+    effects = []
+    armed = False
+    error = error_type("synthetic lookup defect")
+
+    def submit(request):
+        effects.append(json.loads(request.content))
+        raise httpx.ReadTimeout("ack lost", request=request)
+
+    def lookup(request):
+        if armed:
+            raise error
+        return httpx.Response(200, json={})
+
+    create, requests = _service(tmp_path, monkeypatch, submit, receipt_handler=lookup)
+    context = {"request_id": "lookup-defect", "mode": "code"}
+    first = create().invoke(user_id=7, message="修复登录问题", context=context)
+    assert first["dispatch"]["status"] == "dispatch_unknown"
+    path = Path(first["dispatch"]["outbox_path"])
+    original = path.read_bytes()
+    previous_reads = len(requests)
+    armed = True
+    service = create()
+    with pytest.raises(error_type) as caught:
+        if entry == "invoke":
+            service.invoke(user_id=7, message="修复登录问题", context=context)
+        else:
+            service.read_dispatch_receipt(user_id=7, request_id=context["request_id"], task_id="")
+    assert caught.value is error
+    assert path.read_bytes() == original
+    assert len(effects) == 1
+    observed = requests[previous_reads:]
+    assert len(observed) == 1
+    assert observed[0][:2] == ("GET", "para.test")
+    assert observed[0][2].startswith("/api/tasks/by-request/")
+    assert not any(host == "hook.test" for _, host, _ in requests)
+
+
+@pytest.mark.parametrize(
+    ("operation", "status", "body", "message"),
+    [
+        ("request", 403, {"error": "request rejected"}, "request rejected"),
+        ("guest", 401, {"error": "guest rejected"}, "guest rejected"),
+        ("guest", 200, {}, "Para guest 登录未返回 token"),
+    ],
+)
+def test_known_para_response_failure_preserves_runtimeerror_contract(
+    tmp_path, monkeypatch, operation, status, body, message
+):
+    for name in ("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "MODSTORE_PARA_TOKEN", "DEVFLEET_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    service = CodexSuperEmployeeService(storage_root=tmp_path)
+    service._para._token_cache = {}
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, json=body))
+    with httpx.Client(transport=transport) as client, pytest.raises(RuntimeError) as caught:
+        if operation == "guest":
+            service._para_token(client, "https://para.test")
+        else:
+            service._para_request(client, "https://para.test", "test-token", "GET", "/api/devices")
+    assert isinstance(caught.value, ParaRemoteError)
+    assert str(caught.value) == message
+    assert service._para._token_cache == {}
+
+
 def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeypatch):
     effects = []
 
@@ -230,13 +335,21 @@ def test_readback_keeps_partial_fleet_unknown_after_known_task_completes(tmp_pat
     assert Path(first["dispatch"]["outbox_path"]).read_text() == original
 
 
+@pytest.mark.parametrize("receipt_status", [401, 404, 503])
 def test_readback_without_ack_queries_only_original_request_and_keeps_unknown(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, receipt_status
 ):
     def submit(request):
         raise httpx.ReadTimeout("first acknowledgement lost", request=request)
 
-    create, requests = _service(tmp_path, monkeypatch, submit)
+    create, requests = _service(
+        tmp_path,
+        monkeypatch,
+        submit,
+        receipt_handler=lambda request: httpx.Response(
+            receipt_status, json={"error": "request_not_found"}
+        ),
+    )
     first = create().invoke(
         user_id=7,
         message="修复登录问题",
@@ -285,23 +398,23 @@ def test_readback_can_observe_send_intent_while_dispatch_lock_is_held(tmp_path, 
     request = {
         "request_id": "inflight-readback",
         "user_id": 7,
+        "employee_id": service._p.employee_id,
         "created_at": "2026-11-21T00:00:00Z",
     }
-    with service._messages.dispatch_lock(7, "inflight-readback"):
-        service._dispatching._persist_receipt(
-            request,
-            {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
-        )
-        # Lock acquisition is exclusively a sender operation. A reader must not
-        # block on the live sender before it can observe the already durable intent.
-        monkeypatch.setattr(
-            service._messages,
-            "dispatch_lock",
-            lambda *args: pytest.fail("readback waited on the live sender"),
-        )
-        receipt = service.read_dispatch_receipt(
-            user_id=7, request_id="inflight-readback", task_id=""
-        )
+    with ThreadPoolExecutor(max_workers=1) as observer:
+        with service._messages.dispatch_lock(7, "inflight-readback"):
+            service._dispatching._persist_receipt(
+                request,
+                {"status": "dispatching", "dispatcher": "para_api", "api_url": "https://para.test"},
+            )
+            # A different thread cannot reenter the sender's lock. Its read
+            # must return the durable snapshot while the sender still holds it.
+            receipt = observer.submit(
+                service.read_dispatch_receipt,
+                user_id=7,
+                request_id="inflight-readback",
+                task_id="",
+            ).result(timeout=5)
     assert receipt["dispatch"]["status"] == "dispatch_unknown"
     assert receipt["dispatch"]["reconciliation_required"] is True
     assert requests == []
@@ -405,6 +518,8 @@ def test_safe_local_fallback_is_saved_before_replay(tmp_path, monkeypatch):
     assert first["dispatch"]["status"] == second["dispatch"]["status"] == "completed"
     assert first["dispatch"]["accepted"] is True
     assert first["dispatch"]["queued"] is False
+    stored = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())["dispatch_receipt"]
+    assert stored["safe_to_fallback"] is False and stored["queued"] is False
     assert second["assistant_message"]["body"] == "本地任务已完成。"
     assert cli_calls == ["ran"]
     assert requests.count(("POST", "para.test", "/api/tasks")) == 1
@@ -530,3 +645,24 @@ def test_two_processes_replay_accepted_code_request_without_cli_backfill(tmp_pat
                 worker.kill()
             worker.communicate(timeout=5)
     assert (tmp_path / "effects").read_text().splitlines() == ["created"]
+
+
+def test_readback_without_ack_only_queries_the_original_request(tmp_path, monkeypatch):
+    def submit(request):
+        raise httpx.ReadTimeout("first acknowledgement lost", request=request)
+
+    create, requests = _service(tmp_path, monkeypatch, submit)
+    create().invoke(
+        user_id=7,
+        message="修复登录问题",
+        context={"request_id": "lost-readback", "mode": "code"},
+    )
+    before = len(requests)
+    service = create()
+    receipt = service.read_dispatch_receipt(user_id=7, request_id="lost-readback", task_id="")
+    assert receipt["dispatch"]["reconciliation_required"] is True
+    assert receipt["dispatch"]["status"] == "dispatch_unknown"
+    assert not receipt["dispatch"].get("task_id")
+    assert len(requests) == before + 1
+    assert requests[-1][0:2] == ("GET", "para.test")
+    assert requests[-1][2].startswith("/api/tasks/by-request/")

@@ -61,7 +61,7 @@ class EmployeeExecution:
         employee_id: str,
         body: dict[str, Any] = Body(default_factory=dict),
     ):
-        """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
+        """绑定当前账号与稳定请求标识，经统一任务登记执行本机员工。"""
         from app.domain.app_pure.auth_permission_resolver import require_allowed
 
         principal = self._identity(request)
@@ -80,7 +80,21 @@ class EmployeeExecution:
         task = str(body.get("task") or "").strip()
         if not task:
             return JSONResponse({"success": False, "message": "task 必填"}, status_code=400)
-        request_key = _request_key(body, request)
+        try:
+            request_key = _request_key(body, request)
+            if not request_key:
+                raise HTTPException(status_code=400, detail="员工执行需要稳定请求标识")
+        except HTTPException as exc:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "task_identity_required",
+                    "execution_state": "not_started",
+                    "retryable": False,
+                    "message": str(exc.detail),
+                },
+                status_code=400,
+            )
         raw_input = body.get("input_data")
         if raw_input is not None and (not isinstance(raw_input, dict)):
             return JSONResponse(
@@ -137,10 +151,8 @@ class EmployeeExecution:
             session_id=sid,
             workspace_root=server_workspace,
             idempotency_key=request_key,
-            runtime_context=_trusted_context(request, user_id, tenant_id) if request_key else {},
+            runtime_context=_trusted_context(request, user_id, tenant_id),
         )
-        if not request_key:
-            return await run_in_threadpool(self._run, work)
         from app.application.agent_orchestrator.unified_task import UnifiedTaskConflictError
         from app.infrastructure.tenant_scope import tenant_scope
 

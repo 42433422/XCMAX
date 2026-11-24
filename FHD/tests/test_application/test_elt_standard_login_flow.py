@@ -179,11 +179,11 @@ def standard_login(tmp_path, monkeypatch):
             headers={"content-type": "text/event-stream", "x-request-id": "synthetic-response"},
         )
 
-    monkeypatch.setattr(
-        httpx,
-        "AsyncClient",
-        lambda **kwargs: client_type(**{**kwargs, "transport": httpx.MockTransport(remote)}),
-    )
+    class SyntheticClient(client_type):
+        def __init__(self, **kwargs):
+            super().__init__(**{**kwargs, "transport": httpx.MockTransport(remote)})
+
+    monkeypatch.setattr(httpx, "AsyncClient", SyntheticClient)
     app = FastAPI()
     app.include_router(auth_router)
     app.include_router(template_router)

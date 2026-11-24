@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,61 @@ def test_trend_artifacts_cannot_be_downloaded_as_release_clearance():
             + kind
             + "' }}"
         )
+
+
+@pytest.mark.parametrize(
+    "configured,codeowners", [("", True), ("security-owner", True), ("", False)]
+)
+def test_security_followup_uses_owner_login_instead_of_codeowners_path(
+    tmp_path, configured, codeowners
+):
+    step = next(
+        s for s in _steps() if s.get("name") == "Open or update the security follow-up issue"
+    )
+    if codeowners:
+        (tmp_path / ".github").mkdir()
+        (tmp_path / ".github/CODEOWNERS").write_bytes((ROOT / ".github/CODEOWNERS").read_bytes())
+    receipt = tmp_path / "issue-arguments"
+    gh = tmp_path / "gh"
+    gh.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "if sys.argv[1:3] == ['issue', 'list']:\n"
+        "    sys.exit(0)\n"
+        "if '--assignee' in sys.argv:\n"
+        "    login = sys.argv[sys.argv.index('--assignee') + 1]\n"
+        "    if '/' in login or login.startswith('@'):\n"
+        "        sys.exit('GitHub assignee must be a login, not a CODEOWNERS path')\n"
+        "Path(os.environ['ISSUE_ARGUMENTS']).write_text('\\n'.join(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    script = step["run"].replace("${{ vars.SECURITY_ISSUE_ASSIGNEE }}", configured)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "ISSUE_ARGUMENTS": str(receipt),
+            "REPO": "fixture/repository",
+            "SHA": "a" * 40,
+            "RUN_URL": "https://example.invalid/run/1",
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    arguments = receipt.read_text(encoding="utf-8").splitlines()
+    assert arguments[:2] == ["issue", "create"]
+    expected = configured or ("42433422" if codeowners else "")
+    if expected:
+        assert arguments[arguments.index("--assignee") + 1] == expected
+    else:
+        assert "--assignee" not in arguments
 
 
 @pytest.mark.parametrize(

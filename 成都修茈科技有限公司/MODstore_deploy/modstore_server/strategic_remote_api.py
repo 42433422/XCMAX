@@ -11,9 +11,15 @@ from fastapi.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
 from modstore_server import strategic_remote_bridge as bridge
+from modstore_server.llm_gateway_contract import StreamLimitError
 from modstore_server.strategic_portfolio import PortfolioError
 
 router = APIRouter(prefix="/strategic-runs", tags=["strategic-remote-report"])
+_STREAM_LIMIT_ERROR = {
+    "type": "error",
+    "code": "model_stream_limit_exceeded",
+    "message": "Model stream exceeded the host response limit; original usage remains unresolved.",
+}
 
 
 class _OwnedModelStream(StreamingResponse):
@@ -121,9 +127,11 @@ async def responses(request_id: str, request: Request, authorization: str = Head
     from modstore_server.strategic_portfolio_usage import portfolio_usage_scope
 
     token = _token(authorization)
-    raw = await request.body()
-    if len(raw) > 2_000_000:
-        raise HTTPException(413, "remote model request exceeds 2000000 bytes")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > strategic_responses.MAX_REQUEST_BYTES:
+            raise HTTPException(413, "remote model request exceeds 2000000 bytes")
+        raw.extend(chunk)
     try:
         payload = json.loads(raw)
     except (UnicodeDecodeError, ValueError) as exc:
@@ -149,6 +157,8 @@ async def responses(request_id: str, request: Request, authorization: str = Head
             first = await anext(source)
     except StopAsyncIteration:
         raise HTTPException(502, "upstream stream completed without events") from None
+    except StreamLimitError:
+        raise HTTPException(502, _STREAM_LIMIT_ERROR) from None
     except PortfolioError as exc:
         raise _failure(exc) from exc
 
@@ -186,14 +196,16 @@ async def responses(request_id: str, request: Request, authorization: str = Head
                         event = await anext(source)
                 except StopAsyncIteration:
                     return
-        except PortfolioError:
+        except (PortfolioError, StreamLimitError) as exc:
             yield (
                 "data: "
                 + json.dumps(
-                    {
+                    _STREAM_LIMIT_ERROR
+                    if isinstance(exc, StreamLimitError)
+                    else {
                         "type": "error",
                         "code": "strategic_budget_stopped",
-                        "message": "Model stream stopped because authorization or budget is no longer available.",
+                        "message": "Model stream stopped because authorization, budget, or the upstream receipt could not be verified.",
                     }
                 )
                 + "\n\n"

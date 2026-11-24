@@ -153,7 +153,7 @@ def test_discovery_exposes_screen_actions_without_recursive_api_or_chat(dynamic_
     assert {"ui_snapshot", "ui_type", "ui_verify"} <= actions
     assert not actions.intersection({"chat", "api_call", "operation_call"})
     observation = state.invoke("ui_snapshot", {"session_id": "owned"}, "observe")
-    assert observation["verified"] is True
+    assert observation["verified"] is True, observation
     assert [row["action"] for row in state.screen.own.sent] == ["snapshot"]
     assert not state.screen.foreign.sent
 
@@ -182,7 +182,11 @@ def test_approved_single_action_independently_reads_the_original_screen(dynamic_
     assert len(original.steps) == 1
     assert original.steps[0].params == _type_params()
     done = state.approve(pending)
-    assert [row["action"] for row in state.screen.own.sent] == ["type", "verify"]
+    assert [row["action"] for row in state.screen.own.sent] == ["type", "verify"], (
+        done.error,
+        [(step.status, step.error, step.output) for step in done.steps],
+        state.screen.responses,
+    )
     assert not state.screen.foreign.sent
     receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
     if apply:
@@ -212,3 +216,82 @@ def test_model_cannot_change_a_pending_action_or_its_approved_condition(dynamic_
     assert error.value.code == "call_conflict"
     assert not state.screen.posts
     assert state.screen.repository.get(pending["run_id"]).steps[0].params == _type_params()
+
+
+def test_dynamic_screen_action_rejects_missing_workspace_proof(dynamic_screen):
+    state = dynamic_screen
+    pending = state.invoke("ui_type", _type_params())
+    child = state.screen.repository.get(pending["run_id"])
+    assert not child.metadata["plan"].get("metadata", {}).get("approval_required_node_ids")
+    run = state.bridge.orchestrator.continue_run(
+        child.run_id,
+        approved_by="71",
+        approved_step_id=child.steps[0].step_id,
+        approval_request_id="missing-workspace-approval",
+    )
+    assert run.status == "blocked"
+    assert run.error == "持久化审批与当前完整执行计划不匹配"
+    assert "approval_receipt" not in run.metadata
+    assert not run.tool_calls and not state.screen.own.sent and not state.screen.foreign.sent
+
+
+def test_workspace_review_resumes_the_original_screen_action(dynamic_screen, sessions, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application import approval_workspace_app_service as workspace
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
+    from app.db.models.approval import ApprovalRecord, ApprovalRequest
+    from app.fastapi_routes.approval import router
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.middleware.industry_context import IndustryContextMiddleware
+
+    state = dynamic_screen
+    pending = state.invoke("ui_type", _type_params())
+    assert pending["pending_approval"] is True and not state.screen.posts
+    child = state.screen.repository.get(pending["run_id"])
+    plan = plan_from_dict(child.metadata["plan"])
+    waiting = child.steps[0]
+    approvals = ApprovalService()
+    with tenant_scope(7):
+        request = approvals.create_approval_request(
+            plan_id=plan.plan_id,
+            node=plan.nodes[0],
+            plan=plan,
+            require_persistence=True,
+            runtime_context={
+                **child.metadata["runtime_context"],
+                "_approval_agent_run_required": True,
+            },
+        )
+        assert approvals.attach_pending_agent_run(
+            request.request_id, agent_run_id=child.run_id, approved_step_id=waiting.node_id
+        )
+    with tenant_scope(7), sessions() as db:
+        approval_id = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one().id
+    monkeypatch.setattr(workspace, "_approval_backend", lambda: approvals)
+    monkeypatch.setattr(workspace, "_agent_executor", lambda: state.bridge.orchestrator)
+    app = FastAPI()
+    app.add_middleware(IndustryContextMiddleware)
+    app.include_router(router)
+    with tenant_scope(None), TestClient(app, headers={"X-Session-ID": "valid"}) as client:
+        url = f"/api/approval/requests/{approval_id}/approve"
+        response = client.post(url, json={"opinion": "Approve this original screen action"})
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["workflow_execution"]["agent_run_id"] == child.run_id
+        assert client.post(url, json={"opinion": "Repeat original review"}).status_code == 400
+    done = state.screen.repository.get(child.run_id)
+    assert done.status == "completed", done.error
+    assert done.steps[0].step_id == waiting.step_id and done.steps[0].params == _type_params()
+    assert done.metadata["approval_receipt"]["approval_request_id"] == request.request_id
+    assert done.metadata["approval_receipt"]["plan_sha256"] == plan_fingerprint(plan)
+    assert [row["action"] for row in state.screen.own.sent] == ["type", "verify"]
+    assert not state.screen.foreign.sent
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=sessions))
+    receipt = reopened.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert receipt["run_id"] == child.run_id and receipt["verified"] is True
+    with tenant_scope(7), sessions() as db:
+        records = db.query(ApprovalRecord).filter_by(request_id=approval_id, action="approve").all()
+        assert len(records) == 1 and records[0].approver_id == 71

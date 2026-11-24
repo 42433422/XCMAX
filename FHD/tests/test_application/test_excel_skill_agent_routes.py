@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client() -> TestClient:
@@ -30,8 +32,11 @@ def _write_xlsx(path) -> str:
 
 
 @pytest.mark.parametrize("output_mode", ["missing", "empty", "file"])
-def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch, output_mode) -> None:
+def test_skills_analyze_excel_route_executes_agent_run(
+    tmp_path, monkeypatch, output_mode, trusted_actor
+) -> None:
     repo = InMemoryAgentRunRepository()
+    actor = trusted_actor(user_id=7, role="admin")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -45,13 +50,13 @@ def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch, ou
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/skills/analyze/excel",
             json=params,
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == (202 if output_mode == "file" else 200), response.text
     payload = response.json()
     assert payload["success"] is (output_mode != "file")
     assert payload["agent_status"] == ("blocked" if output_mode == "file" else "completed")
@@ -59,9 +64,9 @@ def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch, ou
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "7"
     assert run.status == ("blocked" if output_mode == "file" else "completed")
-    assert run.intent == "skills_analyze_excel"
+    assert run.intent == "ERP Agent 请求执行 excel_analyzer.analyze"
     assert run.tool_calls[0].tool_id == "excel_analyzer"
     assert run.tool_calls[0].action == "analyze"
     assert run.tool_calls[0].permission == "tool.excel_analyzer.analyze"
@@ -79,8 +84,9 @@ def test_skills_analyze_excel_route_executes_agent_run(tmp_path, monkeypatch, ou
         assert verification["code"] == "read_only_output_contract_checked"
 
 
-def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> None:
+def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch, trusted_actor) -> None:
     repo = InMemoryAgentRunRepository()
+    actor = trusted_actor(user_id=7, role="admin")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -90,7 +96,7 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/skills/view/excel",
             json={"file_path": xlsx_path, "action": "view", "sheet_name": "Sheet1"},
             headers={"X-User-Id": "tenant-a"},
@@ -105,9 +111,9 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "7"
     assert run.status == "completed"
-    assert run.intent == "skills_view_excel_view"
+    assert run.intent == "ERP Agent 请求执行 excel_toolkit.view"
     assert run.tool_calls[0].tool_id == "excel_toolkit"
     assert run.tool_calls[0].action == "view"
     assert run.tool_calls[0].permission == "tool.excel_toolkit.view"
@@ -116,9 +122,10 @@ def test_skills_view_excel_route_executes_agent_run(tmp_path, monkeypatch) -> No
 
 @pytest.mark.parametrize("output_mode", ["missing", "empty", "file"])
 def test_generate_label_template_route_executes_agent_run(
-    tmp_path, monkeypatch, local_tools, output_mode
+    tmp_path, monkeypatch, local_tools, output_mode, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
+    actor = trusted_actor(user_id=7, role="admin")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
@@ -153,13 +160,13 @@ def test_generate_label_template_route_executes_agent_run(
             return_value="class ProductLabelTemplate:\n    pass\n",
         ),
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/skills/generate-label-template",
             json=params,
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == (202 if output_mode == "file" else 200), response.text
     payload = response.json()
     assert payload["success"] is (output_mode != "file")
     assert payload["agent_status"] == ("blocked" if output_mode == "file" else "completed")
@@ -167,9 +174,9 @@ def test_generate_label_template_route_executes_agent_run(
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "7"
     assert run.status == ("blocked" if output_mode == "file" else "completed")
-    assert run.intent == "skills_generate_label_template"
+    assert run.intent == "ERP Agent 请求执行 label_template_generator.execute"
     assert run.tool_calls[0].tool_id == "label_template_generator"
     assert run.tool_calls[0].action == "execute"
     assert run.tool_calls[0].permission == "tool.label_template_generator.execute"

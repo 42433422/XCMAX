@@ -1,49 +1,43 @@
-"""Own uploaded document streams and staged files until the Agent accepts them."""
+"""Bounded uploads retain an immutable, actor-owned input for canonical retries."""
 
 from __future__ import annotations
 
-import json
 import logging
-import re
-import uuid
-from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from fastapi import Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application.knowledge.protocols import DatasetAction
+from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+from app.utils.path_io.upload_helpers import (
+    _capability_upload_directory,
+    stage_capability_upload,
+)
 
 
-def _accepted_input(response: JSONResponse) -> bool:
-    if response.status_code >= 400:
-        return False
-    if response.status_code == 202:
-        return True
-    try:
-        payload = json.loads(bytes(response.body))
-    except (TypeError, ValueError):
-        return False
-    return isinstance(payload, dict) and (
-        bool(payload.get("success"))
-        or payload.get("agent_status") in {"waiting_user", "running", "blocked"}
+def stage_knowledge_input(
+    content: bytes, filename: str, context: dict[str, Any], *, suffixes: frozenset[str]
+) -> Path:
+    receipt = stage_capability_upload(
+        content, filename, context, namespace="knowledge", suffixes=suffixes
     )
+    return _capability_upload_directory(context, "knowledge") / receipt["saved_name"]
 
 
 class DocumentUpload:
-    """The Agent owns accepted inputs; every other path releases this upload."""
+    """Immutable inputs may be shared by retries; a failed attempt cannot delete them."""
 
     def __init__(
         self,
         *,
         dispatch: DatasetAction,
-        directory: Callable[[], str | Path],
         extensions: frozenset[str],
         max_bytes: int,
         logger: logging.Logger,
     ) -> None:
         self._dispatch = dispatch
-        self._directory = directory
         self._extensions = extensions
         self._max_bytes = max_bytes
         self._logger = logger
@@ -60,9 +54,6 @@ class DocumentUpload:
         version_label: str,
         chunk_strategy: str,
     ) -> JSONResponse:
-        saved_path: Path | None = None
-        created = False
-        retained = False
         input_closed = False
         try:
             raw_name = Path(str(file.filename or "document")).name
@@ -88,38 +79,29 @@ class DocumentUpload:
             ):
                 return JSONResponse({"success": False, "message": "上传参数过长"}, status_code=400)
 
-            base = (Path(self._directory()).resolve() / "knowledge").resolve()
-            segment = re.sub("[^A-Za-z0-9._-]+", "_", str(dataset_id or "default"))[:100]
-            if segment in {"", ".", ".."}:
-                segment = "default"
-            upload_dir = (base / segment).resolve()
-            if not upload_dir.is_relative_to(base):
-                return JSONResponse(
-                    {"success": False, "message": "资料上传目录无效"}, status_code=400
-                )
-            upload_dir.mkdir(parents=True, exist_ok=True)
-            saved_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
-            size = 0
+            context = request_runtime_context(request)
+            content = bytearray()
             try:
-                # Never overwrite or later delete a pre-existing file on collision.
-                with saved_path.open("xb") as target:
-                    created = True
-                    while chunk := await file.read(1024 * 1024):
-                        size += len(chunk)
-                        if size > self._max_bytes:
-                            raise ValueError("资料文件不能超过 25 MB")
-                        target.write(chunk)
-            except (OSError, ValueError) as exc:
-                self._logger.warning("knowledge upload staging failed: %s", exc)
-                message = (
-                    "资料文件不能超过 25 MB" if size > self._max_bytes else "资料文件暂时无法保存"
+                while chunk := await file.read(1024 * 1024):
+                    if len(content) + len(chunk) > self._max_bytes:
+                        return JSONResponse(
+                            {"success": False, "message": "资料文件不能超过 25 MB"},
+                            status_code=400,
+                        )
+                    content.extend(chunk)
+                saved_path = stage_knowledge_input(
+                    bytes(content), original_name, context, suffixes=self._extensions
                 )
-                return JSONResponse({"success": False, "message": message}, status_code=400)
+            except (OSError, ValueError):
+                self._logger.warning("Knowledge upload staging failed", exc_info=True)
+                return JSONResponse(
+                    {"success": False, "message": "资料文件暂存或校验失败"}, status_code=400
+                )
             try:
                 await file.close()
             finally:
                 input_closed = True
-            response = self._dispatch(
+            return self._dispatch(
                 request=request,
                 action="ingest_document",
                 route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/upload",
@@ -129,14 +111,14 @@ class DocumentUpload:
                     "file_path": str(saved_path),
                     "text": "",
                     "document_id": "",
-                    "chunk_strategy": chunk_strategy
-                    if chunk_strategy in {"semantic", "fixed"}
-                    else "semantic",
+                    "chunk_strategy": (
+                        chunk_strategy if chunk_strategy in {"semantic", "fixed"} else "semantic"
+                    ),
                     "chunk_size": 500,
                     "chunk_overlap": 50,
                     "metadata": {
                         "original_file_name": original_name,
-                        "upload_size_bytes": size,
+                        "upload_size_bytes": len(content),
                         "entrypoint": "persy_knowledge_upload",
                     },
                     "tenant_id": tenant_id,
@@ -144,17 +126,6 @@ class DocumentUpload:
                     "version_label": version_label,
                 },
             )
-            retained = _accepted_input(response)
-            return response
         finally:
-            try:
-                if not input_closed:
-                    await file.close()
-            finally:
-                if created and saved_path is not None and not retained:
-                    try:
-                        saved_path.unlink(missing_ok=True)
-                    except OSError:
-                        self._logger.warning(
-                            "Failed to clean rejected Persy upload: %s", saved_path
-                        )
+            if not input_closed:
+                await file.close()

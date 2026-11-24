@@ -1,8 +1,6 @@
 def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.business_api import router
 
     expected = dict(task.get("expected") or {})
@@ -31,14 +29,14 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
         body.setdefault("contact_person", "Lee")
         body.setdefault("contact_phone", "13800000000")
 
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     print_domain = Mock()
     print_domain.emit_job_submitted.return_value = bool(task.get("mock_publish_result", True))
     inventory_domain = Mock()
     inventory_domain.emit_stock_changed.return_value = bool(task.get("mock_publish_result", True))
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -48,6 +46,7 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -75,12 +74,19 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             response = client.post(
                 path,
                 json=body,
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
     payload, run, checks = _route_agent_checks(response, expected, repo, check_agent_status=False)
-    _check_equal(checks, "payload.event", payload.get("event"), expected.get("event"))
-    _check_equal(checks, "payload.published", payload.get("published"), expected.get("published"))
+    original_output = run.steps[0].output if run is not None and run.steps else {}
+    _check_equal(
+        checks, "original_receipt.event", original_output.get("event"), expected.get("event")
+    )
+    _check_equal(
+        checks,
+        "original_receipt.published",
+        original_output.get("published"),
+        expected.get("published"),
+    )
     for name, actual in (
         ("error_code", payload.get("error_code")),
         ("publish_call_count", publish.call_count),
@@ -96,14 +102,13 @@ def _run_business_event_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             "print_call_count": print_domain.emit_job_submitted.call_count,
             "inventory_call_count": inventory_domain.emit_stock_changed.call_count,
         },
+        route_contract=client,
     )
 
 
 def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
@@ -137,7 +142,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     elif action == "reinitialize_performance":
         path = "/api/performance/optimize/reinitialize"
 
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     system_service = Mock()
     system_service.set_default_printer.return_value = {"success": True, "message": "ok"}
     system_service.enable_startup.return_value = {"success": True, "message": "enabled"}
@@ -165,7 +170,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     optimizer.get_status.return_value = {"status": "ok"}
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -174,7 +179,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
+            stack.enter_context(_route_auth_fixture(client, repo, role_name="admin"))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -209,13 +214,11 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             if method == "DELETE":
                 response = client.delete(
                     path,
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
             else:
                 response = client.post(
                     path,
                     json=body,
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
@@ -234,14 +237,13 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.knowledge_v1 import router
 
     expected = dict(task.get("expected") or {})
@@ -279,7 +281,7 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         method = "DELETE"
         path = "/api/knowledge/v1/datasets/platform-docs/documents/doc_1"
 
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.answer.return_value = {
         "success": True,
@@ -329,7 +331,7 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     }
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -342,7 +344,7 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "X-Dataset-Permissions": "dataset.read,dataset.write",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
+            stack.enter_context(_route_auth_fixture(client, repo, role_name="admin"))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -369,14 +371,13 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.application.agent_task_context import scoped_personal_memory_id
     from app.fastapi_routes.domains.misc.misc_routes import router
     from app.services import user_memory_service as memory_mod
@@ -387,10 +388,10 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     method = "POST"
     path = "/memory/v2/candidates"
 
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -403,7 +404,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "XCAGI_USER_MEMORY_JSON_PATH": str(memory_dir / "memory_store.json"),
         }
         with ExitStack() as stack:
-            user_id = str(stack.enter_context(_authenticated_route_fixture(client)))
+            user_id = str(stack.enter_context(_route_auth_fixture(client, repo)))
             memory_owner = scoped_personal_memory_id({"actor_id": user_id, "tenant_id": "7"})
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(patch.object(memory_mod, "MEMORY_DIR", str(memory_dir)))
@@ -529,7 +530,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         if record.get("status") == "active" and record.get("memory_type") == "preference"
         else {},
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
@@ -546,21 +547,19 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import materials as materials_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-materials-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.create_material.return_value = {"success": True, "data": {"id": 1, "name": "树脂"}}
     service.update_material.return_value = {"success": True, "data": {"id": 1}}
@@ -569,7 +568,7 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(materials_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
     method = "POST"
     path = "/api/materials"
     if action == "create":
@@ -595,6 +594,7 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -609,7 +609,7 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     lambda: service,
                 )
             )
-            headers = {"X-User-Id": user_id}
+            headers = {}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
             elif method == "PUT":
@@ -638,21 +638,19 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "batch_delete": service.batch_delete_materials.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import inventory as inventory_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "stock_in").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-inventory-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.create_storage_location.return_value = {"success": True, "id": 11}
     service.update_storage_location.return_value = {"success": True, "data": {"id": 11}}
@@ -706,7 +704,7 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(inventory_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -716,8 +714,9 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         }
         with ExitStack() as stack:
             stack.enter_context(
-                _authenticated_route_fixture(
+                _route_auth_fixture(
                     client,
+                    repo,
                     permissions=[
                         f"tool.inventory.{action}",
                         "tool.inventory.query_transactions",
@@ -732,7 +731,13 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             stack.enter_context(patch.object(inventory_routes, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            stack.enter_context(
+                patch(
+                    "app.application.inventory_app_service.InventoryAppService",
+                    return_value=service,
+                )
+            )
+            headers = {}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
             elif method == "PUT":
@@ -758,6 +763,7 @@ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "inventory_transfer": service.inventory_transfer.call_count,
             },
         },
+        route_contract=client,
     )
 
 
@@ -765,10 +771,8 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from datetime import date
 
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     from app import db as host_db
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.db.models import Product, PurchaseOrder, PurchaseOrderItem, Supplier, Warehouse
     from app.domain.shared_services.purchase_service import PurchaseService
     from app.fastapi_routes import purchase as purchase_routes
@@ -777,8 +781,7 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create_order").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-purchase-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     verifies_sql = action in {
         "create_order",
         "update_order",
@@ -829,7 +832,7 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(purchase_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -841,8 +844,9 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
-                _authenticated_route_fixture(
+                _route_auth_fixture(
                     client,
+                    repo,
                     role_name="admin",
                     permissions=[
                         f"tool.purchase.{name}"
@@ -899,7 +903,12 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             stack.enter_context(patch.object(purchase_routes, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            stack.enter_context(
+                patch(
+                    "app.application.facades.inventory_facade.PurchaseService", return_value=service
+                )
+            )
+            headers = {}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
             elif method == "PUT":
@@ -929,21 +938,19 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "create_purchase_inbound": service.create_purchase_inbound.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import finance as finance_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create_transaction").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-finance-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.create_transaction.return_value = {
         "success": True,
@@ -970,7 +977,7 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(finance_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -979,6 +986,7 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -986,8 +994,10 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     return_value=repo,
                 )
             )
-            stack.enter_context(patch.object(finance_routes, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            stack.enter_context(
+                patch("app.application.finance_app_service.FinanceAppService", return_value=service)
+            )
+            headers = {}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
             elif method == "PUT":
@@ -996,33 +1006,38 @@ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 response = client.post(path, json=body, headers=headers)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    service_calls = {
+        "create_transaction": service.create_transaction.call_count,
+        "update_transaction": service.update_transaction.call_count,
+        "delete_transaction": service.delete_transaction.call_count,
+    }
+    _check_equal(
+        checks,
+        "canonical_finance_dispatch",
+        service_calls,
+        {name: int(name == action) for name in service_calls},
+    )
     return _result(
         task,
         checks,
         {
             "response": payload,
             "run": run.to_dict() if run is not None else None,
-            "service_calls": {
-                "create_transaction": service.create_transaction.call_count,
-                "update_transaction": service.update_transaction.call_count,
-                "delete_transaction": service.delete_transaction.call_count,
-            },
+            "service_calls": service_calls,
         },
+        route_contract=client,
     )
 
 
 def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.product import routes as product_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "batch_create").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-products-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.batch_add_products.return_value = {"success": True, "data": {"success_count": 1}}
     service.update_product.return_value = {"success": True, "data": {"id": 7}}
@@ -1045,7 +1060,7 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(product_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -1054,6 +1069,7 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1062,7 +1078,7 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             stack.enter_context(patch.object(product_routes, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            headers = {}
             if method == "DELETE":
                 response = client.delete(path, headers=headers)
             elif method == "PUT":
@@ -1083,22 +1099,19 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "delete_product": service.delete_product.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    import app.application.excel_imports as excel_imports
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.legacy.routes.product import compat_routes as product_compat_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-products-compat-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
 
     path = "/products/add"
     if action == "create":
@@ -1120,84 +1133,54 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
     app = FastAPI()
     app.include_router(product_compat_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
-        env_patch = {
-            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
-            "MODEL_USAGE_WALLET_BACKEND": "audit",
-            "MODEL_USAGE_WALLET_REQUIRED": "",
-        }
-        excel_imports.__dict__["_parse_price"] = lambda value: 0.0
-        try:
-            with ExitStack() as stack:
-                stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
-                stack.enter_context(
-                    patch(
-                        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-                        return_value=repo,
-                    )
-                )
-                stack.enter_context(
-                    patch(
-                        "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
-                        return_value=False,
-                    )
-                )
-                stack.enter_context(
-                    patch("app.legacy.routes.product.compat_routes._products_write_raise")
-                )
-                stack.enter_context(
-                    patch(
-                        "app.legacy.routes.product.compat_routes._business_mod_json_block",
-                        return_value=None,
-                    )
-                )
-                insert_row = stack.enter_context(
-                    patch(
-                        "app.legacy.routes.product.compat_routes.products_pg_insert_row",
-                        return_value=7,
-                    )
-                )
-                update_row = stack.enter_context(
-                    patch("app.legacy.routes.product.compat_routes.products_pg_update_row")
-                )
-                delete_row = stack.enter_context(
-                    patch("app.legacy.routes.product.compat_routes.products_pg_delete_row")
-                )
-                batch_delete_rows = stack.enter_context(
-                    patch(
-                        "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
-                        return_value=(2, []),
-                    )
-                )
-                response = client.post(path, json=body, headers={"X-User-Id": user_id})
-        finally:
-            excel_imports.__dict__.pop("_parse_price", None)
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir, ExitStack() as stack:
+        stack.enter_context(_route_auth_fixture(client, repo))
+        stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+                    "MODEL_USAGE_WALLET_BACKEND": "audit",
+                    "MODEL_USAGE_WALLET_REQUIRED": "",
+                },
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                return_value=repo,
+            )
+        )
+        # The retired direct SQL functions no longer exist. Retain all four
+        # original compatibility endpoints and observe canonical dispatch only.
+        execute = stack.enter_context(
+            patch(
+                "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                return_value={"success": True},
+            )
+        )
+        response = client.post(path, json=body)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
+    _check_equal(checks, "dispatch_count", execute.call_count, expected.get("dispatch_count", 0))
     return _result(
         task,
         checks,
         {
             "response": payload,
             "run": run.to_dict() if run is not None else None,
-            "service_calls": {
-                "insert_row": insert_row.call_count,
-                "update_row": update_row.call_count,
-                "delete_row": delete_row.call_count,
-                "batch_delete_rows": batch_delete_rows.call_count,
-            },
+            "dispatch_count": execute.call_count,
         },
+        route_contract=client,
     )
 
 
 def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     from app import db as host_db
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.application.customer_app_service import CustomerApplicationService
     from app.db.models.purchase_unit import PurchaseUnit
     from app.fastapi_routes.domains.customer import routes as customer_routes
@@ -1205,8 +1188,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-customers-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock(wraps=CustomerApplicationService())
     deleted_ids: list[int] = []
     method = "POST"
@@ -1230,7 +1212,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     app = FastAPI()
     app.include_router(customer_routes.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir, ExitStack() as stack:
         stack.enter_context(
             patch.dict(
@@ -1244,7 +1226,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 clear=False,
             )
         )
-        stack.enter_context(_authenticated_route_fixture(client, role_name="admin"))
+        stack.enter_context(_route_auth_fixture(client, repo, role_name="admin"))
         customer_sessions = host_db.SessionLocal
         engine = customer_sessions.kw["bind"]
         if action != "create":
@@ -1275,7 +1257,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 return_value=False,
             )
         )
-        headers = {"X-User-Id": user_id}
+        headers = {}
         if method == "DELETE":
             response = client.delete(path, headers=headers)
         elif method == "PUT":
@@ -1308,6 +1290,7 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "deleted_customer_rows": len(deleted_ids),
             },
         },
+        route_contract=client,
     )
 
 
@@ -1331,7 +1314,7 @@ def _route_agent_checks(response, expected, repo, *, check_agent_status=True, ch
         expected.get("run_id_present"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
@@ -1346,10 +1329,8 @@ def _route_agent_checks(response, expected, repo, *, check_agent_status=True, ch
 
 def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     from app import db as host_db
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.db.models.shipment import ShipmentRecord
     from app.fastapi_routes import shipment_orders
     from app.infrastructure.tenant_scope import tenant_scope
@@ -1357,8 +1338,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-shipment-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.create_shipment.return_value = {"success": True, "data": {"id": 7}}
     service.update_shipment_record.return_value = {"success": True, "data": {"id": 7}}
@@ -1380,7 +1360,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
 
     app = FastAPI()
     app.include_router(shipment_orders.router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -1389,7 +1369,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client))
+            stack.enter_context(_route_auth_fixture(client, repo))
             if action in {"update", "delete"}:
                 # Seed the real target so an inert mock cannot accidentally
                 # satisfy a delete postcondition merely because the DB is empty.
@@ -1414,13 +1394,19 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                     ]
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
+                patch("app.bootstrap.get_shipment_application_service_core", return_value=service)
+            )
+            stack.enter_context(
                 patch(
                     "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
                     return_value=repo,
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            stack.enter_context(
+                patch("app.bootstrap.get_shipment_application_service_core", return_value=service)
+            )
+            headers = {}
             if method == "DELETE":
                 response = client.request("DELETE", path, json=body, headers=headers)
             elif method == "PATCH":
@@ -1455,21 +1441,19 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                 "delete_shipment_record": service.delete_shipment_record.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import shipment_orders
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "generate").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-shipment-order-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
 
     method = "POST"
@@ -1528,7 +1512,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
         app = FastAPI()
         app.include_router(shipment_orders.router)
-        client = TestClient(app, raise_server_exceptions=False)
+        client = _route_contract_client(app, task, repo)
 
         env_patch = {
             "XCAGI_DATA_DIR": str(Path(tmp_dir)),
@@ -1537,9 +1521,8 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            # Preserve this legacy fixture's original tenantless local-account scope.
-            # Enterprise tenant requests are separately asserted to fail closed.
-            stack.enter_context(_authenticated_route_fixture(client, tenant_id=None))
+            # Exercise the current owned enterprise route with its real login scope.
+            stack.enter_context(_route_auth_fixture(client, repo, tenant_id=7))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1548,7 +1531,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
-            headers = {"X-User-Id": user_id}
+            headers = {}
             response = client.request(method, path, json=body, headers=headers)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
@@ -1568,21 +1551,19 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                 "delete_shipment": service.delete_shipment.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes import print_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "print_document").strip().lower()
     body = dict(task.get("body") or {})
-    user_id = str(task.get("user_id") or "eval-print-user")
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     method = "POST"
     path = "/api/print/document"
@@ -1648,7 +1629,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
         app = FastAPI()
         app.include_router(print_routes.router)
-        client = TestClient(app, raise_server_exceptions=False)
+        client = _route_contract_client(app, task, repo)
 
         env_patch = {
             "XCAGI_PRINT_ALLOWED_ROOTS": str(Path(tmp_dir)),
@@ -1657,6 +1638,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1665,6 +1647,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             stack.enter_context(patch.object(print_routes, "_svc", lambda: service))
+            stack.enter_context(patch("app.services.get_printer_service", return_value=service))
             stack.enter_context(
                 patch(
                     "app.application.print_app_service.get_print_application_service",
@@ -1674,7 +1657,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             stack.enter_context(
                 patch("app.application.get_product_app_service", return_value=product_service)
             )
-            headers = {"X-User-Id": user_id}
+            headers = {}
             response = client.request(method, path, json=body, headers=headers)
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
@@ -1694,26 +1677,25 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 "product_search": product_service.search_products.call_count,
             },
         },
+        route_contract=client,
     )
 
 
 def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.system.system_routes import router
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     expected = dict(task.get("expected") or {})
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     ocr_domain = Mock()
     ocr_domain.emit_ocr_requested.return_value = bool(task.get("mock_publish_result", True))
     app = FastAPI()
     app.include_router(router)
     # tools/execute 已从 system routes 拆出；eval 需单独挂载 always-on 路由。
     app.include_router(tools_execute_router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -1722,7 +1704,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client))
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1748,10 +1730,9 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                         },
                     }
                 ),
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
-    payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
+    payload, run, checks = _route_agent_checks(response, expected, repo)
     return _result(
         task,
         checks,
@@ -1760,21 +1741,20 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "run": run.to_dict() if run is not None else None,
             "publish_call_count": ocr_domain.emit_ocr_requested.call_count,
         },
+        route_contract=client,
     )
 
 
 def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
     filename = str(task.get("filename") or "shipment-template.xlsx")
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
@@ -1784,7 +1764,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
-            stack.enter_context(_authenticated_route_fixture(client))
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1842,7 +1822,6 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
                 data=dict(
                     task.get("form") or {"template_name": "发货模板", "template_scope": "shipment"}
                 ),
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
     payload, run, checks = _route_agent_checks(
@@ -1863,22 +1842,21 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
     from openpyxl import Workbook
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.excel.excel_routes import router
 
     expected = dict(task.get("expected") or {})
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
     route_path = str(task.get("path") or "/api/skills/analyze/excel")
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
@@ -1900,6 +1878,7 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with (
+            _route_auth_fixture(client, repo),
             patch.dict(os.environ, env_patch, clear=False),
             patch(
                 "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -1909,7 +1888,6 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             response = client.post(
                 route_path,
                 json=body,
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
     payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
@@ -1920,21 +1898,20 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.excel.excel_routes import router
 
     expected = dict(task.get("expected") or {})
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -1951,6 +1928,7 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             }
         )
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1987,7 +1965,6 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             response = client.post(
                 "/api/skills/generate-label-template",
                 json=body,
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
     payload, run, checks = _route_agent_checks(response, expected, repo, check_events=False)
@@ -1998,14 +1975,13 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
@@ -2016,10 +1992,10 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
         path = "/api/templates/delete"
     else:
         path = "/api/templates/create"
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -2065,7 +2041,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
             patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_create"
         mocked_status = int(task.get("mock_status_code") or 200)
         with (
-            _authenticated_route_fixture(client),
+            _route_auth_fixture(client, repo),
             patch.dict(os.environ, env_patch, clear=False),
             patch(
                 "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -2076,7 +2052,6 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
             response = client.post(
                 path,
                 json=body,
-                headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
             )
 
     payload, run, checks = _route_agent_checks(response, expected, repo)
@@ -2087,6 +2062,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
@@ -2126,7 +2102,7 @@ def _run_agent_run_memory_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
     run = repo.get(str(result.get("run_id") or ""))
     checks: list[dict[str, Any]] = []
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is None:
         return _result(task, checks, {"payload": result})
 

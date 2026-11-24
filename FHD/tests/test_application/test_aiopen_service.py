@@ -19,7 +19,6 @@ from app.application.aiopen.service import (
     MCP_SERVER_NAME,
     TOOL_DEFINITIONS,
     _env_api_key,
-    _tool_api_call,
     _tool_api_catalog,
     _tool_chat,
     aiopen_manifest,
@@ -33,10 +32,11 @@ from app.application.aiopen.service import (
     generate_api_key,
     invoke_tool,
     list_api_keys,
-    openclaw_chat_proxy,
     revoke_api_key,
     verify_api_key,
 )
+from app.infrastructure.aiopen.principal_context import execution_context_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ── API Key 鉴权 ──────────────────────────────────────────────
 
@@ -294,51 +294,40 @@ class TestBuildMcpInstallBundle:
 
 
 class TestFormatToolResultText:
+    @pytest.mark.parametrize(
+        ("receipt", "expected"),
+        [
+            ({"success": False, "execution_state": "queued"}, "排队中"),
+            ({"success": False, "pending_approval": True}, "等待审批"),
+            ({"success": True, "execution_state": "unknown"}, "待核对"),
+            ({"success": True, "reconciliation_required": True}, "待核对"),
+            ({"success": True, "execution_state": "completed"}, "已完成"),
+            ({"success": False, "execution_state": "failed"}, "未完成"),
+        ],
+    )
+    def test_operation_receipt_preserves_state_and_correlation(self, receipt, expected):
+        text = format_tool_result_text(
+            "operation_call",
+            {"operation_id": "capability.ocr.request", "run_id": "original-run", **receipt},
+        )
+        assert expected in text
+        assert "run_id: original-run" in text
+        assert "HTTP" not in text
+
     def test_api_catalog_success(self):
         result = {
             "success": True,
-            "routes": [
-                {"path": "/api/products", "enabled": True},
-                {"path": "/api/disabled", "enabled": False},
+            "capabilities": [
+                {"capability_id": "ocr.request", "description": "Request OCR"},
             ],
         }
         text = format_tool_result_text("api_catalog", result)
-        assert "1/2 已启用" in text
-        assert "✓ /api/products" in text
-        assert "· /api/disabled" in text
+        assert "1 项" in text
+        assert "ocr.request" in text
 
     def test_api_catalog_empty_routes(self):
-        text = format_tool_result_text("api_catalog", {"success": True, "routes": []})
-        assert "0/0 已启用" in text
-
-    def test_api_call_success(self):
-        result = {
-            "success": True,
-            "path": "/api/products",
-            "method": "GET",
-            "status_code": 200,
-            "data": {"items": []},
-        }
-        text = format_tool_result_text("api_call", result)
-        assert "API 调用成功" in text
-        assert "GET /api/products" in text
-        assert "HTTP 200" in text
-
-    def test_api_call_failure(self):
-        result = {"success": False, "path": "/api/x", "method": "POST", "message": "forbidden"}
-        text = format_tool_result_text("api_call", result)
-        assert "API 调用失败" in text
-
-    def test_api_call_large_data_truncated(self):
-        result = {
-            "success": True,
-            "path": "/api/big",
-            "method": "GET",
-            "status_code": 200,
-            "data": {"items": ["x" * 5000]},
-        }
-        text = format_tool_result_text("api_call", result)
-        assert "truncated" in text
+        text = format_tool_result_text("api_catalog", {"success": True, "capabilities": []})
+        assert "0 项" in text
 
     def test_chat_success(self):
         result = {"success": True, "data": {"reply": "你好世界"}}
@@ -521,121 +510,33 @@ class TestBuildAiopenGuide:
 
 
 class TestToolApiCatalog:
-    def test_returns_whitelist_routes(self):
+    def test_unbound_catalog_is_denied(self):
         result = _tool_api_catalog()
-        assert result["success"] is True
-        assert isinstance(result["routes"], list)
-        for r in result["routes"]:
-            assert "path" in r
-            assert "enabled" in r
-
-
-# ── _tool_api_call ────────────────────────────────────────────
-
-
-class TestToolApiCall:
-    def test_empty_path_returns_error(self):
-        result = _tool_api_call(MagicMock(), {"path": ""})
         assert result["success"] is False
-        assert "不能为空" in result["message"]
+        assert result["error_code"] == "capability_discovery_denied"
+        assert result["capabilities"] == []
 
-    def test_non_whitelisted_path_returns_error(self):
-        saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-        AIOPEN_STATE["whitelist"] = {"/api/products": True}
-        try:
-            result = _tool_api_call(MagicMock(), {"path": "/api/forbidden"})
-            assert result["success"] is False
-            assert "未在 AIOPEN 白名单启用" in result["message"]
-        finally:
-            AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_whitelisted_get_call(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"items": []}
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is True
-                assert result["status_code"] == 200
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_whitelisted_post_call(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 201
-        mock_resp.json.return_value = {"id": 1}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(
-                    MagicMock(), {"path": "/api/products", "method": "POST", "body": {"name": "x"}}
-                )
-                assert result["success"] is True
-                assert result["method"] == "POST"
-                mock_client.request.assert_called()
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_api_call_json_parse_failure(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.side_effect = ValueError("bad json")
-        mock_resp.text = "plain text response"
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["data"]["raw"] == "plain text response"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_api_call_recoverable_error(self):
-        with patch("starlette.testclient.TestClient", side_effect=ConnectionError("refused")):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is False
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
+    def test_catalog_uses_current_account_grants(self, trusted_actor):
+        actor = trusted_actor(permissions=["tool.ocr.request"])
+        with execution_context_scope(actor.context):
+            result = _tool_api_catalog()
+        assert result["success"] is True
+        visible = {item["capability_id"] for item in result["capabilities"]}
+        assert "ocr.request" in visible
+        assert "business_db.write" not in visible
+        assert "employee.execute" not in visible
+        assert result["authority"] == "ToolActionSpecV2"
 
 
 # ── _tool_chat ────────────────────────────────────────────────
 
 
 class TestToolChat:
-    def test_empty_message_returns_error(self):
-        result = _tool_chat(MagicMock(), {"message": ""})
+    def test_empty_message_returns_error(self, trusted_actor):
+        with execution_context_scope(trusted_actor().context):
+            result = _tool_chat(MagicMock(), {"message": "", "request_id": "empty-chat"})
         assert result["success"] is False
-        assert "不能为空" in result["message"]
-
-    def test_valid_message_calls_api(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"reply": "hello"}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
-            try:
-                result = _tool_chat(MagicMock(), {"message": "hi"})
-                assert result["success"] is True
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
+        assert result["code"] == "INVALID_ARGUMENT"
 
 
 # ── invoke_tool ───────────────────────────────────────────────
@@ -645,41 +546,16 @@ class TestInvokeTool:
     @pytest.mark.asyncio
     async def test_api_catalog(self):
         result = await invoke_tool("api_catalog", {}, MagicMock())
-        assert result["success"] is True
-        assert "routes" in result
+        assert result["success"] is False
+        assert result["error_code"] == "capability_discovery_denied"
 
     @pytest.mark.asyncio
-    async def test_api_call(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = await invoke_tool("api_call", {"path": "/api/products"}, MagicMock())
-                assert result["success"] is True
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    @pytest.mark.asyncio
-    async def test_chat(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"reply": "hi"}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
-            try:
-                result = await invoke_tool("chat", {"message": "hi"}, MagicMock())
-                assert result["success"] is True
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
+    async def test_removed_api_call_has_no_http_fallback(self):
+        with patch("starlette.testclient.TestClient") as factory:
+            result = await invoke_tool("api_call", {"path": "/api/products"}, MagicMock())
+        assert result["success"] is False
+        assert result["code"] == "UNKNOWN_TOOL"
+        factory.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ui_sessions(self):
@@ -722,65 +598,13 @@ class TestInvokeTool:
     @pytest.mark.asyncio
     async def test_none_args_treated_as_empty_dict(self):
         result = await invoke_tool("api_catalog", None, MagicMock())
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error_code"] == "capability_discovery_denied"
 
     @pytest.mark.asyncio
     async def test_empty_name(self):
         result = await invoke_tool("", {}, MagicMock())
         assert result["success"] is False
-
-
-# ── openclaw_chat_proxy ───────────────────────────────────────
-
-
-class TestOpenclawChatProxy:
-    def test_success(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"reply": "hello"}'
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is True
-            assert status == 200
-            assert payload["data"]["reply"] == "hello"
-
-    def test_http_error(self):
-        import urllib.error
-
-        err = urllib.error.HTTPError("http://x", 500, "Server Error", {}, None)
-        err.read = MagicMock(return_value=b"internal error")
-        with patch("app.application.aiopen.service.urllib.request.urlopen", side_effect=err):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is False
-            assert status == 502
-
-    def test_connection_error(self):
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen",
-            side_effect=ConnectionError("refused"),
-        ):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is False
-            assert status == 502
-
-    def test_uses_openclaw_base_from_state(self):
-        saved = AIOPEN_STATE.get("openclaw_base")
-        AIOPEN_STATE["openclaw_base"] = "http://custom:9999"
-        try:
-            mock_resp = MagicMock()
-            mock_resp.read.return_value = b"{}"
-            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-            mock_resp.__exit__ = MagicMock(return_value=False)
-            with patch(
-                "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-            ) as mock_urlopen:
-                openclaw_chat_proxy("hi")
-                call_args = mock_urlopen.call_args
-                req = call_args[0][0]
-                assert req.full_url == "http://custom:9999/api/chat"
-        finally:
-            AIOPEN_STATE["openclaw_base"] = saved
 
 
 # ── Constants ─────────────────────────────────────────────────
@@ -796,7 +620,6 @@ class TestConstants:
         assert len(names) == len(TOOL_DEFINITIONS)
         assert {
             "api_catalog",
-            "api_call",
             "knowledge_search",
             "operation_describe",
             "operation_call",

@@ -1,4 +1,4 @@
-"""里程碑 G+c：客户 CRUD 统一经 ``CustomerApplicationService``。"""
+"""Customer service reads and authenticated canonical capability mutations."""
 
 from __future__ import annotations
 
@@ -135,71 +135,44 @@ def customers_export(request: Request, keyword: str | None = None, template_id: 
     )
 
 
-def customers_create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
-    from app.neuro_bus.route_event_publisher import publish_simple_event
+def _run_customer_capability(request: Request, action: str, params: dict[str, Any]) -> JSONResponse:
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
+    if request is None:
+        raise HTTPException(status_code=401, detail="客户操作需要已绑定的登录会话")
     _write_gate(request)
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "customers", "action": action, "params": params},
+        route_path=str(request.url.path),
+    )
+    return JSONResponse(result, status_code=status)
+
+
+def customers_create(request: Request, body: dict[str, Any]) -> JSONResponse:
     mapped = _map_body(body)
     if not mapped.get("customer_name"):
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    result = _service().create(mapped)
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("message") or "创建失败")
-    data = result.get("data") or {}
-    publish_simple_event(
-        "customer.created",
-        {
-            "customer_id": data.get("id") if isinstance(data, dict) else None,
-            "customer_name": mapped.get("customer_name"),
-        },
-        domain="customers",
-    )
-    return _stamp({"success": True, "data": data})
+    mapped["unit_name"] = mapped["customer_name"]
+    return _run_customer_capability(request, "create", mapped)
 
 
-def customers_update(request: Request, customer_id: int, body: dict[str, Any]) -> dict[str, Any]:
-    _write_gate(request)
+def customers_update(request: Request, customer_id: int, body: dict[str, Any]) -> JSONResponse:
     mapped = _map_body(body)
     if not mapped.get("customer_name"):
         raise HTTPException(status_code=400, detail="客户名称不能为空")
     if "expected_version" in body:
         mapped["expected_version"] = body.get("expected_version")
-    result = _service().update(customer_id, mapped)
-    if not result.get("success"):
-        if result.get("error_code") == "version_conflict":
-            raise HTTPException(status_code=409, detail="version_conflict")
-        status = 404 if "不存在" in str(result.get("message") or "") else 400
-        raise HTTPException(status_code=status, detail=result.get("message") or "更新失败")
-    return _stamp({"success": True, "data": result.get("data")})
+    return _run_customer_capability(request, "update", {"id": customer_id, **mapped})
 
 
-def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> dict[str, Any]:
-    _write_gate(request)
+def customers_delete(request: Request, customer_id: int, cascade: bool = False) -> JSONResponse:
     if cascade:
         from app.infrastructure.auth.dependencies import require_permission
 
         require_permission("shipment.edit")(request)
         require_permission("product.edit")(request)
-    context = {}
-    if request is not None:
-        from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
-        from app.infrastructure.auth.agent_principal import require_agent_principal
-
-        context = authenticated_runtime_context(
-            {}, require_agent_principal(request, x_user_id=None)
-        )
-    result = _service().delete(
-        customer_id, force=cascade, **({"runtime_context": context} if context else {})
-    )
-    if not result.get("success"):
-        msg = str(result.get("message") or "删除失败")
-        status = (
-            403
-            if result.get("error_code") == "cascade_permission_denied"
-            else (404 if "不存在" in msg else 400)
-        )
-        raise HTTPException(status_code=status, detail=msg)
-    return _stamp({"success": True, "message": result.get("message") or "已删除"})
+    return _run_customer_capability(request, "delete", {"id": customer_id, "force": cascade})
 
 
 __all__ = [

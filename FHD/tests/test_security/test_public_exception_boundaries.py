@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from contextlib import nullcontext
@@ -13,6 +14,9 @@ import pytest
 from app.application.admin_control.protocols import ErrorPolicy
 from app.fastapi_routes.admin_control.profiles import UserProfiles
 from app.fastapi_routes.admin_control.synchronization import Synchronization
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_application.test_codex_tools import _invoke
+from tests.test_application.test_codex_tools import bridge_setup as bridge_setup
 
 PRIVATE = "Traceback /private/state.sqlite token=secret-boundary-test"
 ERRORS = ErrorPolicy(lambda: (OSError, ValueError, RuntimeError), logging.getLogger(__name__))
@@ -179,7 +183,8 @@ def test_shared_chat_boundary_keeps_successful_waiting_confirmation_reply():
 
 
 @pytest.mark.parametrize(
-    "outcome,committed", [("partial", True), ("unknown", False), ("not_executed", False)]
+    "outcome,committed",
+    [("partial", True), ("unknown", False), ("not_executed", False)],
 )
 def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome, committed):
     from app.fastapi_routes.ai_intent import _public_unified_chat_payload
@@ -214,3 +219,363 @@ def test_shared_chat_failure_boundary_preserves_nested_execution_receipt(outcome
     else:
         assert result["_http_status"] == 409
         assert result["requires_reconciliation"] and result["retryable"] is False
+
+
+@pytest.mark.parametrize(
+    "outcome,committed",
+    [("partial", True), ("unknown", False), ("not_executed", False)],
+)
+def test_shared_chat_failure_boundary_preserves_top_level_execution_receipt(outcome, committed):
+    """Actual workflow response builder emits a root execution receipt on failure."""
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
+
+    execution = {
+        "committed": committed,
+        "effect": "none" if outcome == "not_executed" else outcome,
+        "outcome": outcome,
+    }
+    result = _public_unified_chat_payload(
+        {
+            "success": False,
+            "response": PRIVATE,
+            "run_id": "existing-run",
+            "execution": {**execution, "internal_diagnostic": PRIVATE},
+            "data": {
+                "data": {
+                    "plan_id": "existing-plan",
+                    "approval_request_id": "existing-approval",
+                }
+            },
+        }
+    )
+    assert result["execution"] == execution
+    assert result["data"]["data"]["execution"] == execution
+    assert result["run_id"] == "existing-run"
+    assert result["plan_id"] == "existing-plan"
+    assert result["approval_request_id"] == "existing-approval"
+    assert PRIVATE not in json.dumps(result)
+    if outcome == "not_executed":
+        assert result["execution_state"] == "not_executed"
+        assert result.get("requires_reconciliation") is not True
+    else:
+        assert result["_http_status"] == 409
+        assert result["requires_reconciliation"] is True
+        assert result["retryable"] is False
+
+
+@pytest.mark.parametrize("next_state", ["unknown", "failed", "cancelled"])
+def test_shared_chat_current_runtime_partial_write_requires_reconciliation(next_state):
+    """The current Codex runtime retains confirmed writes after later failures."""
+    from app.application.agent_runtime.chat import runtime_chat_payload
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
+    from app.fastapi_routes.ai_intent import _public_unified_chat_payload
+
+    rows = [
+        {
+            "state": "completed",
+            "read_only": False,
+            "tool_id": "materials",
+            "action": "create",
+            "call_id": "original-material-write",
+            "receipt": {"status": "completed", "success": True, "verified": True},
+        },
+        {
+            "state": next_state,
+            "read_only": False,
+            "tool_id": "shipment_records",
+            "action": "create",
+            "call_id": "original-shipment-write",
+            "receipt": {"status": next_state, "success": False, "error": PRIVATE},
+        },
+    ]
+    runtime = {"run_id": "original-run", "output": PRIVATE}
+    assert classify_runtime_result(runtime, rows, {}, "business", "failed") == "blocked"
+    assert runtime["business_receipts"][0]["receipt"]["verified"] is True
+    assert runtime["execution_state"] == ("unknown" if next_state == "unknown" else "partial")
+
+    transport = runtime_chat_payload(runtime, conversation_id="original-session")
+    assert transport["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
+    assert transport["requires_reconciliation"] is True
+    public = _public_unified_chat_payload(transport)
+    assert public["success"] is False
+    assert public["run_id"] == "original-run"
+    assert public["requires_reconciliation"] is True
+    assert public["retryable"] is False
+    assert public["_http_status"] == 409
+    assert "勿重复提交" in public["message"]
+    assert PRIVATE not in json.dumps(public, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("read_only", [True, None])
+def test_failed_step_only_discards_prior_effect_when_proven_read_only(read_only):
+    """Unknown effect kind is not an authorization to restart completed work."""
+    from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result
+
+    prior = {
+        "state": "completed",
+        "receipt": {"status": "completed", "success": True, "verified": True},
+    }
+    if read_only is not None:
+        prior["read_only"] = read_only
+    rows = [
+        prior,
+        {"state": "failed", "receipt": {"status": "failed", "success": False}},
+    ]
+    result = {"run_id": "original-run"}
+    classified = classify_runtime_result(result, rows, {}, "business", "failed")
+    if read_only is True:
+        assert classified == "failed"
+        assert result.get("reconciliation_required") is not True
+    else:
+        assert classified == "blocked"
+        assert result["execution_state"] == "partial"
+        assert result["reconciliation_required"] is True
+        assert result["retryable"] is False
+
+
+@pytest.fixture
+def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
+    """Original host rejection and independently read-back write, both actually approved."""
+    from app.application.agent_orchestrator.approval_consumption_repository import (
+        SQLAlchemyApprovalConsumptionRepository,
+    )
+    from app.utils.resilience import rate_limiter
+    from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
+
+    setup = bridge_setup
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "original-claims.sqlite"))
+    monkeypatch.setattr(
+        "app.application.customer_app_service.get_customers_session", setup.actor.factory
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.approval_grant._consumption_repository",
+        lambda: SQLAlchemyApprovalConsumptionRepository(setup.actor.factory),
+    )
+    endpoint = "agent-tool:customers.create"
+    monkeypatch.setitem(
+        rate_limiter._rate_limiters, endpoint, rate_limiter._InMemoryRateLimiter(120)
+    )
+    for _ in range(120):
+        assert rate_limiter.check_rate_limit(str(setup.actor.tenant_id), endpoint)["allowed"]
+
+    for call_id in ("original-rejection", "verified-write"):
+        pending = _invoke(
+            setup.bridge,
+            setup.grant.mcp_token,
+            "execute_action",
+            {
+                "call_id": call_id,
+                "tool_id": "customers",
+                "action": "create",
+                "params": {"unit_name": call_id},
+            },
+        )
+        assert pending["pending_approval"] is True
+        _approve_and_execute(
+            setup.bridge.orchestrator,
+            setup.store.repository.get(pending["run_id"]),
+            setup.actor,
+        )
+        receipt = _invoke(
+            setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": call_id}
+        )
+        if call_id == "original-rejection":
+            assert receipt["status"] == "failed" and receipt["success"] is False
+            assert receipt["execution"] == {"outcome": "not_executed", "committed": False}
+            monkeypatch.setitem(
+                rate_limiter._rate_limiters, endpoint, rate_limiter._InMemoryRateLimiter(120)
+            )
+        else:
+            assert receipt["success"] is True and receipt["verified"] is True, receipt
+    return setup
+
+
+@pytest.mark.parametrize(
+    "case,completed",
+    [
+        ("proven", True),
+        # An added history row does not establish a second authorized invocation
+        # of this bridge's single frozen action, even if both outputs assert no effect.
+        ("history_proven", False),
+        ("missing_proof", False),
+        ("committed", False),
+        ("unknown", False),
+        ("effect", False),
+        ("nested_committed", False),
+        ("nested_missing_proof", False),
+        ("nested_invalid_proof", False),
+        ("success", False),
+        ("nested_success", False),
+        ("record_mismatch", False),
+        ("output_mismatch", False),
+        ("missing_record", False),
+        ("history_unknown", False),
+        ("history_success", False),
+        ("history_mismatch", False),
+        ("cancelled", False),
+        ("rejected", False),
+        ("stale_goal", False),
+        ("missing_goal", False),
+    ],
+)
+def test_recovered_write_no_effect_receipt_requires_verified_goal(
+    recovered_bound_receipts, case, completed
+):
+    """Reopen real frozen receipts; corrupt storage must never manufacture recovery proof."""
+    from app.application.agent_orchestrator.result_verification import (
+        _binding_valid,
+        bind_execution_receipt,
+        freeze_verification_contract,
+    )
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.db.models.agent import AgentRunRecord
+    from app.domain.task_lifecycle.agent_runtime_contract import (
+        GOAL_PROTOCOL,
+        canonical_digest,
+        goal_evidence_snapshot,
+        goal_report_coverage,
+    )
+    from app.domain.task_lifecycle.agent_runtime_results import (
+        base_runtime_result,
+        classify_runtime_result,
+    )
+    from app.infrastructure.codex.binding import CodexBindingStore
+
+    setup = recovered_bound_receipts
+    repository = setup.store.repository
+    original = repository.get(setup.run.run_id)
+    calls = setup.store.get(original.run_id).metadata["calls"]
+    child = repository.get(calls["original-rejection"]["child_run_id"])
+    step, record = child.steps[0], child.tool_calls[0]
+    output = copy.deepcopy(step.output)
+    if case == "missing_proof":
+        output.pop("execution")
+    elif case == "committed":
+        output["execution"]["committed"] = True
+    elif case == "unknown":
+        output["execution"]["outcome"] = "unknown"
+    elif case == "effect":
+        output["execution"]["effect"] = "changed"
+    elif case == "success":
+        output["success"] = True
+    elif case == "nested_success":
+        output["data"] = {"success": True}
+    elif case == "nested_committed":
+        output["result"] = {"execution": {"outcome": "partial", "committed": True}}
+    elif case == "nested_missing_proof":
+        output["result"] = {"execution": {}}
+    elif case == "nested_invalid_proof":
+        output["result"] = {"execution": "unbound model assertion"}
+    step.output, record.output = copy.deepcopy(output), copy.deepcopy(output)
+    if output != repository.get(child.run_id).steps[0].output:
+        # Keep these contradictory envelopes internally bound so rejection must
+        # come from their semantics, not merely from a stale output digest.
+        bind_execution_receipt(record)
+        assert _binding_valid(
+            child,
+            step,
+            record,
+            child.metadata["runtime_context"],
+            record.metadata["verification_contract"],
+        )
+    records = [record]
+    if case == "record_mismatch":
+        record.params = {"name": "other-operation"}
+    elif case == "output_mismatch":
+        record.output["error"] = "different_execution"
+    elif case == "missing_record":
+        records = []
+    elif case.startswith("history_"):
+        historical = copy.deepcopy(record)
+        historical.call_id += "-previous"
+        historical.output["error"] = "earlier_attempt"
+        if case == "history_unknown":
+            historical.output.update(status="unknown")
+        elif case == "history_success":
+            historical.output.update(success=True)
+        elif case == "history_mismatch":
+            historical.params = {"name": "other-operation"}
+        freeze_verification_contract(
+            child,
+            step,
+            historical,
+            get_tool_action_spec(step.tool_id, step.action),
+            child.metadata["runtime_context"],
+        )
+        bind_execution_receipt(historical)
+        records.insert(0, historical)
+    child.tool_calls = records
+    if case in {"cancelled", "rejected"}:
+        child.status = case
+    # Only fault injection bypasses normal frozen-record persistence. No test
+    # fabricates a successful business receipt or a production approval grant.
+    with setup.actor.factory.begin() as db:
+        stored = db.get(AgentRunRecord, child.run_id)
+        stored.payload_json = json.dumps(child.to_dict(), ensure_ascii=False, default=str)
+        stored.status = child.status
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    rows = reopened.receipt_snapshot(original.run_id)
+    failed = next(row for row in rows if row["call_id"] == "original-rejection")
+    verified = next(row for row in rows if row["call_id"] == "verified-write")
+    assert verified["receipt"]["success"] is True and verified["receipt"]["verified"] is True
+    produced = failed["receipt"]
+    assert produced["success"] is False and produced["verified"] is False
+    if case in {"proven", "stale_goal", "missing_goal"}:
+        assert produced.get("execution") == {
+            "outcome": "not_executed",
+            "committed": False,
+        }
+    else:
+        assert "execution" not in produced
+    contract = original.metadata["runtime_goal_contract"]
+    output = "已完成原客户记录并核验"
+    snapshot = goal_evidence_snapshot(contract, rows, output)
+    report = {
+        "protocol": GOAL_PROTOCOL,
+        "goal_digest": contract["digest"],
+        "evidence_digest": snapshot["digest"],
+        "response_digest": canonical_digest(output),
+        "status": "verified",
+        "accepted": True,
+        "review": {
+            "goals": [
+                {
+                    "goal_id": "customer-goal",
+                    "source_id": "request",
+                    "source": original.message,
+                    "kind": "write",
+                    "status": "satisfied",
+                    "evidence_ids": [verified["child_run_id"]],
+                    "reason": "独立核验最终写入",
+                }
+            ],
+            "violations": [],
+            "uncovered_sources": [],
+            "feedback": "",
+        },
+    }
+    report["report_digest"] = canonical_digest(report)
+    assert goal_report_coverage(contract, rows, output, None, report)["completed"] is True
+    if case == "stale_goal":
+        report["evidence_digest"] = "stale-evidence"
+    elif case == "missing_goal":
+        report = {}
+
+    result = {**base_runtime_result(original.run_id), "output": output}
+    state = classify_runtime_result(
+        result,
+        rows,
+        {"goal_contract": contract, "goal_verification": report},
+        "business",
+        "completed",
+    )
+    if completed:
+        assert state == "completed"
+        assert result["ok"] is True and result["business_completed"] is True
+        assert result.get("reconciliation_required") is not True
+    else:
+        assert state == "blocked"
+        assert result["execution_state"] in {"partial", "unknown"}
+        assert result["reconciliation_required"] is True
+        assert result["retryable"] is False

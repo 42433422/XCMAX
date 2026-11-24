@@ -68,7 +68,6 @@ def clear_document_templates(runtime_context: dict) -> tuple[dict, int]:
         return denied, 403
     service = get_template_app_service()
     deleted = skipped = 0
-    base_dir = str(runtime_context.get("template_base_dir") or "") or None
     starter_ids: list[str] = []
     builtin_paths: list[str] = []
     with owned_tenant_scope(tenant_id):
@@ -90,9 +89,7 @@ def clear_document_templates(runtime_context: dict) -> tuple[dict, int]:
             ):
                 skipped += 1
                 continue
-            item_data, item_status = run_archive_template_delete(
-                {"id": template_id}, base_dir=base_dir
-            )
+            item_data, item_status = run_archive_template_delete({"id": template_id})
             if item_status == 200 and item_data.get("success"):
                 deleted += 1
                 continue

@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -118,7 +119,7 @@ def test_charts_all_success(client: TestClient, monkeypatch: pytest.MonkeyPatch)
 
 def test_charts_all_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_chart_svc = MagicMock()
-    fake_chart_svc.get_all_charts_data.side_effect = RuntimeError("服务异常")
+    fake_chart_svc.get_all_charts_data.side_effect = sqlite3.OperationalError("服务异常")
     monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
     r = client.get("/api/ai/kitten/charts/all")
     assert r.status_code == 500
@@ -162,7 +163,7 @@ def test_financial_dashboard_recoverable_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_chart_svc = MagicMock()
-    fake_chart_svc.get_financial_dashboard.side_effect = RuntimeError("DB 不可用")
+    fake_chart_svc.get_financial_dashboard.side_effect = sqlite3.OperationalError("DB 不可用")
     monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
     r = client.get("/api/ai/kitten/financial/dashboard")
     assert r.status_code == 500
@@ -303,7 +304,7 @@ def test_charts_inventory_success(client: TestClient, monkeypatch: pytest.Monkey
 
 def test_charts_inventory_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_chart_svc = MagicMock()
-    fake_chart_svc.get_inventory_chart_data.side_effect = RuntimeError("运行时错误")
+    fake_chart_svc.get_inventory_chart_data.side_effect = sqlite3.OperationalError("运行时错误")
     monkeypatch.setattr(f"{_FACADE}.chart_service", fake_chart_svc)
     r = client.get("/api/ai/kitten/charts/inventory")
     body = r.json()
@@ -464,7 +465,7 @@ def test_saved_export_recoverable_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_save_svc = MagicMock()
-    fake_save_svc.export_analysis_to_xlsx.side_effect = RuntimeError("服务错误")
+    fake_save_svc.export_analysis_to_xlsx.side_effect = OSError("服务错误")
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
     r = client.get("/api/ai/kitten/saved/abc/export")
     assert r.status_code == 500
@@ -667,7 +668,7 @@ def test_report_export_recoverable_error(
 ) -> None:
     fake_svc_cls = MagicMock()
     fake_instance = fake_svc_cls.return_value
-    fake_instance.build_report.side_effect = RuntimeError("构建失败")
+    fake_instance.build_report.side_effect = OSError("构建失败")
     monkeypatch.setattr(f"{_FACADE}.KittenReportExportService", fake_svc_cls)
 
     r = client.post("/api/ai/kitten/report/export", json={})

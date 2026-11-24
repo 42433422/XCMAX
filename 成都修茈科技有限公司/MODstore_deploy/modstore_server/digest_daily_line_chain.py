@@ -118,6 +118,16 @@ def _build_chain_context(record_id: int, release_train: str, release_kind: str) 
     except RECOVERABLE_ERRORS:
         root = ""
     ctx = _load_digest_execute_context(int(record_id)) or {}
+    # Keep the originally observed source across a paused/resumed daily graph.
+    recorded = _read_execute_meta(int(record_id)).get("phase_c_pipeline", {})
+    source_sha = recorded.get("source_sha")
+    if not source_sha:
+        from modstore_server.production_line_sources import checkout_source_sha
+
+        try:
+            source_sha = checkout_source_sha()
+        except RECOVERABLE_ERRORS:
+            source_sha = ""
     return {
         "digest_record_id": int(record_id),
         "release_train": release_train,
@@ -125,6 +135,7 @@ def _build_chain_context(record_id: int, release_train: str, release_kind: str) 
         "project_root": root,
         "digest_subject": ctx.get("subject") or "",
         "base_version": ctx.get("base_version") or "",
+        "source_sha": source_sha,
     }
 
 
@@ -373,6 +384,7 @@ def execute_production_pipeline_chain(
         "release_train": release_train,
         "release_kind": kind,
         "step_ids": list(step_ids),
+        "source_sha": context.get("source_sha"),
         "ci_job": ci_job,
         "started_at": started_at,
         "completed_at": datetime.now(UTC).isoformat(),
@@ -425,13 +437,29 @@ async def _run_pipeline_with_optional_auto_approve(
             out["executed_steps"] = executed
             return out
         paused = str(out.get("paused_at_step") or "")
-        if not auto or not paused:
+        from modstore_server.production_line_orchestrator import ApprovalGate, StepStatus
+
+        current = orch._step_results.get(paused)
+        step = orch.get_step(paused)
+        if (
+            not auto
+            or not paused
+            or current is None
+            or current.status != StepStatus.AWAITING_APPROVAL
+            or step is None
+            or step.approval_gate != ApprovalGate.CI_PASS
+        ):
             out["executed_steps"] = executed
             return out
-        appr = await approve_production_line_step(paused, admin_user_id=0)
+        previous_subset = getattr(orch, "_release_train_subset", False)
+        orch._release_train_subset = True
+        try:
+            appr = await approve_production_line_step(paused, admin_user_id=0)
+        finally:
+            orch._release_train_subset = previous_subset
         from modstore_server.production_line_orchestrator import StepStatus
 
-        if appr.status == StepStatus.FAILED:
+        if appr.status != StepStatus.COMPLETED:
             cur = orch._step_results.get(paused) or None
             if cur and cur.status == StepStatus.COMPLETED:
                 pass

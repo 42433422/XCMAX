@@ -14,11 +14,18 @@ from tests.test_services.test_etl_source_slices_migration import _FIELDS, _legac
 # 历史交付合并修订 2026_11_15_delivery_slices_merge 保持不变；
 # upgrade("head") 的现行戳是更晚的单头。
 _PRIORS = ["2026_11_15_stock_posting_key", "2026_11_15_etl_source_slices"]
+# Both published parents remain in the DAG; downgrade preflight must reject
+# before the merged head can split or either parent can move its stamp.
+_MERGE_PARENTS = {"2026_11_24_account_license", "2026_11_24_code_edit_proposals"}
 
 
 def _current_head(config) -> str:
-    heads = ScriptDirectory.from_config(config).get_heads()
+    scripts = ScriptDirectory.from_config(config)
+    heads = scripts.get_heads()
     assert heads == [heads[0]]
+    assert (
+        set(scripts.get_revision("2026_11_24_merge_account_edit").down_revision) == _MERGE_PARENTS
+    )
     return heads[0]
 
 
@@ -37,6 +44,7 @@ def _from_history(url, prior):
     config = _alembic_config()
     command.upgrade(config, prior)
     command.upgrade(config, "head")
+    _assert_revision_heads(engine, {_current_head(config)})
     return engine, config, original
 
 
@@ -48,11 +56,34 @@ def _rows(engine):
         ).all()
 
 
-def _assert_current_head(engine, config):
+def _assert_revision_heads(engine, expected):
     with engine.connect() as connection:
-        assert connection.exec_driver_sql(
-            "SELECT version_num FROM alembic_version"
-        ).scalar_one() == _current_head(config)
+        assert (
+            set(
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version")
+                .scalars()
+                .all()
+            )
+            == expected
+        )
+
+
+@pytest.mark.parametrize("target", ["base", "2026_11_15_stock_posting_key"])
+def test_metadata_stamp_does_not_run_schema_downgrade(_db_url, target):
+    engine, config, _original = _from_history(_db_url, _PRIORS[0])
+    try:
+        before = _rows(engine)
+        command.stamp(config, target)
+        with engine.connect() as connection:
+            revisions = (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version")
+                .scalars()
+                .all()
+            )
+        assert revisions == ([] if target == "base" else [target])
+        assert _rows(engine) == before
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize("prior", _PRIORS)
@@ -76,7 +107,7 @@ def test_combined_downgrade_guards_legal_splits_before_either_branch(_db_url, pr
         with pytest.raises(RuntimeError, match="without losing ELT slice provenance"):
             command.downgrade(config, target)
         assert _rows(engine) == before
-        _assert_current_head(engine, config)
+        _assert_revision_heads(engine, {_current_head(config)})
     finally:
         engine.dispose()
 
@@ -88,7 +119,7 @@ def test_zero_slice_roundtrip_preserves_history_from_both_parents(_db_url, prior
         command.downgrade(config, "2026_11_11_agent_permissions")
         command.upgrade(config, "head")
         assert _rows(engine) == [tuple(row) + (0,) for row in original]
-        _assert_current_head(engine, config)
+        _assert_revision_heads(engine, {_current_head(config)})
         table = _run_rows_table(engine)
         assert table == "elt_run_rows"
         # 测试夹具中的 canary 列不是生产列；改名收回旧表后应仍保留。
@@ -114,6 +145,6 @@ def test_zero_slice_partial_parent_downgrade_cannot_leave_a_false_schema_stamp(
         ):
             command.downgrade(config, target)
         assert _rows(engine) == before
-        _assert_current_head(engine, config)
+        _assert_revision_heads(engine, {_current_head(config)})
     finally:
         engine.dispose()

@@ -54,7 +54,10 @@ class CodexBindingError(ValueError):
 
 def _identity(run: AgentRun) -> str:
     context = run.metadata.get("runtime_context") or {}
-    return canonical_digest({"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}})
+    identity = {"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}}
+    if "_credential_authorization" in context:
+        identity["_credential_authorization"] = context["_credential_authorization"]
+    return canonical_digest(identity)
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,34 @@ class CodexBindingStore:
     def _validate_goal(run: AgentRun, metadata: dict[str, Any]) -> str:
         from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
+        legacy_unstarted = (
+            "version" not in metadata
+            and type(metadata.get("generation")) is int
+            and metadata["generation"] == 0
+            and metadata.get("runtime_status") == "not_started"
+            and metadata.get("coordinator_active") is False
+            and metadata.get("revoked") is True
+            and not any(
+                metadata.get(key)
+                for key in (
+                    "calls",
+                    "token_hashes",
+                    "thread_id",
+                    "model_requests",
+                    "active_started_at",
+                    "active_seconds",
+                    "model_reconciliation_required",
+                )
+            )
+        )
+        if (
+            metadata
+            and not legacy_unstarted
+            and (type(metadata.get("version")) is not int or metadata["version"] != 1)
+        ):
+            raise CodexBindingError(
+                "runtime_contract_unsupported", "原运行绑定版本不受支持，请保留原件并核对兼容性"
+            )
         if not run.metadata.get("runtime_goal_contract"):
             if metadata.get("calls") or run.metadata.get("runtime_goal_digest"):
                 raise CodexBindingError("goal_changed", "原任务目标合同已丢失")
@@ -154,6 +185,15 @@ class CodexBindingStore:
             metadata.get("identity_digest") and metadata["identity_digest"] != _identity(run)
         ):
             raise CodexBindingError("owner_changed", "运行绑定的账号、租户或能力范围已变化")
+        if "_credential_authorization" in context:
+            from app.application.aiopen.service import api_key_execution_context_current
+
+            try:
+                credential_current = api_key_execution_context_current(context)
+            except OSError as exc:
+                raise CodexBindingError("owner_changed", "原调用凭据无法核验") from exc
+            if not credential_current:
+                raise CodexBindingError("owner_changed", "原调用凭据已撤销、过期或授权范围已变化")
         if context.get("session_id") or context.get("conversation_id"):
             if type(context.get("_conversation_revision")) is not int:
                 raise CodexBindingError("conversation_changed", "会话运行缺少可信历史版本")
@@ -388,6 +428,19 @@ class CodexBindingStore:
             if prior is not None:
                 calls[call_id] = copy.deepcopy(prior)
                 return
+            # Existing calls above only read their durable receipt. New work must
+            # wait until the model that proposed it has a settled usage receipt.
+            model_calls = (metadata.get("model_requests") or {}).values()
+            if metadata.get("model_reconciliation_required") or any(
+                item.get("state") == "unknown" for item in model_calls
+            ):
+                raise CodexBindingError(
+                    "reconciliation_required", "原模型计量结果尚待核对，未创建业务任务"
+                )
+            if any(item.get("state") == "reserved" for item in model_calls):
+                raise CodexBindingError(
+                    "call_in_progress", "原模型请求尚未结束，请先等待其计量回执"
+                )
             if any((c.get("receipt") or {}).get("pending_approval") for c in calls.values()):
                 raise CodexBindingError("waiting_user", "请先处理原业务任务的审批")
             if any(
@@ -443,12 +496,23 @@ class CodexBindingStore:
         receipt: dict[str, Any] | None = None,
     ) -> CodexBinding:
         def record(run: AgentRun, metadata: dict[str, Any]) -> None:
+            self._validate_goal(run, metadata)
             call = metadata.get("calls", {}).get(call_id)
             if call is None:
                 raise CodexBindingError("call_missing", "调用未持久登记")
+            original_run_id = call["child_run_id"] or child_run_id
+            if receipt is not None and (
+                receipt.get("task_id") != call["child_task_id"]
+                or receipt.get("run_id") != original_run_id
+                or (not original_run_id and receipt.get("status") not in {"claimed", "unknown"})
+            ):
+                raise CodexBindingError("evidence_mismatch", "业务回执与原任务或执行标识不一致")
             previous_receipt = call.get("receipt") or {}
-            if receipt is not None and (previous_receipt.get("child_updated_at") or "") > (
-                receipt.get("child_updated_at") or ""
+            if (
+                receipt is not None
+                and receipt.get("status") != "unknown"
+                and (previous_receipt.get("child_updated_at") or "")
+                > (receipt.get("child_updated_at") or "")
             ):
                 return
             if child_run_id:

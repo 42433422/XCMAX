@@ -8,10 +8,14 @@ Tests: ``set_service_registry(CustomServiceContainer(...))`` or ``reset_service_
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.run_repository import AgentRunRepository
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.customer_app_service import CustomerApplicationService
     from app.application.facades.shipment_event_primary import (
@@ -21,6 +25,8 @@ if TYPE_CHECKING:
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
+    from app.application.workflow.ports import WorkflowRuntime
+    from app.application.workflow.workflow_types import PlanGraph
     from app.domain.shared_services.auth_service import AuthService
     from app.domain.shared_services.extract_log_service import ExtractLogService
     from app.domain.shared_services.materials_service import MaterialsService
@@ -29,6 +35,7 @@ if TYPE_CHECKING:
     from app.domain.shared_services.session_service import SessionService
     from app.domain.shared_services.user_preference_service import UserPreferenceService
     from app.domain.shared_services.user_service import UserService
+    from app.infrastructure.session.session_manager import SessionManager
 
 _lock = threading.RLock()
 _registry: Optional[ServiceContainer] = None
@@ -84,6 +91,12 @@ class ServiceContainer:
         return getattr(self, attr)
 
     # --- core HTTP / session services ---
+
+    @property
+    def session_manager(self) -> SessionManager:
+        from app.infrastructure.session.session_manager import get_session_manager
+
+        return get_session_manager()
 
     @property
     def session_service(self) -> SessionService:
@@ -267,6 +280,37 @@ class ServiceContainer:
         """Clear shipment singletons (tests / hot-reload hooks)."""
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
+
+    @contextmanager
+    def workflow_runtime(
+        self,
+        *,
+        repository: AgentRunRepository,
+        run: AgentRun,
+        plan: PlanGraph,
+        parallel: bool,
+        dispatch: Callable[..., dict[str, Any]],
+    ) -> Iterator[tuple[WorkflowRuntime, str]]:
+        """Bind the existing graph to its original repository and checkpoint lifetime."""
+        from app.infrastructure.workflow.checkpoint_bridge import (
+            open_run_checkpointer,
+            run_checkpoint_thread,
+        )
+        from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
+
+        with open_run_checkpointer(repository) as saver:
+            thread_id = run_checkpoint_thread(run, plan, parallel=parallel) if saver else ""
+            yield (
+                XCAGILangGraphRuntime(
+                    tool_dispatcher=dispatch, native_checkpointer=saver, thread_id=thread_id
+                ),
+                thread_id,
+            )
+
+    def summary_runtime(self) -> Any:
+        from app.infrastructure.workflow.langgraph_runtime import summary_runtime
+
+        return summary_runtime()
 
 
 def get_service_registry() -> ServiceContainer:

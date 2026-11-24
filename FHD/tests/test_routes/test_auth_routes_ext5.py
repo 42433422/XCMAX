@@ -404,8 +404,7 @@ class TestJitCreateLocalUserForEnterprise:
             _jit_create_local_user_for_enterprise,
         )
 
-        # Make get_db context manager raise a RuntimeError (which is in INFRA_TRANSIENT)
-        mock_get_db.side_effect = RuntimeError("db connection failed")
+        mock_get_db.side_effect = ConnectionError("db connection failed")
 
         result = _jit_create_local_user_for_enterprise("user", "pass123")
         assert result is False
@@ -934,7 +933,7 @@ class TestAuthSessionValidateAdditional:
             ),
             patch(
                 "app.fastapi_routes.market_account.resolve_valid_market_access_token_fast",
-                new=AsyncMock(side_effect=RuntimeError("market down")),
+                new=AsyncMock(side_effect=ConnectionError("market down")),
             ),
             patch(
                 "app.enterprise.mod_entitlements.sync_entitlements_for_session",
@@ -1246,7 +1245,7 @@ class TestAuthLogoutAdditional:
             patch("app.fastapi_routes.market_account.clear_session_market_token"),
             patch(
                 "app.enterprise.mod_entitlements.clear_session_entitlements",
-                side_effect=RuntimeError("cache down"),
+                side_effect=ConnectionError("cache down"),
             ),
         ):
             mock_service = MagicMock()
@@ -1391,7 +1390,7 @@ class TestAuthRegisterAdditional:
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get_auth,
             patch(
                 "app.fastapi_routes.market_account.login_market_with_password",
-                new=AsyncMock(side_effect=RuntimeError("market down")),
+                new=AsyncMock(side_effect=ConnectionError("market down")),
             ),
             patch(
                 "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",

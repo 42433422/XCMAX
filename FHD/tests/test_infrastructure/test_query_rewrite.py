@@ -73,7 +73,7 @@ def test_unchanged_or_failed_output_falls_back(monkeypatch: pytest.MonkeyPatch) 
         patch("app.infrastructure.llm.knowledge_answer.platform_provider", return_value=object()),
         patch(
             "app.infrastructure.llm.structured_output.complete_text_sync",
-            side_effect=RuntimeError("timeout"),
+            side_effect=TimeoutError("timeout"),
         ),
     ):
         assert query_rewrite.rewrite_query("它的预算呢？", _HISTORY) == ""

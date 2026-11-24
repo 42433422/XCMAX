@@ -951,8 +951,15 @@ class TestBusinessDbRouter:
 
 
 class TestDatasetRagRouter:
-    def test_missing_dataset_id(self):
-        result = _registered_router_dataset_rag("ingest_document", {}, {}, "admin", "")
+    @pytest.fixture(autouse=True)
+    def authenticated_dataset_owner(self, trusted_actor):
+        self.actor = trusted_actor(permissions=["dataset.read", "dataset.write"])
+        self.context = self.actor.context
+
+    @pytest.mark.parametrize("authenticated", [False, True], ids=["empty", "bound"])
+    def test_missing_dataset_id(self, authenticated):
+        context = self.context if authenticated else {}
+        result = _registered_router_dataset_rag("ingest_document", {}, context, "admin", "")
         assert result["success"] is False
         assert "dataset_id" in result["message"]
 
@@ -965,7 +972,7 @@ class TestDatasetRagRouter:
                 "deleted_memories": 2,
             }
             result = _registered_router_dataset_rag(
-                "clear_dataset", {"dataset_id": "persy-knowledge"}, {}, "admin", ""
+                "clear_dataset", {"dataset_id": "persy-knowledge"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["deleted_memories"] == 2
@@ -979,7 +986,7 @@ class TestDatasetRagRouter:
                 "deleted_documents": 3,
             }
             result = _registered_router_dataset_rag(
-                "clear_dataset", {"dataset_id": "docs"}, {}, "admin", ""
+                "clear_dataset", {"dataset_id": "docs"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["deleted_documents"] == 3
@@ -990,13 +997,15 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.ingest_document.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "ingest_document", {"dataset_id": "ds1", "text": "hello"}, {}, "admin", ""
+                "ingest_document", {"dataset_id": "ds1", "text": "hello"}, self.context, "admin", ""
             )
         assert result["success"] is True
         assert result["dataset_id"] == "ds1"
 
     def test_query_missing_query(self):
-        result = _registered_router_dataset_rag("query", {"dataset_id": "ds1"}, {}, "admin", "")
+        result = _registered_router_dataset_rag(
+            "query", {"dataset_id": "ds1"}, self.context, "admin", ""
+        )
         assert result["success"] is False
 
     def test_query_with_answer(self):
@@ -1005,7 +1014,7 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.answer.return_value = {"success": True, "answer": "A"}
             result = _registered_router_dataset_rag(
-                "query", {"dataset_id": "ds1", "query": "what?"}, {}, "admin", ""
+                "query", {"dataset_id": "ds1", "query": "what?"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
@@ -1017,7 +1026,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "query",
                 {"dataset_id": "ds1", "query": "what?", "include_answer": "false"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1025,14 +1034,14 @@ class TestDatasetRagRouter:
 
     def test_diff_versions_missing_source(self):
         result = _registered_router_dataset_rag(
-            "diff_versions", {"dataset_id": "ds1"}, {}, "admin", ""
+            "diff_versions", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
         assert "source" in result["message"]
 
     def test_diff_versions_missing_from_version(self):
         result = _registered_router_dataset_rag(
-            "diff_versions", {"dataset_id": "ds1", "source": "doc1"}, {}, "admin", ""
+            "diff_versions", {"dataset_id": "ds1", "source": "doc1"}, self.context, "admin", ""
         )
         assert result["success"] is False
         assert "from_version" in result["message"]
@@ -1045,7 +1054,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "diff_versions",
                 {"dataset_id": "ds1", "source": "doc1", "from_version": "v1"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1053,7 +1062,7 @@ class TestDatasetRagRouter:
 
     def test_rollback_version_missing_source(self):
         result = _registered_router_dataset_rag(
-            "rollback_version", {"dataset_id": "ds1"}, {}, "admin", ""
+            "rollback_version", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1061,7 +1070,7 @@ class TestDatasetRagRouter:
         result = _registered_router_dataset_rag(
             "rollback_version",
             {"dataset_id": "ds1", "source": "doc1"},
-            {},
+            self.context,
             "admin",
             "",
         )
@@ -1075,7 +1084,7 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "rollback_version",
                 {"dataset_id": "ds1", "source": "doc1", "target_version": "v2"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
@@ -1087,13 +1096,13 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.start_rebuild_index.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "rebuild_index", {"dataset_id": "ds1"}, {}, "admin", ""
+                "rebuild_index", {"dataset_id": "ds1"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
     def test_cancel_rebuild_missing_job_id(self):
         result = _registered_router_dataset_rag(
-            "cancel_rebuild", {"dataset_id": "ds1"}, {}, "admin", ""
+            "cancel_rebuild", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1103,13 +1112,13 @@ class TestDatasetRagRouter:
         ) as mock_get:
             mock_get.return_value.cancel_rebuild_job.return_value = {"success": True}
             result = _registered_router_dataset_rag(
-                "cancel_rebuild", {"dataset_id": "ds1", "job_id": "job1"}, {}, "admin", ""
+                "cancel_rebuild", {"dataset_id": "ds1", "job_id": "job1"}, self.context, "admin", ""
             )
         assert result["success"] is True
 
     def test_delete_document_missing_id(self):
         result = _registered_router_dataset_rag(
-            "delete_document", {"dataset_id": "ds1"}, {}, "admin", ""
+            "delete_document", {"dataset_id": "ds1"}, self.context, "admin", ""
         )
         assert result["success"] is False
 
@@ -1121,14 +1130,16 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "delete_document",
                 {"dataset_id": "ds1", "document_id": "doc1"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
         assert result["success"] is True
 
     def test_unknown_action(self):
-        result = _registered_router_dataset_rag("fly", {"dataset_id": "ds1"}, {}, "admin", "")
+        result = _registered_router_dataset_rag(
+            "fly", {"dataset_id": "ds1"}, self.context, "admin", ""
+        )
         assert result["success"] is False
 
     def test_access_context_with_explicit_context(self):
@@ -1143,11 +1154,15 @@ class TestDatasetRagRouter:
                     "text": "hello",
                     "access_context": {"tenant_id": "t1", "actor_id": "a1"},
                 },
-                {},
+                self.context,
                 "admin",
                 "",
             )
         assert result["success"] is True
+        access = mock_get.return_value.ingest_document.call_args.kwargs["access_context"]
+        assert access.actor_id == str(self.actor.user_id)
+        assert access.tenant_id == str(self.actor.tenant_id)
+        assert access.is_admin is False
 
     def test_access_context_with_admin_flag(self):
         with patch(
@@ -1157,11 +1172,15 @@ class TestDatasetRagRouter:
             result = _registered_router_dataset_rag(
                 "ingest_document",
                 {"dataset_id": "ds1", "text": "hello", "dataset_admin": "true"},
-                {},
+                self.context,
                 "admin",
                 "",
             )
         assert result["success"] is True
+        access = mock_get.return_value.ingest_document.call_args.kwargs["access_context"]
+        assert access.actor_id == str(self.actor.user_id)
+        assert access.tenant_id == str(self.actor.tenant_id)
+        assert access.is_admin is False
 
 
 # ===========================================================================
@@ -1402,17 +1421,26 @@ class TestExcelAnalysisRouter:
         assert result["success"] is True
         assert mock_exec.call_args.args[0]["file_path"] == "/tmp/x.xlsx"
 
-    def test_query_question_uses_natural_language(self):
+    def test_query_delegates_explicit_expression(self):
         with patch(
             "app.application.tools.workflow.handle_excel_analysis",
             return_value={"success": True},
         ) as mock_exec:
             result = _registered_router_excel_analysis(
-                "query", {"file_path": "/tmp/x.xlsx", "question": "总和是多少"}, {}, "admin", ""
+                "query",
+                {
+                    "file_path": "/tmp/x.xlsx",
+                    "query_expression": "quantity > 1",
+                    "question": "筛选数量大于 1 的记录",
+                },
+                {},
+                "admin",
+                "",
             )
         assert result["success"] is True
-        assert mock_exec.call_args.args[0]["action"] == "excel_query"
-        assert mock_exec.call_args.args[0]["natural_language"] == "总和是多少"
+        assert mock_exec.call_args.args[0]["action"] == "query"
+        assert mock_exec.call_args.args[0]["query_expression"] == "quantity > 1"
+        assert "natural_language" not in mock_exec.call_args.args[0]
 
     def test_error_message_alias(self):
         with patch(
@@ -1454,7 +1482,7 @@ class TestExcelVectorIndexRouter:
         with patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service"
         ) as mock_get:
-            mock_get.return_value.ingest_excel.side_effect = RuntimeError("boom")
+            mock_get.return_value.ingest_excel.side_effect = OSError("boom")
             result = _registered_router_excel_vector_index(
                 "execute", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
             )
@@ -1503,7 +1531,7 @@ class TestExcelVectorIndexRouter:
         with patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
         ) as mock_get:
-            mock_get.return_value.query.side_effect = RuntimeError("fail")
+            mock_get.return_value.query.side_effect = OSError("fail")
             result = _registered_router_excel_vector_index(
                 "query", {"index_id": "idx1", "query": "hello"}, {}, "admin", ""
             )
@@ -1556,30 +1584,35 @@ class TestOcrRouter:
         result = _registered_router_ocr("request", {"request_id": "r1"}, {}, "admin", "")
         assert result["success"] is False
 
-    def test_request_success(self):
+    @pytest.mark.parametrize("published,state", [(True, "pending"), (False, "failed")])
+    def test_request_publication_does_not_complete_ocr(self, published, state):
         with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
-            mock_get.return_value.emit_ocr_requested.return_value = True
+            emit = mock_get.return_value.emit_ocr_requested
+            emit.return_value = published
             result = _registered_router_ocr(
                 "request",
                 {"request_id": "r1", "image_url": "http://img.png"},
-                {},
+                {"actor_id": "7"},
                 "admin",
                 "",
             )
-        assert result["success"] is True
-        assert result["event"] == "ocr.requested"
-
-    def test_request_failure(self):
-        with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
-            mock_get.return_value.emit_ocr_requested.return_value = False
-            result = _registered_router_ocr(
-                "request",
-                {"request_id": "r1", "image_url": "http://img.png"},
-                {},
-                "admin",
-                "",
-            )
+        emit.assert_called_once_with(
+            request_id="r1", image_url="http://img.png", ocr_type="general", user_id="7"
+        )
         assert result["success"] is False
+        assert result["execution_state"] == state
+        assert result["published"] is published
+        if published:
+            assert result["event"] == "ocr.requested"
+
+    def test_request_missing_actor_is_not_published(self):
+        with patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain") as mock_get:
+            result = _registered_router_ocr(
+                "request", {"request_id": "r1", "image_url": "http://img.png"}, {}, "admin", ""
+            )
+            mock_get.assert_not_called()
+        assert result["success"] is False
+        assert result["error_code"] == "tool_identity_required"
 
     def test_recognize_missing_file_path(self):
         with patch("app.fastapi_routes.ocr._get_ocr_service"):
@@ -1658,7 +1691,7 @@ class TestOcrRouter:
     def test_exception_returns_error(self):
         with patch(
             "app.fastapi_routes.ocr._get_ocr_service",
-            side_effect=RuntimeError("ocr unavailable"),
+            side_effect=OSError("ocr unavailable"),
         ):
             result = _registered_router_ocr("recognize", {}, {}, "admin", "")
         assert result["success"] is False
@@ -1851,7 +1884,7 @@ class TestUnitProductsImportRouter:
     def test_import_exception(self):
         with patch(
             "app.application.get_unit_products_import_app_service",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ):
             result = _registered_router_unit_products_import(
                 "execute_import",
@@ -1913,7 +1946,7 @@ class TestPrintRouterWorkflowLabel:
             patch("app.application.print_app_service.get_print_application_service") as mock_print,
             patch(
                 "app.application.get_product_app_service",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
         ):
             mock_print.return_value.print_single_label.return_value = {"success": True}
@@ -2197,7 +2230,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
             ),
             patch(
                 "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                side_effect=RuntimeError("boom"),
+                side_effect=ConnectionError("boom"),
             ),
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",

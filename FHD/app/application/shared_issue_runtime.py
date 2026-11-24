@@ -11,7 +11,10 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from app.application.desktop_delivery_receipt import desktop_installation_id
-from app.application.private_mod_delivery_artifacts import custom_delivery_remote_json
+from app.application.private_mod_delivery_artifacts import (
+    DeliveryRemoteError,
+    custom_delivery_remote_json,
+)
 from app.build_identity import build_identity
 from app.fastapi_routes.private_mod_delivery_context import (
     _private_delivery_market_token,
@@ -19,7 +22,10 @@ from app.fastapi_routes.private_mod_delivery_context import (
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
+_DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+    HTTPException,
+    DeliveryRemoteError,
+)
 _TICKET_TARGETS = {
     "approve": "queued",
     "approved": "queued",

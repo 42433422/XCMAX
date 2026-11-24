@@ -23,6 +23,7 @@ import pytest
 
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.application.super_employee.cli import CliExecutionError
+from app.application.super_employee.para import ParaRemoteError
 from app.application.super_employee_service import (
     _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
@@ -349,7 +350,6 @@ class TestCliReplyBodyBoundary:
         assert "cli answer" in result or isinstance(result, str)
 
     def test_cli_execution_oserror(self, tmp_path, monkeypatch):
-
         monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "1")
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("boom")))
         with (
@@ -359,6 +359,8 @@ class TestCliReplyBodyBoundary:
             svc._cli_reply_body("你好", {})
         assert error.value.receipt["error_code"] == "cli_launch_failed"
         assert "boom" not in str(error.value)
+        assert "boom" not in error.value.body
+        assert "boom" not in str(error.value.event())
 
 
 # ─────────────── _direct_reply_body 边界 ─────────────────────────
@@ -1443,16 +1445,40 @@ class TestDispatchToParaExceptions:
         assert result is None
         assert "unreachable" in reason
 
-    def test_generic_exception(self, tmp_path, monkeypatch):
-        """通用异常被捕获并写入 outbox（返回 dict 而非 None）。"""
+    @pytest.mark.parametrize("error_type", [OSError, httpx.RemoteProtocolError, ParaRemoteError])
+    def test_generic_exception(self, tmp_path, monkeypatch, error_type):
+        """可恢复的外部调用故障写入 outbox（返回 dict 而非 None）。"""
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
-        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=RuntimeError("boom")))
+        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=error_type("boom")))
         result, reason = svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
-        # 通用异常走 _write_outbox 分支，返回 dict（accepted=False, status=dispatch_error）
         assert result is not None
         assert result["accepted"] is False
         assert result["status"] == "dispatch_error"
         assert "boom" in reason
+
+    def test_programming_exception_propagates_unchanged(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
+        error = RuntimeError("boom")
+        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=error))
+        with pytest.raises(RuntimeError) as raised:
+            svc._dispatch_to_para({"request_id": "r1", "created_at": "t"})
+        assert raised.value is error
+
+    @pytest.mark.parametrize("failure_type", [RuntimeError, TypeError])
+    def test_programming_failure_propagates_without_dispatch_receipt(
+        self, tmp_path, monkeypatch, failure_type
+    ):
+        monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "http://para")
+        error = failure_type("invalid internal contract")
+        svc = _make_svc(tmp_path, http_client_factory=_fake_http_factory(exc=error))
+        outbox = MagicMock()
+        monkeypatch.setattr(svc._dispatching, "_outbox", outbox)
+        request = {"request_id": "r1", "created_at": "t"}
+        with pytest.raises(failure_type) as caught:
+            svc._dispatch_to_para(request)
+        assert caught.value is error
+        assert request == {"request_id": "r1", "created_at": "t"}
+        outbox.assert_not_called()
 
 
 # ─────────────── _parse_claude_stream_json 边界 ──────────────────

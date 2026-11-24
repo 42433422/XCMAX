@@ -119,6 +119,7 @@ def _original(
     if (
         row is None
         or row.user_id != owner
+        or goal.get("evolution_owner_user_id", owner) != owner
         or not isinstance(source, dict)
         or source.get("identity_id") != IDENTITY_ID
         or source.get("goal_id") != goal["id"]
@@ -188,6 +189,7 @@ def propose(claim: dict[str, Any], goal: dict[str, Any]) -> dict[str, Any]:
             **goal,
             "retort_request_id": request_id,
             "evolution_source_sha256": digest(source),
+            "evolution_owner_user_id": owner,
             "status": "awaiting_approval",
         }
         data["goals"] = life._merge(data["goals"], [linked], "id", 100)
@@ -211,6 +213,11 @@ def pending_budget(state: dict[str, Any], domain: str) -> dict[str, Any] | None:
         for goal in state.get("goals", []):
             if not goal.get("retort_request_id") or goal.get("decision_id"):
                 continue
+            if (
+                goal.get("evolution_owner_user_id", state["owner_user_id"])
+                != state["owner_user_id"]
+            ):
+                continue  # Settled history grants no new owner an execution budget.
             row, _ = _original(session, goal, state["owner_user_id"])
             if (
                 row.status in {"waiting_execution", "waiting_credential_isolation"}
@@ -386,7 +393,9 @@ def reconcile() -> int:
             if not goal.get("retort_request_id"):
                 continue
             try:
-                observed = feedback(session, goal, data["owner_user_id"])
+                observed = feedback(
+                    session, goal, goal.get("evolution_owner_user_id", data["owner_user_id"])
+                )
             except (LifePolicyError, ValueError, KeyError):
                 observed = {
                     "status": "evolution_evidence_incomplete",

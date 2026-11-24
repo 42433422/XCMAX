@@ -89,60 +89,70 @@ def test_compat_customers_match_mod_block(
 
 
 def test_compat_customer_get_one_and_create(
-    compat_customer_client: TestClient, local_tools, trusted_actor, monkeypatch
+    compat_customer_client: TestClient, trusted_actor, monkeypatch
 ) -> None:
     row = MagicMock()
     row.id = 2
     with (
-        patch(
-            "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
-            return_value=False,
-        ),
         patch.object(customer_routes, "_customer_find_by_id", return_value=row),
         patch.object(
             customer_routes,
             "_customer_row_for_api",
             return_value={"id": 2, "unit_name": "A"},
         ),
-        patch.object(customer_routes, "_customers_write_raise"),
-        patch(
-            "app.application.customer_app_service.CustomerApplicationService.create",
-            return_value={"success": True, "data": {"id": 3, "customer_name": "B"}},
-        ),
         patch.object(
-            customer_routes, "_customer_body_name_contact", return_value=("B", "", "", "")
-        ),
+            customer_routes,
+            "_run_customers_agent",
+            return_value=(
+                {
+                    "success": False,
+                    "data": {"id": 3, "customer_name": "B"},
+                    "agent_status": "blocked",
+                    "error_code": "customer_receipt_unverified",
+                },
+                200,
+            ),
+        ) as entry,
     ):
         assert compat_customer_client.get("/customers/2").status_code == 200
         actor = trusted_actor(tenant_id=7, role="admin")
         monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
         compat_customer_client.headers.update(actor.headers)
         created = compat_customer_client.post("/customers", json={"unit_name": "B"})
-        assert created.status_code == 200
-        assert created.json()["data"]["id"] == 3
-        assert created.json()["agent_status"] == "blocked"
-        assert created.json()["error_code"] == "customer_receipt_unverified"
+    assert created.status_code == 200
+    assert created.json()["data"]["id"] == 3
+    assert created.json()["agent_status"] == "blocked"
+    assert created.json()["error_code"] == "customer_receipt_unverified"
+    entry.assert_called_once()
+    assert entry.call_args.kwargs["action"] == "create"
+    assert entry.call_args.kwargs["route_path"] == "/customers"
+    assert entry.call_args.kwargs["params"] == {
+        "customer_name": "B",
+        "unit_name": "B",
+        "contact_person": "",
+        "contact_phone": "",
+        "contact_address": "",
+    }
 
 
-def test_compat_customer_batch_delete(
-    compat_customer_client: TestClient, local_tools, trusted_actor
-) -> None:
+def test_compat_customer_batch_delete(compat_customer_client: TestClient, trusted_actor) -> None:
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
     actor = trusted_actor(tenant_id=7, role="admin")
     compat_customer_client.headers.update(actor.headers)
-    service = MagicMock()
-    service.batch_delete.return_value = {"success": True, "deleted_count": 2}
-    with (
-        patch.object(customer_routes, "_customers_write_raise"),
-        patch("app.application.get_customer_app_service", return_value=service),
-    ):
+    with patch.object(
+        customer_routes, "_run_customers_agent", return_value=({"success": True, "deleted": 2}, 200)
+    ) as entry:
         batch = compat_customer_client.post("/customers/batch-delete", json={"ids": [2, 3]})
     assert batch.status_code == 200
     assert batch.json()["deleted"] == 2
-    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
-
-    service.batch_delete.assert_called_once()
-    assert service.batch_delete.call_args.args == ([2, 3],)
-    context = service.batch_delete.call_args.kwargs["runtime_context"]
+    entry.assert_called_once()
+    forwarded = entry.call_args.kwargs
+    assert forwarded["action"] == "batch_delete"
+    assert forwarded["route_path"] == "/customers/batch-delete"
+    assert forwarded["params"] == {"ids": [2, 3]}
+    context = request_runtime_context(forwarded["request"])
     assert str(context["tenant_id"]) == str(actor.tenant_id)
     assert str(context["user_id"]) == str(actor.user_id)
     assert validate_actor_context(context) is None

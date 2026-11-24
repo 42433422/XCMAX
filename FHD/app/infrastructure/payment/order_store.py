@@ -201,9 +201,12 @@ def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any, paid
                 plan_id=plan_id,
                 sync_from_market=True,
                 active_plan_expires_at=expires.isoformat(),
+                verified_payment_grant=True,
             )
         else:
-            applied = apply_paid_plan_for_user(user_id=uid, plan_id=plan_id)
+            applied = apply_paid_plan_for_user(
+                user_id=uid, plan_id=plan_id, verified_payment_grant=True
+            )
         if applied:
             logger.info(
                 "[model-payment] saas subscription applied user_id=%s plan_id=%s",

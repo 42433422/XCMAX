@@ -28,8 +28,7 @@ def dynamic_runtime(trusted_actor, monkeypatch, tmp_path):
         permissions=[
             "product.view",
             "customer.view",
-            "tool.customers.create",
-            "tool.products.batch_delete",
+            "customer.edit",
             "tool.excel_analyzer.analyze",
         ]
     )
@@ -284,8 +283,13 @@ def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
         lambda *args: dispatched.append(args) or {"success": True},
     )
     params = {"ids": [11, 22]}
-    first = state.execute("batch-original", params, "products", "batch_delete")
-    repeated = state.execute("batch-repeat", params, "products", "batch_delete")
+    # Exercise the tenant-owned batch contract; global legacy product writes
+    # remain unavailable to this same authenticated enterprise actor.
+    with pytest.raises(CodexBindingError) as legacy:
+        state.describe("products", "batch_delete")
+    assert legacy.value.code == "permission_denied"
+    first = state.execute("batch-original", params, "customers", "batch_delete")
+    repeated = state.execute("batch-repeat", params, "customers", "batch_delete")
     assert first["pending_approval"] is repeated["pending_approval"] is True
     assert first["run_id"] == repeated["run_id"] and first["task_id"] == repeated["task_id"]
     child = state.repository.get(first["run_id"])
@@ -302,14 +306,14 @@ def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
             original["grant"], run=mutated, principal_id=str(state.actor.user_id)
         )
     with pytest.raises(CodexBindingError) as error:
-        state.execute("batch-original", {"ids": [33]}, "products", "batch_delete")
+        state.execute("batch-original", {"ids": [33]}, "customers", "batch_delete")
     assert error.value.code == "call_conflict"
     with pytest.raises(CodexBindingError) as pending:
-        state.execute("different-batch", {"ids": [33]}, "products", "batch_delete")
+        state.execute("different-batch", {"ids": [33]}, "customers", "batch_delete")
     assert pending.value.code == "waiting_user"
     # Model-supplied approval and identity never reach the frozen batch.
     with pytest.raises(CodexBindingError) as forged:
-        state.execute("forged", {**params, "human_approved": True}, "products", "batch_delete")
+        state.execute("forged", {**params, "human_approved": True}, "customers", "batch_delete")
     assert forged.value.code == "identity_override"
     reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
     calls = reopened.get(state.parent.run_id).metadata["calls"]

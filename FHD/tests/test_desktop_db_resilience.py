@@ -5,6 +5,13 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+import subprocess
+import sys
+import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -154,6 +161,294 @@ def test_recover_if_corrupt_recovers_from_backup(tmp_path, monkeypatch):
     assert len(corrupt_files) == 1, "corrupt db must be renamed and kept as evidence"
 
 
+def test_recovery_quarantines_crashed_wal_before_restoring_backup(tmp_path, monkeypatch):
+    from app.desktop_runtime import migrate
+
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db = dirs["data"] / "xcagi.db"
+    _create_test_db(db)
+    backup = backup_database(tmp_path, version="before-crash")
+    assert backup is not None
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os, sqlite3, sys; db = sqlite3.connect(sys.argv[1]); "
+            "db.execute('PRAGMA journal_mode=WAL'); "
+            "db.execute('PRAGMA wal_autocheckpoint=0'); "
+            "db.execute(\"UPDATE orders SET customer='stale-wal'\"); "
+            "db.commit(); os._exit(0)",
+            str(db),
+        ],
+        check=True,
+        timeout=30,
+    )
+    original_wal = Path(f"{db}-wal").read_bytes()
+    with db.open("r+b") as stream:
+        stream.write(b"corrupt sqlite!!")
+    corrupt_bytes = db.read_bytes()
+    sidecars = {}
+    original_check = migrate._quick_check_ok
+
+    def capture_checked_image(path):
+        valid = original_check(path)
+        # SQLite may rebuild its shared-memory index during the health check.
+        # Freeze those exact bytes before recovery quarantines the whole image.
+        sidecars.update({suffix: Path(f"{db}{suffix}").read_bytes() for suffix in ("-wal", "-shm")})
+        return valid
+
+    monkeypatch.setattr(migrate, "_quick_check_ok", capture_checked_image)
+
+    result = recover_if_corrupt(tmp_path)
+
+    assert result == {"action": "restored", "detail": backup.name}
+    assert sidecars["-wal"] == original_wal
+    with closing(sqlite3.connect(db)) as restored:
+        assert restored.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [
+            ("alice",),
+            ("bob",),
+        ]
+        assert restored.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    originals = [
+        path
+        for path in dirs["data"].glob("xcagi.db.corrupt-*")
+        if path.read_bytes() == corrupt_bytes
+    ]
+    assert len(originals) == 1
+    for suffix, content in sidecars.items():
+        assert Path(f"{originals[0]}{suffix}").read_bytes() == content
+        assert not Path(f"{db}{suffix}").exists()
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_recovery_stops_when_corrupt_sidecar_cannot_be_quarantined(tmp_path, monkeypatch, suffix):
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db = dirs["data"] / "xcagi.db"
+    _create_test_db(db)
+    backup = backup_database(tmp_path, version="before-crash")
+    assert backup is not None
+    db.write_bytes(b"corrupt original")
+    sidecar = Path(f"{db}{suffix}")
+    sidecar.write_bytes(b"original journal evidence")
+    original_rename = Path.rename
+
+    def fail_sidecar_rename(path, target):
+        if path == sidecar:
+            raise OSError("sidecar is locked")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_sidecar_rename)
+    result = recover_if_corrupt(tmp_path)
+
+    assert result["action"] == "corrupt_no_backup"
+    assert not db.exists()
+    assert sidecar.read_bytes() == b"original journal evidence"
+    originals = list(dirs["data"].glob("xcagi.db.corrupt-*"))
+    assert len(originals) == 1 and originals[0].read_bytes() == b"corrupt original"
+    assert _integrity_check_ok(backup)
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_recovery_preserves_previous_sidecar_evidence(tmp_path, monkeypatch, suffix):
+    from app.desktop_runtime import migrate
+
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    db.write_bytes(b"corrupt original")
+    Path(f"{db}{suffix}").write_bytes(b"current journal")
+    monkeypatch.setattr(migrate, "utc_now_naive", lambda: datetime(2026, 11, 24, 0, 0, 0))
+    earlier = db.with_name(f"xcagi.db.corrupt-20261124000000{suffix}")
+    earlier.write_bytes(b"previous journal")
+
+    assert recover_if_corrupt(tmp_path)["action"] == "corrupt_no_backup"
+
+    assert earlier.read_bytes() == b"previous journal"
+    quarantine = db.with_name("xcagi.db.corrupt-20261124000000-1")
+    assert quarantine.read_bytes() == b"corrupt original"
+    assert Path(f"{quarantine}{suffix}").read_bytes() == b"current journal"
+
+
+def test_recovery_never_publishes_backup_corrupted_after_check(tmp_path, monkeypatch):
+    from app.desktop_runtime import migrate
+
+    _reset_desktop_env(monkeypatch)
+    dirs = ensure_desktop_dirs(tmp_path)
+    db = dirs["data"] / "xcagi.db"
+    _create_test_db(db)
+    backup = backup_database(tmp_path, version="before-crash")
+    assert backup is not None
+    db.write_bytes(b"corrupt original")
+    original_check = migrate._integrity_check_ok
+
+    def corrupt_after_check(path):
+        valid = original_check(path)
+        if path == backup:
+            assert valid
+            path.write_bytes(b"backup became corrupt")
+        return valid
+
+    monkeypatch.setattr(migrate, "_integrity_check_ok", corrupt_after_check)
+    result = recover_if_corrupt(tmp_path)
+
+    assert result["action"] == "corrupt_no_backup"
+    assert not db.exists()
+    assert backup.read_bytes() == b"backup became corrupt"
+    assert list(dirs["data"].glob("xcagi.db.corrupt-*"))[0].read_bytes() == b"corrupt original"
+    assert not list(dirs["data"].glob("xcagi-recovery-*"))
+
+
+def test_recovery_waits_for_existing_migration_lock(tmp_path, monkeypatch):
+    from app.desktop_runtime.migrate import migration_lock
+
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    _create_test_db(db)
+    backup = backup_database(tmp_path, version="before-crash")
+    assert backup is not None
+    db.write_bytes(b"original database under migration")
+    started = threading.Event()
+
+    def recover():
+        started.set()
+        return recover_if_corrupt(tmp_path)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with migration_lock(tmp_path):
+            pending = pool.submit(recover)
+            assert started.wait(5)
+            with pytest.raises(TimeoutError):
+                pending.result(timeout=0.25)
+            assert db.read_bytes() == b"original database under migration"
+        assert pending.result(timeout=5) == {"action": "restored", "detail": backup.name}
+
+
+def test_recovery_io_failure_sets_existing_persistent_warning(tmp_path, monkeypatch):
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    _create_test_db(db)
+    backup = backup_database(tmp_path, version="before-crash")
+    assert backup is not None
+    backup_bytes = backup.read_bytes()
+    db.write_bytes(b"corrupt original")
+    original_stat = Path.stat
+
+    def inaccessible_backup_stat(path, *args, **kwargs):
+        if path == backup:
+            raise OSError("backup storage became unavailable")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", inaccessible_backup_stat)
+    configure_desktop_environment(tmp_path)
+
+    assert os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") == "corrupt_no_backup"
+    assert (tmp_path / "config" / "database-recovery-required").is_file()
+    assert not db.exists()
+    assert backup.read_bytes() == backup_bytes
+    assert list(db.parent.glob("xcagi.db.corrupt-*"))[0].read_bytes() == b"corrupt original"
+
+
+def test_recovery_hard_exit_after_rename_cannot_become_fresh_start(tmp_path, monkeypatch):
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    db.write_bytes(b"customer database awaiting recovery")
+    crashed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os, sys\n"
+            "from pathlib import Path\n"
+            "from app.desktop_runtime.migrate import recover_if_corrupt\n"
+            "rename = Path.rename\n"
+            "def crash_after_rename(path, target):\n"
+            "    result = rename(path, target)\n"
+            "    if path.name == 'xcagi.db': os._exit(93)\n"
+            "    return result\n"
+            "Path.rename = crash_after_rename\n"
+            "recover_if_corrupt(sys.argv[1])\n",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert crashed.returncode == 93, crashed.stderr
+    assert not db.exists()
+
+    configure_desktop_environment(tmp_path)
+
+    assert os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") == "corrupt_no_backup"
+    assert (tmp_path / "config" / "database-recovery-required").is_file()
+    assert not db.exists()
+    assert list(db.parent.glob("xcagi.db.corrupt-*"))[0].read_bytes() == (
+        b"customer database awaiting recovery"
+    )
+
+
+def test_recovery_published_snapshot_is_not_replaced_after_cleanup_failure(tmp_path, monkeypatch):
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    _create_test_db(db)
+    old_backup = backup_database(tmp_path, version="old")
+    assert old_backup is not None
+    with closing(sqlite3.connect(db)) as connection:
+        connection.execute("UPDATE orders SET customer='latest-backup'")
+        connection.commit()
+    latest = backup_database(tmp_path, version="latest")
+    assert latest is not None
+    stamp = old_backup.stat().st_mtime + 100
+    os.utime(latest, (stamp, stamp))
+    db.write_bytes(b"corrupt original")
+    cleanup = tempfile.TemporaryDirectory.cleanup
+    failures = []
+
+    def fail_first_cleanup(directory):
+        cleanup(directory)
+        if Path(directory.name).name.startswith("xcagi-recovery-") and not failures:
+            failures.append(directory.name)
+            raise OSError("temporary recovery cleanup failed")
+
+    monkeypatch.setattr(tempfile.TemporaryDirectory, "cleanup", fail_first_cleanup)
+    result = recover_if_corrupt(tmp_path)
+
+    with closing(sqlite3.connect(db)) as connection:
+        assert connection.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [
+            ("latest-backup",),
+            ("latest-backup",),
+        ]
+    assert result["action"] == "corrupt_no_backup"
+    assert (tmp_path / "config" / "database-recovery-required").exists()
+    assert len(failures) == 1 and old_backup.exists() and latest.exists()
+
+
+def test_recovery_marker_cleanup_failure_keeps_verified_database_blocked(tmp_path, monkeypatch):
+    _reset_desktop_env(monkeypatch)
+    db = ensure_desktop_dirs(tmp_path)["data"] / "xcagi.db"
+    _create_test_db(db)
+    assert backup_database(tmp_path, version="before-crash") is not None
+    db.write_bytes(b"corrupt original")
+    marker = tmp_path / "config" / "database-recovery-required"
+    unlink = Path.unlink
+
+    def fail_marker_clear(path, *args, **kwargs):
+        if path == marker:
+            raise PermissionError("recovery marker is locked")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_marker_clear)
+    assert recover_if_corrupt(tmp_path)["action"] == "corrupt_no_backup"
+    assert marker.is_file()
+    with closing(sqlite3.connect(db)) as connection:
+        assert connection.execute("SELECT customer FROM orders ORDER BY id").fetchall() == [
+            ("alice",),
+            ("bob",),
+        ]
+    configure_desktop_environment(tmp_path)
+    assert os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") == "corrupt_no_backup"
+    assert marker.is_file()
+
+
 def test_recover_if_corrupt_no_backup_returns_corrupt_no_backup(tmp_path, monkeypatch):
     _reset_desktop_env(monkeypatch)
 
@@ -170,7 +465,10 @@ def test_recover_if_corrupt_no_backup_returns_corrupt_no_backup(tmp_path, monkey
     assert len(corrupt_files) == 1
 
 
-def test_recover_if_corrupt_skips_bad_backups(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "backup_content", [b"corrupt backup content", b"", pytest.param(None, id="empty-schema")]
+)
+def test_recover_if_corrupt_skips_bad_backups(tmp_path, monkeypatch, backup_content):
     """最近的备份本身损坏时，跳过它并尝试更老的备份。"""
     _reset_desktop_env(monkeypatch)
 
@@ -183,7 +481,15 @@ def test_recover_if_corrupt_skips_bad_backups(tmp_path, monkeypatch):
     assert old_backup is not None
 
     bad_backup = backups_dir / "xcagi-bad-latest.db"
-    bad_backup.write_bytes(b"corrupt backup content")
+    if backup_content is None:
+        _create_test_db(bad_backup)
+        with closing(sqlite3.connect(bad_backup)) as connection:
+            connection.execute("DROP TABLE orders")
+            connection.commit()
+            assert connection.execute("PRAGMA page_count").fetchone()[0] >= 2
+        assert _integrity_check_ok(bad_backup)
+    else:
+        bad_backup.write_bytes(backup_content)
     new_mtime = old_backup.stat().st_mtime + 100
     os.utime(bad_backup, (new_mtime, new_mtime))
 

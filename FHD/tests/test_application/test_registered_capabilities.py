@@ -11,7 +11,9 @@ import pytest
 from app.application.workflow.approval_persistence import SNAPSHOT_KEY
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from app.db.models.approval import ApprovalRequest
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_approval_persistence import db as db
+from tests.test_application.test_verification_integrity import repository as repository
 
 
 @pytest.fixture
@@ -30,12 +32,14 @@ def capability_runner(monkeypatch):
         return runner.save_run(run)
 
     monkeypatch.setattr(runner, "execute_dispatched_run", finish)
-    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", lambda: runner)
+    factory = Mock(return_value=runner)
+    factory._step_from_node = AgentOrchestrator._step_from_node
+    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator", factory)
     return runner, execute
 
 
 def test_registered_capability_atomically_binds_one_run_before_execution(
-    capability_runner, monkeypatch
+    capability_runner, batch_approval_context, monkeypatch
 ):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
@@ -53,8 +57,7 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
 
     monkeypatch.setattr(runner, "create_task_run", claim)
     context = {
-        "user_id": "owner",
-        "tenant_id": 1,
+        **batch_approval_context,
         "session_id": "conversation",
         "turn_id": "turn",
         "call_id": "call",
@@ -75,6 +78,8 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
     assert {item["deduplicated"] for item in results} == {True, False}
     assert len({item["agent_run_id"] for item in results}) == 1
     assert len({item["task_id"] for item in results}) == 1
+    assert {item["request_id"] for item in results} == {"turn"}
+    assert {item["attempt"] for item in results} == {1}
     execute.assert_called_once()
     original = runner.get_run(results[0]["agent_run_id"])
     runtime = original.metadata["runtime_context"]
@@ -86,6 +91,8 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
     assert repeated["success"] is True
     assert repeated["execution_state"] == "completed"
     assert repeated["agent_run_id"] == original.run_id
+    assert repeated["request_id"] == "turn"
+    assert repeated["root_run_id"] == original.metadata["task_context"]["root_run_id"]
     execute.assert_called_once()
 
 
@@ -95,20 +102,21 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
         "params",
         "tool",
         "action",
-        "mod_id",
+        "mod",
         "employee_id",
         "employee_tool_allowlist",
         "workspace_id",
         "mutation_policy",
     ],
 )
-def test_registered_identity_conflict_cannot_dispatch_different_content(capability_runner, change):
+def test_registered_identity_conflict_cannot_dispatch_different_content(
+    capability_runner, batch_approval_context, change
+):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     runner, execute = capability_runner
     context = {
-        "user_id": "owner",
-        "tenant_id": 1,
+        **batch_approval_context,
         "session_id": "conversation",
         "turn_id": "turn",
         "call_id": "call",
@@ -121,29 +129,106 @@ def test_registered_identity_conflict_cannot_dispatch_different_content(capabili
         args["tool_id"] = "shipment_records"
     elif change == "action":
         args["action"] = "query"
+    elif change == "mod":
+        context["mod_id"] = "changed"
     else:
         context[change] = ["print"] if change == "employee_tool_allowlist" else "changed"
     response = json.loads(execute_registered_capability(args, runtime_context=context))
     assert response["success"] is False
-    assert response["error_code"] == "task_idempotency_conflict"
+    assert response["error_code"] == (
+        "tool_identity_required" if change == "mod" else "task_idempotency_conflict"
+    )
     assert runner.get_run(original["agent_run_id"]).steps[0].params == {}
-    assert len(runner.list_runs(user_id="owner")) == 1
+    assert len(runner.list_runs(user_id=context["user_id"])) == 1
     execute.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "change", ["service_source", "template_base_dir", "route_module", "params", "mod"]
+)
+def test_real_conflicting_task_admission_keeps_original_receipt_without_new_run(
+    repository, trusted_actor, local_tools, monkeypatch, tmp_path, change
+):
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(user_id=7, mod_id="mod-a", permissions=["tool.ocr.request"])
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    domain = Mock()
+    domain.emit_ocr_requested.return_value = True
+    monkeypatch.setattr("app.neuro_bus.domains.ocr_domain.get_ocr_domain", lambda: domain)
+    request_id = f"cross-entry-{tmp_path.name}"
+    context = {**actor.context, "idempotency_key": request_id}
+    if change not in {"params", "mod"}:
+        context[change] = "original-server-value"
+    args = {
+        "tool_id": "ocr",
+        "action": "request",
+        "params": {
+            "request_id": request_id,
+            "image_url": "https://example.invalid/original.png",
+        },
+    }
+    with tenant_scope(actor.tenant_id):
+        original = json.loads(execute_registered_capability(args, runtime_context=context))
+        assert original["execution_state"] == "pending", original
+        stored = repository.get(original["run_id"]).to_dict()
+        if change == "mod":
+            other = trusted_actor(user_id=actor.user_id, mod_id="mod-b")
+            changed_context = {**other.context, "idempotency_key": context["idempotency_key"]}
+        else:
+            changed_context = {
+                **context,
+                **({change: "different-server-value"} if change != "params" else {}),
+            }
+        changed_args = (
+            args
+            if change != "params"
+            else {
+                **args,
+                "params": {**args["params"], "image_url": "https://example.invalid/other.png"},
+            }
+        )
+        conflict = json.loads(
+            execute_registered_capability(changed_args, runtime_context=changed_context)
+        )
+    assert conflict["error_code"] == "task_idempotency_conflict", conflict
+    assert conflict["success"] is False and conflict["retryable"] is False
+    assert conflict["request_id"] == original["request_id"]
+    if change == "mod":
+        assert not any(conflict.get(key) for key in ("run_id", "agent_run_id", "task_id"))
+    else:
+        assert {key: conflict[key] for key in ("run_id", "task_id")} == {
+            key: original[key] for key in ("run_id", "task_id")
+        }
+    assert len(repository.list_recent(user_id=str(actor.user_id))) == 1
+    assert len(repository.list_tasks(user_id=str(actor.user_id))) == 1
+    assert repository.get(original["run_id"]).to_dict() == stored
+    domain.emit_ocr_requested.assert_called_once()
+
+
 def test_registered_missing_write_identity_is_rejected_and_legacy_read_is_addressable(
-    capability_runner,
+    capability_runner, batch_approval_context
 ):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     _, execute = capability_runner
-    context = {"user_id": "owner", "tenant_id": 1}
+    context = {
+        key: value
+        for key, value in batch_approval_context.items()
+        if key not in {"turn_id", "session_id"}
+    }
     write = json.loads(
         execute_registered_capability(
             {
-                "tool_id": "print",
-                "action": "print_document",
-                "params": {"file_path": "invoice.pdf"},
+                "tool_id": "customers",
+                "action": "batch_delete",
+                "params": {"ids": [1]},
             },
             runtime_context=context,
         )
@@ -160,9 +245,94 @@ def test_registered_missing_write_identity_is_rejected_and_legacy_read_is_addres
     assert read["retryable"] is False
 
 
+@pytest.mark.parametrize(
+    "identity", ["absent", "user_id_only", "null_binding", "forged_binding", "expired", "disabled"]
+)
+def test_registered_capability_requires_live_sealed_actor_before_admission(
+    db, batch_approval_context, monkeypatch, identity
+):
+    from copy import deepcopy
+    from datetime import timedelta
+
+    from app.application.tools import registered_capabilities
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.utils.time import utc_now_naive
+
+    context = deepcopy(batch_approval_context)
+    if identity == "absent":
+        context = {}
+    elif identity == "user_id_only":
+        context.pop("_actor_authorization")
+    elif identity == "null_binding":
+        context["_actor_authorization"] = None
+    elif identity == "forged_binding":
+        context["_actor_authorization"]["proof"] = "forged"
+    elif identity == "expired":
+        with db.begin() as session:
+            session.query(UserSession).filter_by(session_id="session").one().expires_at = (
+                utc_now_naive() - timedelta(seconds=1)
+            )
+    else:
+        with db.begin() as session:
+            session.get(User, 1).is_active = False
+    admission = Mock(
+        side_effect=AssertionError("unauthorized identity must not reach task admission")
+    )
+    monkeypatch.setattr(registered_capabilities, "_execute_registered_capability", admission)
+    response = json.loads(
+        registered_capabilities.execute_registered_capability(
+            {"tool_id": "print", "action": "list", "params": {}},
+            runtime_context=context,
+        )
+    )
+    assert response["success"] is False
+    assert response["error_code"] == "tool_identity_required"
+    admission.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "tool,action,params,explicit_approval",
+    [
+        ("print", "list", {}, True),
+        ("print", "print_document", {"file_path": "invoice.pdf"}, False),
+        ("products", "batch_delete", {"ids": [1]}, False),
+    ],
+)
+def test_platform_actor_without_tenant_cannot_admit_an_unpersistable_approval(
+    trusted_actor, monkeypatch, tool, action, params, explicit_approval
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.tools.registered_capabilities import execute_registered_capability
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(user_id=17, tenant_id=None, role="admin", tier="admin")
+    create = Mock(side_effect=AssertionError("approval scope must be checked before task creation"))
+    monkeypatch.setattr(AgentOrchestrator, "start_run_from_plan", create)
+    monkeypatch.setattr(AgentOrchestrator, "start_task_from_plan", create)
+    args = {"tool_id": tool, "action": action, "params": params}
+    with tenant_scope(None):
+        response = json.loads(
+            execute_registered_capability(
+                args,
+                runtime_context={**actor.context, "idempotency_key": "original-platform-call"},
+                require_approval=explicit_approval,
+            )
+        )
+    assert response["success"] is False
+    assert response["error_code"] == "approval_scope_required"
+    assert response["execution_state"] == "blocked"
+    assert response["execution_status"] == "not_started"
+    assert response["retryable"] is False
+    assert response["request_id"] == "original-platform-call"
+    assert not response.get("requires_reconciliation")
+    assert not response.get("run_id")
+    create.assert_not_called()
+
+
 @pytest.mark.parametrize("state", ["queued", "blocked", "unknown", "waiting_approval"])
 def test_registered_completed_outer_keeps_nested_business_state(
-    capability_runner, monkeypatch, state
+    capability_runner, batch_approval_context, monkeypatch, state
 ):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
@@ -186,7 +356,7 @@ def test_registered_completed_outer_keeps_nested_business_state(
     result = json.loads(
         execute_registered_capability(
             {"tool_id": "print", "action": "list", "params": {}},
-            runtime_context={"user_id": "owner", "tenant_id": 1, "turn_id": "turn"},
+            runtime_context={**batch_approval_context, "turn_id": "turn"},
         )
     )
     assert result["success"] is False
@@ -194,7 +364,9 @@ def test_registered_completed_outer_keeps_nested_business_state(
     assert result["run_id"] and result["task_id"]
 
 
-def test_registered_uncertain_wait_cannot_create_another_approval(capability_runner, monkeypatch):
+def test_registered_uncertain_wait_cannot_create_another_approval(
+    capability_runner, batch_approval_context, monkeypatch
+):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     runner, _ = capability_runner
@@ -212,7 +384,7 @@ def test_registered_uncertain_wait_cannot_create_another_approval(capability_run
     result = json.loads(
         execute_registered_capability(
             {"tool_id": "print", "action": "list", "params": {}},
-            runtime_context={"user_id": "owner", "tenant_id": 1, "turn_id": "turn"},
+            runtime_context={**batch_approval_context, "turn_id": "turn"},
         )
     )
     assert result["execution_state"] == "unknown"
@@ -220,23 +392,50 @@ def test_registered_uncertain_wait_cannot_create_another_approval(capability_run
     approvals.create_approval_request.assert_not_called()
 
 
+@pytest.mark.parametrize("error_type", [ConnectionError, RuntimeError, TypeError])
 def test_registered_executor_exception_keeps_original_unknown_without_redispatch(
-    capability_runner, monkeypatch
+    capability_runner, batch_approval_context, monkeypatch, error_type
 ):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     runner, _ = capability_runner
-    execute = Mock(side_effect=RuntimeError("worker lost receipt"))
+    error = error_type("worker lost receipt")
+    execute = Mock(side_effect=error)
     monkeypatch.setattr(runner, "execute_dispatched_run", execute)
-    replies = [
-        json.loads(
+
+    def call():
+        return json.loads(
             execute_registered_capability(
                 {"tool_id": "print", "action": "list", "params": {}},
-                runtime_context={"user_id": "owner", "tenant_id": 1, "turn_id": "turn"},
+                runtime_context={**batch_approval_context, "turn_id": "turn"},
             )
         )
-        for _ in range(2)
-    ]
+
+    if error_type is not ConnectionError:
+        with pytest.raises(error_type) as caught:
+            call()
+        assert caught.value is error
+        runs = runner.list_runs(user_id=batch_approval_context["user_id"])
+        tasks = runner.list_tasks(user_id=batch_approval_context["user_id"])
+        assert len(runs) == len(tasks) == 1
+        original_run, original_task = runs[0].to_dict(), tasks[0].to_dict()
+        repeated = call()
+        assert repeated["run_id"] == original_run["run_id"]
+        assert repeated["task_id"] == original_task["task_id"]
+        assert repeated["deduplicated"] is True
+        assert repeated["success"] is repeated["retryable"] is False
+        assert repeated["execution_state"] != "completed"
+        assert runner.get_run(repeated["run_id"]).to_dict() == original_run
+        assert (
+            runner.get_task(
+                user_id=batch_approval_context["user_id"], task_id=repeated["task_id"]
+            ).to_dict()
+            == original_task
+        )
+        execute.assert_called_once()
+        return
+
+    replies = [call() for _ in range(2)]
     assert replies[0]["run_id"] == replies[1]["run_id"]
     assert all(item["execution_state"] == "unknown" for item in replies)
     assert all(item["retryable"] is False for item in replies)
@@ -300,11 +499,17 @@ def test_capability_call_rejects_unknown_or_incomplete_actions() -> None:
         {"tool_id": "not-a-real-tool", "action": "list", "params": {}}
     )
     assert unknown["success"] is False
+    assert unknown["error_code"] == "unknown_tool"
+    assert unknown["execution_status"] == "not_started"
+    assert "available_tool_ids" not in unknown
 
     incomplete = resolve_registered_capability_call(
         {"tool_id": "print", "action": "print_document", "params": {}}
     )
     assert incomplete["success"] is False
+    assert incomplete["error_code"] == "schema_validation_failed"
+    assert incomplete["execution_status"] == "not_started"
+    assert incomplete["retryable"] is False
     assert incomplete["required_params"] == ["file_path"]
 
 
@@ -322,12 +527,17 @@ def test_capability_call_strips_model_injected_runtime_context() -> None:
     assert "_runtime_context" not in resolved["params"]
 
 
-def test_workflow_registry_and_dispatch_include_capability_tool(monkeypatch) -> None:
+def test_workflow_registry_and_dispatch_include_capability_tool(
+    monkeypatch, batch_approval_context
+) -> None:
     from app.application.tools import workflow
     from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
 
     workflow.invalidate_workflow_tool_registry()
-    names = {item["function"]["name"] for item in workflow.get_workflow_tool_registry()}
+    names = {
+        item["function"]["name"]
+        for item in workflow.get_workflow_tool_registry(batch_approval_context)
+    }
     assert ERP_CAPABILITY_TOOL_NAME in names
 
     execute = Mock(return_value=json.dumps({"success": True}))
@@ -342,22 +552,6 @@ def test_workflow_registry_and_dispatch_include_capability_tool(monkeypatch) -> 
     )
     assert json.loads(raw)["success"] is True
     execute.assert_called_once_with(args, workspace_root="/tmp/workspace", runtime_context=context)
-
-
-def test_business_read_keeps_decimal_price_serializable(monkeypatch):
-    from app.application.tools import workflow
-
-    monkeypatch.setattr(
-        workflow,
-        "try_execute_business_db_tool",
-        lambda *args: {
-            "success": True,
-            "data": [{"model_number": "P002", "price": Decimal("10.25")}],
-        },
-    )
-    result = json.loads(workflow.execute_workflow_tool("business_db_read", {"entity": "products"}))
-    assert result["success"] is True
-    assert result["data"] == [{"model_number": "P002", "price": 10.25}]
 
 
 @pytest.fixture
@@ -392,7 +586,7 @@ def batch_approval_context(db, monkeypatch):
         }
 
 
-def _batch_call(context, tool="products"):
+def _batch_call(context, tool="customers"):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
     return json.loads(
@@ -403,19 +597,18 @@ def _batch_call(context, tool="products"):
     )
 
 
-@pytest.mark.parametrize("tool", ["products", "customers"])
 def test_independent_batch_calls_in_one_turn_have_distinct_durable_approvals(
-    db, batch_approval_context, tool
+    db, batch_approval_context
 ):
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 
     contexts = [{**batch_approval_context, "call_id": value} for value in ("call-a", "call-b")]
-    receipts = [_batch_call(context, tool) for context in contexts]
+    receipts = [_batch_call(context) for context in contexts]
     assert all(item.get("pending_approval") for item in receipts), receipts
     for key in ("task_id", "agent_run_id", "approval_request_id"):
         assert len({item[key] for item in receipts}) == 2
     for context, original in zip(contexts, receipts, strict=True):
-        repeated = _batch_call(context, tool)
+        repeated = _batch_call(context)
         assert repeated["deduplicated"] is True
         assert repeated["agent_run_id"] == original["agent_run_id"]
         assert repeated["approval_request_id"] == original["approval_request_id"]
@@ -424,6 +617,16 @@ def test_independent_batch_calls_in_one_turn_have_distinct_durable_approvals(
         assert run.metadata["approval_request_id"] == original["approval_request_id"]
     with db() as session:
         assert session.query(ApprovalRequest).count() == 2
+
+
+def test_tenant_cannot_create_approval_for_legacy_global_product_delete(db, batch_approval_context):
+    result = _batch_call(batch_approval_context, "products")
+    assert result["success"] is False
+    assert result["error_code"] == "tool_permission_denied"
+    assert result["reason"] == "legacy_store_not_scoped"
+    assert not result.get("run_id")
+    with db() as session:
+        assert session.query(ApprovalRequest).count() == 0
 
 
 @pytest.mark.parametrize("identity", ["legacy_hash", "stored_opaque_id"])
@@ -446,7 +649,7 @@ def test_legacy_batch_approval_is_read_only_and_bound_to_original_execution(
     legacy_id = (
         hashlib.sha256(
             json.dumps(
-                [1, "1", context["turn_id"], "products", "batch_delete"], ensure_ascii=False
+                [1, "1", context["turn_id"], "customers", "batch_delete"], ensure_ascii=False
             ).encode()
         ).hexdigest()
         if identity == "legacy_hash"
@@ -514,6 +717,67 @@ def test_legacy_batch_approval_is_read_only_and_bound_to_original_execution(
         assert rows[0].business_data == before_approval
 
 
+@pytest.mark.parametrize(
+    "damage", ["step", "request", "attachment", "storage-failure", "runtime", "type"]
+)
+def test_lost_approval_binding_keeps_original_task_without_recreating_approval(
+    db, batch_approval_context, monkeypatch, damage
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.application.workflow.approval_service import ApprovalService
+
+    original_execute = AgentOrchestrator.execute_dispatched_run
+    dispatched = []
+    forbidden = Mock(side_effect=AssertionError("unconfirmed approval cannot execute or replay"))
+    monkeypatch.setattr(AgentToolExecutor, "execute", forbidden)
+
+    def pause(self, run_id):
+        dispatched.append(run_id)
+        run = original_execute(self, run_id)
+        assert run is not None and run.status == "waiting_user"
+        if damage == "step":
+            run.steps[0].params = {"ids": [2]}
+        elif damage == "request":
+            run.metadata.pop("approval_request_id")
+        return self.save_run(run) if damage in {"step", "request"} else run
+
+    monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", pause)
+    error_type = {"runtime": RuntimeError, "type": TypeError}.get(damage)
+    error = error_type("approval adapter programming failure") if error_type else None
+    if damage == "storage-failure":
+        monkeypatch.setattr(ApprovalService, "_persist_request_to_db", Mock(return_value=None))
+    if damage == "attachment" or error is not None:
+        monkeypatch.setattr(
+            ApprovalService, "attach_pending_agent_run", Mock(return_value=False, side_effect=error)
+        )
+    if error is not None:
+        with pytest.raises(type(error)) as caught:
+            _batch_call(batch_approval_context)
+        assert caught.value is error
+        forbidden.assert_not_called()
+        return
+
+    first = _batch_call(batch_approval_context)
+    monkeypatch.setattr(ApprovalService, "create_approval_request", forbidden)
+    monkeypatch.setattr(ApprovalService, "attach_pending_agent_run", forbidden)
+    repeated = _batch_call(batch_approval_context)
+    assert repeated["agent_run_id"] == first["agent_run_id"]
+    assert repeated["task_id"] == first["task_id"]
+    assert repeated["deduplicated"] is True
+    assert dispatched == [first["agent_run_id"]]
+    for response in (first, repeated):
+        assert response["execution_state"] == "unknown"
+        assert response["requires_reconciliation"] is True
+        assert response["success"] is response["retryable"] is False
+        assert not response.get("pending_approval")
+    assert len(get_agent_run_repository().list_recent(user_id="1")) == 1
+    with db() as session:
+        assert session.query(ApprovalRequest).count() == int(damage == "attachment")
+    forbidden.assert_not_called()
+
+
 def test_persisted_approval_pointer_cannot_read_another_call_approval(
     db, batch_approval_context, monkeypatch
 ):
@@ -572,22 +836,22 @@ def test_pre_unified_batch_run_is_read_before_any_new_task_can_be_published(
         old_context.pop("session_id")
     legacy_id = hashlib.sha256(
         json.dumps(
-            [1, "1", context["turn_id"], "products", "batch_delete"], ensure_ascii=False
+            [1, "1", context["turn_id"], "customers", "batch_delete"], ensure_ascii=False
         ).encode()
     ).hexdigest()
     node = WorkflowNode(
-        "registered_capability", "products", "batch_delete", {"ids": [1]}, risk="high"
+        "registered_capability", "customers", "batch_delete", {"ids": [1]}, risk="high"
     )
     plan = PlanGraph(
         plan_id=f"erp-capability-{legacy_id}",
-        intent="delete products",
+        intent="delete customers",
         nodes=[node],
         metadata={"approval_required_node_ids": [node.node_id]},
     )
     orchestrator = AgentOrchestrator()
     original = orchestrator.start_run_from_plan(
         user_id="1",
-        message="delete products",
+        message="delete customers",
         plan=plan,
         runtime_context=old_context,
         auto_execute=True,
@@ -639,7 +903,7 @@ def test_pre_unified_batch_run_is_read_before_any_new_task_can_be_published(
 
         result = json.loads(
             execute_registered_capability(
-                {"tool_id": "products", "action": "batch_delete", "params": {"ids": [2]}},
+                {"tool_id": "customers", "action": "batch_delete", "params": {"ids": [2]}},
                 runtime_context=context,
             )
         )

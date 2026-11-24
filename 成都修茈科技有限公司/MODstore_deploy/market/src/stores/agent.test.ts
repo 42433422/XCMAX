@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAgentStore } from './agent'
 import { useAuthStore } from './auth'
@@ -33,6 +33,30 @@ describe('useAgentStore', () => {
   it('初始状态 isOpen=false', () => {
     const store = useAgentStore()
     expect(store.isOpen).toBe(false)
+  })
+
+  it('账号切换同步清除原对话、确认与无归属操作日志', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: false }
+    sessionStorage.setItem('xc_butler_action_log', '[{"label":"unowned legacy"}]')
+    const store = useAgentStore()
+    const legacyLog = sessionStorage.getItem('xc_butler_action_log')
+    const resolve = vi.fn()
+    store.addMessage({ id: 'private-A', role: 'user', content: 'private A', timestamp: 1 })
+    store.currentConversationId = 10
+    store.isLoading = true
+    store.orchestrationSession = { sessionId: 'A-session', steps: [], status: 'running' }
+    store.setPendingAction({ id: 'A-action', action: 'click', risk: 'medium', label: 'A only', args: {}, resolve })
+    sessionStorage.setItem('xc_butler_action_log', '[{"label":"A action"}]')
+    auth.user = { id: 22, username: 'B', is_admin: false }
+    expect(legacyLog).toBeNull()
+    expect(store.messages).toEqual([])
+    expect(store.currentConversationId).toBeNull()
+    expect(store.orchestrationSession).toBeNull()
+    expect(store.pendingAction).toBeNull()
+    expect(store.isLoading).toBe(false)
+    expect(resolve).toHaveBeenCalledExactlyOnceWith(false)
+    expect(sessionStorage.getItem('xc_butler_action_log')).toBeNull()
   })
 
   it('grantConsent 设置 consentGiven=true 并写 localStorage', () => {

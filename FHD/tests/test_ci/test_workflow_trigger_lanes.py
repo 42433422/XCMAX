@@ -1,7 +1,10 @@
 """Protect PR deduplication without dropping main, tag, or scheduled evidence."""
 
+import ast
 import os
 import subprocess
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -76,6 +79,21 @@ def test_only_superseded_runs_of_the_same_pr_are_cancelled(source, published):
     }
 
 
+@pytest.mark.parametrize("published", [False, True])
+def test_ai_review_keeps_pr_and_manual_run_groups_separate(published):
+    _, doc = workflow("FHD/.github/workflows/ai-review.yml", published)
+    assert set(doc["on"]) == {"pull_request", "workflow_dispatch"}
+    assert doc["concurrency"] == {
+        "group": (
+            "ai-review-${{ github.event_name == 'pull_request' && "
+            "format('pr-{0}', github.event.pull_request.number) || "
+            "format('run-{0}', github.run_id) }}"
+        ),
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    }
+    assert doc["permissions"] == {"contents": "read", "pull-requests": "write"}
+
+
 def test_global_secret_gate_and_scheduled_mobile_acceptance_remain():
     _, secrets = workflow(".github/workflows/gitleaks.yml")
     assert "paths" not in secrets["on"]["pull_request"]
@@ -125,6 +143,150 @@ def test_runtime_contract_keeps_native_and_scheduled_coverage():
         "macos-15",
     }
     assert doc["on"]["schedule"]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "missing_report",
+        "missing_case",
+        "missing_native_report",
+        "missing_native_case",
+        "test_production_freezes_original_source_and_oracle_before_delivery[None]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[delete]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[replace]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[input]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[ready]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[missing_reference]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[changed_reference]",
+        "skipped",
+        "failure",
+        "error",
+    ],
+)
+def test_native_business_replay_requires_executed_original_scenarios(tmp_path, fault):
+    _, doc = workflow("FHD/.github/workflows/mac-control-contract.yml")
+    steps = doc["jobs"]["runtime-contract"]["steps"]
+    run = next(
+        step
+        for step in steps
+        if step.get("name") == "Verify original business replay inside the native sandbox"
+    )
+    guard = next(
+        step
+        for step in steps
+        if step.get("name") == "Reject missing or skipped native business replay evidence"
+    )
+    assert run["if"] == "matrix.os == 'ubuntu-22.04'"
+    assert "tests/test_workflow_training_replay.py" in run["run"]
+    assert "tests/test_workflow_training_replay_capture.py" in run["run"]
+    assert "tests/test_workflow_business_promptfoo.py" in run["run"]
+    assert "always()" in guard["if"]
+    required = [
+        "test_real_native_employee_and_independent_file_check[csv]",
+        "test_real_native_employee_and_independent_file_check[excel]",
+        "test_successful_native_run_with_wrong_cells_fails_business_assertion",
+        "test_native_replay_cannot_read_host_oracle_write_outside_or_use_network[seal]",
+        "test_native_replay_cannot_read_host_oracle_write_outside_or_use_network[cli]",
+        "test_native_replay_without_sandbox_cannot_be_verified",
+        "test_production_freezes_original_source_and_oracle_before_delivery[None]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[delete]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[replace]",
+        "test_production_freezes_original_source_and_oracle_before_delivery[input]",
+        "test_running_delivery_reuses_its_original_optional_training_snapshot[delete]",
+        "test_running_delivery_reuses_its_original_optional_training_snapshot[replace]",
+        "test_running_delivery_reuses_its_original_optional_training_snapshot[disable_policy]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[ready]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[missing_reference]",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input[changed_reference]",
+        "test_missing_training_snapshot_cannot_be_recaptured_during_delivery",
+        "test_delivery_recheck_does_not_add_a_late_training_snapshot",
+        "test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout[direct]",
+        "test_actual_promptfoo_excel_results_revalidate_and_seal_independent_holdout[deferred]",
+        "test_timeout_reaps_worker_descendants",
+        "real promptfoo uses the approved model through the official SRT proxy",
+        "real promptfoo uses the approved model inside native SRT",
+    ]
+    # Parse the original test without importing or executing its native fixtures.
+    source = ROOT / (
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay_capture.py"
+    )
+    parameters = {
+        "test_production_freezes_original_source_and_oracle_before_delivery": "reference_change",
+        "test_frozen_training_snapshot_still_rejects_changed_business_input": "capture_state",
+    }
+    for test_name, parameter in parameters.items():
+        original = next(
+            node
+            for node in ast.parse(source.read_text()).body
+            if isinstance(node, ast.FunctionDef) and node.name == test_name
+        )
+        marker = next(
+            node
+            for node in original.decorator_list
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == "pytest.mark.parametrize"
+        )
+        assert ast.literal_eval(marker.args[0]) == parameter
+        assert {f"{test_name}[{state}]" for state in ast.literal_eval(marker.args[1])} == {
+            name for name in required if name.startswith(test_name + "[")
+        }
+    suites = {
+        name: ET.Element("testsuite")
+        for name in ("native-business-replay.xml", "native-trainer.xml")
+    }
+    for index, name in enumerate(required):
+        if (
+            fault == "missing_case"
+            and index == 0
+            or fault == "missing_native_case"
+            and index == len(required) - 1
+            or fault == name
+        ):
+            continue
+        report = (
+            "native-trainer.xml"
+            if name.startswith("real promptfoo ")
+            else "native-business-replay.xml"
+        )
+        case = ET.SubElement(suites[report], "testcase", name=name)
+        if fault in {"skipped", "failure", "error"}:
+            ET.SubElement(case, fault)
+    if fault != "missing_report":
+        ET.ElementTree(suites["native-business-replay.xml"]).write(
+            tmp_path / "native-business-replay.xml"
+        )
+    if fault != "missing_native_report":
+        ET.ElementTree(suites["native-trainer.xml"]).write(tmp_path / "native-trainer.xml")
+    result = subprocess.run(
+        [sys.executable, "-c", guard["run"]],
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        capture_output=True,
+        text=True,
+    )
+    assert (result.returncode == 0) == (fault is None), result.stdout + result.stderr
+
+
+def test_modstore_full_suite_keeps_native_replays_on_a_supported_host():
+    _, doc = workflow(
+        "成都修茈科技有限公司/MODstore_deploy/.github/workflows/ci-backend-python.yml"
+    )
+    job = doc["jobs"]["modstore-backend-test"]
+    assert job["runs-on"] == "ubuntu-22.04"
+    install = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Install the pinned experiment evaluator"
+    )
+    assert "bubblewrap socat ripgrep" in install["run"]
+    assert "PROMPTFOO_SANDBOX_ENTRY=" in install["run"]
+    tests = next(
+        step for step in job["steps"] if step.get("name", "").startswith("Run tests with coverage")
+    )
+    assert "python -m pytest tests/ -v" in tests["run"]
+    assert "--ignore" not in tests["run"] and " -m " not in tests["run"].replace(
+        "python -m ", "python "
+    )
 
 
 @pytest.mark.parametrize(

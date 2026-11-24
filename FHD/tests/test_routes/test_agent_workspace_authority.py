@@ -7,13 +7,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.employee_runtime.task_continuity import ledger_path
-from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+from app.application.tools.workflow_tools.dispatch import (
+    execute_registered_workflow_tool,
+)
 from app.fastapi_routes.domains.agent import agent_routes
 from app.fastapi_routes.domains.agent.route_support import (
     authenticated_runtime_context,
     without_runtime_identity,
 )
-from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_principal import (
+    AgentPrincipal,
+    require_agent_principal,
+)
 
 
 @pytest.fixture
@@ -117,6 +122,9 @@ def test_shared_ingress_sanitizer_strips_root_without_mutating_input(roots):
         "workspace_root": str(outside),
         "source": "chat",
         "active_skills": ["caller-supplied instructions"],
+        "service_source": "fastapi_product_compat_route",
+        "template_base_dir": str(outside),
+        "route_module": "caller.chosen.module",
     }
     assert without_runtime_identity(raw) == {"source": "chat"}
     assert raw["workspace_root"] == str(outside)
@@ -152,18 +160,38 @@ def test_tools_body_uses_same_server_root_and_discards_nested_override(roots, mo
 
 
 def test_planner_body_root_cannot_select_directory(roots, monkeypatch):
-    import app.mod_sdk.planner_tools as planner
+    from starlette.requests import Request
+
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
     server, outside = roots
     captured = {}
+    monkeypatch.setattr(
+        "app.fastapi_routes.domains.agent.route_support.request_runtime_context",
+        lambda request: {"user_id": "17", "workspace_root": str(server)},
+    )
 
-    def execute(name, args, workspace, **kwargs):
-        captured["workspace"] = workspace
-        return '{"success": true}'
+    def execute(args, **kwargs):
+        captured.update(args=args, **kwargs)
+        return '{"success": true, "execution_state": "completed"}'
 
-    monkeypatch.setattr(planner, "resolve_planner_tool_executor", lambda: execute)
-    planner.execute_planner_tool_from_body({"tool_name": "test", "workspace_root": str(outside)})
-    assert captured["workspace"] == str(server)
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        execute,
+    )
+    request = Request({"type": "http", "path": "/api/mod/test/tools/execute", "headers": []})
+    run_tools_execute_agent(
+        request=request,
+        body={
+            "tool_id": "products",
+            "action": "query",
+            "workspace_root": str(outside),
+            "params": {"workspace_root": str(outside)},
+        },
+        route_path=request.url.path,
+    )
+    assert captured["workspace_root"] == str(server)
+    assert "workspace_root" not in captured["args"]["params"]
 
 
 def test_trigger_payload_root_cannot_select_directory(roots, monkeypatch):
@@ -180,7 +208,8 @@ def test_trigger_payload_root_cannot_select_directory(roots, monkeypatch):
 
     monkeypatch.setattr(EmployeeAgent, "run", run)
     monkeypatch.setattr(
-        "app.application.employee_runtime.metrics.record_employee_trigger", lambda *a: None
+        "app.application.employee_runtime.metrics.record_employee_trigger",
+        lambda *a: None,
     )
     handler = _make_handler("clerk", TriggerBinding(employee_id="clerk"))
     handler(SimpleNamespace(event_type="test", payload={"workspace_root": str(outside)}))

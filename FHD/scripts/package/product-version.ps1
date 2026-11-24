@@ -4,14 +4,25 @@
 # 打包/发布/验收脚本不得再写死四段产品版本；显式传入的 -Version 优先（便于演练降级版本）。
 function Resolve-ProductVersion {
   [CmdletBinding()]
-  param([string]$Version = '')
+  param([string]$Version = '', [string]$SourceSha = '')
 
+  if ($SourceSha -and ($Version -or $SourceSha -cnotmatch '^[0-9a-f]{40}$')) {
+    throw 'Frozen source version requires one exact lowercase Git SHA and no version override'
+  }
   if ($Version) { return $Version.TrimStart('v', 'V') }
 
   $FhdRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
   $VersionFile = Join-Path $FhdRoot 'VERSION.md'
+  if ($SourceSha) {
+    $previousEncoding = [Console]::OutputEncoding
+    try {
+      [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+      $versionText = (& git -C $FhdRoot show "${SourceSha}:FHD/VERSION.md") -join "`n"
+      if ($LASTEXITCODE -ne 0) { throw 'Frozen source VERSION.md is unavailable' }
+    } finally { [Console]::OutputEncoding = $previousEncoding }
+  } else { $versionText = Get-Content -LiteralPath $VersionFile -Raw -Encoding UTF8 }
   $match = [regex]::Match(
-    (Get-Content -LiteralPath $VersionFile -Raw -Encoding UTF8),
+    $versionText,
     '\*\*XCAGI 稳定产品版本\*\*\s*\|\s*`(\d+\.\d+\.\d+\.\d+)`'
   )
   if (-not $match.Success) {

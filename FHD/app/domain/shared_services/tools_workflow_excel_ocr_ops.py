@@ -55,23 +55,31 @@ def _registered_router_ocr(
                 return {"success": False, "message": "缺少 image_url"}
             ocr_type = str(params.get("ocr_type") or "general").strip() or "general"
             user_id = str(
-                params.get("user_id") or runtime_context.get("user_id") or "system"
+                runtime_context.get("actor_id") or runtime_context.get("user_id") or ""
             ).strip()
+            if not user_id:
+                return {
+                    "success": False,
+                    "error_code": "tool_identity_required",
+                    "message": "OCR 请求缺少已验证账号",
+                }
             from app.neuro_bus.domains.ocr_domain import get_ocr_domain
 
             ok = get_ocr_domain().emit_ocr_requested(
                 request_id=request_id,
                 image_url=image_url,
                 ocr_type=ocr_type,
-                user_id=user_id or "system",
+                user_id=user_id,
             )
             return {
-                "success": bool(ok),
+                "success": False,
+                "execution_state": "pending" if ok else "failed",
+                "retryable": False,
                 "message": "OCR 请求已发布" if ok else "OCR 请求发布失败",
                 "request_id": request_id,
                 "image_url": image_url,
                 "ocr_type": ocr_type,
-                "user_id": user_id or "system",
+                "user_id": user_id,
                 "event": "ocr.requested",
                 "published": bool(ok),
             }

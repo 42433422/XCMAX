@@ -4,7 +4,8 @@ import agentRunsApi from '@/api/agentRuns'
 import type { ChatPlannerPayload } from '@/types/chat'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeWaiting, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
+import { isRuntimeWaiting, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { plannerExecutionState } from './chat-orchestration/chatOrchestrationShared'
 
 export type ChatConversationStatus = ChatStatus | 'waiting' | 'review' | 'stopped'
 
@@ -90,7 +91,7 @@ export async function persistDetachedPlannerResult(
     const continuation = runtimeContinuationFromPayload(part)
     const approvalCard = continuation ? parseApprovalCardFromPayload(part) : null
     const extras: UiChatMessageExtras = {
-      ...(continuation?.sessionId === sessionId ? { runtimeContinuation: continuation, workflowAction: runtimeExecutionState(part) } : {}),
+      ...(continuation?.sessionId === sessionId ? { runtimeContinuation: continuation, workflowAction: plannerExecutionState(part) } : {}),
       ...(approvalCard ? { approvalCard } : {}),
     }
     if (Object.keys(extras).length) await save('ai', text, sessionId, extras)

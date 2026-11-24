@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentTaskSummary } from '@/api/agentRuns'
-import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from './taskWorkspacePresentation'
+import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskStatusOf, taskUnreadCount } from './taskWorkspacePresentation'
 
 function task(overrides: Partial<AgentTaskSummary> = {}): AgentTaskSummary {
   return {
@@ -41,5 +41,13 @@ describe('taskWorkspacePresentation', () => {
     expect(taskProgressPercent(task({ status: 'running', progress: undefined }))).toBe(0)
     expect(taskStatusLabel('custom_state')).toBe('custom_state')
     expect(taskStatusLabel(undefined)).toBe('未知')
+  })
+
+  it('keeps metadata-only uncertain receipts out of approval and inferred completion', () => {
+    const uncertain = task({ metadata: { reconciliation_required: true }, approval_required: true })
+    expect(taskStatusOf(uncertain)).toBe('unknown')
+    expect(taskNeedsApproval(uncertain)).toBe(false)
+    expect(taskProgressPercent(uncertain)).toBe(0)
+    expect(taskProgressPercent({ ...uncertain, progress: { percent: 100 } as never })).toBe(100)
   })
 })

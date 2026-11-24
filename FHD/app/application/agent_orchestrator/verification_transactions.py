@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
 from app.application.agent_orchestrator.verification_readback import _report
@@ -165,7 +165,7 @@ def _journal_lines_match(row, tenant, customer_id, kind, amount) -> bool:
 
 
 def _invoice_journals_match(db, tenant, order, current) -> bool:
-    """Reconcile the active invoice and every original posted credit-note pair."""
+    """Reconcile active invoices with their original posted credit/reversal pairs."""
     posted = list(
         db.scalars(
             select(JournalEntry).where(
@@ -180,6 +180,36 @@ def _invoice_journals_match(db, tenant, order, current) -> bool:
     credits = {row.reversed_of_id: row for row in posted if row.reference_type == "credit-note"}
     if len(invoices) + len(credits) != len(posted):
         return False
+    invoice_ids = (
+        select(JournalEntry.id)
+        .where(
+            JournalEntry.tenant_id == tenant,
+            JournalEntry.reference_id == order.id,
+            JournalEntry.reference_type == "sale",
+        )
+        .correlate(None)
+    )
+    reversals = db.scalars(
+        select(JournalEntry).where(
+            JournalEntry.tenant_id == tenant,
+            JournalEntry.reference_type == "reversal",
+            JournalEntry.status == "posted",
+            or_(
+                JournalEntry.reference_id.in_(invoice_ids),
+                JournalEntry.reversed_of_id.in_(invoice_ids),
+            ),
+        )
+    )
+    for reversal in reversals:
+        if (
+            reversal.reversed_of_id not in invoices
+            or reversal.reference_id != reversal.reversed_of_id
+            or reversal.is_credit_note != 0
+            or reversal.credit_note_of_id is not None
+            or reversal.reversed_of_id in credits
+        ):
+            return False
+        credits[reversal.reversed_of_id] = reversal
     active = set()
     for original in invoices.values():
         if original.is_credit_note or original.reversed_of_id is not None:
@@ -190,7 +220,7 @@ def _invoice_journals_match(db, tenant, order, current) -> bool:
         credit = credits.pop(original.id, None)
         if (
             credit is None
-            or credit.is_credit_note != 1
+            or (credit.reference_type == "credit-note" and credit.is_credit_note != 1)
             or credit.reversed_at is not None
             or credit.credit_note_of_id not in {None, original.id}
             or not _journal_lines_match(

@@ -550,14 +550,14 @@ def tick(
     返回 (truth, signals, plans, audits) 供测试断言与 CLI 输出。
 
     与桌面端 controller.ts tick() 对称：
-      - truth 采集失败不抛错，写 audit + 返回空
+      - truth 采集失败写 audit 后重新抛出原异常
       - 派生信号去重：相同 kind+ts 不重复 ingest（与桌面端 processedSignalKeys 一致）
       - **每次 tick 优先检查过期 .frozen 需解除**（hold_ttl 过期 + health 通过）
     """
     # 1. 采集 truth（容错）
     try:
         truth = adapter.collect_truth()
-    except RECOVERABLE_ERRORS as e:
+    except BOUNDARY_ERRORS as e:
         detail = f"truth_collect_failed: {e}"
         adapter.audit(
             AuditEntry(

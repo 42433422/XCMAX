@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import time
 from contextlib import closing
 from copy import deepcopy
 from decimal import Decimal
@@ -236,24 +237,25 @@ def _reconcile_sql_and_download(business, run):
             (sale["order_id"], sale["order_no"]),
         ).fetchone()
         assert order == (actor.tenant_id, 1000, 0, "unpaid", "invoiced")
+        # One extra row still detects duplicate writes without an unbounded result list.
         rows = db.execute(
             "SELECT product_name,quantity,amount,delivered_quantity FROM sales_order_items "
             "WHERE order_id=? AND tenant_id=?",
             (sale["order_id"], actor.tenant_id),
-        ).fetchall()
+        ).fetchmany(2)
         assert rows == [("产品 B", 10, 1000, 10)]
         assert db.execute(
             "SELECT quantity FROM inventory_transactions WHERE sales_order_id=?",
             (sale["order_id"],),
-        ).fetchall() == [(-10,)]
+        ).fetchmany(2) == [(-10,)]
         assert db.execute(
             "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
             (actor.tenant_id,),
-        ).fetchall() == [(10,)]
+        ).fetchmany(2) == [(10,)]
         assert db.execute(
             "SELECT available_quantity FROM inventory_ledger WHERE tenant_id=?",
             (business.foreign_reviewer.tenant_id,),
-        ).fetchall() == [(20,)]
+        ).fetchmany(2) == [(20,)]
         journal_id = sale["invoice_entry_id"]
         assert db.execute(
             "SELECT debit_total,credit_total,status FROM journal_entries WHERE id=?",
@@ -419,15 +421,119 @@ def test_configured_reviewer_delivers_original_order_without_database_lock(busin
     _assert_workspace_approval_delivery(business, monkeypatch, configured=True)
 
 
-def test_execution_claim_blocks_opposite_decision_before_business_write(
-    business, monkeypatch, trusted_actor
-):
+@pytest.mark.parametrize("configured", [False, True])
+def test_workflow_rejection_cancels_original_run_before_any_business_write(business, configured):
     from app.application.approval_workspace_app_service import reject_request
 
     actor = business.requester
-    rejector = trusted_actor(role="admin")
     run = _start(business, workspace=True)
-    request_id, _ = _workspace_approval(business, run)
+    original_plan = deepcopy(run.metadata["plan"])
+    request_id, _ = _workspace_approval(business, run, configured=configured)
+    with tenant_scope(actor.tenant_id):
+        rejected = reject_request(
+            request_id,
+            business.reviewer.request,
+            body={"reason": "Do not execute the original business order"},
+            x_user_id=None,
+        )
+        assert isinstance(rejected, dict) and rejected["success"] is True, rejected
+        stored_run = SQLAlchemyAgentRunRepository(session_factory=actor.factory).get(run.run_id)
+        assert stored_run.status == "cancelled", stored_run.to_dict()
+        assert stored_run.metadata["plan"] == original_plan
+        assert not stored_run.tool_calls
+        assert rejected["data"]["workflow_execution"]["agent_run_id"] == run.run_id
+        repeated = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+        assert repeated.status_code == 400
+        with actor.factory() as db:
+            assert db.get(ApprovalRequest, request_id).status == "rejected"
+            assert (
+                db.query(ApprovalRecord).filter_by(request_id=request_id, action="reject").count()
+                == 1
+            )
+    _no_effect(business)
+
+
+@pytest.mark.parametrize("configured", [False, True])
+@pytest.mark.parametrize(
+    "target,node_type,min_approvals",
+    [("node", "serial", 2), ("node", "countersign", 1), ("flow", "parallel", 1)],
+)
+def test_unsupported_approval_policy_keeps_original_run_waiting_without_writes(
+    business, configured, target, node_type, min_approvals
+):
+    actor = business.requester
+    run = _start(business, workspace=True)
+    request_id, _ = _workspace_approval(business, run, configured=configured)
+    with tenant_scope(actor.tenant_id):
+        with actor.factory.begin() as db:
+            stored = db.get(ApprovalRequest, request_id)
+            if target == "flow":
+                stored.flow.node_type = node_type
+            else:
+                node = stored.current_node or stored.flow.nodes[0]
+                node.node_type = node_type
+                node.min_approvals = min_approvals
+        response = approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
+        _no_effect(business)
+        assert response.status_code == 409
+        assert json.loads(response.body)["code"] == "unsupported_approval_policy"
+        assert business.repository.get(run.run_id).to_dict() == run.to_dict()
+        with actor.factory() as db:
+            stored = db.get(ApprovalRequest, request_id)
+            assert stored.status == "pending"
+            assert "agent_execution_claim" not in json.loads(stored.business_data)
+            assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == 0
+
+
+@pytest.mark.parametrize("target", ["flow", "node", "count"])
+def test_unsupported_approval_configuration_is_rejected_before_saving(
+    business, trusted_actor, target
+):
+    from app.application.approval_workspace_app_service import create_flow, update_flow
+    from app.db.models.approval import ApprovalFlow
+
+    administrator = trusted_actor(role="admin", tier="admin")
+    body = {
+        "flow": {"flow_key": "review-policy", "flow_name": "Review policy"},
+        "nodes": [{"approver_ids": [business.reviewer.user_id]}],
+    }
+    unsupported = deepcopy(body)
+    if target == "flow":
+        unsupported["flow"]["node_type"] = "countersign"
+    elif target == "node":
+        unsupported["nodes"][0]["node_type"] = "parallel"
+    else:
+        unsupported["nodes"][0]["min_approvals"] = 2
+    with tenant_scope(business.requester.tenant_id):
+        rejected = create_flow(administrator.request, body=unsupported, x_user_id=None)
+        assert rejected.status_code == 409
+        with business.requester.factory() as db:
+            assert db.query(ApprovalFlow).filter_by(flow_key="review-policy").count() == 0
+        created = create_flow(administrator.request, body=body, x_user_id=None)
+        assert created["success"] is True
+        flow_id = created["data"]["id"]
+        rejected = update_flow(
+            flow_id,
+            administrator.request,
+            body={"node_type": "countersign"},
+            x_user_id=None,
+        )
+        assert rejected.status_code == 409
+        with business.requester.factory() as db:
+            assert db.get(ApprovalFlow, flow_id).node_type == "serial"
+
+
+@pytest.mark.parametrize("decision", ["reject", "withdraw"])
+def test_execution_claim_blocks_opposite_decision_before_business_write(
+    business, monkeypatch, trusted_actor, decision
+):
+    from app.application.approval_workspace_app_service import reject_request, withdraw_request
+
+    actor = business.requester
+    rejector = trusted_actor(role="admin") if decision == "reject" else actor
+    decide = reject_request if decision == "reject" else withdraw_request
+    run = _start(business, workspace=True)
+    request_id, _ = _workspace_approval(business, run, configured=decision == "withdraw")
     original_execute = business.executor.execute
     rejected = []
 
@@ -438,7 +544,7 @@ def test_execution_claim_blocks_opposite_decision_before_business_write(
                 assert json.loads(stored.business_data)["agent_execution_claim"]
             _no_effect(business)
             rejected.append(
-                reject_request(
+                decide(
                     request_id,
                     rejector.request,
                     body={
@@ -460,43 +566,46 @@ def test_execution_claim_blocks_opposite_decision_before_business_write(
         assert stored.status == "approved"
         assert stored.approved_by == business.reviewer.user_id
         assert (
-            db.query(ApprovalRecord).filter_by(request_id=request_id, action="reject").count() == 0
+            db.query(ApprovalRecord).filter_by(request_id=request_id, action=decision).count() == 0
         )
     _reconcile_sql_and_download(business, business.repository.get(run.run_id))
 
 
 @pytest.mark.parametrize("claim_after_read", [False, True])
+@pytest.mark.parametrize("decision", ["reject", "withdraw"])
 def test_rejection_and_execution_claim_are_mutually_exclusive(
-    business, monkeypatch, trusted_actor, claim_after_read
+    business, monkeypatch, trusted_actor, claim_after_read, decision
 ):
     from app.application import approval_workspace_app_service as workspace
+    from app.application.approval_workspace.repository import ApprovalRepository
     from app.application.workflow.approval_persistence import claim_agent_approval
 
     actor = business.requester
-    rejector = trusted_actor(role="admin")
+    rejector = trusted_actor(role="admin") if decision == "reject" else actor
+    decide = workspace.reject_request if decision == "reject" else workspace.withdraw_request
     run = _start(business, workspace=True)
-    request_id, request_no = _workspace_approval(business, run)
-    authorize = workspace._can_review_ai_workflow_request
+    request_id, request_no = _workspace_approval(business, run, configured=decision == "withdraw")
+    read_request = ApprovalRepository.request
     claimed = []
 
     def interrupted(*_args, **_kwargs):
         raise SystemExit("claim committed while the opposite reviewer holds an older request")
 
-    def authorize_then_claim(db, req, reviewer):
-        allowed = authorize(db, req, reviewer)
-        if allowed and reviewer == rejector.user_id and claim_after_read:
+    def read_then_claim(db, object_id):
+        req = read_request(db, object_id)
+        if object_id == request_id and claim_after_read and not claimed:
             assert req.status == "pending"
             assert "agent_execution_claim" not in json.loads(req.business_data)
+            claimed.append(True)
             with monkeypatch.context() as patch:
                 patch.setattr(AgentOrchestrator, "continue_run", interrupted)
                 with pytest.raises(SystemExit):
                     approve_request(request_id, business.reviewer.request, body={}, x_user_id=None)
-            claimed.append(True)
-        return allowed
+        return req
 
-    monkeypatch.setattr(workspace, "_can_review_ai_workflow_request", authorize_then_claim)
+    monkeypatch.setattr(ApprovalRepository, "request", staticmethod(read_then_claim))
     with tenant_scope(actor.tenant_id):
-        rejected = workspace.reject_request(
+        rejected = decide(
             request_id, rejector.request, body={"reason": "Opposite decision"}, x_user_id=None
         )
         assert not claim_agent_approval(
@@ -516,10 +625,15 @@ def test_rejection_and_execution_claim_are_mutually_exclusive(
         assert retry.status_code == 400
     with tenant_scope(actor.tenant_id), actor.factory() as db:
         stored = db.get(ApprovalRequest, request_id)
-        assert stored.status == ("pending" if claim_after_read else "rejected")
+        expected_status = "rejected" if decision == "reject" else "withdrawn"
+        assert stored.status == ("pending" if claim_after_read else expected_status)
         assert ("agent_execution_claim" in json.loads(stored.business_data)) is claim_after_read
         assert stored.approved_by == (
-            business.reviewer.user_id if claim_after_read else rejector.user_id
+            business.reviewer.user_id
+            if claim_after_read
+            else rejector.user_id
+            if decision == "reject"
+            else None
         )
         assert db.query(ApprovalRecord).filter_by(request_id=request_id).count() == (
             0 if claim_after_read else 1
@@ -646,13 +760,23 @@ def test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook
     dispatcher = AgentTaskDispatcher(
         execution_repository=queue,
         run_repository=fresh,
+        lease_seconds=30,
         orchestrator_factory=lambda repo: AgentOrchestrator(
             repository=repo, tool_executor=business.executor
         ),
     )
-    claim = queue.claim("business-acceptance-worker", run_id=run.run_id, lease_seconds=30)
-    assert claim is not None
-    dispatcher._execute_claim(claim, "business-acceptance-worker")
+    # Use the real coordinator so long business execution keeps its original
+    # lease through production heartbeats instead of a direct worker shortcut.
+    deadline = time.monotonic() + 120
+    dispatcher.start()
+    try:
+        while queue.get(run.run_id).state in {"queued", "running"}:
+            assert time.monotonic() < deadline, dispatcher.snapshot()
+            time.sleep(0.05)
+    finally:
+        dispatcher.stop()
+    assert queue.get(run.run_id).execution_count == 1
+    assert queue.get(run.run_id).recovery_count == 0
     completed = fresh.get(run.run_id)
     if corrupt:
         assert completed.status != "completed", completed.to_dict()

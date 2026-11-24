@@ -9,9 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-from app.application.user_memory.retrieve import build_memory_context as build_memory_context
+from app.application.user_memory.retrieve import (
+    build_memory_context as build_memory_context,
+)
 from app.application.user_memory.retrieve import search as search
-from app.application.user_memory.write import normalize_memory_text as normalize_memory_text
+from app.application.user_memory.write import (
+    normalize_memory_text as normalize_memory_text,
+)
 from app.application.user_memory.write import remember as remember
 
 
@@ -32,8 +36,8 @@ def get_memory_v2_action_meta(action: str) -> dict[str, Any] | None:
 
 
 def _memory_source():
-    from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
     from app.domain.shared_services import user_memory_service as memory
+    from app.domain.user_memory.policy import MemoryPolicy, PolicyPorts
     from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
     from app.infrastructure.user_memory.persistence import MemoryRepository
 
@@ -81,7 +85,9 @@ def _memory_snapshot(backend, path):
                 )
                 if os.name == "nt"
                 else os.open(
-                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
+                    path.name,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                    dir_fd=directory,
                 )
             )
         except FileNotFoundError:
@@ -138,7 +144,7 @@ def _proposed_memory_matches(policy, params, record) -> bool:
         **policy.govern_candidate(
             source=str(params.get("source") or "memory_v2_api"),
             confidence=0.5 if confidence in (None, "") else float(confidence),
-            evidence=params.get("evidence") if isinstance(params.get("evidence"), list) else None,
+            evidence=(params.get("evidence") if isinstance(params.get("evidence"), list) else None),
         ),
         "memory_id": record["memory_id"],
         "memory_type": policy.normalize_type(
@@ -188,9 +194,12 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         or canonical_hash(previous) != before.get("sha256")
         or canonical_hash(history[:-1]) != before.get("history_sha256")
         or last.get("action")
-        != {"confirm": "confirm", "correct": "correct", "reject": "rejected", "delete": "deleted"}[
-            step.action
-        ]
+        != {
+            "confirm": "confirm",
+            "correct": "correct",
+            "reject": "rejected",
+            "delete": "deleted",
+        }[step.action]
         or not record.get("updated_at")
         or last.get("at") != record["updated_at"]
     ):
@@ -227,7 +236,9 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
                 expected["confidence"] = max(0.0, min(1.0, float(correction["confidence"])))
             expected["correction_count"] = int(previous.get("correction_count") or 0) + 1
         expected.update(
-            status="active", eligible_for_planner=True, confirmed_at=record["updated_at"]
+            status="active",
+            eligible_for_planner=True,
+            confirmed_at=record["updated_at"],
         )
     else:
         if previous.get("status") == "deleted":

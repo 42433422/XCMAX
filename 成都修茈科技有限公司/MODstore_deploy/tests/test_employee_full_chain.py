@@ -12,6 +12,17 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture
+def resolved_scaffold_route(monkeypatch):
+    """Keep catalog tests on their stub model through the current async route boundary."""
+
+    async def resolve(db, user_id, *, provider="", model="", **kwargs):
+        assert user_id > 0
+        return {"provider": provider or "test", "model": model or "test-model"}
+
+    monkeypatch.setattr("modstore_server.llm_api.resolve_default_llm_route", resolve)
+
+
 @pytest.mark.xfail(strict=False, reason="employee_full_chain pre-existing failures in CI")
 def test_employee_pack_parser_adds_web_rankings_config():
     from modstore_server.employee_ai_scaffold import parse_employee_pack_llm_json
@@ -114,7 +125,9 @@ def test_employee_runtime_loads_manifest_from_registered_zip(tmp_path, monkeypat
     assert cfg["perception"]["type"] == "web_rankings"
 
 
-def test_run_employee_ai_scaffold_registers_runtime_catalog(tmp_path, monkeypatch):
+def test_run_employee_ai_scaffold_registers_runtime_catalog(
+    tmp_path, monkeypatch, resolved_scaffold_route
+):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
 
@@ -188,7 +201,9 @@ def test_run_employee_ai_scaffold_registers_runtime_catalog(tmp_path, monkeypatc
         assert row.stored_filename
 
 
-def test_run_employee_ai_scaffold_skips_catalog_when_publish_disabled(tmp_path, monkeypatch):
+def test_run_employee_ai_scaffold_skips_catalog_when_publish_disabled(
+    tmp_path, monkeypatch, resolved_scaffold_route
+):
     """工作台「做员工」流水线传入 publish_to_catalog=False 时，仅落本地 library，不写 Catalog。"""
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
@@ -317,7 +332,9 @@ def test_try_load_employee_pack_from_library_when_not_in_catalog(tmp_path, monke
     assert er.try_load_employee_pack_from_library("asset-worker-employee") is None
 
 
-def test_employee_pack_can_attach_generated_skill_workflow(tmp_path, monkeypatch):
+def test_employee_pack_can_attach_generated_skill_workflow(
+    tmp_path, monkeypatch, resolved_scaffold_route
+):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
 
@@ -452,14 +469,6 @@ def test_employee_pack_can_attach_generated_skill_workflow(tmp_path, monkeypatch
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.resolve_api_key",
         lambda *args, **kwargs: ("k", "test"),
-    )
-    monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.resolve_llm_provider_model",
-        lambda db, user, provider, model: (
-            provider or "test",
-            model or "test-model",
-            None,
-        ),
     )
     monkeypatch.setattr(
         "modstore_server.mod_scaffold_runner.load_config",

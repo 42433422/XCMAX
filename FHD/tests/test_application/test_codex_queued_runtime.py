@@ -6,6 +6,7 @@ import copy
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
 from app.application.agent_runtime import gateway
@@ -39,10 +40,17 @@ def expire(state, run_id):
         row.lease_expires_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
 
 
-def test_http_queue_request_and_worker_turn_have_separate_stable_identities(runtime_entry):
+@pytest.mark.parametrize("legacy_unstarted", [False, True])
+def test_http_queue_request_and_worker_turn_have_separate_stable_identities(
+    runtime_entry, legacy_unstarted
+):
     state = runtime_entry
     run_id = create(state)
     saved = state.repository.get(run_id)
+    assert saved.metadata["codex_runtime"]["version"] == 1
+    if legacy_unstarted:
+        saved.metadata["codex_runtime"].pop("version")
+        state.repository.save(saved)
     pending = saved.metadata["_codex_queued_request"]
     original = canonical_digest({"turn_id": "queued-request", "owner": saved.user_id})
     worker_id = canonical_digest({"turn_id": pending["worker_turn_id"], "owner": saved.user_id})
@@ -57,6 +65,7 @@ def test_http_queue_request_and_worker_turn_have_separate_stable_identities(runt
     assert state.queue.get(run_id).execution_count == 0
     state.drain(run_id)
     saved = state.repository.get(run_id)
+    assert saved.metadata["codex_runtime"]["version"] == 1
     assert set(saved.metadata["runtime_requests"]) == {original, worker_id}
     assert saved.metadata["runtime_requests"][original]["result"]["ok"] is True
     assert len(state.calls) == 1 and state.queue.get(run_id).state == "succeeded"
@@ -85,17 +94,29 @@ def test_queue_admission_needs_no_qualification_but_worker_still_requires_it(
         assert state.repository.get(run_id).final_output["codex_result"]["run_id"] == run_id
 
 
-def test_failed_queue_insert_rolls_back_the_parent_admission(runtime_entry, monkeypatch):
+@pytest.mark.parametrize("programming_error", [False, True])
+def test_failed_queue_insert_rolls_back_the_parent_admission(
+    runtime_entry, monkeypatch, programming_error
+):
     state = runtime_entry
+    error = (
+        RuntimeError("synthetic queue write failure")
+        if programming_error
+        else OperationalError("INSERT INTO agent_task_executions", {}, OSError("queue unavailable"))
+    )
 
     def fail(*_args, **_kwargs):
-        raise RuntimeError("synthetic queue write failure")
+        raise error
 
     monkeypatch.setattr(state.queue, "enqueue_in_session", fail)
-    response = state.client.post(
-        "/api/agent/runs", json={"message": "解释库存含义", "request_id": "failed-insert"}
-    )
-    assert response.status_code == 409
+    payload = {"message": "解释库存含义", "request_id": "failed-insert"}
+    if programming_error:
+        with pytest.raises(RuntimeError) as raised:
+            state.client.post("/api/agent/runs", json=payload)
+        assert raised.value is error
+    else:
+        response = state.client.post("/api/agent/runs", json=payload)
+        assert response.status_code == 409
     assert state.repository.list_recent() == []
     assert state.calls == state.servers == []
 

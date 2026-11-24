@@ -1,48 +1,52 @@
-"""Tool request values and exceptions must not enter application logs."""
+"""Public tool receipts never expose plugin exceptions or business values."""
 
-import logging
+import json
+from unittest.mock import patch
 
 import pytest
 
-from app.services.tools_execution import executor
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-@pytest.mark.parametrize("route", ["registered", "legacy", "error"])
-def test_tool_execution_never_logs_request_or_exception_values(monkeypatch, caplog, route):
-    secret = "test-only-xxxxxxxxxxxxxxxxxxxxxxxx"
-    payload = {
-        "tool_id": secret,
-        "action": secret,
-        "params": {"order_text": secret, secret: secret},
+@pytest.mark.parametrize("failure", ["exception", "receipt"])
+def test_tool_execution_never_logs_or_returns_private_failure_values(
+    trusted_actor, caplog, failure
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.tools_execute import router
+
+    secret = "private-business-value-only-for-test"
+    app = FastAPI()
+    app.include_router(router)
+    actor = trusted_actor(user_id=17, permissions=["products.query"])
+    receipt = {
+        "success": False,
+        "execution_state": "unknown",
+        "run_id": "original-run",
+        "reconciliation_required": True,
+        "retryable": False,
+        "error": secret,
+        "message": secret,
+        "result": {"traceback": secret},
     }
-    calls = []
-    monkeypatch.setattr(executor, "_j", lambda body, status: (body, status))
-    monkeypatch.setattr(executor, "_normalize_action", lambda action, params: action)
-    monkeypatch.setattr(executor, "_validate_required_params", lambda *args: (True, ""))
-    monkeypatch.setattr(
-        executor,
-        "get_workflow_tool_registry",
-        lambda: {secret: {"actions": {secret: {}}}} if route == "registered" else {},
-    )
-
-    def invoke(*args, **kwargs):
-        calls.append((args, kwargs))
-        if route == "error":
-            raise ValueError(secret)
-        return {"success": True}
-
-    monkeypatch.setattr(executor, "execute_registered_workflow_tool", invoke)
-    monkeypatch.setattr(executor, "dispatch_legacy_tool_payload", invoke)
-    with caplog.at_level(logging.INFO, logger=executor.__name__):
-        result = executor.execute_tool_from_payload(payload)
-    assert len(calls) == 1
+    with patch(
+        "app.application.tools.registered_capabilities.execute_registered_capability",
+        side_effect=ValueError(secret) if failure == "exception" else None,
+        return_value=json.dumps(receipt),
+    ) as execute:
+        response = TestClient(app, headers=actor.headers).post(
+            "/api/tools/execute",
+            json={
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": secret},
+            },
+        )
+    execute.assert_called_once()
     assert secret not in caplog.text
-    assert "request received" in caplog.text
-    if route == "registered":
-        assert result == ({"success": True}, 200)
-        assert calls[0][1]["params"] is payload["params"]
-    elif route == "legacy":
-        assert result == {"success": True}
-        assert calls[0][0][2] is payload["params"]
-    else:
-        assert result == ({"success": False, "message": secret}, 500)
+    assert secret not in response.text
+    assert response.status_code == 202
+    assert response.json()["reconciliation_required"] is True
+    assert response.json()["retryable"] is False

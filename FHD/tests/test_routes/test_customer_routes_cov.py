@@ -15,7 +15,6 @@ from app.fastapi_routes.domains.customer import routes as cust_routes
 from app.fastapi_routes.domains.customer.customer_routes import (
     _agent_node_output,
     _customers_agent_user_id,
-    _execute_customers_route_action,
     router,
 )
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -28,7 +27,9 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 @pytest.fixture()
 def client(request, monkeypatch):
     actor = None
-    if any(action in request.node.name for action in ("create", "update", "delete")):
+    if "canonical_auth" not in request.node.name and any(
+        action in request.node.name for action in ("create", "update", "delete")
+    ):
         actor = request.getfixturevalue("trusted_actor")(tenant_id=7, role="admin")
         monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     app = FastAPI()
@@ -77,12 +78,14 @@ class TestAgentNodeOutput:
     def test_fallback_completed_status(self):
         run = _make_run("completed")
         out = _agent_node_output(run, "no_match")
-        assert out["success"] is True
+        assert out["success"] is False
+        assert out["error_code"] == "execution_receipt_missing"
 
     def test_fallback_failed_with_error_message(self):
         run = _make_run("failed", error="oops")
         out = _agent_node_output(run, "no_match")
-        assert out.get("message") == "oops"
+        assert out["success"] is False
+        assert out["error_code"] == "execution_receipt_missing"
 
     def test_no_run_id(self):
         run = _make_run(run_id="")
@@ -101,132 +104,39 @@ class TestAgentNodeOutput:
 
 
 class TestCustomersAgentUserId:
-    def _req(self, headers: dict) -> MagicMock:
-        req = MagicMock()
-        req.headers = headers
-        return req
+    @pytest.mark.parametrize(
+        "headers,payload",
+        [
+            ({"X-User-Id": "99"}, {}),
+            ({"X-User-ID": "88"}, {}),
+            ({}, {"user_id": "77"}),
+            ({}, {"userId": "66"}),
+            ({}, {}),
+        ],
+    )
+    def test_untrusted_identity_without_session_is_rejected(self, headers, payload):
+        from starlette.requests import Request
 
-    def test_from_x_user_id_header(self):
-        req = self._req({"X-User-Id": "99"})
-        uid = _customers_agent_user_id(req, {})
-        assert uid == "99"
+        request = Request(
+            {
+                "type": "http",
+                "headers": [
+                    (key.lower().encode(), value.encode()) for key, value in headers.items()
+                ],
+            }
+        )
+        with pytest.raises(HTTPException) as denied:
+            _customers_agent_user_id(request, payload)
+        assert denied.value.status_code == 401
 
-    def test_from_x_user_id_upper(self):
-        req = self._req({"X-User-ID": "88"})
-        uid = _customers_agent_user_id(req, {})
-        assert uid == "88"
-
-    def test_from_payload_user_id(self):
-        req = self._req({})
-        uid = _customers_agent_user_id(req, {"user_id": "77"})
-        assert uid == "77"
-
-    def test_from_payload_userId(self):
-        req = self._req({})
-        uid = _customers_agent_user_id(req, {"userId": "66"})
-        assert uid == "66"
-
-    def test_fallback_default(self):
-        req = self._req({})
-        uid = _customers_agent_user_id(req, {})
-        assert uid == "customers-route"
+    def test_authenticated_identity_ignores_body_spoof(self, trusted_actor):
+        actor = trusted_actor(user_id=7)
+        assert _customers_agent_user_id(actor.request, {"user_id": "99"}) == "7"
 
 
 # ===========================================================================
 # 3. _execute_customers_route_action (lines 139-206)
 # ===========================================================================
-
-
-class TestExecuteCustomersRouteAction:
-    def test_create_success(self):
-        with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert",
-            return_value={"id": 1, "name": "A"},
-        ):
-            result = _execute_customers_route_action("create", {"customer_name": "A"})
-        assert result["success"] is True
-        assert result["data"]["id"] == 1
-
-    def test_create_no_name(self):
-        result = _execute_customers_route_action("create", {})
-        assert result["success"] is False
-        assert "不能为空" in result["message"]
-
-    def test_update_success(self):
-        with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_update",
-            return_value={"id": 5},
-        ):
-            result = _execute_customers_route_action("update", {"id": 5, "name": "B"})
-        assert result["success"] is True
-
-    def test_update_no_id(self):
-        result = _execute_customers_route_action("update", {"name": "B"})
-        assert result["success"] is False
-        assert "缺少 id" in result["message"]
-
-    def test_update_no_name(self):
-        result = _execute_customers_route_action("update", {"id": 5})
-        assert result["success"] is False
-        assert "不能为空" in result["message"]
-
-    @pytest.mark.parametrize(
-        ("action", "params", "ids"),
-        [
-            ("delete", {"id": 10}, [10]),
-            ("batch_delete", {"ids": [1, 2, 3]}, [1, 2, 3]),
-        ],
-    )
-    def test_delete_delegates_one_atomic_batch(self, action, params, ids):
-        service = MagicMock()
-        service.batch_delete.return_value = {"success": True, "deleted_count": len(ids)}
-        with patch("app.application.get_customer_app_service", return_value=service):
-            result = _execute_customers_route_action(action, params)
-        assert result["success"] is True
-        assert result["deleted"] == len(ids)
-        service.batch_delete.assert_called_once_with(ids)
-
-    @pytest.mark.parametrize(
-        ("action", "params"),
-        [
-            ("delete", {"id": 0}),
-            ("batch_delete", {"ids": []}),
-            ("batch_delete", {"ids": "bad"}),
-            ("batch_delete", {"ids": [1, "abc", 2]}),
-            ("batch_delete", {"ids": [1, True]}),
-        ],
-    )
-    def test_invalid_batch_rejects_all_before_service(self, action, params):
-        with patch("app.application.get_customer_app_service") as service:
-            result = _execute_customers_route_action(action, params)
-        assert result["success"] is False
-        assert result["deleted_count"] == 0
-        service.assert_not_called()
-
-    def test_missing_customer_result_does_not_partially_delete(self):
-        service = MagicMock()
-        service.batch_delete.return_value = {
-            "success": False,
-            "deleted_count": 0,
-            "message": "客户不存在",
-        }
-        with patch("app.application.get_customer_app_service", return_value=service):
-            result = _execute_customers_route_action("batch_delete", {"ids": [1, 2]})
-        assert result["success"] is False
-        assert result["deleted"] == 0
-        service.batch_delete.assert_called_once_with([1, 2])
-
-    def test_batch_delete_service_error_propagates(self):
-        service = MagicMock()
-        service.batch_delete.side_effect = HTTPException(status_code=500)
-        with patch("app.application.get_customer_app_service", return_value=service):
-            with pytest.raises(HTTPException):
-                _execute_customers_route_action("batch_delete", {"ids": [1]})
-
-    def test_unknown_action(self):
-        result = _execute_customers_route_action("unknown", {})
-        assert result["success"] is False
-        assert "未注册" in result["message"]
 
 
 # Shorthand for the routes module target path
@@ -273,31 +183,30 @@ class TestCustomersGetOne:
 class TestCustomersCreate:
     def test_create_success(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
-            with patch(f"{_ROUTES}._customers_write_raise"):
+            with patch(
+                f"{_ROUTES}._customer_body_name_contact",
+                return_value=("TestCo", "p", "111", "addr"),
+            ):
                 with patch(
-                    f"{_ROUTES}._customer_body_name_contact",
-                    return_value=("TestCo", "p", "111", "addr"),
+                    f"{_ROUTES}._run_customers_agent",
+                    return_value=({"success": True, "data": {"id": 1}}, 200),
                 ):
-                    with patch(
-                        f"{_ROUTES}._run_customers_agent",
-                        return_value={"success": True, "data": {"id": 1}},
-                    ):
-                        with patch(f"{_ROUTES}.publish_simple_event"):
-                            r = client.post("/customers", json={"name": "TestCo"})
+                    with patch(f"{_ROUTES}.publish_simple_event"):
+                        r = client.post("/customers", json={"name": "TestCo"})
         assert r.status_code == 200
 
     def test_create_empty_name_returns_400(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
-            with patch(f"{_ROUTES}._customers_write_raise"):
-                with patch(f"{_ROUTES}._customer_body_name_contact", return_value=("", "", "", "")):
-                    r = client.post("/customers", json={})
+            with patch(f"{_ROUTES}._customer_body_name_contact", return_value=("", "", "", "")):
+                r = client.post("/customers", json={})
         assert r.status_code == 400
 
-    def test_create_via_service(self, client: TestClient):
+    def test_create_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
-            with patch(f"{_FACADE}.customers_create", return_value={"success": True}):
-                r = client.post("/customers", json={"name": "TestCo"})
-        assert r.status_code == 200
+            with patch(f"{_FACADE}.customers_create") as bypass:
+                r = client.post("/customers", json={"unit_name": "TestCo"})
+        assert r.status_code == 401
+        bypass.assert_not_called()
 
 
 # ===========================================================================
@@ -308,15 +217,16 @@ class TestCustomersCreate:
 class TestCustomersDelete:
     def test_delete_via_service(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
-            with patch(f"{_FACADE}.customers_delete", return_value={"success": True}):
+            with patch(f"{_FACADE}.customers_delete") as bypass:
                 r = client.delete("/customers/5")
-        assert r.status_code == 200
+        assert r.status_code == 400
+        assert r.json()["error_code"] == "task_identity_required"
+        bypass.assert_not_called()
 
     def test_delete_not_via_service(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
-            with patch(f"{_ROUTES}._customers_write_raise"):
-                with patch(f"{_ROUTES}._run_customers_agent", return_value={"success": True}):
-                    r = client.delete("/customers/5")
+            with patch(f"{_ROUTES}._run_customers_agent", return_value=({"success": True}, 200)):
+                r = client.delete("/customers/5")
         assert r.status_code == 200
 
     def test_delete_recoverable_error_fallthrough(self, client: TestClient):
@@ -325,9 +235,8 @@ class TestCustomersDelete:
         with patch(
             f"{_FACADE}.is_erp_customers_via_service_enabled", side_effect=httpx.ConnectError("err")
         ):
-            with patch(f"{_ROUTES}._customers_write_raise"):
-                with patch(f"{_ROUTES}._run_customers_agent", return_value={"success": True}):
-                    r = client.delete("/customers/5")
+            with patch(f"{_ROUTES}._run_customers_agent", return_value=({"success": True}, 200)):
+                r = client.delete("/customers/5")
         assert r.status_code == 200
 
 
@@ -339,16 +248,16 @@ class TestCustomersDelete:
 class TestCustomersUpdate:
     def test_update_no_name_400(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=False):
-            with patch(f"{_ROUTES}._customers_write_raise"):
-                with patch(f"{_ROUTES}._customer_body_name_contact", return_value=("", "", "", "")):
-                    r = client.put("/customers/1", json={})
+            with patch(f"{_ROUTES}._customer_body_name_contact", return_value=("", "", "", "")):
+                r = client.put("/customers/1", json={})
         assert r.status_code == 400
 
-    def test_update_via_service(self, client: TestClient):
+    def test_update_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
-            with patch(f"{_FACADE}.customers_update", return_value={"success": True}):
-                r = client.put("/customers/1", json={"name": "Updated"})
-        assert r.status_code == 200
+            with patch(f"{_FACADE}.customers_update") as bypass:
+                r = client.put("/customers/1", json={"unit_name": "Updated"})
+        assert r.status_code == 401
+        bypass.assert_not_called()
 
 
 # ===========================================================================
@@ -358,21 +267,18 @@ class TestCustomersUpdate:
 
 class TestCustomersBatchDelete:
     def test_batch_delete_empty_ids_raises_400(self, client: TestClient):
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            r = client.post("/customers/batch-delete", json={"ids": []})
+        r = client.post("/customers/batch-delete", json={"ids": []})
         assert r.status_code == 400
 
     def test_batch_delete_no_ids_field_raises_400(self, client: TestClient):
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            r = client.post("/customers/batch-delete", json={})
+        r = client.post("/customers/batch-delete", json={})
         assert r.status_code == 400
 
     def test_batch_delete_success(self, client: TestClient):
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(
-                f"{_ROUTES}._run_customers_agent", return_value={"success": True, "deleted": 2}
-            ):
-                r = client.post("/customers/batch-delete", json={"ids": [1, 2]})
+        with patch(
+            f"{_ROUTES}._run_customers_agent", return_value=({"success": True, "deleted": 2}, 200)
+        ):
+            r = client.post("/customers/batch-delete", json={"ids": [1, 2]})
         assert r.status_code == 200
 
 
@@ -382,76 +288,18 @@ class TestCustomersBatchDelete:
 
 
 class TestCustomersImport:
-    def test_import_business_mod_blocked(self, client: TestClient):
-        import io
-
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(
-                f"{_ROUTES}._business_mod_json_block",
-                return_value={"success": False, "message": "blocked"},
-            ):
-                r = client.post(
-                    "/customers/import",
-                    files={
-                        "file": (
-                            "f.xlsx",
-                            io.BytesIO(b"data"),
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        )
-                    },
-                )
-        assert r.status_code == 200
-        assert r.json()["success"] is False
-
-    def test_import_success(self, client: TestClient):
-        import io
-        import sys
-        import types
-
-        # run_customers_excel_import_bytes is a lazy import that the module guards via __getattr__
-        # Inject a fresh fake into sys.modules before the route handler executes
-        fake_excel = types.ModuleType("app.domain.app_pure.excel_imports")
-        fake_excel.run_customers_excel_import_bytes = lambda _: {"success": True, "created": 5}  # type: ignore[attr-defined]
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
-                with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
-                    r = client.post(
-                        "/customers/import",
-                        files={
-                            "file": (
-                                "f.xlsx",
-                                io.BytesIO(b"data"),
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            )
-                        },
-                    )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
-
-    def test_import_failure_returns_400(self, client: TestClient):
-        import io
-        import sys
-        import types
-
-        fake_excel = types.ModuleType("app.domain.app_pure.excel_imports")
-        fake_excel.run_customers_excel_import_bytes = lambda _: {
-            "success": False,
-            "message": "parse error",
-        }
-        with patch(f"{_ROUTES}._customers_write_raise"):
-            with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
-                with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
-                    r = client.post(
-                        "/customers/import",
-                        files={
-                            "file": (
-                                "f.xlsx",
-                                io.BytesIO(b"data"),
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            )
-                        },
-                    )
-        assert r.status_code == 400
+    @pytest.mark.parametrize("suffix", ["", "/"])
+    def test_import_requires_real_session_before_staging_or_service(self, client, suffix):
+        with patch(
+            "app.application.customer_app_service.CustomerApplicationService.import_from_excel"
+        ) as execute:
+            response = client.post(
+                f"/customers/import{suffix}",
+                files={"file": ("customers.xlsx", b"original upload")},
+                headers={"X-User-Id": "1", "Idempotency-Key": "customer-import"},
+            )
+        assert response.status_code == 401
+        execute.assert_not_called()
 
 
 # ===========================================================================

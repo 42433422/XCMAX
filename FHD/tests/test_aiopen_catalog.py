@@ -13,6 +13,7 @@ from fastapi import APIRouter, FastAPI, Query
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.ai_open import router as ai_open_router
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 _KEY = "fixture-catalog-key"
 
@@ -162,14 +163,15 @@ def test_mcp_resources_read_unknown_uri_returns_error(client):
     assert body["error"]["code"] == -32602
 
 
-def test_knowledge_search_returns_relevant_operations(client):
+def test_knowledge_search_does_not_advertise_http_resources_as_capabilities(client):
     body = _rpc(
         client,
         "tools/call",
         {"name": "knowledge_search", "arguments": {"query": "商品", "limit": 5}},
     )
     text = body["result"]["content"][0]["text"]
-    assert "products.list" in text
+    assert "products.list" not in text
+    assert body["result"]["structuredContent"]["items"] == []
     assert body["result"]["isError"] is False
 
 
@@ -184,15 +186,25 @@ def test_operation_describe_returns_semantic_card(client):
     assert "read:products" in text
 
 
-def test_knowledge_search_matches_chinese_intent_via_glossary(client):
-    """路由摘要是英文时，中文意图仍应命中正确业务域。"""
-    body = _rpc(
-        client,
-        "tools/call",
-        {"name": "knowledge_search", "arguments": {"query": "创建客户", "limit": 3}},
-    )
-    lines = body["result"]["content"][0]["text"].splitlines()
-    assert "customers.create" in lines[1]
+def test_knowledge_search_projects_current_account_capabilities(client, trusted_actor):
+    from app.application.aiopen.knowledge import knowledge_search
+    from app.infrastructure.aiopen.principal_context import execution_context_scope
+
+    actor = trusted_actor(permissions=["customer.view"])
+    with execution_context_scope(actor.context):
+        result = knowledge_search(client.app, {"query": "业务数据", "limit": 50})
+    assert result["success"] is True
+    assert "capability.business_db.read" in {item["operation_id"] for item in result["items"]}
+    assert all(item["kind"] == "capability" and item["executable"] for item in result["items"])
+    assert not any(item["operation_id"] == "customers.create" for item in result["items"])
+
+    from app.db.models.permission import Role
+
+    with actor.factory.begin() as db:
+        db.query(Role).filter_by(name="user").one().permissions = []
+    with execution_context_scope(actor.context):
+        revoked = knowledge_search(client.app, {"query": "业务数据", "limit": 50})
+    assert "capability.business_db.read" not in {item["operation_id"] for item in revoked["items"]}
 
 
 def test_coverage_reports_ratios(client):

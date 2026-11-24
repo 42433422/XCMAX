@@ -4,8 +4,10 @@ import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
 import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
-import type { AgentRunResponse, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
+import type { AgentRunResponse, AgentTaskSummary, AgentVerificationReport, AgentVerificationStatus } from '@/api/agentRuns'
+import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 
 vi.mock('@/utils', () => ({ downloadBlob: vi.fn() }))
 
@@ -81,6 +83,45 @@ describe('AgentTaskRuntimePanel', () => {
     expect(downloadBlob).toHaveBeenCalledWith(blob, '销售报表.xlsx')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     download.mockRestore()
+  })
+
+  it.each(['run', 'task', 'account', 'session', 'mod', 'unmount'])('does not deliver old artifact bytes after the %s changes', async change => {
+    vi.mocked(downloadBlob).mockClear()
+    let finish!: (blob: Blob) => void
+    const bytes = new Promise<Blob>(resolve => { finish = resolve })
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => bytes } as Response)
+    const source = { ...task, payload: { activeRunId: 'run-1', artifacts: [
+      { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
+    ] } }
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
+    if (change === 'run') await wrapper.setProps({ task: { ...source, payload: { ...source.payload, activeRunId: 'run-2' } } })
+    if (change === 'task') await wrapper.setProps({ task: { ...source, id: 'agent_task_task-2' } })
+    if (change === 'account') productReadAccountEpoch.value++
+    if (change === 'session') invalidateEnterpriseSessionCache()
+    if (change === 'mod') writeActiveExtensionModIdToStorage('other-customer-mod')
+    if (change === 'unmount') wrapper.unmount()
+    finish(new Blob(['isolated business evidence']))
+    await flushPromises()
+    expect(downloadBlob).not.toHaveBeenCalled()
+    if (change !== 'unmount') wrapper.unmount()
+    if (change === 'mod') writeActiveExtensionModIdToStorage(null)
+  })
+
+  it('keeps a legitimate artifact download when only the same run status advances', async () => {
+    vi.mocked(downloadBlob).mockClear()
+    let finish!: (blob: Blob) => void
+    vi.spyOn(agentRunsApi, 'downloadArtifact').mockResolvedValue({ blob: () => new Promise(resolve => { finish = resolve }) } as Response)
+    const source = { ...task, payload: { activeRunId: 'run-1', rawRunStatus: 'running', artifacts: [
+      { artifact_id: 'xlsx-1', artifact_type: 'file', name: '隔离验收报表.xlsx', uri: '/api/agent/runs/run-1/artifacts/xlsx-1' },
+    ] } }
+    const wrapper = mountTask(source)
+    await wrapper.get('.agent-artifact-downloads button').trigger('click'); await flushPromises()
+    await wrapper.setProps({ task: { ...source, payload: { ...source.payload, rawRunStatus: 'completed' } } })
+    const blob = new Blob(['isolated business evidence']); finish(blob)
+    await flushPromises()
+    expect(downloadBlob).toHaveBeenCalledExactlyOnceWith(blob, '隔离验收报表.xlsx')
+    wrapper.unmount()
   })
 
   it('shows traceable runtime details and controls the exact task', async () => {
@@ -268,6 +309,54 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
     expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
   })
+
+  it('keeps a metadata-only uncertain task summary pending reconciliation in the runtime panel', () => {
+    const [projected] = taskSummariesToTaskItems([{
+      task_id: 'task-unknown',
+      status: 'completed',
+      active_run_id: 'run-unknown',
+      metadata: { reconciliation_required: true, business_result: { summary: '订单创建成功' } },
+    } as AgentTaskSummary])
+    const wrapper = mountTask(projected)
+
+    expect(projected.payload?.rawRunStatus).toBe('unknown')
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果待核对')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+    expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it('does not use an older accepted verification to certify a currently uncertain run', () => {
+    const source = verificationTask('verified')
+    const wrapper = mountTask({
+      ...source,
+      payload: {
+        ...source.payload,
+        rawRunStatus: 'unknown',
+        finalOutput: { ...source.payload.finalOutput, business_result: { summary: '订单创建成功' } },
+      },
+    })
+
+    expect(wrapper.get('.agent-result-verification').attributes('data-status')).toBe('inconclusive')
+    expect(wrapper.get('.agent-result-summary').text()).toContain('结果待核对')
+    expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+    expect(wrapper.find('.agent-verification-action').exists()).toBe(false)
+  })
+
+  it.each(['failed', 'inconclusive', 'pending', 'not_verified'] as const)(
+    'does not certify a contradictory accepted %s report', (status) => {
+      const source = verificationTask(status)
+      source.payload.finalOutput.verification.accepted = true
+      const wrapper = mountTask({
+        ...source,
+        payload: { ...source.payload, finalOutput: { ...source.payload.finalOutput, business_result: { summary: '订单创建成功' } } },
+      })
+
+      expect(wrapper.get('.agent-result-summary').text()).toContain('结果尚未完成核验')
+      expect(wrapper.get('.agent-result-summary').text()).not.toContain('订单创建成功')
+      expect(wrapper.get('.agent-result-summary').classes()).toContain('agent-result-summary--unverified')
+    },
+  )
 
   it('does not claim a saved receipt while execution has only frozen a pending contract', () => {
     const source = verificationTask('pending')

@@ -7,10 +7,10 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Body, Query, Request
+from fastapi.responses import JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
 from app.fastapi_routes.inventory_exports import router as export_router
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
 router = export_router
 
@@ -21,88 +21,19 @@ def _svc():
     return InventoryAppService()
 
 
-def _inventory_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "inventory-route"
-    ).strip()
-
-
 def _run_inventory_agent(
     *,
     request: Request,
     action: str,
     params: dict[str, Any],
     route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("inventory") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 inventory 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    params = {
-        key: value
-        for key, value in params.items()
-        if key not in {"tenant_id", "tenantId", "user_id", "userId"}
-    }
-    runtime_context = request_runtime_context(
-        request,
-        {
-            "source": "inventory_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "route_confirmed": True,
-            "service_source": "fastapi_inventory_route",
-        },
+) -> JSONResponse:
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "inventory", "action": action, "params": params},
+        route_path=route_path,
     )
-    node_id = f"inventory_{action}"
-    user_id = str(runtime_context["user_id"])
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 inventory.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="inventory",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute inventory.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-        metadata={"source": "inventory_route", "route": route_path},
-    )
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Inventory {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "inventory-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
+    return JSONResponse(result, status_code=status)
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -238,22 +169,13 @@ def inventory_warehouse_setup_status(request: Request):
 
 @router.post("/api/inventory/setup/warehouse")
 def inventory_warehouse_setup_init(request: Request):
-    """幂等初始化当前企业的默认仓库；已有可用仓库时不新建。"""
-    from app.application.inventory_default_warehouse import ensure_default_warehouse
-    from app.db.session import get_db
-
-    user = _warehouse_setup_user(request, "shipment.edit")
-    with get_db() as db:
-        warehouse, created = ensure_default_warehouse(db, int(user.tenant_id))
-        data = {
-            "id": warehouse.id,
-            "code": warehouse.code,
-            "name": warehouse.name,
-            "status": warehouse.status,
-            "created": bool(created),
-        }
-    message = "已创建默认仓库，请先入库再销售发货" if created else "已有可用仓库，无需初始化"
-    return {"success": True, "data": data, "message": message}
+    """通过统一权限和审批初始化当前企业默认仓库。"""
+    return _run_inventory_agent(
+        request=request,
+        action="setup_warehouse",
+        params={},
+        route_path="/api/inventory/setup/warehouse",
+    )
 
 
 @router.get("/api/inventory/warehouses")

@@ -171,6 +171,7 @@ def _append_ledger(record: Dict[str, Any]) -> None:
             "deploy_dispatch_intent",
             "deploy_dispatch_bound",
             "post_deploy_verified",
+            "merge_feedback_reconciled",
             "delivery_reconciled",
         }:
             fh.flush()
@@ -178,7 +179,12 @@ def _append_ledger(record: Dict[str, Any]) -> None:
     if (
         durable_outcome
         or record.get("event")
-        in {"deploy_dispatch_intent", "post_deploy_verified", "delivery_reconciled"}
+        in {
+            "deploy_dispatch_intent",
+            "post_deploy_verified",
+            "merge_feedback_reconciled",
+            "delivery_reconciled",
+        }
     ) and os.name != "nt":
         directory = os.open(path.parent, os.O_RDONLY)
         try:
@@ -274,16 +280,28 @@ def _read_delivery_row(handle: Any, end: int, budget: dict[str, int]) -> dict[st
     return row
 
 
-def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _pending_delivery_page(
+    cursor: Any = None, *, recent_runs: Any = None, include_terminal: bool = False
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Discover and verify a bounded page against the original append-only ledger.
 
     Verification has its own durable cursor; it never rescans an entire ledger
     in one tick. Only a page checked through the current EOF becomes actionable.
     Every finished page advances discovery even when its tasks remain unknown.
     """
+    recent = list(
+        {
+            str(run["run_id"]): run
+            for run in recent_runs or []
+            if isinstance(run, dict)
+            and run.get("run_id")
+            and run.get("status")
+            in {"completed_merge_requested", "completed_merged", "completed_merge_failed"}
+        }.values()
+    )[-DELIVERY_RECOVERY_RUNS:]
     path = ledger_path()
     if not path.exists():
-        return [], {}
+        return [dict(run) for run in recent], {}
     with path.open("rb") as handle:
         stat = os.fstat(handle.fileno())
         identity = [stat.st_dev, stat.st_ino]
@@ -302,17 +320,44 @@ def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], di
                 state["end"] = stat.st_size
         budget = {"rows": DELIVERY_RECOVERY_ROWS, "bytes": DELIVERY_RECOVERY_BYTES}
         candidates = state.get("candidates") or []
+        if not state.get("recent_checked") and not candidates:
+            # A UI projection cannot bypass terminal verification while a page
+            # is still scanning. Check it once per discovery cycle, then advance
+            # through history even if the first projected tasks remain unknown.
+            state["recent_checked"] = True
+            candidates = [
+                {
+                    **{key: str(run.get(key) or "").strip() for key in _DELIVERY_BINDING},
+                    "projected": True,
+                }
+                for run in recent
+            ]
+            if candidates:
+                state.update(candidates=candidates, verify_offset=0, projected_page=True)
         if not candidates:
             handle.seek(int(state.get("offset") or 0))
             while len(candidates) < DELIVERY_RECOVERY_RUNS:
                 row = _read_delivery_row(handle, state["end"], budget)
                 if row is None:
                     break
+                feedback = _merge_feedback_row(None, row)
+                terminal = feedback and feedback.get("status") in {
+                    "completed_merged",
+                    "completed_merge_failed",
+                }
                 if (
-                    row.get("event") == "merge_requested"
-                    and row.get("ok") is True
-                    and row.get("status") == "pending"
-                    and all(str(row.get(key) or "").strip() for key in _DELIVERY_BINDING[:3])
+                    (
+                        (
+                            row.get("event") == "merge_requested"
+                            and row.get("ok") is True
+                            and row.get("status") == "pending"
+                            and all(
+                                str(row.get(key) or "").strip() for key in _DELIVERY_BINDING[:3]
+                            )
+                        )
+                        or terminal
+                    )
+                    and row.get("run_id")
                     and not any(item["run_id"] == row["run_id"] for item in candidates)
                 ):
                     candidates.append(
@@ -340,6 +385,9 @@ def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], di
                 break
             item = by_run.get(str(row.get("run_id") or "").strip())
             if item is None:
+                feedback = _merge_feedback_row(None, row)
+                if state.get("projected_page") and feedback:
+                    state["other_requests"] = True
                 continue
             event = row.get("event")
             policy = row.get("policy_decision") or {}
@@ -358,20 +406,26 @@ def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], di
                 )
                 item["deployment_scope"] = scope
             if event == "merge_requested":
+                if item.get("projected") and not item.get("seen"):
+                    for key in _DELIVERY_BINDING:
+                        if not item[key]:
+                            item[key] = str(row.get(key) or "").strip()
                 matches = all(
                     str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING
                 )
                 item["seen"] = item.get("seen") or matches
                 item["conflict"] = item.get("conflict") or not matches
-            elif (
-                event in {"merge_completed", "delivery_reconciled"}
-                and row.get("ok") is True
-                and row.get("status") == "completed_merged"
-                and all(
-                    str(row.get(key) or "").strip() == item[key] for key in _DELIVERY_BINDING[:3]
+            feedback = _merge_feedback_row(item.get("feedback"), row)
+            if feedback:
+                item["feedback"] = feedback
+                item["terminal"] = feedback.get("status") in {
+                    "completed_merged",
+                    "completed_merge_failed",
+                }
+                item["conflict"] = item.get("conflict") or any(
+                    str(feedback.get(key) or "").strip() != item[key]
+                    for key in _DELIVERY_BINDING[:3]
                 )
-            ):
-                item["terminal"] = True
             sha = str(row.get("merge_sha") or "").strip()
             if row.get("phase") == "deployment" and sha:
                 item["conflict"] = item.get("conflict") or bool(
@@ -385,6 +439,7 @@ def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], di
             {
                 **{key: item[key] for key in _DELIVERY_BINDING},
                 "status": "completed_merge_requested",
+                **(item.get("feedback") or {}),
                 "delivery_merge_sha": item.get("merge_sha", ""),
                 **(
                     {"deployment_scope": item["deployment_scope"]}
@@ -393,10 +448,14 @@ def _pending_delivery_page(cursor: Any = None) -> tuple[list[dict[str, Any]], di
                 ),
             }
             for item in candidates
-            if item.get("seen") and not item.get("terminal") and not item.get("conflict")
+            if (item.get("seen") or item.get("projected") or item.get("terminal"))
+            and (include_terminal or not item.get("terminal"))
+            and not item.get("conflict")
         ]
         state.pop("candidates")
         state.pop("verify_offset")
+        if state.pop("projected_page", False) and not state.pop("other_requests", False):
+            state["offset"] = state["end"]
         if state["offset"] >= state["end"]:
             state = {}
         return ready, state
@@ -433,6 +492,42 @@ def _ledger_row_timestamp(
             parsed = parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
     return None
+
+
+def _merge_feedback_row(
+    previous: Dict[str, Any] | None, row: Dict[str, Any]
+) -> Dict[str, Any] | None:
+    """One reducer shared by full readback and bounded recovery; terminals never regress."""
+    if previous and previous.get("status") in {
+        "completed_merged",
+        "completed_merge_failed",
+    }:
+        return previous
+    event, status = row.get("event"), row.get("status")
+    if event == "merge_requested" and status == "pending":
+        return {**row, "status": "completed_merge_requested"}
+    if (
+        event == "merge_feedback_reconciled"
+        or (
+            event in {"merge_completed", "delivery_reconciled"}
+            and row.get("ok") is True
+            and status == "completed_merged"
+        )
+        or (row.get("phase") == "complete" and status == "completed_merge_requested")
+    ):
+        return dict(row)
+    return previous
+
+
+def merge_feedback_runs() -> List[Dict[str, Any]]:
+    """Reduce durable delivery state, retaining terminal records as replay fences."""
+    runs: Dict[str, Dict[str, Any]] = {}
+    for row in _read_ledger(limit=0):
+        if not isinstance(row, dict) or not (run_id := str(row.get("run_id") or "")):
+            continue
+        if reduced := _merge_feedback_row(runs.get(run_id), row):
+            runs[run_id] = reduced
+    return list(runs.values())
 
 
 def _select_recent_milestone_rows(
@@ -606,9 +701,9 @@ def _write_loop_memory(memory: Dict[str, Any]) -> None:
         fh.flush()
         os.fsync(fh.fileno())
     tmp.replace(path)
-    if hasattr(os, "O_DIRECTORY"):
-        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    if os.name != "nt":
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
-            os.fsync(directory_fd)
+            os.fsync(directory)
         finally:
-            os.close(directory_fd)
+            os.close(directory)

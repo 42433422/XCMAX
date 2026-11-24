@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+from contextlib import ExitStack
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_context import observe_run_phase
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 class DurableExecutionLeaseMixin:
@@ -41,23 +46,33 @@ class DurableExecutionLeaseMixin:
         )
         run.metadata["execution"] = execution
         self._repo.save(run)
-        try:
-            with observe_run_phase(run, "execution"):
-                self._execute_ready_steps(
-                    run,
-                    runtime_context=runtime_context,
-                    approved_step_id=approved_step_id,
-                )
-        finally:
+
+        def release_browser(error_type: Any, _error: Any, _traceback: Any) -> None:
             try:
-                self._apply_requested_control(run)
-            finally:
-                now = utc_now_iso()
-                execution = dict(run.metadata.get("execution") or {})
-                execution.update(state="idle", updated_at=now, finished_at=now)
-                run.metadata["execution"] = execution
-                self._repo.save(run)
                 self._release_browser_run_resources(run, runtime_context=runtime_context)
+            except BOUNDARY_ERRORS:
+                if error_type is None:
+                    raise
+                logger.exception("browser cleanup failed while settling the original run")
+
+        with ExitStack() as cleanup:
+            cleanup.push(release_browser)
+            try:
+                with observe_run_phase(run, "execution"):
+                    self._execute_ready_steps(
+                        run,
+                        runtime_context=runtime_context,
+                        approved_step_id=approved_step_id,
+                    )
+            finally:
+                try:
+                    self._apply_requested_control(run)
+                finally:
+                    now = utc_now_iso()
+                    execution = dict(run.metadata.get("execution") or {})
+                    execution.update(state="idle", updated_at=now, finished_at=now)
+                    run.metadata["execution"] = execution
+                    self._repo.save(run)
 
     @staticmethod
     def _release_browser_run_resources(

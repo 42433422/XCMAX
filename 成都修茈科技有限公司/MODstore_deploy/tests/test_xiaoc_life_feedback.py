@@ -15,10 +15,7 @@ from modstore_server import strategic_portfolio_usage as usage
 from modstore_server import xiaoc_life_reconciliation as reconciliation
 from modstore_server import xiaoc_life_runtime as runtime
 from modstore_server import xiaoc_life_store as life
-from modstore_server.strategic_customer_outcomes import (
-    BUSINESS_OUTCOME_ATTRIBUTION,
-    LEGACY_BUSINESS_OUTCOME_ATTRIBUTION,
-)
+from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.xiaoc_life_cognition import (
     SYSTEM_PROMPT,
     cognition_messages,
@@ -43,7 +40,7 @@ def reviewed_record(**changes):
             "order_numbers": ["PRIVATE_ORDER"],
             "window_start": "2026-11-20T10:00:00+00:00",
             "window_end": "2026-11-21T10:00:00+00:00",
-            "attribution": LEGACY_BUSINESS_OUTCOME_ATTRIBUTION,
+            "attribution": "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
         },
         "accrued_cost_cents": 100,
         "attributed_roi_bps": -10000,
@@ -104,15 +101,25 @@ def test_feedback_preserves_actual_measurement_stage_and_filters_private_text(ch
 @pytest.mark.parametrize(
     "attribution,status,revenue,expected",
     [
-        (BUSINESS_OUTCOME_ATTRIBUTION, "verified", 0, True),
-        (LEGACY_BUSINESS_OUTCOME_ATTRIBUTION, "verified", 0, True),
-        (BUSINESS_OUTCOME_ATTRIBUTION, "unknown", None, False),
-        (LEGACY_BUSINESS_OUTCOME_ATTRIBUTION, "unknown", 100, False),
-        (BUSINESS_OUTCOME_ATTRIBUTION, "verified", True, False),
-        (BUSINESS_OUTCOME_ATTRIBUTION, "verified", -1, False),
-        (BUSINESS_OUTCOME_ATTRIBUTION, "verified", "0", False),
-        (BUSINESS_OUTCOME_ATTRIBUTION + " ", "verified", 0, False),
-        ({"attribution": BUSINESS_OUTCOME_ATTRIBUTION}, "verified", 0, False),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", 0, True),
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            "verified",
+            0,
+            True,
+        ),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "unknown", None, False),
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            "unknown",
+            100,
+            False,
+        ),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", True, False),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", -1, False),
+        (VERIFIED_DELIVERY_ATTRIBUTION, "verified", "0", False),
+        (VERIFIED_DELIVERY_ATTRIBUTION + " ", "verified", 0, False),
+        ({"attribution": VERIFIED_DELIVERY_ATTRIBUTION}, "verified", 0, False),
     ],
 )
 def test_attribution_requires_verified_measurement_and_exact_contract(
@@ -177,6 +184,81 @@ def test_business_and_stop_feedback_survives_prompt_bound_and_enters_next_model(
     assert len(messages[1]["content"].encode()) <= 4200
     assert feedback["evidence_ref"] in refs
     assert "not incremental" in SYSTEM_PROMPT and "model-weight training" in SYSTEM_PROMPT
+
+
+def test_prompt_deduplicates_sources_before_limit_without_rewriting_receipts():
+    facts = (
+        [{"ref": "receipt:old", "text": "首份原回执"}]
+        + [{"ref": "receipt:old", "text": "同一来源的重复记录"} for _ in range(11)]
+        + [{"ref": "receipt:new", "text": "新业务事实", "business_feedback": {"decision": "stop"}}]
+    )
+    original = copy.deepcopy(facts)
+    messages, refs = cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    assert json.loads(messages[1]["content"])["observations"] == [facts[0], facts[-1]]
+    assert refs == {"receipt:old", "receipt:new"}
+    assert facts == original
+
+
+@pytest.mark.parametrize(
+    "facts,reason",
+    [
+        ([], "no_observed_context"),
+        ([{"text": "无来源"}], "no_observed_context"),
+        ([{"ref": "", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": " \t", "text": "无来源"}], "no_observed_context"),
+        ([{"ref": 3, "text": "无来源"}], "no_observed_context"),
+        (
+            [{"ref": "receipt:large", "business_feedback": {"measurement": "测" * 1500}}],
+            "life_cycle_prompt_budget_exhausted",
+        ),
+    ],
+)
+def test_prompt_rejects_unusable_context_without_altering_structured_evidence(facts, reason):
+    from modstore_server import xiaoc_life_cognition as cognition
+
+    original = copy.deepcopy(facts)
+    with pytest.raises(ValueError, match=f"^{reason}$") as raised:
+        cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
+    assert type(raised.value) is cognition.CognitionContextError
+    assert facts == original
+
+
+@pytest.mark.parametrize(
+    "attribution,recognized",
+    [
+        (
+            "same_owner_completed_task_artifact_and_verified_acceptance_with_order_outcome_not_incremental_causality",
+            True,
+        ),
+        (
+            "approved_customer_goal_order_completed_artifact_and_verified_acceptance_not_incremental_causality",
+            True,
+        ),
+        ("incremental_causal_profit", False),
+        (None, False),
+        ({"verified": True}, False),
+        (["verified"], False),
+    ],
+)
+def test_feedback_accepts_known_delivery_contracts_and_rejects_unknown_claims(
+    attribution, recognized
+):
+    record = reviewed_record()
+    record["reviews"][0]["business"]["attribution"] = attribution
+    metrics = portfolio_feedback(record)["metrics"]
+    assert metrics["attribution"] == (
+        "artifact_acceptance_and_order_outcome_not_incremental_causality"
+        if recognized
+        else "unverified"
+    )
+
+
+def test_delivery_contract_label_alone_does_not_verify_an_unknown_measurement():
+    record = reviewed_record()
+    record["reviews"][0]["business"].update(status="unknown", revenue_cents=None)
+    feedback = portfolio_feedback(record)
+    assert feedback["outcome_status"] == "business_measurement_unknown"
+    assert feedback["metrics"]["attribution"] == "unverified"
 
 
 @pytest.fixture
@@ -294,7 +376,7 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
         owner_user_id=7,
     )
     review = workers.review_portfolio(decision_id, owner_user_id=7)
-    assert review["business"]["attribution"] == BUSINESS_OUTCOME_ATTRIBUTION
+    assert review["business"]["attribution"] == VERIFIED_DELIVERY_ATTRIBUTION
     assert review["business"]["status"] == ("verified" if completed_artifact else "unknown")
     assert review["business"]["revenue_cents"] == (0 if completed_artifact else None)
     assert review["observation_complete"] and review["usage_complete"]

@@ -176,18 +176,17 @@ def closed_loop_setup_failure_code(agent_run: Any) -> str | None:
 
 
 def freeze_approval_plan(plan: PlanGraph | None, node_id: str) -> PlanGraph | None:
-    """Copy and elevate the reviewed graph identically for memory and storage."""
-    # Approval itself is a server policy elevation. Keep that elevation in the
-    # reviewed graph before hashing it; otherwise the durable approval snapshot
-    # can retain a low-risk node while the AgentRun persists the same node as
-    # high-risk, making a legitimate restart/resume fail its plan fingerprint.
+    """Copy the same explicit policy elevations persisted in the original run."""
+    # Only approval_required_node_ids elevate a node to high in AgentOrchestrator.
+    # A medium-risk step can also await review under the normal risk policy. Its
+    # snapshot must retain that original risk, or the workspace rejects the
+    # unchanged run on fingerprint comparison before any approved effect.
     snapshot_plan = plan_from_dict(plan)
     if snapshot_plan is not None:
         metadata = snapshot_plan.metadata if isinstance(snapshot_plan.metadata, dict) else {}
         required = {
             str(value) for value in metadata.get("approval_required_node_ids", []) if str(value)
         }
-        required.add(str(node_id or ""))
         for item in snapshot_plan.nodes:
             if item.node_id in required:
                 item.risk = "high"

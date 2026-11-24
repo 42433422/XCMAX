@@ -917,7 +917,7 @@ class TestInstallHostFoundationInternal:
             ),
             patch("app.mod_sdk.host_foundation.materialize_host_foundation_bridges") as mock_mat,
         ):
-            mock_mat.side_effect = RuntimeError("bridge fail")
+            mock_mat.side_effect = ConnectionError("bridge fail")
             result = _sync(_mod._install_host_foundation_internal(edition="generic"))
         assert result.success is False
         assert "展开宿主 bridge 失败" in result.message

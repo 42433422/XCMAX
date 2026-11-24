@@ -170,7 +170,7 @@ def test_multi_query_route_validates_and_dispatches() -> None:
         calls.append(kwargs)
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)

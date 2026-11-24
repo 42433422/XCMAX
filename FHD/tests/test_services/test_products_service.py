@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.domain.shared_services.products_service import ProductsService
 
@@ -191,7 +193,7 @@ class TestCreateProduct:
         assert result["success"] is True
 
     def test_create_error(self, service, mock_repo):
-        mock_repo.create.side_effect = RuntimeError("db error")
+        mock_repo.create.side_effect = sqlite3.OperationalError("db error")
         with (
             patch("app.domain.product.entities.Product", side_effect=RuntimeError("fail")),
             patch("app.domain.value_objects.Money", return_value=MagicMock()),
@@ -271,7 +273,7 @@ class TestBatchAddProducts:
         assert result["success"] is True
 
     def test_batch_error(self, service, mock_repo):
-        mock_repo.batch_create.side_effect = RuntimeError("fail")
+        mock_repo.batch_create.side_effect = sqlite3.OperationalError("database unavailable")
         result = service.batch_add_products([{"name": "P1"}])
         assert result["success"] is False
 
@@ -383,7 +385,7 @@ class TestCacheInvalidation:
 
     def test_invalidate_product_cache_error(self, service):
         mock_cache = MagicMock()
-        mock_cache.clear_pattern.side_effect = RuntimeError("cache error")
+        mock_cache.clear_pattern.side_effect = RedisConnectionError("cache error")
         service._cache = mock_cache
         service._invalidate_product_cache()  # Should not raise
 
@@ -395,6 +397,6 @@ class TestCacheInvalidation:
 
     def test_invalidate_single_product_cache_error(self, service):
         mock_cache = MagicMock()
-        mock_cache.delete.side_effect = RuntimeError("err")
+        mock_cache.delete.side_effect = RedisConnectionError("cache unavailable")
         service._cache = mock_cache
         service._invalidate_single_product_cache(1)  # Should not raise

@@ -432,10 +432,10 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   const toggleWechat = async (event: CheckEvent) => {
     if (!panelAvailable.value || clientMode.value) return
     wechatOpen.value = eventChecked(event)
-    await safeJsonRequest('/api/ai/qclaw/wechat-gateway', {
+    await safeJsonRequest('/api/aiopen/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: wechatOpen.value }),
+      body: JSON.stringify({ wechat_open: wechatOpen.value }),
     })
   }
 

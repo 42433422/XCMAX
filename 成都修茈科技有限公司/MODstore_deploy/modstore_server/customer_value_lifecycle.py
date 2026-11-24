@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -30,11 +31,31 @@ def _receipt_evidence(row: CustomerValueReceipt | None) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _float_or_nan(value: Any) -> float:
-    try:
-        return float(value) if value is not None else float("nan")
-    except (TypeError, ValueError):
-        return float("nan")
+def _delivery_identity(row: CustomerValueReceipt | None) -> tuple[str, str] | None:
+    if row is None or not row.artifact_id:
+        return None
+    digest = str(_receipt_evidence(row).get("artifact_sha256") or "").lower()
+    return (str(row.artifact_id), digest) if _SHA256.fullmatch(digest) else None
+
+
+def _same_delivery(*rows: CustomerValueReceipt | None) -> bool:
+    identities = {_delivery_identity(row) for row in rows}
+    return None not in identities and len(identities) == 1
+
+
+def _kpi_achieved(evidence: dict[str, Any]) -> bool:
+    measured, target = evidence.get("measured_value"), evidence.get("target")
+    if measured is None or target is None:
+        return False
+    if not all(
+        type(value) is int or (type(value) is float and math.isfinite(value))
+        for value in (measured, target, evidence.get("baseline"))
+    ):
+        return False
+    comparison = _text(evidence.get("comparison"), 8).lower()
+    return bool(
+        comparison == "ge" and measured >= target or comparison == "le" and measured <= target
+    )
 
 
 def build_customer_lifecycle(
@@ -97,21 +118,13 @@ def build_customer_lifecycle(
             measured_outcome = kinds.get("outcome")
             accepted = kinds.get("acceptance")
             reused = kinds.get("reuse")
-            achieved = False
-            outcome_data = _receipt_evidence(measured_outcome)
-            measured_value = _float_or_nan(outcome_data.get("measured_value"))
-            target_value = _float_or_nan(outcome_data.get("target"))
-            operator = _text(outcome_data.get("comparison"), 8).lower()
-            if operator == "ge":
-                achieved = measured_value >= target_value
-            elif operator == "le":
-                achieved = measured_value <= target_value
             sequence_valid = bool(
                 first
                 and measured_outcome
                 and accepted
                 and reused
-                and achieved
+                and _same_delivery(first, measured_outcome, accepted)
+                and _kpi_achieved(_receipt_evidence(measured_outcome))
                 and first.occurred_at <= measured_outcome.occurred_at <= accepted.occurred_at
                 and accepted.occurred_at + timedelta(hours=24) <= reused.occurred_at
             )
@@ -121,7 +134,23 @@ def build_customer_lifecycle(
             )
             return sequence_valid, len(kinds), latest
 
-        selected_rows = max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
+        delivery_groups: list[list[CustomerValueReceipt]] = []
+        for goal_rows in receipts_by_goal.values():
+            shared: dict[str, CustomerValueReceipt] = {}
+            by_artifact: dict[tuple[str, str], list[CustomerValueReceipt]] = {}
+            for row in sorted(goal_rows, key=lambda item: item.occurred_at):
+                kind = str(row.receipt_kind)
+                if kind in {"first_use", "outcome", "acceptance"}:
+                    identity = _delivery_identity(row)
+                    if identity is not None:
+                        by_artifact.setdefault(identity, []).append(row)
+                elif kind in {"goal", "reuse"}:
+                    shared.setdefault(kind, row)
+            common = list(shared.values())
+            delivery_groups.extend(common + artifact for artifact in by_artifact.values())
+            if not by_artifact:
+                delivery_groups.append(common)
+        selected_rows = max(delivery_groups, key=goal_rank, default=[])
         by_kind: dict[str, CustomerValueReceipt] = {}
         for selected_row in sorted(selected_rows, key=lambda item: item.occurred_at):
             by_kind.setdefault(str(selected_row.receipt_kind), selected_row)
@@ -145,13 +174,6 @@ def build_customer_lifecycle(
         outcome_evidence = _receipt_evidence(outcome)
         acceptance_evidence = _receipt_evidence(acceptance)
         reuse_evidence = _receipt_evidence(reuse)
-        comparison = _text(outcome_evidence.get("comparison"), 8).lower()
-        measured = _float_or_nan(outcome_evidence.get("measured_value"))
-        target = _float_or_nan(outcome_evidence.get("target"))
-        outcome_achieved = (
-            comparison == "ge" and measured >= target or comparison == "le" and measured <= target
-        )
-
         stages = {
             "payment": True,
             "installation": bool(user_id and matching_installs),
@@ -178,10 +200,12 @@ def build_customer_lifecycle(
                         "source_material_sha256",
                     )
                 )
-                and outcome_achieved
+                and _same_delivery(first_use, outcome)
+                and _kpi_achieved(outcome_evidence)
             ),
             "acceptance": bool(
                 acceptance
+                and _same_delivery(first_use, outcome, acceptance)
                 and (
                     acceptance_evidence.get("customer_confirmed") is True
                     or _SHA256.fullmatch(
@@ -239,6 +263,7 @@ def build_customer_lifecycle(
             and acceptance
             and reuse
             and same_goal
+            and _same_delivery(first_use, outcome, acceptance)
             and goal.occurred_at <= first_use.occurred_at
             and any(
                 paid_at <= installed_at <= first_use.occurred_at.replace(tzinfo=UTC)

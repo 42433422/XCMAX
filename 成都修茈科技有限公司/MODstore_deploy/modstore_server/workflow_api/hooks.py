@@ -10,7 +10,6 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from modstore_server.api.xss_sanitizer import _sanitize_value
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import WorkflowTrigger
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -52,7 +51,7 @@ async def public_webhook_run_workflow(
         raise HTTPException(403, "签名校验失败")
 
     try:
-        payload: Dict[str, Any] = _sanitize_value(await request.json())
+        payload: Dict[str, Any] = await request.json()
     except RECOVERABLE_ERRORS:
         payload = {}
 

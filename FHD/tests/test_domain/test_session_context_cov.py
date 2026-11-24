@@ -626,12 +626,15 @@ class TestFormatRuntimeContextForLlm:
             "chat_db_write_authorized": True,
         }
         out = format_runtime_context_for_llm(ctx)
-        assert "写入授权" in out
+        assert "统一任务的服务器回执" in out
+        assert "import_excel_to_database" not in out
+        assert "db_write_token" not in out
 
     def test_no_write_authorized_alternative_branch(self):
         ctx = {"excel_analysis": {"file_path": "/x.xlsx"}}
         out = format_runtime_context_for_llm(ctx)
-        assert "requires_token" in out
+        assert "审批" in out
+        assert "requires_token" not in out
 
     def test_excel_customer_hint_added(self):
         ctx = {
@@ -644,7 +647,8 @@ class TestFormatRuntimeContextForLlm:
     def test_db_write_stream_resume(self):
         ctx = {"db_write_stream_resume": "previous output"}
         out = format_runtime_context_for_llm(ctx)
-        assert "续跑" in out
+        assert "同一轮对话记录" in out
+        assert "结果未知时不得重新提交" in out
 
     def test_excel_file_paths_list(self):
         ctx = {"excel_file_paths": ["/a.xlsx", "/b.xlsx", ""]}

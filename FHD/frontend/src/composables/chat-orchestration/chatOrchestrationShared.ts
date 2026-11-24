@@ -72,6 +72,7 @@ export function plannerExecutionState(value: unknown): string {
   if (requiresTurnReconciliation(value)) return 'unknown'
   const row = asRecord(value)
   const data = asRecord(row.data)
+  if (row.requires_token || data.requires_token) return 'waiting_auth'
   return String(row.execution_state || data.execution_state || asRecord(data.data).agent_status || '').trim().toLowerCase()
 }
 

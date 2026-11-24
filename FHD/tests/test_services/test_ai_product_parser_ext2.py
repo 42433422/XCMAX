@@ -364,7 +364,7 @@ class TestCachedCallAiApiExtended:
         with (
             patch(
                 "app.domain.shared_services.ai_product_parser._get_product_parse_cache",
-                side_effect=RuntimeError("cache down"),
+                side_effect=ImportError("product parser cache backend unavailable"),
             ),
             patch.object(
                 AIProductParser, "_call_ai_api", return_value={"product_code": "fallback"}
@@ -380,7 +380,7 @@ class TestCallAiApiExtended:
         parser = AIProductParser()
         with patch(
             "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
-            side_effect=RuntimeError("api error"),
+            side_effect=PermissionError("cannot read API key configuration"),
         ):
             result = parser._call_ai_api("text")
         assert result is None

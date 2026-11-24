@@ -60,7 +60,7 @@ from app.db.models.elt import (
     EltUpload,
 )
 from app.db.models.elt_archive import EltArchiveAsset, EltArchiveQuota, EltArchiveVersion
-from app.db.models.local_file import LocalFileDocument, LocalFileGrant
+from app.db.models.local_file import CodeEditProposal, LocalFileDocument, LocalFileGrant
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (
     InventoryLedger,
@@ -150,6 +150,7 @@ __all__ = [
     "EltTargetConfig",
     "LocalFileGrant",
     "LocalFileDocument",
+    "CodeEditProposal",
     "FinancialTransaction",
     "ChartOfAccount",
     "JournalEntry",

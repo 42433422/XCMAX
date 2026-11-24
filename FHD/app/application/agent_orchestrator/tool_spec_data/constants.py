@@ -38,14 +38,16 @@ PERMISSION_OVERRIDES: dict[str, str] = {
     # Like the history API, current-conversation reads require a live owner binding,
     # enforced again by the adapter; they grant no access to other users' sessions.
     "conversation_history": "",
+    # Like /conversation/image, the tool requires a live owner-bound market
+    # session; market routing and the wallet still enforce model authorization.
+    "image_generate": "",
     # Entity-specific RBAC and a live actor binding are checked by the adapter.
     "enterprise_cognition": "",
     # Kellai applies its explicit per-account grants after validating the sealed host actor.
     "kellai": "",
+    "tasks": "",
     "memory_v2": "memory_v2.write",
     "client_product_issue": "",
-    # Excel 导入属于数据对接（ELT）执行，沿用 elt.execute，而不是发明新的权限码。
-    "import_excel_to_database": "elt.execute",
     # ELT 预演/执行同样归入数据对接权限。
     "elt_import": "elt.execute",
 }

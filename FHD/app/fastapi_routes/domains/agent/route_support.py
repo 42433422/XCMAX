@@ -28,7 +28,16 @@ from app.application.agent_orchestrator.task_models import (
     tenant_id_of_run,
 )
 from app.application.agent_orchestrator.task_progress import fallback_task_progress_snapshot
+from app.application.agent_orchestrator.unified_task import (
+    run_owned_by as run_owned_by,
+)
+from app.application.agent_orchestrator.unified_task import (
+    scoped_tasks as scoped_tasks,
+)
 from app.application.agent_orchestrator.unified_task import task_capabilities
+from app.application.agent_orchestrator.unified_task import (
+    task_scope_matches as task_scope_matches,
+)
 from app.domain.task_lifecycle.adapters import canonical_execution_state
 from app.infrastructure.auth.agent_principal import AgentPrincipal
 from app.infrastructure.codex.binding import (
@@ -90,17 +99,16 @@ def project_execution_failure(
     result: _TaskResult, execution: AgentTaskExecution | None
 ) -> _TaskResult:
     """Expose a stopped lease without rewriting business receipts or stored state."""
-    if (
-        execution is None
-        or canonical_execution_state(execution.state) not in {"failed", "unknown"}
-        or result.status not in {"queued", "planning", "running", "retrying"}
-    ):
+    if execution is None or result.status not in {"queued", "planning", "running", "retrying"}:
         return result
-    code = execution.last_error_code
-    uncertain = (
-        canonical_execution_state(execution.state) == "unknown" or code == "needs_verification"
+    state = canonical_execution_state(execution.state)
+    if state not in {"failed", "unknown"}:
+        return result
+    code = "needs_verification" if state == "unknown" else execution.last_error_code
+    uncertain = state == "unknown" or code == "needs_verification"
+    status = (
+        "unknown" if state == "unknown" else "blocked" if code == "needs_verification" else "failed"
     )
-    status = "blocked" if uncertain else "failed"
     metadata = dict(result.metadata)
     if uncertain or code == "retries_exhausted":
         metadata["non_retryable"] = True
@@ -146,10 +154,14 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "authenticated_local_user_id",
         "_mod_authorization",
         "_actor_authorization",
+        "_credential_authorization",
         "_tool_approval_scope",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "mutation_policy",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "mod_id",
         "active_mod_id",
         "authenticated_username",
@@ -233,6 +245,10 @@ def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -
         data = public_runtime_result(data)
     if isinstance(data.get("metadata"), dict):
         data["metadata"].pop("_tool_approval_grants", None)
+        context = data["metadata"].get("runtime_context")
+        if isinstance(context, dict):
+            for key in ("_actor_authorization", "_mod_authorization", "_credential_authorization"):
+                context.pop(key, None)
         if data["metadata"].get("child_results"):
             from app.application.agent_orchestrator.run_audit_scope import project_child_results
             from app.application.agent_orchestrator.run_repository import get_agent_run_repository
@@ -308,93 +324,6 @@ def owned_run(
             {"success": False, "message": "无权访问该 agent run"}, status_code=403
         )
     return run, None
-
-
-def run_owned_by(run: Any, principal: AgentPrincipal) -> bool:
-    runtime_context = run.metadata.get("runtime_context") or {}
-    binding = runtime_context.get("_mod_authorization") or {}
-    requested_binding = principal.mod_authorization or {}
-    run_mod = str(binding.get("mod_id") or "")
-    requested_mod = str(requested_binding.get("mod_id") or "")
-    # Legacy unbound runs still require the authenticated owner and tenant.
-    # Platform administration is not a grant to access customer task data.
-    same_mod = (not run_mod) or run_mod == requested_mod
-    return (
-        same_mod
-        and run.user_id == principal.user_id
-        and tenant_id_of_run(run) == principal.tenant_id
-    )
-
-
-RunScopeMap = dict[str, list[tuple[str, str, str]]]
-
-
-def task_scope_matches(
-    orchestrator: AgentOrchestrator,
-    task: Any,
-    principal: AgentPrincipal,
-    scopes: RunScopeMap | None = None,
-) -> bool:
-    if task.user_id != principal.user_id or task.tenant_id != principal.tenant_id:
-        return False
-    if scopes is None:
-        # 兼容只实现 list_task_runs 的测试替身与旧调用方。
-        runs = [
-            run
-            for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
-            if tenant_id_of_run(run) == task.tenant_id
-        ]
-        if not runs:
-            return True
-        return all(run_owned_by(run, principal) for run in runs)
-    # 列表页只做一次运行扫描；逐任务查询会让 200 条历史各自重扫全部运行。
-    matching_scopes = [
-        scope for scope in scopes.get(task.task_id, ()) if scope[1] == task.tenant_id
-    ]
-    if not matching_scopes:
-        # Legacy tasks without execution records have no authenticated Mod binding.
-        # 任务在上方已通过「用户 + 租户」归属校验；不应仅因请求头携带 active-mod
-        # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
-        # 故该分支等于让这类任务永久不可见）。此处不再据 mod 绑定额外过滤。
-        return True
-    requested_mod = str((principal.mod_authorization or {}).get("mod_id") or "")
-    return all(
-        (not run_mod or run_mod == requested_mod)
-        and run_user == principal.user_id
-        and run_tenant == principal.tenant_id
-        for run_user, run_tenant, run_mod in matching_scopes
-    )
-
-
-def scoped_tasks(
-    orchestrator: AgentOrchestrator,
-    *,
-    principal: AgentPrincipal,
-    limit: int,
-    include_archived: bool = False,
-) -> list[Any]:
-    result: list[Any] = []
-    scopes = (
-        orchestrator.list_run_scopes(user_id=principal.user_id)
-        if hasattr(orchestrator, "list_run_scopes")
-        else None
-    )
-    offset = 0
-    while len(result) < limit:
-        page = orchestrator.list_tasks(
-            user_id=principal.user_id,
-            tenant_id=principal.tenant_id,
-            limit=100,
-            offset=offset,
-            include_archived=include_archived,
-        )
-        result.extend(
-            task for task in page if task_scope_matches(orchestrator, task, principal, scopes)
-        )
-        if len(page) < 100:
-            break
-        offset += len(page)
-    return result[:limit]
 
 
 def enqueue_run(run: Any, *, requested_by: str) -> None:

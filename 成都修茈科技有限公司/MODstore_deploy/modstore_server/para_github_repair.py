@@ -405,6 +405,7 @@ def _worker_run(github, repo, run_id, request_id):
         or run.get("id") != run_id
         or run.get("event") != "workflow_dispatch"
         or run.get("head_branch") != "main"
+        or not re.fullmatch(r"[0-9a-f]{40}", str(run.get("head_sha") or ""))
         or run.get("run_attempt") != 1
         or (run.get("repository") or {}).get("full_name") != repo
         or run.get("display_title") != f"para-workspace-{request_id}"
@@ -502,6 +503,8 @@ def _observe_para(db, task, request, state, request_id, client):
     if (
         not str(raw.get("title", "")).startswith(marker)
         or raw.get("repo_url") != f"https://github.com/{request['repository']}.git"
+        or raw.get("branch") != request["source_sha"]
+        or raw.get("description") != request["message"]
     ):
         raise HTTPException(409, "Para 原任务回执身份不一致")
     if not para_task_succeeded(raw, task.para_task_id, planned_devices=[task.device_id]):
@@ -822,6 +825,7 @@ def run_status(task):
         "source_run_id": request["source_run_id"],
         "source_run_attempt": request.get("source_run_attempt"),
         "source_sha": request["source_sha"],
+        "original_request_digest": task.request_digest,
         "controller_sha": (approved or {}).get("controller_sha"),
         "run_id": state.get("run_id"),
         "status": task.state,

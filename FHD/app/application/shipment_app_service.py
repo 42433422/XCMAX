@@ -29,7 +29,9 @@ def verify_agent_shipment_mutation(
 ) -> dict[str, Any]:
     """Read the original claim and current tenant records; never repeat a mutation."""
     from app.application.agent_orchestrator.verification_readback import _report
-    from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.agent_orchestrator.verification_transactions import (
+        _transaction_read_scope,
+    )
     from app.application.business_db_write_verification import (
         _model_config,
         _verify_independent_write,
@@ -66,7 +68,10 @@ def verify_agent_shipment_mutation(
         return proof
     from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
-    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (db, tenant):
+    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (
+        db,
+        tenant,
+    ):
         remaining = (
             db.query(ShipmentEltImportFingerprint)
             .filter(
@@ -88,7 +93,9 @@ def verify_agent_created_shipment(
 
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.verification_readback import _report
-    from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
+    from app.application.agent_orchestrator.verification_transactions import (
+        _transaction_read_scope,
+    )
     from app.application.business_db_write_verification import (
         _same_value,
         _verify_independent_write,
@@ -122,8 +129,10 @@ def verify_agent_created_shipment(
     items = [ShipmentItem.from_dict(product) for product in products]
     expected = {
         "purchase_unit": unit,
-        "contact_person": params.get("contact_person"),
-        "contact_phone": params.get("contact_phone"),
+        # The canonical shipment adapter passes these optional fields as strings.
+        # Verify that exact normalized input against both receipt and storage.
+        "contact_person": str(params.get("contact_person") or ""),
+        "contact_phone": str(params.get("contact_phone") or ""),
         "contact_address": None,
         "items": [item.to_dict() for item in items],
         "status": "pending",
@@ -136,7 +145,10 @@ def verify_agent_created_shipment(
         for key, value in expected.items()
     ):
         return _report("failed", "result_shipment_receipt_mismatch", source)
-    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (db, tenant):
+    with _transaction_read_scope(context, {"shipment.view"}, "shipment") as (
+        db,
+        tenant,
+    ):
         row = (
             db.query(ShipmentRecord)
             .filter(ShipmentRecord.id == shipment["id"], ShipmentRecord.tenant_id == tenant)
@@ -208,7 +220,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
 
     @staticmethod
     def reserve_order_number(suffix: str = "A") -> dict[str, Any]:
-        from app.infrastructure.database.shipment_order_numbers import reserve_order_number
+        from app.infrastructure.database.shipment_order_numbers import (
+            reserve_order_number,
+        )
 
         return reserve_order_number(suffix)
 
@@ -428,7 +442,11 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         file_path = os.path.join(output_dir, filename)
         if not os.path.exists(file_path):
-            return {"success": False, "message": f"文件不存在：{filename}", "file_path": None}
+            return {
+                "success": False,
+                "message": f"文件不存在：{filename}",
+                "file_path": None,
+            }
         return {"success": True, "file_path": file_path, "message": "文件存在"}
 
     def mark_as_printed(self, shipment_id: int, printer_name: str = "") -> dict[str, Any]:
@@ -531,7 +549,9 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
         return list(matched[0]["products"])
 
 
-from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class
+from app.neuro_bus.neuro_application_instrumentation import (
+    instrument_application_service_class,
+)
 
 instrument_application_service_class(ShipmentApplicationService)
 

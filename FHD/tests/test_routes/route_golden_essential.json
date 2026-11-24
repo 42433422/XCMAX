@@ -499,7 +499,6 @@
   "/api/report/sales",
   "/api/runtime/product-sku",
   "/api/shipment/shipment-records/units",
-  "/api/skills/execute",
   "/api/system/duty-roster",
   "/api/system/employee-registry-rules",
   "/api/system/host-profile",

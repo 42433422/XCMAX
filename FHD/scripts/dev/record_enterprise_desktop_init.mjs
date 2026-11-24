@@ -170,7 +170,7 @@ async function main() {
     return { original_run: seed.run, tenant_id: login.tenant_id, workspace_id: login.workspace_id, workspace_owner_id: workspaceOwners.at(-1), records }
   })
   if (phase === 'readback') { evidence.result = 'gui_readback_passed'; return }
-  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); return visibleVersion(page, expect, JSON.parse(fs.readFileSync(path.join(root, 'config/release_train.json'), 'utf8')).product_version) })
+  if (phase !== 'seed') await step('visible_version', async () => { await nav('settings', '#view-settings'); return visibleVersion(page, expect, process.env.XCAGI_GUI_PRODUCT_VERSION) })
   await step('customer', async () => {
     await nav('customers', '#view-customers')
     await click('+ 新建客户')

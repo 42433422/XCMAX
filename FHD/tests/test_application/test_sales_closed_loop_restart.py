@@ -6,14 +6,16 @@ import hashlib
 import json
 import os
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
+from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db.db_base import Base
@@ -63,29 +65,29 @@ def _prepare(db_path: Path):
     return factory
 
 
-def _seed(factory) -> int:
+def _seed(factory, tenant_id: int = 1) -> int:
     from datetime import datetime
 
     from app.db.models import Customer, InventoryLedger, Product, Warehouse
     from app.db.models.user import User
 
-    with tenant_scope(1):
+    with tenant_scope(tenant_id):
         db = factory()
         customer = Customer(customer_name="测试客户 A")
         product = Product(name="产品 B", unit="件", model_number="TEST-B-001", is_active=1)
         warehouse = Warehouse(
-            code="WH-A",
-            name="企业1仓",
+            code="WH-A" if tenant_id == 1 else f"WH-{tenant_id}",
+            name=f"企业{tenant_id}仓",
             status="active",
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
         user = User(
-            username="sales-approver",
+            username="sales-approver" if tenant_id == 1 else f"sales-approver-{tenant_id}",
             password="x",
             display_name="销售审批人",
             role="admin",
-            tenant_id=1,
+            tenant_id=tenant_id,
             is_active=True,
         )
         db.add_all([customer, product, warehouse, user])
@@ -443,6 +445,141 @@ def _wait_for(path: Path, proc: subprocess.Popen, timeout: float = 60) -> None:
     raise AssertionError(f"timed out waiting for {path.name}")
 
 
+def sale_fault_phase(db_path: Path, marker: Path, output: Path, phase: str) -> None:
+    """Exercise the actual transaction in a disposable process, without a model call."""
+    from app.application.sales_app_service import SalesAppService
+
+    factory = _prepare(db_path)
+    if phase == "sale_seed":
+        _seed(factory)
+        _seed(factory, tenant_id=2)
+        marker.write_text("seeded", encoding="utf-8")
+        return
+
+    def stop_before_response(*_args):
+        marker.write_text(json.dumps({"phase": phase, "pid": os.getpid()}), encoding="utf-8")
+        while True:
+            time.sleep(0.05)
+
+    if phase == "sale_stock_written":
+
+        def after_statement(_conn, _cursor, statement, *_args):
+            if statement.lower().lstrip().startswith("insert into inventory_transactions"):
+                stop_before_response()
+
+        event.listen(factory.kw["bind"], "after_cursor_execute", after_statement)
+    elif phase == "sale_committed":
+        event.listen(factory.class_, "after_commit", stop_before_response)
+
+    payload = _historical_plan().nodes[0].params["payload"]
+    with tenant_scope(1):
+        result = SalesAppService().execute_closed_loop(payload)
+    assert result["success"] is True, result
+    output.write_text(json.dumps(result, default=str), encoding="utf-8")
+
+
+def _sale_snapshot(db_path: Path, *, completed: bool) -> None:
+    """Read durable rows independently of the worker's ORM and returned receipt."""
+    with closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        for table in (
+            "sales_orders",
+            "sales_order_items",
+            "inventory_transactions",
+            "journal_entries",
+        ):
+            assert db.execute(f"SELECT count(*) FROM {table} WHERE tenant_id=1").fetchone() == (
+                int(completed),
+            )
+            assert db.execute(f"SELECT count(*) FROM {table} WHERE tenant_id=2").fetchone() == (0,)
+        assert db.execute("SELECT count(*) FROM receivable_allocations").fetchone() == (0,)
+        stock = dict(db.execute("SELECT tenant_id, available_quantity FROM inventory_ledger"))
+        assert stock == {1: 10 if completed else 20, 2: 20}
+        if completed:
+            assert db.execute(
+                "SELECT total_amount, invoice_status, payment_state FROM sales_orders WHERE tenant_id=1"
+            ).fetchone() == (1000, "invoiced", "unpaid")
+            assert db.execute(
+                "SELECT quantity FROM inventory_transactions WHERE tenant_id=1"
+            ).fetchone() == (-10,)
+
+
+def _finish_sale_process(proc: subprocess.Popen) -> None:
+    try:
+        proc.wait(timeout=60)
+        assert proc.returncode == 0, Path(proc.log_handle.name).read_text(encoding="utf-8")[-6000:]
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+        proc.log_handle.close()
+
+
+@pytest.mark.parametrize("interrupt_point", ["stock_written", "committed"])
+def test_sale_process_loss_and_backup_restore_preserve_one_original_effect(
+    tmp_path: Path, monkeypatch, interrupt_point
+):
+    """Kill during a write or after commit, then retry and restore the same business."""
+    from app.domain.shared_services.database_service import DatabaseService
+
+    db_path, marker = tmp_path / "sales.db", tmp_path / "seeded"
+    result_path = tmp_path / "first-result.json"
+    _finish_sale_process(_spawn("sale_seed", db_path, marker, result_path, wait=False))
+    _sale_snapshot(db_path, completed=False)
+    marker.unlink()
+    interrupted = _spawn(f"sale_{interrupt_point}", db_path, marker, result_path, wait=False)
+    try:
+        _wait_for(marker, interrupted)
+        _sale_snapshot(db_path, completed=interrupt_point == "committed")
+        interrupted.kill()
+        interrupted.wait(timeout=10)
+        assert interrupted.returncode != 0
+    finally:
+        if interrupted.poll() is None:
+            interrupted.kill()
+            interrupted.wait(timeout=10)
+        interrupted.log_handle.close()
+    assert not result_path.exists(), "the client must not have received a success response"
+    _sale_snapshot(db_path, completed=interrupt_point == "committed")
+    _finish_sale_process(_spawn("sale_retry", db_path, marker, result_path, wait=False))
+    assert json.loads(result_path.read_text())["replayed"] is (interrupt_point == "committed")
+    _sale_snapshot(db_path, completed=True)
+
+    service = DatabaseService()
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(service, "_get_db_path", lambda: str(db_path))
+    monkeypatch.setattr(service, "_get_backup_dir", lambda: str(backup_dir))
+    backup = service.backup_database()
+    assert backup["success"] is True, backup
+    with closing(sqlite3.connect(db_path)) as db:
+        db.execute("UPDATE inventory_ledger SET quantity=0, available_quantity=0 WHERE tenant_id=1")
+        db.commit()
+    restored = service.restore_database(backup["filename"])
+    assert restored["success"] is True, restored
+    _sale_snapshot(db_path, completed=True)
+
+    # Two fresh workers receive retries after the lost response and real restore.
+    retries = [
+        _spawn(phase, db_path, marker, tmp_path / f"{phase}.json", wait=False)
+        for phase in ("sale_repeat", "sale_duplicate")
+    ]
+    try:
+        for retry in retries:
+            _finish_sale_process(retry)
+    finally:
+        for retry in retries:
+            if retry.poll() is None:
+                retry.kill()
+                retry.wait(timeout=10)
+            retry.log_handle.close()
+    for phase in ("sale_repeat", "sale_duplicate"):
+        result = json.loads((tmp_path / f"{phase}.json").read_text())
+        assert result["success"] is True and result["replayed"] is True
+    _sale_snapshot(db_path, completed=True)
+
+
 @pytest.mark.parametrize(
     "kill,invalidate", [(False, None), (True, None), (False, "delete"), (False, "withdraw")]
 )
@@ -553,7 +690,9 @@ if __name__ == "__main__":
     database = Path(os.environ["SALES_DB"])
     marker_path = Path(os.environ["SALES_MARKER"])
     output = Path(os.environ["SALES_RESULT"])
-    if phase == "confirm":
+    if phase.startswith("sale_"):
+        sale_fault_phase(database, marker_path, output, phase)
+    elif phase == "confirm":
         confirm_phase(database, marker_path)
     elif phase in {"delete", "withdraw"}:
         invalidate_phase(database, marker_path, phase)

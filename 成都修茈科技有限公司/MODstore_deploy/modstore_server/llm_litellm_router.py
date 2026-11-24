@@ -22,7 +22,12 @@ import time
 from collections.abc import Mapping
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
-from modstore_server.llm_gateway_contract import gateway_body, gateway_single_attempt
+from modstore_server.llm_gateway_contract import (
+    StreamLimitError,
+    StreamReceiptBudget,
+    gateway_body,
+    gateway_single_attempt,
+)
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
     is_minimax_token_plan_key,
@@ -394,9 +399,14 @@ def _budgeted_stream_client(
     from openai import AsyncOpenAI, AsyncStream, DefaultAsyncHttpxClient
     from openai.types.chat import ChatCompletionChunk
 
+    from modstore_server.platform_model_transport import bound_model_stream_client
+
+    receipt_budget = StreamReceiptBudget()
+
     def record(chunk):
         if not isinstance(chunk, ChatCompletionChunk):
             return
+        receipt_budget.consume(chunk.model_dump(mode="json", exclude_unset=True))
         # LiteLLM rewrites chunk.model to its requested alias. Retain raw
         # identity from every SDK frame; later aliases cannot erase a mismatch.
         if chunk.model and reported.get("model", model) == model:
@@ -407,12 +417,20 @@ def _budgeted_stream_client(
     class ReceiptStream(AsyncStream[ChatCompletionChunk]):
         async def __aiter__(self):
             async for chunk in super().__aiter__():
-                record(chunk)
+                try:
+                    record(chunk)
+                except StreamLimitError:
+                    await self.close()
+                    raise
                 yield chunk
 
         async def __anext__(self):
             chunk = await super().__anext__()
-            record(chunk)
+            try:
+                record(chunk)
+            except StreamLimitError:
+                await self.close()
+                raise
             return chunk
 
     class ReceiptClient(AsyncOpenAI):
@@ -445,11 +463,12 @@ def _budgeted_stream_client(
                 )
             return response
 
+    transport = http_client or DefaultAsyncHttpxClient(follow_redirects=False, trust_env=False)
     return ReceiptClient(
         api_key=params["api_key"],
         base_url=params["api_base"],
         max_retries=0,
-        http_client=http_client or DefaultAsyncHttpxClient(follow_redirects=False, trust_env=False),
+        http_client=bound_model_stream_client(transport) if stream else transport,
     )
 
 
@@ -467,6 +486,26 @@ def _reported_stream_usage(reported: Dict[str, Any], usage: Dict[str, Any]) -> b
 
 
 def _error_payload(exc: BaseException, *, timeout_s: Optional[float]) -> Dict[str, Any]:
+    # SDK/router wrapping must not turn a consumed, truncated response into a
+    # retryable transport failure. Match exception identity, never provider text.
+    causes, seen = [exc], set()
+    for _ in range(32):
+        if not causes:
+            break
+        cause = causes.pop()
+        if id(cause) in seen:
+            continue
+        seen.add(id(cause))
+        if isinstance(cause, StreamLimitError):
+            return {
+                "ok": False,
+                "status": 502,
+                "error": "模型响应超过资源上限，原调用用量尚未核验",
+                "code": "model_stream_limit_exceeded",
+                "outcome_unknown": True,
+                "non_retryable": True,
+            }
+        causes.extend(item for item in (cause.__cause__, cause.__context__) if item is not None)
     if isinstance(exc, asyncio.TimeoutError):
         if timeout_s:
             return {
@@ -766,7 +805,9 @@ async def _stream_impl(
             ),
         )
         pending_calls: Dict[int, Dict[str, Any]] = {}
+        receipt_budget = StreamReceiptBudget()
         async for chunk in response:
+            receipt_budget.consume(chunk.model_dump(mode="json", exclude_unset=True))
             usage = _usage_dict(chunk)
             if usage:
                 yield {
@@ -804,11 +845,8 @@ async def _stream_impl(
     except _UPSTREAM_ERRORS as exc:
         outcome = "error"
         payload = _error_payload(exc, timeout_s=None)
-        yield {
-            "type": "error",
-            "status": payload.get("status"),
-            "error": payload.get("error"),
-        }
+        payload.pop("ok", None)
+        yield {"type": "error", **payload}
     finally:
         try:
             closer = getattr(response, "aclose", None)

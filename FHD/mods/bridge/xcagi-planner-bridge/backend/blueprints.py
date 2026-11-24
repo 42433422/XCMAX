@@ -1,4 +1,4 @@
-"""Planner Mod（房子）— 对话 API 门面；执行仍走宿主 Planner（经 app.mod_sdk.planner_compat）。"""
+"""对话 Mod API 门面；经稳定 Mod SDK 委托宿主固定 Codex 内核与唯一能力执行入口。"""
 
 from __future__ import annotations
 
@@ -88,10 +88,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return intent_test(body)
 
     @router.get("/tools/registry")
-    def mod_tools_registry():
+    def mod_tools_registry(request: Request):
         from app.mod_sdk.planner_compat import list_planner_tools_registry
 
-        data = list_planner_tools_registry()
+        data = list_planner_tools_registry(request)
         return {"success": True, "data": data}
 
     @router.post("/tools/execute")

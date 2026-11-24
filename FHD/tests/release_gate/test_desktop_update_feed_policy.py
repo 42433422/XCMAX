@@ -151,7 +151,11 @@ def test_frozen_mac_promotion_keeps_security_and_authorization_gates() -> None:
     assert "MACOS_FROZEN_PAIR_AUTHORIZED_SHA" in workflow
     assert "MACOS_FROZEN_PAIR_PUBLICATION_ENABLED" in workflow
     assert "prevent_self_review" not in workflow
-    assert "protection/required_status_checks" in workflow
+    assert "measure_required_checks.py" in workflow
+    assert '--authorized-frozen-sha "$AUTHORIZED_SHA"' in workflow
+    assert 'test "$CONTROLLER_REF" = refs/heads/main' in workflow
+    assert "path: release-controller" in workflow
+    assert "../release-controller/FHD/scripts/security/verify_security_scan_pair.py" in workflow
     assert "verify_security_scan_pair.py" in workflow
     assert "arm64_run_id:" in workflow and "x64_run_id:" in workflow
     assert "prepare_mac_candidate_pair.py" in workflow

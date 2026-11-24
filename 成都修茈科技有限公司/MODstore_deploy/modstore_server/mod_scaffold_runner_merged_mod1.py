@@ -1050,63 +1050,19 @@ async def resolve_llm_provider_model_auto(
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Optional[str], _facade().Optional[str], _facade().Optional[str]]:
-    """
-    工作台 Auto 语义：显式 provider/model 必须可用；否则优先账户默认，
-    默认无 key 时自动切到第一个有 key 且能拿到模型目录的供应商。
-    """
-    prov = (provider or "").strip()
-    mdl = (model or "").strip()
-    if prov and mdl:
-        if prov not in _facade().KNOWN_PROVIDERS:
-            return (None, None, f"不支持的供应商: {prov}")
-        api_key, _ = _facade().resolve_api_key(db, user.id, prov)
-        if not api_key:
-            return (None, None, f"供应商 {prov} 未配置可用 API Key")
-        return (prov, mdl, None)
-    from modstore_server.llm_catalog import get_models_for_provider
+    """Reuse chat routing so Auto shares gateway, model-capability and BYOK boundaries."""
+    from fastapi import HTTPException
+    from modstore_server.llm_api import resolve_default_llm_route
 
-    async def first_model_id(p: str) -> str:
-        try:
-            block = await get_models_for_provider(db, user.id, p, force_refresh=False)
-        except RECOVERABLE_ERRORS:
-            return ""
-        mids = list(block.get("models") or [])
-        return str(mids[0]).strip() if mids else ""
-
-    urow = db.query(_facade().User).filter(_facade().User.id == user.id).first()
-    raw_pref = ((urow.default_llm_json if urow else None) or "").strip()
-    prefs: _facade().Dict[str, _facade().Any] = {}
-    if raw_pref:
-        try:
-            loaded = _facade().json.loads(raw_pref)
-            if isinstance(loaded, dict):
-                prefs = loaded
-        except _facade().json.JSONDecodeError:
-            prefs = {}
-    pref_p = str(prefs.get("provider") or "").strip()
-    pref_m = str(prefs.get("model") or "").strip()
-    if pref_p in _facade().KNOWN_PROVIDERS:
-        api_key, _ = _facade().resolve_api_key(db, user.id, pref_p)
-        if api_key:
-            if pref_m:
-                return (pref_p, pref_m, None)
-            m0 = await first_model_id(pref_p)
-            if m0:
-                return (pref_p, m0, None)
-    if "xiaomi" in _facade().KNOWN_PROVIDERS:
-        api_key, _ = _facade().resolve_api_key(db, user.id, "xiaomi")
-        if api_key:
-            m0 = await first_model_id("xiaomi")
-            if m0:
-                return ("xiaomi", m0, None)
-    for p in _facade().KNOWN_PROVIDERS:
-        api_key, _ = _facade().resolve_api_key(db, user.id, p)
-        if not api_key:
-            continue
-        m0 = await first_model_id(p)
-        if m0:
-            return (p, m0, None)
-    return (None, None, "没有找到已配置 API Key 且可用模型目录的 LLM 供应商")
+    try:
+        route = await resolve_default_llm_route(
+            db, user.id, provider=(provider or "").strip(), model=(model or "").strip()
+        )
+    except HTTPException as exc:
+        detail = exc.detail
+        message = detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
+        return (None, None, message)
+    return (route["provider"], route["model"], None)
 
 
 # --- from mod_scaffold_runner_part03_part01_part01.py ---

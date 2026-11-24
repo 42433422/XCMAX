@@ -1,0 +1,165 @@
+# CI SSOT: generated from FHD/.github/workflows/desktop-soak.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Desktop native eight-hour soak
+run-name: Desktop soak ${{ inputs.release_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact mainline SHA embedded in all three installed acceptance applications
+        required: true
+        type: string
+      product_version:
+        description: Catalog version installed on the three controlled acceptance devices
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  native:
+    if: github.ref == 'refs/heads/main'
+    name: Desktop soak (${{ matrix.platform }})
+    # xcagi-physical is assigned only to enrolled acceptance devices. The label
+    # routes work; independent original job metadata is verified at closeout.
+    runs-on: [self-hosted, '${{ matrix.os }}', '${{ matrix.arch }}', xcagi-physical]
+    timeout-minutes: 600
+    concurrency:
+      group: xcagi-desktop-soak-${{ matrix.platform }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: Windows
+            arch: X64
+            binary_var: XCAGI_SOAK_WINDOWS_BINARY
+            user_secret: XCAGI_SOAK_WINDOWS_USER
+            pass_secret: XCAGI_SOAK_WINDOWS_PASS
+          - platform: macos-arm64
+            os: macOS
+            arch: ARM64
+            binary_var: XCAGI_SOAK_MACOS_ARM64_BINARY
+            user_secret: XCAGI_SOAK_MACOS_USER
+            pass_secret: XCAGI_SOAK_MACOS_PASS
+          - platform: macos-x64
+            os: macOS
+            arch: X64
+            binary_var: XCAGI_SOAK_MACOS_X64_BINARY
+            user_secret: XCAGI_SOAK_MACOS_USER
+            pass_secret: XCAGI_SOAK_MACOS_PASS
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Validate mainline identity and native runner
+        shell: python
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+          EXPECTED_OS: ${{ matrix.os }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          RUNNER_KIND: ${{ runner.environment }}
+        run: |
+          import os, re, subprocess, sys
+          sha = os.environ['RELEASE_SHA']
+          if not re.fullmatch(r'[0-9a-f]{40}', sha):
+              raise SystemExit('Exact lowercase release SHA required')
+          if (os.environ['RUNNER_OS'] != os.environ['EXPECTED_OS']
+              or os.environ['RUNNER_ARCH'] != os.environ['EXPECTED_ARCH']
+              or os.environ['RUNNER_KIND'] != 'self-hosted'):
+              raise SystemExit('Controlled native runner required')
+          subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'HEAD'], check=True)
+          subprocess.run([sys.executable, 'scripts/release/build_closure_reports.py', 'version',
+                          '--product-version', os.environ['PRODUCT_VERSION']], check=True)
+      - name: Install locked observation tools in an isolated environment
+        id: tools
+        shell: python
+        run: |
+          import os, pathlib, subprocess, tempfile, venv
+          root = pathlib.Path(tempfile.mkdtemp(prefix='xcagi-soak-tools-', dir=os.environ['RUNNER_TEMP']))
+          venv.EnvBuilder(with_pip=True).create(root)
+          python = root / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+          subprocess.run([str(python), '-m', 'pip', 'install', '--disable-pip-version-check',
+                          'psutil==7.2.2', 'httpx==0.28.1', 'playwright==1.65.1'], check=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'python={python}\n')
+      - name: Exercise the installed application for eight hours
+        shell: python
+        env:
+          SOAK_PYTHON: ${{ steps.tools.outputs.python }}
+          DESKTOP_BINARY: ${{ vars[matrix.binary_var] }}
+          XCAGI_TEST_USER: ${{ secrets[matrix.user_secret] }}
+          XCAGI_TEST_PASS: ${{ secrets[matrix.pass_secret] }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: |
+          import os, pathlib, subprocess
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'desktop-soak' / (os.environ['TARGET_PLATFORM'] + '.json')
+          subprocess.run([os.environ['SOAK_PYTHON'], 'scripts/release/desktop_soak.py',
+                          '--binary', os.environ['DESKTOP_BINARY'], '--release-sha', os.environ['RELEASE_SHA'],
+                          '--platform', os.environ['TARGET_PLATFORM'],
+                          '--product-version', os.environ['PRODUCT_VERSION'], '--output', str(output),
+                          '--duration-seconds', '28800', '--interval-seconds', '30'], check=True)
+      - name: Preserve raw native measurements on every outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-soak-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-soak/${{ matrix.platform }}.json
+          retention-days: 120
+          if-no-files-found: error
+
+  aggregate:
+    if: always() && github.ref == 'refs/heads/main'
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-soak-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-soak
+          merge-multiple: true
+      - name: Recompute measurement verdict without certifying machine provenance
+        if: always()
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+        run: |
+          python scripts/release/verify_desktop_soak.py \
+            --windows "${RUNNER_TEMP}/desktop-soak/windows.json" \
+            --macos-arm64 "${RUNNER_TEMP}/desktop-soak/macos-arm64.json" \
+            --macos-x64 "${RUNNER_TEMP}/desktop-soak/macos-x64.json" \
+            --release-sha "$RELEASE_SHA" --product-version "$PRODUCT_VERSION" \
+            --measurements-only --output "${RUNNER_TEMP}/desktop-soak/verification.json"
+      - name: Preserve combined evidence and blockers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-desktop-soak
+          path: ${{ runner.temp }}/desktop-soak
+          overwrite: true
+          retention-days: 120
+          if-no-files-found: error

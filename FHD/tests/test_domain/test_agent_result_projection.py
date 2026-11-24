@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.domain.task_lifecycle.results import agent_node_output
+from app.application.agent_orchestrator.trace_payloads import agent_node_output
 
 
 def _run(output, *, verification_status="inconclusive", accepted=False):
@@ -84,6 +84,8 @@ def test_other_nodes_and_an_old_rejection_cannot_override_the_latest_node_receip
     unrelated = copy.deepcopy(run.tool_calls[0])
     unrelated.node_id = "other"
     run.tool_calls.append(unrelated)
+    assert agent_node_output(run, "delete")["success"] is False
+    run.status = "completed"
     assert agent_node_output(run, "delete")["success"] is True
 
 

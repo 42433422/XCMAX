@@ -43,11 +43,26 @@ vi.mock('./updater', () => ({ readLocalProductVersion: vi.fn(() => '1.0.0.1'), r
 vi.mock('./desktop-navigation', () => ({ parseDesktopDeepLink: vi.fn(() => null) }))
 
 import { execFile } from 'node:child_process'
-import { clipboard } from 'electron'
-import { openKellaiDesktop, captureFullScreenScreenshot, createTray } from './app-shell'
+import { clipboard, Menu } from 'electron'
+import { openKellaiDesktop, captureFullScreenScreenshot, createMenu, createTray } from './app-shell'
 import { showMainWindow } from './window-manager'
 
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
+
+it.each(['win32', 'darwin'])('installs the standard quit action with an explicit keyboard shortcut on %s', platform => {
+  const original = process.platform
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+  try {
+    createMenu()
+    const [template] = vi.mocked(Menu.buildFromTemplate).mock.calls.at(-1)!
+    expect(template[0].submenu).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'quit', accelerator: 'CmdOrCtrl+Q' }),
+    ]))
+    expect(Menu.setApplicationMenu).toHaveBeenCalledWith(trayHarness.menu)
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original, configurable: true })
+  }
+})
 
 describe('createTray（单击弹出主窗口，右键才是菜单）', () => {
   function installTray(platform: string) {

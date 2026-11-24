@@ -212,7 +212,7 @@ class TestRunCmd:
         facade, _ = _make_facade()
         with patch(
             "app.application.facades.shipment_event_primary.run_coroutine_on_neuro_loop",
-            side_effect=RuntimeError("loop down"),
+            side_effect=TimeoutError("loop down"),
         ):
             result = facade._run_cmd(MagicMock())
         assert result["success"] is False

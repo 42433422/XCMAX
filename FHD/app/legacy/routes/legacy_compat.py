@@ -251,12 +251,12 @@ def _register_shipment_routes(app: FastAPI) -> None:
 
 
 def _register_ai_routes(app: FastAPI) -> None:
-    """Mount AI assistant/intent/kitten/qclaw/open routes."""
+    """Mount AI assistant/intent/kitten/open routes."""
     # Always-on: chat task cards POST here; must not depend on XCAGI_REGISTER_LEGACY_ROUTES.
     _mount_router(
         app,
         "app.fastapi_routes.tools_execute",
-        log_name="tools_execute (/api/tools/execute, /api/skills/execute)",
+        log_name="tools_execute (/api/tools/execute)",
     )
     _mount_router(
         app,
@@ -288,12 +288,6 @@ def _register_ai_routes(app: FastAPI) -> None:
         app,
         "app.fastapi_routes.ai_kitten",
         log_name="ai_kitten (/api/ai/kitten/*)",
-    )
-
-    _mount_router(
-        app,
-        "app.fastapi_routes.ai_qclaw",
-        log_name="ai_qclaw (/api/ai/qclaw/*)",
     )
 
     _mount_router(

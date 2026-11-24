@@ -43,10 +43,14 @@ _SERVER_FIELDS = frozenset(
         "employee_id",
         "employee_tool_allowlist",
         "mutation_policy",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "_tool_approval_scope",
         "task_id",
@@ -68,9 +72,13 @@ _UNTRUSTED_CONTROL = frozenset(
         "permissions",
         "system_prompt",
         "grant_tools",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "employee_tool_allowlist",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "_tool_approval_scope",
         "_approval_agent_run_required",
@@ -89,6 +97,7 @@ _FINGERPRINT_SKIP = frozenset(
         "mod_id",
         "active_mod_id",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "local_user_id",
         "authenticated_local_user_id",
@@ -218,6 +227,18 @@ def actor_tool_denial(
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
+    if "_credential_authorization" in ctx:
+        from app.application.aiopen.service import api_key_permits_execution
+
+        if not api_key_permits_execution(ctx, tool_id, action):
+            return _denial(
+                "tool_permission_denied",
+                "调用凭据已撤销、过期或未授权此能力",
+                context=ctx,
+                tool_id=tool_id,
+                action=action,
+                reason="credential_scope_denied",
+            )
     receipt = ctx.get("_tool_approval_scope")
     if isinstance(receipt, dict) and (
         receipt.get("tool_id"),
@@ -271,6 +292,53 @@ def actor_tool_denial(
 
     try:
         actor = _bound_actor(ctx)
+        if tool_id == "business_db" and action in {"read", "write"}:
+            tenant = getattr(actor, "tenant_id", None)
+            if type(tenant) is not int or tenant <= 0:
+                return _denial(
+                    "tool_permission_denied",
+                    "业务读写需要已认证企业归属",
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="owned_tenant_required",
+                )
+            if action == "read" and (params or {}).get("entity") == "products":
+                from fastapi import HTTPException
+
+                from app.infrastructure.auth.business_scope_gate import (
+                    check_owned_business_permission,
+                )
+
+                try:
+                    check_owned_business_permission(actor, "product.view")
+                except HTTPException as exc:
+                    return _denial(
+                        "tool_permission_denied",
+                        str(exc.detail),
+                        context=ctx,
+                        tool_id=tool_id,
+                        action=action,
+                        reason="owned_business_permission_denied",
+                    )
+        if spec.policy.get("data_scope") == "legacy_global":
+            from fastapi import HTTPException
+
+            from app.infrastructure.auth.business_scope_gate import (
+                check_legacy_business_user_permission,
+            )
+
+            try:
+                check_legacy_business_user_permission(actor, spec.permission)
+            except HTTPException as exc:
+                return _denial(
+                    "tool_permission_denied",
+                    str(exc.detail),
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="legacy_store_not_scoped",
+                )
         if tool_id == "memory_v2":
             aliases = {str(actor.id)}
             if not str(actor.username).isdecimal():
@@ -585,10 +653,15 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
 
 
 def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.application.employee_runtime.result_verifier import (
         execution_result_requires_reconciliation,
     )
 
+    if pending_execution_receipt(output):
+        # Acceptance pins the original claim just like uncertain effects, while
+        # retaining the provider's known state for independent readback later.
+        return {**output, "success": False, "retryable": False}
     if (
         execution_result_requires_reconciliation(output)
         or str(output.get("execution_status") or "").lower()
@@ -1292,7 +1365,12 @@ def handoff_runtime_context(
         "parent_run_id": parent_run_id,
         **{
             key: parent[key]
-            for key in ("workspace_id", "workspace_path", "root_run_id")
+            for key in (
+                "workspace_id",
+                "workspace_path",
+                "root_run_id",
+                "_credential_authorization",
+            )
             if key in parent
         },
         "_actor_authorization": parent.get("_actor_authorization"),
