@@ -867,3 +867,66 @@ def test_self_audit_mapping_keeps_all_existing_anchors_unverified(monkeypatch):
     assert result["anchor_count"] == 108
     assert all(row["status"] == "unverified" for row in result["anchors"])
     assert result["historical_domains"]["autonomy"]["status"] == "PASS"
+
+def test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery(database, tmp_path):
+    import hashlib
+
+    from modstore_server.xiaoc_self_evidence import (
+        annotate_unverified_catalog,
+        record_fixture_report,
+    )
+
+    layers = {
+        "unit": "NOT RUN",
+        "integration": "NOT RUN",
+        "real_model": "NOT RUN",
+        "real_business": "NOT RUN",
+        "production": "NOT RUN",
+    }
+    standard = {
+        "standard_version": "fixture-v1",
+        "scoring_version": "fixture-only-v1",
+        "digital_life_evaluation": {
+            "protocol_version": "fixture-v1",
+            "layers": list(layers),
+            "seeds": [17],
+            "scenarios": [{"id": "memory", "anchor": "autonomy-B3"}],
+        },
+    }
+    standard_path = tmp_path / "standard.json"
+    standard_path.write_text(json.dumps(standard), encoding="utf-8")
+    raw_standard = standard_path.read_bytes()
+    report = {
+        "standard_sha256": hashlib.sha256(raw_standard).hexdigest(),
+        "standard_version": "fixture-v1",
+        "scoring_version": "fixture-only-v1",
+        "protocol_version": "fixture-v1",
+        "seeds": [17],
+        "domain_status": "UNRATED",
+        "score": None,
+        "evidence_scope": "isolated_fixture_only_not_attested",
+        "model_and_budget": "fixture_only_no_live_model_claim",
+        "source_sha": "a" * 40,
+        "auditor_source_sha": "b" * 40,
+        "dataset_sha256": "c" * 64,
+        "environment_sha256": "d" * 64,
+        "scenarios": [{"id": "memory", "anchor": "autonomy-B3", "layers": layers, "trials": []}],
+    }
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    first = record_fixture_report(report_path, standard_path)
+    assert first["status"] == "historical_fixture"
+    assert record_fixture_report(report_path, standard_path) == first
+    state = store.read_state()
+    assert len(state["self_fixture_checks"]) == 1
+    assert state["self_fixture_checks"][0]["id"] == first["evidence_ref"]
+    catalog = {
+        "status": "catalog_only",
+        "standard_sha256": report["standard_sha256"],
+        "anchors": [{"anchor_id": "autonomy-B3", "status": "unverified"}],
+    }
+    annotated = annotate_unverified_catalog(
+        catalog, state["self_fixture_checks"], current_sha=report["source_sha"]
+    )
+    assert annotated["anchors"][0]["status"] == "unverified"
+    assert annotated["anchors"][0]["fixture_history"][0]["reported_integration"] == "NOT RUN"
