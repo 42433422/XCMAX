@@ -43,12 +43,23 @@ async def native_life_checkpointer() -> AsyncIterator[Any]:
         url = engine.url
 
     if dialect == "postgresql":
+        import re
+
+        from sqlalchemy import text
+
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-        # Psycopg3 accepts standard postgresql://, including original URL
-        # query parameters (such as an isolated test schema search_path).
-        conn_string = url.set(drivername="postgresql").render_as_string(
-            hide_password=False
+        # The business engine may set search_path through connect_args rather
+        # than the URL. Discover the effective schema with the SAME role, then
+        # bind the native saver to that schema. Never leak to public by default.
+        with xiaoc_life_store.get_session_factory()() as session:
+            schema = session.execute(text("SELECT current_schema()")).scalar_one()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,62}", schema):
+            raise RuntimeError("life checkpoint schema is not safely addressable")
+        conn_string = (
+            url.set(drivername="postgresql")
+            .update_query_dict({"options": f"-csearch_path={schema}"})
+            .render_as_string(hide_password=False)
         )
         async with AsyncPostgresSaver.from_conn_string(
             conn_string, serde=serde

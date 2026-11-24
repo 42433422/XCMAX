@@ -1116,3 +1116,21 @@ def test_native_postgres_process_claim_checkpoint_and_pool_release(monkeypatch):
                 connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         finally:
             admin.dispose()
+
+
+
+def test_native_act_cas_is_permanent_and_preserves_original_task_identity(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=120)
+    assert store.begin_cycle_graph(claim)
+    store.record_cycle_phase(claim, "observe")
+    store.record_cycle_phase(claim, "decide")
+    candidate = store.pending_native_act_claim()
+    assert candidate is not None and candidate["cycle_id"] == claim["cycle_id"]
+    assert candidate["lease_token"] == claim["lease_token"]
+    assert store.admit_cycle_act(candidate)
+    assert not store.admit_cycle_act(claim)
+    assert store.pending_native_act_claim() is None
+    store.record_cycle_phase(claim, "act")
+    assert not store.admit_cycle_act(claim)
+    assert finish(claim)["budget"]["used_tokens"] == 50
