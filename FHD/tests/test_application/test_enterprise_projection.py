@@ -145,6 +145,7 @@ def test_catalog_names_existing_authorities():
         "supplier",
         "purchase_order",
         "purchase_inbound",
+        "journal_entry",
     }
     assert catalog["task"]["id_field"] == "task_id"
     assert all(row["read_only"] for row in catalog.values())
@@ -781,3 +782,72 @@ def test_tampered_history_cannot_validate_a_cached_current_fact(world):
     unsafe = get(service)
     assert unsafe["knowledge_kind"] == "unknown"
     assert unsafe["reason_code"] == "observation_history_unavailable"
+
+
+
+def test_journal_entry_authority_is_scoped_without_invented_account_balances(world, observer):
+    from datetime import date
+
+    from app.db.models.accounting import JournalEntry, JournalEntryLine
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add(
+            JournalEntry(
+                id=620,
+                tenant_id=11,
+                entry_no="WORLD-J-620",
+                journal_date=date(2026, 11, 24),
+                status="posted",
+                debit_total=Decimal("10.00"),
+                credit_total=Decimal("10.00"),
+            )
+        )
+        db.flush()
+        db.add_all(
+            [
+                JournalEntryLine(
+                    id=621,
+                    tenant_id=11,
+                    entry_id=620,
+                    account_code="1122",
+                    debit=Decimal("10.00"),
+                    credit=Decimal("0.00"),
+                ),
+                JournalEntryLine(
+                    id=622,
+                    tenant_id=11,
+                    entry_id=620,
+                    account_code="6001",
+                    debit=Decimal("0.00"),
+                    credit=Decimal("10.00"),
+                ),
+            ]
+        )
+    with pytest.raises(PermissionError):
+        get(service, "journal_entry", "620")
+    permissions.add("tool.finance.ledger_query")
+    before = get(service, "journal_entry", "620")
+    assert before["knowledge_kind"] == "fact"
+    assert before["state"]["debit_total"] == "10.00"
+    assert before["state"]["credit_total"] == "10.00"
+    assert before["state"]["lines"][0]["account_code"] == "1122"
+    assert before["state"]["lines"][0]["debit"] == "10.00"
+    assert before["state"]["lines_truncated"] is False
+    assert "cash_balance" not in before["state"]
+    assert "accounts_receivable" not in before["state"]
+    assert "partner_name" not in before["state"]["lines"][0]
+    assert get(service, "journal_entry", "999")["knowledge_kind"] == "unknown"
+    with sessions.begin() as db:
+        db.get(JournalEntryLine, 621).account_code = "1123"
+    assert any(
+        payload["entity_type"] == "journal_entry" and payload["entity_id"] == "620"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    after = get(service, "journal_entry", "620")
+    assert after["state"]["lines"][0]["account_code"] == "1123"
+    assert after["source_version"] != before["source_version"]
+    permissions.remove("tool.finance.ledger_query")
+    with pytest.raises(PermissionError):
+        get(service, "journal_entry", "620")

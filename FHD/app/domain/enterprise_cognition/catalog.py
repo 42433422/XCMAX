@@ -68,6 +68,13 @@ _DEFINITIONS = (
         "生产工单及领料记录；不推断产能或完工率",
     ),
     EntityDefinition(
+        "journal_entry",
+        "journal_entries",
+        "id",
+        "tool.finance.ledger_query",
+        "原总账凭证、借贷明细与冲销来源；不推断现金、应收或应付余额",
+    ),
+    EntityDefinition(
         "fund",
         "financial_transactions",
         "id",

@@ -12,6 +12,7 @@ import logging
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
+from app.db.models.accounting import JournalEntry, JournalEntryLine
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
@@ -39,6 +40,8 @@ _MODELS = {
     AiEmployeeProfile: ("employee", "employee_id", "ai_employee_profiles"),
     AgentTaskRecord: ("task", "task_id", "agent_tasks"),
     FinancialTransaction: ("fund", "id", "financial_transactions"),
+    JournalEntry: ("journal_entry", "id", "journal_entries"),
+    JournalEntryLine: ("journal_entry", "entry_id", "journal_entries"),
     Supplier: ("supplier", "id", "suppliers"),
     PurchaseOrder: ("purchase_order", "id", "purchase_orders"),
     PurchaseOrderItem: ("purchase_order", "order_id", "purchase_orders"),

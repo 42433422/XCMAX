@@ -237,6 +237,7 @@ def test_model_and_http_share_strict_catalog_contract(enterprise_http):
         "supplier",
         "purchase_order",
         "purchase_inbound",
+        "journal_entry",
     }
     assert data["read_only_sources"] is True
     spec = get_tool_action_spec("enterprise_cognition", "query")

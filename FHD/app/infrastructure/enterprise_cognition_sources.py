@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models.accounting import JournalEntry
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
@@ -31,6 +32,7 @@ _MODELS: dict[str, Any] = {
     "employee": AiEmployeeProfile,
     "task": AgentTaskRecord,
     "fund": FinancialTransaction,
+    "journal_entry": JournalEntry,
     "inventory": InventoryTransaction,
     "production": ManufacturingOrder,
     "supplier": Supplier,
@@ -116,6 +118,20 @@ _FIELDS = {
         "inbound_date",
         "total_amount",
         "status",
+    ),
+    "journal_entry": (
+        "id",
+        "entry_no",
+        "journal_date",
+        "status",
+        "reference_type",
+        "reference_id",
+        "debit_total",
+        "credit_total",
+        "reversed_of_id",
+        "reversed_at",
+        "credit_note_of_id",
+        "is_credit_note",
     ),
     "fund": (
         "id",
@@ -314,6 +330,25 @@ class AuthorityReader:
             }
             if definition.entity_type == "order":
                 self._order_quantities(row, scope, state)
+            if definition.entity_type == "journal_entry":
+                fields = (
+                    "id",
+                    "account_id",
+                    "account_code",
+                    "debit",
+                    "credit",
+                    "partner_id",
+                )
+                lines = sorted(
+                    (line for line in row.lines if line.tenant_id == scope.tenant_id),
+                    key=lambda line: line.id,
+                )
+                state["lines"] = [
+                    {key: json_value(getattr(line, key)) for key in fields}
+                    for line in lines[:200]
+                ]
+                state["lines_truncated"] = len(lines) > 200
+                # Raw journal lines are evidence, not a cash or receivables balance.
             if definition.entity_type in {"purchase_order", "purchase_inbound"}:
                 fields = (
                     ("id", "product_id", "quantity", "received_quantity", "unit", "status")
