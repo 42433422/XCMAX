@@ -51,31 +51,46 @@ class TestXcagiChatHttpExcExtended:
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
 
+    def _request(self):
+        import httpx
+
+        return httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+
     def test_authentication_error(self):
+        import httpx
+
         from app.fastapi_routes.xcagi_compat_chat_models import AuthenticationError
 
-        exc = AuthenticationError(message="invalid key", response=Mock(), body=None)
+        request = self._request()
+        exc = AuthenticationError(
+            message="invalid key", response=httpx.Response(401, request=request), body=None
+        )
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 401
 
     def test_rate_limit_error(self):
+        import httpx
+
         from app.fastapi_routes.xcagi_compat_chat_models import RateLimitError
 
-        exc = RateLimitError(message="rate limited", response=Mock(), body=None)
+        request = self._request()
+        exc = RateLimitError(
+            message="rate limited", response=httpx.Response(429, request=request), body=None
+        )
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 429
 
     def test_api_connection_error(self):
         from app.fastapi_routes.xcagi_compat_chat_models import APIConnectionError
 
-        exc = APIConnectionError(request=Mock())
+        exc = APIConnectionError(request=self._request())
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
 
     def test_api_error(self):
         from app.fastapi_routes.xcagi_compat_chat_models import APIError
 
-        exc = APIError(message="api error", request=Mock(), body=None)
+        exc = APIError(message="api error", request=self._request(), body=None)
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 502
 

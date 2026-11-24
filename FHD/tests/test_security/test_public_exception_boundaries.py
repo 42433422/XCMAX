@@ -347,8 +347,14 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     # run the real tool in-process so host-specific worker spawn cannot fail setup.
     executor = setup.bridge.orchestrator._tool_executor
 
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
     def execute_in_process(step, *, runtime_context, deadline_monotonic):
-        return executor.execute(step, runtime_context=runtime_context)
+        try:
+            return executor.execute(step, runtime_context=runtime_context)
+        except BOUNDARY_ERRORS as exc:
+            print(f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc}")
+            raise
 
     executor.execute_with_deadline = execute_in_process
     for target in (
