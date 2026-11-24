@@ -202,6 +202,7 @@ def test_history_must_match_standard_digest_and_bound_event_identity():
         result = annotate_unverified_catalog(copy.deepcopy(catalog), [tampered], current_sha=None)
         assert "fixture_history" not in result["anchors"][0]
 
+
 def test_release_fixture_trend_never_claims_actual_capability_decline():
     report, standard = sample()
     summary = read_fixture_summary(encode(report), standard)
@@ -228,9 +229,11 @@ def test_release_fixture_trend_never_claims_actual_capability_decline():
 
     drifted = copy.deepcopy(old)
     drifted["details"]["dataset_sha256"] = sha("different")
-    assert fixture_trend(
-        [current, drifted], current_sha="a" * 40
-    )["status"] == "insufficient_comparable_fixture_evidence"
-    assert fixture_trend(
-        [old], current_sha="a" * 40
-    )["status"] == "insufficient_comparable_fixture_evidence"
+    assert (
+        fixture_trend([current, drifted], current_sha="a" * 40)["status"]
+        == "insufficient_comparable_fixture_evidence"
+    )
+    assert (
+        fixture_trend([old], current_sha="a" * 40)["status"]
+        == "insufficient_comparable_fixture_evidence"
+    )
