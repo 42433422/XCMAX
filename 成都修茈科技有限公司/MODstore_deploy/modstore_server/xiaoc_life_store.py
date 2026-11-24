@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import copy
+import hashlib
 import json
 import uuid
 from datetime import UTC, timedelta
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.identity import User
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
+from modstore_server.xiaoc_life_checkpoint import make_checkpoint, same_checkpoint
 from modstore_server.xiaoc_life_policy import (
     IDENTITY_ID,
     MINIMUM_LEVEL,
@@ -69,6 +71,7 @@ def _initial() -> dict[str, Any]:
         "revision": 1,
         "level": 3,
         "paused": False,
+        "stopped": False,
         "owner_user_id": None,
         "mission": "持续改善 XCMAX 的交付与经营，并在授权预算内探索和学习。",
         "policy": LifePolicy().model_dump(),
@@ -165,6 +168,19 @@ def _blockers(data: dict[str, Any], session: Session) -> list[str]:
     return blocked
 
 
+def _admission_blockers(data: dict[str, Any]) -> list[str]:
+    """Daily exhaustion blocks new cycles, never settlement of an existing lease."""
+    budget, policy = data["budget"], data["policy"]
+    if budget["date"] != _day():
+        return []
+    blocked = []
+    if budget["cycles"] >= policy["daily_cycle_limit"]:
+        blocked.append("今日自主活动次数已耗尽")
+    if budget["used_tokens"] + budget["reserved_tokens"] >= policy["daily_token_limit"]:
+        blocked.append("今日自主活动模型预算已耗尽")
+    return blocked
+
+
 def _event(
     session: Session,
     event_id: str,
@@ -215,6 +231,11 @@ def read_state() -> dict[str, Any]:
         data = json.loads(row.state_json)
         blockers = _blockers(data, session)
         active = data.pop("active_cycle", None)
+        data.setdefault("stopped", False)
+        if not active and not data["paused"] and data["level"] >= 4:
+            blockers.extend(_admission_blockers(data))
+        if active and active["policy_revision"] != data["revision"]:
+            blockers.append("原运行授权已改变，等待原回执结算")
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
@@ -224,35 +245,66 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        from modstore_server.xiaoc_life_experience_review import review_facts
+
+        data["experience_review_facts"] = review_facts(session, data)
         data["status"] = (
-            "paused"
-            if data["paused"]
+            "stopped"
+            if data["stopped"]
             else (
-                "blocked"
-                if blockers
+                "paused"
+                if data["paused"]
                 else (
-                    ("waiting" if active.get("awaiting_worker") else "thinking")
-                    if active
-                    else "idle" if data["level"] < 4 else data["last_status"]
+                    "blocked"
+                    if blockers
+                    else (
+                        (
+                            "waiting"
+                            if active.get("awaiting_worker")
+                            else {
+                                "observe": "thinking",
+                                "decide": "thinking",
+                                "act": "acting",
+                                "reflect": "reflecting",
+                            }.get(active.get("phase"), "thinking")
+                        )
+                        if active
+                        else "idle" if data["level"] < 4 else data["last_status"]
+                    )
                 )
             )
         )
         data["activity"] = (
             {
                 "id": active["cycle_id"],
+                "trace_cycle_sha256": hashlib.sha256(
+                    active["cycle_id"].encode("utf-8")
+                ).hexdigest(),
                 "domain": active["domain"],
                 "started_at": active["started_at"],
                 "status": data["status"],
+                "phase": active.get("phase", "claimed"),
+                "phase_started_at": active.get("phase_started_at", active["started_at"]),
+                "checkpoint_phase": (
+                    "reflect"
+                    if "reflect" in active.get("graph_checkpoints", {})
+                    else "act" if "act" in active.get("graph_checkpoints", {}) else None
+                ),
                 "summary": (
-                    "等待原队列任务的执行回执"
-                    if active.get("awaiting_worker")
-                    else "正在处理已认领的自主活动"
+                    "原运行已禁止新增动作，保留原回执及预算核对"
+                    if data["status"] in {"paused", "stopped", "blocked"}
+                    else (
+                        "等待原队列任务的执行回执"
+                        if active.get("awaiting_worker")
+                        else "正在处理已认领的自主活动"
+                    )
                 ),
             }
             if active
             else None
         )
         data["blockers"] = blockers
+        data["state_version"] = row.version
         data["updated_at"] = row.updated_at.replace(tzinfo=UTC).isoformat()
         if data["budget"]["date"] != _day() and not active and not data.get("unknown_usage"):
             data["budget"] = _budget()
@@ -353,6 +405,10 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 settled = _settled_owner_goals(data, session)
                 if settled is None:
                     raise LifePolicyError("原授权任务或模型用量尚未结清，请先核对执行与用量回执")
+                # Historical events remain; the active self hypothesis is not
+                # transferred to another administrator's cognition context.
+                data["self_model"] = {}
+                data.pop("world_review", None)
                 for goal, status in settled:
                     # Old approvals must not keep prioritizing the enterprise lane
                     # after its original owner and execution ledger are settled.
@@ -365,7 +421,21 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 reflection_template(policy.retort_template_id, actor_user_id)
             data["policy"] = policy.model_dump()
             data["owner_user_id"] = actor_user_id
-        for name in ("level", "paused", "mission"):
+        previous_lifecycle = (data.get("stopped", False), data["paused"])
+        stopped = body.stopped if body.stopped is not None else previous_lifecycle[0]
+        if stopped and body.paused is False:
+            raise LifePolicyError("已停止的自主活动须由管理员明确启动")
+        paused = stopped or (body.paused if body.paused is not None else previous_lifecycle[1])
+        if (
+            (body.stopped is not None or body.paused is not None)
+            and (stopped, paused) == previous_lifecycle
+            and body.level is None
+            and body.mission is None
+            and body.policy is None
+        ):
+            return  # Retrying a lifecycle command must not invalidate a live lease.
+        data["stopped"], data["paused"] = stopped, paused
+        for name in ("level", "mission"):
             if (value := getattr(body, name)) is not None:
                 data[name] = value.strip() if isinstance(value, str) else value
         if not data["mission"]:
@@ -379,11 +449,20 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
             kind="policy",
             status="applied",
             summary=f"全企业小 C 自主模式更新为 L{data['level']}"
-            + ("，自主活动已暂停" if data["paused"] else ""),
+            + (
+                "，自主活动已停止"
+                if data.get("stopped")
+                else "，自主活动已暂停" if data["paused"] else ""
+            ),
             evidence_refs=[f"admin:{actor_user_id}", f"policy:{data['revision']}"],
             details={
                 "previous_owner_user_id": previous_owner,
                 "owner_user_id": data["owner_user_id"],
+                **(
+                    {"stopped": stopped, "paused": paused}
+                    if (stopped, paused) != previous_lifecycle
+                    else {}
+                ),
             },
         )
 
@@ -420,7 +499,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         if data["budget"]["date"] != _day():
             data["budget"] = _budget()
         budget, policy = data["budget"], data["policy"]
-        if budget["cycles"] >= policy["daily_cycle_limit"]:
+        if _admission_blockers(data):
             return None
         exploring = domain == "exploration"
         share = policy["daily_token_limit"] * policy["exploration_percent"] // 100
@@ -444,6 +523,8 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
             "domain": domain,
             "reserved_tokens": reserved,
             "outbound_journal_version": 1,
+            "phase": "claimed",
+            "phase_started_at": now.isoformat(),
             "started_at": now.isoformat(),
             "deadline": min(
                 now + timedelta(seconds=300), parse_time(policy["authorization_expires_at"])
@@ -463,23 +544,27 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
     return _mutate(claim)
 
 
+def _matches_claim(current: dict[str, Any], claim: dict[str, Any]) -> bool:
+    return bool(current.get("lease_token")) and all(
+        key in claim and current.get(key) == claim[key]
+        for key in (
+            "lease_token",
+            "cycle_id",
+            "owner_user_id",
+            "domain",
+            "reserved_tokens",
+            "policy_revision",
+            "deadline",
+        )
+    )
+
+
 def _claim_active(data: dict[str, Any], session: Session, claim: dict[str, Any]) -> bool:
     from modstore_server.strategic_remote_life import execution_deadline
 
     current = data.get("active_cycle") or {}
     return bool(
-        all(
-            current.get(key) == claim.get(key)
-            for key in (
-                "lease_token",
-                "cycle_id",
-                "owner_user_id",
-                "domain",
-                "reserved_tokens",
-                "policy_revision",
-            )
-        )
-        and current.get("lease_token")
+        _matches_claim(current, claim)
         and current.get("policy_revision") == data["revision"]
         and execution_deadline(data, claim) > utcnow()
         and not data["paused"]
@@ -561,15 +646,17 @@ def finish_cycle(
 
     def finish(data: dict[str, Any], session: Session) -> None:
         event_id = f"cycle:{claim['cycle_id']}"
-        if session.get(XiaoCLifeEvent, event_id) is not None:
-            return
+        if (
+            session.get(XiaoCLifeEvent, event_id) is not None
+            or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+        ):
+            return  # The original receipt or recovery transaction already settled this cycle.
         active = data.get("active_cycle") or {}
-        if active.get("lease_token") != claim.get("lease_token") or active.get(
-            "cycle_id"
-        ) != claim.get("cycle_id"):
+        if not _matches_claim(active, claim):
             raise LifePolicyError("lifecycle receipt does not own this run")
         budget = data["budget"]
         reserved = active["reserved_tokens"]
+        # Late receipts still settle actual consumption, but cannot grant new learning.
         fresh = _claim_active(data, session, claim)
         if actual_tokens is None:
             data["unknown_usage"] = True
@@ -588,7 +675,34 @@ def finish_cycle(
             data["goals"] = _merge(data["goals"], goals or [], "id", 100)
             data["interests"] = _merge(data["interests"], interests or [], "topic", 20)
             if self_model and self_model.get("evidence_refs"):
-                data["self_model"] = {**self_model, "status": "hypothesis"}
+                data["self_model"] = {
+                    **self_model,
+                    "status": "hypothesis",
+                    "owner_user_id": claim["owner_user_id"],
+                    "assessment_event_id": event_id,
+                }
+        world_receipt: dict[str, Any] = {}
+        observations = (details or {}).get("world_observations")
+        if (
+            safe
+            and status == "completed"
+            and active["domain"] == "reflection"
+            and data["level"] >= 6
+            and isinstance(observations, dict)
+        ):
+            from modstore_server.xiaoc_life_world import advance_review
+
+            previous = data.get("world_review")
+            try:
+                next_review = advance_review(
+                    previous, observations, owner=claim["owner_user_id"], now=utcnow()
+                )
+            except ValueError:
+                world_receipt = {"world_review_error": "invalid_persisted_review"}
+            else:
+                if next_review != previous:
+                    data["world_review"] = next_review
+                    world_receipt = {"world_review_snapshot": next_review}
         final_status = "unknown" if actual_tokens is None else status if fresh else "policy_changed"
         _event(
             session,
@@ -601,12 +715,16 @@ def finish_cycle(
             model=model,
             details={
                 **(details or {}),
+                **world_receipt,
                 "policy_revision": claim["policy_revision"],
                 "reservation": reserved,
                 "learning_applied": safe,
                 "owner_user_id": claim["owner_user_id"],
                 "steps": active.get("steps", []),
+                "last_phase": active.get("phase", "claimed"),
+                "graph_checkpoints": active.get("graph_checkpoints", {}),
                 "outbound_journal_version": active.get("outbound_journal_version"),
+                "outbound_attempted": bool(active.get("outbound_attempted")),
             },
         )
         data["active_cycle"] = None
@@ -666,12 +784,22 @@ def defer_cycle(
 
     def defer(data: dict[str, Any], session: Session) -> None:
         active = data.get("active_cycle") or {}
-        if any(active.get(key) != claim.get(key) for key in ("cycle_id", "lease_token")):
+        event_id = "cycle:" + claim["cycle_id"]
+        if (
+            session.get(XiaoCLifeEvent, event_id) is not None
+            or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+        ):
+            return
+        if not _matches_claim(active, claim):
             raise LifePolicyError("队列回执不属于当前运行")
         if not any(step.get("kind") == "portfolio" for step in active.get("steps", [])):
             raise LifePolicyError("没有原企业任务账本，不能延后结算")
-        _advance_goal_cursor(data, claim, details)
+        if _claim_active(data, session, claim):
+            _advance_goal_cursor(data, claim, details)
         active["awaiting_worker"] = True
+        if active.get("phase") != "waiting_worker":
+            active["phase"] = "waiting_worker"
+            active["phase_started_at"] = utcnow().isoformat()
         data["last_status"] = "waiting"
         event_id = "waiting:" + claim["cycle_id"]
         if session.get(XiaoCLifeEvent, event_id) is None:
@@ -689,26 +817,168 @@ def defer_cycle(
     return read_state()
 
 
+def begin_cycle_graph(claim: dict[str, Any]) -> bool:
+    """Only one graph invocation may consume a claimed cognition lease."""
+
+    def begin(data: dict[str, Any], session: Session) -> bool:
+        if not _claim_active(data, session, claim):
+            return False
+        active = data["active_cycle"]
+        if active.get("graph_started"):
+            return False
+        active["graph_started"] = True
+        return True
+
+    return _mutate(begin)
+
+
+def pending_native_act_claim() -> dict[str, Any] | None:
+    """Find an admitted graph at a durable pre-effect boundary, without changing it.
+
+    The original decision's persisted LangGraph checkpoint must still be
+    independently checked before this lease can be used to enter act.
+    """
+    _ensure()
+    with get_session_factory()() as session:
+        row = session.get(XiaoCLifeState, IDENTITY_ID)
+        assert row is not None
+        data = json.loads(row.state_json)
+        active = data.get("active_cycle") or {}
+        if (
+            not active.get("graph_started")
+            or active.get("act_admitted")
+            or active.get("phase") != "decide"
+            or not _claim_active(data, session, active)
+        ):
+            return None
+        return {**copy.deepcopy(active), "state": copy.deepcopy(data)}
+
+
+def admit_cycle_act(claim: dict[str, Any]) -> bool:
+    """Single-use SQL CAS fence for a resumed graph's first effectful node.
+
+    Once admitted, act is NEVER replayed. An interrupted or unknown effect
+    must use original business/model receipts, not checkpoint replay.
+    """
+
+    def admit(data: dict[str, Any], session: Session) -> bool:
+        active = data.get("active_cycle") or {}
+        if (
+            not _claim_active(data, session, claim)
+            or not active.get("graph_started")
+            or active.get("phase") != "decide"
+            or active.get("act_admitted")
+        ):
+            return False
+        active["act_admitted"] = True
+        active["act_admitted_at"] = utcnow().isoformat()
+        return True
+
+    return _mutate(admit)
+
+
+def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
+    """Persist node progress in the original CAS row, not a second task engine."""
+    phases = ("claimed", "observe", "decide", "act", "reflect")
+    if phase not in phases[1:]:
+        raise LifePolicyError("invalid lifecycle graph phase")
+
+    def record(data: dict[str, Any], session: Session) -> None:
+        active = data.get("active_cycle") or {}
+        if phase == "reflect":
+            # Receipt-only reflection may finish after stop/expiry. It grants no
+            # new operation; finish_cycle independently fences learning adoption.
+            if not _matches_claim(active, claim):
+                event_id = "cycle:" + claim["cycle_id"]
+                if (
+                    session.get(XiaoCLifeEvent, event_id) is not None
+                    or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+                ):
+                    return
+                raise LifePolicyError("反思回执不属于当前运行")
+        elif not _claim_active(data, session, claim):
+            raise LifePolicyError("运行授权已改变，不能进入下一节点")
+        previous = active.get("phase", "claimed")
+        if previous == phase:
+            return
+        if previous not in phases or phases.index(phase) != phases.index(previous) + 1:
+            raise LifePolicyError("生命节点进度不可跳过或倒退")
+        active["phase"] = phase
+        active["phase_started_at"] = utcnow().isoformat()
+
+    _mutate(record)
+
+
+def record_cycle_checkpoint(
+    claim: dict[str, Any],
+    phase: str,
+    *,
+    result: dict[str, Any],
+    actual_tokens: int | None,
+    evidence_refs: list[str],
+    reflection_status: str | None = None,
+) -> None:
+    """Keep bounded returned-node evidence in the same SQL CAS authority."""
+    checkpoint = make_checkpoint(
+        claim,
+        phase,
+        result=result,
+        actual_tokens=actual_tokens,
+        evidence_refs=evidence_refs,
+        reflection_status=reflection_status,
+        recorded_at=utcnow().isoformat(),
+    )
+
+    def save(data: dict[str, Any], session: Session) -> None:
+        event_id = "cycle:" + claim["cycle_id"]
+        if (
+            session.get(XiaoCLifeEvent, event_id) is not None
+            or session.get(XiaoCLifeEvent, "reconciled:" + event_id) is not None
+        ):
+            return
+        active = data.get("active_cycle") or {}
+        if not _matches_claim(active, claim) or not active.get("graph_started"):
+            raise LifePolicyError("节点检查点不属于原运行")
+        records = active.setdefault("graph_checkpoints", {})
+        previous = records.get(phase)
+        if previous is not None:
+            if not same_checkpoint(previous, checkpoint):
+                raise LifePolicyError("原节点检查点不可覆盖")
+            return
+        if active.get("phase") != phase or (phase == "reflect" and "act" not in records):
+            raise LifePolicyError("节点检查点不符合原图阶段")
+        # Receipt-only write: late evidence may survive revocation, but cannot
+        # execute another node or grant any learning/dispatch authority.
+        records[phase] = checkpoint
+
+    _mutate(save)
+
+
+def mark_model_attempt(claim: dict[str, Any]) -> None:
+    """Persist outbound uncertainty BEFORE a potentially billed model request.
+
+    An empty action journal cannot later be interpreted as no provider call
+    when the process crashes between transport and durable reservation receipt.
+    """
+
+    def mark(data: dict[str, Any], session: Session) -> None:
+        if not _claim_active(data, session, claim):
+            raise LifePolicyError("原模型授权已失效，禁止新增外呼")
+        data["active_cycle"]["outbound_attempted"] = True
+
+    _mutate(mark)
+
+
 def record_cycle_step(claim: dict[str, Any], *, kind: str, details: dict[str, Any]) -> None:
     """Journal existing execution identities before leaving the process."""
-    from modstore_server.strategic_remote_life import execution_deadline, require_step
+    from modstore_server.strategic_remote_life import require_step
 
     require_step(kind, details)
 
     def record(data: dict[str, Any], _session: Session) -> None:
         active = data.get("active_cycle") or {}
-        if active.get("cycle_id") != claim.get("cycle_id") or active.get(
-            "lease_token"
-        ) != claim.get("lease_token"):
-            raise LifePolicyError("运行身份已改变，不能登记新的外部动作")
-        if (
-            active.get("policy_revision") != data["revision"]
-            or data["paused"]
-            or execution_deadline(data, claim) <= utcnow()
-            or data["level"] < MINIMUM_LEVEL[active["domain"]]
-            or _blockers(data, _session)
-        ):
-            raise LifePolicyError("运行授权已改变，不能登记新的外部动作")
+        if not _claim_active(data, _session, claim):
+            raise LifePolicyError("运行身份或授权已改变，不能登记新的外部动作")
         steps = active.setdefault("steps", [])
         step = {"kind": kind, **details}
         if step not in steps:

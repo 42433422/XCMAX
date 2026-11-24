@@ -11,58 +11,87 @@ from sqlalchemy.orm import aliased
 from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, digest, portfolio_status
-from modstore_server.xiaoc_life_policy import IDENTITY_ID, parse_time, utcnow
+from modstore_server.xiaoc_life_checkpoint import (
+    recover_checkpoint,
+    zero_usage_checkpoint_compatible,
+)
+from modstore_server.xiaoc_life_policy import IDENTITY_ID, utcnow
 from modstore_server.xiaoc_life_store import _event, _mutate, get_session_factory, read_state
 
 
 def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
     if not steps:
         return None
-    portfolios = [step for step in steps if step["kind"] == "portfolio"]
-    if portfolios:
-        total = 0
-        for step in portfolios:
-            try:
-                record = portfolio_status(step["decision_id"], owner_user_id=owner)
-            except PortfolioError:
-                return None
-            tasks = [
-                task
-                for key, task in record.get("tasks", {}).items()
-                if key not in step.get("before_task_ids", [])
-            ]
-            if any(task.get("status") not in {"completed", "failed"} for task in tasks):
-                return None
-            calls = [call for task in tasks for call in task.get("calls", {}).values()]
-            if any(
-                call.get("status") != "settled" or type(call.get("actual_tokens")) is not int
-                for call in calls
-            ):
-                return None
-            total += sum(call["actual_tokens"] for call in calls)
-        return total
     total = 0
+    portfolios: set[str] = set()
+    verified_calls: set[tuple[str, str, str]] = set()
+    for step in steps:
+        if step["kind"] != "portfolio":
+            continue
+        decision_id = step["decision_id"]
+        if decision_id in portfolios or "before_call_ids" not in step:
+            return None
+        portfolios.add(decision_id)
+        try:
+            record = portfolio_status(decision_id, owner_user_id=owner)
+        except PortfolioError:
+            return None
+        tasks = record.get("tasks", {})
+        before_calls = set(step["before_call_ids"])
+        # An existing task can receive additional calls when resumed; task IDs
+        # alone are not sufficient to identify the current cycle's consumption.
+        if any(task.get("status") not in {"completed", "failed"} for task in tasks.values()):
+            return None
+        for task_id, task in tasks.items():
+            for call_id, call in task.get("calls", {}).items():
+                if call_id in before_calls:
+                    continue
+                actual = call.get("actual_tokens")
+                if call.get("status") != "settled" or type(actual) is not int or actual < 0:
+                    return None
+                verified_calls.add((decision_id, task_id, call_id))
+                total += actual
+
+    direct_calls: set[str] = set()
     with get_session_factory()() as session:
         for step in steps:
-            if step["kind"] != "model" or step.get("decision_id"):
+            if step["kind"] == "portfolio":
+                continue
+            if step["kind"] != "model":
                 return None
+            request_id = step["request_id"]
+            if step.get("decision_id"):
+                # Every journaled portfolio call must have an original settled
+                # ledger entry, including calls on an already-known task.
+                if (
+                    step["decision_id"],
+                    step.get("opportunity_id"),
+                    request_id,
+                ) not in verified_calls:
+                    return None
+                continue
+            if request_id in direct_calls:
+                continue
+            direct_calls.add(request_id)
             row = session.scalar(
                 select(LlmClientRequest).where(
                     LlmClientRequest.user_id == owner,
-                    LlmClientRequest.client_request_id == step["request_id"],
+                    LlmClientRequest.client_request_id == request_id,
                 )
             )
             if row is None or row.state != "completed":
                 return None
             receipt = json.loads(row.done_json or "{}")
-            if receipt.get("status") != "settled" or type(receipt.get("actual_tokens")) is not int:
+            actual = receipt.get("actual_tokens")
+            if receipt.get("status") != "settled" or type(actual) is not int or actual < 0:
                 return None
-            total += receipt["actual_tokens"]
+            total += actual
     return total
 
 
 def reconcile_usage() -> dict[str, int]:
     """Resolve only the original persisted receipt, never replay an uncertain call."""
+    from modstore_server.strategic_remote_life import waiting_deadline
     from modstore_server.strategic_usage_reconciliation import reconcile_pending_usage
 
     reconcile_pending_usage()
@@ -70,15 +99,19 @@ def reconcile_usage() -> dict[str, int]:
     def collect(data: dict[str, Any], session: Any) -> list[dict[str, Any]]:
         active = data.get("active_cycle")
         pending = []
-        if active and (active.get("awaiting_worker") or parse_time(active["deadline"]) <= utcnow()):
+        if active and (active.get("awaiting_worker") or waiting_deadline(data) <= utcnow()):
             pending.append(
                 {
                     "cycle_id": active["cycle_id"],
+                    "lease_token": active["lease_token"],
                     "domain": active["domain"],
                     "reservation": active["reserved_tokens"],
                     "steps": active.get("steps", []),
                     "owner_user_id": active["owner_user_id"],
                     "outbound_journal_version": active.get("outbound_journal_version"),
+                    "outbound_attempted": bool(active.get("outbound_attempted")),
+                    "policy_revision": active["policy_revision"],
+                    "graph_checkpoints": active.get("graph_checkpoints", {}),
                     "active": True,
                 }
             )
@@ -121,11 +154,25 @@ def reconcile_usage() -> dict[str, int]:
     resolved = 0
     for item in pending:
         steps = item.get("steps", [])
-        actual = (
-            0
-            if not steps and item.get("outbound_journal_version") == 1
-            else _verified_usage(steps, item["owner_user_id"])
-        )
+        if not isinstance(steps, list):
+            continue
+        if not steps:
+            # A returned node may contradict an empty or incomplete journal.
+            # Keep its reservation rather than inventing a verified zero charge.
+            actual = (
+                0
+                if item.get("outbound_journal_version") == 1
+                and not item.get("outbound_attempted")
+                and zero_usage_checkpoint_compatible(
+                    item.get("graph_checkpoints", {}),
+                    cycle_id=item["cycle_id"],
+                    owner_user_id=item.get("owner_user_id", 0),
+                    policy_revision=item.get("policy_revision", 0),
+                )
+                else None
+            )
+        else:
+            actual = _verified_usage(steps, item["owner_user_id"])
         if actual is None or not 0 <= actual <= item["reservation"]:
             continue
 
@@ -142,7 +189,15 @@ def reconcile_usage() -> dict[str, int]:
                 return False
             if item["active"]:
                 running = current.get("active_cycle") or {}
-                if running.get("cycle_id") != item["cycle_id"] or running.get("steps", []) != steps:
+                if (
+                    running.get("cycle_id") != item["cycle_id"]
+                    or running.get("lease_token") != item["lease_token"]
+                    or running.get("steps", []) != steps
+                    or running.get("outbound_journal_version") != item["outbound_journal_version"]
+                    or bool(running.get("outbound_attempted")) != item["outbound_attempted"]
+                    or running.get("graph_checkpoints", {}) != item.get("graph_checkpoints", {})
+                    or not (running.get("awaiting_worker") or waiting_deadline(current) <= utcnow())
+                ):
                     return False
                 current["active_cycle"] = None
             budget = current["budget"]
@@ -153,6 +208,15 @@ def reconcile_usage() -> dict[str, int]:
                 budget["exploration_tokens"] += actual
             current["unknown_usage"] = budget["reserved_tokens"] > 0
             current["last_status"] = "waiting"
+            checkpoint = None
+            if item.get("graph_checkpoints"):
+                checkpoint = recover_checkpoint(
+                    item["graph_checkpoints"],
+                    cycle_id=item["cycle_id"],
+                    owner_user_id=item.get("owner_user_id", 0),
+                    policy_revision=item.get("policy_revision", 0),
+                    actual_tokens=actual,
+                )
             _event(
                 session,
                 event_id,
@@ -161,7 +225,10 @@ def reconcile_usage() -> dict[str, int]:
                 summary="已核对原运行账本并结算模型用量，没有重新执行原调用。",
                 evidence_refs=["cycle:" + item["cycle_id"]],
                 actual_tokens=actual,
-                details={"steps": item["steps"]},
+                details={
+                    "steps": item["steps"],
+                    **({"graph_checkpoint_recovery": checkpoint} if checkpoint else {}),
+                },
             )
             return True
 
@@ -170,7 +237,12 @@ def reconcile_usage() -> dict[str, int]:
 
 
 def reconcile_goals() -> dict[str, Any]:
-    from modstore_server.xiaoc_life_cognition import portfolio_feedback
+    from modstore_server.xiaoc_life_cognition import goal_review_projection, portfolio_feedback
+    from modstore_server.xiaoc_life_reflection import (
+        candidate_id,
+        candidate_refs,
+        review_experiences,
+    )
 
     snapshot = read_state()
     updates = []
@@ -208,13 +280,57 @@ def reconcile_goals() -> dict[str, Any]:
                 feedback["evidence_ref"],
             ]
         )
-        if goal.get("execution_receipt") != receipt:
-            updates.append((goal["id"], decision_id, status, label, receipt, feedback))
+        review = goal_review_projection(
+            owner=snapshot["owner_user_id"],
+            goal_id=goal["id"],
+            decision_id=decision_id,
+            status=status,
+            feedback=feedback,
+        )
+        reflection, candidates = review_experiences(record)
+        if (
+            goal.get("execution_receipt") != receipt
+            or goal.get("goal_review") != review
+            or candidates
+        ):
+            previous = (
+                goal.get("execution_receipt"),
+                goal.get("outcome_ref"),
+                goal.get("status"),
+                goal.get("goal_review"),
+            )
+            updates.append(
+                (
+                    goal["id"],
+                    decision_id,
+                    status,
+                    label,
+                    receipt,
+                    feedback,
+                    previous,
+                    review,
+                    reflection,
+                    candidates,
+                )
+            )
 
-    def apply(data: dict[str, Any], session: Any) -> None:
+    def apply(data: dict[str, Any], session: Any) -> int:
         if data.get("owner_user_id") != snapshot.get("owner_user_id"):
-            return
-        for goal_id, decision_id, status, label, receipt, feedback in updates:
+            return 0
+        changed = 0
+        registered: set[str] = set()
+        for (
+            goal_id,
+            decision_id,
+            status,
+            label,
+            receipt,
+            feedback,
+            previous,
+            review,
+            reflection,
+            candidates,
+        ) in updates:
             target = next(
                 (
                     goal
@@ -223,7 +339,38 @@ def reconcile_goals() -> dict[str, Any]:
                 ),
                 None,
             )
-            if target is None or target.get("execution_receipt") == receipt:
+            if target is None:
+                continue
+            if previous != (
+                target.get("execution_receipt"),
+                target.get("outcome_ref"),
+                target.get("status"),
+                target.get("goal_review"),
+            ):
+                continue  # A newer reconciliation or live cycle already changed this goal.
+            for candidate in candidates:
+                experience_id = candidate_id(candidate)
+                if experience_id in registered:
+                    continue
+                registered.add(experience_id)
+                if session.get(XiaoCLifeEvent, experience_id) is None:
+                    _event(
+                        session,
+                        experience_id,
+                        kind="experience_candidate",
+                        status="pending_review",
+                        summary="原任务独立测量形成待审核经验；未采纳。",
+                        evidence_refs=candidate_refs(candidate),
+                        details={
+                            "owner_user_id": snapshot["owner_user_id"],
+                            "goal_id": goal_id,
+                            "source_execution_event_id": "execution:" + receipt,
+                            "outcome_ref": feedback["evidence_ref"],
+                            "candidate": candidate,
+                            "candidate_sha256": digest(candidate),
+                        },
+                    )
+            if target.get("execution_receipt") == receipt and target.get("goal_review") == review:
                 continue
             target.update(
                 status=status,
@@ -231,6 +378,7 @@ def reconcile_goals() -> dict[str, Any]:
                 outcome_status=feedback["outcome_status"],
                 outcome_feedback=feedback["metrics"],
                 outcome_ref=feedback["evidence_ref"],
+                goal_review=review,
             )
             event_id = "execution:" + receipt
             if session.get(XiaoCLifeEvent, event_id) is None:
@@ -245,11 +393,18 @@ def reconcile_goals() -> dict[str, Any]:
                         f"receipt:{receipt}",
                         feedback["evidence_ref"],
                     ],
-                    details={"outcome_feedback": feedback},
+                    details={
+                        "outcome_feedback": feedback,
+                        "business_reflection": reflection,
+                        "owner_user_id": snapshot["owner_user_id"],
+                        "goal_id": goal_id,
+                        "decision_id": decision_id,
+                    },
                 )
+            changed += 1
+        return changed
 
-    if updates:
-        _mutate(apply)
+    observed = _mutate(apply) if updates else 0
     from modstore_server.xiaoc_life_evolution import reconcile
 
-    return {"observed": len(updates) + reconcile()}
+    return {"observed": observed + reconcile()}

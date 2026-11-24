@@ -18,10 +18,20 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
+    cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
     parse_decision,
     portfolio_feedback,
+    reflection_facts,
+    reflection_receipt,
 )
+from modstore_server.xiaoc_life_native_checkpoint import (
+    native_life_checkpointer,
+    native_thread_config,
+)
+from modstore_server.xiaoc_life_telemetry import life_operation
 
 
 class LifeBlocked(ValueError):
@@ -53,6 +63,7 @@ class LifeCycle(TypedDict, total=False):
     self_model: dict[str, Any]
     summary: str
     status: str
+    model_receipt: dict[str, Any]
 
 
 def _store():
@@ -243,6 +254,13 @@ class CyclePorts:
 
     async def observe(self, _state: LifeCycle) -> LifeCycle:
         self.active()
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import read_samples
+
+            self.details["world_observations"] = await asyncio.to_thread(
+                read_samples, datetime.now(UTC)
+            )
+            self.active()
         portfolio = self.approved_portfolio()
         if portfolio is not None:
             self.details["portfolio_selection"] = {
@@ -259,6 +277,30 @@ class CyclePorts:
 
         context = await asyncio.to_thread(collect_context)
         facts = feedback_facts(self.state) + evolution.feedback_facts(self.state)
+        facts.extend(cognitive_review_facts(self.state))
+        # Keep pending comparisons visible to reviewers, not to cognition.
+        facts.extend(
+            row
+            for row in self.state.get("experience_review_facts", [])
+            if isinstance(row, dict)
+            and isinstance(row.get("reviewed_experience"), dict)
+            and "experience_candidate" not in row
+        )
+        facts.extend(reflection_facts(self.state))
+        facts.extend(goal_review_facts(self.state))
+        if self.domain == "reflection" and self.state["level"] >= 6:
+            from modstore_server.xiaoc_life_world import review_projection
+
+            try:
+                projection = review_projection(
+                    self.state.get("world_review"), self.claim["owner_user_id"]
+                )
+            except ValueError:
+                self.details["world_review_error"] = "invalid_persisted_review"
+                projection = {}
+            for metric, item in projection.items():
+                value = {"metric_id": metric, **item}
+                facts.append(_fact("world-review", value, world_forecast=value))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -321,15 +363,21 @@ class CyclePorts:
                     }
                 facts.append(_fact("company:" + key, value))
         for event in self.state.get("events", [])[:4]:
-            if isinstance(event, dict) and event.get("summary"):
+            if (
+                isinstance(event, dict)
+                and event.get("summary")
+                and event.get("kind") not in ("experience_candidate", "experience_review")
+                and (event.get("details") or {}).get("owner_user_id")
+                == self.state.get("owner_user_id")
+            ):
                 facts.append(
                     _fact(
-                        "experience",
+                        "historical_life_event",
                         {k: event.get(k) for k in ("id", "cycle_id", "status", "summary")},
                     )
                 )
         if self.domain == "exploration":
-            facts = (await self.research()) + facts
+            facts = await self.research() + facts
         if not facts:
             raise LifeBlocked("no_observed_context")
         self.evidence = [row["ref"] for row in facts]
@@ -417,6 +465,11 @@ class CyclePorts:
             messages, refs = cognition_messages(self.state, self.domain, state["facts"])
         except CognitionContextError as exc:
             raise LifeBlocked(str(exc)) from exc
+        self.details["attention"] = {
+            "selected_refs": sorted(refs),
+            "observations_considered": len(state["facts"]),
+            "status": "bounded_context_not_authorization",
+        }
         prompt_bound = (
             len(
                 json.dumps(
@@ -439,6 +492,9 @@ class CyclePorts:
         with planning_usage_scope(self.claim["owner_user_id"], admission) as context:
             self.actual_tokens = None
             try:
+                # Commit the original uncertainty fence before any paid model
+                # transport; an absent return receipt must NOT become zero use.
+                _store().mark_model_attempt(self.claim)
                 result = await chat_dispatch_via_platform_only(
                     provider, model, messages, max_tokens=output_bound
                 )
@@ -446,7 +502,7 @@ class CyclePorts:
                 receipts = list(context["receipts"])
                 self.details["model_receipts"] = receipts
                 if not receipts:
-                    self.actual_tokens = 0
+                    self.actual_tokens = None
                 elif all(row.get("status") == "settled" for row in receipts):
                     self.actual_tokens = sum(int(row["actual_tokens"]) for row in receipts)
         if self.actual_tokens is None:
@@ -463,7 +519,19 @@ class CyclePorts:
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
-        return {"decision": decision.model_dump()}
+        if decision.alternatives:
+            self.details["proposal_review"] = {
+                "status": "unverified_options_not_execution_authority",
+                "alternatives": [item.model_dump() for item in decision.alternatives],
+            }
+        return {
+            "decision": decision.model_dump(),
+            "model_receipt": {
+                "actual_tokens": self.actual_tokens,
+                "model": self.model,
+                "evidence_refs": self.evidence[:32],
+            },
+        }
 
     async def act(self, state: LifeCycle) -> LifeCycle:
         self.active()
@@ -676,7 +744,10 @@ class CyclePorts:
             old, new = usage(before), usage(after)
             if old is not None and new is not None:
                 self.actual_tokens = max(0, new - old)
+        from modstore_server.xiaoc_life_reflection import review_experiences
+
         feedback = portfolio_feedback(after)
+        self.details["business_reflection"], _ = review_experiences(after)
         self.details["outcome_feedback"] = feedback
         self.evidence = [f"strategic_portfolio:{decision_id}", feedback["evidence_ref"]]
         self.details["portfolio_receipt"] = {
@@ -709,6 +780,13 @@ class CyclePorts:
             "outcome_status": feedback["outcome_status"],
             "outcome_feedback": feedback["metrics"],
             "outcome_ref": feedback["evidence_ref"],
+            "goal_review": goal_review_projection(
+                owner=owner,
+                goal_id=binding["goal"]["id"],
+                decision_id=decision_id,
+                status=goal_status,
+                feedback=feedback,
+            ),
             "evidence_refs": list(
                 dict.fromkeys([*binding["goal"].get("evidence_refs", []), *self.evidence])
             ),
@@ -800,8 +878,20 @@ class CyclePorts:
         return receipts
 
     async def reflect(self, state: LifeCycle) -> LifeCycle:
-        # Reflect only after actual ports have returned. Model suggestions never
-        # turn a research source, queued job or API acceptance into a completed goal.
+        # Preserve existing goal and budget authority; record only observed evidence.
+        receipt = reflection_receipt(
+            self.details.get("outcome_feedback"),
+            evidence_refs=self.evidence,
+            status=state.get("status", "failed"),
+            actual_tokens=self.actual_tokens,
+        )
+        if (
+            receipt["status"] == "unmeasured"
+            and state.get("decision")
+            and self.details.get("model_note_status") == "unverified_suggestion"
+        ):
+            receipt = {"status": "model_suggestion_only", "evidence_refs": list(self.evidence)}
+        self.details["reflection_receipt"] = receipt
         return state
 
     def finish(self, result: LifeCycle) -> dict[str, Any]:
@@ -830,33 +920,150 @@ class CyclePorts:
         )
 
 
-def build_life_graph(ports: CyclePorts):
+def build_life_graph(ports: CyclePorts, *, checkpointer: Any | None = None):
     from langgraph.graph import END, START, StateGraph
 
     graph = StateGraph(LifeCycle)
+
+    def durable_node(name: str):
+        async def invoke(state: LifeCycle) -> LifeCycle:
+            with life_operation(name):
+                if name != "reflect":
+                    ports.active()
+                _store().record_cycle_phase(ports.claim, name)
+                result = await getattr(ports, name)(state)
+                if name in {"act", "reflect"}:
+                    _store().record_cycle_checkpoint(
+                        ports.claim,
+                        name,
+                        result=dict(result),
+                        actual_tokens=ports.actual_tokens,
+                        evidence_refs=ports.evidence,
+                        reflection_status=ports.details.get("reflection_receipt", {}).get("status"),
+                    )
+                return result
+
+        return invoke
+
     for name in ("observe", "decide", "act", "reflect"):
-        graph.add_node(name, getattr(ports, name))
+        graph.add_node(name, durable_node(name))
     graph.add_edge(START, "observe")
     graph.add_edge("observe", "decide")
     graph.add_edge("decide", "act")
     graph.add_edge("act", "reflect")
     graph.add_edge("reflect", END)
-    return graph.compile()
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["act"] if checkpointer is not None else None,
+    )
+
+
+async def _continue_at_act(
+    graph: Any,
+    config: dict[str, Any],
+    ports: CyclePorts,
+    *,
+    restoring: bool,
+) -> dict[str, Any] | None:
+    """Resume exactly once from a persisted, verified pre-act checkpoint."""
+    with life_operation("checkpoint", cycle_id=ports.claim["cycle_id"]):
+        snapshot = await graph.aget_state(config)
+    if tuple(snapshot.next) != ("act",):
+        return None
+    state = snapshot.values
+    if not isinstance(state, dict):
+        return None
+    receipt = state.get("model_receipt")
+    if state.get("decision"):
+        # On recovery the in-memory model receipt is NOT authoritative.
+        # Refuse a new act until the original outbound ledger is independently
+        # settled and agrees with the durable LangGraph state.
+        if not isinstance(receipt, dict):
+            return None
+        if restoring:
+            from modstore_server.xiaoc_life_reconciliation import _verified_usage
+
+            with life_operation("reconcile"):
+                usage = await asyncio.to_thread(
+                    _verified_usage, ports.claim.get("steps", []), ports.claim["owner_user_id"]
+                )
+        else:
+            # The original platform scope completed inside THIS live process.
+            # Only recovered calls require SQL receipt reconstruction.
+            usage = ports.actual_tokens
+        if (
+            usage is None
+            or type(receipt.get("actual_tokens")) is not int
+            or usage != receipt["actual_tokens"]
+            or usage > ports.claim["reserved_tokens"]
+        ):
+            return None
+        ports.actual_tokens = usage
+        ports.model = str(receipt.get("model") or "")[:256]
+        ports.evidence = [
+            ref
+            for ref in receipt.get("evidence_refs", [])
+            if isinstance(ref, str) and 0 < len(ref) <= 256
+        ][:32]
+    if not _store().admit_cycle_act(ports.claim):
+        return None  # The winner owns this cycle; never settle its reservation.
+    return await graph.ainvoke(None, config, durability="sync")
+
+
+async def recover_native_act() -> dict[str, Any] | None:
+    """Recovery only at a completed decision before act starts.
+
+    A crash in decide/act is deliberately NOT replayed. Expired or revoked
+    claims cannot regain authority by virtue of a graph checkpoint.
+    """
+    claim = _store().pending_native_act_claim()
+    if claim is None:
+        return None
+    ports = CyclePorts(claim)
+    async with native_life_checkpointer() as saver:
+        graph = build_life_graph(ports, checkpointer=saver)
+        config = native_thread_config(claim)
+        # Restore the same authority context used by normal execution.
+        # The remote employee/model gates must see this original lease.
+        with (
+            life_operation("graph", cycle_id=claim["cycle_id"]),
+            _store().life_execution_scope(claim),
+        ):
+            result = await _continue_at_act(graph, config, ports, restoring=True)
+            if result is None:
+                return None
+        with life_operation("settle", cycle_id=claim["cycle_id"]):
+            return ports.finish(result)
 
 
 async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
+    if not _store().begin_cycle_graph(claim):
+        # Never finish or release the reservation of a competing invocation.
+        return dict(_store().read_state())
     ports = CyclePorts(claim)
     try:
-        with _store().life_execution_scope(claim):
-            result = await build_life_graph(ports).ainvoke({}, {"recursion_limit": 8})
+        with (
+            life_operation("graph", cycle_id=claim["cycle_id"]),
+            _store().life_execution_scope(claim),
+        ):
+            async with native_life_checkpointer() as saver:
+                graph = build_life_graph(ports, checkpointer=saver)
+                config = native_thread_config(claim)
+                await graph.ainvoke({}, config, durability="sync")
+                result = await _continue_at_act(graph, config, ports, restoring=False)
+                if result is None:
+                    # Another worker won the pre-act CAS, or an unverified
+                    # model receipt prevents effects. Do not finish its lease.
+                    return dict(_store().read_state())
     except asyncio.CancelledError:
         ports.details["reason"] = "cycle_cancelled"
-        ports.finish(
-            {
-                "status": "interrupted",
-                "summary": "本轮已中断，未知调用保留预算等待核对。",
-            }
-        )
+        with life_operation("settle", cycle_id=claim["cycle_id"]):
+            ports.finish(
+                {
+                    "status": "interrupted",
+                    "summary": "本轮已中断，未知调用保留预算等待核对。",
+                }
+            )
         raise
     except BOUNDARY_ERRORS as exc:
         ports.details["reason"] = str(exc) if isinstance(exc, LifeBlocked) else type(exc).__name__
@@ -866,7 +1073,8 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
                 ports.details["reason"], "本轮条件尚未满足，已保留观察和调用记录。"
             ),
         }
-    return ports.finish(result)
+    with life_operation("settle", cycle_id=claim["cycle_id"]):
+        return ports.finish(result)
 
 
 async def tick_async() -> dict[str, Any]:
@@ -875,16 +1083,30 @@ async def tick_async() -> dict[str, Any]:
         reconcile_usage,
     )
 
-    reconcile_usage()
-    reconcile_goals()
-    store = _store()
-    state = store.read_state()
-    for domain in _domain_order(state):
-        claim = store.claim_cycle(domain=domain, reserve_tokens=_cycle_reservation(state, domain))
-        if claim is not None:
-            claim["state"]["events"] = state.get("events", [])
-            return await run_claimed_cycle(claim)
-    return {"status": "idle", "identity_id": state["identity_id"]}
+    with life_operation("tick"):
+        with life_operation("reconcile"):
+            reconcile_usage()
+            reconcile_goals()
+        resumed = await recover_native_act()
+        if resumed is not None:
+            return resumed
+        store = _store()
+        state = store.read_state()
+        for domain in _domain_order(state):
+            claim = store.claim_cycle(
+                domain=domain, reserve_tokens=_cycle_reservation(state, domain)
+            )
+            if claim is not None:
+                claim["state"]["events"] = state.get("events", [])
+                # A concurrent human review can advance the policy revision after
+                # the snapshot; stale review facts must not enter the new claim.
+                claim["state"]["experience_review_facts"] = (
+                    state.get("experience_review_facts", [])
+                    if state["revision"] == claim["policy_revision"]
+                    else []
+                )
+                return await run_claimed_cycle(claim)
+        return {"status": "idle", "identity_id": state["identity_id"]}
 
 
 def tick() -> dict[str, Any]:
