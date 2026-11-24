@@ -480,13 +480,18 @@ def record_promptfoo_measurement(bundle_path: Path, result_path: Path) -> dict[s
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--promptfoo", nargs=2, type=Path, metavar=("BUNDLE", "RESULT"))
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--promptfoo", nargs=2, type=Path, metavar=("BUNDLE", "RESULT"))
+    group.add_argument("--audit-fixture", nargs=2, type=Path, metavar=("REPORT", "SSOT"))
     args = parser.parse_args()
-    result = (
-        record_promptfoo_measurement(*args.promptfoo)
-        if args.promptfoo
-        else record_identity_check()
-    )
+    if args.promptfoo:
+        result = record_promptfoo_measurement(*args.promptfoo)
+    elif args.audit_fixture:
+        from modstore_server.xiaoc_self_evidence import record_fixture_report
+
+        result = record_fixture_report(*args.audit_fixture)
+    else:
+        result = record_identity_check()
     print(json.dumps(result, ensure_ascii=False))
 
 
