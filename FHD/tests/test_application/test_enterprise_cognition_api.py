@@ -120,6 +120,9 @@ def test_goal_deadline_is_user_objective_not_invented_order_due_date(enterprise_
         headers=actor.headers,
     ).json()["data"]
     assert query["goal_progress"][0]["goal_deadline_missed"] is True
+    assert query["goal_progress"][0]["knowledge_kind"] == "inference"
+    assert query["goal_progress"][0]["derivation"] == "deterministic_metric_target_comparison"
+    assert query["goal_progress"][0]["evidence"]
     assert query["goal_progress"][0]["deadline_source"] == "user_goal"
     assert query["goal_progress"][0]["order_promised_date_inferred"] is False
     assert query["observations"][0]["delay_status"] == "unknown"
@@ -243,8 +246,22 @@ def test_model_and_http_share_strict_catalog_contract(enterprise_http):
         "employee",
         "task",
         "fund",
+        "inventory",
+        "production",
+        "supplier",
+        "purchase_order",
+        "purchase_inbound",
+        "journal_entry",
     }
     assert data["read_only_sources"] is True
+    unknowns = data["unverified_aggregate_metrics"]
+    assert {row["metric"] for row in unknowns} >= {
+        "cash_balance",
+        "accounts_receivable_balance",
+        "accounts_payable_balance",
+        "available_inventory_balance",
+    }
+    assert all(row["knowledge_kind"] == "unknown" for row in unknowns)
     spec = get_tool_action_spec("enterprise_cognition", "query")
     assert spec.read_only and spec.idempotent
     assert validate_tool_call(
@@ -268,3 +285,111 @@ def test_met_goal_and_foreign_entity_do_not_produce_operating_gap(enterprise_htt
     foreign = service.invoke("query", {"entity_id": foreign_id}, context=actor.context)
     assert foreign["current_state_verified"] is False
     assert foreign["operating_gap_candidates"] == []
+
+
+def test_world_history_and_scenario_share_http_and_model_status(enterprise_http):
+    actor, client, order_id, *_ = enterprise_http
+    params = {"entity_id": order_id}
+    first = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": params},
+        headers=actor.headers,
+    ).json()["data"]["snapshots"][0]
+    history_params = {**params, "as_of": first["observed_at"]}
+    response = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": history_params},
+        headers=actor.headers,
+    ).json()
+    assert response["success"] is True
+    assert response["data"]["current_state_verified"] is False
+    assert response["data"]["history"]["observation"]["source_version"] == first["source_version"]
+    result = execute_registered_workflow_tool(
+        "enterprise_cognition", "query", {**history_params, "_runtime_context": actor.context}
+    )
+    assert result["success"] is True
+    prediction = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": {**params, "scenario_delivery_quantity": "2"}},
+        headers=actor.headers,
+    ).json()
+    assert prediction["success"] is True
+    assert prediction["data"]["scenario"]["knowledge_kind"] == "prediction"
+    assert Decimal(prediction["data"]["scenario"]["value"]) == 4
+    unknown = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": {**params, "scenario_delivery_quantity": "100"}},
+        headers=actor.headers,
+    ).json()
+    assert unknown["success"] is False
+    assert unknown["data"]["scenario"]["knowledge_kind"] == "unknown"
+
+
+def test_goal_comparison_without_verified_evidence_stays_unknown():
+    from app.application.enterprise_cognition.service import _goal_progress
+
+    result = _goal_progress(
+        {
+            "goal_id": "no-evidence",
+            "metric": "remaining_quantity",
+            "unit": "件",
+            "target": "0",
+            "direction": "decrease",
+        },
+        {
+            "freshness": "fresh",
+            "source_version": "sha256:synthetic",
+            "state": {"remaining_quantity": "2", "quantity_unit": "件"},
+            "evidence": [],
+        },
+    )
+    assert result["knowledge_kind"] == "unknown"
+    assert result["target_met"] is None
+
+
+def test_goal_inference_keeps_strategic_goal_provenance():
+    from app.application.enterprise_cognition.service import _goal_progress
+
+    goal = {
+        "goal_id": "strategy-bound-goal",
+        "metric": "remaining_quantity",
+        "unit": "件",
+        "target": "0",
+        "direction": "decrease",
+        "source": {"kind": "strategic_plan", "plan_sha256": "e" * 64},
+    }
+    snapshot = {
+        "freshness": "fresh",
+        "source_version": "sha256:synthetic",
+        "state": {"remaining_quantity": "2", "quantity_unit": "件"},
+        "evidence": [{"source": "sales_orders", "row_id": "42"}],
+    }
+    result = _goal_progress(goal, snapshot)
+    assert result["knowledge_kind"] == "inference"
+    assert result["goal_assertion_kind"] == "strategic_plan"
+    assert result["source_knowledge_kind"] == "fact"
+    assert result["target_met"] is False
+
+
+def test_empty_authorized_world_query_is_unknown_not_a_verified_fact():
+    from app.application.enterprise_cognition.service import (
+        EnterpriseCognitionService,
+        cognition_result_verified,
+    )
+
+    class NoVisibleRecords:
+        def list_refs(self, entity_type, *, limit, **scope):
+            return {"refs": [], "has_more": False}
+
+    class NoGoals:
+        def list(self, **scope):
+            raise AssertionError("empty source must not synthesize a goal")
+
+    query = {"entity_type": "order", "entity_id": None, "limit": 10, "force_refresh": False}
+    result = EnterpriseCognitionService(
+        projections=NoVisibleRecords(), goals=NoGoals()
+    ).query(query, tenant_id="11", actor_id="1", mod_id="")
+    assert result["snapshots"] == []
+    assert result["current_state_verified"] is False
+    assert result["reason_code"] == "no_visible_source_records"
+    assert cognition_result_verified("query", query, result) is False

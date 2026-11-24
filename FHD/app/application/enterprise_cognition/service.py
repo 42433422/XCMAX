@@ -8,6 +8,11 @@ from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.domain.enterprise_cognition.contracts import INPUT_MODELS
+from app.domain.enterprise_cognition.world_observation import (
+    delivery_scenario,
+    public_snapshot,
+    relationship_references,
+)
 
 
 def _order_observation(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -44,7 +49,10 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
     from app.application.enterprise_cognition.goals import GoalBindingError, metric_value
 
     try:
-        value = metric_value(snapshot, goal["metric"], goal["unit"])
+        source = public_snapshot(snapshot)
+        if source["knowledge_kind"] != "fact":
+            raise GoalBindingError("goal_metric_evidence_unavailable")
+        value = metric_value(source, goal["metric"], goal["unit"])
         target = Decimal(str(goal["target"]))
         met = value >= target if goal["direction"] == "increase" else value <= target
         deadline = (
@@ -52,8 +60,19 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             if goal.get("deadline")
             else None
         )
+        declared_source = goal.get("source")
+        declared_kind = (
+            declared_source.get("kind") if isinstance(declared_source, dict) else None
+        )
         return {
             "goal_id": goal["goal_id"],
+            "knowledge_kind": "inference",
+            "derivation": "deterministic_metric_target_comparison",
+            "source_knowledge_kind": "fact",
+            "goal_assertion_kind": (
+                declared_kind if declared_kind in {"user_goal", "strategic_plan"} else "unknown"
+            ),
+            "evidence": source["evidence"],
             "current": str(value),
             "target": str(target),
             "unit": goal["unit"],
@@ -65,7 +84,12 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             "observed_at": snapshot["observed_at"],
         }
     except (GoalBindingError, ValueError, TypeError, InvalidOperation):
-        return {"goal_id": goal["goal_id"], "status": "unknown", "target_met": None}
+        return {
+            "goal_id": goal["goal_id"],
+            "status": "unknown",
+            "knowledge_kind": "unknown",
+            "target_met": None,
+        }
 
 
 def _goal_gap(
@@ -159,6 +183,16 @@ class EnterpriseCognitionService:
 
     def query(self, params: dict, **scope) -> dict[str, Any]:
         entity_type, entity_id = params["entity_type"], params.get("entity_id")
+        if params.get("as_of") is not None:
+            observation = self.projections.get(
+                entity_type, entity_id, as_of=params["as_of"], **scope
+            )
+            return {
+                "history": observation,
+                "historical_observation_verified": observation.get("knowledge_kind") == "fact",
+                "current_state_verified": False,
+                "business_data_written": False,
+            }
         references: dict[str, Any] = (
             {"refs": [{"entity_type": entity_type, "entity_id": entity_id}], "has_more": False}
             if entity_id
@@ -184,6 +218,16 @@ class EnterpriseCognitionService:
         ]
         return {
             "snapshots": snapshots,
+            "relationships": [
+                {"source_entity_id": row["entity_id"], **relation}
+                for row in snapshots
+                for relation in relationship_references(row)
+            ],
+            "scenario": (
+                delivery_scenario(snapshots[0], params["scenario_delivery_quantity"])
+                if params.get("scenario_delivery_quantity") is not None and snapshots
+                else None
+            ),
             "goals": goals,
             "goal_scope": "current_actor_visible_recent_50_for_selected_entities",
             "goals_may_be_truncated": len(goals) == 50,
@@ -197,9 +241,12 @@ class EnterpriseCognitionService:
             ],
             "scope": "current_actor_visible_recent" if not entity_id else "requested_entity",
             "has_more": references.get("has_more", False),
-            "current_state_verified": references.get("freshness", "fresh") == "fresh"
+            # Empty SELECT results are not positive evidence of an enterprise state.
+            "current_state_verified": bool(snapshots)
+            and references.get("freshness", "fresh") == "fresh"
             and all(row["freshness"] == "fresh" for row in snapshots),
             "reference_status": references.get("freshness", "fresh"),
+            "reason_code": "no_visible_source_records" if not snapshots else None,
             "business_data_written": False,
         }
 
@@ -230,7 +277,26 @@ class EnterpriseCognitionService:
             if action == "catalog":
                 from app.domain.enterprise_cognition.catalog import entity_catalog
 
-                return {"entities": entity_catalog(), "read_only_sources": True}
+                return {
+                    "entities": entity_catalog(),
+                    "read_only_sources": True,
+                    # Exposing transaction and journal rows does not prove an aggregate.
+                    "unverified_aggregate_metrics": [
+                        {
+                            "metric": metric,
+                            "knowledge_kind": "unknown",
+                            "reason_code": "not_verified_by_current_projection",
+                        }
+                        for metric in (
+                            "cash_balance",
+                            "accounts_receivable_balance",
+                            "accounts_payable_balance",
+                            "available_inventory_balance",
+                            "production_capacity",
+                            "customer_satisfaction",
+                        )
+                    ],
+                }
             if action == "query":
                 return self.query(parsed, **scope)
             if action == "goals":
@@ -261,6 +327,19 @@ class EnterpriseCognitionService:
                     parsed["run_id"], observation, repository=self._outcomes.repository
                 )
             return observation
+
+
+def cognition_result_verified(action: str, params: dict, result: dict) -> bool:
+    """HTTP and model tools share the same epistemic success semantics."""
+    if action == "evaluate":
+        return result.get("observation_verified") is True
+    if action != "query":
+        return True
+    if params.get("as_of") is not None:
+        return result.get("historical_observation_verified") is True
+    if params.get("scenario_delivery_quantity") is not None:
+        return (result.get("scenario") or {}).get("knowledge_kind") == "prediction"
+    return result.get("current_state_verified") is True
 
 
 def get_cognition_service() -> EnterpriseCognitionService:

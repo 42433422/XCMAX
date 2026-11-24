@@ -1020,6 +1020,18 @@
       "validation": "原Voice SDK失败与来源解析未知错误传播纳入25项定向回归且通过；具名tuple仅替代等价展开式，完整mypy与最终原CI仍须核验。",
       "follow_up": "随原语音服务验证真实平台SDK故障；源码规模评审由原责任人完成，不增加替代路由或宽泛fallback。",
       "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py",
+      "base_blob": "606a0109cbdba0ed13ac99b415d95af017c502d8",
+      "head_blob": "d4ad4f3012ff957f9c90b2eaa0c492d4054c09f4",
+      "before_lines": 1220,
+      "after_lines": 1225,
+      "reason": "本记录为架构评审请求，非批准。#3534 复用现有 SearXNG 结果标准化路径，保留上游已返回的 publishedDate 和 engine，供公开信息记录来源与未核实状态。",
+      "boundary": "仅保留非空字符串 publishedDate（最多 128 字符）及 engine（最多 100 字符）；原 URL 检查、结果数量上限、检索器和业务权限不变，不把公开声明当作已核实事实。",
+      "validation": "本轮仅修复 CI 格式及变更记录，六处 Python 格式修改前后 AST 完全一致；原 Ruff、Black、完整计数及发布前检查结果随 PR 披露，新增业务回归、完整 CI 和生产验收仍待完成。",
+      "follow_up": "请 @42433422 根据精确 main/head blob 审阅这处 1220 到 1225 行的薄适配；本登记不代替架构批准。既有检索模块的后续拆分应单独评审，不在格式修复中改写作者语义。",
+      "review_owner": "@42433422"
     }
   }
 }
