@@ -10,6 +10,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: xiaoc-d04-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   offline-research-contract:
     runs-on: ubuntu-latest
