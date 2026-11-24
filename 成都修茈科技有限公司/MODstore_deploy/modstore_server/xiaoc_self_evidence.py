@@ -49,7 +49,7 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
         or not all(_sha(report.get(key)) for key in ("dataset_sha256", "environment_sha256"))
     ):
         raise ValueError("independent_fixture_provenance_missing")
-    expected = {s["id"]: s["anchor"] for s in protocol["scenarios"]}
+    expected = {s["id"]: s for s in protocol["scenarios"]}
     statuses = {"PASS", "FAIL", "BLOCKED", "NOT RUN"}
     observed: dict[str, dict[str, str]] = {}
     for row in report.get("scenarios", []):
@@ -60,7 +60,7 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
         if (
             ident not in expected
             or ident in observed
-            or row.get("anchor") != expected[ident]
+            or row.get("anchor") != expected[ident]["anchor"]
             or not isinstance(layers, dict)
             or set(layers) != set(protocol["layers"])
             or layers.get("integration") not in statuses
@@ -78,20 +78,34 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
             if not isinstance(trial, dict):
                 raise ValueError("independent_fixture_malformed_trial")
             key = (trial.get("kind"), trial.get("seed"))
-            if key not in expected_trial_keys or key in seen or trial.get("status") not in statuses:
+            if key not in expected_trial_keys or key in seen:
                 raise ValueError("independent_fixture_unexpected_trial")
+            if (
+                trial.get("node") != expected[ident].get(trial["kind"])
+                or trial.get("status") not in {"PASS", "FAIL", "BLOCKED"}
+            ):
+                raise ValueError("independent_fixture_frozen_test_mismatch")
             seen.add(key)
             if trial["status"] == "PASS" and (
                 trial.get("returncode") != 0 or not _sha(trial.get("artifact_sha256"))
             ):
                 raise ValueError("independent_fixture_pass_without_artifact")
-        if layers["integration"] == "PASS" and (
-            seen != expected_trial_keys or any(t["status"] != "PASS" for t in trials)
+        if not trials:
+            actual = "NOT RUN"
+        elif any(trial["status"] == "FAIL" for trial in trials):
+            actual = "FAIL"
+        elif seen == expected_trial_keys and all(
+            trial["status"] == "PASS" for trial in trials
         ):
-            raise ValueError("independent_fixture_incomplete_pass")
-        if layers["integration"] == "NOT RUN" and trials:
-            raise ValueError("independent_fixture_unrun_with_trials")
-        observed[ident] = {"anchor": expected[ident], "integration": layers["integration"]}
+            actual = "PASS"
+        else:
+            actual = "BLOCKED"
+        if layers["integration"] != actual:
+            raise ValueError("independent_fixture_aggregate_mismatch")
+        observed[ident] = {
+            "anchor": expected[ident]["anchor"],
+            "integration": layers["integration"],
+        }
     if set(observed) != set(expected):
         raise ValueError("independent_fixture_missing_scenario")
     return {
