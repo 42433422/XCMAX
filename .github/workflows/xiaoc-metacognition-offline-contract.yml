@@ -24,4 +24,4 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Validate both research arms and fail-closed reports (synthetic contracts only)
         working-directory: 成都修茈科技有限公司/MODstore_deploy/research/xiaoc_metacognition
-        run: python -m pytest -c /dev/null -q -W error test_xiaoc_metacognition_eval.py
+        run: python -m pytest -c /dev/null -p no:cacheprovider -q -W error test_xiaoc_metacognition_eval.py
