@@ -9,6 +9,7 @@ from typing import Any
 from app.domain.enterprise_cognition.contracts import INPUT_MODELS
 from app.domain.enterprise_cognition.world_observation import (
     delivery_scenario,
+    public_snapshot,
     relationship_references,
 )
 
@@ -47,7 +48,10 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
     from app.application.enterprise_cognition.goals import GoalBindingError, metric_value
 
     try:
-        value = metric_value(snapshot, goal["metric"], goal["unit"])
+        source = public_snapshot(snapshot)
+        if source["knowledge_kind"] != "fact":
+            raise GoalBindingError("goal_metric_evidence_unavailable")
+        value = metric_value(source, goal["metric"], goal["unit"])
         target = Decimal(str(goal["target"]))
         met = value >= target if goal["direction"] == "increase" else value <= target
         deadline = (
@@ -57,6 +61,11 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
         )
         return {
             "goal_id": goal["goal_id"],
+            "knowledge_kind": "inference",
+            "derivation": "deterministic_metric_target_comparison",
+            "source_knowledge_kind": "fact",
+            "goal_assertion_kind": "user_goal",
+            "evidence": source["evidence"],
             "current": str(value),
             "target": str(target),
             "unit": goal["unit"],
@@ -68,7 +77,12 @@ def _goal_progress(goal: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
             "observed_at": snapshot["observed_at"],
         }
     except (GoalBindingError, ValueError, TypeError, InvalidOperation):
-        return {"goal_id": goal["goal_id"], "status": "unknown", "target_met": None}
+        return {
+            "goal_id": goal["goal_id"],
+            "status": "unknown",
+            "knowledge_kind": "unknown",
+            "target_met": None,
+        }
 
 
 class EnterpriseCognitionService:

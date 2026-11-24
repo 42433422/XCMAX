@@ -120,6 +120,9 @@ def test_goal_deadline_is_user_objective_not_invented_order_due_date(enterprise_
         headers=actor.headers,
     ).json()["data"]
     assert query["goal_progress"][0]["goal_deadline_missed"] is True
+    assert query["goal_progress"][0]["knowledge_kind"] == "inference"
+    assert query["goal_progress"][0]["derivation"] == "deterministic_metric_target_comparison"
+    assert query["goal_progress"][0]["evidence"]
     assert query["goal_progress"][0]["deadline_source"] == "user_goal"
     assert query["goal_progress"][0]["order_promised_date_inferred"] is False
     assert query["observations"][0]["delay_status"] == "unknown"
@@ -282,3 +285,25 @@ def test_world_history_and_scenario_share_http_and_model_status(enterprise_http)
     ).json()
     assert unknown["success"] is False
     assert unknown["data"]["scenario"]["knowledge_kind"] == "unknown"
+
+
+def test_goal_comparison_without_verified_evidence_stays_unknown():
+    from app.application.enterprise_cognition.service import _goal_progress
+
+    result = _goal_progress(
+        {
+            "goal_id": "no-evidence",
+            "metric": "remaining_quantity",
+            "unit": "件",
+            "target": "0",
+            "direction": "decrease",
+        },
+        {
+            "freshness": "fresh",
+            "source_version": "sha256:synthetic",
+            "state": {"remaining_quantity": "2", "quantity_unit": "件"},
+            "evidence": [],
+        },
+    )
+    assert result["knowledge_kind"] == "unknown"
+    assert result["target_met"] is None
