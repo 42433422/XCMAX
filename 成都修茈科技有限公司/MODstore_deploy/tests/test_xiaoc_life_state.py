@@ -894,7 +894,14 @@ def test_independent_fixture_report_import_is_durable_idempotent_and_not_mastery
             "protocol_version": "fixture-v1",
             "layers": list(layers),
             "seeds": [17],
-            "scenarios": [{"id": "memory", "anchor": "autonomy-B3"}],
+            "scenarios": [
+                {
+                    "id": "memory",
+                    "anchor": "autonomy-B3",
+                    "positive": "tests/test_memory.py::test_positive",
+                    "negative": "tests/test_memory.py::test_negative",
+                }
+            ],
         },
     }
     standard_path = tmp_path / "standard.json"
