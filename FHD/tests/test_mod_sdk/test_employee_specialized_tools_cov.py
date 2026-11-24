@@ -304,7 +304,7 @@ class TestRunCmd:
         assert r["returncode"] == -1
 
     async def test_generic_exception(self):
-        with patch("asyncio.create_subprocess_exec", side_effect=RuntimeError("boom")):
+        with patch("asyncio.create_subprocess_exec", side_effect=PermissionError("boom")):
             r = await _run_cmd(["echo"])
         assert r["ok"] is False
         assert r["returncode"] == -1
@@ -370,7 +370,7 @@ class TestApiCall:
 
     async def test_network_exception(self):
         mock_client = AsyncMock()
-        mock_client.request = AsyncMock(side_effect=RuntimeError("connection refused"))
+        mock_client.request = AsyncMock(side_effect=ConnectionRefusedError("connection refused"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch.object(module, "httpx") as mock_httpx:

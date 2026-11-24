@@ -236,7 +236,7 @@ def test_product_query_rejects_client_identity_params(trusted_actor, dispatch_ca
 
 
 @pytest.mark.parametrize(
-    "error", [RuntimeError("private-backend-detail"), OSError("private-io-detail")]
+    "error", [TimeoutError("private-backend-detail"), OSError("private-io-detail")]
 )
 def test_operational_failure_is_unknown_without_leaking_or_replaying(
     trusted_actor, monkeypatch, error

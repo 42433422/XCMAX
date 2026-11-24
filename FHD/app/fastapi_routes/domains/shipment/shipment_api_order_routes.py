@@ -48,7 +48,8 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
         },
         route_path="/api/orders",
     )
-    return _facade().JSONResponse(*_capability_http_receipt(result))
+    receipt, status = _capability_http_receipt(result)
+    return _facade().JSONResponse(receipt, status_code=201 if status == 200 else status)
 
 
 @router.delete("/api/orders")

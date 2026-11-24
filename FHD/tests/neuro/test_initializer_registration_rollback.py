@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from sqlite3 import OperationalError
 from unittest.mock import MagicMock
 
 from app.neuro_bus import initializer as init_mod
@@ -37,7 +38,7 @@ def test_initialize_short_circuits_when_already_initialized(monkeypatch):
 def test_initialize_returns_false_on_exception(monkeypatch):
     init = NeuroBusInitializer()
     # 让 event_store 抛错，触发 except 分支
-    fake_es = MagicMock(side_effect=RuntimeError("event store init fail"))
+    fake_es = MagicMock(side_effect=OperationalError("event store init fail"))
 
     monkeypatch.setattr(init_mod, "get_neuro_bus", lambda: MagicMock())
     monkeypatch.setattr(init_mod, "get_dead_letter_queue", lambda: MagicMock())

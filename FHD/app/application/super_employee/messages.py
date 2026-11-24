@@ -97,9 +97,9 @@ class MessageSynchronizer:
             )
             if key in receipt
         }
-        dispatch["task_id"] = original_id
+        dispatch.update(task_id=original_id, reconciliation_required=uncertain)
         if uncertain:
-            dispatch.update(status="dispatch_unknown", reconciliation_required=True)
+            dispatch["status"] = "dispatch_unknown"
         if not original_id:
             return (
                 {

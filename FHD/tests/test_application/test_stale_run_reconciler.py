@@ -253,7 +253,7 @@ def test_reconcile_failure_does_not_block_dispatcher_start(monkeypatch) -> None:
     calls: list[str] = []
 
     def _boom(**kwargs):
-        raise RuntimeError("database unavailable")
+        raise sqlite3.OperationalError("database unavailable")
 
     monkeypatch.setattr(reconciler, "reconcile_stale_running_runs", _boom)
     monkeypatch.setattr(

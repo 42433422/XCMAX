@@ -808,7 +808,7 @@ class TestDecomposeTemplateHttp:
         # Create a real file so os.path.exists passes, then _decompose_template raises
         f = tmp_path / "x.xlsx"
         f.write_text("content")
-        with patch.object(svc, "_decompose_template", side_effect=RuntimeError("boom")):
+        with patch.object(svc, "_decompose_template", side_effect=OSError("boom")):
             resp = svc.decompose_template({"file_path": str(f)})
         assert resp.status_code == 500
         _assert_safe_service_error(resp, "boom")

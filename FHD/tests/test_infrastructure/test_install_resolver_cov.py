@@ -119,7 +119,7 @@ class TestEmployeePackBranches:
             ),
             patch(
                 "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
-                side_effect=RuntimeError("zip error"),
+                side_effect=ValueError("zip error"),
             ),
         ):
             resolver = InstallResolver()
@@ -761,7 +761,7 @@ class TestInstallBundleZipEdgeCases:
     def test_recoverable_error(self, mock_get_mm, mock_mm):
         mock_get_mm.return_value = mock_mm
         mock_pkg = MagicMock()
-        mock_pkg.extract_package.side_effect = RuntimeError("unexpected error")
+        mock_pkg.extract_package.side_effect = OSError("unexpected error")
 
         resolver = InstallResolver()
         rb: list = []

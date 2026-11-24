@@ -1167,7 +1167,7 @@ class TestSyncModstoreLibraryToLocal:
         with (
             patch(
                 "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
-                side_effect=RuntimeError("net down"),
+                side_effect=ConnectionError("net down"),
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(

@@ -108,7 +108,7 @@ class TestOcrServiceInit:
         fake_runner.check_paddle_available.return_value = False
         # Easyocr importable, but __init__ raises → no reader
         fake_easyocr_mod = MagicMock()
-        fake_easyocr_mod.Reader.side_effect = RuntimeError("fail")
+        fake_easyocr_mod.Reader.side_effect = OSError("model weights unavailable")
         with patch.dict(
             "sys.modules",
             {

@@ -378,7 +378,7 @@ async def test_dispatch_mention_targets_one_employee_point_to_point(tmp_path: Pa
 async def test_dispatch_failure_reports_without_blocking_other_employees(tmp_path: Path):
     def executor(employee_id: str, task: str, input_data: dict, user_id: int):
         if employee_id == "bad":
-            raise RuntimeError("工具不可用")
+            raise ConnectionError("工具不可用")
         return {"success": True, "summary": "已处理"}
 
     svc = make_service(tmp_path, executor=executor)

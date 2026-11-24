@@ -254,7 +254,7 @@ class TestBuildModDatabaseSeedPlan:
     @patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix")
     @patch(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
-        side_effect=RuntimeError("no manager"),
+        side_effect=FileNotFoundError("working directory disappeared during mod root discovery"),
     )
     @patch("app.db.init_db.get_app_data_dir")
     def test_mod_manager_failure(self, mock_dir, mock_mm, mock_suffix, tmp_path):

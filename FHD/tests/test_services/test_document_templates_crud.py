@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -161,7 +162,9 @@ class TestEnsureTemplateTablesReady:
             mock_ensure.assert_called_once()
 
     def test_handles_error_gracefully(self):
-        with patch("app.db.init_db.init_template_tables", side_effect=RuntimeError("db error")):
+        with patch(
+            "app.db.init_db.init_template_tables", side_effect=sqlite3.OperationalError("db error")
+        ):
             from app.domain.shared_services.document_templates.crud import (
                 _ensure_template_tables_ready,
             )
@@ -414,7 +417,10 @@ class TestCreateTemplateWithPayload:
 
     def test_create_with_db_error_returns_500(self):
         with (
-            patch("app.db.session.get_db", side_effect=RuntimeError("db connection failed")),
+            patch(
+                "app.db.session.get_db",
+                side_effect=sqlite3.OperationalError("db connection failed"),
+            ),
             patch("app.db.init_db.init_template_tables"),
         ):
             result = create_template_with_payload({"name": "测试"})
@@ -446,7 +452,7 @@ class TestCreateTemplateWithPayload:
         mock_db = MagicMock()
         mock_result = MagicMock()
         mock_result.lastrowid = 1
-        mock_db.execute.side_effect = [mock_result, RuntimeError("log table missing")]
+        mock_db.execute.side_effect = [mock_result, sqlite3.OperationalError("log table missing")]
         mock_db.commit = MagicMock()
 
         with _shared_scope_case_0() as mock_get_db:
@@ -594,7 +600,7 @@ class TestUpdateTemplateWithPayload:
 
     def test_update_with_db_error_returns_500(self):
         with (
-            patch("app.db.session.get_db", side_effect=RuntimeError("db error")),
+            patch("app.db.session.get_db", side_effect=sqlite3.OperationalError("db error")),
             patch("app.db.init_db.init_template_tables"),
         ):
             result = update_template_with_payload({"id": "db:1"})
@@ -690,7 +696,7 @@ class TestUpdateTemplateWithPayload:
         mock_db.execute.side_effect = [
             MagicMock(fetchone=MagicMock(return_value=mock_row)),
             MagicMock(),  # UPDATE
-            RuntimeError("log table missing"),  # usage log fails
+            sqlite3.OperationalError("log table missing"),  # usage log fails
             MagicMock(fetchone=MagicMock(return_value=mock_row)),  # refreshed SELECT
         ]
         mock_db.commit = MagicMock()

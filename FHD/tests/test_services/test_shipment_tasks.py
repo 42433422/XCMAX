@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -56,7 +57,7 @@ class TestGenerateShipmentOrder:
         from app.tasks.shipment_tasks import generate_shipment_order
 
         mock_svc = MagicMock()
-        mock_svc.generate_shipment_document.side_effect = RuntimeError("db down")
+        mock_svc.generate_shipment_document.side_effect = sqlite3.OperationalError("db down")
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
             patch.object(generate_shipment_order, "retry", side_effect=MaxRetriesExceededError),
@@ -192,7 +193,7 @@ class TestPrintShipmentDocument:
         from app.tasks.shipment_tasks import print_shipment_document
 
         with (
-            patch("os.path.exists", side_effect=RuntimeError("io error")),
+            patch("os.path.exists", side_effect=OSError("io error")),
             patch.object(print_shipment_document, "retry", side_effect=MaxRetriesExceededError),
         ):
             result = print_shipment_document("/tmp/doc.pdf")
@@ -256,9 +257,7 @@ class TestCleanupOldShipmentDocuments:
     def test_outer_exception_returns_zero(self):
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
-        with patch(
-            "app.utils.path_io.path_utils.get_app_data_dir", side_effect=RuntimeError("fail")
-        ):
+        with patch("app.utils.path_io.path_utils.get_app_data_dir", side_effect=OSError("fail")):
             result = cleanup_old_shipment_documents(90)
         assert result == 0
 
@@ -305,7 +304,7 @@ class TestExportShipmentRecordsTask:
         from app.tasks.shipment_tasks import export_shipment_records_task
 
         mock_svc = MagicMock()
-        mock_svc.export_shipment_records.side_effect = RuntimeError("fail")
+        mock_svc.export_shipment_records.side_effect = PermissionError("cannot write export")
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
             patch.object(
@@ -358,7 +357,7 @@ class TestImportProductsBatchTask:
         from app.tasks.shipment_tasks import import_products_batch_task
 
         mock_svc = MagicMock()
-        mock_svc.create_product.side_effect = RuntimeError("db error")
+        mock_svc.create_product.side_effect = sqlite3.OperationalError("db error")
         with (
             patch("app.services.get_products_service", return_value=mock_svc),
             patch.object(import_products_batch_task, "retry", side_effect=MaxRetriesExceededError),
@@ -405,7 +404,7 @@ class TestGenerateLabelsBatchTask:
         from app.tasks.shipment_tasks import generate_labels_batch_task
 
         mock_svc = MagicMock()
-        mock_svc.generate_label.side_effect = RuntimeError("printer error")
+        mock_svc.generate_label.side_effect = OSError("printer error")
         with (
             patch("app.services.get_printer_service", return_value=mock_svc),
             patch.object(generate_labels_batch_task, "retry", side_effect=MaxRetriesExceededError),
@@ -420,7 +419,10 @@ class TestGenerateLabelsBatchTask:
         from app.tasks.shipment_tasks import generate_labels_batch_task
 
         with (
-            patch("app.services.get_printer_service", side_effect=RuntimeError("fatal")),
+            patch(
+                "app.services.get_printer_service",
+                side_effect=PermissionError("printer configuration directory unavailable"),
+            ),
             patch.object(generate_labels_batch_task, "retry", side_effect=MaxRetriesExceededError),
         ):
             result = generate_labels_batch_task([{"product_name": "P1"}])
@@ -461,10 +463,11 @@ class TestGenerateParallelShipmentOrders:
         from app.tasks.shipment_tasks import generate_parallel_shipment_orders
 
         with (
-            patch("celery.group", side_effect=RuntimeError("broker down")),
+            patch("celery.group") as group,
             patch.object(
                 generate_parallel_shipment_orders, "retry", side_effect=MaxRetriesExceededError
             ),
         ):
+            group.return_value.apply_async.side_effect = ConnectionError("broker down")
             result = generate_parallel_shipment_orders([{"unit_name": "Co1", "products": []}])
         assert result["success"] is False

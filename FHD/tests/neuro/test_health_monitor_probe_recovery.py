@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from sqlite3 import OperationalError
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -109,7 +110,7 @@ def test_check_neuro_bus_healthy(monitor):
 
 
 def test_check_neuro_bus_exception(monitor):
-    with patch.object(hm, "get_neuro_bus", side_effect=RuntimeError("bus down")):
+    with patch.object(hm, "get_neuro_bus", side_effect=ConnectionError("bus down")):
         result = monitor._check_neuro_bus()
     assert result.status == HealthStatus.UNHEALTHY
     assert "bus down" in result.message
@@ -208,7 +209,7 @@ def test_check_memory_no_psutil(monitor):
 
 def test_check_memory_exception(monitor):
     fake_psutil = MagicMock()
-    fake_psutil.Process.side_effect = RuntimeError("proc error")
+    fake_psutil.Process.side_effect = OSError("proc error")
     with patch.dict("sys.modules", {"psutil": fake_psutil}):
         result = monitor._check_memory()
     assert result.status == HealthStatus.UNHEALTHY
@@ -521,7 +522,7 @@ class _FailingStore:
 
     def append(self, event, stream_id=None):
         self.appends.append(event)
-        raise RuntimeError("secret-db-error-TOKEN123")
+        raise OperationalError("secret-db-error-TOKEN123")
 
 
 def _health_receipts(store):

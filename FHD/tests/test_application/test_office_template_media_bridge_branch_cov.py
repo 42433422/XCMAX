@@ -142,13 +142,13 @@ class TestCollectOoxmlText:
 class _RaisePara:
     @property
     def text(self):  # pragma: no cover - 触发 RECOVERABLE_ERRORS
-        raise RuntimeError("boom")
+        raise UnicodeError("boom")
 
 
 class _RaiseFrame:
     @property
     def text(self):  # pragma: no cover - 触发 RECOVERABLE_ERRORS
-        raise RuntimeError("boom")
+        raise UnicodeError("boom")
 
 
 class TestExtractPptxViaLib:
@@ -306,7 +306,7 @@ class TestExtractPptxDocumentText:
         monkeypatch.setattr(
             bridge,
             "_extract_pptx_text_via_lib",
-            lambda fp: (_ for _ in ()).throw(RuntimeError("boom")),
+            lambda fp: (_ for _ in ()).throw(OSError("boom")),
         )
         monkeypatch.setattr(bridge, "_extract_pptx_text_via_zip", lambda fp: ("ziptext", 1))
         meta = bridge.extract_pptx_document_text("x.pptx")
@@ -346,7 +346,7 @@ class TestExtractPdfDocumentText:
         p1 = MagicMock()
         p1.extract_text.return_value = "   "
         p2 = MagicMock()
-        p2.extract_text.side_effect = RuntimeError("boom")
+        p2.extract_text.side_effect = OSError("cannot read PDF page stream")
         reader = MagicMock()
         reader.pages = [p1, p2]
         fake.PdfReader.return_value = reader
@@ -604,7 +604,7 @@ class TestBuildPdfTemplateAnalysis:
         monkeypatch.setattr(
             bridge,
             "extract_pdf_document_text",
-            lambda fp: (_ for _ in ()).throw(RuntimeError("boom")),
+            lambda fp: (_ for _ in ()).throw(OSError("boom")),
         )
         out = bridge.build_pdf_template_analysis("x.pdf")
         assert out["success"] is False

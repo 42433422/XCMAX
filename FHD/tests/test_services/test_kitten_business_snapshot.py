@@ -160,8 +160,8 @@ class TestBuildKittenBusinessSnapshot:
         with (
             patch("app.application.get_material_application_service", return_value=mock_mat_svc),
             patch("app.db.session.get_db", return_value=mock_db),
-            _patch_products(side_effect=RuntimeError("no products")),
-            _patch_shipments(side_effect=RuntimeError("no shipments")),
+            _patch_products(side_effect=OSError("no products")),
+            _patch_shipments(side_effect=OSError("no shipments")),
         ):
             result = build_kitten_business_snapshot()
         assert result["stats"]["materials_total"] == 10
@@ -189,8 +189,8 @@ class TestBuildKittenBusinessSnapshot:
             },
         ]
         with (
-            _patch_materials(side_effect=RuntimeError("no mat")),
-            _patch_products(side_effect=RuntimeError("no prod")),
+            _patch_materials(side_effect=OSError("no mat")),
+            _patch_products(side_effect=OSError("no prod")),
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
         ):
             result = build_kitten_business_snapshot()

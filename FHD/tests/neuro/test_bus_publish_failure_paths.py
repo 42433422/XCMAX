@@ -177,7 +177,7 @@ async def test_dispatch_dlq_handle_failure_inner_exception_swallowed():
     bus._running = True
 
     fake_dlq_int = MagicMock()
-    fake_dlq_int.handle_failure.side_effect = RuntimeError("dlq broken")
+    fake_dlq_int.handle_failure.side_effect = OSError("dlq broken")
     bus._dlq_integration = fake_dlq_int
 
     async def boom(event):

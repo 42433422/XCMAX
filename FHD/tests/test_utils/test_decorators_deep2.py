@@ -217,7 +217,7 @@ class TestCachedDeep:
         still returned."""
         cache = MagicMock()
         cache.get.return_value = None
-        cache.set.side_effect = RuntimeError("redis down")
+        cache.set.side_effect = ConnectionError("redis down")
 
         @dec.cached(ttl=60, cache_instance=cache)
         def fn(x):

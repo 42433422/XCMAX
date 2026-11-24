@@ -4033,7 +4033,7 @@ class TestCCIterCatalogPackages:
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_recoverable_error_falls_back(self) -> None:
         with _shared_scope_iter_catalog_packages_market_0() as (mock_fetch, mock_get):
-            mock_fetch.side_effect = RuntimeError("err")
+            mock_fetch.side_effect = FileNotFoundError("market catalog CA bundle unavailable")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
             async for row in cc.iter_catalog_packages():

@@ -840,7 +840,7 @@ class TestResolveSurfaceAuditBranchCov:
             ),
             patch(
                 "app.application.surface_audit_service.run_surface_audit_lane",
-                side_effect=RuntimeError("boom"),
+                side_effect=OSError("boom"),
             ),
         ):
             surface, note = await _resolve_surface_audit(

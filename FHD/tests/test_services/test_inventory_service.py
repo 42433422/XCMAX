@@ -166,7 +166,7 @@ class TestCreateWarehouse:
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.add.side_effect = RuntimeError("db error")
+        mock_db.add.side_effect = ConnectionError("db error")
         mock_db.rollback.return_value = None
         mock_get_db.return_value = mock_db
         mock_warehouse = MagicMock()
@@ -220,7 +220,7 @@ class TestUpdateWarehouse:
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_warehouse = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_warehouse
-        mock_db.commit.side_effect = RuntimeError("db error")
+        mock_db.commit.side_effect = ConnectionError("db error")
         mock_db.rollback.return_value = None
         mock_get_db.return_value = mock_db
 

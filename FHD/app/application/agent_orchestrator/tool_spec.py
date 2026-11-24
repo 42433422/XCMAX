@@ -790,6 +790,8 @@ def _validate_input_schema_with_references(
     )
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
+    if (spec.tool_id, spec.action) == ("shipment_records", "create") and "purchase_unit" in params:
+        params = {**params, "unit_name": params.get("unit_name") or params["purchase_unit"]}
     if not defer_domain_checks and (spec.tool_id, spec.action) == ("inventory", "stock_in"):
         from app.domain.app_pure.inventory_inputs import validate_stock_in_request
 

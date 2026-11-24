@@ -202,7 +202,7 @@ class TestCustomersCreate:
     def test_create_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
             with patch(f"{_FACADE}.customers_create") as bypass:
-                r = client.post("/customers", json={"name": "TestCo"})
+                r = client.post("/customers", json={"unit_name": "TestCo"})
         assert r.status_code == 401
         bypass.assert_not_called()
 
@@ -253,7 +253,7 @@ class TestCustomersUpdate:
     def test_update_service_flag_cannot_bypass_canonical_auth(self, client: TestClient):
         with patch(f"{_FACADE}.is_erp_customers_via_service_enabled", return_value=True):
             with patch(f"{_FACADE}.customers_update") as bypass:
-                r = client.put("/customers/1", json={"name": "Updated"})
+                r = client.put("/customers/1", json={"unit_name": "Updated"})
         assert r.status_code == 401
         bypass.assert_not_called()
 

@@ -1482,7 +1482,7 @@ class TestExcelVectorIndexRouter:
         with patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service"
         ) as mock_get:
-            mock_get.return_value.ingest_excel.side_effect = RuntimeError("boom")
+            mock_get.return_value.ingest_excel.side_effect = OSError("boom")
             result = _registered_router_excel_vector_index(
                 "execute", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
             )
@@ -1531,7 +1531,7 @@ class TestExcelVectorIndexRouter:
         with patch(
             "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
         ) as mock_get:
-            mock_get.return_value.query.side_effect = RuntimeError("fail")
+            mock_get.return_value.query.side_effect = OSError("fail")
             result = _registered_router_excel_vector_index(
                 "query", {"index_id": "idx1", "query": "hello"}, {}, "admin", ""
             )
@@ -1686,7 +1686,7 @@ class TestOcrRouter:
     def test_exception_returns_error(self):
         with patch(
             "app.fastapi_routes.ocr._get_ocr_service",
-            side_effect=RuntimeError("ocr unavailable"),
+            side_effect=OSError("ocr unavailable"),
         ):
             result = _registered_router_ocr("recognize", {}, {}, "admin", "")
         assert result["success"] is False
@@ -1879,7 +1879,7 @@ class TestUnitProductsImportRouter:
     def test_import_exception(self):
         with patch(
             "app.application.get_unit_products_import_app_service",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ):
             result = _registered_router_unit_products_import(
                 "execute_import",
@@ -1941,7 +1941,7 @@ class TestPrintRouterWorkflowLabel:
             patch("app.application.print_app_service.get_print_application_service") as mock_print,
             patch(
                 "app.application.get_product_app_service",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
         ):
             mock_print.return_value.print_single_label.return_value = {"success": True}
@@ -2225,7 +2225,7 @@ class TestExecuteRegisteredWorkflowToolEmployee:
             ),
             patch(
                 "app.mod_sdk.employee_tool_registry.execute_employee_tool",
-                side_effect=RuntimeError("boom"),
+                side_effect=ConnectionError("boom"),
             ),
             patch(
                 "app.mod_sdk.employee_tool_registry.is_employee_tool",

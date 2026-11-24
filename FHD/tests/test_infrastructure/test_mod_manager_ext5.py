@@ -1596,10 +1596,9 @@ class TestEnsureModsLoadedBranches:
 
         mm = ModManager(mods_root="/tmp")
         with (
-            patch(
-                "app.infrastructure.mods.mod_manager.is_mods_disabled",
-                side_effect=RuntimeError("err"),
-            ),
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch.object(mm, "list_loaded_mods", return_value=[]),
+            patch.object(mm, "scan_mods", side_effect=PermissionError("mod directory unreadable")),
             patch.object(mm, "load_all_mods") as mock_load,
         ):
             # Recoverable error is swallowed (does not propagate) and no load runs.

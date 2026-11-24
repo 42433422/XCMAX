@@ -272,8 +272,8 @@ def execution_result_outcome_unknown(
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
         execution_result_states(result) & _UNKNOWN_STATES
-        or result.get("reconciliation_required") is True
-        or result.get("requires_reconciliation") is True
+        or result.get("reconciliation_required")
+        or result.get("requires_reconciliation")
         or result.get("outcome_unknown") is True
         for result in execution_result_envelopes(data, include_execution=include_execution)
     )

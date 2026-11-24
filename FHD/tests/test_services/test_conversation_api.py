@@ -733,7 +733,7 @@ class TestTokenUsagePersisted:
             patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
             patch(
                 "app.infrastructure.billing.model_usage.record_model_usage",
-                side_effect=RuntimeError("ledger write failed"),
+                side_effect=OSError("ledger write failed"),
             ),
         ):
             result = await svc.call_llm_api([{"role": "user", "content": "hi"}])

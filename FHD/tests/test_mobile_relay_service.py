@@ -217,7 +217,7 @@ def test_completion_push_static_helper_swallows_push_exception(monkeypatch):
     import app.domain.shared_services.mobile_push as mobile_push
 
     def boom(*_args, **_kwargs):
-        raise RuntimeError("push down")
+        raise ConnectionError("push down")
 
     monkeypatch.setattr(mobile_push, "notify_user", boom)
 

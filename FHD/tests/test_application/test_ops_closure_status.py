@@ -83,7 +83,7 @@ class TestInstalledEmployeePackIds:
     def test_returns_empty_when_mod_manager_raises(self):
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("no mods"),
+            side_effect=FileNotFoundError("no mods"),
         ):
             result = _installed_employee_pack_ids()
         assert result == set()
@@ -140,7 +140,7 @@ class TestInstalledEmployeePackIds:
 
     def test_all_mods_roots_raises_falls_back(self):
         mock_mgr = MagicMock()
-        mock_mgr.all_mods_roots.side_effect = RuntimeError("fail")
+        mock_mgr.all_mods_roots.side_effect = OSError("fail")
         mock_mgr.mods_root = "/tmp/primary"
         mock_mgr.list_loaded_mods.return_value = []
 

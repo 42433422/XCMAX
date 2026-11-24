@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -64,7 +65,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
             ),
         ) as create,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/templates/create",
             json={"name": "发货模板", "template_type": "Excel"},
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
@@ -122,7 +123,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
             ),
         ) as update,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/templates/update",
             json={"id": "db:1", "name": "发货模板 v2"},
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
@@ -176,7 +177,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
             ),
         ) as delete,
     ):
-        response = _client().request(
+        response = ApprovedCapabilityClient(_client(), repo, actor).request(
             "DELETE",
             "/api/templates/delete",
             json={"id": "db:1"},

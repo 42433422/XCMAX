@@ -293,7 +293,7 @@ class TestInvokeDispatch:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
             tmp_path,
-            http_client_factory=_fake_http_factory(exc=RuntimeError("boom")),
+            http_client_factory=_fake_http_factory(exc=httpx.ReadTimeout("webhook timed out")),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
         assert result["dispatch"]["queued"] is False

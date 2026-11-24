@@ -586,10 +586,13 @@ class TestDistillationGetDeepseekApiKey:
         config_dir = os.path.join(tmp_dir, "resources", "config")
         os.makedirs(config_dir, exist_ok=True)
         config_file = os.path.join(config_dir, "deepseek_config.py")
-        with open(config_file, "w", encoding="utf-8") as f:
-            f.write('raise RuntimeError("bad config")\n')
+        Path(config_file).touch()
         monkeypatch.setattr(ddc, "BASE_DIR", tmp_dir)
-        result = ddc.get_deepseek_api_key()
+        with patch(
+            "importlib.machinery.SourceFileLoader.get_data",
+            side_effect=PermissionError("cannot read config"),
+        ):
+            result = ddc.get_deepseek_api_key()
         assert result == ""
 
 

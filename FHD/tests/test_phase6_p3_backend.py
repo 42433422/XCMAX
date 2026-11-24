@@ -707,7 +707,7 @@ def test_init_disables_bert_when_init_raises() -> None:
     # _init_bert_service imports get_bert_intent_service from .bert_intent_service
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("no model"),
+        side_effect=FileNotFoundError("no model"),
     ):
         svc = HybridIntentService(use_bert=True)
     assert svc.use_bert is False
@@ -1020,7 +1020,7 @@ async def test_hybrid_recognize_intents_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("disabled"),
+        side_effect=FileNotFoundError("no local BERT model"),
     ):
         result = await hybrid_recognize_intents("你好")
     assert "sources_used" in result
@@ -1031,7 +1031,7 @@ def test_hybrid_recognize_intents_sync_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("disabled"),
+        side_effect=FileNotFoundError("no local BERT model"),
     ):
         result = hybrid_recognize_intents_sync("你好")
     assert "sources_used" in result
@@ -1042,7 +1042,7 @@ def test_get_hybrid_intent_service_singleton_caches() -> None:
     reset_hybrid_intent_service()
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("disabled"),
+        side_effect=FileNotFoundError("no local BERT model"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
         svc2 = get_hybrid_intent_service(use_bert=True)
@@ -1071,13 +1071,13 @@ def test_reset_hybrid_intent_service_clears_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("disabled"),
+        side_effect=FileNotFoundError("no local BERT model"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
     reset_hybrid_intent_service()
     with patch(
         "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
-        side_effect=RuntimeError("disabled"),
+        side_effect=FileNotFoundError("no local BERT model"),
     ):
         svc2 = get_hybrid_intent_service(use_bert=True)
     assert svc1 is not svc2

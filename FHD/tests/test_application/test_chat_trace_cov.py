@@ -6,6 +6,7 @@ All external I/O (DB, billing, artifact ingestion) is mocked.
 
 from __future__ import annotations
 
+from sqlite3 import OperationalError
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -457,7 +458,7 @@ class TestRecordLlmUsageEntry:
         call = LLMCall(provider_id="x", provider="x", model="m", total_tokens=10)
         with patch(
             "app.infrastructure.billing.model_usage.record_model_usage",
-            side_effect=RuntimeError("ledger down"),
+            side_effect=OperationalError("ledger down"),
         ):
             result = ct._record_llm_usage_entry(run, call)
         assert result is None

@@ -40,13 +40,15 @@ async def test_coordinator_exception_triggers_emit_intent_event():
         confidence=0.5,
         reason="test",
     )
-    with patch.object(coord, "route", return_value=decision):
-        with patch.object(coord, "_process_conscious", side_effect=RuntimeError("boom")):
-            with patch.object(coord, "_process_reflex", side_effect=RuntimeError("no reflex")):
-                with patch.object(coord, "_emit_intent_event", new_callable=AsyncMock) as em:
-                    report = await coord.process("hello", "user1", {})
-                    assert report.success is False
-                    em.assert_awaited()
+    with (
+        patch.object(coord, "route", return_value=decision),
+        patch.object(coord, "_process_conscious", side_effect=TimeoutError("handler timed out")),
+        patch.object(coord, "_process_reflex", side_effect=TimeoutError("reflex timed out")),
+        patch.object(coord, "_emit_intent_event", new_callable=AsyncMock) as em,
+    ):
+        report = await coord.process("hello", "user1", {})
+        assert report.success is False
+        em.assert_awaited()
 
 
 def test_neuro_domains_package_imports():

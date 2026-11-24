@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from datetime import date
 from types import SimpleNamespace
@@ -100,7 +101,7 @@ def test_generate_monthly_summary_without_tenant_and_query_failure() -> None:
 
     @contextmanager
     def _failed_db():
-        raise RuntimeError("database down")
+        raise sqlite3.OperationalError("database down")
         yield
 
     with patch("app.db.session.get_db", return_value=_failed_db()):
@@ -126,7 +127,7 @@ def test_monthly_task_publishes_success_failure_and_tolerates_bus_error() -> Non
     assert event.event_type == "report.monthly_summary_generated"
 
     failed_bus = MagicMock()
-    failed_bus.publish.side_effect = RuntimeError("bus down")
+    failed_bus.publish.side_effect = ConnectionError("bus down")
     with (
         patch.object(
             monthly_report_scheduler,

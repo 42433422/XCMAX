@@ -205,7 +205,7 @@ class TestInvokeStream:
             patch.object(svc, "_cli_path", return_value="/fake/codex"),
             patch.object(svc, "_is_task_intent", return_value=True),
             patch.object(svc, "_dev_loop_enabled", return_value=True),
-            patch.object(svc, "_run_dev_task_loop", side_effect=RuntimeError("boom")),
+            patch.object(svc, "_run_dev_task_loop", side_effect=OSError("boom")),
         ):
             events = _run_agen(
                 svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"})
@@ -1586,7 +1586,7 @@ class TestPreparePersistentWorktree:
 
     def test_exception_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_git", side_effect=RuntimeError("crash")):
+        with patch.object(svc, "_git", side_effect=OSError("crash")):
             assert (
                 svc._prepare_persistent_worktree(str(tmp_path), str(tmp_path / "wt"), "branch")
                 is None

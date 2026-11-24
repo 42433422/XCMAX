@@ -491,7 +491,7 @@ class TestAnalyzeToJson:
                 "openpyxl.utils.get_column_letter",
                 return_value="E",
             ),
-            patch("builtins.open", side_effect=RuntimeError("disk full")),
+            patch("builtins.open", side_effect=OSError("disk full")),
         ):
             result = analyze_to_json(str(excel_path), str(output_path))
             assert result["success"] is False

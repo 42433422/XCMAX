@@ -1301,7 +1301,7 @@ class TestAnalyzeColorsExceptionPath:
     def test_exception_during_color_analysis_returns_default(self):
         """If img.convert raises an exception → fallback with #FFFFFF background."""
         fake_img = MagicMock(spec=Image.Image)
-        fake_img.convert.side_effect = RuntimeError("no color data")
+        fake_img.convert.side_effect = OSError("no color data")
         fake_img.width = 100
         fake_img.height = 100
 
@@ -1418,7 +1418,7 @@ class TestSkillExecuteAdditionalBranches:
         _patch_analyze = (
             "app.services.skills.label_template_generator.label_template_generator.analyze_image"
         )
-        with patch(_patch_analyze, side_effect=RuntimeError("unexpected crash")):
+        with patch(_patch_analyze, side_effect=OSError("unexpected crash while reading image")):
             result = skill.execute("/some/image.png")
 
         assert result["success"] is False

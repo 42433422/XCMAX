@@ -142,7 +142,7 @@ class TestMaybeSendIntakeFormNotice:
         mock_load.return_value = {"intake_form_notice_sent": False}
         mock_url.return_value = "http://form"
         auto = MagicMock()
-        auto.send_wechat_message.side_effect = RuntimeError("boom")
+        auto.send_wechat_message.side_effect = OSError("boom")
         mock_da.return_value = auto
         result = maybe_send_intake_form_notice(1, contact_name="张三")
         assert result["sent"] is False

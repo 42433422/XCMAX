@@ -101,7 +101,7 @@ def test_extension_missing_receipt_cannot_fall_through_to_another_executor(owner
     def fail(stage):
         def invoke(*args, **kwargs):
             calls.append(stage)
-            raise RuntimeError(stage)
+            raise ConnectionError(stage)
 
         return invoke
 

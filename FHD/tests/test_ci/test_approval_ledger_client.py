@@ -189,7 +189,7 @@ class TestFailOpen:
         mock_client = MagicMock()
         mock_client.__enter__.return_value = mock_client
         mock_client.__exit__.return_value = False
-        mock_client.post.side_effect = httpx_err = RuntimeError("connection reset")
+        mock_client.post.side_effect = client.httpx.ReadError("connection reset")
 
         with patch.object(client.httpx, "Client", return_value=mock_client):
             result = client.post_to_approval_ledger(action="restart_service", payload={})

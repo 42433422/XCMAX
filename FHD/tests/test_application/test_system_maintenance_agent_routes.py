@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -14,7 +16,8 @@ def _client(actor) -> TestClient:
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
+    headers = {**actor.headers, "Idempotency-Key": uuid4().hex}
+    return TestClient(app, raise_server_exceptions=False, headers=headers)
 
 
 def _patch_agent_repo(repo: InMemoryAgentRunRepository):
@@ -43,7 +46,8 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
         _patch_agent_repo(repo),
         patch("app.application.facades.session_facade.get_system_service", return_value=service),
     ):
-        response = _client(trusted_actor(user_id=17, role="admin")).post(
+        actor = trusted_actor(user_id=17, role="admin")
+        response = ApprovedCapabilityClient(_client(actor), repo, actor).post(
             "/api/system/printer",
             json={"printer_name": "HP"},
             headers={"X-User-Id": "tenant-a"},
@@ -122,7 +126,8 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
             return_value=optimizer,
         ),
     ):
-        response = _client(trusted_actor(user_id=17, role="admin")).post(
+        actor = trusted_actor(user_id=17, role="admin")
+        response = ApprovedCapabilityClient(_client(actor), repo, actor).post(
             "/api/performance/cache/invalidate",
             json={"keys": ["k1"]},
             headers={"X-User-Id": "tenant-a"},

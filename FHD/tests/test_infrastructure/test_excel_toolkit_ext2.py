@@ -314,7 +314,7 @@ class TestGetMergedCells:
 
         with patch(
             "openpyxl.load_workbook",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             result = get_merged_cells(str(excel_path))
             assert result["success"] is False
@@ -389,7 +389,7 @@ class TestGetCellStyles:
 
         with patch(
             "openpyxl.load_workbook",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             result = get_cell_styles(str(excel_path))
             assert result["success"] is False
@@ -499,7 +499,7 @@ class TestAnalyzeStructure:
 
         with patch(
             "openpyxl.load_workbook",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             result = analyze_structure(str(excel_path))
             assert result["success"] is False

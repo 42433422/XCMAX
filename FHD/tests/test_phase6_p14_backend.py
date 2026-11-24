@@ -612,7 +612,7 @@ class TestChatErrorPath:
         self, conversation_service: _ConversationHost
     ) -> None:
         with patch("app.application.get_ai_chat_app_service") as application:
-            application.return_value.process_chat.side_effect = RuntimeError("boom")
+            application.return_value.process_chat.side_effect = OSError("boom")
             result = await conversation_service.chat("u1", "hello")
             assert result["action"] == "error"
             assert "boom" in result["text"]
