@@ -32,30 +32,41 @@ def sample():
             "seeds": [17, 29, 43],
             "layers": ["unit", "integration", "real_model", "real_business", "production"],
             "scenarios": [
-                {"id": "memory", "anchor": "autonomy-B3"},
-                {"id": "business", "anchor": "erp-B3"},
+                {
+                    "id": "memory",
+                    "anchor": "autonomy-B3",
+                    "positive": "tests/test_memory.py::test_positive",
+                    "negative": "tests/test_memory.py::test_negative",
+                },
+                {
+                    "id": "business",
+                    "anchor": "erp-B3",
+                    "positive": "tests/test_business.py::test_positive",
+                    "negative": "tests/test_business.py::test_negative",
+                },
             ],
         },
     }
     standard_raw = encode(standard)
-    trials = [
-        {
-            "kind": kind,
-            "seed": seed,
-            "status": "PASS",
-            "returncode": 0,
-            "artifact_sha256": sha(f"{kind}:{seed}"),
-        }
-        for kind in ("positive", "negative")
-        for seed in (17, 29, 43)
-    ]
     rows = []
     for scenario in standard["digital_life_evaluation"]["scenarios"]:
+        trials = [
+            {
+                "kind": kind,
+                "seed": seed,
+                "node": scenario[kind],
+                "status": "PASS",
+                "returncode": 0,
+                "artifact_sha256": sha(f"{scenario['id']}:{kind}:{seed}"),
+            }
+            for kind in ("positive", "negative")
+            for seed in (17, 29, 43)
+        ]
         rows.append(
             {
                 "id": scenario["id"],
                 "anchor": scenario["anchor"],
-                "trials": copy.deepcopy(trials),
+                "trials": trials,
                 "layers": {
                     "unit": "NOT RUN",
                     "integration": "PASS",
@@ -128,6 +139,8 @@ def test_report_fingerprints_are_historical_and_anchor_status_remains_unverified
         "nonindependent_auditor",
         "missing_trial",
         "duplicate_trial",
+        "wrong_node",
+        "false_aggregate",
         "forged_pass",
         "unrun_with_trials",
     ],
@@ -155,6 +168,10 @@ def test_fixture_report_fails_closed_on_provenance_and_coverage(change):
         rows[0]["trials"].pop()
     elif change == "duplicate_trial":
         rows[0]["trials"].append(copy.deepcopy(rows[0]["trials"][0]))
+    elif change == "wrong_node":
+        rows[0]["trials"][0]["node"] = "tests/test_fake.py::test_fake"
+    elif change == "false_aggregate":
+        rows[0]["layers"]["integration"] = "BLOCKED"
     elif change == "forged_pass":
         rows[0]["trials"][0]["artifact_sha256"] = None
     elif change == "unrun_with_trials":
