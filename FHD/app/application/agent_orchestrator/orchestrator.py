@@ -976,16 +976,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             run.status, run.error = "blocked", "子任务已受理，尚未独立核验业务结果"
             run.final_output["node_outputs"] = dict(node_outputs)
 
-        # A resumed graph must not treat an already-admitted child as a
-        # completed business dependency simply because its host step is done.
         if any(verified_enterprise_admission(run, step) for step in run.steps):
             pause_for_enterprise_readback()
             self._repo.save(run)
             return
 
-        # LangGraph is the single scheduler for business plans. Its node callback
-        # delegates each side effect to StepExecution, retaining the existing
-        # permission, idempotency, billing, approval and audit boundaries.
+        # LangGraph schedules nodes; StepExecution retains permission, idempotency, billing, approval and audit.
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 
         approved = str(approved_step_id or "").strip()
@@ -1426,17 +1422,15 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                         "message": run.error,
                     }
                 if verified_enterprise_admission(run, step):
-                    receipt = verified_step_output(run, step)
-                    node_outputs[step.node_id] = receipt
+                    admission = verified_step_output(run, step)
+                    node_outputs[step.node_id] = admission
                     pause_for_enterprise_readback()
                     waiting_for_enterprise_readback = True
-                    # Graph-only stop signal. Keep the admission receipt intact
-                    # and out of generic execution-result normalization.
                     return {
                         "success": True,
                         "requires_confirmation": True,
                         "retryable": False,
-                        "business_outcome": receipt,
+                        "business_outcome": admission,
                     }
                 decision = (
                     step.output.get("question")

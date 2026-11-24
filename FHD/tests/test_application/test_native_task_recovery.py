@@ -799,7 +799,7 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     if not cleanup_verified:
         assert stored.status == "blocked", stored.steps[0].output
         assert stored.steps[0].output["error_code"] == "tool_worker_exited"
-        assert stored.steps[0].output["cleanup_unresolved"] is True
+        assert stored.steps[0].output["reconciliation_evidence"]["cleanup_unresolved"] is True
         assert stored.steps[0].output["reconciliation_required"] is True
         assert stored.steps[0].output == stored.tool_calls[0].output
         assert stored.steps[0].output["outcome"] == "unknown"

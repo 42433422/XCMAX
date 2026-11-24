@@ -88,10 +88,9 @@ def normalize_tool_execution_result(step, output: dict, context: dict) -> dict:
     from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.domain.task_lifecycle.results import normalize_execution_result
 
-    # A plan receipt must not borrow the generic in-flight exception, even
-    # when presented under a different action. Only scoped readback admits it.
-    if (step.tool_id, step.action) == ("enterprise_cognition", "plan") or (
-        plan_admission_receipt(output)
+    # Only scoped readback admits a plan receipt, regardless of its action.
+    if (step.tool_id, step.action) == ("enterprise_cognition", "plan") or plan_admission_receipt(
+        output
     ):
         if verified_plan_admission(step, output, context):
             return output
