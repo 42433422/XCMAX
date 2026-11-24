@@ -947,7 +947,13 @@ def build_life_graph(ports: CyclePorts, *, checkpointer: Any | None = None):
     )
 
 
-async def _continue_at_act(graph: Any, config: dict[str, Any], ports: CyclePorts) -> dict[str, Any] | None:
+async def _continue_at_act(
+    graph: Any,
+    config: dict[str, Any],
+    ports: CyclePorts,
+    *,
+    restoring: bool,
+) -> dict[str, Any] | None:
     """Resume exactly once from a persisted, verified pre-act checkpoint."""
     snapshot = await graph.aget_state(config)
     if tuple(snapshot.next) != ("act",):
@@ -962,12 +968,17 @@ async def _continue_at_act(graph: Any, config: dict[str, Any], ports: CyclePorts
         # settled and agrees with the durable LangGraph state.
         if not isinstance(receipt, dict):
             return None
-        from modstore_server.xiaoc_life_reconciliation import _verified_usage
+        if restoring:
+            from modstore_server.xiaoc_life_reconciliation import _verified_usage
 
-        with life_operation("reconcile"):
-            usage = await asyncio.to_thread(
-                _verified_usage, ports.claim.get("steps", []), ports.claim["owner_user_id"]
-            )
+            with life_operation("reconcile"):
+                usage = await asyncio.to_thread(
+                    _verified_usage, ports.claim.get("steps", []), ports.claim["owner_user_id"]
+                )
+        else:
+            # The original platform scope completed inside THIS live process.
+            # Only recovered calls require SQL receipt reconstruction.
+            usage = ports.actual_tokens
         if (
             usage is None
             or type(receipt.get("actual_tokens")) is not int
@@ -999,7 +1010,7 @@ async def recover_native_act() -> dict[str, Any] | None:
     async with native_life_checkpointer() as saver:
         graph = build_life_graph(ports, checkpointer=saver)
         config = native_thread_config(claim)
-        result = await _continue_at_act(graph, config, ports)
+        result = await _continue_at_act(graph, config, ports, restoring=True)
         if result is None:
             return None
         with life_operation("settle"):
@@ -1017,7 +1028,9 @@ async def run_claimed_cycle(claim: dict[str, Any]) -> dict[str, Any]:
                 graph = build_life_graph(ports, checkpointer=saver)
                 config = native_thread_config(claim)
                 await graph.ainvoke({}, config, durability="sync")
-                result = await _continue_at_act(graph, config, ports)
+                result = await _continue_at_act(
+                    graph, config, ports, restoring=False
+                )
                 if result is None:
                     # Another worker won the pre-act CAS, or an unverified
                     # model receipt prevents effects. Do not finish its lease.

@@ -107,11 +107,13 @@ def ports(monkeypatch):
     current = {}
     monkeypatch.setattr(runtime, "_store", lambda: store)
 
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    test_saver = InMemorySaver()
+
     @asynccontextmanager
     async def memory_checkpointer():
-        from langgraph.checkpoint.memory import InMemorySaver
-
-        yield InMemorySaver()
+        yield test_saver
 
     monkeypatch.setattr(runtime, "native_life_checkpointer", memory_checkpointer)
     monkeypatch.setattr(xiaoc_life_reconciliation, "reconcile_goals", lambda: None)
@@ -800,3 +802,35 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
         check_company_receipt()
     finally:
         engine.dispose()
+
+
+
+def test_native_pre_act_restart_reuses_saved_decision_without_rebilling(ports, monkeypatch):
+    """A second runner may resume only before any act invocation is admitted."""
+    from modstore_server import xiaoc_life_reconciliation as reconciliation
+
+    store, calls, *_ = ports
+    original_admit = store.admit_cycle_act
+    admitted = []
+
+    def block_first_admission(claim):
+        admitted.append("first")
+        return False
+
+    monkeypatch.setattr(store, "admit_cycle_act", block_first_admission)
+    first = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1 and not store.finished and store.graph_started
+    assert first["identity_id"] == store.state["identity_id"]
+
+    # The test's receipt is simulated; actual production recovery independently
+    # queries the persisted original model/portfolio execution ledger.
+    monkeypatch.setattr(reconciliation, "_verified_usage", lambda steps, owner: 42)
+    monkeypatch.setattr(store, "admit_cycle_act", original_admit)
+    monkeypatch.setattr(store, "pending_native_act_claim", lambda: store.claim)
+    resumed = asyncio.run(runtime.tick_async())
+    assert resumed["actual_tokens"] == 42
+    assert len(store.finished) == 1 and len(calls) == 1
+    assert store.act_admitted and admitted == ["first"]
+
+    # The CAS guard rejects a second resume instead of resending the act.
+    assert original_admit(store.claim) is False
