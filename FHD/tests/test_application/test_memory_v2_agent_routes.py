@@ -105,8 +105,9 @@ def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
 
-    if omit_conflict:
-        request.getfixturevalue("local_tools")
+    # Assert the conflict round-trip in-process; worker transport is covered by
+    # tests/test_application/test_tool_process.py and is not this regression.
+    request.getfixturevalue("local_tools")
 
     def relation(person):
         return {
