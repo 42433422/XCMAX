@@ -351,6 +351,14 @@ export const useModsStore = defineStore('mods', () => {
       if (r.modsDisabled) {
         setActiveModId('')
         isLoaded.value = true
+        // A confirmed server-side disable must also revoke routes on the live router.
+        try {
+          const { registerModRoutes } = await import('@/router/registerModRoutes')
+          const router = (await import('@/router')).default
+          await registerModRoutes(router, [], { reconcileRuntime: true })
+        } catch (error) {
+          console.warn('[mods] revoke runtime routes after server disable failed:', error)
+        }
         return
       }
       const ok = r.ok
@@ -375,9 +383,7 @@ export const useModsStore = defineStore('mods', () => {
         const { registerAllModRoutesFromGlob, registerModRoutes, retireStaleRuntimeRoutes } = await import('@/router/registerModRoutes')
         const router = (await import('@/router')).default
         await registerAllModRoutesFromGlob(router)
-        if (r.modsDisabled) {
-          await registerModRoutes(router, [], { reconcileRuntime: true })
-        } else if (authoritativeRoutes !== null) {
+        if (authoritativeRoutes !== null) {
           // The server's empty list revokes runtime routes; a failed read does not.
           await registerModRoutes(router, authoritativeRoutes, { reconcileRuntime: true })
         } else {
