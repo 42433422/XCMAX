@@ -7,6 +7,7 @@ import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useModsStore } from '@/stores/mods'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
+import NotificationInbox from './NotificationInbox.vue'
 import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
@@ -15,6 +16,7 @@ const account = useAccountProfileStore()
 const mods = useModsStore()
 const router = useRouter()
 const { tasks, drawerOpen, loading, connected, error, runtime, unreadCount, approvalCount, activeCount } = storeToRefs(store)
+const notificationsOpen = ref(false)
 const filter = ref<'all' | 'active' | 'unread' | 'approval'>('all')
 const filters = [
   { value: 'all', label: '全部' },
@@ -113,6 +115,7 @@ onBeforeUnmount(() => {
 watch(tutorialScopeKey, (next, previous) => {
   if (next !== previous) {
     taskPage.value = 0
+    notificationsOpen.value = false
     store.restartForScope()
   }
 }, { flush: 'sync' })
@@ -144,6 +147,12 @@ watch(tutorialScopeKey, (next, previous) => {
             <button class="task-center-close" type="button" aria-label="关闭" @click="store.closeDrawer()">×</button>
           </header>
 
+          <nav v-if="account.localUserId" class="task-center-filters" aria-label="工作区与通知">
+            <button type="button" :aria-pressed="!notificationsOpen" @click="notificationsOpen = false">工作区</button>
+            <button type="button" :aria-pressed="notificationsOpen" @click="notificationsOpen = true">通知</button>
+          </nav>
+          <NotificationInbox v-if="notificationsOpen && account.localUserId" :scope-key="tutorialScopeKey" />
+          <template v-else>
           <div v-if="error" class="task-center-error">
             <span>{{ error }}</span
             ><button type="button" @click="store.refresh()">重试</button>
@@ -240,6 +249,7 @@ watch(tutorialScopeKey, (next, previous) => {
               {{ loading ? '正在同步工作区…' : '这里暂时没有工作区' }}
             </div>
           </div>
+          </template>
         </aside>
       </div>
     </Transition>
