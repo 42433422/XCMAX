@@ -13,9 +13,15 @@ import '../../models/conversation.dart';
 /// 这些数据此前混在会话 JSON 文件里，导致每次会话写入都要重写整份聊天记录。
 /// 这里使用 drift（成熟 SQLite 封装）单独建库，会话文件只保留凭证与偏好。
 class MobileOfflineStore {
-  MobileOfflineStore._(this._db, [this._namespace]);
+  MobileOfflineStore._(this._db, [this._namespace, DateTime Function()? clock])
+      : _clock = clock ?? DateTime.now;
 
   final String? _namespace;
+  final DateTime Function() _clock;
+  // Display cache freshness uses acquisition time, not business event time.
+  static const displayCacheLifetime = Duration(hours: 24);
+  int get _nowMs => _clock().millisecondsSinceEpoch;
+  int _cacheCutoff(int now) => now - displayCacheLifetime.inMilliseconds;
   static final _scoped = <String, Future<MobileOfflineStore>>{};
 
   static const _databaseName = 'xcagi_mobile_cache';
@@ -49,8 +55,9 @@ class MobileOfflineStore {
   }
 
   /// 测试或自定义执行器入口（例如 NativeDatabase.memory()）。
-  static MobileOfflineStore forExecutor(QueryExecutor executor) =>
-      MobileOfflineStore._(_MobileOfflineDatabase(executor));
+  static MobileOfflineStore forExecutor(QueryExecutor executor,
+          {DateTime Function()? clock}) =>
+      MobileOfflineStore._(_MobileOfflineDatabase(executor), null, clock);
 
   /// 单元测试注入内存库，避免依赖 path_provider 平台通道。
   static void installSharedForTest(MobileOfflineStore store) {
@@ -73,10 +80,13 @@ class MobileOfflineStore {
 
   Future<List<Map<String, Object?>>> cachedMessages(
       String conversationId) async {
+    final now = _nowMs;
+    // Keep unresolved local turns for reconciliation even after history expires.
     final rows = await _db.customSelect(
-      'SELECT * FROM chat_messages WHERE conversation_id = ? '
+      'SELECT * FROM chat_messages WHERE conversation_id = ? AND '
+      "((cached_at > ? AND cached_at <= ?) OR status IN ('pending', 'queued', 'sending')) "
       'ORDER BY ts ASC, message_id ASC',
-      variables: [Variable<String>(conversationId)],
+      variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
     return rows.map(_messageRow).toList(growable: false);
   }
@@ -87,8 +97,8 @@ class MobileOfflineStore {
   ) async {
     await _db.customUpdate(
       'INSERT OR REPLACE INTO chat_messages '
-      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status, turn_id) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      '(conversation_id, message_id, role, body, time_text, ts, has_employee_profile, status, turn_id, cached_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       variables: [
         Variable<String>(conversationId),
         Variable<String>('${row['id'] ?? ''}'),
@@ -99,6 +109,7 @@ class MobileOfflineStore {
         Variable<int>(row['has_employee_profile'] == true ? 1 : 0),
         Variable<String>('${row['status'] ?? ChatDeliveryStatus.sent.name}'),
         Variable<String>('${row['turn_id'] ?? ''}'),
+        Variable<int>(_nowMs),
       ],
     );
     await _trimMessages(conversationId);
@@ -145,9 +156,11 @@ class MobileOfflineStore {
   // ── 会话列表状态 ────────────────────────────────────────────
 
   Future<Map<String, Object?>?> conversationState(String conversationId) async {
+    final now = _nowMs;
     final rows = await _db.customSelect(
-      'SELECT preview, timestamp_ms FROM conversation_states WHERE conversation_id = ?',
-      variables: [Variable<String>(conversationId)],
+      'SELECT preview, timestamp_ms FROM conversation_states WHERE conversation_id = ? '
+      'AND updated_at > ? AND updated_at <= ?',
+      variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
     if (rows.isEmpty) return null;
     final data = rows.first.data;
@@ -159,12 +172,15 @@ class MobileOfflineStore {
 
   /// 一次读取全部会话的最近消息，供消息列表显示预览与时间。
   Future<Map<String, Map<String, Object?>>> latestMessagePreviews() async {
-    final rows = await _db
-        .customSelect(
-          'SELECT conversation_id, body, role, MAX(ts) AS ts FROM chat_messages '
-          'GROUP BY conversation_id',
-        )
-        .get();
+    final now = _nowMs;
+    final rows = await _db.customSelect(
+      'WITH fresh AS (SELECT conversation_id, message_id, body, role, ts '
+      'FROM chat_messages WHERE cached_at > ? AND cached_at <= ?) '
+      'SELECT f.conversation_id, f.body, f.role, f.ts FROM fresh f '
+      'WHERE NOT EXISTS (SELECT 1 FROM fresh n WHERE n.conversation_id = f.conversation_id '
+      'AND (n.ts > f.ts OR (n.ts = f.ts AND n.message_id > f.message_id)))',
+      variables: [Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
+    ).get();
     return {
       for (final row in rows)
         if ((row.data['conversation_id'] as String? ?? '').trim().isNotEmpty)
@@ -188,7 +204,7 @@ class MobileOfflineStore {
         Variable<String>(conversationId),
         Variable<String>(preview),
         Variable<int>(timestampMs),
-        Variable<int>(DateTime.now().millisecondsSinceEpoch),
+        Variable<int>(_nowMs),
       ],
     );
   }
@@ -543,7 +559,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, dynamic>> get allTables => const [];
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -559,6 +575,7 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
             'has_employee_profile INTEGER NOT NULL DEFAULT 0, '
             'status TEXT NOT NULL, '
             "turn_id TEXT NOT NULL DEFAULT '', "
+            'cached_at INTEGER NOT NULL DEFAULT 0, '
             'PRIMARY KEY (conversation_id, message_id))',
           );
           await m.database.customStatement(
@@ -611,6 +628,11 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
                 "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
             await m.database.customStatement(
                 "UPDATE outbox_messages SET status = 'unknown' WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
+          }
+          if (from < 3) {
+            // Legacy history has no reliable cache acquisition time.
+            await m.database.customStatement(
+                'ALTER TABLE chat_messages ADD COLUMN cached_at INTEGER NOT NULL DEFAULT 0');
           }
         },
       );
