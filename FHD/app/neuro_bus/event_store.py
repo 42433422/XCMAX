@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -45,9 +46,20 @@ from .storage.event_records import (
 )
 from .storage.event_recovery import EventRecovery
 from .storage.event_snapshots import EventSnapshots, state_hash
-from .storage.sqlite import SQLiteOwner, StorageRuntime
+from .storage.sqlite import SQLiteOwner, StorageRuntime, fetch_rows
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DurableAdmissionReceipt:
+    """Evidence of committed admission, not handler completion or business success."""
+
+    event_id: str
+    event_sha256: str
+    admitted_at: float
+    newly_admitted: bool
+    queued: bool | None = None
 
 
 class EventStore:
@@ -155,6 +167,71 @@ class EventStore:
     def _check_expected_version(self, stream_id: str | None, expected_version: int | None) -> None:
         """乐观并发检查"""
         self._journal.check_version(stream_id, expected_version)
+
+    def admit(self, event: NeuroEvent) -> DurableAdmissionReceipt:
+        """Commit a stable event identity before acknowledging reliable admission.
+
+        This uses the existing file-backed EventStore transaction owner. Admission
+        records are not ordinary history and are not subject to journal trimming
+        or generic event replay. A repeat returns the original durable receipt;
+        it does not authorize another dispatch.
+        """
+        validate_event_schema(event)
+        event_id = event.metadata.event_id
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise InvalidEventError("reliable admission requires a nonempty event_id")
+        if self._mode != EventStoreMode.SQLITE or self._conn is None:
+            raise RuntimeError("reliable admission requires a file-backed SQLite EventStore")
+        event_json = json.dumps(
+            event.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha256(event_json.encode("utf-8")).hexdigest()
+        with self._storage.transaction() as connection:
+            databases = fetch_rows(connection, "PRAGMA database_list")
+            if not any(row["name"] == "main" and row["file"] for row in databases):
+                raise RuntimeError("reliable admission cannot use an in-memory database")
+            if int(fetch_rows(connection, "PRAGMA synchronous")[0][0]) < 2:
+                raise RuntimeError("reliable admission requires synchronous=FULL or stronger")
+            rows = fetch_rows(
+                connection,
+                "SELECT event_data, event_sha256, admitted_at FROM neuro_admissions WHERE event_id = ?",
+                (event_id,),
+            )
+            if rows:
+                row = rows[0]
+                if row["event_sha256"] != digest or row["event_data"] != event_json:
+                    raise InvalidEventError("reliable admission event identity conflict")
+                admitted_at = float(row["admitted_at"])
+                newly_admitted = False
+            else:
+                admitted_at = time.time()
+                connection.execute(
+                    "INSERT INTO neuro_admissions VALUES (?, ?, ?, ?)",
+                    (event_id, event_json, digest, admitted_at),
+                ).close()
+                newly_admitted = True
+        # Exiting the transaction successfully is the sole durable ACK boundary.
+        return DurableAdmissionReceipt(event_id, digest, admitted_at, newly_admitted)
+
+    def get_admitted_event(self, event_id: str) -> NeuroEvent | None:
+        """Read the original event for reconciliation; never dispatch implicitly."""
+        if self._mode != EventStoreMode.SQLITE or self._conn is None:
+            raise RuntimeError("reliable admission requires a file-backed SQLite EventStore")
+        rows = self._storage.rows(
+            "SELECT event_data, event_sha256 FROM neuro_admissions WHERE event_id = ?",
+            (event_id,),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        event_json = row["event_data"]
+        if hashlib.sha256(event_json.encode("utf-8")).hexdigest() != row["event_sha256"]:
+            raise InvalidEventError("reliable admission record failed digest verification")
+        event = NeuroEvent.from_dict(json.loads(event_json), preserve_queue_identity=True)
+        if event.metadata.event_id != event_id:
+            raise InvalidEventError("reliable admission record identity mismatch")
+        return event
 
     def append(
         self, event: NeuroEvent, stream_id: str | None = None, expected_version: int | None = None
