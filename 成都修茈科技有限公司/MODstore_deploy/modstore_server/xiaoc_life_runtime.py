@@ -18,9 +18,9 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_goal_management import (
     candidate_gate,
     discover_goal_candidate,
-    resumable_operating_candidate,
     portfolio_goal_closed,
     project_goal_steps,
+    resumable_operating_candidate,
 )
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
@@ -656,17 +656,17 @@ class CyclePorts:
                     "status": "completed",
                     "summary": "已创建有来源的经营候选；等待原企业预算及员工授权。",
                 }
+            from modstore_server.strategic_portfolio import (
+                PortfolioError,
+                create_portfolio_proposal,
+                digest,
+            )
             from modstore_server.strategy_business_context import customer_value_context
             from modstore_server.xiaoc_goal_management import (
                 ORIGIN,
                 compile_autonomous_review_plan,
             )
             from modstore_server.xiaoc_life_policy import LifePolicyError
-            from modstore_server.strategic_portfolio import (
-                PortfolioError,
-                create_portfolio_proposal,
-                digest,
-            )
             from modstore_server.xiaoc_self_model import employee_preflight
 
             current_value = await self.write_in_thread(customer_value_context)
