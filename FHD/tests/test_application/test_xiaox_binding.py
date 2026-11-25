@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -394,3 +395,79 @@ def test_missing_ancestor_cannot_create_a_runtime_grant(trusted_actor):
     with pytest.raises(XiaoxBindingError) as error:
         make_binding(trusted_actor(), parent_run_id="missing-native-parent")
     assert error.value.code == "owner_changed"
+
+
+@pytest.mark.parametrize("prefix", ["codex_", "xiaox_"])
+def test_child_identity_alias_reuses_original_reservation(trusted_actor, prefix):
+    store, run, grant = make_binding(trusted_actor())
+    kwargs = dict(
+        tool_id="customers",
+        action="create",
+        params={"unit_name": "legacy"},
+        read_only=False,
+        generation=grant.binding.metadata["generation"],
+        cost_units=5,
+    )
+    first, created = store.claim_call(run.run_id, "a", **kwargs)
+    assert created and first["child_task_id"].startswith("codex_")
+
+    def intermediate_build(_run, metadata):
+        original = metadata["calls"]["a"]
+        original["child_task_id"] = prefix + first["child_task_id"].removeprefix("codex_")
+
+    store.update(run.run_id, intermediate_build)
+    snapshot = store.get(run.run_id)
+    prior = snapshot.metadata["calls"]["a"]
+    duplicate, created = store.claim_call(run.run_id, "b", **kwargs)
+    assert not created and duplicate == prior
+    assert store.get(run.run_id).run.metadata["reserved_cost_units"] == (
+        snapshot.run.metadata["reserved_cost_units"]
+    )
+
+
+def test_split_child_identities_block_replay_without_mutation(trusted_actor):
+    store, run, grant = make_binding(trusted_actor())
+    kwargs = dict(
+        tool_id="customers",
+        action="create",
+        params={"unit_name": "split"},
+        read_only=False,
+        generation=grant.binding.metadata["generation"],
+    )
+    first, _ = store.claim_call(run.run_id, "a", **kwargs)
+
+    def split(_run, metadata):
+        other = copy.deepcopy(first)
+        other["child_task_id"] = "xiaox_" + first["child_task_id"].removeprefix("codex_")
+        metadata["calls"]["b"] = other
+
+    store.update(run.run_id, split)
+    before = store.repository.get(run.run_id).to_dict()
+    for call_id in ("a", "c"):
+        with pytest.raises(XiaoxBindingError) as error:
+            store.claim_call(run.run_id, call_id, **kwargs)
+        assert error.value.code == "reconciliation_required"
+        assert store.repository.get(run.run_id).to_dict() == before
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_unmigrated_binding_cannot_be_recreated_or_closed(trusted_actor, mixed):
+    store, run, grant = make_binding(trusted_actor())
+    legacy = store.repository.get(run.run_id)
+    legacy.intent = "codex.runtime"
+    legacy.metadata["runtime_type"] = "codex"
+    legacy.metadata["codex_runtime"] = copy.deepcopy(legacy.metadata["xiaox_runtime"])
+    if not mixed:
+        legacy.metadata.pop("xiaox_runtime")
+    store.repository.save(legacy)
+    before = store.repository.get(run.run_id).to_dict()
+    for operation in (
+        lambda: store.get(run.run_id),
+        lambda: store.authenticate(grant.mcp_token),
+        lambda: store.create(run.run_id),
+        lambda: store.close(run.run_id),
+    ):
+        with pytest.raises(XiaoxBindingError) as error:
+            operation()
+        assert error.value.code == "runtime_migration_required"
+        assert store.repository.get(run.run_id).to_dict() == before
