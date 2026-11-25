@@ -213,7 +213,7 @@ def test_workspace_revision_rejects_stale_cross_device_write(monkeypatch):
         patch_workspace_prefs(owner, {"host_pack_acknowledged": False})
 
 
-def _process_workspace_writer(db_url, employee, barrier, results):
+def _process_workspace_writer(db_url, employee, barrier, results, expected_revision=None):
     """Independent interpreter with its own SQLAlchemy engine and connection."""
     from contextlib import contextmanager
 
@@ -223,7 +223,8 @@ def _process_workspace_writer(db_url, employee, barrier, results):
     from app.application.tenant_workspace_prefs import patch_workspace_prefs
     from app.domain.shared_services import user_preference_service as services
 
-    engine = create_engine(db_url, connect_args={"timeout": 20})
+    kwargs = {"connect_args": {"timeout": 20}} if db_url.startswith("sqlite:") else {}
+    engine = create_engine(db_url, **kwargs)
     sessions = sessionmaker(bind=engine)
 
     @contextmanager
@@ -237,7 +238,9 @@ def _process_workspace_writer(db_url, employee, barrier, results):
     try:
         barrier.wait(timeout=15)
         saved = patch_workspace_prefs(
-            "tenant:42", {"workflow_ai_employees": {employee: True}}
+            "tenant:42",
+            {"workflow_ai_employees": {employee: True}},
+            expected_revision=expected_revision,
         )
         results.put((employee, saved["_revision"], None))
     except Exception as exc:
@@ -379,3 +382,94 @@ def test_legacy_preference_duplicates_migrate_without_discarding_conflicts(tmp_p
             _run_preference_uniqueness_migration(db)
         assert db.execute(text("SELECT COUNT(*) FROM user_preferences")).scalar() == 2
     engine.dispose()
+
+
+def _race_expected_revision(db_url):
+    from multiprocessing import get_context
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.models import UserPreference
+
+    ctx = get_context("spawn")
+    barrier, queue = ctx.Barrier(2), ctx.Queue()
+    workers = [
+        ctx.Process(
+            target=_process_workspace_writer,
+            args=(db_url, employee, barrier, queue, 0),
+        )
+        for employee in ("desktop", "mobile")
+    ]
+    for process in workers:
+        process.start()
+    for process in workers:
+        process.join(timeout=30)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+    outcomes = [queue.get(timeout=5) for _ in workers]
+    completed = [outcome for outcome in outcomes if outcome[2] is None]
+    conflicts = [
+        outcome for outcome in outcomes
+        if outcome[2] is not None and "workspace_prefs_version_conflict" in outcome[2]
+    ]
+    assert len(completed) == 1
+    assert completed[0][1] == 1
+    assert len(conflicts) == 1
+    assert sorted(p.exitcode for p in workers) == [0, 1]
+
+    engine = create_engine(db_url)
+    try:
+        session_factory = sessionmaker(bind=engine)
+        with session_factory() as session:
+            rows = session.scalars(select(UserPreference)).all()
+            assert len(rows) == 1
+            value = json.loads(rows[0].preference_value)
+            assert value["_revision"] == 1
+            assert len(value["workflow_ai_employees"]) == 1
+    finally:
+        engine.dispose()
+
+
+def test_workspace_revision_competing_processes_accept_exactly_one(tmp_path):
+    from sqlalchemy import create_engine
+
+    from app.db.models import UserPreference
+
+    url = f"sqlite:///{tmp_path / 'competing-revision.sqlite'}"
+    engine = create_engine(url)
+    try:
+        UserPreference.__table__.create(engine)
+    finally:
+        engine.dispose()
+    _race_expected_revision(url)
+
+
+def test_workspace_revision_competing_postgresql_processes():
+    """Executes only with the explicit disposable PostgreSQL CI service."""
+    import os
+
+    import pytest
+    from sqlalchemy import create_engine, engine
+
+    from app.db.models import UserPreference
+
+    url = os.environ.get("XCMAX_PREF_TEST_PG_URL")
+    if not url:
+        pytest.skip("real PostgreSQL preference test database not configured")
+    parsed = engine.make_url(url)
+    if (
+        os.environ.get("XCMAX_PREF_GUARD_ONLY") != "1"
+        or parsed.get_backend_name() != "postgresql"
+        or parsed.host not in {"127.0.0.1", "localhost"}
+        or parsed.database != "xcagi_prefs_guard"
+    ):
+        raise RuntimeError("refusing_non_disposable_preference_test_database")
+    database = create_engine(url)
+    try:
+        UserPreference.__table__.create(database)
+        _race_expected_revision(url)
+    finally:
+        UserPreference.__table__.drop(database, checkfirst=True)
+        database.dispose()
