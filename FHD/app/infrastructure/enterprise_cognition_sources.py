@@ -388,12 +388,15 @@ class AuthorityReader:
         identity = source.scalar(
             select(User).where(User.id == row.user_id, User.tenant_id == scope.tenant_id)
         )
-        state["role"] = (
-            identity.role if identity is not None and identity.role == "ai_employee" else None
+        # A reused or incorrectly linked AI user cannot prove another employee's
+        # identity, even when the tenant and generic ai_employee role match.
+        canonical_identity = (
+            identity is not None
+            and identity.role == "ai_employee"
+            and identity.username == f"ai-employee:{row.employee_id}"
         )
-        state["identity_active"] = (
-            bool(identity.is_active) if state["role"] == "ai_employee" else None
-        )
+        state["role"] = "ai_employee" if canonical_identity else None
+        state["identity_active"] = bool(identity.is_active) if canonical_identity else None
         state["capability_evidence"] = {
             "status": "unknown",
             "source": "installed_employee_pack",
