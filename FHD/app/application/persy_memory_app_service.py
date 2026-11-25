@@ -86,6 +86,73 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             self._memory_service = get_user_memory_service()
         return self._memory_service
 
+    def capture_erp_field(
+        self,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None,
+        entity_type: str,
+        entity_id: str,
+        field: str,
+    ) -> dict[str, Any]:
+        """Propose a private, reviewed MemoryV2 claim from one authorized ERP field.
+
+        Cross-actor sharing is intentionally excluded until list/graph read paths
+        can enforce each recipient's original ERP source permission as well.
+        """
+        access = _coerce_access_context(access_context)
+        if access is None or not access.actor_id or not access.tenant_id:
+            return _scope_denied()
+        denied = _permission_denied(access, DATASET_WRITE_PERMISSION)
+        if denied is not None:
+            return denied
+        from app.application.enterprise_cognition.memory_reference import build_erp_field_claim
+        from app.application.enterprise_cognition.projection import get_projection_service
+
+        try:
+            snapshot = get_projection_service().get(
+                entity_type,
+                entity_id,
+                tenant_id=access.tenant_id,
+                actor_id=access.actor_id,
+                mod_id=access.mod_id,
+                force_refresh=True,
+            )
+        except (PermissionError, ValueError, TypeError):
+            return {
+                "success": False,
+                "error_code": "persy_erp_fact_source_denied",
+                "candidate": None,
+            }
+        claim = build_erp_field_claim(snapshot, field)
+        if claim is None:
+            return {
+                "success": False,
+                "error_code": "persy_erp_fact_source_unavailable",
+                "candidate": None,
+            }
+        owner_id = _memory_owner_id(access, "user")
+        proposed = self.memory_service.propose_memory_candidate(
+            owner_id,
+            "entity",
+            f"erp.{entity_type}.{entity_id}.{field}",
+            claim["value"],
+            source="erp_authority",
+            confidence=1.0,
+            evidence=[claim["evidence"]],
+        )
+        candidate = proposed.get("candidate")
+        return {
+            "success": proposed.get("success") is True,
+            "created": proposed.get("created") is True,
+            "candidate": (
+                _public_memory_record(candidate, "user")
+                if isinstance(candidate, dict)
+                else None
+            ),
+            "confirmation_required": True,
+            "business_data_written": False,
+        }
+
     def capture_conversation_turn(
         self,
         *,
