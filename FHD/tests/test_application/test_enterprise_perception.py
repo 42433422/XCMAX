@@ -163,13 +163,14 @@ def test_permission_revoked_between_list_and_read_discards_all_sampled_evidence(
     first = _snapshot()
     second = _snapshot(entity_id="621")
     reader = ProjectionStub(
-        {"journal_entry": [first, second]},
+        {"journal_entry": [first, second, _snapshot(entity_id="622")]},
         revoke_on={("journal_entry", "621")},
+        has_more={"journal_entry"},
     )
     result = _observe(reader)
     journal = result["domains"]["B01"]["sources"][1]
-    assert journal["status"] == "permission_denied"
-    assert journal["samples"] == []
+    assert journal == {"source": "journal_entry", "status": "permission_denied", "samples": []}
+    assert not any(call[0] == "get" and call[2] == "622" for call in reader.calls)
     assert result["observed_fact_count"] == 0
     assert result["anomaly_candidates"] == []
 
@@ -259,6 +260,26 @@ def test_perception_http_reads_real_authorized_order_without_claiming_kpis(
         )
         assert forged.status_code == 422
 
+    # Revoke the real SQL principal after a successful authenticated observation.
+    # Even a cached projection must not reveal the old source or its cardinality.
+    from app.application.enterprise_cognition.projection import ProjectionService
+    from app.db.models.user import User
+
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).is_active = False
+    after = observe_enterprise(
+        ProjectionService(),
+        tenant_id=str(actor.tenant_id),
+        actor_id=str(actor.user_id),
+        mod_id="",
+        force_refresh=False,
+    )
+    assert after["observed_fact_count"] == 0
+    assert after["anomaly_candidates"] == []
+    assert after["domains"]["B03"]["sources"] == [
+        {"source": "order", "status": "permission_denied", "samples": []}
+    ]
+
 
 @pytest.mark.parametrize("failure", ["authority_response", "connection", "timeout"])
 def test_authority_disconnect_after_first_read_discards_source_sample(failure):
@@ -285,6 +306,7 @@ def test_authority_disconnect_after_first_read_discards_source_sample(failure):
     journal = result["domains"]["B01"]["sources"][1]
     assert journal["status"] == "unavailable"
     assert journal["samples"] == []
+    assert "has_more" not in journal and "sampled_count" not in journal
     assert result["observed_fact_count"] == 0
     assert result["anomaly_candidates"] == []
     assert result["domains"]["B09"]["candidate_delivery_verified"] is False

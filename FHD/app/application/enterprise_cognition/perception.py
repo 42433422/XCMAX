@@ -270,13 +270,13 @@ def observe_enterprise(
                     status = "partial_sample"
                 else:
                     status = "fresh_sample"
-            sources.append({
-                "source": name,
-                "status": status,
-                "sampled_count": len(samples),
-                "has_more": refs["has_more"],
-                "samples": samples,
-            })
+            source_result = {"source": name, "status": status, "samples": samples}
+            if status not in {"permission_denied", "unavailable"}:
+                source_result["sampled_count"] = len(samples)
+                source_result["has_more"] = refs["has_more"]
+            elif status == "unavailable":
+                source_result["reason_code"] = "authority_unavailable"
+            sources.append(source_result)
             source_statuses[name] = status
         domains[code] = {
             "status": "partially_observed" if any(
