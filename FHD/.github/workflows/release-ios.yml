@@ -247,7 +247,7 @@ jobs:
           archive = archives[0]
           with zipfile.ZipFile(archive) as ipa:
               plist_names = [n for n in ipa.namelist()
-                             if re.fullmatch(r'Payload/[^/]+\\.app/Info\\.plist', n)]
+                             if re.fullmatch(r'Payload/[^/]+\.app/Info\.plist', n)]
               if len(plist_names) != 1:
                   raise SystemExit('IPA must contain exactly one app Info.plist')
               app_info = plistlib.loads(ipa.read(plist_names[0]))
@@ -266,7 +266,15 @@ jobs:
               subprocess.run(['codesign', '--verify', '--deep', '--strict', str(apps[0])], check=True)
               signed = subprocess.run(['codesign', '-dv', '--verbose=4', str(apps[0])],
                                       check=True, text=True, capture_output=True)
-              team = re.search(r'^TeamIdentifier=(\\S+)          (archive_dir / (archive.name + '.sha256')).write_text(
+              team = re.search(r'^TeamIdentifier=(\S+)$', signed.stderr, re.MULTILINE)
+              if not team:
+                  raise SystemExit('Signed IPA lacks Apple TeamIdentifier')
+              signing_team = team.group(1)
+              if signing_team != os.environ['APPLE_TEAM_ID']:
+                  raise SystemExit('Signed IPA Apple TeamIdentifier does not match configured team')
+          with archive.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          (archive_dir / (archive.name + '.sha256')).write_text(
               f'{digest}  {archive.name}\n', encoding='utf-8')
           receipt = {
               'schema': 'xcagi.ios_candidate_build_identity/v1',

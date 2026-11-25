@@ -211,13 +211,13 @@ def test_personal_ios_identity_gate_fail_closed(
     bundle = "com.example.xcagi.personal"
     store_id = "123456789"
     (ios / "fastlane/Fastfile").write_text(
-        f'APP_IDENTIFIER = "{bundle}"\\nAPP_STORE_ID = "{store_id}"\\n', encoding="utf-8"
+        f'APP_IDENTIFIER = "{bundle}"\nAPP_STORE_ID = "{store_id}"\n', encoding="utf-8"
     )
     (ios / "fastlane/Matchfile").write_text(
-        f'app_identifier("{bundle}")\\n', encoding="utf-8"
+        f'app_identifier("{bundle}")\n', encoding="utf-8"
     )
     (ios / "Runner.xcodeproj/project.pbxproj").write_text(
-        f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};\\n', encoding="utf-8"
+        f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};\n', encoding="utf-8"
     )
     active = ["enterprise"] if scenario == "inactive" else ["enterprise", "personal"]
     frozen = ["personal"] if scenario == "frozen" else []
