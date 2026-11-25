@@ -126,18 +126,32 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
     assert training.request_postpromotion_regression_rechecks() == 0
     for user_id in run["users"][:2]:
         with get_session_factory()() as db:
+            progress = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})[
+                "experiment"
+            ]
+            observation_id = str(uuid4())
             enqueue(
                 db,
-                "experiment.observed",
+                "experiment.postpromotion_observed",
                 run["id"],
                 {
+                    "assignment_stage": "approved_rollout",
+                    "request_id": run["id"],
+                    "experiment_id": progress["experiment_id"],
+                    "policy_digest": progress["policy_digest"],
+                    "release_sha": progress["release_sha"],
                     "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
                     "variation_id": "1",
-                    "execution_id": str(uuid4()),
+                    "observation_id": observation_id,
                     "subject_id": str(user_id),
+                    "user_id": user_id,
+                    "execution_id": str(uuid4()),
                     "success": False,
+                    "customer_outcome_evidence_sha256": "b" * 64,
+                    "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                    "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
                 },
-                event_id="experiment.observed:" + str(uuid4()),
+                event_id="experiment.postpromotion_observed:" + observation_id,
             )
             db.commit()
     # Uses original outbox stop-loss, never a submitted model verdict.
@@ -242,7 +256,7 @@ def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
         user_id = run["users"][0]
         enqueue(
             db,
-            "experiment.observed",
+            "experiment.postpromotion_observed",
             run["id"],
             {
                 "assignment_stage": "approved_rollout",
@@ -261,7 +275,7 @@ def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
                 "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
                 "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
             },
-            event_id="experiment.observed:" + observation_id,
+            event_id="experiment.postpromotion_observed:" + observation_id,
         )
         db.commit()
     assert training.request_postpromotion_regression_rechecks() == 0
@@ -302,7 +316,7 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         user_id = run["users"][0]
         enqueue(
             db,
-            "experiment.observed",
+            "experiment.postpromotion_observed",
             run["id"],
             {
                 "assignment_stage": "approved_rollout",
@@ -321,7 +335,7 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
                 "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
                 "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
             },
-            event_id="experiment.observed:" + observation_id,
+            event_id="experiment.postpromotion_observed:" + observation_id,
         )
         db.flush()
         snapshot = training.postpromotion_effect_snapshot(
