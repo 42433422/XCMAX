@@ -585,3 +585,64 @@ def test_report_revalidation_rejects_tampered_verdict(verifier):
         verifier.run.metadata["runtime_goal_contract"], verifier.rows, verifier.output, [], report
     )
     assert not coverage["completed"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "receipt_missing",
+        "late_success_after_timeout",
+        "late_success_after_cancel",
+        "contradictory_terminal",
+        "state_missing",
+    ],
+)
+def test_terminal_receipt_negative_controls_never_mark_completed(verifier, failure):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state, receipt_verified
+
+    row = verifier.rows[0]
+    if failure == "receipt_missing":
+        row.pop("receipt")
+    elif failure == "late_success_after_timeout":
+        row["state"] = "timed_out"
+    elif failure == "late_success_after_cancel":
+        row["state"] = "cancelled"
+    elif failure == "contradictory_terminal":
+        row["receipt"]["status"] = "failed"
+    else:
+        row.pop("state")
+    assert receipt_state(row) == "unknown"
+    assert receipt_verified(row) is False
+
+    # Even if another child is genuinely complete, the parent must preserve
+    # the original uncertain side effect rather than resubmit either action.
+    state, result = verifier.classify(None)
+    assert state == "blocked"
+    assert result["execution_state"] == "unknown"
+    assert result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
+    assert result["needs_verification"] is True
+    assert result["retryable"] is False
+    assert result["business_completed"] is False
+    assert result["verified_operations"] is False
+    assert result["ok"] is False
+
+
+def test_late_success_cannot_overwrite_an_older_unknown_execution_receipt(verifier):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state
+
+    original = verifier.rows[0]
+    original["state"] = "unknown"
+    original["receipt"]["status"] = "completed"
+    original["receipt"]["success"] = True
+    original["receipt"]["verified"] = True
+    assert receipt_state(original) == "unknown"
+    assert verifier.classify(None)[0] == "blocked"
+
+
+def test_settle_target_matches_unknown_effect_protection_of_task_lifecycle():
+    from app.domain.task_lifecycle.control import settle_target
+
+    for state in ("failed", "cancelled", "timed_out", "paused", "unknown"):
+        target, code = settle_target(state, "timeout", 4, open_effects=True)
+        assert (target, code) == ("unknown", "needs_verification")
