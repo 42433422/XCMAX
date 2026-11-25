@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CustomerCreate(BaseModel):
@@ -77,3 +77,38 @@ class CustomerListResponse(BaseModel):
     page: int
     per_page: int
     count: int
+
+class CustomerCompatMutation(BaseModel):
+    """Validated legacy /customers write contract; never trust client tenant fields."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    customer_name: str | None = Field(default=None, max_length=200)
+    name: str | None = Field(default=None, max_length=200)
+    unit_name: str | None = Field(default=None, max_length=200)
+    contact_person: str | None = Field(default=None, max_length=100)
+    contact_phone: str | None = Field(default=None, max_length=50)
+    contact_address: str | None = Field(default=None, max_length=500)
+    address: str | None = Field(default=None, max_length=500)
+    expected_version: int | None = Field(default=None, ge=0)
+
+    @field_validator("expected_version", mode="before")
+    @classmethod
+    def strict_expected_version(cls, value: object) -> int | None:
+        if value is None:
+            return None
+        if type(value) is int:
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        raise ValueError("expected_version must be a nonnegative integer")
+
+    @model_validator(mode="after")
+    def reject_conflicting_aliases(self):
+        for values in (
+            (self.customer_name, self.name, self.unit_name),
+            (self.contact_address, self.address),
+        ):
+            if len({value for value in values if value}) > 1:
+                raise ValueError("Conflicting customer field aliases")
+        return self

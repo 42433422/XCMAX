@@ -32,17 +32,45 @@ def _db_error(message: str) -> OperationalError:
 
 
 class TestGetCustomersSession:
-    def test_fallback_to_session_local(self):
+    @pytest.mark.parametrize(
+        "error",
+        [ImportError("no mod"), RuntimeError("provider broken"), _db_error("db unavailable")],
+    )
+    def test_resolver_error_never_falls_back_to_host_database(self, error):
         with (
             patch(
                 "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-                side_effect=ImportError("no mod"),
+                side_effect=error,
             ),
-            patch("app.db.SessionLocal") as mock_sl,
+            patch("app.db.SessionLocal") as host_session,
         ):
-            get_customers_session()
-            mock_sl.assert_called_once()
+            with pytest.raises(type(error)):
+                get_customers_session()
+            host_session.assert_not_called()
 
+    def test_selected_session_is_authoritative(self):
+        selected = MagicMock()
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                return_value=selected,
+            ),
+            patch("app.db.SessionLocal") as host_session,
+        ):
+            assert get_customers_session() is selected
+            host_session.assert_not_called()
+
+    def test_missing_session_fails_instead_of_falling_back(self):
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                return_value=None,
+            ),
+            patch("app.db.SessionLocal") as host_session,
+        ):
+            with pytest.raises(RuntimeError, match="did not provide a session"):
+                get_customers_session()
+            host_session.assert_not_called()
 
 # ---------------------------------------------------------------------------
 # reset_customers_engine
