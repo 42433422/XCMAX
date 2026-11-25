@@ -534,14 +534,15 @@ def evaluate_review(
     p = expected.get("probability_of_target")
     value = expected.get("expected_metric_value")
     cost = expected.get("expected_accrued_cost_cents")
-    if any(
-        number is not None
-        and (
-            type(number) not in (int, float)
-            or not math.isfinite(number)
+    if (
+        any(
+            number is not None
+            and (type(number) not in (int, float) or not math.isfinite(number))
+            for number in (p, value, cost)
         )
-        for number in (p, value, cost)
-    ) or (p is not None and not 0 <= p <= 1) or (cost is not None and cost < 0):
+        or (p is not None and not 0 <= p <= 1)
+        or (cost is not None and cost < 0)
+    ):
         return {"status": "unscorable_invalid_frozen_forecast", "option_id": selected}
     return {
         "status": "independent_measurement_verified",
@@ -573,9 +574,7 @@ def evaluate_review(
     }
 
 
-def decision_quality_report(
-    owner_user_id: int, *, as_of: datetime | None = None
-) -> dict[str, Any]:
+def decision_quality_report(owner_user_id: int, *, as_of: datetime | None = None) -> dict[str, Any]:
     """Read-only forecast-error audit from original approved, settled SQL receipts.
 
     This is descriptive verification, not a causal business impact estimate or
