@@ -16,12 +16,12 @@ const useLifeStore = defineStore('xiaoc-enterprise-life', () => {
   let channel: BroadcastChannel | undefined
   let readInFlight: Promise<void> | undefined
 
-  async function refresh(clearError = true): Promise<void> {
+  async function refresh(): Promise<void> {
     if (actor === undefined) return
     if (readInFlight) return readInFlight
     const epoch = generation
     const sequence = ++readSequence
-    if (clearError) error.value = ''
+    // Keep the previous failure visible until an authoritative read succeeds.
     loading.value = true
     const request = (async () => {
       try {
@@ -33,8 +33,9 @@ const useLifeStore = defineStore('xiaoc-enterprise-life', () => {
         }
       } catch (failure) {
         if (epoch !== generation || sequence !== readSequence) return
-        error.value =
-          failure instanceof ApiError && failure.status === 403 ? '当前账号无法管理企业小 C。' : '暂时无法读取小 C 状态，请刷新重试。'
+        const accessDenied = failure instanceof ApiError && (failure.status === 401 || failure.status === 403)
+        if (accessDenied) state.value = null
+        error.value = accessDenied ? '当前账号无法管理企业小 C。' : '暂时无法读取小 C 状态，请刷新重试。'
       } finally {
         if (epoch === generation && sequence === readSequence) loading.value = false
       }
@@ -45,7 +46,7 @@ const useLifeStore = defineStore('xiaoc-enterprise-life', () => {
   }
 
   function invalidate() {
-    if (!saving.value && document.visibilityState !== 'hidden') void refresh(false)
+    if (!saving.value && document.visibilityState !== 'hidden') void refresh()
   }
 
   function stop() {
@@ -99,7 +100,7 @@ const useLifeStore = defineStore('xiaoc-enterprise-life', () => {
     operation: (revision: number) => Promise<XiaoCLifeState>,
     expectedRevision = state.value?.revision,
   ): Promise<boolean> {
-    if (actor === undefined || saving.value || expectedRevision === undefined) return false
+    if (actor === undefined || !state.value || saving.value || error.value || expectedRevision === undefined) return false
     const epoch = generation
     readSequence += 1
     readInFlight = undefined
@@ -115,7 +116,7 @@ const useLifeStore = defineStore('xiaoc-enterprise-life', () => {
     } catch (failure) {
       if (epoch !== generation) return false
       const conflict = failure instanceof ApiError && failure.status === 409
-      await refresh(false)
+      await refresh()
       if (epoch !== generation) return false
       error.value = conflict
         ? '企业设置已在其他窗口更新。已读取最新状态，请核对后再修改。'

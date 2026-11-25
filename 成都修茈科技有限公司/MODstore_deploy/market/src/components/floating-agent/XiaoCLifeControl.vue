@@ -16,7 +16,7 @@ const triggerRef = ref<HTMLButtonElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
 const marks = { 1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4', 5: 'L5', 6: 'L6' }
 const label = computed(() =>
-  life.state ? `L${life.state.level} · ${xiaocLevelLabels[life.state.level] ?? '模式待核实'}` : '正在读取自主模式',
+  life.state ? `L${life.state.level} · ${xiaocLevelLabels[life.state.level] ?? '模式待核实'}` : life.loading ? '正在读取自主模式' : '自主模式待核实',
 )
 const activity = computed(() =>
   life.error
@@ -63,7 +63,7 @@ function selectLevel(value: number | number[]) {
 }
 
 async function changeLevel(value: number | number[]) {
-  if (!isLevel(value) || !life.state) return
+  if (!isLevel(value) || !life.state || life.error || life.saving) return
   if (props.compact) {
     selection.value = value
     return
@@ -173,21 +173,21 @@ async function applyLevel() {
       </div>
       <span>全企业生效</span>
       <div v-if="!compact" class="xiaoc-life-control__actions">
-      <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
+      <button v-if="life.state?.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">
         启动自主活动
       </button>
       <template v-else-if="life.state">
-        <button type="button" :disabled="life.saving" @click="life.save({ paused: !life.state.paused })">
+        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">
           {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
         </button>
-        <button type="button" :disabled="life.saving" @click="life.save({ stopped: true })">停止自主活动</button>
+        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
       </template>
       </div>
     </div>
     <div v-if="compact" class="xiaoc-life-control__preview" aria-live="polite" aria-atomic="true">
       <strong>{{ life.state ? (selection === life.state.level ? previewLabel : '预选 ' + previewLabel) : label }}</strong>
       <span v-if="life.state">{{ modeDescriptions[selection] }}</span>
-      <span v-if="life.state" class="xiaoc-life-control__applied">{{ selection === life.state.level ? '已应用' : '当前已应用 ' + label }}</span>
+      <span v-if="life.state" class="xiaoc-life-control__applied">{{ life.error ? '上次读取的设置，当前状态待核实' : selection === life.state.level ? '已应用' : '当前已应用 ' + label }}</span>
     </div>
     <ElSlider
       :data-autonomy-preview="compact ? selection : undefined"
@@ -198,25 +198,25 @@ async function applyLevel() {
       :marks="marks"
       show-stops
       :show-tooltip="!compact"
-      :disabled="!life.state || life.saving || (compact && !!life.error)"
+      :disabled="!life.state || life.saving || !!life.error"
       :format-tooltip="(value: number) => `L${value} · ${xiaocLevelLabels[value]}`"
       v-bind="{ ariaLabel: '小 C 全企业自主等级' }"
       @update:model-value="selectLevel"
       @change="changeLevel"
     />
     <div class="xiaoc-life-control__foot">
-      <span role="status">{{ life.state ? activity : '尚未读取运行状态' }}</span>
+      <span role="status">{{ life.error ? activity : life.state ? activity : '尚未读取运行状态' }}</span>
       <button type="button" @click="openLife">目标与预算</button>
     </div>
     <div v-if="compact" class="xiaoc-life-control__actions">
-    <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
+    <button v-if="life.state?.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">
       启动自主活动
     </button>
     <template v-else-if="life.state">
-      <button type="button" :disabled="life.saving" @click="life.save({ paused: !life.state.paused })">
+      <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">
         {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
       </button>
-      <button type="button" :disabled="life.saving" @click="life.save({ stopped: true })">停止自主活动</button>
+      <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
     </template>
     </div>
     <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
