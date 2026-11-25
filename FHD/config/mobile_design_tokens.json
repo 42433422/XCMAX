@@ -293,8 +293,8 @@
           "app-radius-md": "{radius.medium}",
           "app-radius-lg": "18px",
           "app-radius-xl": "24px",
-          "app-focus-ring": "0 0 0 3px rgba(24, 144, 255, 0.18)",
-          "app-transition-fast": "160ms ease",
+          "app-focus-ring": "0 0 0 var(--xc-token-focus-ring-width) rgba(24, 144, 255, var(--xc-token-focus-ring-alpha))",
+          "app-transition-fast": "var(--xc-token-motion-feedback-ms) ease",
           "app-transition-medium": "240ms cubic-bezier(0.2, 0.8, 0.2, 1)"
         },
         "office": {

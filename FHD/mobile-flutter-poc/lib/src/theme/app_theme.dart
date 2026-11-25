@@ -68,6 +68,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: scheme,
+      focusColor: brand.withValues(alpha: DesignTokens.focusRingAlpha),
       extensions: const [XcagiThemeColors.light],
       scaffoldBackgroundColor: page,
       appBarTheme: const AppBarTheme(
@@ -167,6 +168,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: scheme,
+      focusColor: darkBrand.withValues(alpha: DesignTokens.focusRingAlpha),
       extensions: const [XcagiThemeColors.dark],
       scaffoldBackgroundColor: darkBg,
       appBarTheme: const AppBarTheme(

@@ -61,6 +61,8 @@ void main() {
     expect(XcagiThemeColors.dark.surface.toARGB32(), _argb(dark['dark_surface'] as String));
     expect(DesignTokens.motionStandardMs, (tokens['motion'] as Map)['standard_ms']);
     expect(DesignTokens.motionReducedMs, 0);
+    expect(AppTheme.light().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
+    expect(AppTheme.dark().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
   });
 
   test('message avatar layout keeps stable Flutter geometry', () {

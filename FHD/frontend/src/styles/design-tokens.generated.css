@@ -225,8 +225,8 @@
   --xc-token-desktop-office-base-app-radius-md: var(--xc-token-radius-medium);
   --xc-token-desktop-office-base-app-radius-lg: 18px;
   --xc-token-desktop-office-base-app-radius-xl: 24px;
-  --xc-token-desktop-office-base-app-focus-ring: 0 0 0 3px rgba(24, 144, 255, 0.18);
-  --xc-token-desktop-office-base-app-transition-fast: 160ms ease;
+  --xc-token-desktop-office-base-app-focus-ring: 0 0 0 var(--xc-token-focus-ring-width) rgba(24, 144, 255, var(--xc-token-focus-ring-alpha));
+  --xc-token-desktop-office-base-app-transition-fast: var(--xc-token-motion-feedback-ms) ease;
   --xc-token-desktop-office-base-app-transition-medium: 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --xc-token-desktop-office-primary-color: #0b72d9;
   --xc-token-desktop-office-secondary-color: #616161;
