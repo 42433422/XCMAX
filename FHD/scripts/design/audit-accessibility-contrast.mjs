@@ -6,6 +6,22 @@ import { readFileSync } from 'node:fs';
 const root = new URL('../../', import.meta.url);
 const tokens = JSON.parse(readFileSync(new URL('config/mobile_design_tokens.json', root), 'utf8'));
 const dialog = readFileSync(new URL('frontend/src/components/ConfirmDialog.vue', root), 'utf8');
+const generatedCss = readFileSync(new URL('frontend/src/styles/design-tokens.generated.css', root), 'utf8');
+
+function resolveColor(value, seen = []) {
+  if (value === 'white') return '#FFFFFF';
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+  const reference = /^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(#[0-9a-f]{6}))?\s*\)$/i.exec(value ?? '');
+  if (!reference) throw Error('Unsupported color expression: ' + value);
+  const key = reference[1];
+  if (seen.includes(key)) throw Error('Cyclic CSS reference: ' + key);
+  // Never treat a fallback as proof of the actual generated token value.
+  const declaration = generatedCss.split('\n').find(line => line.trim().startsWith(key + ':'));
+  if (!declaration) throw Error('Missing generated CSS token: ' + key);
+  const raw = declaration.slice(declaration.indexOf(':') + 1).replace(/;\s*$/, '').trim();
+  return resolveColor(raw, [...seen, key]);
+}
+
 
 function token(path, ancestors = []) {
   if (ancestors.includes(path)) throw Error('Cyclic token: ' + path);
@@ -41,7 +57,7 @@ const lightSurface = tokens.semantic?.light?.surface ? 'semantic.light.surface' 
 const lightPrimary = tokens.semantic?.light?.primary ? 'semantic.light.primary' : 'colors.brand.primary';
 function pair(label, fg, bg, minimum = 4.5) {
   try {
-    const foreground = fg(), background = bg();
+    const foreground = resolveColor(fg()), background = resolveColor(bg());
     const ratio = contrast(foreground, background);
     rows.push({ label, foreground, background, ratio: Number(ratio.toFixed(4)), minimum,
       result: ratio >= minimum ? 'PASS_STATIC_PAIR' : 'FAIL_STATIC_PAIR' });
