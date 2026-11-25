@@ -528,7 +528,8 @@ def evaluate_review(
         started_at = _date(state["tasks"][selected]["started_at"])
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
-    if not frozen_at <= approved_at <= started_at <= now:
+    # A forecast captured at the approval instant is not verifiably pre-decision.
+    if not frozen_at < approved_at <= started_at <= now:
         return {"status": "unscorable_prediction_timing", "option_id": selected}
     expected = option["forecast"]
     p = expected.get("probability_of_target")
