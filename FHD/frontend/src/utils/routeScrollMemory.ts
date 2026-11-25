@@ -1,3 +1,11 @@
+/** Only the mounted page for this exact route may receive its saved scroll offsets.
+ * A Suspense fallback or a leaving page can still occupy the shell during navigation. */
+export function findRouteScrollRoot(container: ParentNode, fullPath: string): Element | null {
+  const roots = Array.from(container.querySelectorAll('.route-view-shell[data-route-scroll-key]'))
+    .filter(root => root.getAttribute('data-route-scroll-key') === fullPath)
+  return roots.length === 1 ? roots[0] : null
+}
+
 /** Bounded scroll restoration. Scan once when leaving, restore by structural paths.
  * Avoid repeated all-descendant layout reads on every route switch. */
 export class RouteScrollMemory {
@@ -12,7 +20,7 @@ export class RouteScrollMemory {
     while (current && positions.length < this.maxScrollers) {
       // Reading scrollTop/Left avoids forcing three separate box measurements
       // for each DOM element, which made large ERP pages slow to leave.
-      if (current instanceof HTMLElement && (current.scrollTop > 0 || current.scrollLeft > 0)) {
+      if (current instanceof HTMLElement && (current.scrollTop !== 0 || current.scrollLeft !== 0)) {
         const path = pathFromRoot(root, current)
         if (path) positions.push({
           path, tag: current.tagName, id: current.id, className: current.className,
@@ -30,9 +38,12 @@ export class RouteScrollMemory {
     }
   }
 
-  restore(route: string, root: Element | null): void {
-    if (!root) return
-    for (const position of this.routes.get(route) || []) {
+  restore(route: string, root: Element | null): boolean {
+    const positions = this.routes.get(route) || []
+    if (!positions.length) return true
+    if (!root) return false
+    let restored = true
+    for (const position of positions) {
       let target: Element | undefined = root
       for (const index of position.path) {
         target = target?.children.item(index) || undefined
@@ -40,10 +51,15 @@ export class RouteScrollMemory {
       }
       // Content can change across navigation. Never restore to a different node.
       if (!(target instanceof HTMLElement) || target.tagName !== position.tag
-        || target.id !== position.id || target.className !== position.className) continue
+        || target.id !== position.id || target.className !== position.className) {
+        restored = false
+        continue
+      }
       target.scrollTop = position.top
       target.scrollLeft = position.left
+      if (Math.abs(target.scrollTop - position.top) > 1 || Math.abs(target.scrollLeft - position.left) > 1) restored = false
     }
+    return restored
   }
 
   clear(): void { this.routes.clear() }
