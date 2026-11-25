@@ -28,6 +28,11 @@ def db_factory(monkeypatch):
     FinancialTransaction.__table__.create(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr("app.db.SessionLocal", factory)
+    # The original CRM voucher is read independently of any supplied dict.
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
+        lambda invoice_id: invoice() if invoice_id == 9 else None,
+    )
     try:
         yield factory
     finally:
@@ -73,7 +78,7 @@ def test_same_reference_with_changed_amount_or_status_is_conflict(db_factory):
             outcome = archive.archive_from_crm_invoice(changed)
             assert outcome == {
                 "archived": False,
-                "reason_code": "invoice_archive_conflict",
+                "reason_code": "invoice_source_conflict",
             }
         with db_factory() as db:
             rows = db.scalars(select(FinancialTransaction)).all()
@@ -229,6 +234,27 @@ def test_insert_must_be_independently_read_back(db_factory, monkeypatch):
         "archived": False,
         "reason_code": "invoice_archive_readback_failed",
     }
+
+
+def test_original_source_missing_or_changed_does_not_archive(db_factory, monkeypatch):
+    import app.domain.shared_services.user_cs_crm_store as store
+
+    monkeypatch.setattr(store, "get_crm_invoice_by_id", lambda invoice_id: None)
+    with tenant_scope(7):
+        result = archive.archive_from_crm_invoice(invoice())
+        assert result["reason_code"] == "invoice_source_missing"
+        with db_factory() as db:
+            assert db.scalars(select(FinancialTransaction)).all() == []
+
+    monkeypatch.setattr(
+        store, "get_crm_invoice_by_id",
+        lambda _invoice_id: invoice(amount_cents=730),
+    )
+    with tenant_scope(7):
+        result = archive.archive_from_crm_invoice(invoice())
+        assert result["reason_code"] == "invoice_source_conflict"
+        with db_factory() as db:
+            assert db.scalars(select(FinancialTransaction)).all() == []
 
 
 def test_invoice_rebuild_refuses_source_mutation_between_scans(monkeypatch):
