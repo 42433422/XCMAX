@@ -30,6 +30,10 @@ class StateQuery(EmptyInput):
     entity_id: str | None = Field(default=None, min_length=1, max_length=160)
     limit: int = Field(default=10, ge=1, le=20, strict=True)
     force_refresh: bool = False
+    # Verify a remembered fact against ERP again, never against the TTL cache.
+    expected_source_version: str | None = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
     as_of: AwareDatetime | None = None
     scenario_delivery_quantity: str | None = Field(
         default=None, max_length=32, pattern=r"^[0-9]+(?:\.[0-9]{1,4})?$"
@@ -47,6 +51,12 @@ class StateQuery(EmptyInput):
             self.entity_id is None or self.entity_type != "order"
         ):
             raise ValueError("delivery_scenario_requires_single_order")
+        if self.expected_source_version is not None and (
+            self.entity_id is None
+            or self.as_of is not None
+            or self.scenario_delivery_quantity is not None
+        ):
+            raise ValueError("fact_verification_requires_single_current_entity")
         return self
 
 
