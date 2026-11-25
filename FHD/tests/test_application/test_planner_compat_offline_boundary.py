@@ -307,3 +307,41 @@ def test_no_unreviewed_direct_legacy_business_or_offline_dispatch_callers():
             if name in callers:
                 callers[name].add(path.relative_to(root).as_posix())
     assert callers == allowed, f"Review/migrate legacy direct dispatch callers: {callers}"
+
+
+@pytest.mark.asyncio
+async def test_offline_saved_replay_requires_current_read_authorization(monkeypatch):
+    """A revoked raw-data token must block JSON and SSE before receipt replay."""
+    business = Mock(side_effect=AssertionError("no offline business call after revocation"))
+    admission, paths = _components(business)
+    checks = []
+
+    def denied(_request, *, message, provided_token):
+        checks.append((message, provided_token))
+        return False, {"token_name": "DB_READ_TOKEN", "message": "重新授权后查询"}
+
+    admission = replace(admission, authorize_read=denied, requires_read=lambda _m: True)
+    prepare = Mock(side_effect=AssertionError("must not read a cached result before auth"))
+    monkeypatch.setattr("app.application.ai_chat.dialogue_memory.prepare_chat_turn", prepare)
+    trace = Mock(side_effect=lambda payload, **_kwargs: payload)
+    executor = Mock()
+    executor.trace.attach.side_effect = lambda payload, *_args, **_kwargs: payload
+    app = CompatChatApplication(
+        admission, executor, paths, Mock(), Mock(), lambda _r: "standard",
+        lambda: 5, AsyncMock(),
+    )
+    stream = CompatStream(
+        admission, paths, Mock(), trace,
+        lambda payload: (json.dumps(payload, ensure_ascii=False) + "\n").encode(),
+        lambda _r: "standard", AsyncMock(), logging.getLogger(__name__),
+    )
+    body = XcagiCompatChatBody(message="查询原始数据库", mode="offline")
+    json_result = await app.single(Mock(), body)
+    events = [json.loads(chunk) async for chunk in stream.run(Mock(), body)]
+    assert json_result["requires_token"] is True
+    assert json_result["token_name"] == "DB_READ_TOKEN"
+    assert events[-1]["result"] == json_result
+    assert len(checks) == 2
+    prepare.assert_not_called()
+    business.assert_not_called()
+    executor.execute.assert_not_called()
