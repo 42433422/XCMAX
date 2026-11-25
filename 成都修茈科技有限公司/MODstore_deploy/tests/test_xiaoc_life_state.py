@@ -814,6 +814,89 @@ def test_explicit_stop_survives_new_sessions_and_requires_explicit_start(databas
     )
 
 
+@pytest.mark.parametrize(
+    ("command", "status"),
+    [
+        ({"paused": False, "stopped": False}, "thinking"),
+        ({"paused": True}, "paused"),
+        ({"stopped": True}, "stopped"),
+    ],
+)
+def test_repeating_lifecycle_command_preserves_cycle_and_state(
+    database, monkeypatch, command, status
+):
+    now = datetime(2026, 11, 23, 4, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    initial = configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    store.record_cycle_phase(claim, "observe")
+    if status != "thinking":
+        store.update_settings(
+            LifeUpdate(expected_revision=initial["revision"], **command), actor_user_id=7
+        )
+    before = store.read_state()
+    with database() as session:
+        cycle = json.loads(session.get(XiaoCLifeState, before["identity_id"]).state_json)[
+            "active_cycle"
+        ]
+    assert before["status"] == status
+    assert before["activity"]["id"] == cycle["cycle_id"] == claim["cycle_id"]
+    assert before["budget"]["cycles"] == 1
+    assert before["budget"]["reserved_tokens"] == 200
+    assert cycle["lease_token"] == claim["lease_token"]
+    now += timedelta(seconds=1)
+    result = store.update_settings(
+        LifeUpdate(expected_revision=before["revision"], **command), actor_user_id=7
+    )
+    for field in (
+        "identity_id",
+        "revision",
+        "state_version",
+        "activity",
+        "budget",
+        "next_wake_at",
+        "updated_at",
+        "events",
+    ):
+        assert result[field] == before[field]
+    with database() as session:
+        row = session.get(XiaoCLifeState, before["identity_id"])
+        assert json.loads(row.state_json)["active_cycle"] == cycle
+    assert store.cycle_active(claim) is (status == "thinking")
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [{"level": 5}, {"mission": "更新企业使命"}, {"policy": {"daily_cycle_limit": 8}}],
+)
+def test_repeated_lifecycle_flag_does_not_skip_settings_update(database, settings):
+    initial = configure()
+    paused = store.update_settings(
+        LifeUpdate(expected_revision=initial["revision"], paused=True), actor_user_id=7
+    )
+    updated = store.update_settings(
+        LifeUpdate(expected_revision=paused["revision"], paused=True, **settings), actor_user_id=7
+    )
+    assert updated["paused"]
+    assert updated["revision"] == paused["revision"] + 1
+    assert updated["state_version"] == paused["state_version"] + 1
+    for field, value in settings.items():
+        if field == "policy":
+            assert updated["policy"]["daily_cycle_limit"] == value["daily_cycle_limit"]
+        else:
+            assert updated[field] == value
+
+
+def test_repeated_lifecycle_command_still_checks_expected_revision(database):
+    initial = configure()
+    command = LifeUpdate(expected_revision=initial["revision"], paused=True)
+    paused = store.update_settings(command, actor_user_id=7)
+    with pytest.raises(LifePolicyError, match="全企业自主设置已变动"):
+        store.update_settings(command, actor_user_id=7)
+    assert store.read_state()["state_version"] == paused["state_version"]
+
+
 def test_budget_exhaustion_blocks_even_zero_token_new_cycle(database):
     configure(daily_token_limit=200, exploration_percent=0)
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)

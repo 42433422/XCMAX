@@ -459,10 +459,21 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
                 reflection_template(policy.retort_template_id, actor_user_id)
             data["policy"] = policy.model_dump()
             data["owner_user_id"] = actor_user_id
-        if body.stopped is not None:
-            data["stopped"] = body.stopped
-        if data.get("stopped") and body.paused is False:
+        was_stopped, was_paused = data.get("stopped", False), data["paused"]
+        stopped = was_stopped if body.stopped is None else body.stopped
+        if stopped and body.paused is False:
             raise LifePolicyError("已停止的自主活动须由管理员明确启动")
+        paused = stopped or (was_paused if body.paused is None else body.paused)
+        if (
+            (body.stopped is not None or body.paused is not None)
+            and (stopped, paused) == (was_stopped, was_paused)
+            and body.level is None
+            and body.mission is None
+            and body.policy is None
+        ):
+            return
+        if body.stopped is not None:
+            data["stopped"] = stopped
         for name in ("level", "paused", "mission"):
             if (value := getattr(body, name)) is not None:
                 data[name] = value.strip() if isinstance(value, str) else value
