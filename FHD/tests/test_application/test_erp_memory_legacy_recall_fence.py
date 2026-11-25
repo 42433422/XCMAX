@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.application.user_memory import projections, retrieve
+from app.application.user_memory.queries import MemoryQueries, QueryPorts
 from app.domain.user_memory.policy import is_erp_bound_memory
 
 
@@ -78,6 +79,19 @@ def test_legacy_and_vector_recall_exclude_erp_fact_without_actor_rbac(monkeypatc
     )
     assert retrieve.recall_authoritative_memories(OWNER, "secret") == []
     assert "secret" not in str(retrieve.relation_recall_hits(OWNER, "secret", memory_service=authority))
+
+    # The Agent's direct MemoryV2 formatter is another original recall path.
+    formatter = MemoryQueries(
+        access=SimpleNamespace(),
+        ports=QueryPorts(
+            normalize_type=lambda value: value,
+            normalize_status=lambda value: value,
+            list_memories=authority.list_memories,
+        ),
+    )
+    prompt = formatter.format_memory_v2_for_prompt(OWNER)
+    assert "secret" not in prompt
+    assert "简洁报告" in prompt
 
 
 def test_erp_bound_memory_is_removed_not_upserted_to_replicas(monkeypatch):
