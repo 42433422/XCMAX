@@ -74,6 +74,7 @@ class CandidateMemory:
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
         activate_personal_capture: bool = False,
+        activate_reviewed_capture: bool = False,
     ) -> dict[str, Any]:
         """Persist a candidate or activate an authorized personal capture in one commit."""
         normalized_type = self.ports.normalize_type(memory_type)
@@ -92,7 +93,25 @@ class CandidateMemory:
             and governance["source_policy"] == "observed_pending"
             and bool(governance["evidence"])
         )
-        activate = activate_personal_capture and personal_capture
+        review = next(
+            (
+                item.get("auto_review")
+                for item in governance["evidence"]
+                if isinstance(item.get("auto_review"), dict)
+            ),
+            None,
+        )
+        reviewed_enterprise = (
+            user_id.startswith("enterprise-memory:v1:")
+            and governance["source"] == "chat_trace"
+            and governance["source_policy"] == "observed_pending"
+            and isinstance(review, dict)
+            and review.get("policy") == "explicit-source-v1"
+            and review.get("decision") == "approve"
+        )
+        activate = (activate_personal_capture and personal_capture) or (
+            activate_reviewed_capture and reviewed_enterprise
+        )
         memory = self.access.get_memory(user_id) or self.access.new_memory(user_id)
         fingerprint = self.ports.fingerprint(normalized_type, normalized_key, value)
         for record in memory.memory_v2_records:
@@ -140,15 +159,32 @@ class CandidateMemory:
         if candidate["status"] == "rejected":
             candidate["rejected_at"] = now
             candidate["rejected_reason"] = "source_policy_blocked"
+        if isinstance(review, dict):
+            candidate["auto_review"] = dict(review)
         if candidate["status"] == "pending":
             conflicts = relation_write_conflicts(memory.memory_v2_records, candidate)
+            same_key_conflict = activate and any(
+                row.get("status") == "active"
+                and row.get("key") == normalized_key
+                and row.get("fingerprint") != fingerprint
+                for row in memory.memory_v2_records
+            )
             if conflicts:
                 candidate["conflict_review"] = conflicts
+            if conflicts or same_key_conflict:
                 activate = False
+                if isinstance(review, dict):
+                    candidate["auto_review"] = {
+                        **review,
+                        "decision": "defer",
+                        "reason": "conflicting_active_memory",
+                    }
         if activate:
             candidate.update(
                 status="active",
-                source_policy="personal_auto_saved",
+                source_policy=(
+                    "enterprise_auto_saved" if reviewed_enterprise else "personal_auto_saved"
+                ),
                 auto_confirm_allowed=True,
                 requires_user_confirmation=False,
                 eligible_for_planner=True,

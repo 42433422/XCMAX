@@ -555,3 +555,51 @@ def test_lexical_recall_revalidates_revision_without_graph_path(monkeypatch) -> 
     assert result["chunks"] == []
     assert result["revalidation_dropped"] == 1
     assert result["coverage_complete"] is False
+
+
+
+def test_explicit_private_remember_auto_reviews_even_offline(monkeypatch) -> None:
+    service = _service()
+    backend = MagicMock()
+    backend.extract_candidates.return_value = None
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
+    )
+    result = service.capture_conversation_turn(
+        access_context=_access(), user_message="请记住：我偏好简洁报告"
+    )
+    row = result["candidates"][0]
+    assert row["status"] == "active"
+    assert row["auto_review"]["decision"] == "approve"
+    assert row["requires_user_confirmation"] is False
+    assert service.query(access_context=_access(), query="简洁报告")["memories"]
+
+    conflict = service.capture_conversation_turn(
+        access_context=_access(), user_message="请记住：我偏好详细报告"
+    )
+    assert conflict["candidates"][0]["status"] == "pending"
+    assert conflict["candidates"][0]["auto_review"]["reason"] == "conflicting_active_memory"
+
+
+def test_auto_review_respects_enterprise_scope_and_opt_out(monkeypatch) -> None:
+    service = _service()
+    backend = MagicMock()
+    message = "北辰科技位于苏州"
+    backend.extract_candidates.return_value = extract_explicit_memories(message)
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
+    )
+    result = service.capture_conversation_turn(
+        access_context=_access(actor="alice"), user_message=message, scope="tenant"
+    )
+    assert result["candidates"][0]["status"] == "active"
+    assert service.query(access_context=_access(actor="bob"), query="北辰科技")["memories"]
+    assert not service.query(
+        access_context=_access(actor="bob", tenant="other"), query="北辰科技"
+    )["memories"]
+
+    monkeypatch.setenv("XCAGI_MEMORY_AUTO_REVIEW", "0")
+    result = service.capture_conversation_turn(
+        access_context=_access(), user_message="请记住：我偏好简洁报告"
+    )
+    assert result["candidates"][0]["status"] == "pending"
