@@ -83,7 +83,8 @@ export async function patchWorkspacePrefs(
   }
   const expected_revision = observed?.revision ?? serverRevision
   assertScopeUnchanged(scope)
-  const { _revision: _ignored, ...fields } = partial
+  const fields = { ...partial }
+  delete fields._revision
   const r = await apiFetch('/api/workspace/prefs', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -146,9 +147,10 @@ export function applyWorkspacePrefsToLocalCache(prefs: WorkspacePrefs, scope?: s
 
 export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent: () => boolean = () => true): Promise<WorkspacePrefs | null> {
   try {
+    const startedScope = scope || resolveTenantStorageScopeFromRuntime(true)
     const resp = await fetchWorkspacePrefs()
     const prefs = resp.data || {}
-    if (resp.owner_id && isCurrent()) {
+    if (resp.owner_id && isCurrent() && resolveTenantStorageScopeFromRuntime(true) === startedScope) {
       if (typeof resp.revision === 'number' && Number.isSafeInteger(resp.revision) && resp.revision >= 0) {
         observedSnapshot = {
           scope: scope || resolveTenantStorageScopeFromRuntime(true),
@@ -173,6 +175,7 @@ export function queueWorkspacePrefsSync(partial: WorkspacePrefs, delayMs = 400):
   const scope = resolveTenantStorageScopeFromRuntime(true)
   if (pendingScope !== null && pendingScope !== scope) {
     pendingPatch = {} // Never send a previous account's queued settings.
+    notifyWorkspaceSyncFailed(new Error('workspace_prefs_account_changed'))
   }
   pendingScope = scope
   const employees = {
