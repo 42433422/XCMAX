@@ -402,6 +402,13 @@ async def run_runtime_task_async(
             if parent is None:
                 raise XiaoxBindingError("binding_missing", "原运行任务不存在")
             _same_owner(parent, context, owner)
+            for prefix, alternate in (("run_codex_", "run_xiaox_"), ("run_xiaox_", "run_codex_")):
+                if resolved_id.startswith(prefix) and repository.get(
+                    alternate + resolved_id[len(prefix):]
+                ) is not None:
+                    raise XiaoxBindingError(
+                        "runtime_identity_conflict", "同一请求存在两套任务记录，须核对原始回执，禁止重复执行"
+                    )
             if parent.intent != "xiaox.runtime" or parent.metadata.get("runtime_type") != "xiaox":
                 raise XiaoxBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Xiaox")
             previous = parent.metadata.get("runtime_route") or (
