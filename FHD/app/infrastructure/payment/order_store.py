@@ -42,13 +42,13 @@ def _load() -> dict[str, Any]:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
             if not isinstance(data, dict):
-                return _empty_state()
+                raise ValueError("payment ledger root must be a mapping")
             data.setdefault("orders", {})
             if not isinstance(data["orders"], dict):
-                data["orders"] = {}
+                raise ValueError("payment orders must be a mapping")
             data.setdefault("entitlements", {})
             if not isinstance(data["entitlements"], dict):
-                data["entitlements"] = {}
+                raise ValueError("payment entitlements must be a mapping")
             data.setdefault("unmatched_notifications", {})
             if not isinstance(data["unmatched_notifications"], dict):
                 # Payment evidence must not be silently discarded or overwritten.
@@ -129,6 +129,8 @@ def apply_notify_paid(
             return "invalid_notify", None
         o = orders.get(out_trade_no)
         unmatched: dict[str, Any] = data.setdefault("unmatched_notifications", {})
+        if out_trade_no in orders and not isinstance(o, dict):
+            return "order_record_corrupt", None
         if not o:
             # Signed unknown payments must leave durable, retry-idempotent
             # evidence. Never grant an entitlement or acknowledge the provider.
