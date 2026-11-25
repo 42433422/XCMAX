@@ -36,6 +36,9 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
   const text = ref('')
   let streamError: unknown = null
   let lastSeq = 0
+  let lastCursor = ''
+  let cursorReliable = true
+  let originalTurnId = ''
 
   const transport = createXcagiChatTransport({
     onEvent: (event, seq) => {
@@ -48,16 +51,21 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
     onStreamError: (error) => {
       streamError = error
     },
+    onCursor: (id) => {
+      if (!id) cursorReliable = false
+      if (cursorReliable) lastCursor = id
+    },
   })
 
   async function read(
     fetchStream: () => ReturnType<typeof transport.sendMessages>,
     signal?: AbortSignal,
+    prefix = '',
   ): Promise<AiSdkChatRoundResult> {
     streamError = null
     lastSeq = 0
-    text.value = ''
-    let finalText = ''
+    text.value = prefix
+    let finalText = prefix
     try {
       const stream = await fetchStream()
       for await (const message of readUIMessageStream<XcagiUIMessage>({
@@ -67,7 +75,7 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
         },
       })) {
         options.onMessage?.(message)
-        const value = textFromMessage(message)
+        const value = prefix + textFromMessage(message)
         if (value === finalText) continue
         finalText = value
         text.value = value
@@ -80,10 +88,21 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
   }
 
   return {
-    send: (body: Record<string, unknown>, signal?: AbortSignal) =>
-      read(() => transport.sendMessages({ body, abortSignal: signal }), signal),
-    resume: (turnId: string, signal?: AbortSignal) =>
-      read(() => transport.reconnectToStream(turnId, signal), signal),
+    send: (body: Record<string, unknown>, signal?: AbortSignal) => {
+      const context = body.context as Record<string, unknown> | undefined
+      originalTurnId = String(context?.turn_id || '')
+      lastCursor = ''
+      cursorReliable = true
+      return read(() => transport.sendMessages({ body, abortSignal: signal }), signal)
+    },
+    resume: (turnId: string, signal?: AbortSignal) => {
+      const after = cursorReliable && originalTurnId === turnId ? lastCursor : ''
+      const prefix = after ? text.value : ''
+      if (!after) lastCursor = ''
+      originalTurnId = turnId
+      cursorReliable = true
+      return read(() => transport.reconnectToStream(turnId, signal, after), signal, prefix)
+    },
     text,
   }
 }
