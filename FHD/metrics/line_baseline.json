@@ -1,5 +1,5 @@
 {
-  "lines": 2733297,
+  "lines": 2733349,
   "updated": "2026-11-25",
-  "note": "#生产交付 iOS SHA/IPA 身份门禁：相对 main 的人工维护净增163行（FHD 原工作流+60、原测试+101、CHANGELOG+2）；根工作流为生成物不计入。新增原签名制品摘要、主线 SHA 负控与真实 git 迁移回归；未改变测试/安全发布门槛，待正式 preflight 复核。"
+  "note": "#生产交付 iOS SHA/IPA 身份门禁：相对当前 main 的维护行净增215行（来源工作流、原生 Git SHA 负控、分发授权负控、CHANGELOG），仅生成根工作流不计入。安全修复冻结主线 SHA/制品摘要并默认禁止 TestFlight 分发；没有放宽覆盖率或发布门禁。当前自动 preflight 与所需审查仍需正式 CI 验证。"
 }
