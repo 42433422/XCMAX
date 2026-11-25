@@ -1,5 +1,5 @@
 {
-  "lines": 2733501,
+  "lines": 2733875,
   "updated": "2026-11-25",
-  "note": "#3620：基于 main 受保护 SHA 的 GitHub 文件级 diff，维护代码+文档净增 367 行（业务回读字段校验、客户分页上限、批量关联聚合消除 N+1 及三份真实 SQLite 回归测试、Unreleased）。这是候选源码的计算登记，原始 check_net_deletion.py、preflight 与当前 HEAD CI 尚未执行通过，必须按原脚本复核，不降低源增长、安全、覆盖率门禁。"
+  "note": "#3620：基于 main 受保护 SHA 的 GitHub 文件级 diff，维护代码+文档净增 367 行（业务回读字段校验、客户分页上限、批量关联聚合消除 N+1 及三份真实 SQLite 回归测试、Unreleased）。这是候选源码的计算登记，原始 check_net_deletion.py、preflight 与当前 HEAD CI 尚未执行通过，必须按原脚本复核，不降低源增长、安全、覆盖率门禁。；本轮补充变更（PR #3620）：新增实证门禁/数据库只读核验/事务异常回归，按 GitHub 差异统计计入 374 行（FHD/CHANGELOG.md +2；FHD/scripts/dev/pg_customer_delete_read_budget.py +277；FHD/tests/test_application/test_pg_customer_read_budget.py +95）。这是显式评审候选，未经本 SHA check_net_deletion.py、preflight 和 CI 实测，仍需独立审核，不降低原门禁。"
 }
