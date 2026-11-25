@@ -124,6 +124,8 @@ def test_incompatible_bounds_and_explicit_exclusion_block_without_cross_owner_le
 def test_candidate_source_and_success_condition_cannot_be_silently_rewritten(operating):
     now, _, state, goal, _ = operating
     assert governance_gate(goal, state["goals"], now=now)["status"] == "reviewable"
+    with_receipt = {**goal, "evidence_refs": [*goal["evidence_refs"], "strategic_portfolio:approved"]}
+    assert governance_gate(with_receipt, [with_receipt], now=now)["status"] == "reviewable"
     for field, changed in (
         ("acceptance", {**goal["acceptance"], "target": 1}),
         ("evidence_refs", ["customer-value-gap:" + "a" * 64]),
