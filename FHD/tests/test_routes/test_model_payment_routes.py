@@ -889,9 +889,12 @@ class TestRefundQuery:
                 "/api/model-payment/refund/query", params={"out_trade_no": "mp-123"}
             )
             assert r.status_code == 409
-            mock_orders.confirm_refund_from_provider_query.assert_called_once_with(
-                out_trade_no="mp-123", out_request_no="mp-123", amount_cents=991
-            ) if raw.get("refund_amount") == "9.91" and raw.get("out_trade_no") != "other" else mock_orders.confirm_refund_from_provider_query.assert_not_called()
+            if raw.get("refund_amount") == "9.91" and raw.get("out_trade_no") != "other":
+                mock_orders.confirm_refund_from_provider_query.assert_called_once_with(
+                    out_trade_no="mp-123", out_request_no="mp-123", amount_cents=991
+                )
+            else:
+                mock_orders.confirm_refund_from_provider_query.assert_not_called()
 
     def test_refund_query_failure(self, client_mp):
         with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
