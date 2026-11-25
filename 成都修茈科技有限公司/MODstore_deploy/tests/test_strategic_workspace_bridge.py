@@ -26,6 +26,7 @@ from modstore_server.integrations.repository_packages import load_repository_mod
 from modstore_server.mac_control_dispatch_api import router
 from modstore_server.models import IncidentEvent, RetortEvolutionRun
 from modstore_server.para_execution_isolation import HEADER_ONLY_PLATFORM_PROFILE
+from modstore_server.retort_feedback_recovery import _immutable_recovery
 from tests import test_strategic_company_resources as company_tests
 from tests import test_strategic_portfolio as strategic_tests
 from tests.test_strategic_remote_bridge import REPO, SOURCE, TOKEN, GitHub
@@ -113,7 +114,21 @@ def workspace(configured, monkeypatch):
         ],
     }
     protocol["protocol_digest"] = contract.digest(protocol)
-    plan = {"public_title": "Approved repair", "public_body": "Repair an ordinary report export"}
+    recovery_policy = {
+        "mode": "restore_previous_release",
+        "target": {
+            "git_sha": SOURCE,
+            "artifact_sha256": "a" * 64,
+            "image_digest": "",
+            "product_version": "1.0.0",
+            "release_id": f"xcagi-1.0.0-{SOURCE}",
+        },
+    }
+    plan = {
+        "public_title": "Approved repair",
+        "public_body": "Repair an ordinary report export",
+        "feedback_policy": {"recovery": recovery_policy},
+    }
     optimization = {"status": "awaiting_measured_baseline"}
     approval = {
         "approved": True,
@@ -127,7 +142,7 @@ def workspace(configured, monkeypatch):
         "plan": plan,
         "optimization": optimization,
         "issue_number": 123,
-        "customer_feedback": {"ticket_ids": [1]},
+        "customer_feedback": {"ticket_ids": [1], "recovery": recovery_policy},
     }
     with configured() as session:
         session.add(
@@ -610,19 +625,61 @@ def test_original_recovery_stays_pending_until_its_rollback_receipt(workspace, m
     with workspace.factory() as session:
         row = session.get(RetortEvolutionRun, workspace.request_id)
         state = json.loads(row.snapshot_json)
-        state.update(
-            impact={"status": "customer_impact_rejected"},
-            recovery={
-                "status": "rollback_verified",
-                "receipt": {"request_id": f"retort:{row.id}:rollback"},
-            },
+        effects = json.loads(row.effects_json)
+        state["impact"] = {
+            "status": "customer_impact_rejected",
+            "reason": "experiment_regression",
+        }
+        delivery = state["delivery"]
+        delivery["identity"].update(
+            image_digest="",
+            product_version="1.1.0",
+            release_id=f"xcagi-1.1.0-{delivery['release_sha']}",
         )
+        rollback_request_id = f"retort:{row.id}:rollback"
+        state["recovery"] = effects["recovery"] = {
+            "status": "rollback_verified",
+            "receipt": {"request_id": rollback_request_id},
+        }
         row.snapshot_json = json.dumps(state)
+        row.effects_json = json.dumps(effects)
+        session.commit()
+    assert not receipts.reconcile_request(workspace.request_id)
+    assert p.portfolio_status(workspace.decision_id)["tasks"]["a"]["status"] == "waiting"
+
+    target = effects["customer_feedback"]["recovery"]["target"]
+    reader = _immutable_recovery()
+    payload = reader.request_payload(
+        {
+            "request_id": rollback_request_id,
+            "expected_identity": delivery["identity"],
+            "target_identity": target,
+            "reason": state["impact"]["reason"],
+        }
+    )
+    recovery = {
+        "status": "rollback_verified",
+        "request_id": workspace.request_id,
+        "identity": target,
+        "receipt": {
+            **payload,
+            "status": "rollback_verified",
+            "identity": target,
+            "request_sha256": reader._request_digest(payload),
+        },
+        "verified_at": datetime.now(UTC).isoformat(),
+    }
+    with workspace.factory() as session:
+        row = session.get(RetortEvolutionRun, workspace.request_id)
+        state["recovery"] = effects["recovery"] = recovery
+        row.snapshot_json = json.dumps(state)
+        row.effects_json = json.dumps(effects)
         session.commit()
     assert receipts.reconcile_request(workspace.request_id)
     saved = p.portfolio_status(workspace.decision_id)["tasks"]["a"]
     assert saved["status"] == "failed"
-    assert saved["execution_receipt"]["remote_receipt"]["recovery"]["status"] == "rollback_verified"
+    assert remote.read_request(workspace.request_id)[2] == "failed"
+    assert saved["execution_receipt"]["remote_receipt"]["recovery"] == recovery
 
 
 def test_changed_original_approval_revokes_the_task_before_another_model_call(

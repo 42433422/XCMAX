@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,11 +20,13 @@ from app.db.models import (
     AiEmployeeProfile,
     Customer,
     EnterpriseEventCursor,
+    EnterpriseStateProjection,
     FinancialTransaction,
     SalesOrder,
     SalesOrderItem,
     User,
 )
+from app.db.models.employee_run_log import EmployeeRunLog
 from app.domain.enterprise_cognition.catalog import entity_catalog
 from app.infrastructure.enterprise_cognition_sources import AuthorityReader
 from app.infrastructure.tenant_scope import tenant_scope
@@ -132,7 +135,19 @@ def get(service, kind="order", entity_id="101", **kwargs):
 
 def test_catalog_names_existing_authorities():
     catalog = {row["entity_type"]: row for row in entity_catalog()}
-    assert set(catalog) == {"order", "customer", "employee", "task", "fund"}
+    assert set(catalog) == {
+        "order",
+        "customer",
+        "employee",
+        "task",
+        "fund",
+        "inventory",
+        "production",
+        "supplier",
+        "purchase_order",
+        "purchase_inbound",
+        "journal_entry",
+    }
     assert catalog["task"]["id_field"] == "task_id"
     assert all(row["read_only"] for row in catalog.values())
 
@@ -438,6 +453,8 @@ async def test_committed_orm_change_reaches_running_neurobus_and_refreshes(world
             db.get(SalesOrderItem, 401).delivered_quantity = 9
             db.commit()
         await asyncio.wait_for(delivered.wait(), timeout=2)
+        # Keep observation order monotonic without expiring the cache.
+        clock[0] += 1
         after = get(service)
         assert after["retrieved_from"] == "authority"
         assert after["state"]["remaining_quantity"] == "1.0000"
@@ -451,3 +468,477 @@ async def test_committed_orm_change_reaches_running_neurobus_and_refreshes(world
             ("after_soft_rollback", source_events._rolled_back),
         ):
             event.remove(Session, name, handler)
+
+
+def test_employee_observation_reads_scoped_role_declarations_and_persisted_load(world, monkeypatch):
+    service, sessions, clock, _ = world
+    from app.infrastructure.mods import employee_registry
+
+    class Registry:
+        def list_packs(self):
+            return [
+                {
+                    "pack_id": "employee-a",
+                    "version": "1.2.3",
+                    "employee": {"capabilities": ["Excel", "Finance review", "excel"]},
+                },
+                {
+                    "pack_id": "unrelated",
+                    "employee": {"capabilities": ["unrelated-capability"]},
+                },
+            ]
+
+    monkeypatch.setattr(employee_registry, "get_employee_registry", Registry)
+    with sessions() as db:
+        db.add(
+            User(
+                id=10,
+                username="ai-employee:employee-a",
+                password="hash",
+                tenant_id=11,
+                role="ai_employee",
+                is_active=True,
+            )
+        )
+        for status in ("running", "pending", "awaiting_approval", "unknown", "success"):
+            db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=1, status=status))
+        db.add_all(
+            [
+                EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=3, status="running"),
+                EmployeeRunLog(employee_id="other", tenant_id=11, user_id=1, status="running"),
+            ]
+        )
+        db.commit()
+    with tenant_scope(22), sessions() as db:
+        db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=22, user_id=2, status="running"))
+        db.commit()
+    first = get(service, "employee", "employee-a", force_refresh=True)
+    state = first["state"]
+    assert state["role"] == "ai_employee" and state["identity_active"] is True
+    assert state["capability_evidence"] == {
+        "status": "declared",
+        "source": "installed_employee_pack",
+        "declared": ["excel", "finance_review"],
+        "pack_version": "1.2.3",
+        "independent_verified": False,
+    }
+    assert state["workload"]["open_count"] == 4
+    assert state["workload"]["running_count"] == 1
+    assert state["workload"]["unresolved_count"] == 1
+    assert state["workload"]["capacity_verified"] is False
+    assert state["workload"]["counts"]["succeeded"] == 1
+    with sessions() as db:
+        db.add(EmployeeRunLog(employee_id="employee-a", tenant_id=11, user_id=1, status="running"))
+        db.commit()
+    clock[0] += 31
+    second = get(service, "employee", "employee-a")
+    assert second["state"]["workload"]["open_count"] == 5
+    assert second["source_version"] != first["source_version"]
+
+
+def test_employee_observation_missing_evidence_does_not_prove_availability(world, monkeypatch):
+    service, sessions, clock, _ = world
+    from app.infrastructure.mods import employee_registry
+
+    class Registry:
+        def list_packs(self):
+            return []
+
+    monkeypatch.setattr(employee_registry, "get_employee_registry", Registry)
+    state = get(service, "employee", "employee-a", force_refresh=True)["state"]
+    assert state["role"] is None and state["identity_active"] is None
+    assert state["capability_evidence"]["status"] == "unknown"
+    assert state["workload"]["status"] == "no_history"
+    assert state["workload"]["capacity_verified"] is False
+    with sessions() as db:
+        db.scalar(select(AiEmployeeProfile)).mod_id = "sales"
+        db.commit()
+    clock[0] += 1
+    state = get(service, "employee", "employee-a", force_refresh=True)["state"]
+    assert state["workload"]["status"] == "unknown"
+    assert "open_count" not in state["workload"]
+    assert state["capability_evidence"]["status"] == "unknown"
+
+
+def test_world_history_replays_only_authorized_observations(world):
+    service, sessions, clock, permissions = world
+    before = get(service)
+    assert before["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        db.get(SalesOrderItem, 401).delivered_quantity = Decimal(5)
+    clock[0] += 31
+    after = get(service)
+    assert after["state"]["remaining_quantity"] == "5.0000"
+    historical = get(service, as_of=before["observed_at"])
+    assert historical["observation"]["state"]["remaining_quantity"] == "8.0000"
+    assert historical["observation"]["source_version"] == before["source_version"]
+    assert historical["observation"]["freshness"] == "historical"
+    assert historical["business_validity_verified"] is False
+    assert historical["current_state_verified"] is False
+    assert get(service, as_of="2000-01-01T00:00:00+00:00")["knowledge_kind"] == "unknown"
+    other = service.get("order", "101", tenant_id=11, actor_id="3", as_of=after["observed_at"])
+    assert other["knowledge_kind"] == "unknown"
+    permissions.remove("tool.sales.query")
+    with pytest.raises(PermissionError):
+        get(service, as_of=before["observed_at"])
+
+
+def test_conflicting_observations_are_retained_not_last_writer_wins(world):
+    service, sessions, clock, _ = world
+    first = get(service)
+    with sessions.begin() as db:
+        db.get(SalesOrderItem, 401).delivered_quantity = Decimal(5)
+    conflict = get(service, force_refresh=True)
+    assert conflict["knowledge_kind"] == "unknown"
+    assert conflict["reason_code"] == "conflicting_observation_order"
+    history = get(service, as_of=first["observed_at"])
+    assert history["knowledge_kind"] == "unknown"
+    assert history["reason_code"] == "conflicting_observations"
+    assert {x["state"]["remaining_quantity"] for x in history["conflict_evidence"]} == {
+        "8.0000",
+        "5.0000",
+    }
+    clock[0] += 1
+    assert get(service)["state"]["remaining_quantity"] == "5.0000"
+    assert get(service, as_of=first["observed_at"])["knowledge_kind"] == "unknown"
+
+
+def test_conditional_delivery_scenario_does_not_modify_authority(world):
+    from app.domain.enterprise_cognition.world_observation import delivery_scenario
+
+    service, sessions, *_ = world
+    before = get(service)
+    scenario = delivery_scenario(before, "3")
+    assert scenario["knowledge_kind"] == "prediction"
+    assert Decimal(scenario["value"]) == 5
+    assert scenario["probability"] is None
+    assert scenario["causal_effect_verified"] is False
+    assert scenario["baseline_source_version"] == before["source_version"]
+    assert delivery_scenario(before, "99")["knowledge_kind"] == "unknown"
+    assert delivery_scenario({"freshness": "unknown"}, "3")["knowledge_kind"] == "unknown"
+    with sessions() as db:
+        assert db.get(SalesOrderItem, 401).delivered_quantity == 2
+
+
+def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer):
+    from datetime import UTC, datetime
+
+    from app.db.models.inventory import InventoryTransaction, Warehouse
+    from app.db.models.mrp import Bom, ManufacturingOrder, ManufacturingOrderLine
+    from app.db.models.product import Product
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add_all(
+            [
+                Product(id=501, tenant_id=11, name="Finished product"),
+                Warehouse(id=502, tenant_id=11, code="WORLD-W", name="Warehouse"),
+            ]
+        )
+        db.flush()
+        db.add(Bom(id=503, tenant_id=11, code="WORLD-B", product_id=501, product_name="Finished"))
+        db.flush()
+        db.add_all(
+            [
+                InventoryTransaction(
+                    id=504,
+                    tenant_id=11,
+                    transaction_type="in",
+                    product_id=501,
+                    warehouse_id=502,
+                    quantity=Decimal(3),
+                    before_quantity=Decimal(1),
+                    after_quantity=Decimal(4),
+                    transaction_date=datetime.now(UTC),
+                ),
+                ManufacturingOrder(
+                    id=505,
+                    tenant_id=11,
+                    order_no="WORLD-M",
+                    bom_id=503,
+                    product_id=501,
+                    product_name="Finished",
+                    warehouse_id=502,
+                    quantity=2,
+                    status="confirmed",
+                ),
+            ]
+        )
+        db.flush()
+        db.add(
+            ManufacturingOrderLine(
+                id=506,
+                tenant_id=11,
+                order_id=505,
+                product_id=501,
+                product_name="Finished",
+                quantity=Decimal(2),
+                consumed_quantity=Decimal(0),
+            )
+        )
+    with pytest.raises(PermissionError):
+        get(service, "inventory", "504")
+    with pytest.raises(PermissionError):
+        get(service, "production", "505")
+    permissions.update({"tool.inventory.query_transactions", "tool.mrp.query_orders"})
+    movement = get(service, "inventory", "504")
+    assert movement["knowledge_kind"] == "fact"
+    assert Decimal(movement["state"]["after_quantity"]) == 4
+    assert movement["source_last_changed"] is None
+    assert get(service, "production", "505")["state"]["status"] == "confirmed"
+    with sessions.begin() as db:
+        db.get(ManufacturingOrderLine, 506).consumed_quantity = Decimal(1)
+    assert any(
+        payload["entity_type"] == "production" and payload["entity_id"] == "505"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    updated = get(service, "production", "505")
+    assert Decimal(updated["state"]["lines"][0]["consumed_quantity"]) == 1
+    assert get(service, "inventory", "999")["knowledge_kind"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "cutoff",
+    ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"],
+)
+def test_historical_query_out_of_range_utc_fails_closed(world, cutoff):
+    service, *_ = world
+    assert get(service)["knowledge_kind"] == "fact"
+    response = get(service, as_of=cutoff)
+    assert response["knowledge_kind"] == "unknown"
+    assert response["reason_code"] == "observation_history_unavailable"
+
+
+def test_purchase_authority_read_permissions_and_committed_changes(world, observer):
+    from datetime import date
+
+    from app.db.models.inventory import Warehouse
+    from app.db.models.product import Product
+    from app.db.models.purchase import (
+        PurchaseInbound,
+        PurchaseInboundItem,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        Supplier,
+    )
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add_all(
+            [
+                Supplier(id=610, tenant_id=11, code="WORLD-S", name="Supplier A"),
+                Warehouse(id=611, tenant_id=11, code="WORLD-P-W", name="Purchasing warehouse"),
+                Product(id=612, tenant_id=11, name="Material"),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                PurchaseOrder(
+                    id=613,
+                    tenant_id=11,
+                    order_no="WORLD-P-613",
+                    supplier_id=610,
+                    warehouse_id=611,
+                    order_date=date(2026, 11, 24),
+                    status="approved",
+                ),
+                PurchaseInbound(
+                    id=614,
+                    tenant_id=11,
+                    inbound_no="WORLD-I-614",
+                    supplier_id=610,
+                    warehouse_id=611,
+                    order_id=613,
+                    inbound_date=date(2026, 11, 24),
+                    status="completed",
+                ),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                PurchaseOrderItem(
+                    id=615,
+                    tenant_id=11,
+                    order_id=613,
+                    product_id=612,
+                    quantity=Decimal(5),
+                    received_quantity=Decimal(2),
+                    unit="件",
+                ),
+                PurchaseInboundItem(
+                    id=616,
+                    tenant_id=11,
+                    inbound_id=614,
+                    product_id=612,
+                    quantity=Decimal(2),
+                    unit="件",
+                ),
+            ]
+        )
+    # The other tenant's row is committed under its own tenant context, never
+    # smuggled through the current caller's tenant-scoped write session.
+    with tenant_scope(22), sessions.begin() as db:
+        db.add(Supplier(id=617, tenant_id=22, code="WORLD-OTHER-S", name="Foreign Supplier"))
+    for kind, identity in (
+        ("supplier", "610"),
+        ("purchase_order", "613"),
+        ("purchase_inbound", "614"),
+    ):
+        with pytest.raises(PermissionError):
+            get(service, kind, identity)
+    permissions.update(
+        {
+            "tool.purchase.query_suppliers",
+            "tool.purchase.query_orders",
+            "tool.purchase.query_inbounds",
+        }
+    )
+    supplier = get(service, "supplier", "610")
+    assert supplier["knowledge_kind"] == "fact"
+    assert supplier["state"]["name"] == "Supplier A"
+    assert "contact_phone" not in supplier["state"]
+    purchase = get(service, "purchase_order", "613")
+    assert purchase["knowledge_kind"] == "fact"
+    assert purchase["state"]["items"][0]["received_quantity"] == "2.0000"
+    assert purchase["state"]["items_truncated"] is False
+    inbound = get(service, "purchase_inbound", "614")
+    assert inbound["state"]["items"][0]["quantity"] == "2.0000"
+    assert get(service, "purchase_order", "999")["knowledge_kind"] == "unknown"
+    assert get(service, "supplier", "617")["knowledge_kind"] == "unknown"
+    with sessions.begin() as db:
+        db.get(PurchaseOrderItem, 615).received_quantity = Decimal(4)
+    assert any(
+        payload["entity_type"] == "purchase_order" and payload["entity_id"] == "613"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    after = get(service, "purchase_order", "613")
+    assert after["state"]["items"][0]["received_quantity"] == "4.0000"
+    assert after["source_version"] != purchase["source_version"]
+    permissions.remove("tool.purchase.query_orders")
+    with pytest.raises(PermissionError):
+        get(service, "purchase_order", "613")
+
+
+def test_procurement_references_are_unverified_pointers_not_facts_about_targets():
+    from app.domain.enterprise_cognition.world_observation import relationship_references
+
+    source = {
+        "knowledge_kind": "fact",
+        "entity_type": "purchase_inbound",
+        "state": {"order_id": 613, "supplier_id": 610, "warehouse_id": 611},
+        "evidence": [{"source": "purchase_inbounds", "row_id": "614"}],
+    }
+    refs = relationship_references(source)
+    assert {(row["entity_type"], row["entity_id"]) for row in refs} == {
+        ("purchase_order", "613"),
+        ("supplier", "610"),
+        ("warehouse", "611"),
+    }
+    assert all(row["target_visibility_verified"] is False for row in refs)
+    assert all(row["evidence"] == source["evidence"] for row in refs)
+    assert relationship_references({**source, "knowledge_kind": "unknown"}) == []
+
+
+def test_tampered_current_projection_is_not_reused_as_authoritative_fact(world):
+    service, sessions, *_ = world
+    original = get(service)
+    assert original["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        row = db.scalar(select(EnterpriseStateProjection))
+        saved = row.snapshot_json
+        decoded = json.loads(saved)
+        decoded["state"]["remaining_quantity"] = "999"
+        row.snapshot_json = json.dumps(decoded, ensure_ascii=False)
+    unsafe = get(service)
+    assert unsafe["knowledge_kind"] == "unknown"
+    assert unsafe["reason_code"] == "observation_history_unavailable"
+    assert unsafe["evidence"] == []
+    with sessions.begin() as db:
+        db.scalar(select(EnterpriseStateProjection)).snapshot_json = saved
+    assert get(service)["state"]["remaining_quantity"] == original["state"]["remaining_quantity"]
+
+
+def test_tampered_history_cannot_validate_a_cached_current_fact(world):
+    service, sessions, *_ = world
+    assert get(service)["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        row = db.scalar(select(EnterpriseStateProjection))
+        tampered = json.loads(row.snapshot_json)
+        tampered["_observation_history"][0]["state"]["remaining_quantity"] = "1000"
+        row.snapshot_json = json.dumps(tampered, ensure_ascii=False)
+    unsafe = get(service)
+    assert unsafe["knowledge_kind"] == "unknown"
+    assert unsafe["reason_code"] == "observation_history_unavailable"
+
+
+def test_journal_entry_authority_is_scoped_without_invented_account_balances(world, observer):
+    from datetime import date
+
+    from app.db.models.accounting import JournalEntry, JournalEntryLine
+
+    service, sessions, clock, permissions = world
+    with sessions.begin() as db:
+        db.add(
+            JournalEntry(
+                id=620,
+                tenant_id=11,
+                entry_no="WORLD-J-620",
+                journal_date=date(2026, 11, 24),
+                status="posted",
+                debit_total=Decimal("10.00"),
+                credit_total=Decimal("10.00"),
+            )
+        )
+        db.flush()
+        db.add_all(
+            [
+                JournalEntryLine(
+                    id=621,
+                    tenant_id=11,
+                    entry_id=620,
+                    account_code="1122",
+                    debit=Decimal("10.00"),
+                    credit=Decimal("0.00"),
+                ),
+                JournalEntryLine(
+                    id=622,
+                    tenant_id=11,
+                    entry_id=620,
+                    account_code="6001",
+                    debit=Decimal("0.00"),
+                    credit=Decimal("10.00"),
+                ),
+            ]
+        )
+    permissions.remove("tool.finance.ledger_query")
+    with pytest.raises(PermissionError):
+        get(service, "journal_entry", "620")
+    permissions.add("tool.finance.ledger_query")
+    before = get(service, "journal_entry", "620")
+    assert before["knowledge_kind"] == "fact"
+    assert before["state"]["debit_total"] == "10.00"
+    assert before["state"]["credit_total"] == "10.00"
+    assert before["state"]["lines"][0]["account_code"] == "1122"
+    assert before["state"]["lines"][0]["debit"] == "10.00"
+    assert before["state"]["lines_truncated"] is False
+    assert "cash_balance" not in before["state"]
+    assert "accounts_receivable" not in before["state"]
+    assert "partner_name" not in before["state"]["lines"][0]
+    assert get(service, "journal_entry", "999")["knowledge_kind"] == "unknown"
+    with sessions.begin() as db:
+        db.get(JournalEntryLine, 621).account_code = "1123"
+    assert any(
+        payload["entity_type"] == "journal_entry" and payload["entity_id"] == "620"
+        for _, payload in observer
+    )
+    clock[0] += 31
+    after = get(service, "journal_entry", "620")
+    assert after["state"]["lines"][0]["account_code"] == "1123"
+    assert after["source_version"] != before["source_version"]
+    permissions.remove("tool.finance.ledger_query")
+    with pytest.raises(PermissionError):
+        get(service, "journal_entry", "620")

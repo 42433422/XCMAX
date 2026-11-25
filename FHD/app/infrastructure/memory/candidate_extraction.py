@@ -20,6 +20,14 @@ class ExtractedMemory(BaseModel):
     event: Literal["ADD"] = "ADD"
     memory_type: Literal["entity", "preference"] = "entity"
     subject: str = Field(default="", max_length=200)
+    predicate: str = Field(default="", max_length=80)
+    object: str = Field(default="", max_length=200)
+    subject_type: Literal[
+        "person", "organization", "project", "product", "place", "concept", "literal"
+    ] = "concept"
+    object_type: Literal[
+        "person", "organization", "project", "product", "place", "concept", "literal"
+    ] = "concept"
 
 
 class ExtractedMemories(BaseModel):
@@ -53,7 +61,11 @@ def extract_candidates(user_message: str) -> list[dict[str, Any]] | None:
             "speaker directly states a durable fact about themselves or their own preference. "
             "Keep project or company facts tied to their named subject. Company/customer "
             "preferences retain their named subject and must not become user preferences. "
-            "Use memory_type=entity for business facts. Return an empty memory "
+            "Use memory_type=entity for business facts. For explicitly stated binary relations, "
+            "also return predicate, object, subject_type and object_type. Subject and object "
+            "must occur verbatim in the user text and statement; use literal for scalar "
+            "attributes, and never invent identities, relations or dates. Leave relation "
+            "fields empty when unsure. Return an empty memory "
             "array when there are no asserted facts. Return at most eight memories.\n"
             + parser.get_format_instructions()
         )
@@ -69,7 +81,7 @@ def extract_candidates(user_message: str) -> list[dict[str, Any]] | None:
             ],
             timeout_seconds=15,
             temperature=0,
-            max_tokens=1500,
+            max_tokens=2400,
             provider=provider,
         )
         parsed = parser.parse(raw)
@@ -83,15 +95,34 @@ def extract_candidates(user_message: str) -> list[dict[str, Any]] | None:
         if not text or text in seen:
             continue
         seen.add(text)
+        subject = item.subject.strip()
+        predicate = item.predicate.strip()
+        object_text = item.object.strip()
+        value: dict[str, Any] = {
+            "statement": text,
+            "subject": subject,
+            "extraction_backend": "mem0",
+        }
+        if (
+            subject
+            and predicate
+            and object_text
+            and subject != object_text
+            and all(part in user_message and part in text for part in (subject, object_text))
+        ):
+            value.update(
+                predicate=predicate,
+                object=object_text,
+                entities=[
+                    {"name": subject, "type": item.subject_type, "role": "subject"},
+                    {"name": object_text, "type": item.object_type, "role": "object"},
+                ],
+            )
         result.append(
             {
                 "memory_type": item.memory_type,
                 "key": "statement." + hashlib.sha256(text.encode()).hexdigest()[:24],
-                "value": {
-                    "statement": text,
-                    "subject": item.subject.strip(),
-                    "extraction_backend": "mem0",
-                },
+                "value": value,
                 "confidence": 0.7,
             }
         )

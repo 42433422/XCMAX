@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.enterprise_cognition.goal_contract import GoalDefinition
 
@@ -14,10 +14,40 @@ class EmptyInput(BaseModel):
 
 
 class StateQuery(EmptyInput):
-    entity_type: Literal["order", "customer", "employee", "task", "fund"] = "order"
+    entity_type: Literal[
+        "order",
+        "customer",
+        "employee",
+        "task",
+        "fund",
+        "inventory",
+        "production",
+        "supplier",
+        "purchase_order",
+        "purchase_inbound",
+        "journal_entry",
+    ] = "order"
     entity_id: str | None = Field(default=None, min_length=1, max_length=160)
     limit: int = Field(default=10, ge=1, le=20, strict=True)
     force_refresh: bool = False
+    as_of: AwareDatetime | None = None
+    scenario_delivery_quantity: str | None = Field(
+        default=None, max_length=32, pattern=r"^[0-9]+(?:\.[0-9]{1,4})?$"
+    )
+
+    @model_validator(mode="after")
+    def validate_world_query(self) -> StateQuery:
+        if self.as_of is not None and (
+            self.entity_id is None
+            or self.force_refresh
+            or self.scenario_delivery_quantity is not None
+        ):
+            raise ValueError("historical_query_requires_single_entity_without_refresh_or_scenario")
+        if self.scenario_delivery_quantity is not None and (
+            self.entity_id is None or self.entity_type != "order"
+        ):
+            raise ValueError("delivery_scenario_requires_single_order")
+        return self
 
 
 class GoalQuery(EmptyInput):

@@ -13,7 +13,12 @@ from uuid import uuid4
 import pytest
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
-from retort_engine.evolution_contract import digest, freeze_request, verify_bundle
+from retort_engine.evolution_contract import (
+    digest,
+    freeze_request,
+    inspect_bundle,
+    verify_bundle,
+)
 from retort_engine.evolution_evidence import run_comparison
 from retort_engine.evolution_optimizer import CommandTrial, optimize_measured
 from retort_engine.evolution_workflow import build_evolution_graph
@@ -263,6 +268,20 @@ def test_comparison_uses_real_distinct_commits_and_keeps_domain_unrated(
         and result["score"] is None
         and result["domain_status"] == "UNRATED"
     )
+    comparison_report = result["comparison"]
+    assert comparison_report["schema"] == "retort.paired-checks/v1"
+    assert comparison_report["baseline_sha"] == protocol["source_sha"]
+    assert comparison_report["candidate_sha"] == target
+    assert comparison_report["baseline_passed"] == 0
+    assert comparison_report["candidate_passed"] == comparison_report["total"] == 1
+    assert (
+        comparison_report["bundle_digest"]
+        == result["evidence_digest"]
+        == digest(bundle)
+    )
+    pair = comparison_report["checks"][0]
+    assert pair["baseline_returncode"] == bundle["checks"][0]["before"]["returncode"]
+    assert pair["candidate_log_sha256"] == bundle["checks"][0]["after"]["log_sha256"]
     with pytest.raises(ValueError, match="isolation"):
         verify_bundle(protocol, bundle, output, run_id="42", target_sha=target)
     (output / "replay-after.log").write_text("forged")
@@ -272,6 +291,64 @@ def test_comparison_uses_real_distinct_commits_and_keeps_domain_unrated(
             bundle,
             output,
             run_id="42",
+            target_sha=target,
+            isolation="local_test",
+        )
+
+
+def test_paired_checks_pass_is_not_an_improvement_score(comparison):
+    protocol, before, after, output, target = comparison
+    git(before, "checkout", "--detach", target)
+    protocol["source_sha"] = target
+    protocol["protocol_digest"] = digest(
+        {k: v for k, v in protocol.items() if k != "protocol_digest"}
+    )
+    (after / "notes.txt").write_text("unrelated change")
+    git(after, "add", "notes.txt")
+    git(after, "commit", "-qm", "unrelated change")
+    target = git(after, "rev-parse", "HEAD")
+    bundle = run_comparison(
+        protocol,
+        before=before,
+        after=after,
+        output=output,
+        run_id="42",
+        target_sha=target,
+        isolation="local_test",
+    )
+    report = verify_bundle(
+        protocol, bundle, output, run_id="42", target_sha=target, isolation="local_test"
+    )
+    assert report["comparison"]["baseline_passed"] == 1
+    assert report["comparison"]["candidate_passed"] == 1
+    assert report["domain_status"] == "UNRATED"
+    assert report["score"] is None
+
+    (after / "value").write_text("regressed")
+    git(after, "commit", "-qam", "regression")
+    target = git(after, "rev-parse", "HEAD")
+    bundle = run_comparison(
+        protocol,
+        before=before,
+        after=after,
+        output=output,
+        run_id="43",
+        target_sha=target,
+        isolation="local_test",
+    )
+    failed = inspect_bundle(
+        protocol, bundle, output, run_id="43", target_sha=target, isolation="local_test"
+    )
+    assert failed["status"] == "checks_failed"
+    assert failed["comparison"]["baseline_passed"] == 1
+    assert failed["comparison"]["candidate_passed"] == 0
+    assert failed["domain_status"] == "UNRATED"
+    with pytest.raises(ValueError, match="independent check failed"):
+        verify_bundle(
+            protocol,
+            bundle,
+            output,
+            run_id="43",
             target_sha=target,
             isolation="local_test",
         )

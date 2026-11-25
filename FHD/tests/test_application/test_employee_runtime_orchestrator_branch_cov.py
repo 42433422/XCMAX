@@ -3,6 +3,7 @@
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.employee_runtime.orchestrator import (
     EmployeeOrchestrator,
     _resolve_depends_on,
@@ -70,20 +71,40 @@ def test_run_with_dependencies_uses_agent_run_and_returns_receipts():
     graph = CollaborationGraph()
     graph.add("root", ["worker"])
     run = NS(
+        user_id="7",
+        metadata={"runtime_context": {"tenant_id": 1}},
         plan_id="stable-plan",
         run_id="run-1",
         status="completed",
         error=None,
         final_output={"message": "done", "node_outputs": {"worker": {"ok": True}}},
-        steps=[NS(node_id="worker", status="completed", tool_id="employee", error=None)],
+        steps=[
+            NS(
+                node_id="worker",
+                step_id="step-worker",
+                status="completed",
+                tool_id="employee",
+                action="context",
+                params={"employee_id": "worker"},
+                depends_on=[],
+                output={"ok": True},
+                error=None,
+            )
+        ],
     )
     orchestrator = MagicMock()
-    orchestrator.start_run_from_plan.return_value = run
+
+    def start(**kwargs):
+        run.plan_id = kwargs["plan"].plan_id
+        return run
+
+    orchestrator.start_run_from_plan.side_effect = start
 
     with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
         result = EmployeeOrchestrator(graph).run_with_dependencies(
             "root",
             "task",
+            include_root=False,
             runtime_context={"user_id": 7, "run_id": "parent-1", "task_id": "task-1"},
         )
 
@@ -101,12 +122,26 @@ def test_failed_agent_run_is_not_reported_as_success():
     graph = CollaborationGraph()
     graph.add("root", ["worker"])
     run = NS(
+        user_id="7",
+        metadata={"runtime_context": {"tenant_id": 1}},
         plan_id="stable-plan",
         run_id="run-2",
         status="failed",
         error="tool failure",
         final_output={},
-        steps=[NS(node_id="worker", status="failed", tool_id="employee", error="tool failure")],
+        steps=[
+            NS(
+                node_id="worker",
+                step_id="step-worker",
+                status="failed",
+                tool_id="employee",
+                action="context",
+                params={"employee_id": "worker"},
+                depends_on=[],
+                output={},
+                error="tool failure",
+            )
+        ],
     )
     orchestrator = MagicMock()
     orchestrator.start_run_from_plan.return_value = run
@@ -117,3 +152,58 @@ def test_failed_agent_run_is_not_reported_as_success():
     assert result["success"] is False
     assert result["message"] == "tool failure"
     assert result["node_results"][0]["success"] is False
+
+
+def test_default_collaboration_requires_complete_root_and_worker_receipts():
+    graph = CollaborationGraph({"root": ["worker"], "worker": []})
+    worker = AgentStep(
+        node_id="worker",
+        tool_id="employee",
+        action="context",
+        params={"employee_id": "worker"},
+        status="completed",
+        output={"success": True, "employee_id": "worker"},
+    )
+    root = AgentStep(
+        node_id="root",
+        tool_id="employee",
+        action="context",
+        params={"employee_id": "root"},
+        depends_on=["worker"],
+        status="completed",
+        output={"success": True, "employee_id": "root"},
+    )
+    outputs = {"worker": dict(worker.output), "root": dict(root.output)}
+    run = AgentRun(
+        user_id="7",
+        message="task",
+        status="completed",
+        steps=[worker, root],
+        final_output={"node_outputs": outputs},
+        metadata={"runtime_context": {"tenant_id": 1}},
+    )
+    orchestrator = MagicMock()
+
+    def start(**kwargs):
+        run.plan_id = kwargs["plan"].plan_id
+        return run
+
+    orchestrator.start_run_from_plan.side_effect = start
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        result = EmployeeOrchestrator(graph).run_with_dependencies(
+            "root", "task", runtime_context={"user_id": 7}
+        )
+        plan = orchestrator.start_run_from_plan.call_args.kwargs["plan"]
+        assert [node.node_id for node in plan.nodes] == ["worker", "root"]
+        assert result["success"] is True
+        assert result["node_outputs"] == outputs
+
+        run.steps = [worker]
+        run.final_output = {"node_outputs": {"worker": dict(worker.output)}}
+        missing_root = EmployeeOrchestrator(graph).run_with_dependencies(
+            "root", "task", runtime_context={"user_id": 7}
+        )
+
+    assert missing_root["success"] is False
+    assert missing_root["error_code"] == "employee_collaboration_incomplete"
+    assert missing_root["node_outputs"] == {}

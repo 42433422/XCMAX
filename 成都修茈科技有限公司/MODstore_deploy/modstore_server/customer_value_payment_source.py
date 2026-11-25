@@ -40,6 +40,8 @@ def load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
 
     orders: list[dict[str, Any]] = []
     offset = 0
+    expected_total: int | None = None
+    seen_orders: set[str] = set()
     max_pages = (_JAVA_MAX_ORDERS // _JAVA_PAGE_SIZE) + 1
     with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
         for _page_number in range(max_pages):
@@ -61,14 +63,25 @@ def load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
             page = payload.get("orders")
             if not isinstance(page, list) or any(not isinstance(item, dict) for item in page):
                 raise RuntimeError("java_payment_evidence_orders_invalid")
-            total = int(payload.get("total") or 0)
-            if total < 0 or total > _JAVA_MAX_ORDERS:
+            total = payload.get("total")
+            if type(total) is not int or total < 0 or total > _JAVA_MAX_ORDERS:
                 raise RuntimeError("java_payment_evidence_total_out_of_bounds")
-            orders.extend(dict(item) for item in page)
-            if len(orders) >= total:
-                break
-            if not page or len(orders) > _JAVA_MAX_ORDERS:
+            if expected_total is None:
+                expected_total = total
+            if total != expected_total or len(page) != min(_JAVA_PAGE_SIZE, total - offset):
                 raise RuntimeError("java_payment_evidence_pagination_incomplete")
+            for item in page:
+                order_no = item.get("out_trade_no") or item.get("order_no")
+                if (
+                    not isinstance(order_no, str)
+                    or not order_no.strip()
+                    or order_no.strip() in seen_orders
+                ):
+                    raise RuntimeError("java_payment_evidence_order_identity_invalid")
+                seen_orders.add(order_no.strip())
+                orders.append(dict(item))
+            if len(orders) == total:
+                break
             offset += _JAVA_PAGE_SIZE
         else:
             raise RuntimeError("java_payment_evidence_pagination_incomplete")
@@ -85,8 +98,16 @@ def load_authoritative_payment_orders(
     days = max(1, min(int(window_days), 3650))
     if payment_orders.is_local_source_of_truth():
         try:
-            found, _ = payment_orders.list_orders(status="paid", limit=_JAVA_MAX_ORDERS)
-            rows = [dict(item) for item in found if isinstance(item, dict)]
+            found, total = payment_orders.list_orders(status="paid", limit=_JAVA_MAX_ORDERS)
+            if (
+                type(total) is not int
+                or total < 0
+                or total > _JAVA_MAX_ORDERS
+                or len(found) != total
+                or any(not isinstance(item, dict) for item in found)
+            ):
+                raise ValueError("local_payment_evidence_pagination_incomplete")
+            rows = [dict(item) for item in found]
         except (OSError, ValueError, TypeError):
             return {
                 "orders": [],
