@@ -41,6 +41,7 @@ def durable_queue(repository: SQLAlchemyAgentRunRepository) -> SQLAlchemyTaskExe
 def stage_queued_request(
     run: AgentRun, request_key: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
+    XiaoxBindingStore._reject_legacy_binding(run)
     result = {
         **base_runtime_result(run.run_id),
         "execution_state": "queued",
@@ -75,6 +76,7 @@ def enqueue_resume(
     from app.domain.task_lifecycle.adapters import execution_requeue_allowed
     from app.domain.task_lifecycle.control import SessionBook
 
+    store._reject_legacy_binding(parent)
     repository = store.repository
     queue = durable_queue(repository)
     with repository.transaction() as db:
