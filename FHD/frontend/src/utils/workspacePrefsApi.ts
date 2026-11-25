@@ -88,7 +88,7 @@ export async function patchWorkspacePrefs(
   const r = await apiFetch('/api/workspace/prefs', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...fields, expected_revision }),
+    body: JSON.stringify({ ...fields, expected_revision, expected_owner_id: before.owner_id }),
     timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
   })
   if (r.status === 409) throw new WorkspacePrefsConflictError()
