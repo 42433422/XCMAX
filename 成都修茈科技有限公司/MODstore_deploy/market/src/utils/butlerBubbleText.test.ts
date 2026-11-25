@@ -48,6 +48,23 @@ describe('renderButlerBubbleHtml', () => {
     expect(html).toContain('href="/market/"')
   })
 
+  it('never nests anchors when markdown and bare URLs appear together', () => {
+    const html = renderButlerBubbleHtml('查看 [官网](https://xiu-ci.com/download.html) 和 https://xiu-ci.com/')
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const links = doc.querySelectorAll('a')
+    expect(links).toHaveLength(2)
+    expect(links[0].getAttribute('href')).toBe('https://xiu-ci.com/download.html')
+    expect(links[1].getAttribute('href')).toBe('https://xiu-ci.com/')
+    expect(links[0].querySelector('a')).toBeNull()
+  })
+
+  it('escapes fenced code without linking or executing syntax inside it', () => {
+    const html = renderButlerBubbleHtml('代码：\\n```ts\\nconst text = "<script>"; // https://xiu-ci.com\\n```')
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect(doc.querySelector('pre code')?.textContent).toContain('<script>')
+    expect(doc.querySelector('a, script')).toBeNull()
+  })
+
   it('does not double-decode entities into link attributes', () => {
     const html = renderButlerBubbleHtml(
       '[x](https://xiu-ci.com/&quot;onmouseover=&quot;alert(1))',
