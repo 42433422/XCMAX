@@ -78,7 +78,7 @@ vi.mock('./desktop-navigation', () => ({
   isTrustedDesktopOrigin: vi.fn(),
 }))
 
-import { clampWindowBounds } from './window-state'
+import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { handleDesktopWindowOpen, handleDesktopWillNavigate, isTrustedDesktopOrigin } from './desktop-navigation'
 import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
@@ -317,6 +317,40 @@ it('macOS 托盘唤起会抢前台，隐藏窗口才能露出来', () => {
   } finally {
     Object.defineProperty(process, 'platform', { value: original, configurable: true })
   }
+})
+
+it('restores maximized presentation and persists normal bounds with maximized state', async () => {
+  vi.mocked(waitForBackendPing).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendApplicationReady).mockResolvedValue(undefined)
+  vi.mocked(waitForBackendStatus).mockResolvedValue(null)
+  vi.mocked(readWindowState).mockReturnValueOnce({ x: 50, y: 40, width: 1100, height: 700, maximized: true })
+  const normal = { x: 50, y: 40, width: 1100, height: 700 }
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), maximize: vi.fn(), isMaximized: vi.fn(() => true),
+    getNormalBounds: vi.fn(() => normal), isFullScreen: vi.fn(() => false),
+    setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async () => undefined),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'http://127.0.0.1:17500/'),
+      setWindowOpenHandler: vi.fn(), session: { on: vi.fn() },
+      executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  await createWindow()
+  const firstPaint = win.once.mock.calls.find(([name]) => name === 'ready-to-show')?.[1] as (() => void) | undefined
+  expect(firstPaint).toBeTypeOf('function')
+  firstPaint?.()
+  expect(win.maximize).toHaveBeenCalledOnce()
+  expect(win.show).toHaveBeenCalledOnce()
+  const onMaximize = win.on.mock.calls.find(([name]) => name === 'maximize')?.[1] as (() => void) | undefined
+  expect(onMaximize).toBeTypeOf('function')
+  onMaximize?.()
+  await vi.waitFor(() => expect(vi.mocked(writeWindowState)).toHaveBeenCalledWith(
+    expect.stringContaining('window-state.json'),
+    { ...normal, maximized: true },
+  ))
+  await desktopRuntime.mainApplicationReady?.catch(() => undefined)
 })
 
 it('keeps the activated startup window and its in-flight readiness task', async () => {
