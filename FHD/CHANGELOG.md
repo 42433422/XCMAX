@@ -1,5 +1,7 @@
 ## Unreleased
 
+- iOS 个人版签名前新增 fail-closed 身份核验：个人版须在产品目录解冻并启用，App Store 原始 App ID / Bundle ID 与 Fastlane、Matchfile、Xcode 工程一致；IPA 内 Info.plist 版本/包名和 Apple codesign 签名团队经原包回读核对，缺任一证据阻断分发。
+
 - iOS App Store 版本号与构建号均改为显式必填，不从桌面四段版本或 Actions run number 推导；个人版身份仍须由 App Store Connect 核对，现有 enterprise Bundle ID 不得冒充个人版验收。
 
 - 修复 iOS 发布版本输入直接进入 Shell 源码的问题；版本与构建号通过环境变量传递后校验，新增无副作用负控及默认构建号回归，保留原签名和分发授权门禁。

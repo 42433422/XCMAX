@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -60,6 +61,13 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     assert "with archive.open('rb')" in signed["run"]
     assert "'verification_scope': 'build_artifact_not_physical_device'" in signed["run"]
     assert "xcagi-ios-build-info.json" in signed["run"]
+    for proof in ("CFBundleIdentifier", "CFBundleShortVersionString", "CFBundleVersion",
+                  "codesign", "TeamIdentifier", "'sku': 'personal'"):
+        assert proof in signed["run"]
+    personal = next(step for step in steps if step.get("name") == "Reject unverified personal iOS App Store identity")
+    assert personal["env"]["PERSONAL_BUNDLE_ID"] == "${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}"
+    assert personal["env"]["PERSONAL_APP_STORE_ID"] == "${{ vars.IOS_PERSONAL_APP_STORE_APP_ID }}"
+
     upload = next(step for step in steps if step.get("name") == "Upload IPA artifact")
     assert upload["with"]["path"] == artifact_path
     assert upload["with"]["if-no-files-found"] == "error"
@@ -182,3 +190,51 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
         assert output.read_text(encoding="utf-8").splitlines() == [
             "marketing_version=1.2.3", "build_number=42"
         ]
+
+@pytest.mark.parametrize("path,_", WORKFLOWS, ids=["source", "published"])
+@pytest.mark.parametrize("scenario", [
+    "valid", "frozen", "inactive", "bundle_mismatch", "store_mismatch", "missing_bundle",
+])
+def test_personal_ios_identity_gate_fail_closed(
+    path: Path, _: str, scenario: str, tmp_path: Path
+) -> None:
+    """Personal target must be active and all release identity sources must agree."""
+    step = next(
+        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        if row.get("name") == "Reject unverified personal iOS App Store identity"
+    )
+    mobile = tmp_path / "mobile-flutter-poc"
+    ios = mobile / "ios"
+    (ios / "fastlane").mkdir(parents=True)
+    (ios / "Runner.xcodeproj").mkdir()
+    (tmp_path / "config").mkdir()
+    bundle = "com.example.xcagi.personal"
+    store_id = "123456789"
+    (ios / "fastlane/Fastfile").write_text(
+        f'APP_IDENTIFIER = "{bundle}"\\nAPP_STORE_ID = "{store_id}"\\n', encoding="utf-8"
+    )
+    (ios / "fastlane/Matchfile").write_text(
+        f'app_identifier("{bundle}")\\n', encoding="utf-8"
+    )
+    (ios / "Runner.xcodeproj/project.pbxproj").write_text(
+        f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};\\n', encoding="utf-8"
+    )
+    active = ["enterprise"] if scenario == "inactive" else ["enterprise", "personal"]
+    frozen = ["personal"] if scenario == "frozen" else []
+    (tmp_path / "config/download_release.json").write_text(
+        json.dumps({"active_skus": active, "frozen_skus": frozen}),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        cwd=mobile,
+        env={
+            **os.environ,
+            "PERSONAL_BUNDLE_ID": "" if scenario == "missing_bundle" else (
+                "com.example.other" if scenario == "bundle_mismatch" else bundle
+            ),
+            "PERSONAL_APP_STORE_ID": "999999999" if scenario == "store_mismatch" else store_id,
+        },
+        capture_output=True, text=True, check=False,
+    )
+    assert (result.returncode == 0) == (scenario == "valid"), result.stderr
