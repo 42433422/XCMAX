@@ -388,3 +388,55 @@ def test_existing_im_revision_keeps_its_upgrade_and_downgrade_behavior():
         }
         assert connection.execute(text("SELECT * FROM im_messages")).fetchall() == [(1, "retained")]
     engine.dispose()
+
+
+def test_benchmark_identity_and_session_share_one_sqlite_transaction(tmp_path, monkeypatch):
+    from datetime import timedelta
+
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
+
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.utils.time import utc_now_naive
+    from tests.benchmarks.task_success_runner import _trial_session_factory
+
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'benchmark-auth.sqlite3'}",
+        connect_args={"timeout": 1},
+        poolclass=NullPool,
+    )
+    try:
+        init_db.ensure_sqlite_auth_bootstrap(engine=engine, swallow_errors=False)
+        init_db.ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
+        monkeypatch.setattr(database, "_get_engine", lambda: engine)
+        factory = _trial_session_factory()
+        assert factory.kw["bind"] is engine
+        with factory.begin() as session:
+            actor = User(
+                username="benchmark-transaction-regression",
+                password="test-only",
+                role="admin",
+                tier="enterprise",
+            )
+            session.add(actor)
+            session.flush()
+            actor_id = actor.id
+            session.add(
+                UserSession(
+                    session_id="benchmark-transaction-regression",
+                    user_id=actor_id,
+                    expires_at=utc_now_naive() + timedelta(hours=1),
+                )
+            )
+        with Session(engine) as session:
+            actor = session.get(User, actor_id)
+            assert actor is not None
+            receipt = (
+                session.query(UserSession)
+                .filter_by(session_id="benchmark-transaction-regression")
+                .one()
+            )
+            assert receipt.user_id == actor.id
+    finally:
+        engine.dispose()
