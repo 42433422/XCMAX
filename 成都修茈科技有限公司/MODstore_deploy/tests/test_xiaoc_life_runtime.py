@@ -290,6 +290,43 @@ def test_model_cannot_forge_fact_refs_goal_status_or_executor_binding(ports):
             parse_decision(json.dumps(invalid), refs=refs, level=5, domain="enterprise")
 
 
+@pytest.mark.parametrize("action", ["ask_human", "refuse"])
+def test_metacognitive_safe_route_does_not_create_goals_or_execution(ports, monkeypatch, action):
+    store, _calls, current, llm, decision = ports
+
+    async def safe_reply(provider, model, messages, **kwargs):
+        payload = decision(messages)
+        payload.update(action=action, goal=None, interests=[], self_assessment=None)
+        current["receipts"].append({"status": "settled", "actual_tokens": 42})
+        return {"ok": True, "content": json.dumps(payload, ensure_ascii=False)}
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", safe_reply)
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "blocked"
+    assert result["actual_tokens"] == 42
+    assert result["goals"] == []
+    assert result["details"]["metacognitive_route"]["action"] == action
+    assert result["details"]["metacognitive_route"]["status"] == "model_suggestion_not_authority"
+    assert not result["details"].get("created_proposals")
+    assert store.finished and len(store.finished) == 1
+
+
+@pytest.mark.parametrize("action", ["ask_human", "refuse"])
+def test_metacognitive_safe_route_rejects_hidden_goal_or_interest(ports, action):
+    _, _, _, _, decision = ports
+    messages, refs = cognition_messages(
+        ports[0].state, "enterprise", [{"ref": "observed:1", "text": "事实"}]
+    )
+    payload = decision(messages)
+    payload["action"] = action
+    payload["interests"] = []
+    with pytest.raises(ValueError, match="life_safe_route_cannot_mutate_or_create_task"):
+        parse_decision(json.dumps(payload), refs=refs, level=5, domain="enterprise")
+    payload["goal"] = None
+    parsed = parse_decision(json.dumps(payload), refs=refs, level=5, domain="enterprise")
+    assert parsed.action == action and parsed.goal is None
+
+
 def test_unconfigured_research_never_falls_back_to_paid_search_or_model(ports, monkeypatch):
     from modstore_server import research_tools
 
