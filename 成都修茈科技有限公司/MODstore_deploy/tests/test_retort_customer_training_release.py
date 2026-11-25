@@ -397,6 +397,42 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         assert effects["experiment"]["traffic"] == "control"
 
 
+@pytest.mark.parametrize(
+    "closed_at",
+    [None, "not-a-timestamp", "2026-01-01T00:00:00", "9999-01-01T00:00:00+00:00"],
+)
+def test_promoted_training_blocks_traffic_without_valid_rollout_clock(
+    released_customer_training, closed_at
+):
+    from modstore_server.retort_workflow_metrics import postpromotion_stop_reason
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        effects["experiment"]["closed_at"] = closed_at
+        row.effects_json = json_dumps(effects)
+        assert postpromotion_stop_reason(db, row, run["spec"]) == (
+            "workflow_postpromotion_source_unverified"
+        )
+        db.commit()
+
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
 @pytest.mark.parametrize("fault", ["source", "runtime"])
 def test_customer_training_release_drift_blocks_forward_progress(

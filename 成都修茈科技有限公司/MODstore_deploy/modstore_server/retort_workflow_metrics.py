@@ -214,10 +214,20 @@ def postpromotion_stop_reason(db, row, spec):
     original = execution_policy(spec)
     if original is None:
         return ""
+    effects = json_loads(row.effects_json, {})
     evidence = postpromotion_effect_snapshot(
-        db, row, spec, json_loads(row.effects_json, {}), observed_at=datetime.now(UTC)
+        db, row, spec, effects, observed_at=datetime.now(UTC)
     )
     if evidence is None:
+        # No snapshot is normal before promotion, but an already promoted
+        # candidate must not continue with a missing/invalid rollout clock.
+        progress = effects.get("experiment") or {}
+        if (
+            progress.get("traffic") == "candidate"
+            and progress.get("decision") == "promote"
+            and progress.get("rollout_verified") is True
+        ):
+            return "workflow_postpromotion_source_unverified"
         return ""
     if evidence["status"] in {"source_unverified", "blocked_source_budget"}:
         return "workflow_postpromotion_source_unverified"
