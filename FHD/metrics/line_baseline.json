@@ -1,5 +1,5 @@
 {
-  "lines": 2733641,
-  "updated": "2026-11-25",
-  "note": "#3617: web JWT live-session revocation and cross-process PostgreSQL negative control; no security gate changed. Real PG execution and CI evidence pending. Dedicated PostgreSQL-16 CI scenario and JUnit evidence gate: +119 tracked lines."
+  "lines": 2733752,
+  "updated": "2026-11-26",
+  "note": "M07 持续运行可验证：监控回执改为可验证证据并对失败告警重试（净 +113 行），属运维验收链路补强。 #3617 原分支已登记增量 507 行，测试异常处理修复净减 2 行，合并增量为 505 行；按两侧 GitHub diff 算术合并，须正式 preflight 复核，不修改门禁。"
 }
