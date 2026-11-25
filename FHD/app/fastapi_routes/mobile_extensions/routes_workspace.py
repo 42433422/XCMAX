@@ -53,6 +53,7 @@ class MobileWorkspacePrefsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_ai_employees: dict[str, bool]
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_owner_id: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,7 @@ class WorkspaceRoutes:
                 WorkspacePrefsPatch(
                     workflow_ai_employees=body.workflow_ai_employees,
                     expected_revision=body.expected_revision,
+                    expected_owner_id=body.expected_owner_id,
                 ), request
             )
 
