@@ -257,6 +257,7 @@ def _trial_session_factory():
 
     return sessionmaker(bind=get_runtime_engine())
 
+
 def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
     """Use the same authenticated Codex/SQL queue as product requests.
 
