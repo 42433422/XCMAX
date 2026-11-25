@@ -8,7 +8,8 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 
-EXPECTED = {"desktop": 6, "market": 5, "flutter": 16}
+# Exact planned captures for the current specs; count drift must fail until reviewed.
+EXPECTED = {"desktop": 16, "market": 19, "flutter": 40}
 
 
 def pixel_hash(image):
@@ -27,6 +28,8 @@ def compare(root, surface, base_sha, candidate_sha, manifest):
     if not isinstance(approvals, dict):
         raise ValueError("surface approvals must be an object")
     report = {"surface": surface, "base_sha": base_sha, "candidate_sha": candidate_sha,
+              "expected_case_count": EXPECTED.get(surface, 1),
+              "baseline_case_count": len(base), "candidate_case_count": len(candidate),
               "cases": [], "unused_approvals": []}
     ok = len(base) == EXPECTED.get(surface, 1) and base.keys() == candidate.keys()
     used = set()
