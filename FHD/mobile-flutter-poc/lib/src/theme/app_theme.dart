@@ -20,7 +20,7 @@ class AppTheme {
   static const textPrimary = DesignTokens.semanticLightTextPrimary;
   static const textSecondary = DesignTokens.semanticLightTextSecondary;
   static const textStrongSecondary = DesignTokens.colorsNeutralLightN600;
-  static const textTertiary = DesignTokens.colorsNeutralLightN400;
+  static const textTertiary = DesignTokens.colorsNeutralLightN500;
 
   static Duration motionDuration(BuildContext context,
           {int milliseconds = DesignTokens.motionStandardMs}) =>
@@ -47,7 +47,7 @@ class AppTheme {
       primaryContainer: brandContainer,
       onPrimaryContainer: DesignTokens.mobileColorsLightOnBrandContainer,
       secondary: success,
-      onSecondary: surface,
+      onSecondary: DesignTokens.colorsNeutralLightN900,
       secondaryContainer: DesignTokens.colorsStatusSuccessContainer,
       onSecondaryContainer: DesignTokens.mobileColorsLightOnSuccessContainer,
       tertiary: brand,
@@ -59,7 +59,7 @@ class AppTheme {
       outline: textSecondary,
       outlineVariant: divider,
       error: danger,
-      onError: surface,
+      onError: DesignTokens.colorsNeutralLightN900,
       errorContainer: DesignTokens.mobileColorsLightErrorContainer,
       onErrorContainer: DesignTokens.mobileColorsLightOnErrorContainer,
     );
@@ -129,11 +129,11 @@ class AppTheme {
       brightness: Brightness.dark,
     ).copyWith(
       primary: darkBrand,
-      onPrimary: DesignTokens.colorsNeutralLightN00,
+      onPrimary: DesignTokens.colorsNeutralLightN900,
       primaryContainer: DesignTokens.mobileColorsDarkBrandContainer,
       onPrimaryContainer: DesignTokens.mobileColorsDarkOnBrandContainer,
       secondary: success,
-      onSecondary: DesignTokens.colorsNeutralLightN00,
+      onSecondary: DesignTokens.colorsNeutralLightN900,
       secondaryContainer: DesignTokens.mobileColorsDarkSuccessContainer,
       onSecondaryContainer: DesignTokens.colorsStatusSuccessLight,
       tertiary: darkBrand,
@@ -145,7 +145,7 @@ class AppTheme {
       outline: darkBorder,
       outlineVariant: darkSurfaceVariant,
       error: danger,
-      onError: DesignTokens.colorsNeutralLightN00,
+      onError: DesignTokens.colorsNeutralLightN900,
       errorContainer: DesignTokens.mobileColorsDarkErrorContainer,
       onErrorContainer: DesignTokens.mobileColorsDarkOnErrorContainer,
     );
