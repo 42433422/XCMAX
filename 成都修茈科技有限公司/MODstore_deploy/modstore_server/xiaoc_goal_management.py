@@ -458,6 +458,15 @@ def compile_autonomous_review_plan(
         raise LifePolicyError("自主调查需要原预算、员工及空的安全任务输入")
     if goal.get("candidate_origin") != ORIGIN or goal.get("status") != "proposed":
         raise LifePolicyError("仅未审批的原经营候选可自动生成调查提案")
+    authorization_expiry = policy.get("authorization_expires_at")
+    if authorization_expiry is not None:
+        try:
+            expires = parse_time(authorization_expiry)
+            proposal_expires = parse_time(limits["expires_at"])
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise LifePolicyError("当前授权期限无效") from exc
+        if not now < proposal_expires <= expires:
+            raise LifePolicyError("当前授权已过期或原提案期限超过授权")
     check_candidate_promotion(goal, owner, limits, current_value, now=now)
     if governance_gate(goal, goals, now=now)["status"] != "reviewable":
         raise LifePolicyError("原候选来源、冲突或前置依赖未通过审查")

@@ -366,3 +366,63 @@ def test_revoked_admin_or_stale_source_cannot_resume(operating, monkeypatch):
         xiaoc_life_store.manage_operating_goal(
             goal["id"], action="resume", actor_user_id=17, expected_revision=4, reason="复核"
         )
+
+
+
+def test_dependency_cannot_borrow_another_owner_or_choose_duplicate(operating):
+    _, _, _, goal, _ = operating
+    goal["depends_on_goal_ids"] = ["predecessor"]
+    predecessor = deepcopy(goal)
+    predecessor.update(
+        id="predecessor",
+        status="completed",
+        step_projection={
+            "all_steps_verified": True,
+            "independent_acceptance": "verified_all_accepted",
+        },
+    )
+    assert goal_dependency_gate(goal, [predecessor])["status"] == "ready"
+    foreign = {**predecessor, "candidate_owner_user_id": 18}
+    assert goal_dependency_gate(goal, [foreign])["status"] == "blocked"
+    for rows in ([foreign, predecessor], [predecessor, foreign]):
+        assert goal_dependency_gate(goal, rows)["status"] == "blocked"
+    malformed = {**predecessor, "step_projection": ["not", "proof"]}
+    assert goal_dependency_gate(goal, [malformed])["status"] == "waiting"
+
+
+def test_review_plan_respects_shortened_authorization_and_exact_expiry(operating):
+    from modstore_server.xiaoc_goal_management import compile_autonomous_review_plan
+
+    now, value, state, goal, _ = operating
+    expiry = now + timedelta(hours=1)
+    limits = {
+        "cost_cents": 7,
+        "tokens": 5,
+        "compute_seconds": 2,
+        "expires_at": expiry.isoformat(),
+    }
+    policy = {
+        "employee_id": "existing-employee",
+        "task_input": {},
+        "portfolio_limits": limits,
+        "authorization_expires_at": expiry.isoformat(),
+    }
+    rows, _ = compile_autonomous_review_plan(
+        goal, owner=17, policy=policy, goals=state["goals"], current_value=value, now=now
+    )
+    assert [row["compute_seconds"] for row in rows] == [1, 1]
+    assert sum(row["cost_cents"] for row in rows) == 7
+    for invalid_expiry in (
+        now.isoformat(),
+        (expiry - timedelta(microseconds=1)).isoformat(),
+        "invalid",
+    ):
+        with pytest.raises(LifePolicyError, match="授权"):
+            compile_autonomous_review_plan(
+                goal,
+                owner=17,
+                policy={**policy, "authorization_expires_at": invalid_expiry},
+                goals=state["goals"],
+                current_value=value,
+                now=now,
+            )

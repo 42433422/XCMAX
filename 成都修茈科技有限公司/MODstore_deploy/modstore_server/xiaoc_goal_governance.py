@@ -190,15 +190,21 @@ def goal_dependency_gate(goal: dict[str, Any], others: list[dict[str, Any]]) -> 
         or goal.get("id") in dependencies
     ):
         return {"status": "blocked", "reason": "invalid_goal_dependencies"}
-    by_id = {row.get("id"): row for row in others if isinstance(row, dict)}
     pending = []
+    owner = goal.get("candidate_owner_user_id")
     for dependency in dependencies:
-        predecessor = by_id.get(dependency)
-        if predecessor is None:
+        matches = [
+            row for row in others if isinstance(row, dict) and row.get("id") == dependency
+        ]
+        if len(matches) != 1:
+            return {"status": "blocked", "reason": "missing_or_ambiguous_goal_dependency"}
+        predecessor = matches[0]
+        if owner is not None and predecessor.get("candidate_owner_user_id") != owner:
             return {"status": "blocked", "reason": "missing_goal_dependency"}
         proof = predecessor.get("step_projection") or {}
         if (
             predecessor.get("status") not in {"execution_verified", "completed"}
+            or not isinstance(proof, dict)
             or proof.get("all_steps_verified") is not True
             or proof.get("independent_acceptance") != "verified_all_accepted"
         ):
