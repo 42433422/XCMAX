@@ -65,6 +65,12 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
                   "codesign", "TeamIdentifier", "'sku': 'personal'"):
         assert proof in signed["run"]
     personal = next(step for step in steps if step.get("name") == "Reject unverified personal iOS App Store identity")
+    assert personal["id"] == "personal_identity"
+    assert signed["id"] == "ipa_provenance"
+    summary = next(step for step in steps if step.get("name") == "Release summary")
+    assert "Submitted for review" not in summary["run"]
+    assert "Distribution step outcome" in summary["run"]
+    assert "iPhone physical-device acceptance" in summary["run"]
     assert personal["env"]["PERSONAL_BUNDLE_ID"] == "${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}"
     assert personal["env"]["PERSONAL_APP_STORE_ID"] == "${{ vars.IOS_PERSONAL_APP_STORE_APP_ID }}"
 
@@ -73,6 +79,7 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     assert upload["with"]["if-no-files-found"] == "error"
     distribution = next(step for step in steps if step.get("name") == "Upload to TestFlight or submit for review")
     assert distribution["if"] == "inputs.distribute_to_testflight"
+    assert distribution["id"] == "store_distribution"
     decode_key = next(step for step in steps if step.get("name") == "Decode App Store Connect API key")
     assert decode_key["if"] == "inputs.distribute_to_testflight"
 

@@ -81,6 +81,7 @@ jobs:
           test "$(git rev-parse refs/remotes/origin/main)" = "$RELEASE_SHA"
 
       - name: Reject unverified personal iOS App Store identity
+        id: personal_identity
         env:
           PERSONAL_BUNDLE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}
           PERSONAL_APP_STORE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_APP_ID }}
@@ -236,6 +237,7 @@ jobs:
         run: bundle exec fastlane ios build_ipa
 
       - name: Freeze signed IPA bytes and original build identity
+        id: ipa_provenance
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
@@ -330,6 +332,7 @@ jobs:
           echo "APP_STORE_CONNECT_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
 
       - name: Upload to TestFlight or submit for review
+        id: store_distribution
         if: inputs.distribute_to_testflight
         working-directory: FHD/mobile-flutter-poc/ios
         env:
@@ -340,83 +343,23 @@ jobs:
 
       - name: Release summary
         if: always()
+        env:
+          PERSONAL_BUNDLE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}
+          PERSONAL_IDENTITY_RESULT: ${{ steps.personal_identity.outcome }}
+          IPA_PROVENANCE_RESULT: ${{ steps.ipa_provenance.outcome }}
+          DISTRIBUTION_RESULT: ${{ steps.store_distribution.outcome }}
+          TESTFLIGHT_REQUESTED: ${{ inputs.distribute_to_testflight }}
+          APP_REVIEW_REQUESTED: ${{ inputs.submit_for_review }}
         run: |
           {
-            echo "### XCAGI Flutter iOS"
-            echo ""
-            echo "- Version: \`${{ steps.version.outputs.marketing_version }} (${{ steps.version.outputs.build_number }})\`"
-            echo "- Bundle ID: \`com.xiuci.xcagi.mobile.enterprise\`"
-            echo "- Signing: Fastlane match, App Store profile"
-            echo "- Submitted for review: \`${{ inputs.submit_for_review }}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
-, signed.stderr, re.MULTILINE)
-              if not team:
-                  raise SystemExit('Signed IPA lacks Apple TeamIdentifier')
-              signing_team = team.group(1)
-          with archive.open('rb') as stream:
-              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-          (archive_dir / (archive.name + '.sha256')).write_text(
-              f'{digest}  {archive.name}\n', encoding='utf-8')
-          receipt = {
-              'schema': 'xcagi.ios_candidate_build_identity/v1',
-              'source_sha': os.environ['RELEASE_SHA'],
-              'marketing_version': os.environ['IOS_MARKETING_VERSION'],
-              'build_number': os.environ['IOS_BUILD_NUMBER'],
-              'ipa_filename': archive.name,
-              'ipa_sha256': digest,
-              'verification_scope': 'build_artifact_not_physical_device',
-          }
-          (archive_dir / 'xcagi-ios-build-info.json').write_text(
-              json.dumps(receipt, sort_keys=True) + '\n', encoding='utf-8')
-          PY
-
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
-          path: FHD/mobile-flutter-poc/build/ios/ipa/
-          if-no-files-found: error
-
-      - name: Require explicit distribution approval for App Review
-        env:
-          DISTRIBUTE_TO_TESTFLIGHT: ${{ inputs.distribute_to_testflight }}
-          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
-        run: |
-          if [[ "$SUBMIT_FOR_REVIEW" == "true" && "$DISTRIBUTE_TO_TESTFLIGHT" != "true" ]]; then
-            echo "::error::App Review requires explicit TestFlight distribution authorization"
-            exit 1
-          fi
-      - name: Decode App Store Connect API key
-        if: inputs.distribute_to_testflight
-        env:
-          APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
-        run: |
-          set -euo pipefail
-          : "${APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64:?APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 secret is required}"
-          key_dir="${HOME}/.appstoreconnect/private_keys"
-          key_path="${key_dir}/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
-          mkdir -p "${key_dir}"
-          printf '%s' "${APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64}" | base64 --decode > "${key_path}"
-          chmod 600 "${key_path}"
-          echo "APP_STORE_CONNECT_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
-
-      - name: Upload to TestFlight or submit for review
-        if: inputs.distribute_to_testflight
-        working-directory: FHD/mobile-flutter-poc/ios
-        env:
-          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
-          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
-          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
-        run: bundle exec fastlane ios distribute
-
-      - name: Release summary
-        if: always()
-        run: |
-          {
-            echo "### XCAGI Flutter iOS"
-            echo ""
-            echo "- Version: \`${{ steps.version.outputs.marketing_version }} (${{ steps.version.outputs.build_number }})\`"
-            echo "- Bundle ID: \`com.xiuci.xcagi.mobile.enterprise\`"
-            echo "- Signing: Fastlane match, App Store profile"
-            echo "- Submitted for review: \`${{ inputs.submit_for_review }}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
+            echo '### XCAGI Flutter iOS personal release candidate'
+            echo ''
+            printf -- '- Version input: `%s (%s)`\n' "${{ steps.version.outputs.marketing_version }}" "${{ steps.version.outputs.build_number }}"
+            printf -- '- Personal Bundle ID input: `%s`\n' "$PERSONAL_BUNDLE_ID"
+            printf -- '- Personal identity gate: `%s`\n' "$PERSONAL_IDENTITY_RESULT"
+            printf -- '- Signed IPA verification step: `%s`\n' "$IPA_PROVENANCE_RESULT"
+            printf -- '- TestFlight requested: `%s`\n' "$TESTFLIGHT_REQUESTED"
+            printf -- '- App Review requested: `%s`\n' "$APP_REVIEW_REQUESTED"
+            printf -- '- Distribution step outcome: `%s`\n' "$DISTRIBUTION_RESULT"
+            echo '- iPhone physical-device acceptance: BLOCKED unless a separate device receipt proves it'
+          } >> "$GITHUB_STEP_SUMMARY"
