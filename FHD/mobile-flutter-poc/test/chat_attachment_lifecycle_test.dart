@@ -111,8 +111,8 @@ void main() {
     addTearDown(repository.dispose);
     addTearDown(api.dispose);
     await _showChat(tester, repository, picker: () async => [
-      XFile.fromData(Uint8List.fromList([1]), name: 'first.txt'),
-      XFile.fromData(Uint8List.fromList([2]), name: 'second.txt'),
+      XFile.fromData(Uint8List.fromList([1]), path: 'first.txt', name: 'first.txt'),
+      XFile.fromData(Uint8List.fromList([2]), path: 'second.txt', name: 'second.txt'),
     ]);
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pumpAndSettle();

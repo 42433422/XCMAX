@@ -971,7 +971,7 @@ void main() {
   });
 
   for (final uncertain in [false, true]) {
-    test('outbox preserves identity and only reconciles dispatched writes: $uncertain', () async {
+    test('outbox preserves identity and only reads original receipts: $uncertain', () async {
       final api = _OutboxReceiptApi(uncertain);
       final repository = MobileRepository(client: api);
       addTearDown(repository.dispose);
@@ -983,7 +983,9 @@ void main() {
       expect(await repository.pendingMessageCount(), 1);
       expect(await repository.flushPendingMessages(), 1);
       expect(api.turnKeys, ['original-outbox-turn', 'original-outbox-turn']);
-      expect(api.resumeFlags, [false, uncertain]);
+      // Persisted outbox rows follow a failed send; even a socket error is
+      // not proof that the original business POST did not commit.
+      expect(api.resumeFlags, [true, true]);
       expect(await repository.pendingMessageCount(), 0);
     });
   }
@@ -2396,7 +2398,7 @@ class _OutboxReceiptApi extends MobileApiClient {
         throw const MobileApiException(statusCode: 409, errorCode: 'CHAT_RECEIPT_PENDING',
             message: '原任务回执待核对', body: {'execution_state': 'unknown'});
       }
-      throw const SocketException('connection refused before send');
+      throw const SocketException('connection lost during receipt lookup');
     }
     return '原任务完成';
   }

@@ -66,6 +66,17 @@ class _ApprovalRepository extends MobileRepository {
   }
 }
 
+Future<void> _expectApprovalDisabled(WidgetTester tester) async {
+  final approve = find.widgetWithText(WeBlockButton, '通过');
+  // A status banner can push the action below the lazy ListView viewport.
+  // Scroll to the real action, then verify that it cannot be submitted.
+  await tester.scrollUntilVisible(approve, 120,
+      scrollable: find.byType(Scrollable).first);
+  await tester.pumpAndSettle();
+  expect(approve, findsOneWidget);
+  expect(tester.widget<WeBlockButton>(approve).enabled, isFalse);
+}
+
 void main() {
   late MobileApiClient api;
   late _ApprovalRepository repo;
@@ -97,8 +108,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.writes, 0);
     expect(find.textContaining('原审批已变更'), findsOneWidget);
-    expect(tester.widget<WeBlockButton>(
-      find.widgetWithText(WeBlockButton, '通过')).enabled, isFalse);
+    await _expectApprovalDisabled(tester);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -166,9 +176,7 @@ void main() {
     expect(repo.writes, 1);
     expect(repo.reads, greaterThanOrEqualTo(3));
     expect(find.textContaining('请勿重复操作'), findsOneWidget);
-    final submit = tester.widget<WeBlockButton>(
-        find.widgetWithText(WeBlockButton, '通过'));
-    expect(submit.enabled, isFalse);
+    await _expectApprovalDisabled(tester);
     expect(repo.unknownApprovalOutcome, isTrue);
     await tester.pumpWidget(const SizedBox());
     // A new screen after app process restart must NOT make this POST again.
@@ -177,8 +185,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.textContaining('原审批回执仍待核对'), findsOneWidget);
-    expect(tester.widget<WeBlockButton>(
-      find.widgetWithText(WeBlockButton, '通过')).enabled, isFalse);
+    await _expectApprovalDisabled(tester);
     expect(repo.writes, 1);
     await tester.pumpWidget(const SizedBox());
   });

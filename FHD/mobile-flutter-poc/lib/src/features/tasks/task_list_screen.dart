@@ -201,7 +201,7 @@ class _TaskListScreenState extends State<TaskListScreen>
                             sliver: DecoratedSliver(
                               decoration: BoxDecoration(
                                 color: colors.surface,
-                                borderRadius: BorderRadius.all(radius),
+                                borderRadius: const BorderRadius.all(radius),
                                 border: Border.all(
                                   color: colors.divider.withValues(alpha: 0.45),
                                 ),
