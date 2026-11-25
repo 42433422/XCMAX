@@ -1,14 +1,26 @@
 name: XCMAX dedicated runner smoke
+run-name: XCMAX dedicated runner smoke ${{ github.sha }}
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [.github/workflows/xcmax-grok-box-smoke.yml]
 permissions: {}
 jobs:
   hello:
-    if: github.repository == '42433422/XCMAX' && github.ref_protected
+    if: github.repository == '42433422/XCMAX' && github.ref == 'refs/heads/main' && github.ref_protected
     runs-on: [self-hosted, xcmax-grok-box]
     timeout-minutes: 2
     steps:
-      - shell: bash
-        run: printf '%s\n' 'xcmax-grok-box smoke OK'
+      - name: Print pickup identity for independent GitHub job verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'xcmax-grok-box smoke OK'
+          printf 'run_id=%s\n' "$GITHUB_RUN_ID"
+          printf 'run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+          printf 'head_sha=%s\n' "$GITHUB_SHA"
+          printf 'runner_name=%s\n' "$RUNNER_NAME"
+          printf 'runner_os=%s\n' "$RUNNER_OS"
+          printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+          date -u '+pickup_utc=%Y-%m-%dT%H:%M:%SZ'
