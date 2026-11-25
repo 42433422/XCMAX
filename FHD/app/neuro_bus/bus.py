@@ -19,6 +19,7 @@ import time
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.bus_primitives import (
@@ -40,6 +41,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from app.neuro_bus.event_store import DurableAdmissionReceipt, EventStore
     from app.neuro_bus.transports.redis_pubsub import RedisPubSubBridge
     from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
@@ -486,12 +488,28 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 return False
         return True
 
-    def publish(self, event: NeuroEvent) -> bool:
-        """
-        发布事件
+    def publish_reliable(
+        self, event: NeuroEvent, *, event_store: EventStore
+    ) -> DurableAdmissionReceipt:
+        """Commit admission before dispatching via the existing in-memory queue.
 
-        Returns:
-            是否成功加入队列
+        A receipt proves durable acceptance only. Queue rejection, shutdown or
+        an interrupted dispatch cannot erase the committed record. Duplicate
+        admission never re-dispatches an event with an uncertain prior outcome.
+        Callers must use an authorized, durable EventStore, not the memory singleton.
+        """
+        receipt = event_store.admit(event)
+        if not receipt.newly_admitted:
+            return receipt
+        stored = event_store.get_admitted_event(receipt.event_id)
+        if stored is None:
+            raise RuntimeError("committed admission record is unavailable")
+        return replace(receipt, queued=self.publish(stored))
+
+    def publish(self, event: NeuroEvent) -> bool:
+        """Best-effort local queue admission; not a durable acceptance receipt.
+
+        Reliable callers must use publish_reliable with a durable EventStore.
         """
         if not self._running or self._shutdown:
             logger.warning("Cannot publish: NeuroBus not running")
