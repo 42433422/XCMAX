@@ -15,6 +15,7 @@ from app.db.bootstrap.contracts import InspectorFactory
 from app.db.db_base import Base
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+
 @contextmanager
 def _serialized_schema_bind(engine: Engine) -> Iterator[Engine | Connection]:
     """Serialize SQLite file schema creation before checking which tables exist.
