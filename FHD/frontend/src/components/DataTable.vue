@@ -1,5 +1,5 @@
 <template>
-  <div class="data-table-wrapper" ref="tableWrapper" @scroll="handleScroll">
+  <div class="data-table-wrapper" ref="tableWrapper" :aria-busy="loading" @scroll="handleScroll">
     <table class="data-table">
       <thead>
         <tr>
@@ -53,13 +53,18 @@
             </td>
           </tr>
         </template>
+        <tr v-if="error && !loading && localData.length > 0">
+          <td :colspan="totalColumns" class="empty-state" role="alert">
+            {{ error }} <button type="button" class="data-table-retry" @click="emit('retry')">重试</button>
+          </td>
+        </tr>
         <tr v-if="loading && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="loading-state">加载中...</td>
         </tr>
-        <tr v-if="hasMore && !loading && localData.length > 0 && isLastPage">
+        <tr v-if="hasMore && !loading && !error && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="has-more-tip">滚动加载更多</td>
         </tr>
-        <tr v-if="!hasMore && localData.length > 0 && isLastPage">
+        <tr v-if="!hasMore && !loading && !error && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="no-more-tip">没有更多数据了</td>
         </tr>
       </tbody>
@@ -136,7 +141,7 @@ const tableWrapper = ref(null)
 const slots = useSlots()
 
 const handleScroll = () => {
-  if (!tableWrapper.value || props.loading || !props.hasMore || !isLastPage.value) return
+  if (!tableWrapper.value || props.loading || props.error || !props.hasMore || !isLastPage.value) return
 
   const { scrollTop, scrollHeight, clientHeight } = tableWrapper.value
   const threshold = 100
