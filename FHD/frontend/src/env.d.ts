@@ -57,7 +57,7 @@ interface Window {
     consumeDeepLink?: () => Promise<string | null>
     onDeepLink?: (callback: (url: string) => void) => () => void
     onVoiceInvoke?: (callback: () => void) => () => void
-    onWorkspaceCommand?: (callback: (command: 'palette' | 'chat' | 'new-chat' | 'sessions' | 'tasks') => void) => () => void
+    onWorkspaceCommand?: (callback: (command: 'palette' | 'chat' | 'new-chat' | 'new-task' | 'sessions' | 'tasks') => void) => () => void
     onAssistantProductSearch?: (callback: (query: string) => void | Promise<void>) => () => void
   }
   handleAutoAction?: (action: unknown, userMessage?: string) => void
