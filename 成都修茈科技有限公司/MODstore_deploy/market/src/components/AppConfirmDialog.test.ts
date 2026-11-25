@@ -38,6 +38,7 @@ describe('全局敏感操作确认弹窗', () => {
     dialog.vm.$emit('opened')
     await flushPromises()
     expect(document.activeElement?.textContent?.trim()).toBe('取消')
+    expect(wrapper!.get('[data-dialog-initial-focus]').element).toBe(document.activeElement)
     await wrapper!.get('.app-confirm-dialog__cancel').trigger('click')
     expect(await answer).toBe(false)
   })

@@ -12,6 +12,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       const origin = new URL(baseURL!).origin
       await page.addInitScript(() => {
         localStorage.setItem('modstore_token', 'visual-synthetic')
+        localStorage.setItem('workbench_personal_settings_v1', JSON.stringify({ theme: 'auto' }))
         localStorage.setItem('workbench_direct_conversations_v1', '[]')
         localStorage.setItem('workbench_direct_active_v1', '')
       })
@@ -27,6 +28,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.goto('/workbench/home')
       const input = page.locator('#wb-home-input')
       await expect(input).toBeVisible({ timeout: 30000 })
+      // Theme must be applied to the DOM, not merely emulated by Playwright.
+      if (process.env.VISUAL_CAPTURE_SIDE !== 'baseline') {
+        await expect(page.locator('html')).toHaveAttribute('data-workbench-theme', colorScheme)
+      }
       await input.fill('请核对订单差异')
       await input.focus()
       await expect(input).toBeFocused()
@@ -41,7 +46,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
         const style = getComputedStyle(element)
         return style.outline + '|' + style.boxShadow
       })
-      expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
+      // Record genuine pre-feature baseline pixels, but require visible focus on
+      // the candidate. The historical baseline did not have this focus style.
+      if (process.env.VISUAL_CAPTURE_SIDE !== 'baseline') {
+        expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
+      }
       await capture(page, 'a11y-workbench-focused-' + colorScheme + '-' + width, 'device')
       await page.keyboard.press('Tab')
       expect(await page.evaluate(() => !!document.activeElement && document.activeElement !== document.body)).toBe(true)

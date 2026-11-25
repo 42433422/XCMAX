@@ -15,6 +15,9 @@ const lifeState = {
 
 for (const [width, height] of [[1440, 900], [375, 812]]) {
   test('autonomy popover keyboard and touch viewport ' + width, async ({ page, baseURL }) => {
+    // No matching control exists in the base SHA. Never fabricate a baseline.
+    // Candidate captures still require independent human visual approval.
+    test.skip(process.env.VISUAL_CAPTURE_SIDE === 'baseline', 'New autonomy popover absent from base; explicit visual review required')
     await page.setViewportSize({ width, height })
     await isolate(page, baseURL!)
     const origin = new URL(baseURL!).origin

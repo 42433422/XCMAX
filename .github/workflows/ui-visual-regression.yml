@@ -108,7 +108,7 @@ jobs:
                     src/components/floating-agent/floating-agent-panel/PanelComposer.test.ts
                 fi
               fi
-              VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" npx playwright test --config playwright.visual.config.ts
+              VISUAL_CAPTURE_SIDE="$side" VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" npx playwright test --config playwright.visual.config.ts
             ) || status=1
           done
           exit "$status"
@@ -148,7 +148,7 @@ jobs:
                   test/employee_workspace_screen_test.dart
               fi
               # Ephemeral capture only; no automatic baseline commits.
-              flutter test --no-pub --update-goldens visual_regression/visual_test.dart
+              VISUAL_CAPTURE_SIDE="$side" flutter test --no-pub --update-goldens visual_regression/visual_test.dart
               cp visual_regression/goldens/*.png "$RUNNER_TEMP/visual/$side/"
             ) || status=1
           done

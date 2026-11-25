@@ -309,7 +309,10 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
         _repository.client.authGeneration != _generation) return;
     _refreshing = true;
     final future = _load();
-    setState(() => _future = future);
+    // setState must return void synchronously, never a Future from _load().
+    setState(() {
+      _future = future;
+    });
     try {
       await future;
     } catch (_) {

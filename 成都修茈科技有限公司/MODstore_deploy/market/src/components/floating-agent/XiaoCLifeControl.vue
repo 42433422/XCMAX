@@ -146,7 +146,7 @@ async function applyLevel() {
         type="button"
         class="xiaoc-life-disclosure__trigger"
         :class="{ 'xiaoc-life-disclosure__trigger--light': light, 'xiaoc-life-disclosure__trigger--open': expanded }"
-        data-xiaoc-autonomy-trigger
+        v-bind="{ 'data-xiaoc-autonomy-trigger': '' }"
         aria-haspopup="dialog"
         :aria-expanded="expanded"
         :title="life.error ? '自主任务设置：状态待同步' : '自主任务设置（全企业）'"
@@ -190,7 +190,7 @@ async function applyLevel() {
       <span v-if="life.state" class="xiaoc-life-control__applied">{{ life.error ? '上次读取的设置，当前状态待核实' : selection === life.state.level ? '已应用' : '当前已应用 ' + label }}</span>
     </div>
     <ElSlider
-      :data-autonomy-preview="compact ? selection : undefined"
+
       :model-value="selection"
       :min="1"
       :max="6"
@@ -200,7 +200,7 @@ async function applyLevel() {
       :show-tooltip="!compact"
       :disabled="!life.state || life.saving || !!life.error"
       :format-tooltip="(value: number) => `L${value} · ${xiaocLevelLabels[value]}`"
-      v-bind="{ ariaLabel: '小 C 全企业自主等级' }"
+      v-bind="{ ariaLabel: '小 C 全企业自主等级', 'data-autonomy-preview': compact ? selection : undefined }"
       @update:model-value="selectLevel"
       @change="changeLevel"
     />

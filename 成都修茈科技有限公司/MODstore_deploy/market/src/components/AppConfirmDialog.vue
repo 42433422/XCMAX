@@ -22,7 +22,7 @@
           ref="cancelButton"
           type="button"
           class="app-confirm-dialog__cancel"
-          data-dialog-initial-focus
+          v-bind="{ 'data-dialog-initial-focus': '' }"
           @click="resolveDangerConfirm(false)"
         >{{ options.cancelLabel || '取消' }}</button>
         <button
