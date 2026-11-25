@@ -46,81 +46,87 @@ void main() {
     testWidgets('approval label and status contrast (dark=$dark)',
         (tester) async {
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
-      final api = fixture.Api();
-      final repo = ApprovalRepository(api);
-      addTearDown(repo.dispose);
-      addTearDown(api.dispose);
-      tester.view.physicalSize = const Size(320, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(MaterialApp(
-        theme: dark ? AppTheme.dark() : AppTheme.light(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: const TextScaler.linear(2),
-            disableAnimations: true,
+      try {
+        final api = fixture.Api();
+        final repo = ApprovalRepository(api);
+        addTearDown(repo.dispose);
+        addTearDown(api.dispose);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(MaterialApp(
+          theme: dark ? AppTheme.dark() : AppTheme.light(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+              disableAnimations: true,
+            ),
+            child: child!,
           ),
-          child: child!,
-        ),
-        home: ApprovalDetailScreen(
-          id: detail.id,
-          initialDetail: detail,
-          repository: repo,
-        ),
-      ));
-      await tester.pumpAndSettle();
+          home: ApprovalDetailScreen(
+            id: detail.id,
+            initialDetail: detail,
+            repository: repo,
+          ),
+        ));
+        await tester.pumpAndSettle();
 
-      final status = find.text('待审核');
-      final text = tester.widget<Text>(status);
-      final colors = AppTheme.colors(tester.element(status));
-      expect(contrast(text.style!.color!, colors.brandContainer),
-          greaterThanOrEqualTo(4.5));
-      final field = find.byType(TextField);
-      await tester.ensureVisible(field);
-      expect(tester.widget<TextField>(field).decoration!.labelText,
-          '审批意见（可选）');
-      await tester.enterText(field, '示例意见');
-      await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(field).decoration!.labelText,
-          '审批意见（可选）');
-      expect(tester.widget<SafeArea>(find.byType(SafeArea).first).bottom,
-          isTrue);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
+        final status = find.text('待审核');
+        final text = tester.widget<Text>(status);
+        final colors = AppTheme.colors(tester.element(status));
+        expect(contrast(text.style!.color!, colors.brandContainer),
+            greaterThanOrEqualTo(4.5));
+        final field = find.byType(TextField);
+        await tester.ensureVisible(field);
+        expect(tester.widget<TextField>(field).decoration!.labelText,
+            '审批意见（可选）');
+        await tester.enterText(field, '示例意见');
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(field).decoration!.labelText,
+            '审批意见（可选）');
+        expect(tester.widget<SafeArea>(find.byType(SafeArea).first).bottom,
+            isTrue);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      } finally {
+        semantics.dispose();
+      }
     });
   }
 
   testWidgets('approval loading is named and errors are live regions',
       (tester) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-    final api = fixture.Api();
-    final repo = ApprovalRepository(api);
-    addTearDown(repo.dispose);
-    addTearDown(api.dispose);
-    await tester.pumpWidget(MaterialApp(
-      home: ApprovalListScreen(repository: repo),
-    ));
-    expect(
-      tester.widget<CircularProgressIndicator>(
-        find.byType(CircularProgressIndicator),
-      ).semanticsLabel,
-      '正在加载待办审批',
-    );
-    repo.pending.completeError(
-      const MobileRepositoryException('审批列表加载失败'),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('重试'), findsOneWidget);
-    expect(
-      find.byWidgetPredicate(
-        (widget) => widget is Semantics && widget.properties.liveRegion == true,
-      ),
-      findsWidgets,
-    );
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
+    try {
+      final api = fixture.Api();
+      final repo = ApprovalRepository(api);
+      addTearDown(repo.dispose);
+      addTearDown(api.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: ApprovalListScreen(repository: repo),
+      ));
+      expect(
+        tester.widget<CircularProgressIndicator>(
+          find.byType(CircularProgressIndicator),
+        ).semanticsLabel,
+        '正在加载待办审批',
+      );
+      repo.pending.completeError(
+        const MobileRepositoryException('审批列表加载失败'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('重试'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.liveRegion == true,
+        ),
+        findsWidgets,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    } finally {
+      semantics.dispose();
+    }
   });
 }
