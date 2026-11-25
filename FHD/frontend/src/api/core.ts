@@ -211,8 +211,13 @@ async function authRecovery(
 }
 
 async function requestWithRetry<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
-  const resolvedUrl = await resolveErpApiPathWhenReady(url)
+  // Bind the request to the initiating account before asynchronous MOD discovery.
+  // Otherwise a write queued under A could be sent under B after discovery resolves.
   const accountEpoch = productReadAccountEpoch.value
+  const resolvedUrl = await resolveErpApiPathWhenReady(url)
+  if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(resolvedUrl)) {
+    throw new AccountSwitchedError()
+  }
   try {
     return await requestOnce<T>(resolvedUrl, options, accountEpoch)
   } catch (error) {
