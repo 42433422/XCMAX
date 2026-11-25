@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
+import json
 import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import func
+
+from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -17,6 +22,28 @@ logger = logging.getLogger("app.domain.shared_services.inventory_service")
 
 def _facade():
     return importlib.import_module("app.domain.shared_services.inventory_service")
+
+
+def _count_baseline(ledger: Any, movement_id: int, actual: Decimal, location_id: int | None) -> str:
+    """Version the exact original stock row, latest movement and counted input."""
+    payload = [
+        ledger.tenant_id,
+        ledger.id,
+        ledger.product_id,
+        ledger.warehouse_id,
+        ledger.batch_no,
+        ledger.location_id,
+        format(Decimal(str(ledger.quantity or 0)), ".4f"),
+        format(Decimal(str(ledger.available_quantity or 0)), ".4f"),
+        format(Decimal(str(ledger.reserved_quantity or 0)), ".4f"),
+        ledger.updated_at.isoformat() if ledger.updated_at is not None else None,
+        movement_id,
+        format(actual, ".4f"),
+        location_id,
+    ]
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 class InventoryCountingMixin:
@@ -35,6 +62,7 @@ class InventoryCountingMixin:
         remark: str | None = None,
         confirmed: bool = False,
         expected_book_quantity: str | None = None,
+        expected_baseline_version: str | None = None,
     ) -> dict[str, Any]:
         """Preview or CAS-confirm an inventory count without consuming reservations."""
         try:
@@ -46,6 +74,12 @@ class InventoryCountingMixin:
                 raise ValueError("盘点数量必须为四位小数以内的非负数")
         except (ValueError, TypeError, InvalidOperation):
             return {"success": False, "message": "盘点数量必须为四位小数以内的非负数"}
+        if confirmed and not expected_baseline_version:
+            return {
+                "success": False,
+                "error_code": "inventory_count_baseline_required",
+                "message": "确认盘点前必须重新预览并提交原基线版本",
+            }
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 model = _facade().InventoryLedger
@@ -82,6 +116,19 @@ class InventoryCountingMixin:
                             "error_code": "inventory_count_stale",
                             "message": "盘点预览后账面数量已变更，请重新盘点",
                         }
+                movement = _facade().InventoryTransaction
+                movement_query = db.query(func.coalesce(func.max(movement.id), 0)).filter(
+                    movement.ledger_id == ledger.id,
+                    movement.tenant_id == ledger.tenant_id,
+                )
+                movement_id = movement_query.scalar()
+                baseline_version = _count_baseline(ledger, movement_id, actual, location_id)
+                if confirmed and expected_baseline_version != baseline_version:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_count_stale",
+                        "message": "库存基线或实盘输入已变化，请重新预览",
+                    }
                 diff = actual - book
                 if not confirmed:
                     return {
@@ -93,6 +140,7 @@ class InventoryCountingMixin:
                             "warehouse_id": warehouse_id,
                             "batch_no": batch_no,
                             "book_quantity": float(book),
+                            "baseline_version": baseline_version,
                             "actual_quantity": float(actual),
                             "diff": float(diff),
                         },
@@ -119,6 +167,9 @@ class InventoryCountingMixin:
                     model.quantity == book,
                     model.available_quantity == available,
                     model.reserved_quantity == reserved,
+                    model.updated_at == ledger.updated_at,
+                    model.location_id == ledger.location_id,
+                    movement_query.scalar_subquery() == movement_id,
                 ).update(values, synchronize_session=False)
                 if changed != 1:
                     db.rollback()
@@ -130,6 +181,7 @@ class InventoryCountingMixin:
                 db.refresh(ledger)
                 db.add(_facade().InventoryTransaction(
                     ledger_id=ledger.id,
+                    tenant_id=ledger.tenant_id,
                     transaction_type="count",
                     product_id=product_id,
                     warehouse_id=warehouse_id,
