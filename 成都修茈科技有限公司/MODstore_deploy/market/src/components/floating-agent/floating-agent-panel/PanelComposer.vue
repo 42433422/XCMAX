@@ -67,8 +67,8 @@ defineExpose({ autoResize })
 </script>
 
 <template>
-  <template v-if="corpMode">
-    <div class="panel-composer panel-composer--corp">
+  <div class="panel-composer-layout" :class="{ 'panel-composer-layout--corp': corpMode }">
+    <div class="panel-tools" :class="{ 'panel-tools--corp': corpMode }">
       <AgentVoiceInput
         :voice-state="voiceState"
         :is-supported="isSupported"
@@ -80,62 +80,7 @@ defineExpose({ autoResize })
       <button
         type="button"
         class="panel-shot-btn"
-        :class="{
-          'panel-shot-btn--active': hasPendingImage,
-          'panel-shot-btn--light': isLightTheme || corpMode,
-        }"
-        :aria-pressed="hasPendingImage"
-        aria-label="上传图片"
-        :title="hasPendingImage ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
-        :disabled="imagePicking"
-        @click="$emit('pick-image')"
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
-          <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
-          <path d="M3.5 16.5 9 12l3.2 2.8L15 12l5.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <textarea
-        ref="textareaRef"
-        :value="draft"
-        class="panel-input"
-        placeholder="说点什么…"
-        rows="1"
-        aria-label="发送消息"
-        @keydown.enter.exact="handleComposerEnter"
-        @input="onDraftInput"
-      />
-      <button
-        type="button"
-        class="panel-send"
-        :disabled="!canSend"
-        aria-label="发送"
-        @click="send"
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-    </div>
-  </template>
-  <template v-else>
-    <div class="panel-tools">
-      <AgentVoiceInput
-        :voice-state="voiceState"
-        :is-supported="isSupported"
-        :error="error"
-        :loading-hint="loadingHint"
-        :session-ready="sessionReady"
-        @toggle="$emit('toggle-voice')"
-      />
-      <button
-        type="button"
-        class="panel-shot-btn"
-        :class="{
-          'panel-shot-btn--active': hasPendingImage,
-          'panel-shot-btn--light': isLightTheme,
-        }"
+        :class="{ 'panel-shot-btn--active': hasPendingImage, 'panel-shot-btn--light': isLightTheme || corpMode }"
         :aria-pressed="hasPendingImage"
         aria-label="上传图片"
         :title="hasPendingImage ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
@@ -149,8 +94,8 @@ defineExpose({ autoResize })
         </svg>
       </button>
     </div>
-    <div class="panel-composer">
-      <div class="panel-input-shell" :class="{ 'panel-input-shell--autonomy': !!$slots.autonomy }">
+    <div class="panel-composer" :class="{ 'panel-composer--corp': corpMode }">
+      <div class="panel-input-shell" :class="{ 'panel-input-shell--autonomy': !corpMode && !!$slots.autonomy }">
         <textarea
           ref="textareaRef"
           :value="draft"
@@ -161,21 +106,15 @@ defineExpose({ autoResize })
           @keydown.enter.exact="handleComposerEnter"
           @input="onDraftInput"
         />
-        <slot name="autonomy" />
+        <slot v-if="!corpMode" name="autonomy" />
       </div>
-      <button
-        type="button"
-        class="panel-send"
-        :disabled="!canSend"
-        aria-label="发送"
-        @click="send"
-      >
+      <button type="button" class="panel-send" :disabled="!canSend" aria-label="发送" @click="send">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
     </div>
-  </template>
+  </div>
 </template>
 
 <style scoped src="./floatingAgentPanel.css"></style>
