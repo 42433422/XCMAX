@@ -215,6 +215,38 @@ def test_autonomous_review_compiles_two_safe_original_opportunities(operating):
         )
 
 
+def test_resumable_candidate_uses_existing_identity_after_policy_is_granted(operating):
+    from modstore_server.xiaoc_goal_management import resumable_operating_candidate
+
+    now, value, state, goal, fact = operating
+    assert resumable_operating_candidate(
+        {"customer_value": value}, state, 17, now=now
+    ) is None
+    state["policy"] = {"employee_id": "existing", "portfolio_limits": {"cost_cents": 10}}
+    recovered = resumable_operating_candidate(
+        {"customer_value": value}, state, 17, now=now
+    )
+    assert recovered is not None
+    original, source = recovered
+    assert original["id"] == goal["id"]
+    assert source["ref"] == fact["ref"]
+    assert "decision_id" not in original
+    original["next_review_at"] = (now + timedelta(hours=1)).isoformat()
+    state["goals"] = [original]
+    assert resumable_operating_candidate(
+        {"customer_value": value}, state, 17, now=now
+    ) is None
+    original.pop("next_review_at")
+    original["status"] = "cancelled"
+    assert resumable_operating_candidate(
+        {"customer_value": value}, state, 17, now=now
+    ) is None
+    original["status"] = "proposed"
+    assert resumable_operating_candidate(
+        {"customer_value": {**value, "status": "unknown"}}, state, 17, now=now
+    ) is None
+
+
 def test_autonomous_discovery_still_only_submits_review_proposal(operating, monkeypatch):
     import asyncio
 
