@@ -248,11 +248,15 @@ export function ensureGlobModRoutes(router: Router): Promise<void> {
 export async function registerModRoutes(
   router: Router,
   entries: ModRouteApiEntry[] | undefined | null,
-  options: { reconcileRuntime?: boolean } = {},
+  options: { reconcileRuntime?: boolean; sessionCurrent?: () => boolean } = {},
 ): Promise<void> {
   retireStaleRuntimeRoutes(router)
   if (!entries) return
-  const current = captureAuthSession()
+  const session = captureAuthSession()
+  // Also fence the session that actually fetched the list. Capturing only at
+  // registration time would let an old account's late GET revoke a new account.
+  const current = () => session() && (options.sessionCurrent?.() ?? true)
+  if (!current()) return
   if (options.reconcileRuntime) {
     const allowed = new Set(entries.filter(entry => entry.runtime !== undefined).map(entry => entry.mod_id))
     for (const modId of runtimeRegistrationsByRouter.get(router)?.keys() ?? []) {
