@@ -47,8 +47,18 @@ def test_global_singleton_durable_and_shared(isolated_global, monkeypatch):
     entry_id = _enqueue(queue)
     original = queue.dequeue(entry_id).original_event.metadata.event_id
     queue.close()
-    monkeypatch.setattr(module, "_dlq_instance", None)
-    reopened = module.get_dead_letter_queue()
+    with pytest.raises(sqlite3.ProgrammingError):
+        queue.dequeue(entry_id)
+    other = isolated_global.with_name("other.sqlite3")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_DLQ_PATH", str(other))
+    with pytest.raises(ValueError, match="different storage"):
+        module.get_dead_letter_queue(str(other))
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        reopened_queues = list(executor.map(lambda _: module.get_dead_letter_queue(), range(16)))
+    reopened = reopened_queues[0]
+    assert reopened is not queue
+    assert all(item is reopened for item in reopened_queues)
+    assert not other.exists()
     assert reopened.dequeue(entry_id).original_event.metadata.event_id == original
     assert reopened.get_audit_history(entry_id)[0]["action"] == "enqueued"
     with pytest.raises(ValueError, match="different storage"):
