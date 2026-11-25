@@ -297,6 +297,10 @@ class EnterpriseCognitionService:
                 }
             if action == "query":
                 return self.query(parsed, **scope)
+            if action == "perceive":
+                from app.application.enterprise_cognition.perception import observe_enterprise
+
+                return observe_enterprise(self.projections, **parsed, **scope)
             if action == "goals":
                 return (
                     self.goals.get(parsed["goal_id"], **scope)
@@ -331,6 +335,9 @@ def cognition_result_verified(action: str, params: dict, result: dict) -> bool:
     """HTTP and model tools share the same epistemic success semantics."""
     if action == "evaluate":
         return result.get("observation_verified") is True
+    if action == "perceive":
+        # A successful diagnostic is not proof of complete enterprise perception.
+        return result.get("source_checks_completed") is True
     if action != "query":
         return True
     if params.get("as_of") is not None:
