@@ -12,8 +12,6 @@ import tempfile
 from pathlib import Path
 
 MODEL = "BAAI/bge-small-zh-v1.5"
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CACHE = ROOT / "resources" / "models" / "fastembed"
 MANIFEST = "xcmax-model.json"
 
 
@@ -90,11 +88,17 @@ def provision(root: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=DEFAULT_CACHE)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--verify-only", action="store_true")
     args = parser.parse_args()
+    output = args.output
+    if output is None:
+        script = Path(__file__).resolve()
+        if script.parent.name != "dev" or script.parent.parent.name != "scripts":
+            parser.error("--output is required when the provisioner is copied outside scripts/dev")
+        output = script.parent.parent.parent / "resources" / "models" / "fastembed"
     operation = verify if args.verify_only else provision
-    print(json.dumps(operation(args.output.resolve()), sort_keys=True))
+    print(json.dumps(operation(output.resolve()), sort_keys=True))
     return 0
 
 
