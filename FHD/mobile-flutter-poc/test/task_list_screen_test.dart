@@ -99,10 +99,16 @@ void main() {
   ) async {
     final pending = Completer<List<MobileTaskSummary>>();
     final repo = Tasks(TaskApi())..load = () => pending.future;
+    addTearDown(() async {
+      await repo.dispose();
+      repo.api.dispose();
+    });
     await tester.pumpWidget(
       MaterialApp(home: TaskListScreen(repository: repo)),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump();
+    expect(repo.loads, 1);
     pending.completeError(const MobileRepositoryException('任务列表加载失败'));
     await tester.pumpAndSettle();
     expect(find.text('下拉刷新，或点击重试'), findsOneWidget);
@@ -114,8 +120,6 @@ void main() {
     expect(find.text('暂无任务'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
-    await repo.dispose();
-    repo.api.dispose();
   });
 
   for (final count in [1000, 10000]) {

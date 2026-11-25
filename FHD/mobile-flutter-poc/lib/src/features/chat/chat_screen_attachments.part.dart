@@ -86,7 +86,9 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
       {String? selectionScope}) async {
     final client = _repository?.client;
     if (!mounted || _chatInvalidated || _sending || _uploading ||
-        client == null || files.isEmpty) return;
+        client == null || files.isEmpty) {
+      return;
+    }
     if (_attachments.length + files.length > 4) {
       _showMessage('每轮最多 4 个附件，请先移除多余附件');
       return;

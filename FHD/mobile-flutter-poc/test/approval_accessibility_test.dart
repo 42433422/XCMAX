@@ -59,7 +59,7 @@ void main() {
         theme: dark ? AppTheme.dark() : AppTheme.light(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(2),
+            textScaler: const TextScaler.linear(2),
             disableAnimations: true,
           ),
           child: child!,

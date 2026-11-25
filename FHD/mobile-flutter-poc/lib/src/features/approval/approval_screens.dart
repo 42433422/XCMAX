@@ -306,7 +306,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
 
   Future<void> _refreshFromServer() async {
     if (!mounted || _working || _refreshing || _revoked ||
-        _repository.client.authGeneration != _generation) return;
+        _repository.client.authGeneration != _generation) {
+      return;
+    }
     _refreshing = true;
     final future = _load();
     // setState must return void synchronously, never a Future from _load().
@@ -493,18 +495,25 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
       throw StateError('账号已切换，请重新打开审批');
     }
     final detail = await _repository.loadApprovalDetail(widget.id);
+    if (detail.id != widget.id) {
+      throw StateError('审批编号不匹配，请重新打开审批');
+    }
     final unresolved = await _repository.hasUnknownApprovalOutcome(widget.id);
     if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
     }
     if (unresolved && !_isTerminalApproval(detail)) {
       _needsReconciliation = true;
-      _status = '原审批回执仍待核对，禁止重复提交。';
+      _status = '原审批回执仍待核对，请勿重复操作（禁止重复提交）。';
     } else if (unresolved) {
       // Only a terminal server snapshot can release a previously uncertain
       // local decision, including after force-stop or process restart.
       await _repository.clearUnknownApprovalOutcome(widget.id);
+      if (_revoked || _repository.client.authGeneration != _generation) {
+        throw StateError('账号已切换，请重新打开审批');
+      }
       _needsReconciliation = false;
+      _status = '审批状态已由服务端更新，请查看最新结果';
     }
     return detail;
   }
@@ -526,8 +535,15 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
     try {
       // The displayed initial detail is not a write authorization.
       final before = await _load();
-      if (!before.canAct || before.id != widget.id) {
-        throw StateError('原审批已变更或无权操作，请刷新');
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
+      }
+      if (!before.canAct) {
+        setState(() {
+          _status = '原审批已变更或无权操作，请刷新';
+          _future = Future.value(before);
+        });
+        return;
       }
       if (_needsReconciliation) {
         throw StateError('原审批回执待核对，请勿重复提交');
@@ -548,9 +564,19 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
         await _repository.rejectApproval(widget.id, opinion);
       }
       if (!mounted || _repository.client.authGeneration != _generation) return;
-      await _repository.clearUnknownApprovalOutcome(widget.id);
-      _needsReconciliation = false;
-      setState(() => _status = approve ? '审批已通过' : '审批已驳回');
+      // A successful transport response is not a terminal approval snapshot.
+      final after = await _load();
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
+      }
+      if (!_isTerminalApproval(after) || _needsReconciliation) {
+        setState(() {
+          _future = Future.value(after);
+          _status = '原审批回执仍待核对，请勿重复操作（禁止重复提交）。';
+        });
+        return;
+      }
+      setState(() => _status = '审批状态已由服务端更新，请查看最新结果');
       Navigator.of(context).maybePop();
     } catch (error) {
       if (!mounted) return;

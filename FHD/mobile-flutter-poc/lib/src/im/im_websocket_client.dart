@@ -64,7 +64,9 @@ class ImWebSocketClient {
     final nextSessionId = sessionId.trim();
     final nextUrl = url.trim();
     if (_sessionId == nextSessionId && _url == nextUrl &&
-        _state != ImWsConnectionState.disconnected) return;
+        _state != ImWsConnectionState.disconnected) {
+      return;
+    }
     _sessionId = nextSessionId;
     _url = nextUrl;
     _reconnectAttempts = 0;

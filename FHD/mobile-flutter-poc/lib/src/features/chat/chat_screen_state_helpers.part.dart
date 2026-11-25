@@ -49,14 +49,18 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   late final ChatStreamFrameBatcher _streamTokenBatcher = ChatStreamFrameBatcher(
     (messageId, text) {
       if (!mounted || _chatInvalidated || !_chatForeground ||
-          _stopRequested || _activeAssistantId != messageId) return;
+          _stopRequested || _activeAssistantId != messageId) {
+        return;
+      }
       _appendMessageBody(messageId, text);
     },
   );
 
   void _queueStreamToken(String assistantId, String text) {
     if (!mounted || _chatInvalidated || !_chatForeground ||
-        _stopRequested || _activeAssistantId != assistantId) return;
+        _stopRequested || _activeAssistantId != assistantId) {
+      return;
+    }
     _streamTokenBatcher.append(assistantId, text);
   }
 
@@ -67,7 +71,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
     try {
       final draft = await repository.loadChatComposerDraft(widget.conversation.id);
       if (!mounted || _chatInvalidated || _draftTouched ||
-          generation != repository.client.authGeneration) return;
+          generation != repository.client.authGeneration) {
+        return;
+      }
       final text = draft['text'] is String ? draft['text'] as String : '';
       final rawNames = draft['attachment_names'];
       final names = rawNames is List
@@ -102,11 +108,11 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
     final repository = _repository;
     if (repository == null || _chatInvalidated) return;
     final text = _controller.text;
-    final attachmentNames = <String>[
+    final attachmentNames = <String>{
       ..._attachments.map((attachment) => attachment.name),
       ..._failedAttachments.map((file) => file.name),
       ..._recoveredAttachmentNames,
-    ].toSet().take(4).toList(growable: false);
+    }.take(4).toList(growable: false);
     unawaited(repository.saveChatComposerDraft(widget.conversation.id, text,
         attachmentNames: attachmentNames).catchError((_) {}));
   }

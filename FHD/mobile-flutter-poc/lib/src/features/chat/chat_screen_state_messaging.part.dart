@@ -13,7 +13,9 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         widget.conversation,
       );
       if (!mounted || _chatInvalidated || epoch != _chatEpoch ||
-          generation != repository.client.authGeneration) return;
+          generation != repository.client.authGeneration) {
+        return;
+      }
       if (remoteMessages.isNotEmpty && !_sending) {
         setState(() => _messages = remoteMessages);
         _syncFlyerChat();
@@ -53,7 +55,9 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   /// Read only the original turn receipt; never replay an uncertain POST.
   Future<void> _resumePendingChatTurnsIfNeeded() async {
     if (_resumingPendingChat || _sending || _chatInvalidated ||
-        !_chatForeground) return;
+        !_chatForeground) {
+      return;
+    }
     _resumingPendingChat = true;
     try {
       final pending = _messages.where((message) =>
@@ -201,10 +205,14 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     // send a stale pre-composition draft or clear the user's input.
     if (overrideText == null &&
         _controller.value.composing.isValid &&
-        !_controller.value.composing.isCollapsed) return;
+        !_controller.value.composing.isCollapsed) {
+      return;
+    }
     final text = (overrideText ?? _controller.text).trim();
     if (_chatInvalidated || !_chatForeground ||
-        _repository?.client.authGeneration != _chatGeneration) return;
+        _repository?.client.authGeneration != _chatGeneration) {
+      return;
+    }
     if (_recoveredAttachmentNames.isNotEmpty) {
       _showMessage('请重新选择或移除上次的附件后再发送');
       return;

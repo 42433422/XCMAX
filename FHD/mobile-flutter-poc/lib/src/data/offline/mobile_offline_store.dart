@@ -87,7 +87,7 @@ class MobileOfflineStore {
     // Keep unresolved local turns for reconciliation even after history expires.
     final rows = await _db.customSelect(
       'SELECT * FROM chat_messages WHERE conversation_id = ? AND '
-      "((cached_at > ? AND cached_at <= ?) OR status IN $_unresolvedStatuses) "
+      '((cached_at > ? AND cached_at <= ?) OR status IN $_unresolvedStatuses) '
       'ORDER BY ts ASC, message_id ASC',
       variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
@@ -453,7 +453,7 @@ class MobileOfflineStore {
     final rows = await _db.customSelect(
       "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') "
       "${scoped ? 'AND auth_generation = ? ' : ''}"
-      "ORDER BY updated_at ASC, id ASC LIMIT ?",
+      'ORDER BY updated_at ASC, id ASC LIMIT ?',
       variables: [
         if (authGeneration != null) Variable<int>(authGeneration),
         Variable<int>(limit),

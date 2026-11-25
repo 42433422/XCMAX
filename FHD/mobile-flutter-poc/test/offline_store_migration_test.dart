@@ -55,11 +55,11 @@ void main() {
         sqlite.execute(
             'CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
         sqlite.execute(
-            "INSERT INTO chat_messages VALUES "
+            'INSERT INTO chat_messages VALUES '
             "('c1', 'sent-legacy', 'assistant', 'old display', 'earlier', "
             "1, 1, 'sent', 'old-turn'${interrupted ? ', 0' : ''})");
         sqlite.execute(
-            "INSERT INTO chat_messages VALUES "
+            'INSERT INTO chat_messages VALUES '
             "('c1', 'pending-legacy', 'assistant', 'unknown result', 'earlier', "
             "2, 1, 'pending', 'original-turn'${interrupted ? ', 0' : ''})");
         sqlite.execute(
@@ -67,10 +67,10 @@ void main() {
         sqlite.execute(
             "INSERT INTO inflight_tasks VALUES ('c1', 'original-task', 1)");
         sqlite.execute(
-            "INSERT INTO outbox_messages VALUES "
+            'INSERT INTO outbox_messages VALUES '
             "(23, 'c1', 'pinnedAssistant', '小C', 'write operation', 5, "
             "'original-turn', 'sending', 1, '', 1, 1)");
-        sqlite.execute("PRAGMA user_version = 2");
+        sqlite.execute('PRAGMA user_version = 2');
       }),
       clock: () => fixedNow,
     );

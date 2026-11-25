@@ -134,14 +134,18 @@ class _ImMessengerScreenState extends State<ImMessengerScreen>
 
   Future<void> _attachWebSocket() async {
     if (_invalidated || !_foreground || _conversationId <= 0 ||
-        _authGeneration != _repository.client.authGeneration) return;
+        _authGeneration != _repository.client.authGeneration) {
+      return;
+    }
     final epoch = _requestEpoch;
     _wsSubscription?.cancel();
     _wsSubscription = _repository.imWebSocketEvents.listen(_onWebSocketEvent);
     _wsStateSubscription?.cancel();
     _wsStateSubscription = _repository.imWebSocketStates.listen((state) {
       if (!mounted || _invalidated || !_foreground ||
-          _authGeneration != _repository.client.authGeneration) return;
+          _authGeneration != _repository.client.authGeneration) {
+        return;
+      }
       setState(() => _wsState = state);
       // Missed frames and acknowledgements are resolved from server truth.
       // Never recover by re-sending the last outbound message.
@@ -152,7 +156,9 @@ class _ImMessengerScreenState extends State<ImMessengerScreen>
     await _repository.connectImWebSocket();
     if (!mounted || _invalidated || !_foreground ||
         epoch != _requestEpoch ||
-        _authGeneration != _repository.client.authGeneration) return;
+        _authGeneration != _repository.client.authGeneration) {
+      return;
+    }
     setState(() {
       _wsAttached = true;
       _wsState = _repository.imWebSocketState;
@@ -163,7 +169,9 @@ class _ImMessengerScreenState extends State<ImMessengerScreen>
     final parsed = ImWebSocketClient.parseMessageEvent(event);
     if (parsed == null || parsed.conversationId != _conversationId ||
         _invalidated || !_foreground ||
-        _authGeneration != _repository.client.authGeneration) return;
+        _authGeneration != _repository.client.authGeneration) {
+      return;
+    }
     if (_messages.any((message) => message.id == parsed.messageId)) return;
     if (!mounted) return;
     setState(() {
@@ -394,7 +402,9 @@ class _ImMessengerScreenState extends State<ImMessengerScreen>
       final messages = await _repository.loadImMessages(conversationId);
       if (!mounted || _invalidated || !_foreground ||
           conversationId != _conversationId || epoch != _requestEpoch ||
-          _authGeneration != _repository.client.authGeneration) return;
+          _authGeneration != _repository.client.authGeneration) {
+        return;
+      }
       setState(() {
         // Server snapshot wins. Only preserve new live frames that arrived
         // after the GET began; stale/deleted cached messages must not survive.

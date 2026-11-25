@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +26,12 @@ class VisualBusinessRepository extends fixture.Repository {
         status: '待审核', applicantName: '示例员工'),
     ];
   }
+
+  @override
+  Future<ApprovalDetail> loadApprovalDetail(int id) async => approval;
+
+  @override
+  Future<bool> hasUnknownApprovalOutcome(int id) async => false;
 
   @override
   Future<List<MobileTaskSummary>> loadTasks({int limit = 50}) async {
@@ -122,12 +127,13 @@ void main() {
         final captureSide = Platform.environment['VISUAL_CAPTURE_SIDE'] ?? 'candidate';
         if (captureSide == 'baseline') {
           expect(field.maxLines, 1);
+          expect(field.controller?.text, '整理订单核对库存列出异常');
         } else if (captureSide == 'candidate') {
           expect(field.maxLines, greaterThan(1));
+          expect(field.controller?.text, '整理订单\n核对库存\n列出异常');
         } else {
           throw StateError('Unknown VISUAL_CAPTURE_SIDE: $captureSide');
         }
-        expect(field.controller?.text, '整理订单\n核对库存\n列出异常');
         await capture(tester, 'chat-multiline-draft-$name');
         await tester.tap(find.byTooltip('更多工具'));
         await tester.pumpAndSettle();

@@ -175,7 +175,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
 
   Future<void> _markRead() async {
     if (_reading || _stale || !_foreground || !_session.active ||
-        _task?['attention_state'] != 'result_unread') return;
+        _task?['attention_state'] != 'result_unread') {
+      return;
+    }
     _reading = true;
     final epoch = _lifecycleEpoch;
     final displayed = _task;
@@ -241,7 +243,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final signature = _clarificationContext(task),
           form = GlobalKey<FormState>();
       if (_answeredContext == signature) throw StateError('已提交此问题，请等待任务状态更新');
-      if (!_isCurrent(epoch)) return;
+      if (!mounted || !_isCurrent(epoch)) return;
       final parameters = await showDialog<Map<String, Object?>>(
           context: context,
           builder: (context) => AlertDialog(
@@ -369,7 +371,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         }
         step = matches.single;
       }
-      if (!_isCurrent(epoch)) return;
+      if (!mounted || !_isCurrent(epoch)) return;
       if (['cancel', 'retry', 'approve'].contains(action)) {
         final yes = await showDialog<bool>(
           context: context,

@@ -72,7 +72,7 @@ void main() {
 
   setUp(() {
     api = MobileApiClient(sessionStore:
-        MemoryMobileSessionStore(MobileSessionData.empty));
+        MemoryMobileSessionStore(const MobileSessionData(accessToken: 'approval-test-token', userId: 42)));
     repo = _ApprovalRepository(api);
   });
 
@@ -97,6 +97,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.writes, 0);
     expect(find.textContaining('原审批已变更'), findsOneWidget);
+    expect(tester.widget<WeBlockButton>(
+      find.widgetWithText(WeBlockButton, '通过')).enabled, isFalse);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('account switch hides cached approval and disables actions',
@@ -108,7 +111,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('跨端库存审批'), findsOneWidget);
-    await api.clearActiveAuth();
+    await tester.runAsync(() async {
+      await api.clearActiveAuth();
+    });
     await tester.pumpAndSettle();
     expect(find.text('跨端库存审批'), findsNothing);
     expect(find.text('账号已切换，请重新打开审批'), findsOneWidget);

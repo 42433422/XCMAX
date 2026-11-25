@@ -151,7 +151,7 @@ class _TaskListScreenState extends State<TaskListScreen>
                       taskIndexById.putIfAbsent(task.taskId, () => i);
                     }
                   }
-                  final radius = Radius.circular(XcagiShapeTokens.large);
+                  const radius = Radius.circular(XcagiShapeTokens.large);
                   return RefreshIndicator(
                     color: colors.brand,
                     onRefresh: _refresh,
