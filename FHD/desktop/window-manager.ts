@@ -215,6 +215,7 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
   })
   desktopRuntime.auxiliaryWindows.add(win)
   attachAuxiliaryGuards(win)
+  attachWorkAreaRecovery(win)
   win.on('closed', () => {
     void isolated.clearStorageData().catch(() => undefined)
     void isolated.clearCache().catch(() => undefined)
@@ -259,15 +260,35 @@ export function toggleMainWindow(): void {
 }
 
 /** 托盘唤起时，窗口若几乎不在当前工作区内，拉回该显示器，避免点了却看不见。 */
-function bringOffscreenWindowIntoWorkArea(win: BrowserWindow): void {
+function bringOffscreenWindowIntoWorkArea(win: BrowserWindow, strict = false): void {
+  if (win.isDestroyed() || win.isMinimized() || win.isMaximized() || win.isFullScreen()) return
   const bounds = win.getBounds()
   const work = screen.getDisplayMatching(bounds).workArea
+  if (work.width <= 0 || work.height <= 0) return
+  // Electron reports these in DIP; the same bounds contract works across display scale factors.
+  const minimum = { width: Math.min(DESKTOP_MIN_WIDTH, work.width), height: Math.min(DESKTOP_MIN_HEIGHT, work.height) }
+  const [minWidth, minHeight] = win.getMinimumSize()
+  if (minWidth !== minimum.width || minHeight !== minimum.height) win.setMinimumSize(minimum.width, minimum.height)
   const overlapW = Math.min(bounds.x + bounds.width, work.x + work.width) - Math.max(bounds.x, work.x)
   const overlapH = Math.min(bounds.y + bounds.height, work.y + work.height) - Math.max(bounds.y, work.y)
   const visibleEnough =
     overlapW >= Math.min(240, bounds.width / 2) && overlapH >= Math.min(180, bounds.height / 2)
-  if (visibleEnough) return
-  win.setBounds(clampWindowBounds(bounds, work))
+  if (!strict && visibleEnough && bounds.width <= work.width && bounds.height <= work.height) return
+  const next = clampWindowBounds(bounds, work, minimum)
+  if (next.x !== bounds.x || next.y !== bounds.y || next.width !== bounds.width || next.height !== bounds.height) win.setBounds(next)
+}
+
+function attachWorkAreaRecovery(win: BrowserWindow): void {
+  const recover = () => bringOffscreenWindowIntoWorkArea(win, true)
+  screen.on('display-removed', recover)
+  screen.on('display-metrics-changed', recover)
+  win.on('restore', recover)
+  win.on('unmaximize', recover)
+  win.on('leave-full-screen', recover)
+  win.on('closed', () => {
+    screen.removeListener('display-removed', recover)
+    screen.removeListener('display-metrics-changed', recover)
+  })
 }
 
 /**
@@ -293,29 +314,6 @@ export function showMainWindow(): void {
     mainWindow.moveTop()
     mainWindow.focus()
     mainWindow.setAlwaysOnTop(false)
-  }
-}
-
-/** macOS 全屏/恢复后窗口可能只剩顶部一条，拉回工作区。 */
-function ensureMacWindowInWorkArea(win: BrowserWindow): void {
-  if (process.platform !== 'darwin') return
-  const bounds = win.getBounds()
-  const work = screen.getDisplayMatching(bounds).workArea
-  const minW = DESKTOP_MIN_WIDTH
-  const minH = DESKTOP_MIN_HEIGHT
-  let { x, y, width, height } = bounds
-  if (width < minW) width = Math.min(minW, work.width)
-  if (height < minH) height = Math.min(minH, work.height)
-  if (y < work.y || height < minH) {
-    y = work.y + 8
-    height = Math.min(Math.max(height, minH), work.height - 16)
-  }
-  if (x + width > work.x + work.width) {
-    x = work.x + Math.max(0, work.width - width)
-  }
-  if (x < work.x) x = work.x
-  if (width !== bounds.width || height !== bounds.height || x !== bounds.x || y !== bounds.y) {
-    win.setBounds({ x, y, width, height })
   }
 }
 
@@ -406,6 +404,7 @@ export async function createWindow(): Promise<void> {
     backgroundThrottling: false,
   } })
   desktopRuntime.mainWindow = mainWindow
+  attachWorkAreaRecovery(mainWindow)
   attachRendererSurfaceRecovery(mainWindow, writeBackendLog)
   desktopRuntime.rendererFailedDuringStartup = false
   let startupWindowShown = false
@@ -461,15 +460,6 @@ export async function createWindow(): Promise<void> {
     desktopRuntime.mainWindow = null
     desktopRuntime.mainApplicationReady = null
   })
-  if (process.platform === 'darwin') {
-    mainWindow.on('leave-full-screen', () => {
-      if (desktopRuntime.mainWindow) ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
-    })
-    mainWindow.on('restore', () => {
-      if (desktopRuntime.mainWindow) ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
-    })
-  }
-
   attachDesktopNavigationGuards(mainWindow)
   // 未注册 will-download 时 Chromium 只把文件留在下载目录的 <guid>.tmp，
   // 客户看不到「文件名: xxx.xlsx」对应的文件。显式落盘到下载目录并保留业务文件名。
@@ -573,7 +563,7 @@ export async function createWindow(): Promise<void> {
       })
       tagDesktopWebContents(desktopRuntime.mainWindow)
       if (process.platform === 'darwin') {
-        ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
+        bringOffscreenWindowIntoWorkArea(desktopRuntime.mainWindow, true)
       }
       if (startupWindowShown) desktopRuntime.mainWindow.focus()
     } catch (error) {
