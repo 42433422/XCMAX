@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from modstore_server import retort_experiment_runtime as runtime
 from modstore_server import retort_feedback_experiments as lifecycle
 from modstore_server import retort_training_candidates as training
 from modstore_server import workflow_nl_graph
@@ -160,7 +161,14 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
         effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
         assert effects["experiment"]["traffic"] == "control"
         assert effects["experiment"]["decision"] == "rollback"
-    assert run["choose"]() == (run["spec"]["lifecycle"]["control_prompt"], None)
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
 @pytest.mark.parametrize("tamper", ["no_outbox_regression", "release_changed", "snapshot_changed"])
@@ -199,7 +207,14 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
     assert result["status"] == "waiting_customer_impact"
     assert result["reason"] == "training_regression_recheck_unverified"
     assert run["api"].calls == previous_calls
-    assert run["choose"]() == (run["spec"]["lifecycle"]["control_prompt"], None)
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
