@@ -37,3 +37,24 @@ describe('independently installed Mod routes', () => {
     }
   })
 })
+
+
+it('rejects duplicate or invalid revisions without leaving an old runtime registered', async () => {
+  const router = await setup()
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: data() }])
+  const invalid = { ...data(), package_sha256: 'invalid' }
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: invalid }])
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(false)
+  const duplicate = { ...data(), routes: [data().routes[0]!, data().routes[0]!] }
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: duplicate }])
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(false)
+})
+
+it('rejects collisions with a differently named host path and still registers the next extension', async () => {
+  const router = await setup()
+  router.addRoute({ path: '/mod/unknown-ui/home', name: 'host-home', component: { template: '<div />' } })
+  const other = { ...data(), mod_id: 'other-ui', routes: [{ path: '/mod/other-ui/home', name: 'runtime-other-ui-0', title: 'Other' }] }
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: data() }, { mod_id: 'other-ui', routes_path: '', runtime: other }])
+  expect(router.resolve('/mod/unknown-ui/home').name).toBe('host-home')
+  expect(router.hasRoute('runtime-other-ui-0')).toBe(true)
+})
