@@ -490,15 +490,50 @@ def training_plan(request_id):
 
 
 def read_training_impact(request_id, state):
+    from modstore_server.retort_feedback_experiments import approved_policy
+    from modstore_server.retort_workflow_metrics import execution_stop_loss
+
+    reject = False
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, request_id)
-        source = json_loads(row.effects_json, {}).get("training_candidate") if row else None
-    if not source:
-        return None
+        effects = json_loads(row.effects_json, {}) if row else {}
+        source = effects.get("training_candidate")
+        if not source:
+            return None
+        recheck = effects.get("training_regression_recheck")
+        if recheck is not None:
+            progress = effects.get("experiment") or {}
+            delivery = state.get("delivery") or {}
+            try:
+                policy, _ = approved_policy(row)
+                bound = (
+                    isinstance(recheck, dict)
+                    and recheck.get("source") == "original_experiment_outbox"
+                    and recheck.get("reason") == "workflow_execution_stop_loss"
+                    and recheck.get("request_id") == request_id
+                    and recheck.get("release_sha") == progress.get("release_sha")
+                    and recheck.get("release_sha") == delivery.get("release_sha")
+                    and recheck.get("final_snapshot_sha256")
+                    == progress.get("final_snapshot_sha256")
+                    and bool(recheck.get("final_snapshot_sha256"))
+                    and policy == source["growthbook"]
+                    and execution_stop_loss(db, row, policy)
+                )
+            except (KeyError, TypeError, ValueError):
+                bound = False
+            if not bound:
+                return {
+                    "status": "waiting_customer_impact",
+                    "reason": "training_regression_recheck_unverified",
+                    "source": "original_experiment_outbox",
+                    "release_sha": delivery.get("release_sha"),
+                    "verified_at": None,
+                }
+            reject = True
     from modstore_server.retort_feedback_measurements import experiment_measurement
 
     experiment = experiment_measurement(
-        source["growthbook"], request_id, state["delivery"], state=state
+        source["growthbook"], request_id, state["delivery"], state=state, reject=reject
     )
     status, reason = "waiting_customer_impact", "awaiting_experiment_result"
     if experiment.get("rollout_verified"):
