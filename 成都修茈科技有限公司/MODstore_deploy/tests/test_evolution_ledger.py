@@ -108,3 +108,54 @@ def test_append_event_concurrent_safe(tmp_ledger):
         t.join()
     lines = tmp_ledger.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 100
+
+
+def test_audit_keeps_original_jsonl_immutable_and_tracks_revisions(tmp_ledger):
+    original = append_event({"event_type": "pack_listed", "pack_id": "unchanged"})
+    before = tmp_ledger.read_bytes()
+    assert mark_audited(original["event_id"], "approved") is True
+    first = tmp_ledger.read_bytes()
+    assert first.startswith(before)
+    rows = [json.loads(line) for line in first.splitlines()]
+    assert len(rows) == 2
+    assert rows[0]["owner_audit"]["audited"] is False
+    assert rows[1]["event_type"] == "owner_audit_recorded"
+    assert rows[1]["audit_target_event_id"] == original["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "approved"
+
+    assert mark_audited(original["event_id"], "approved") is True
+    assert tmp_ledger.read_bytes() == first
+    assert mark_audited(original["event_id"], "rejected") is True
+    amended = tmp_ledger.read_bytes()
+    assert amended.startswith(first)
+    rows = [json.loads(line) for line in amended.splitlines()]
+    assert len(rows) == 3
+    assert rows[2]["previous_audit_event_id"] == rows[1]["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "rejected"
+    assert len(list_events(event_type="pack_listed")) == 1
+
+
+def test_proposer_cannot_spoof_journal_identity_or_owner_audit(tmp_ledger):
+    forged = {
+        "event_type": "signal_detected",
+        "event_id": "forged-id",
+        "recorded_at": "2000-01-01T00:00:00+00:00",
+        "owner_audit": {"audited": True, "verdict": "approved"},
+    }
+    recorded = append_event(forged)
+    assert recorded["event_id"] != "forged-id"
+    assert recorded["recorded_at"] != forged["recorded_at"]
+    assert recorded["owner_audit"]["audited"] is False
+    assert list_events()[0]["owner_audit"]["verdict"] is None
+    with pytest.raises(ValueError, match="invalid_evolution_event"):
+        append_event({"event_type": "owner_audit_recorded", "audit_verdict": "approved"})
+
+
+def test_audit_missing_event_and_invalid_verdict_fail_closed(tmp_ledger):
+    original = append_event({"event_type": "signal_detected"})
+    before = tmp_ledger.read_bytes()
+    assert mark_audited("not-present", "approved") is False
+    assert tmp_ledger.read_bytes() == before
+    with pytest.raises(ValueError, match="invalid_evolution_audit_verdict"):
+        mark_audited(original["event_id"], "self-approved")
+    assert tmp_ledger.read_bytes() == before
