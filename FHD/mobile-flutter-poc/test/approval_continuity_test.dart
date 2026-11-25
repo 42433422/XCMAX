@@ -77,6 +77,23 @@ void main() {
     expect(find.textContaining('原审批已变更'), findsOneWidget);
   });
 
+  testWidgets('account switch hides cached approval and disables actions',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ApprovalDetailScreen(
+        id: 42, repository: repo, initialDetail: repo.detail,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('跨端库存审批'), findsOneWidget);
+    await api.clearActiveAuth();
+    await tester.pumpAndSettle();
+    expect(find.text('跨端库存审批'), findsNothing);
+    expect(find.text('账号已切换，请重新打开审批'), findsOneWidget);
+    expect(repo.writes, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('lost approval receipt blocks repeated writes',
       (tester) async {
     repo.loseWriteReceipt = true;
