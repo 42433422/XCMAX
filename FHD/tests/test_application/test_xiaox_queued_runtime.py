@@ -329,3 +329,43 @@ def test_parent_queue_claim_does_not_authorize_forged_or_foreign_children(runtim
             "query",
             {"keyword": "test"},
         )
+
+
+@pytest.mark.parametrize("marker", ["intent", "runtime_type", "ledger", "queue", "result"])
+def test_legacy_queue_never_enters_generic_executor(runtime_entry, marker):
+    state = runtime_entry
+    run_id = create(state)
+    saved = state.repository.get(run_id)
+    if marker == "intent":
+        saved.intent = "codex.runtime"
+    elif marker == "runtime_type":
+        saved.metadata["runtime_type"] = "codex"
+    elif marker == "ledger":
+        saved.metadata["codex_runtime"] = {"calls": {"old": {"state": "unknown"}}}
+    elif marker == "queue":
+        saved.metadata["_codex_queued_request"] = {"state": "queued"}
+    else:
+        saved.final_output["codex_result"] = {"output": "original receipt"}
+    state.repository.save(saved)
+    original = state.repository.get(run_id).to_dict()
+    execution = state.queue.claim("legacy-worker", lease_seconds=120)
+    assert execution is not None
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("unreconciled legacy runtime entered generic executor")
+
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=state.queue, run_repository=state.repository
+    )
+    dispatcher._orchestrator_factory = forbidden
+    dispatcher._execute_claim(execution, "legacy-worker")
+    assert state.repository.get(run_id).to_dict() == original
+    assert state.queue.get(run_id).last_error_code == "needs_verification"
+    assert state.calls == state.servers == []
+
+
+def test_legacy_source_cannot_skip_parent_receipt_validation():
+    from app.infrastructure.xiaox.receipts import action_parent
+
+    with pytest.raises(PermissionError, match="来源校验"):
+        action_parent({"source": "codex_runtime", "parent_run_id": "old"})
