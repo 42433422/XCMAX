@@ -55,7 +55,7 @@
             {{ accountUsername }}
           </div>
         </div>
-        <TopQuickNav @select="handleViewChange" />
+        <TopQuickNav @select="handleViewChange" @command="handleWorkspaceCommand" />
         <div class="top-bar-actions">
           <button
             type="button"
@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElDrawer } from 'element-plus'
 import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/el-overlay.css'
@@ -104,6 +104,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useModsStore } from '@/stores/mods'
 import { useAccountProfileStore } from '@/stores/accountProfile'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import {
+  workspaceCommandStorageKey, readWorkspaceCommandPreferences, writeWorkspaceCommandPreferences,
+} from '@/utils/workspaceCommandShortcuts'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
 import { isAdminConsoleSpa as detectAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -149,6 +153,7 @@ const isAnyTutorialActive = computed(() => onboardingTutorialActive.value || leg
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()
+const workspaceTaskCenter = useAgentTaskCenterStore()
 const { modsForUi } = storeToRefs(modsStore)
 const { displayBrand, isImpersonating, impersonatingUsername, companyBrand } = storeToRefs(accountProfileStore)
 const endingImpersonation = ref(false)
@@ -395,6 +400,62 @@ const handleViewChange = (viewKey) => {
   void navigateToView(viewKey, 'sidebar-or-quicknav')
 }
 
+async function handleWorkspaceCommand(command) {
+  if (!isSidebarFeatureEnabled.value && command === 'sidebar') return
+  if (command === 'sidebar') {
+    clearSidebarCollapseTimer()
+    clearSidebarHoverTimer()
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    const key = workspaceCommandStorageKey()
+    if (key) {
+      const prefs = readWorkspaceCommandPreferences(key)
+      writeWorkspaceCommandPreferences(key, { ...prefs, sidebarCollapsed: sidebarCollapsed.value })
+    }
+    return
+  }
+  if (command === 'tasks') {
+    workspaceTaskCenter.drawerOpen = true
+    void workspaceTaskCenter.refresh()
+    return
+  }
+  if (!['chat', 'new-chat', 'sessions'].includes(command)) return
+  await navigateToView('chat', 'workspace-shortcut')
+  if (router.currentRoute.value.name !== 'chat') return
+  // The route resolves before Vue's async component/keep-alive activation may settle.
+  await nextTick()
+  const dispatch = () => {
+    if (router.currentRoute.value.name !== 'chat') return false
+    const input = document.getElementById('messageInput')
+    if (!input || !input.isConnected || input.closest('[inert]')) return false
+    if (command === 'new-chat') window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    else if (command === 'sessions') window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    else input.focus({ preventScroll: true })
+    return true
+  }
+  if (!dispatch()) {
+    window.setTimeout(() => { dispatch() }, 100)
+  }
+}
+
+function restoreWorkspaceSidebarPreference() {
+  if (!isSidebarFeatureEnabled.value) return
+  const key = workspaceCommandStorageKey()
+  if (!key) return
+  const preference = readWorkspaceCommandPreferences(key).sidebarCollapsed
+  if (typeof preference === 'boolean') sidebarCollapsed.value = preference
+}
+function onWorkspacePreferenceStorage(event) {
+  const key = workspaceCommandStorageKey()
+  if (!key || event.key !== key || event.storageArea !== localStorage) return
+  restoreWorkspaceSidebarPreference()
+}
+watch(
+  () => [accountProfileStore.tenantId, accountProfileStore.localUserId, accountProfileStore.marketUserId,
+    accountProfileStore.accountKind, accountProfileStore.loaded],
+  () => { void nextTick(restoreWorkspaceSidebarPreference) },
+  { immediate: true, flush: 'post' },
+)
+
 function openSettings() {
   // Share the same intent channel as sidebar / ecosystem so races invalidate correctly.
   void navigateToView('settings', 'top-settings')
@@ -424,7 +485,7 @@ const ensureSidebarExpandedForTutorial = () => {
 
 const scheduleSidebarAutoCollapse = () => {
   clearSidebarCollapseTimer()
-  if (document.documentElement.classList.contains('xcagi-electron')) return void (sidebarCollapsed.value = false)
+  if (document.documentElement.classList.contains('xcagi-electron')) return
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
@@ -502,6 +563,7 @@ function syncMobileViewport() {
 }
 
 onMounted(() => {
+  window.addEventListener('storage', onWorkspacePreferenceStorage)
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
@@ -545,6 +607,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('storage', onWorkspacePreferenceStorage)
   layoutActive = false
   window.visualViewport?.removeEventListener('resize', syncMobileViewport)
   window.visualViewport?.removeEventListener('scroll', syncMobileViewport)
