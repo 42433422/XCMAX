@@ -344,6 +344,11 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      if (error is MobileApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        _revokeChatView();
+        return;
+      }
       final pending = error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_PENDING';
       final offline = !pending && isOfflineError(error);
       final queuedId = offline && !resumeOnly && attachments.isEmpty
