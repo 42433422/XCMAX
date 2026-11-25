@@ -37,7 +37,6 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
     return Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             WeTopBar(
@@ -78,12 +77,19 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
                     return Center(
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(mobileErrorText(snapshot.error)),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(mobileErrorText(snapshot.error)),
+                      ),
                       TextButton(onPressed: _refresh, child: const Text('重试')),
                     ]));
                   }
                   if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        semanticsLabel: '正在加载待办审批',
+                      ),
+                    );
                   }
                   if (snapshot.connectionState == ConnectionState.done &&
                       items.isEmpty) {
@@ -224,7 +230,6 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
         return Scaffold(
           backgroundColor: colors.page,
           body: SafeArea(
-            bottom: false,
             child: Column(
               children: [
                 WeTopBar(
@@ -237,7 +242,10 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                       ? Center(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text(mobileErrorText(snapshot.error)),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(mobileErrorText(snapshot.error)),
+                          ),
                           TextButton(
                               onPressed: () =>
                                   setState(() => _future = _load()),
@@ -246,7 +254,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                       : detail == null
                           ? Center(
                               child: CircularProgressIndicator(
-                                  color: colors.brand),
+                                color: colors.brand,
+                                semanticsLabel: '正在加载审批详情',
+                              ),
                             )
                           : ListView(
                               padding: const EdgeInsets.only(bottom: 96),
@@ -317,7 +327,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                         maxLines: 4,
                                         decoration: const InputDecoration(
                                           border: InputBorder.none,
-                                          hintText: '输入审批意见（可选）',
+                                          labelText: '审批意见（可选）',
                                         ),
                                       ),
                                     ),
@@ -363,7 +373,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
         onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
-    if (accepted != true) return;
+    if (accepted != true || !mounted || _working) return;
     setState(() => _working = true);
     try {
       final opinion = _opinionController.text.trim();
@@ -400,7 +410,7 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         text.ifEmpty('待处理'),
         style: TextStyle(
-          color: colors.brand,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
           fontSize: 11,
           height: 1.27,
           letterSpacing: 0,
@@ -418,20 +428,23 @@ class _StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.brandContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: colors.brand,
-          fontSize: 13,
-          height: 1.38,
-          letterSpacing: 0,
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.brandContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+            fontSize: 13,
+            height: 1.38,
+            letterSpacing: 0,
+          ),
         ),
       ),
     );
