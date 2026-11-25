@@ -993,3 +993,68 @@ def test_customer_and_finance_remembered_facts_are_superseded_by_erp(
     assert verify_source_reference(
         after, after["source_version"], make_fact_reference(after)["fact_token"]
     )["status"] == "current"
+
+
+def test_source_verification_never_writes_derived_cache_or_history(world):
+    service, sessions, clock, _ = world
+    baseline = get(service)
+    assert baseline["retrieved_from"] == "authority"
+    with sessions() as db:
+        projection = db.scalar(
+            select(EnterpriseStateProjection).where(
+                EnterpriseStateProjection.entity_type == "order",
+                EnterpriseStateProjection.entity_id == "101",
+            )
+        )
+        prior_json = projection.snapshot_json
+        prior_expiry = projection.expires_at
+        prior_generation = db.scalar(select(EnterpriseEventCursor)).generation
+
+    # Repeated source-version checks are read-only and never churn history.
+    for _ in range(3):
+        checked = get(service, verify_only=True)
+        assert checked["retrieved_from"] == "authority"
+        assert checked["source_version"] == baseline["source_version"]
+        with sessions() as db:
+            same = db.scalar(
+                select(EnterpriseStateProjection).where(
+                    EnterpriseStateProjection.entity_type == "order",
+                    EnterpriseStateProjection.entity_id == "101",
+                )
+            )
+            assert same.snapshot_json == prior_json
+            assert same.expires_at == prior_expiry
+            assert db.scalar(select(EnterpriseEventCursor)).generation == prior_generation
+    with sessions.begin() as db:
+        db.get(SalesOrderItem, 401).delivered_quantity = Decimal(9)
+    clock[0] += 1
+    revised = get(service, verify_only=True)
+    assert revised["source_version"] != baseline["source_version"]
+    assert revised["state"]["remaining_quantity"] == "1.0000"
+    with sessions() as db:
+        assert db.scalar(
+            select(EnterpriseStateProjection).where(
+                EnterpriseStateProjection.entity_type == "order",
+                EnterpriseStateProjection.entity_id == "101",
+            )
+        ).snapshot_json == prior_json
+    # A read-through verification cannot silently alter the ordinary TTL contract.
+    assert get(service)["source_version"] == baseline["source_version"]
+    with pytest.raises(ValueError, match="source_verification_requires_current_authority"):
+        get(service, verify_only=True, as_of=baseline["observed_at"])
+
+
+def test_verify_only_first_read_does_not_create_derived_cursor(world):
+    service, sessions, _, _ = world
+    result = get(service, "customer", "201", verify_only=True)
+    assert result["knowledge_kind"] == "fact"
+    assert result["last_event_id"] is None
+    with sessions() as db:
+        assert not db.scalars(
+            select(EnterpriseEventCursor).where(EnterpriseEventCursor.entity_type == "customer")
+        ).all()
+        assert not db.scalars(
+            select(EnterpriseStateProjection).where(
+                EnterpriseStateProjection.entity_type == "customer"
+            )
+        ).all()
