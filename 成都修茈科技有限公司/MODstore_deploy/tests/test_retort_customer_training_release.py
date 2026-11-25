@@ -5,11 +5,13 @@ from __future__ import annotations
 import base64
 from datetime import timedelta
 from urllib.parse import quote
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
 from modstore_server import retort_feedback_experiments as lifecycle
+from modstore_server import retort_training_candidates as training
 from modstore_server import workflow_nl_graph
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import RetortEvolutionRun, get_session_factory
@@ -105,6 +107,52 @@ def test_exact_released_and_running_treatment_reaches_original_promotion(
         assert effects["training_candidate"]["growthbook"] == run["spec"]
         assert effects["experiment"]["release_sha"] == run["delivery"]["release_sha"]
         assert effects["experiment"]["traffic"] == "candidate"
+
+
+def test_late_postpromotion_failure_reopens_original_training_compensation(released_customer_training):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        db.commit()
+    assert training.request_postpromotion_regression_rechecks() == 0
+    for user_id in run["users"][:2]:
+        with get_session_factory()() as db:
+            enqueue(
+                db,
+                "experiment.observed",
+                run["id"],
+                {
+                    "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                    "variation_id": "1",
+                    "execution_id": str(uuid4()),
+                    "subject_id": str(user_id),
+                    "success": False,
+                },
+                event_id="experiment.observed:" + str(uuid4()),
+            )
+            db.commit()
+    # Uses original outbox stop-loss, never a submitted model verdict.
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert row.status == "impact_recheck"
+        effects = json_loads(row.effects_json, {})
+        assert effects["training_regression_recheck"]["reason"] == "workflow_execution_stop_loss"
+        assert effects["experiment"]["traffic"] == "candidate"
+    assert run["advance"](reject=True)["status"] in ("awaiting_rollout_readback", "measured")
+    assert run["advance"](reject=True)["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
