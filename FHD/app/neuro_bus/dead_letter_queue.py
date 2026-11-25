@@ -6,6 +6,7 @@ import asyncio
 import hashlib as hashlib
 import json as json
 import logging
+import os
 import random
 import sqlite3
 import threading
@@ -157,7 +158,7 @@ class DeadLetterQueue:
         Args:
             max_size: 最大条目数
             retention_hours: 保留时间（小时，默认 7 天）
-            storage_path: SQLITE 持久化路径；None 表示纯内存模式（默认）
+            storage_path: SQLITE 持久化路径；None 为显式构造的内存模式（测试/临时使用）
             alert_suppress_window: 告警抑制窗口（秒，默认 5 分钟）
             alert_threshold: 触发告警的最小同类事件数（默认 1）
         """
@@ -402,6 +403,18 @@ class DeadLetterQueue:
         """清理过期条目"""
         return self._management.cleanup_expired()
 
+    def get_archived_entries(self, limit: int = 100) -> list[DeadLetterEntry]:
+        """List retained inactive dead letters for supervised recovery."""
+        return self._repository.archived_entries(limit)
+
+    def restore_archived(self, entry_id: str, restored_by: str) -> bool:
+        """Restore the same event identity; this never dispatches the event."""
+        return self._repository.restore_archived(entry_id, restored_by)
+
+    def get_audit_history(self, entry_id: str) -> list[dict[str, Any]]:
+        """Return durable lifecycle history without copying the original payload."""
+        return self._repository.audit_history(entry_id)
+
     def get_all_entries(self) -> list[DeadLetterEntry]:
         """获取所有条目"""
         return self._repository.entries()
@@ -515,7 +528,7 @@ class NeuroBusDLQIntegration:
     """
 
     def __init__(self, dlq: DeadLetterQueue | None = None):
-        self._dlq = dlq or DeadLetterQueue()
+        self._dlq = dlq if dlq is not None else get_dead_letter_queue()
         self._max_retries = 3
 
     @property
@@ -561,23 +574,40 @@ class NeuroBusDLQIntegration:
 
 
 _dlq_instance: DeadLetterQueue | None = None
+_dlq_instance_lock = threading.Lock()
+
+
+def _default_dlq_path() -> str:
+    """Resolve a stable on-disk path, never a process-local temporary file."""
+    configured = os.environ.get("XCAGI_NEURO_BUS_DLQ_PATH", "").strip()
+    if configured:
+        if configured == ":memory:":
+            raise ValueError("Global NeuroBus DLQ requires persistent storage")
+        return str(Path(configured).expanduser().resolve())
+    desktop_data = os.environ.get("XCAGI_DATA_DIR", "").strip()
+    database_path = os.environ.get("DATABASE_PATH", "").strip()
+    if desktop_data:
+        root = Path(desktop_data) / "data"
+    elif database_path:
+        root = Path(database_path)
+    else:
+        root = Path(__file__).resolve().parents[2] / "data"
+    return str((root / "neurobus_dlq.sqlite3").expanduser().resolve())
 
 
 def get_dead_letter_queue(storage_path: str | None = None) -> DeadLetterQueue:
-    """
-    获取全局死信队列实例
-
-    Args:
-        storage_path: 可选 SQLITE 持久化路径；仅在首次创建实例时生效。
-            若实例已存在则忽略该参数（保持向后兼容）。
-
-    Returns:
-        全局 DeadLetterQueue 实例
-    """
+    """Return the durable process singleton; reject conflicting explicit paths."""
     global _dlq_instance
-    if _dlq_instance is None:
-        _dlq_instance = DeadLetterQueue(storage_path=storage_path)
-    return _dlq_instance
+    with _dlq_instance_lock:
+        if storage_path is not None:
+            if not storage_path.strip() or storage_path == ":memory:":
+                raise ValueError("Global NeuroBus DLQ requires persistent storage")
+            storage_path = str(Path(storage_path).expanduser().resolve())
+        if _dlq_instance is None:
+            _dlq_instance = DeadLetterQueue(storage_path=storage_path or _default_dlq_path())
+        elif storage_path is not None and _dlq_instance._storage_path != storage_path:
+            raise ValueError("Global NeuroBus DLQ already uses a different storage path")
+        return _dlq_instance
 
 
 def enqueue_dead_letter(
