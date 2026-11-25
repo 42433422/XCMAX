@@ -325,6 +325,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         status: str = "",
         memory_type: str = "",
         limit: int = 200,
+        revalidate_erp: bool = True,
     ) -> dict[str, Any]:
         access = _coerce_access_context(access_context)
         if access is None or not access.actor_id or not access.tenant_id:
@@ -375,6 +376,12 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         )
         bounded = max(1, min(int(limit or 200), 1000))
         visible = rows[:bounded]
+        if revalidate_erp and visible:
+            from app.application.enterprise_cognition.memory_reference import (
+                sanitize_erp_memory_view,
+            )
+
+            visible = [sanitize_erp_memory_view(row, access) for row in visible]
         return {
             "success": True,
             "memories": visible,
@@ -495,7 +502,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 }
         review_only = instant is not None or business_time is not None
         # Pending, revoked and blocked records never supply recall facts.
-        listed = self.list_memories(access_context=access, status="active", limit=1000)
+        listed = self.list_memories(
+            access_context=access, status="active", limit=1000, revalidate_erp=False
+        )
         if not listed.get("success"):
             return {**listed, "memories": [], "chunks": []}
         listed_memories = listed.get("memories")
@@ -560,7 +569,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         if selected:
             # A second authority read fences changes while building paths. Each returned
             # result still identifies its source revision, never a new business authorization.
-            fresh = self.list_memories(access_context=access, status="active", limit=1000)
+            fresh = self.list_memories(
+                access_context=access, status="active", limit=1000, revalidate_erp=False
+            )
             if not fresh.get("success"):
                 return {**fresh, "memories": [], "chunks": []}
             fresh_rows = [row for row in fresh.get("memories", []) if is_recallable_memory(row)]
