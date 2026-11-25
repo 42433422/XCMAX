@@ -24,7 +24,7 @@
       </div>
       <div class="search-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
         <label style="white-space:nowrap;">产品单位：</label>
-        <select v-model="selectedUnit" style="min-width:180px;" @change="loadProducts">
+        <select v-model="selectedUnit" style="min-width:180px;" @change="changeProductUnit">
           <option value="">请选择产品单位</option>
           <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
         </select>
@@ -32,7 +32,7 @@
           <option value="">默认 Word 模板（price_list_default）</option>
           <option v-for="tpl in wordTemplateOptions" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
         </select>
-        <input v-model="searchQuery" type="text" placeholder="搜索产品型号或名称..." @input="loadProducts">
+        <input v-model="searchQuery" type="text" placeholder="搜索产品型号或名称..." @input="scheduleProductSearch">
         <label class="lbl-inline" title="从考勤统计表「明细」工作表读取：第4行起每6行一块，A部门 B性质 C姓名">
           <input v-model="useAttendanceDetailImport" type="checkbox" />
           考勤统计表·明细导入人员
@@ -58,6 +58,8 @@
           :selectable="true"
           :selected-ids="selectedIds"
           :has-more="hasMore"
+          :error="productReadError || ''"
+          @retry="refreshProducts"
           :height="'500px'"
           row-key="id"
           :highlight-id="focusId"
@@ -78,8 +80,8 @@
             {{ value ? '¥' + value.toFixed(2) : '-' }}
           </template>
           <template #actions="{ row }">
-            <button type="button" class="btn btn-sm btn-secondary" :disabled="!canEditProducts" @click.stop="editProduct(row)">编辑</button>
-            <button type="button" class="btn btn-sm btn-danger" :disabled="!canEditProducts" @click.stop="handleDelete(row)">删除</button>
+            <button type="button" class="btn btn-sm btn-secondary" :disabled="!canEditProducts || searchPending" @click.stop="editProduct(row)">编辑</button>
+            <button type="button" class="btn btn-sm btn-danger" :disabled="!canEditProducts || searchPending" @click.stop="handleDelete(row)">删除</button>
           </template>
         </DataTable>
       </div>
@@ -133,7 +135,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showModal = false">取消</button>
-          <button class="btn btn-primary" :disabled="loading || (isEdit && !canEditProducts)" @click="saveProduct">保存</button>
+          <button class="btn btn-primary" :disabled="loading || searchPending || (isEdit && !canEditProducts)" @click="saveProduct">保存</button>
         </div>
       </div>
     </div>
@@ -141,7 +143,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, onDeactivated, watch } from 'vue';
 import { useRecordFocusQuery } from '@/composables/useRecordFocusQuery';
 import { useProductsStore } from '@/stores/products';
 import { useProductsReadLifecycle, createProductListLoader, createProductUnitsLoader } from '@/composables/useProductsReadLifecycle';
@@ -166,11 +168,12 @@ const isEdit = ref(false);
 const selectedIds = ref([]);
 const selectAll = ref(false);
 const searchQuery = ref('');
+const searchPending = ref(false);
 const { keyword: routeKeyword, focusId } = useRecordFocusQuery();
 searchQuery.value = routeKeyword.value;
 const selectedUnit = ref('');
 const currentPage = ref(1);
-const perPage = ref(1000);
+const perPage = ref(100);
 const hasMore = ref(false);
 /** Word 价目表模板 slug，传给 /api/products/export.docx?template_id= */
 const selectedWordTemplateSlug = ref('');
@@ -192,10 +195,10 @@ const useAttendanceDetailImport = ref(false);
 const replaceTaggedAttendancePersonnel = ref(true);
 
 const columns = [
-  { key: 'model_number', label: '型号' },
-  { key: 'name', label: '名称' },
+  { key: 'model_number', sortable: true, minWidth: 130, label: '型号' },
+  { key: 'name', sortable: true, minWidth: 150, label: '名称' },
   { key: 'specification', label: '规格' },
-  { key: 'price', label: '价格' }
+  { key: 'price', sortable: true, minWidth: 100, align: 'right', label: '价格' }
 ];
 
 const currentRequestId = ref(0);
@@ -204,6 +207,32 @@ const loadProducts = createProductListLoader({
   store, page: currentPage, hasMore, requestId: currentRequestId,
   query: () => ({ per_page: perPage.value, ...(searchQuery.value ? { keyword: searchQuery.value } : {}), ...(selectedUnit.value ? { unit: selectedUnit.value } : {}) }),
 });
+
+let searchTimer = null;
+let searchRevision = 0;
+function cancelProductSearch() {
+  if (searchTimer !== null) clearTimeout(searchTimer);
+  searchTimer = null;
+  searchRevision++;
+  searchPending.value = false;
+}
+function scheduleProductSearch() {
+  cancelProductSearch();
+  selectedIds.value = [];
+  searchPending.value = true;
+  const revision = searchRevision;
+  searchTimer = setTimeout(async () => {
+    try { await loadProducts(); }
+    finally { if (revision === searchRevision) searchPending.value = false; }
+  }, 280);
+}
+function changeProductUnit() {
+  cancelProductSearch();
+  selectedIds.value = [];
+  void loadProducts();
+}
+onDeactivated(cancelProductSearch);
+onBeforeUnmount(cancelProductSearch);
 
 let isLoadingMore = false;
 
@@ -477,14 +506,17 @@ const handleImport = async (e) => {
 
 watch(routeKeyword, (value) => {
   if (searchQuery.value === value) return;
+  cancelProductSearch();
+  selectedIds.value = [];
   searchQuery.value = value;
-  loadProducts();
+  void loadProducts();
 });
 
 const { refreshProducts } = useProductsReadLifecycle({
   store, loadProducts, loadUnits,
   resetScope: () => {
     currentRequestId.value++;
+    cancelProductSearch();
     selectedIds.value = []; selectedUnit.value = ''; searchQuery.value = routeKeyword.value; units.value = [];
     showModal.value = false; showDeleteConfirm.value = false; showBatchDeleteConfirm.value = false;
     itemToDelete.value = null; productListNotice.value = '';

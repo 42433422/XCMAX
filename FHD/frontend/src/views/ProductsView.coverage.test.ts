@@ -254,6 +254,21 @@ describe('ProductsView.coverage', () => {
     })
   })
 
+  it('debounces ordinary product keyword search instead of issuing a request per character', async () => {
+    const wrapper = await mountProducts()
+    mockFetchProducts.mockClear()
+    const input = wrapper.find('.search-box input[type="text"]')
+    await input.setValue('A')
+    await input.setValue('AB')
+    await input.setValue('ABC')
+    expect(mockFetchProducts).not.toHaveBeenCalled()
+    await new Promise((resolve) => setTimeout(resolve, 330))
+    await flushPromises()
+    expect(mockFetchProducts).toHaveBeenCalledTimes(1)
+    expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, keyword: 'ABC', per_page: 100 }), { append: false })
+    wrapper.unmount()
+  })
+
   // ===== loadProducts 产品加载 =====
   describe('loadProducts 加载产品列表', () => {
     it('reset=true 时重置分页并替换列表', async () => {
@@ -266,7 +281,7 @@ describe('ProductsView.coverage', () => {
       const state = getSetupState(wrapper)
       await state.loadProducts(true)
       await flushPromises()
-      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 1000 }), { append: false })
+      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 100 }), { append: false })
     })
 
     it('reset=false 时追加列表（loadMore 场景）', async () => {
