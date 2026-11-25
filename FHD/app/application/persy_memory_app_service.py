@@ -513,6 +513,19 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             checked = [(score, row) for score, row in selected if unchanged(row)]
             dropped = len(selected) - len(checked)
             selected = checked
+        erp_revalidation_dropped = 0
+        if not review_only and selected:
+            from app.application.enterprise_cognition.memory_reference import revalidate_erp_memory
+
+            verified = []
+            for score, row in selected:
+                safe_row, bound_to_erp = revalidate_erp_memory(row, access)
+                if bound_to_erp and safe_row is None:
+                    erp_revalidation_dropped += 1
+                    continue
+                if safe_row is not None:
+                    verified.append((score, safe_row))
+            selected = verified
         if not review_only and reinforce and selected:
             with self._lock:
                 for _score, row in selected:
@@ -556,6 +569,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         "source": "对话记忆",
                         "updated_at": public.get("updated_at"),
                         "relation_path": public.get("relation_path", []),
+                        "erp_fact_verification": public.get("erp_fact_verification"),
                     },
                 }
             )
@@ -574,10 +588,12 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "relation_conflicts": conflicts[:50],
             "relation_conflict_count": len(conflicts),
             "revalidation_dropped": dropped,
+            "erp_revalidation_dropped": erp_revalidation_dropped,
             "coverage_complete": (
                 not traversal_truncated
                 and unavailable == 0
                 and dropped == 0
+                and erp_revalidation_dropped == 0
                 and int((listed.get("summary") or {}).get("total") or 0)
                 <= len(listed_memories or [])
             ),
