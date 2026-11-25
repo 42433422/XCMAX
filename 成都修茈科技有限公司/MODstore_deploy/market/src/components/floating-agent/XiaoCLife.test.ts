@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ElSlider } from 'element-plus/es/components/slider/index'
+import { ElPopover } from 'element-plus/es/components/popover/index'
 import { ElInputNumber } from 'element-plus/es/components/input-number/index'
 import { ElDialog } from 'element-plus/es/components/dialog/index'
 import { xiaocLifeApi, type XiaoCLifeState, type XiaoCPortfolioLimits } from '../../application/xiaocLifeApi'
@@ -101,12 +102,14 @@ describe('企业唯一小 C 管理界面', () => {
     vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue(snapshot())
     const next = deferred<XiaoCLifeState>()
     const update = vi.spyOn(xiaocLifeApi, 'update').mockReturnValue(next.promise)
-    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true } }))
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true }, global: { stubs: { teleport: true } } }))
     await flushPromises()
-    const disclosure = wrapper.get('details').element as HTMLDetailsElement
-    expect(disclosure.open).toBe(false)
-    expect(wrapper.get('summary').text()).toBe('自治运营')
-    disclosure.open = true
+    const trigger = wrapper.get('[data-xiaoc-autonomy-trigger]')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(trigger.text()).toBe('自治运营')
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ElPopover).props('visible')).toBe(true)
     expect(wrapper.get('section').text()).toContain('L4 · 自治运营')
     const slider = wrapper.getComponent(ElSlider)
     expect(slider.props('marks')).toEqual({ 1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4', 5: 'L5', 6: 'L6' })
@@ -114,25 +117,51 @@ describe('企业唯一小 C 管理界面', () => {
     slider.vm.$emit('change', 6)
     await flushPromises()
     expect(update).not.toHaveBeenCalled()
-    expect(wrapper.get('summary').text()).toBe('自治运营')
+    expect(wrapper.get('[data-xiaoc-autonomy-trigger]').text()).toBe('自治运营')
+    expect(wrapper.get('.xiaoc-life-control__preview').text()).toContain('预选 L6 · 数字生命')
     await click(wrapper, '确认切换')
     await flushPromises()
     expect(update).toHaveBeenCalledWith(4, { level: 6 })
-    expect(wrapper.get('summary').text()).toBe('自治运营')
+    expect(wrapper.get('[data-xiaoc-autonomy-trigger]').text()).toBe('自治运营')
     next.resolve(snapshot({ revision: 5, level: 6 }))
     await flushPromises()
-    expect(wrapper.get('summary').text()).toBe('数字生命')
-    expect(disclosure.open).toBe(false)
+    expect(wrapper.get('[data-xiaoc-autonomy-trigger]').text()).toBe('数字生命')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
   })
 
   it('紧凑模式拒绝读取失败时更改自治等级', async () => {
     vi.spyOn(xiaocLifeApi, 'read').mockRejectedValue(new ApiError('unavailable', 503))
     const update = vi.spyOn(xiaocLifeApi, 'update')
-    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true } }))
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true }, global: { stubs: { teleport: true } } }))
     await flushPromises()
-    expect(wrapper.get('summary').text()).toContain('自治待核实')
+    const trigger = wrapper.get('[data-xiaoc-autonomy-trigger]')
+    expect(trigger.text()).toContain('自治待核实')
+    await trigger.trigger('click')
+    await flushPromises()
     expect(wrapper.getComponent(ElSlider).props('disabled')).toBe(true)
     expect(wrapper.findAll('button').find(node => node.text().trim() === '确认切换')?.attributes('disabled')).toBeDefined()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('紧凑弹层 Escape 和外部点击关闭，丢弃未确认预选', async () => {
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue(snapshot())
+    const update = vi.spyOn(xiaocLifeApi, 'update')
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true }, global: { stubs: { teleport: true } } }))
+    await flushPromises()
+    const trigger = wrapper.get('[data-xiaoc-autonomy-trigger]')
+    await trigger.trigger('click')
+    await flushPromises()
+    wrapper.getComponent(ElSlider).vm.$emit('update:modelValue', 6)
+    await flushPromises()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ElSlider).props('modelValue')).toBe(4)
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
     expect(update).not.toHaveBeenCalled()
   })
 

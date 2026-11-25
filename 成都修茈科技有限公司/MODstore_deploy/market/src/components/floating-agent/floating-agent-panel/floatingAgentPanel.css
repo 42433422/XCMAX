@@ -221,6 +221,10 @@
   border-radius: 9px;
 }
 .panel-input-shell--autonomy:focus-within { border-color: rgba(148, 163, 184, 0.38); }
+.panel-input-shell--autonomy { border-radius: 12px; transition: border-color 160ms ease, background-color 160ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .panel-input-shell--autonomy { transition: none; }
+}
 .panel-input-shell--autonomy .panel-input { min-width: 0; border: 0; background: transparent; }
 .panel-input-shell--autonomy .panel-input:focus { border: 0; }
 .butler-panel--light .panel-input-shell--autonomy { background: #fff; border-color: #d9e0eb; }
