@@ -686,7 +686,10 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
     assert Decimal(movement["state"]["after_quantity"]) == 4
     assert movement["source_last_changed"] is None
     # Same source row edited within the TTL: an old memory reference cannot win.
-    from app.application.enterprise_cognition.service import verify_source_reference
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
 
     with sessions.begin() as db:
         db.get(InventoryTransaction, 504).after_quantity = Decimal(6)
@@ -694,7 +697,9 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
     changed_movement = get(service, "inventory", "504", force_refresh=True)
     assert changed_movement["source_version"] != movement["source_version"]
     assert verify_source_reference(
-        changed_movement, movement["source_version"]
+        changed_movement,
+        movement["source_version"],
+        make_fact_reference(movement)["fact_token"],
     )["status"] == "superseded"
     assert get(service, "production", "505")["state"]["status"] == "confirmed"
     with sessions.begin() as db:
@@ -965,7 +970,10 @@ def test_journal_entry_authority_is_scoped_without_invented_account_balances(wor
 def test_customer_and_finance_remembered_facts_are_superseded_by_erp(
     world, entity_type, entity_id, model, field, replacement
 ):
-    from app.application.enterprise_cognition.service import verify_source_reference
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
 
     service, sessions, clock, _ = world
     before = get(service, entity_type, entity_id)
@@ -976,10 +984,12 @@ def test_customer_and_finance_remembered_facts_are_superseded_by_erp(
     after = get(service, entity_type, entity_id, force_refresh=True)
     assert after["retrieved_from"] == "authority"
     assert after["source_version"] != before["source_version"]
-    superseded = verify_source_reference(after, before["source_version"])
+    superseded = verify_source_reference(
+        after, before["source_version"], make_fact_reference(before)["fact_token"]
+    )
     assert superseded["status"] == "superseded"
     assert superseded["memory_reuse_allowed"] is False
     assert superseded["requires_reconciliation"] is True
     assert verify_source_reference(
-        after, after["source_version"]
+        after, after["source_version"], make_fact_reference(after)["fact_token"]
     )["status"] == "current"
