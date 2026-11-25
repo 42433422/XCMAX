@@ -123,7 +123,7 @@ const recordScope = computed(() => productReadScopeKey(String(modsStore.activeMo
 const desktopEnabled = isDesktopShell()
 const macPlatform = window.xcagiDesktop?.platform === 'darwin' ||
   (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || ''))
-const shortcutLabel = computed(() => shortcutForDisplay(preferences.value.shortcuts.palette).replace('⌘', 'Meta').replace('Ctrl', 'Control'))
+const shortcutLabel = computed(() => preferences.value.shortcuts.palette.replace('Mod', macPlatform ? 'Meta' : 'Control'))
 const storageKey = ref('')
 const preferences = ref(readWorkspaceCommandPreferences(''))
 const recentKeys = computed(() => preferences.value.recent)
