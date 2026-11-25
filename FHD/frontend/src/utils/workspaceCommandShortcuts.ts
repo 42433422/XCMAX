@@ -1,0 +1,130 @@
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+
+/** Renderer-only navigation commands. No command can invoke a business write. */
+export const WORKSPACE_COMMANDS = [
+  { id: 'palette', label: '搜索命令', defaultChord: 'Mod+K' },
+  { id: 'chat', label: '打开智能对话', defaultChord: 'Mod+Alt+J' },
+  { id: 'new-chat', label: '新建对话', defaultChord: 'Mod+Alt+N' },
+  { id: 'sessions', label: '切换历史会话', defaultChord: 'Mod+Alt+H' },
+  { id: 'tasks', label: '查看任务工作区', defaultChord: 'Mod+Alt+T' },
+  { id: 'sidebar', label: '展开或折叠侧栏', defaultChord: 'Mod+Alt+B' },
+] as const
+
+export type WorkspaceCommandId = (typeof WORKSPACE_COMMANDS)[number]['id']
+export type WorkspaceShortcutMap = Record<WorkspaceCommandId, string>
+export type WorkspaceCommandPreferences = {
+  shortcuts: WorkspaceShortcutMap
+  recent: string[]
+  favorites: string[]
+  sidebarCollapsed: boolean | null
+}
+const PREFIX = 'xcagi.desktop.workspace.commands.v1'
+const IDS = new Set<string>(WORKSPACE_COMMANDS.map((command) => command.id))
+const RESERVED_CHORDS = new Set(['Mod+Q', 'Mod+W', 'Mod+R', 'Mod+T', 'Mod+N', 'Mod+P', 'Mod+F', 'Mod+L', 'Mod+Tab', 'Mod+Comma'])
+export const WORKSPACE_SHORTCUT_CHOICES = [
+  'Mod+K', 'Mod+Shift+K', 'Mod+Alt+K', 'Mod+Alt+J', 'Mod+Alt+N', 'Mod+Alt+H',
+  'Mod+Alt+T', 'Mod+Alt+B', 'Mod+Alt+G', 'Mod+Alt+Y', 'Mod+Shift+J',
+  'Mod+Shift+G', 'Mod+Shift+H', 'Mod+Shift+Y',
+] as const
+
+export function defaultWorkspaceShortcuts(): WorkspaceShortcutMap {
+  return Object.fromEntries(WORKSPACE_COMMANDS.map(({ id, defaultChord }) => [id, defaultChord])) as WorkspaceShortcutMap
+}
+
+export function validateWorkspaceShortcut(
+  bindings: WorkspaceShortcutMap, id: WorkspaceCommandId, chord: string,
+): string {
+  if (!WORKSPACE_SHORTCUT_CHOICES.includes(chord as (typeof WORKSPACE_SHORTCUT_CHOICES)[number])) return '不支持此快捷键'
+  if (RESERVED_CHORDS.has(chord)) return '该快捷键属于系统或浏览器保留组合'
+  if (Object.entries(bindings).some(([key, value]) => key !== id && value === chord)) return '该快捷键已分配给其他工作区命令'
+  return ''
+}
+
+export type ShortcutKeyEvent = Pick<KeyboardEvent,
+  'key' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing' | 'repeat' | 'defaultPrevented' | 'keyCode'>
+
+export function workspaceKeyChord(event: ShortcutKeyEvent, isMac: boolean): string {
+  if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return ''
+  if (isMac ? (!event.metaKey || event.ctrlKey) : (!event.ctrlKey || event.metaKey)) return ''
+  if (event.key.length !== 1 || !/^[a-z]$/i.test(event.key)) return ''
+  return ['Mod', ...(event.altKey ? ['Alt'] : []), ...(event.shiftKey ? ['Shift'] : []), event.key.toUpperCase()].join('+')
+}
+
+export function workspaceCommandForKey(
+  event: ShortcutKeyEvent, shortcuts: WorkspaceShortcutMap, isMac: boolean,
+): WorkspaceCommandId | null {
+  const chord = workspaceKeyChord(event, isMac)
+  if (!chord) return null
+  return WORKSPACE_COMMANDS.find((command) => shortcuts[command.id] === chord)?.id ?? null
+}
+
+/** Do not persist account metadata, task data, or preferences under unauthenticated/shared keys. */
+export function workspaceCommandStorageKey(): string {
+  const session = getRuntimeTenantStorageScopeInput()
+  if (!session || (session.localUserId == null && session.marketUserId == null)) return ''
+  const scope = JSON.stringify([
+    session.accountKind || '', session.tenantId ?? null, session.marketUserId ?? null,
+    session.localUserId ?? null,
+  ])
+  return `${PREFIX}:${encodeURIComponent(scope)}`
+}
+
+export function defaultWorkspaceCommandPreferences(): WorkspaceCommandPreferences {
+  return { shortcuts: defaultWorkspaceShortcuts(), recent: [], favorites: [], sidebarCollapsed: null }
+}
+
+function normalizedKeys(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter((key): key is string => typeof key === 'string'
+    && key.length > 0 && key.length < 100 && /^[a-zA-Z0-9._:-]+$/.test(key)))].slice(0, limit)
+}
+
+export function readWorkspaceCommandPreferences(
+  key: string, storage: Pick<Storage, 'getItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null,
+): WorkspaceCommandPreferences {
+  const defaults = defaultWorkspaceCommandPreferences()
+  if (!key || !storage) return defaults
+  try {
+    const raw = storage.getItem(key)
+    if (!raw || raw.length > 8000) return defaults
+    const data = JSON.parse(raw) as Record<string, unknown>
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return defaults
+    const shortcuts = { ...defaults.shortcuts }
+    const candidates = data.shortcuts && typeof data.shortcuts === 'object' && !Array.isArray(data.shortcuts)
+      ? data.shortcuts as Record<string, unknown> : {}
+    for (const { id } of WORKSPACE_COMMANDS) {
+      const chord = candidates[id]
+      if (typeof chord === 'string' && !validateWorkspaceShortcut(shortcuts, id, chord)) shortcuts[id] = chord
+    }
+    return {
+      shortcuts,
+      recent: normalizedKeys(data.recent, 12),
+      favorites: normalizedKeys(data.favorites, 12),
+      sidebarCollapsed: typeof data.sidebarCollapsed === 'boolean' ? data.sidebarCollapsed : null,
+    }
+  } catch { return defaults }
+}
+
+export function writeWorkspaceCommandPreferences(
+  key: string, value: WorkspaceCommandPreferences,
+  storage: Pick<Storage, 'setItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null,
+): boolean {
+  if (!key || !storage) return false
+  try {
+    storage.setItem(key, JSON.stringify({
+      shortcuts: value.shortcuts,
+      recent: normalizedKeys(value.recent, 12),
+      favorites: normalizedKeys(value.favorites, 12),
+      sidebarCollapsed: value.sidebarCollapsed,
+    }))
+    return true
+  } catch { return false }
+}
+
+export function nextRecentNavKeys(keys: string[], selected: string): string[] {
+  return normalizedKeys([selected, ...keys.filter((key) => key !== selected)], 12)
+}
+
+export function isWorkspaceCommandId(value: string): value is WorkspaceCommandId {
+  return IDS.has(value)
+}
