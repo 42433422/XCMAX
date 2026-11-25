@@ -1,5 +1,12 @@
 <template>
-  <div class="top-quick-nav">
+  <Teleport to="body">
+    <div v-if="paletteOpen" class="top-quick-nav__scrim" @mousedown.prevent="closeAndRestore" />
+  </Teleport>
+  <Teleport to="body" :disabled="!paletteOpen">
+  <div ref="paletteRootRef" class="top-quick-nav" :class="{ 'top-quick-nav--palette': paletteOpen }"
+    :role="paletteOpen ? 'dialog' : undefined" :aria-modal="paletteOpen ? 'true' : undefined"
+    :aria-label="paletteOpen ? '工作空间命令面板' : undefined"
+    @keydown="onPaletteKeydown">
     <i class="fa fa-search top-quick-nav__icon" aria-hidden="true"></i>
     <input
       ref="inputRef"
@@ -11,8 +18,8 @@
       aria-controls="top-quick-nav-list"
       :aria-activedescendant="open && filtered.length ? `top-quick-nav-option-${highlightIndex}` : undefined"
       :aria-keyshortcuts="desktopEnabled ? shortcutLabel : undefined"
-      aria-label="搜索功能、订单、产品、客户、员工或模板"
-      placeholder="搜索功能、订单、产品、客户、员工或模板"
+      aria-label="搜索页面、任务、客户、员工与业务入口"
+      placeholder="搜索页面、任务、客户、员工或命令"
       autocomplete="off"
       @focus="onFocus"
       @keydown="onKeydown"
@@ -27,7 +34,7 @@
         aria-label="功能列表"
         :style="listStyle"
       >
-        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能、订单、产品、客户、员工或模板</li>
+        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的页面或记录</li>
         <li
           v-for="(item, idx) in filtered"
           :key="`${item.kind}-${item.key || item.id}-${idx}`"
@@ -47,10 +54,33 @@
           ></i>
           <span v-if="item.kind !== 'nav'" class="top-quick-nav__kind">{{ KIND_LABELS[item.kind] || '' }}</span>
           <span class="top-quick-nav__option-name">{{ item.name }}</span>
+          <span v-if="item.kind === 'nav' && preferences.favorites.includes(item.key)" class="top-quick-nav__star" aria-label="常用">★</span>
         </li>
       </ul>
     </Teleport>
+    <div v-if="paletteOpen" class="top-quick-nav__footer">
+      <button type="button" :disabled="filtered[highlightIndex]?.kind !== 'nav'"
+        @click="toggleFavoriteHighlighted">
+        {{ preferences.favorites.includes(filtered[highlightIndex]?.key) ? '取消常用' : '设为常用' }}
+      </button>
+      <button type="button" :aria-expanded="shortcutsVisible" @click="shortcutsVisible = !shortcutsVisible">快捷键设置</button>
+      <button type="button" @click="closeAndRestore">Esc 关闭</button>
+    </div>
+    <section v-if="paletteOpen && shortcutsVisible" class="top-quick-nav__settings" aria-label="自定义快捷键">
+      <label v-for="action in WORKSPACE_COMMANDS" :key="action.id">
+        <span>{{ action.label }}</span>
+        <select :aria-label="`${action.label}快捷键`" :value="preferences.shortcuts[action.id]"
+          @change="setCommandShortcut(action.id, $event)">
+          <option v-for="chord in WORKSPACE_SHORTCUT_CHOICES" :key="chord" :value="chord">
+            {{ shortcutForDisplay(chord) }}
+          </option>
+        </select>
+      </label>
+      <p v-if="shortcutError" role="alert">{{ shortcutError }}</p>
+      <button type="button" @click="resetCommandShortcuts">恢复默认快捷键</button>
+    </section>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -70,8 +100,14 @@ import { useModsStore } from '@/stores/mods'
 import { pushErpPage } from '@/utils/erpPagePaths'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import {
+  WORKSPACE_COMMANDS, WORKSPACE_SHORTCUT_CHOICES, workspaceCommandForKey,
+  workspaceCommandStorageKey, readWorkspaceCommandPreferences, writeWorkspaceCommandPreferences,
+  defaultWorkspaceShortcuts, validateWorkspaceShortcut, nextRecentNavKeys,
+} from '@/utils/workspaceCommandShortcuts'
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'command'])
 const router = useRouter()
 
 /** 与模板库约定的交接键：跳转前写入关键词，模板库挂载后读取。 */
@@ -86,8 +122,21 @@ const recordScope = computed(() => productReadScopeKey(String(modsStore.activeMo
 
 const desktopEnabled = isDesktopShell()
 const macPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '')
-const shortcutLabel = macPlatform ? 'Meta+K' : 'Control+K'
-const recentKeys = ref([])
+const shortcutLabel = computed(() => shortcutForDisplay(preferences.value.shortcuts.palette).replace('⌘', 'Meta').replace('Ctrl', 'Control'))
+const storageKey = ref('')
+const preferences = ref(readWorkspaceCommandPreferences(''))
+const recentKeys = computed(() => preferences.value.recent)
+const paletteOpen = ref(false)
+const shortcutsVisible = ref(false)
+const shortcutError = ref('')
+const paletteRootRef = ref(null)
+let taskStore = null
+// The top navigation is also mounted in isolated component tests without Pinia.
+try { taskStore = useAgentTaskCenterStore() } catch { /* no task store in standalone mounts */ }
+const authorizedActionLinks = [
+  { id: 'create-order', name: '发起业务单据（保留原审批）', key: 'orders-create' },
+  { id: 'review-approvals', name: '查看待审批业务（保留原授权）', key: 'approval-hub' },
+]
 let restoreTarget = null
 let blurTimer = null
 
@@ -97,6 +146,10 @@ const highlightIndex = ref(0)
 const keyboardMoved = ref(false)
 const inputRef = ref(null)
 const records = ref([])
+const commandOptions = computed(() => desktopEnabled ? WORKSPACE_COMMANDS
+  .filter((item) => item.id !== 'palette')
+  .filter((item) => !['chat', 'new-chat', 'sessions'].includes(item.id) || visibleNavItems.value.some((nav) => nav.key === 'chat'))
+  .map((item) => ({ kind: 'command', id: item.id, name: item.label })) : [])
 const listStyle = ref({ position: 'fixed', top: '0px', left: '0px', width: '420px', zIndex: 4000 })
 let recordTimer = null
 let recordGeneration = 0
@@ -107,11 +160,22 @@ const filtered = computed(() => {
   const nav = keyword
     ? items.filter((item) => `${item.name || ''} ${item.key || ''} ${item.routeName || ''}`.toLowerCase().includes(keyword))
     : items
-  if (keyword) return [...nav, ...records.value]
-  // Reuse the current permission-filtered menu, never cache business records or hidden destinations.
+  const actionLinks = desktopEnabled ? authorizedActionLinks
+    .filter((action) => (visibleNavItems.value || []).some((nav) => nav.key === action.key))
+    .map((action) => ({ ...action, kind: 'action' })) : []
+  const taskItems = desktopEnabled && taskStore
+    ? taskStore.tasks.filter((task) => !task.archived_at)
+      .filter((task) => !keyword || `${task.title} ${task.task_id} ${task.status}`.toLowerCase().includes(keyword))
+      .slice(0, 12).map((task) => ({ kind: 'task', id: task.task_id, name: task.title || task.task_id, task })) : []
+  const commands = commandOptions.value.filter((item) => !keyword || `${item.name} ${item.id}`.toLowerCase().includes(keyword))
+  const actions = actionLinks.filter((item) => !keyword || `${item.name} ${item.id}`.toLowerCase().includes(keyword))
+  if (keyword) return [...nav, ...records.value, ...taskItems, ...actions, ...commands]
   if (!desktopEnabled) return nav
+  const favorites = new Set(preferences.value.favorites)
   const rank = new Map(recentKeys.value.map((key, index) => [key, index]))
-  return [...nav].sort((a, b) => (rank.get(a.key) ?? Infinity) - (rank.get(b.key) ?? Infinity))
+  const orderedNav = [...nav].sort((a, b) => (Number(favorites.has(b.key)) - Number(favorites.has(a.key)))
+    || (rank.get(a.key) ?? Infinity) - (rank.get(b.key) ?? Infinity))
+  return [...orderedNav, ...taskItems.slice(0, 5), ...actions, ...commands]
 })
 
 function recordName(row, keys) {
