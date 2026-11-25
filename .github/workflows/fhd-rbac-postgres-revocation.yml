@@ -1,0 +1,118 @@
+name: XCMAX RBAC PostgreSQL Revocation Evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - "FHD/app/application/rbac_app_service.py"
+      - "FHD/app/security/web_jwt.py"
+      - "FHD/tests/test_application/test_rbac_atomic_revocation.py"
+      - "FHD/tests/test_security/test_web_jwt_revocation.py"
+      - ".github/workflows/fhd-rbac-postgres-revocation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rbac-pg-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-two-process:
+    # Never expose or execute privileged workflows for an untrusted fork.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'fix/p0-rbac-atomic-revocation-20261125'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: rbac-ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      XCAGI_TEST_POSTGRES_URL: "postgresql+psycopg://postgres:rbac-ci-only@127.0.0.1:5432/postgres"
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact source commit
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_HEAD"
+          echo "RBAC evidence source HEAD: $actual"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned server test stack
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          pins="$(python scripts/dev/check_requirements_lock.py --test-toolchain-pins)"
+          read -r -a requirements <<< "$pins"
+          uv pip install --system --python "$(command -v python)" \
+            -r requirements-server-api.txt \
+            -r ops/deploy/requirements-dev.txt "${requirements[@]}"
+          uv pip check --system --python "$(command -v python)"
+
+      - name: Targeted lint
+        run: |
+          ruff check app/security/web_jwt.py tests/test_security/test_web_jwt_revocation.py
+
+      - name: Real PostgreSQL and existing-token revocation tests
+        run: |
+          python -m pytest -q --tb=short \
+            tests/test_application/test_rbac_atomic_revocation.py \
+            tests/test_security/test_web_jwt_revocation.py \
+            tests/test_security/test_web_jwt.py \
+            --junitxml=rbac-postgres-revocation.xml
+
+      - name: Reject skipped PostgreSQL acceptance
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+
+          report = Path("rbac-postgres-revocation.xml")
+          if not report.is_file():
+              raise SystemExit("BLOCKED: PostgreSQL JUnit report missing")
+          cases = ET.parse(report).findall(".//testcase")
+          matches = [c for c in cases if c.get("name") ==
+                     "test_postgres_two_processes_observe_same_committed_revocation"]
+          if len(matches) != 1:
+              raise SystemExit("BLOCKED: PostgreSQL two-process scenario was not executed")
+          if any(matches[0].find(s) is not None for s in ("skipped", "error", "failure")):
+              raise SystemExit("BLOCKED: PostgreSQL two-process scenario did not PASS")
+          print("PASS: exact-HEAD PostgreSQL two-process revocation readback")
+          PY
+
+      - name: Upload original acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rbac-pg-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}
+          path: FHD/rbac-postgres-revocation.xml
+          if-no-files-found: warn
+          retention-days: 14

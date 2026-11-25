@@ -1,5 +1,5 @@
 {
-  "lines": 2733640,
+  "lines": 2734358,
   "updated": "2026-11-25",
-  "note": "工作组08 H01/H07 源码安全补强：派工点名/重复员工防重和员工虚拟身份精确绑定，保留原租户/权限/回执。相对 main 源码净增39行、新增回归测试158行、Unreleased说明4行，共+201行。源码增长的显式评审请求；最新 HEAD CI 与真实业务验收仍需独立通过。 E06 持久化绩效投影增量：源码36行、测试70行、变更说明2行；未替换现有诊断计数器或宣称业务验收，正式计数器与CI未运行。 E05/E08 增量：旧绩效标记语义纠正，拒绝畸形和不可用交接档案，源码净增3行、测试净增26行、变更说明2行；不替代并发撤权或真实交接验收。 E01 职责授权收窄增量：源码净增21行、测试净增51行、说明2行，待正式行数计数及CI。 E05/E08 避免未核对的重复派工、保持停用账号：源码净增-1行、测试净增83行、说明2行；调整旧不安全行为测试，待正式回归及真实交接。 #3632 Ruff fixture alias and import ordering: +8 lines, original contract tests retained."
+  "note": "#3617 and #3632 exact integrated main delta, including new in-flight handoff test and shared PostgreSQL CI; source-growth review retained. No CI result or release acceptance claimed."
 }

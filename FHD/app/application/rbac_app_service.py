@@ -81,15 +81,15 @@ def _resolve_permissions(
     return found
 
 
-def _revoke_role_sessions(role_name: str) -> int:
-    with get_host_db() as db:
-        user_ids = select(User.id).where(User.role == role_name)
-        result = (
-            db.query(UserSession)
-            .filter(UserSession.user_id.in_(user_ids))
-            .delete(synchronize_session=False)
-        )
-        return int(result or 0)
+def _revoke_role_sessions(db: Any, role_name: str) -> int:
+    """Revoke old sessions within the same transaction as the role update."""
+    user_ids = select(User.id).where(User.role == role_name)
+    result = (
+        db.query(UserSession)
+        .filter(UserSession.user_id.in_(user_ids))
+        .delete(synchronize_session=False)
+    )
+    return int(result or 0)
 
 
 class RbacAppService:
@@ -156,7 +156,9 @@ class RbacAppService:
             role_name = role.name
             db.flush()
             data = _role_data(role)
-        sessions_revoked = _revoke_role_sessions(role_name) if revoke_sessions else 0
+            # Permission replacement and session invalidation must commit
+            # together. A failed session DELETE must roll back both changes.
+            sessions_revoked = _revoke_role_sessions(db, role_name) if revoke_sessions else 0
         return {**data, "sessions_revoked": sessions_revoked}
 
     def delete_role(self, role_id: int, *, tenant_id: int | None = None) -> None:
@@ -262,18 +264,24 @@ class RbacAppService:
     ) -> dict[str, Any]:
         user_role = role.strip()
         with get_host_db() as db:
+            # Validate the target role, user scope and session invalidation
+            # under one transaction, not two independent authorization reads.
             role_obj = db.query(Role).filter(Role.name == user_role).first()
             if role_obj is None or not _tenant_role(role_obj, tenant_id):
                 _fail("角色不存在", 404)
             if tenant_id is not None and role_obj.name == "admin":
                 _fail("租户管理员不能分配平台管理员角色", 403)
             role_data = _role_data(role_obj)
-        with get_host_db() as db:
             user = db.query(User).filter(User.id == user_id).first()
             if user is None or (tenant_id is not None and user.tenant_id != tenant_id):
                 _fail("用户不存在", 404)
-            current_role = user.role
-            if current_role != user_role:
+            # Even a platform-scoped caller cannot attach another tenant's
+            # namespaced role or a platform-admin role to a tenant user.
+            if not role_belongs_to_user(user_role, user.tenant_id):
+                _fail("角色不属于该用户所属租户", 403)
+            if user_role == "admin" and user.tenant_id is not None:
+                _fail("租户用户不能分配平台管理员角色", 403)
+            if user.role != user_role:
                 user.role = user_role
                 revoked = int(
                     db.query(UserSession)
