@@ -648,7 +648,11 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         "source": "对话记忆",
                         "updated_at": public.get("updated_at"),
                         "relation_path": public.get("relation_path", []),
-                        "erp_fact_verification": public.get("erp_fact_verification"),
+                        **(
+                            {"erp_fact_verification": public["erp_fact_verification"]}
+                            if public.get("erp_fact_verification")
+                            else {}
+                        ),
                     },
                 }
             )
