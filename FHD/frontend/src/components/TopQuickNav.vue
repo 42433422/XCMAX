@@ -139,6 +139,7 @@ const authorizedActionLinks = [
 ]
 let restoreTarget = null
 let blurTimer = null
+let unregisterNativeCommand = null
 
 const query = ref('')
 const open = ref(false)
@@ -452,8 +453,23 @@ function onGlobalKeydown(event) {
   emit('command', command)
 }
 
+function onNativeWorkspaceCommand(command) {
+  if (!desktopEnabled || inputRef.value?.closest('[inert]')) return
+  const active = document.activeElement
+  if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]') &&
+    !paletteRootRef.value?.contains(active)) return
+  if (command === 'palette') { openCommandPalette(); return }
+  if (['chat', 'new-chat', 'sessions', 'tasks'].includes(command)) {
+    closeAndRestore()
+    emit('command', command)
+  }
+}
+
 onMounted(() => {
   loadCommands()
+  if (desktopEnabled && typeof window.xcagiDesktop?.onWorkspaceCommand === 'function') {
+    unregisterNativeCommand = window.xcagiDesktop.onWorkspaceCommand(onNativeWorkspaceCommand)
+  }
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
   window.addEventListener('storage', onCommandStorageChange)
@@ -461,6 +477,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  unregisterNativeCommand?.()
+  unregisterNativeCommand = null
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
   window.removeEventListener('storage', onCommandStorageChange)
