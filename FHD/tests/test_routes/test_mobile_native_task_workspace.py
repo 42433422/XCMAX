@@ -10,7 +10,7 @@ from app.application.agent_orchestrator import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import AgentTask
-from app.fastapi_routes.mobile_extensions.routes_tasks import TaskRoutes
+from app.fastapi_routes.mobile_extensions.routes_tasks import TaskRoutes, task_summary
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 
 
@@ -59,6 +59,16 @@ def test_mobile_reads_the_original_desktop_task_and_later_execution_receipt(nati
     assert after["conversation_id"] == before["conversation_id"]
     assert after["status"] == "completed"
     assert after["attention_state"] == "result_unread"
+
+
+def test_mobile_summary_projects_original_attempt_and_run_identity():
+    original = AgentTask(
+        task_id="task-1", user_id="owner", tenant_id="tenant",
+        conversation_id="conversation-1", active_run_id="run-2", attempt=2,
+    )
+    summary = task_summary(original)
+    for key in ("task_id", "conversation_id", "active_run_id", "attempt", "updated_at", "status"):
+        assert summary[key] == original.to_dict()[key]
 
 
 @pytest.mark.parametrize("suffix", ["", "/read", "/archive"])
