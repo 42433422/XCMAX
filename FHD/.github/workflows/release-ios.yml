@@ -1,14 +1,18 @@
 # CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release iOS
+run-name: Release iOS ${{ inputs.release_sha }}
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: App Store marketing version
+      release_sha:
+        description: Immutable 40-character mainline source SHA
         required: true
         type: string
-        default: "10.0.0"
+      version:
+        description: Apple three-component version from the frozen product catalog
+        required: true
+        type: string
       build_number:
         description: iOS build number; empty uses the Actions run number
         required: false
@@ -33,6 +37,7 @@ concurrency:
 
 jobs:
   build-and-distribute:
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-26
     defaults:
       run:
@@ -47,6 +52,19 @@ jobs:
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reject an unfrozen or non-main iOS release source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$RELEASE_SHA"
 
       - name: Verify Xcode SDK
         run: |
@@ -59,6 +77,11 @@ jobs:
         run: |
           set -euo pipefail
           marketing_version="${{ inputs.version }}"
+          catalog_version="$(python3 -c 'import json; from pathlib import Path; print(json.loads(Path("../config/download_release.json").read_text())["version_lock"])')"
+          if [[ ! "$catalog_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ || "$marketing_version" != "${catalog_version%.*}" ]]; then
+            echo "::error::iOS marketing version must match the selected source product catalog"
+            exit 2
+          fi
           build_number="${{ inputs.build_number }}"
           if [[ -z "${build_number}" ]]; then
             build_number="${{ github.run_number }}"
@@ -72,6 +95,7 @@ jobs:
             exit 2
           fi
           echo "marketing_version=${marketing_version}" >> "${GITHUB_OUTPUT}"
+          echo "product_version=${catalog_version}" >> "${GITHUB_OUTPUT}"
           echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
 
       - uses: subosito/flutter-action@v2
@@ -170,11 +194,43 @@ jobs:
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: bundle exec fastlane ios build_ipa
 
+      - name: Freeze signed IPA bytes and original build identity
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ steps.version.outputs.product_version }}
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          archive_dir = Path('build/ios/ipa')
+          archives = list(archive_dir.glob('*.ipa'))
+          if len(archives) != 1:
+              raise SystemExit('Exactly one signed IPA candidate is required')
+          archive = archives[0]
+          digest = hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest()
+          (archive_dir / (archive.name + '.sha256')).write_text(
+              f'{digest}  {archive.name}\n', encoding='utf-8')
+          receipt = {
+              'schema': 'xcagi.ios_candidate_build_identity/v1',
+              'source_sha': os.environ['RELEASE_SHA'],
+              'product_version': os.environ['PRODUCT_VERSION'],
+              'marketing_version': os.environ['IOS_MARKETING_VERSION'],
+              'build_number': os.environ['IOS_BUILD_NUMBER'],
+              'ipa_filename': archive.name,
+              'ipa_sha256': digest,
+              'verification_scope': 'build_artifact_not_physical_device',
+          }
+          (archive_dir / 'xcagi-ios-build-info.json').write_text(
+              json.dumps(receipt, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
-          path: mobile-flutter-poc/build/ios/ipa/*.ipa
+          path: mobile-flutter-poc/build/ios/ipa/
           if-no-files-found: error
 
       - name: Decode App Store Connect API key
