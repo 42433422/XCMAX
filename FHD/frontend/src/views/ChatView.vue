@@ -361,6 +361,7 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { readChatComposerDraft, writeChatComposerDraft } from '@/utils/chatComposerDraft'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
@@ -577,6 +578,34 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
+// Compose text is scoped to the same account, Mod, and original conversation.
+// Never persist file bytes, upload handles, or approval grants with a draft.
+const composerDraftKey = computed(() => isDurableChatScope(chatScope.value)
+  ? buildChatScopedKey('xcagi_chat_composer_draft_', currentSessionId.value,
+    modsStore.activeModId, chatScope.value)
+  : '')
+let composerDraftTimer: ReturnType<typeof setTimeout> | undefined
+const flushComposerDraft = () => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  composerDraftTimer = undefined
+  writeChatComposerDraft(composerDraftKey.value, messageInput.value)
+}
+watch(messageInput, (text) => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  const key = composerDraftKey.value
+  composerDraftTimer = setTimeout(() => writeChatComposerDraft(key, text), 250)
+})
+watch(composerDraftKey, (key, previous) => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  composerDraftTimer = undefined
+  if (previous) writeChatComposerDraft(previous, messageInput.value)
+  messageInput.value = readChatComposerDraft(key)
+}, { flush: 'sync' })
+onMounted(() => {
+  if (!messageInput.value) messageInput.value = readChatComposerDraft(composerDraftKey.value)
+})
+onBeforeUnmount(flushComposerDraft)
+onDeactivated(flushComposerDraft)
 async function recallMessage(index: number) {
   if (isRecalling.value || !window.confirm('撤回这条消息及后续对话，同时撤销可核实的业务操作？原消息将放回输入框。')) return
   const result = await chatViewApi.recallUserMessage(index)
