@@ -220,7 +220,10 @@ def _process_workspace_writer(db_url, employee, barrier, results, expected_revis
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.application.tenant_workspace_prefs import patch_workspace_prefs
+    from app.application.tenant_workspace_prefs import (
+        WorkspacePrefsVersionConflict,
+        patch_workspace_prefs,
+    )
     from app.domain.shared_services import user_preference_service as services
 
     kwargs = {"connect_args": {"timeout": 20}} if db_url.startswith("sqlite:") else {}
@@ -243,7 +246,7 @@ def _process_workspace_writer(db_url, employee, barrier, results, expected_revis
             expected_revision=expected_revision,
         )
         results.put((employee, saved["_revision"], None))
-    except Exception as exc:
+    except WorkspacePrefsVersionConflict as exc:
         results.put((employee, None, repr(exc)))
         raise
     finally:
