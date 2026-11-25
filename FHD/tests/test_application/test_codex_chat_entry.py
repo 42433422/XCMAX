@@ -66,6 +66,43 @@ def test_invalid_qualification_never_falls_back_or_creates_an_approval(entry):
     assert reply["requires_confirmation"] is False
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "runtime_login_required",
+        "runtime_account_model_required",
+        "runtime_configuration_required",
+        "runtime_qualification_unavailable",
+        "runtime_storage_invalid",
+    ],
+)
+@pytest.mark.parametrize("resume", [False, True])
+def test_setup_failure_keeps_safe_specific_error_and_original_run(entry, code, resume):
+    from app.application.agent_runtime.configuration import (
+        RuntimeSetupError,
+        public_runtime_failure,
+    )
+
+    invoke, execute, _ = entry
+    original = RuntimeSetupError(code, "PRIVATE diagnostic must never reach the chat")
+    execute.side_effect = original
+    context = {"session_id": "original"}
+    if resume:
+        context["agent_runtime_run_id"] = "original-run"
+    reply = invoke(context)
+    assert reply["success"] is False
+    assert reply["execution_state"] == "blocked"
+    assert reply["data"]["error_code"] == code
+    assert reply["response"] == public_runtime_failure(original)["message"]
+    assert "PRIVATE diagnostic" not in str(reply)
+    assert reply["requires_confirmation"] is False
+    assert reply["data"]["failure_stage"] == "runtime_setup"
+    assert reply["runtime_context_update"]["agent_runtime_run_id"] == (
+        "original-run" if resume else None
+    )
+    assert execute.call_count == 1
+
+
 def test_waiting_input_and_terminal_receipts_update_same_conversation(entry):
     invoke, execute, _ = entry
     execute.return_value = {
