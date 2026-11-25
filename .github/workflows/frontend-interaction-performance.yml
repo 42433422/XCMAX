@@ -104,6 +104,12 @@ jobs:
             --root "$RUNNER_TEMP/ui-perf" \
             --baseline-sha "$BASELINE_SHA" \
             --candidate-sha "$CANDIDATE_SHA"
+      - name: Compare measured heap and DOM on source-pinned data
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node candidate/FHD/frontend/list-perf/compare-memory.mjs "$RUNNER_TEMP/ui-perf"
       - name: Upload raw measurements and execution logs
         if: always()
         uses: actions/upload-artifact@v4
