@@ -39,7 +39,7 @@ abstract final class DesignTokens {
   static const Color colorsNeutralDarkSurfaceVariant = Color(0xFF2E2E2E);
   static const Color colorsNeutralDarkBorder = Color(0xFF383838);
   static const Color colorsNeutralDarkTextPrimary = Color(0xFFE5E5E5);
-  static const Color colorsNeutralDarkTextSecondary = Color(0xFF888888);
+  static const Color colorsNeutralDarkTextSecondary = Color(0xFF8C8C8C);
   static const Color colorsNeutralDarkTextTertiary = Color(0xFF5C5C5C);
   static const double spacingXs = 4.0;
   static const double spacingSm = 8.0;
@@ -125,7 +125,7 @@ abstract final class DesignTokens {
   static const Color semanticDarkSurface = Color(0xFF242424);
   static const Color semanticDarkSurfaceHigh = Color(0xFF2E2E2E);
   static const Color semanticDarkTextPrimary = Color(0xFFE5E5E5);
-  static const Color semanticDarkTextSecondary = Color(0xFF888888);
+  static const Color semanticDarkTextSecondary = Color(0xFF8C8C8C);
   static const Color semanticDarkBorder = Color(0xFF383838);
   static const Color semanticDarkPrimary = Color(0xFF818CF8);
   static const double componentsButtonLabelSize = 15.0;
