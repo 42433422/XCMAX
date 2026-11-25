@@ -254,4 +254,30 @@ def test_complete_business_identity_contract_is_distinct_from_installer_status()
         issue, {"business_receipts": {"42": _business_evidence()}}, "1.0.0.7", SHA
     )
 
+def test_business_verdict_persistence_stores_only_bound_receipt_digest(monkeypatch):
+    import hashlib
+    import json
 
+    m = load()
+    business = _business_evidence()
+    acceptance = {**receipt(), "business_receipts": {"42": business}}
+    captured = []
+
+    def persist(method, _url, _token, body=None):
+        captured.append((method, body))
+        return {"ok": True}
+
+    monkeypatch.setattr(m, "_http", persist)
+    assert m._record_verdict_local(
+        "https://xiu-ci.com", "test", 42, "1.0.0.7", "accepted", acceptance
+    )
+    assert len(captured) == 1 and captured[0][0] == "POST"
+    payload = captured[0][1]
+    expected = hashlib.sha256(
+        json.dumps(
+            business, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+    assert payload["evidence"]["business_receipt_sha256"] == expected
+    assert "business_receipts" not in payload["evidence"]
+    assert "customer_id" not in payload["evidence"]
