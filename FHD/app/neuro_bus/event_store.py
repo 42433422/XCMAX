@@ -177,13 +177,17 @@ class EventStore:
         it does not authorize another dispatch.
         """
         validate_event_schema(event)
-        event_id = event.metadata.event_id
-        if not isinstance(event_id, str) or not event_id.strip():
-            raise InvalidEventError("reliable admission requires a nonempty event_id")
         if self._mode != EventStoreMode.SQLITE or self._conn is None:
             raise RuntimeError("reliable admission requires a file-backed SQLite EventStore")
+        snapshot = event.to_dict()
+        event_id = snapshot["metadata"]["event_id"]
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise InvalidEventError("reliable admission requires a nonempty event_id")
         event_json = json.dumps(
-            event.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False,
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
             separators=(",", ":"),
         )
         digest = hashlib.sha256(event_json.encode("utf-8")).hexdigest()
