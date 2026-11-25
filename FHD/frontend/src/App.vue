@@ -16,7 +16,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useRoute, useRouter } from 'vue-router'
-import { RouteScrollMemory } from '@/utils/routeScrollMemory'
+import { findRouteScrollRoot, RouteScrollMemory } from '@/utils/routeScrollMemory'
 
 const viewPending = ref(false)
 const { hideChrome, appReady, startupVisible, startupError, startupStage, retryStartup, cancelStartup, isAdminConsoleSpa } = useAppBoot(viewPending)
@@ -47,13 +47,15 @@ function cancelScrollRestore() {
   if (scrollTimer !== undefined) clearTimeout(scrollTimer)
   scrollFrame = scrollTimer = undefined
 }
-watch(cacheScope, () => { cancelScrollRestore(); scrollMemory.clear() })
+watch(cacheScope, () => { cancelScrollRestore(); scrollMemory.clear() }, { flush: 'sync' })
 function rememberRouteScroll(fullPath) {
-  scrollMemory.remember(fullPath, document.querySelector('.route-view-shell'))
+  scrollMemory.remember(fullPath, findRouteScrollRoot(document, fullPath))
 }
 function restoreRouteScroll(fullPath) {
-  scrollMemory.restore(fullPath, document.querySelector('.route-view-shell'))
+  return scrollMemory.restore(fullPath, findRouteScrollRoot(document, fullPath))
 }
+// A user's new interaction wins over any pending layout retry.
+const scrollIntentEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown']
 let sessionProbeTimer = 0
 onMounted(() => {
   if (isDesktopShell()) {
@@ -64,6 +66,7 @@ onMounted(() => {
     probe()
     sessionProbeTimer = window.setInterval(probe, 5_000)
   }
+  for (const name of scrollIntentEvents) window.addEventListener(name, cancelScrollRestore, { capture: true, passive: true })
   removeScrollGuards.push(
     router.beforeEach((to, from) => {
       if (!scrollActive) return
@@ -76,12 +79,14 @@ onMounted(() => {
       const generation = scrollGeneration, scope = cacheScope.value
       const current = () => scrollActive && generation === scrollGeneration &&
         currentRoute.fullPath === to.fullPath && cacheScope.value === scope
-      const restore = () => { if (current()) restoreRouteScroll(to.fullPath) }
+      const restore = () => current() && restoreRouteScroll(to.fullPath)
       nextTick(() => {
-        if (!current()) return
-        restore()
-        scrollFrame = requestAnimationFrame(() => { scrollFrame = undefined; restore() })
-        scrollTimer = setTimeout(() => { scrollTimer = undefined; restore() }, 60)
+        if (!current() || restore()) return
+        scrollFrame = requestAnimationFrame(() => {
+          scrollFrame = undefined
+          if (!current() || restore()) return
+          scrollTimer = setTimeout(() => { scrollTimer = undefined; restore() }, 60)
+        })
       })
     }),
   )
@@ -89,6 +94,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (sessionProbeTimer) window.clearInterval(sessionProbeTimer)
   scrollActive = false
+  for (const name of scrollIntentEvents) window.removeEventListener(name, cancelScrollRestore, true)
   cancelScrollRestore()
   for (const remove of removeScrollGuards) remove()
   scrollMemory.clear()
@@ -127,23 +133,23 @@ const routeReadinessHandlers = computed(() => {
     <router-view v-if="hideChrome" />
     <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
-        <keep-alive v-if="!isAdminConsoleSpa() && !isDesktopShell()" :max="32">
-          <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
-        </keep-alive>
-        <!-- 管理端与桌面壳不用淡出叠层：离开中的旧页面会和下一页一起留在文档里。 -->
-        <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
+        <!-- Every shell shares the same error fallback and account-scoped route lifetime. -->
+        <RouteFallbackPanel v-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
+        <keep-alive v-else-if="!isAdminConsoleSpa() && !isDesktopShell()" :key="cacheScope" :max="32">
+          <component :is="Component" :key="route.path" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
+        </keep-alive>
         <RouteErrorBoundary v-else :path="route.fullPath">
           <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="32">
             <Suspense v-on="routeReadinessHandlers">
-              <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+              <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
               <template #fallback>
                 <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
               </template>
             </Suspense>
           </keep-alive>
           <Suspense v-else v-on="routeReadinessHandlers">
-            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
             <template #fallback>
               <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
             </template>
