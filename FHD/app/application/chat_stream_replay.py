@@ -126,14 +126,22 @@ def events_after(
         return []
     scoped = scope_key(turn_id, owner, tenant)
     cursor = str(after or "")
+    from_start = cursor in {"", "0", "0-0"}
     client, prefix = _require_client()
     if client is not None:
         stream_key, _, _ = _redis_keys(scoped, prefix)
         try:
-            start = cursor if _STREAM_ID.match(cursor) else "-"
-            raw = client.xrange(stream_key, min=start, max="+")
+            if not from_start and not _STREAM_ID.fullmatch(cursor):
+                raise ReplayBackendUnavailable("无效的回放游标")
+            raw = client.xrange(stream_key, min="-" if from_start else cursor, max="+")
         except RECOVERABLE_ERRORS:
             raise ReplayBackendUnavailable("回放流读取失败") from None
+        if not from_start:
+            first = raw[0][0] if raw else None
+            if isinstance(first, bytes):
+                first = first.decode()
+            if first != cursor:
+                raise ReplayBackendUnavailable("原事件游标已失效，请核对原任务回执")
         out: list[dict[str, Any]] = []
         for entry_id, fields in raw:
             sid = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
@@ -147,9 +155,15 @@ def events_after(
             if isinstance(payload, dict):
                 out.append({"seq": sid, "payload": payload})
         return out
-    after_int = int(cursor) if cursor.isdigit() else 0
+    if not from_start and not cursor.isdigit():
+        raise ReplayBackendUnavailable("无效的回放游标")
+    after_int = 0 if from_start else int(cursor)
     with _lock:
         bucket = _events.get(scoped) or []
+        if after_int and not any(int(row["seq"]) == after_int for row in bucket):
+            raise ReplayBackendUnavailable("原事件游标已失效，请核对原任务回执")
+        if from_start and bucket and int(bucket[0]["seq"]) != 1:
+            raise ReplayBackendUnavailable("回放历史不完整，请核对原任务回执")
         _touched[scoped] = time.time()
         return [dict(row) for row in bucket if int(row["seq"]) > after_int]
 
