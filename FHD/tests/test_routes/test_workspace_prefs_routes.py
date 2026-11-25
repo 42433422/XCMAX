@@ -352,3 +352,37 @@ def test_workspace_stale_industry_update_rejected_before_binding(monkeypatch):
         )
     assert denied.status_code == 409
     bind.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_versioned_industry_patch_keeps_single_preference_revision(monkeypatch):
+    from app.fastapi_routes import workspace_prefs_routes as routes
+
+    user = SimpleNamespace(id=7)
+    observed = []
+    monkeypatch.setattr(routes, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(routes, "resolve_workspace_owner_id", lambda *_: "tenant:42")
+    monkeypatch.setattr(routes, "session_id_from_request", lambda _request: "sid-42")
+
+    def write(owner, partial, *, expected_revision):
+        observed.append(("prefs", owner, expected_revision))
+        return {"selected_industry_id": partial["selected_industry_id"], "_revision": 5}
+
+    def bind(actor, industry_id, *, persist_workspace_prefs, **kwargs):
+        observed.append(("user", industry_id, persist_workspace_prefs))
+        assert actor is user
+        return {"_revision": 6}  # Must not be used as the response version.
+
+    async def sync(*_args):
+        return {"success": True}
+
+    monkeypatch.setattr(routes, "patch_workspace_prefs", write)
+    monkeypatch.setattr(routes, "bind_selected_industry_for_user", bind)
+    monkeypatch.setattr(routes, "_try_grant_market_entitlements", sync)
+    result = await routes.patch_workspace_prefs_endpoint(
+        WorkspacePrefsPatch(selected_industry_id="涂料", expected_revision=4),
+        MagicMock(),
+    )
+    assert result["success"] is True
+    assert result["revision"] == 5
+    assert observed == [("prefs", "tenant:42", 4), ("user", "涂料", False)]
