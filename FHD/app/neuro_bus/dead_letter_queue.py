@@ -523,7 +523,13 @@ class NeuroBusDLQIntegration:
         return self._dlq
 
     def handle_failure(
-        self, event: NeuroEvent, error: Exception, retry_count: int, handler_name: str | None = None
+        self,
+        event: NeuroEvent,
+        error: Exception,
+        retry_count: int,
+        handler_name: str | None = None,
+        *,
+        retry_exhausted: bool | None = None,
     ) -> str:
         """
         处理失败，决定进入死信队列
@@ -531,7 +537,10 @@ class NeuroBusDLQIntegration:
         Returns:
             死信条目 ID
         """
-        if retry_count >= self._max_retries:
+        # Legacy callers may omit the explicit terminal outcome. The bus always
+        # supplies it because a numeric count cannot prove why execution stopped.
+        exhausted = retry_count >= self._max_retries if retry_exhausted is None else retry_exhausted
+        if exhausted:
             reason = DeadLetterReason.RETRY_EXHAUSTED
         elif isinstance(error, (TimeoutError, asyncio.TimeoutError)):
             reason = DeadLetterReason.TIMEOUT
