@@ -140,3 +140,19 @@ def test_corrupt_order_file_is_never_silently_replaced(paid_store):
             out_trade_no="orphan", trade_no="gateway-trade", total_amount="9.90",
         )
     assert paid_store.read_bytes() == before
+
+
+@pytest.mark.parametrize("status", ["refunded", "closed", "refund_pending_reconciliation"])
+def test_delayed_verified_paid_notify_cannot_reopen_terminal_order(paid_store, status):
+    state = json.loads(paid_store.read_text(encoding="utf-8"))
+    state["orders"]["merchant-1"]["status"] = status
+    paid_store.write_text(json.dumps(state), encoding="utf-8")
+    previous = paid_store.read_bytes()
+    reason, receipt = order_store.apply_notify_paid(
+        out_trade_no="merchant-1",
+        trade_no="alipay-original",
+        total_amount="9.90",
+    )
+    assert reason == "terminal_order_conflict"
+    assert receipt["status"] == status
+    assert paid_store.read_bytes() == previous
