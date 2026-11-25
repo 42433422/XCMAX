@@ -63,6 +63,21 @@ class ReplayLedger:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_dlq_replay_expires ON neuro_dlq_replay_log(expires_at)"
         ).close()
+        with closing(
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'neuro_dlq_audit'"
+            )
+        ) as cursor:
+            has_audit = cursor.fetchone() is not None
+        if has_audit:
+            conn.execute(
+                """CREATE TRIGGER IF NOT EXISTS neuro_dlq_audit_replay_record
+                   AFTER INSERT ON neuro_dlq_replay_log
+                   BEGIN
+                       INSERT INTO neuro_dlq_audit (entry_id, action, recorded_at, details)
+                       VALUES (NEW.entry_id, 'replay_recorded', NEW.replayed_at, NEW.fingerprint);
+                   END"""
+            ).close()
 
     @staticmethod
     def fingerprint(entry_id: str, replay_count: int) -> str:
