@@ -39,6 +39,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     int? authGeneration,
     bool passwordIsPlaintext = false,
     bool invalidateConnectionScope = true,
+    void Function(int generation)? onCommitted,
   }) {
     final generation = authGeneration ?? _authGeneration;
     final write = _sessionWrites.then((_) async {
@@ -78,6 +79,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
             _connectionIdentity(current) != _connectionIdentity(stored)) {
           _beginAuthChange();
         }
+        onCommitted?.call(_authGeneration);
         _rememberSession(visible);
       }
     });
@@ -93,15 +95,25 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         session.marketAccessToken,
       );
 
-  Object _connectionIdentity(MobileSessionData session) => (
-        session.accountKind,
-        session.relayAccountId,
-        session.relayTenantId,
-        session.serverMode.trim().toLowerCase(),
-        session.fhdHost.trim(),
-        session.localBaseUrl.trim(),
-        session.relayBaseUrl.trim(),
-      );
+  Object _connectionIdentity(MobileSessionData session) {
+    final host = session.fhdHost.trim();
+    final localBase = session.localBaseUrl.trim();
+    final mode = session.serverMode.trim().toLowerCase();
+    // A legacy unset mode with no LAN destination already uses the configured
+    // cloud backend. Persisting the default must not revoke the request that
+    // triggered normalization (including a login or token refresh).
+    final effectiveMode =
+        mode.isEmpty && host.isEmpty && localBase.isEmpty ? 'cloud' : mode;
+    return (
+      session.accountKind,
+      session.relayAccountId,
+      session.relayTenantId,
+      effectiveMode,
+      host,
+      localBase,
+      session.relayBaseUrl.trim(),
+    );
+  }
 
   int _beginAuthChange() {
     _refreshInFlight = null;
