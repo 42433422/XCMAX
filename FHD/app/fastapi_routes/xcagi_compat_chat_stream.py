@@ -291,7 +291,7 @@ def _token_events(
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
-    """Execute every online stream through the LangGraph-backed chat service."""
+    """Execute every online stream through the scoped Xiaox-backed chat service."""
     from app.application.planner_compat.offline import is_offline
 
     facade = _facade()
