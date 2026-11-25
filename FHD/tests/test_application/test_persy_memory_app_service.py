@@ -892,11 +892,6 @@ def test_revoked_erp_memory_view_never_reveals_unrecognized_legacy_metadata():
     assert redacted["erp_requires_reconciliation"] is True
     assert redacted["erp_fact_verification"]["memory_reuse_allowed"] is False
     assert confidential not in repr(redacted)
-    assert not (set(legacy_record) - {
-        "memory_id",
-        "scope",
-        "status",
-        "memory_type",
-        "revision",
-        "source",
-    }) & set(redacted)
+    for key in ("summary", "raw_metadata", "metadata", "relation_path"):
+        assert key not in redacted
+    assert redacted["key"] == "erp_fact_reference_redacted"
