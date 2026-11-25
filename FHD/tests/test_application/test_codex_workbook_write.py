@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import copy
 import io
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
 from app.application.agent_orchestrator import set_agent_run_repository_for_tests
@@ -24,14 +28,16 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.employee_runtime.executor import execute_employee_task_local
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.domain.workbook_write_contract import WORKBOOK_WRITER
+from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
 from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
 from app.infrastructure.codex.tools import CodexToolBridge
 from app.infrastructure.tenant_scope import tenant_scope
+from app.mod_sdk.employee_tool_registry import office_output_paths
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -39,12 +45,13 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    workspace = tmp_path / "workspace"
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     actor = trusted_actor(permissions=["employee.execute", "tool.excel_analysis.read"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-    set_agent_run_repository_for_tests(repository)
     parent = AgentRun(
         str(actor.user_id), "按原模板写入两格并保存公式，然后读回工作簿", status="running"
     )
@@ -59,18 +66,26 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
     sheet.title = "Data"
     sheet["A1"], sheet["B1"], sheet["C1"] = "name", "amount", "formula"
     sheet["A2"], sheet["B2"], sheet["D2"] = "old", 1, "protected"
-    content = io.BytesIO()
-    book.save(content)
+    with io.BytesIO() as stream:
+        book.save(stream)
+        original = stream.getvalue()
     book.close()
-    content.seek(0)
-    with tenant_scope(actor.tenant_id), get_db() as db:
-        upload = UploadServiceMixin().save_upload(
-            db,
-            owner_user_id=actor.user_id,
-            file_name="template.xlsx",
-            content_type=None,
-            stream=content,
+    app = FastAPI()
+    app.include_router(platform_shell_router)
+    with TestClient(app, headers=actor.headers) as client:
+        response = client.post(
+            "/api/platform-shell/chat-office-file-upload",
+            files={
+                "file": (
+                    "template.xlsx",
+                    original,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
+    assert response.status_code == 200, response.text
+    upload = response.json()["data"]
+    assert upload.get("upload_id"), response.text
 
     def forbid_model(*args, **kwargs):
         pytest.fail("the bundled writer/QC must not add a model planner")
@@ -149,6 +164,7 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
             },
         },
     }
+    set_agent_run_repository_for_tests(repository)
     try:
         yield SimpleNamespace(
             actor=actor,
@@ -158,6 +174,8 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
             bridge=bridge,
             grant=grant,
             upload=upload,
+            workspace_copy=workspace / upload["file_path"],
+            original=original,
             params=params,
             invoke=invoke,
             approve=approve,
@@ -166,10 +184,28 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
         set_agent_run_repository_for_tests(None)
 
 
-def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifact(
-    workbook_runtime,
-):
+def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_runtime):
     state = workbook_runtime
+    upload_id = state.upload["upload_id"]
+    reader = "excel-full-read-employee"
+    with tenant_scope(state.actor.tenant_id):
+        with get_db() as db:
+            owned_copy = Path(db.get(EltUpload, upload_id).storage_path)
+        assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+        read = execute_employee_task_local(
+            reader,
+            "读取上传的工作簿",
+            {"upload_id": upload_id},
+            user_id=state.actor.user_id,
+            runtime_context=state.actor.context,
+        )
+    assert read["success"] is True, read
+    [reader_output] = office_output_paths(reader, read)
+    [sheet] = json.loads(Path(reader_output).read_text(encoding="utf-8"))["sheets"]
+    assert sheet["name"] == "Data"
+    cells = {(cell["row"], cell["col"]): cell["value"] for cell in sheet["cells"]}
+    assert cells[2, 1] == "old"
+    assert cells[2, 2] == 1
     pending = state.invoke("write", state.params)
     assert pending["pending_approval"] is True and not pending["artifacts"]
     child = state.approve(pending)
@@ -202,6 +238,7 @@ def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifa
     replay = state.invoke("write-retry", state.params)
     assert replay["run_id"] == child.run_id
     assert read_verified_run_file(child.run_id, artifact) == content
+    assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
     assert len(child.tool_calls) == 1 and not child.llm_calls
 
 
