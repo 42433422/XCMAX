@@ -161,13 +161,15 @@ def goal_conflicts(
             continue
         directions = {left.get("direction"), right.get("direction")}
         a, b = left.get("target"), right.get("target")
-        if (
-            directions == {"min", "max"}
-            and type(a) in (int, float)
-            and type(b) in (int, float)
-            and math.isfinite(a)
-            and math.isfinite(b)
-        ):
+        if directions == {"min", "max"}:
+            if (
+                type(a) not in (int, float)
+                or type(b) not in (int, float)
+                or (type(a) is float and not math.isfinite(a))
+                or (type(b) is float and not math.isfinite(b))
+            ):
+                result.append({"goal_id": str(key), "reason": "invalid_metric_bounds"})
+                continue
             lower = a if left["direction"] == "max" else b
             upper = a if left["direction"] == "min" else b
             if lower > upper:
@@ -299,7 +301,12 @@ def project_goal_governance(state: dict[str, Any], *, now: datetime) -> dict[str
                 ),
             }
         )
-    result.sort(key=lambda row: (-(row.get("priority") or {}).get("score", 0), row["goal_id"]))
+    result.sort(
+        key=lambda row: (
+            -(row.get("priority") or {}).get("score", 0),
+            str(row.get("goal_id") or ""),
+        )
+    )
     return {
         "schema": "xiaoc_goal_governance/v1",
         "items": result,
