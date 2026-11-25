@@ -90,6 +90,58 @@ void main() {
     expect(AppTheme.dark().cardTheme.color, XcagiThemeColors.dark.surface);
   });
 
+  test('Material overlays and slider share tokens in both themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      final surface = theme.colorScheme.surface;
+      final border = theme.brightness == Brightness.light
+          ? AppTheme.divider
+          : DesignTokens.mobileColorsDarkDivider;
+      expect(theme.dialogTheme.backgroundColor, surface);
+      expect(theme.dialogTheme.elevation, DesignTokens.elevationLevel2);
+      expect((theme.dialogTheme.shape! as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(DesignTokens.radiusLarge));
+      expect(theme.bottomSheetTheme.modalBackgroundColor, surface);
+      expect(theme.bottomSheetTheme.showDragHandle, isTrue);
+      expect(theme.bottomSheetTheme.dragHandleColor, border);
+      expect(theme.bottomSheetTheme.modalElevation, DesignTokens.elevationLevel3);
+      expect((theme.bottomSheetTheme.shape! as RoundedRectangleBorder).borderRadius,
+          const BorderRadius.vertical(top: Radius.circular(DesignTokens.radiusLarge)));
+      expect(theme.popupMenuTheme.color, surface);
+      expect(theme.popupMenuTheme.elevation, DesignTokens.elevationLevel2);
+      expect(theme.sliderTheme.trackHeight, DesignTokens.spacingXs);
+      expect(theme.sliderTheme.inactiveTrackColor, border);
+      expect(theme.sliderTheme.activeTrackColor, theme.colorScheme.primary);
+    }
+  });
+
+  testWidgets('system reduced motion disables optional micro-interactions', (tester) async {
+    Duration? duration;
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(disableAnimations: true),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionReducedMs));
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(accessibleNavigation: true),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionReducedMs));
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionStandardMs));
+  });
+
   test('message avatar layout keeps stable Flutter geometry', () {
     expect(MessageAvatarLayout.conversationAvatarSize, 52.0);
     expect(MessageAvatarLayout.bubbleAvatarSize, 40.0);
