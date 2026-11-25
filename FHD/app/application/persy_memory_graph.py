@@ -44,6 +44,7 @@ class PersyMemoryGraphMixin:
             status: str = "",
             memory_type: str = "",
             limit: int = 200,
+            revalidate_erp: bool = True,
         ) -> dict[str, Any]: ...
 
     def graph(
