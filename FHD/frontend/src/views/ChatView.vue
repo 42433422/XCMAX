@@ -549,9 +549,35 @@ async function onWorkspaceNewConversation() {
     showAppToast('当前对话或附件仍在处理中，请结束后再新建会话', 'warning')
     return
   }
-  await Promise.resolve(newConversation())
-  await nextTick()
-  if (isActiveWorkspaceChat()) document.getElementById('messageInput')?.focus({ preventScroll: true })
+  try {
+    await Promise.resolve(newConversation())
+    await nextTick()
+    if (isActiveWorkspaceChat()) document.getElementById('messageInput')?.focus({ preventScroll: true })
+  } catch {
+    showAppToast('新建会话失败，请保留当前内容并重试', 'error')
+  }
+}
+async function onWorkspaceNewTask() {
+  if (!isActiveWorkspaceChat()) return
+  if (isLoading.value || isStreamingReply.value || isExecuting.value || attachmentUploading.value) {
+    showAppToast('当前任务仍在执行或上传中，无法新建任务', 'warning')
+    return
+  }
+  if (messageInput.value.trim() || artifactStaging.value.length || multimodalStaging.value.length ||
+    unsupportedStaging.value.length) {
+    showAppToast('当前草稿或附件尚未发送，请先处理后再新建任务', 'warning')
+    document.getElementById('messageInput')?.focus({ preventScroll: true })
+    return
+  }
+  try {
+    await Promise.resolve(newConversation())
+    await nextTick()
+    if (!isActiveWorkspaceChat()) return
+    document.getElementById('messageInput')?.focus({ preventScroll: true })
+    showAppToast('请描述任务目标并发送；执行仍按原授权与审批流程进行', 'info')
+  } catch {
+    showAppToast('新建任务草稿失败，未创建业务任务', 'error')
+  }
 }
 function onWorkspaceOpenSessions() {
   if (!isActiveWorkspaceChat()) return
@@ -559,10 +585,12 @@ function onWorkspaceOpenSessions() {
 }
 onMounted(() => {
   window.addEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.addEventListener('xcagi:workspace-new-task', onWorkspaceNewTask)
   window.addEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.removeEventListener('xcagi:workspace-new-task', onWorkspaceNewTask)
   window.removeEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
 })
 onDeactivated(() => { workspaceChatActive = false })
