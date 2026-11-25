@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import TopQuickNav from './TopQuickNav.vue'
+import { resolveErpPagePath } from '@/utils/erpPagePaths'
 
 const searchProducts = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
 const getCustomers = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
@@ -471,7 +472,7 @@ describe('TopQuickNav', () => {
       expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
       expect(document.querySelector('.top-quick-nav__scrim')).toBeNull()
       expect(document.querySelector('.top-quick-nav__list')).toBeNull()
-      expect(activeRouter.currentRoute.value.path).toBe(path)
+      expect(activeRouter.currentRoute.value.path).toBe(resolveErpPagePath(path))
       if (navKey) expect(wrapper.emitted('select')).toContainEqual([navKey])
     } finally {
       wrapper.unmount()
