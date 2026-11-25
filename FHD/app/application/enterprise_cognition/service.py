@@ -281,6 +281,7 @@ class EnterpriseCognitionService:
                 entity_type,
                 ref["entity_id"],
                 force_refresh=params["force_refresh"] or expected_version is not None,
+                verify_only=expected_version is not None,
                 **scope,
             )
             for ref in references["refs"]
