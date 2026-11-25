@@ -24,6 +24,10 @@ def cases(monkeypatch):
                 "customer_business_replay": {
                     "source_group_sha256": prefix + "a" * 56,
                     "source_sha256": [prefix + "b" * 56],
+                    "manifest_sha256": prefix + "1" * 56,
+                    "expected_reference_sha256": prefix + "2" * 56,
+                    "contract_sha256": prefix + "3" * 56,
+                    "source_evidence_sha256": prefix + "4" * 56,
                     "expected_files": [{"private_oracle": "ORACLE_MUST_NOT_REACH_MODEL"}],
                 },
                 "execution_feedback": {"error": "verified_business_difference"},
@@ -137,7 +141,19 @@ def _sealed_inputs(cases):
             "pass": bool(arm),
             "runtime_verified": True,
             "measurement_scope": datasets.BUSINESS_SCOPE,
-            "business_evidence": {"manifest_sha256": f"manifest-{index}"},
+            "business_evidence": {
+                **{
+                    key: cases[index]["generation_context"]["customer_business_replay"][key]
+                    for key in (
+                        "manifest_sha256",
+                        "source_group_sha256",
+                        "expected_reference_sha256",
+                        "contract_sha256",
+                        "source_evidence_sha256",
+                    )
+                },
+                "output_sha256": {"final.xlsx": "e" * 64} if arm else {},
+            },
         }
         for arm in (0, 1)
         for index in range(len(cases))
@@ -506,4 +522,27 @@ def test_business_sealing_scores_independent_reports_not_raw_model_grades(
     assert len(reports) == 4
     assert evidence["baseline"] == {"pass": 0, "total": 2}
     assert evidence["candidate"] == {"pass": 2, "total": 2}
-    assert evidence["verdict"] == "candidate_for_approval" and evidence["holdout_verified"] is True
+    # A mock grading result with no native source identity cannot satisfy L5,
+    # even when its claimed success and runtime_verified flags are true.
+    assert evidence["verdict"] == "keep_baseline"
+    assert evidence["holdout_verified"] is False
+    assert evidence["runtime_verified"] is False
+    assert evidence["reason"] == "training_business_evidence_origin_unverified"
+
+
+
+@pytest.mark.parametrize(
+    "tamper", ["manifest_sha256", "source_evidence_sha256", "output_sha256"]
+)
+def test_paired_replay_cannot_claim_l5_from_swapped_source_or_missing_output(cases, tamper):
+    bundle, tests, verified = _sealed_inputs(cases)
+    evidence = verified[1, 1]["business_evidence"]
+    evidence[tamper] = {} if tamper == "output_sha256" else "f" * 64
+    result = datasets.seal_business_evidence(
+        bundle, tests, verified, {"improved": True, "verdict": "candidate_for_approval"}
+    )
+    assert result["verdict"] == "keep_baseline"
+    assert result["improved"] is False
+    assert result["runtime_verified"] is False
+    assert result["holdout_verified"] is False
+    assert result["reason"] == "training_business_evidence_origin_unverified"
