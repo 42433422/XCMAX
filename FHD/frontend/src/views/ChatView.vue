@@ -536,6 +536,37 @@ const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList
     markTaskRead: taskCenterStore.markTaskRead,
   })
 
+// Workspace commands are UI intents, not agent or business execution routes.
+// Ignore deactivated keep-alive instances and routed task workspaces.
+let workspaceChatActive = true
+function isActiveWorkspaceChat() {
+  return workspaceChatActive && !workspaceMode.value && router.currentRoute.value.name === 'chat'
+}
+async function onWorkspaceNewConversation() {
+  if (!isActiveWorkspaceChat()) return
+  if (isLoading.value || isStreamingReply.value || isExecuting.value || attachmentUploading.value) {
+    showAppToast('当前对话或附件仍在处理中，请结束后再新建会话', 'warning')
+    return
+  }
+  await Promise.resolve(newConversation())
+  await nextTick()
+  if (isActiveWorkspaceChat()) document.getElementById('messageInput')?.focus({ preventScroll: true })
+}
+function onWorkspaceOpenSessions() {
+  if (!isActiveWorkspaceChat()) return
+  showHistoryPanel()
+}
+onMounted(() => {
+  window.addEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.addEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.removeEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
+})
+onDeactivated(() => { workspaceChatActive = false })
+onActivated(() => { workspaceChatActive = true })
+
 async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
   await taskCenterStore.controlTask(workspaceTaskId.value, action)
   if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
