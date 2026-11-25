@@ -626,7 +626,7 @@ def refund_query(request: Request, out_trade_no: str, out_request_no: str | None
     """Read the original gateway refund and settle only exact confirmed identity."""
     if not out_trade_no:
         return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
-    owned_payment_order(request, out_trade_no)
+    owned_payment_order(request, out_trade_no, permission="model_payment.refund")
     request_no = (out_request_no or "").strip() or out_trade_no
     provider = mp_ali.query_refund(out_trade_no=out_trade_no, out_request_no=request_no)
     raw = provider.get("raw") if isinstance(provider, dict) else None
