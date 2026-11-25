@@ -1,5 +1,5 @@
 {
-  "lines": 2737605,
+  "lines": 2737648,
   "updated": "2026-11-25",
-  "note": "#3658 同一集成候选：main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37 + #3615/#3620/#3621/#3623（已吸收采购退货迁移/反冲及其新增两份测试至 2cefe60cf378e57daaa1aa23c1fedf52f4c47597）；相对 main 58 文件净增 4471 行，基线 2737605。按 GitHub 逐文件差分登记，原 check_net_deletion.py/preflight/required CI/真实 PostgreSQL 尚未验证。真实原件、客户审批、库存财务权威核对、可下载 XLSX、客户签认缺失仍 BLOCKED；任何门禁不得降低。"
+  "note": "#3658 完整候选（main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37）结合 #3615/#3620/#3621/#3623，采购退货服务代码同步到源提交 cbe03492e8bfb4857652eb486a814068b40d28a0。GitHub compare 共 58 文件，计数净增 4514 行，基线 2737648；必须继续通过原 check_net_deletion、preflight、最新全部 CI、真实 PostgreSQL、客户原件及审批/SQL/最终 Excel/独立签收。真实性门禁不降低，现阶段未验收。"
 }
