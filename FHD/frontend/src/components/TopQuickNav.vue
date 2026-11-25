@@ -148,6 +148,8 @@ const highlightIndex = ref(0)
 const keyboardMoved = ref(false)
 const inputRef = ref(null)
 const records = ref([])
+const recordNavKeys = { product: 'products', customer: 'customers', order: 'orders', template: TEMPLATE_NAV_KEY, employee: 'employee-workflow' }
+const searchPermissionKey = computed(() => Object.values(recordNavKeys).filter(canNavigateToBusinessKey).join('|'))
 const commandOptions = computed(() => desktopEnabled ? WORKSPACE_COMMANDS
   .filter((item) => item.id !== 'palette')
   .filter((item) => !['chat', 'new-chat', 'new-task', 'sessions'].includes(item.id) || visibleNavItems.value.some((nav) => nav.key === 'chat'))
@@ -165,13 +167,13 @@ const filtered = computed(() => {
   const actionLinks = desktopEnabled ? authorizedActionLinks
     .filter((action) => (visibleNavItems.value || []).some((nav) => nav.key === action.key))
     .map((action) => ({ ...action, kind: 'action' })) : []
-  const taskItems = desktopEnabled && taskStore && taskStore.stale !== true
+  const taskItems = (desktopEnabled || keyword) && taskStore && taskStore.stale !== true
     ? taskStore.tasks.filter((task) => !task.archived_at)
       .filter((task) => !keyword || `${task.title} ${task.task_id} ${task.status}`.toLowerCase().includes(keyword))
       .slice(0, 12).map((task) => ({ kind: 'task', id: task.task_id, name: task.title || task.task_id, task })) : []
   const commands = commandOptions.value.filter((item) => !keyword || `${item.name} ${item.id}`.toLowerCase().includes(keyword))
   const actions = actionLinks.filter((item) => !keyword || `${item.name} ${item.id}`.toLowerCase().includes(keyword))
-  if (keyword) return [...nav, ...records.value, ...taskItems, ...actions, ...commands]
+  if (keyword) return [...nav, ...records.value.filter(record => canNavigateToBusinessKey(recordNavKeys[record.kind])), ...taskItems, ...actions, ...commands]
   if (!desktopEnabled) return nav
   const favorites = new Set(preferences.value.favorites)
   const rank = new Map(recentKeys.value.map((key, index) => [key, index]))
@@ -191,6 +193,7 @@ function canNavigateToBusinessKey(key) {
 async function lookupRecords(keyword) {
   const generation = ++recordGeneration
   const scope = recordScope.value
+  const permissions = searchPermissionKey.value
   const [products, customers, orders, templates, employees] = await Promise.all([
     canNavigateToBusinessKey('products') ? productsApi.searchProducts(keyword).catch(() => null) : null,
     canNavigateToBusinessKey('customers') ? customersApi.getCustomers({ keyword, page: 1, per_page: 8 }).catch(() => null) : null,
@@ -198,7 +201,7 @@ async function lookupRecords(keyword) {
     canNavigateToBusinessKey('template-preview') ? templatePreviewApi.listTemplates().catch(() => null) : null,
     canNavigateToBusinessKey('employee-workflow') ? fetchEmployeeDirectory().catch(() => []) : [],
   ])
-  if (generation !== recordGeneration || scope !== recordScope.value) return
+  if (generation !== recordGeneration || scope !== recordScope.value || permissions !== searchPermissionKey.value) return
   const productRows = Array.isArray(products?.data) ? products.data : []
   const customerRows = Array.isArray(customers?.data) ? customers.data : []
   const orderRows = Array.isArray(orders?.data) ? orders.data : []
@@ -276,8 +279,9 @@ function onFocus() {
   highlightIndex.value = 0
   keyboardMoved.value = false
   placeList()
+  if (query.value.trim() && !records.value.length) scheduleRecordSearch()
   // Use the existing scoped task center read path, never a second polling loop.
-  if (desktopEnabled && taskStore?.stale === true && !taskStore.loading &&
+  if (taskStore?.stale === true && !taskStore.loading &&
     typeof taskStore.refresh === 'function') void taskStore.refresh()
 }
 
@@ -293,6 +297,7 @@ function onBlur() {
     blurTimer = null
     open.value = false
     restoreTarget = null
+    clearRecordSearch()
   }, 180)
 }
 
@@ -316,17 +321,22 @@ watch(recordScope, () => {
   open.value = false
 }, { flush: 'sync' })
 
-watch(query, () => {
+function scheduleRecordSearch() {
   highlightIndex.value = 0
   keyboardMoved.value = false
   clearRecordSearch()
   const keyword = query.value.trim()
-  if (!keyword) return
+  if (!keyword || !open.value) return
   const generation = recordGeneration
   recordTimer = setTimeout(() => {
-    if (generation === recordGeneration) lookupRecords(keyword)
+    if (generation === recordGeneration) void lookupRecords(keyword)
   }, 250)
-})
+}
+
+// A same-account permission change can occur while a search is in flight.
+// Invalidate both displayed results and in-flight responses immediately.
+watch(searchPermissionKey, scheduleRecordSearch, { flush: 'sync' })
+watch(query, scheduleRecordSearch)
 
 watch(highlightIndex, () => {
   void nextTick(() => {
@@ -519,7 +529,7 @@ onBeforeUnmount(() => {
 
 function choose(item) {
   if (item?.kind === 'command') {
-    if (!WORKSPACE_COMMANDS.some((command) => command.id === item.id)) return
+    if (!commandOptions.value.some((command) => command.id === item.id)) return
     closeAndRestore()
     emit('command', item.id)
     return
