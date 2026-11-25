@@ -33,7 +33,11 @@ from scripts.dev.benchmark_evidence import (
     trial_artifact,
     write_report,
 )
-from scripts.dev.task_benchmark_report import passes_gate, startup_blocked_task_ids, summarize_trials
+from scripts.dev.task_benchmark_report import (
+    passes_gate,
+    startup_blocked_task_ids,
+    summarize_trials,
+)
 
 BENCH_DIR = Path(__file__).resolve().parent
 RUNNER_PATH = BENCH_DIR / "task_success_runner.py"
