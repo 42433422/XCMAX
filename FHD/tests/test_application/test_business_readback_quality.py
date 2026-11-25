@@ -77,7 +77,9 @@ def test_business_field_must_match_actual_committed_row(verified_customer):
     assert real["business_verification"]["checked_fields"] == ["unit_name"]
 
 
-def test_tenant_or_nonexistent_identity_cannot_verify_claimed_success(verified_customer):
+def test_tenant_or_nonexistent_identity_cannot_verify_claimed_success(
+    verified_customer,
+):
     _engine, customer_id = verified_customer
     with tenant_scope(18):
         foreign = verify_business_db_write(
@@ -106,7 +108,8 @@ def test_verify_again_is_read_only_and_ensure_exists_preserves_presence_contract
     writes = []
 
     def observe(_conn, _cursor, statement, _params, _context, _many):
-        if statement.lstrip().split(None, 1)[0].upper() in {"INSERT", "UPDATE", "DELETE"}:
+        kind = statement.lstrip().split(None, 1)[0].upper()
+        if kind in {"INSERT", "UPDATE", "DELETE"}:
             writes.append(statement)
 
     event.listen(engine, "before_cursor_execute", observe)
