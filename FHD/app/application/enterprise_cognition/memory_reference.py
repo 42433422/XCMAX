@@ -230,7 +230,23 @@ def sanitize_erp_memory_view(record: dict[str, Any], access: DatasetAccessContex
         return record
     if checked is not None:
         return checked
-    sanitized = dict(record)
+    # Build a strict public envelope rather than copying arbitrary record
+    # metadata. Historical payloads may carry extra fields from older clients,
+    # so stripping only value/statement/history is insufficient to prevent a
+    # revoked source value from reappearing in a list or graph.
+    preserved = (
+        "memory_id",
+        "memory_type",
+        "scope",
+        "status",
+        "revision",
+        "created_at",
+        "updated_at",
+        "recorded_at_utc",
+        "requires_user_confirmation",
+    )
+    sanitized = {key: record[key] for key in preserved if key in record}
+    sanitized["source"] = "erp_authority"
     sanitized.update(
         key="erp_fact_reference_redacted",
         value=None,
