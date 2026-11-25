@@ -46,6 +46,7 @@ import './styles/css/components/ui-components.css'
 import './styles/css/animations/transitions.css'
 import './styles/css/animations/ui-effects.css'
 import './styles/css/office-theme.css'
+import './styles/css/interaction-surfaces.css'
 import 'font-awesome/css/font-awesome.min.css'
 
 // Window globals are kept for backward compatibility; prefer using the Pinia appShell store.
