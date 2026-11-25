@@ -14,16 +14,31 @@ from typing import Any, Callable
 from modstore_server.xiaoc_life_policy import parse_time
 
 
+def consistent_cycle_receipts(
+    events: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Quarantine conflicting originals instead of picking a convenient duplicate."""
+    originals: dict[str, dict[str, Any]] = {}
+    conflicts: set[str] = set()
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        key = event.get("id")
+        if not isinstance(key, str) or not key.startswith("cycle:"):
+            continue
+        previous = originals.setdefault(key, event)
+        if previous != event:
+            conflicts.add(key)
+    return [row for key, row in originals.items() if key not in conflicts], len(conflicts)
+
+
 def completion_review(scope: str | None, events: list[dict[str, Any]]) -> dict[str, Any]:
     """Compare disjoint samples for the SAME scope, model and lifecycle domain."""
     groups: dict[tuple[str, str], list[tuple[Any, str, bool]]] = defaultdict(list)
-    seen: set[str] = set()
     excluded = 0
-    for event in events:
-        key = event.get("id")
-        if not isinstance(key, str) or not key.startswith("cycle:") or key in seen:
-            continue
-        seen.add(key)
+    consistent, conflicting = consistent_cycle_receipts(events)
+    for event in consistent:
+        key = event["id"]
         if not scope or event.get("details", {}).get("execution_scope") != scope:
             continue
         model, domain = event.get("model"), event.get("kind")
@@ -73,10 +88,11 @@ def completion_review(scope: str | None, events: list[dict[str, Any]]) -> dict[s
         "threshold": 0.2,
         "samples_per_window": 10,
         "excluded_unmeasured": excluded,
+        "conflicting_cycle_receipts": conflicting,
         "groups": samples,
         "status": (
             "review_recommended"
-            if any(row["status"] == "observed_completion_drop" for row in samples)
+            if conflicting or any(row["status"] == "observed_completion_drop" for row in samples)
             else (
                 "no_drop_observed"
                 if any(row["status"] == "no_threshold_drop_observed" for row in samples)
