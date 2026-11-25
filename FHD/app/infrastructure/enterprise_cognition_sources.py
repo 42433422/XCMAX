@@ -463,7 +463,7 @@ class AuthorityReader:
             return
         counts: dict[str, int] = {}
         finished_counts: dict[str, int] = {}
-        contract_verified_successes = incomplete_terminal = 0
+        legacy_marked_successes = incomplete_terminal = 0
         for status, verified, finished, count in grouped:
             try:
                 canonical = canonicalize("employee", status)
@@ -476,16 +476,16 @@ class AuthorityReader:
                     continue
                 finished_counts[canonical] = finished_counts.get(canonical, 0) + int(count)
                 if canonical == "succeeded" and verified == 1:
-                    contract_verified_successes += int(count)
-        # The audit verifier checks execution envelopes, not independent business
-        # outcomes. Never promote a legacy success string into business success.
+                    legacy_marked_successes += int(count)
+        # Current ledger writes verified=0; a legacy flag is historical metadata,
+        # not proof of an execution contract or independent business acceptance.
         state["performance"].update(
             status="observed" if counts else "no_history",
             recorded_runs=sum(counts.values()),
             finished_terminal_counts=finished_counts,
-            contract_verified_success_count=contract_verified_successes,
-            unverified_success_count=finished_counts.get("succeeded", 0)
-            - contract_verified_successes,
+            legacy_marked_success_count=legacy_marked_successes,
+            unmarked_success_count=finished_counts.get("succeeded", 0)
+            - legacy_marked_successes,
             incomplete_terminal_count=incomplete_terminal,
         )
         state["workload"].update(

@@ -112,8 +112,8 @@ def test_employee_performance_is_scoped_persisted_and_not_business_acceptance(wo
     assert performance["status"] == "observed"
     assert performance["recorded_runs"] == 7
     assert performance["finished_terminal_counts"] == {"succeeded": 3, "failed": 1}
-    assert performance["contract_verified_success_count"] == 2
-    assert performance["unverified_success_count"] == 1
+    assert performance["legacy_marked_success_count"] == 2
+    assert performance["unmarked_success_count"] == 1
     assert performance["incomplete_terminal_count"] == 1
     assert performance["independent_business_verified"] is False
     assert performance["cost_attribution"] == "unknown"

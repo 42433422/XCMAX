@@ -412,6 +412,8 @@ def _employee_card(workspace: str | None, target: str) -> tuple[dict[str, str] |
     assert card is not None
     if not card["available"]:
         return None, "handoff_unknown_employee"
+    if any(card[flag] for flag in ("timeout", "crash", "unrecoverable")):
+        return None, "employee_unavailable"
     return {"employee_id": card["employee_id"], "tenant_id": card["tenant_id"]}, ""
 
 

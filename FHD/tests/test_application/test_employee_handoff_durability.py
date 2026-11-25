@@ -573,3 +573,29 @@ def test_missing_task_root_requires_reconciliation_without_a_replacement(handoff
         user_id="11", task_id=handoff_env.context["task_id"]
     )
     assert [run.run_id for run in runs] == [first["child_run_id"]]
+
+
+@pytest.mark.parametrize(
+    ("flags", "code"),
+    [
+        ({"available": False}, "handoff_unknown_employee"),
+        ({"available": "false"}, "handoff_identity_unverified"),
+        ({"available": 1}, "handoff_identity_unverified"),
+        ({"timeout": "false"}, "handoff_identity_unverified"),
+        ({"crash": True}, "employee_unavailable"),
+        ({"timeout": True}, "employee_unavailable"),
+        ({"unrecoverable": True}, "employee_unavailable"),
+    ],
+)
+def test_unavailable_handoff_target_cannot_start_a_child(handoff_env, flags, code):
+    path = handoff_env.workspace / "employees" / "employee-b.json"
+    card = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**card, **flags}), encoding="utf-8")
+
+    result = _commit(handoff_env)
+
+    assert result["success"] is False
+    assert result["error_code"] == code
+    assert handoff_env.repository().list_task_runs(
+        user_id="11", task_id=handoff_env.context["task_id"]
+    ) == []
