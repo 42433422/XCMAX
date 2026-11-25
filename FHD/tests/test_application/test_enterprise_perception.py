@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.application.enterprise_cognition.perception import observe_enterprise
 from app.application.enterprise_cognition.service import cognition_result_verified
-from app.domain.enterprise_cognition.contracts import CognitionRequest, INPUT_MODELS
+from app.domain.enterprise_cognition.contracts import INPUT_MODELS, CognitionRequest
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 NOW = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)
@@ -204,7 +204,6 @@ def test_diagnostic_contract_rejects_client_identity_and_unbounded_scan():
     for invalid in [{"limit_per_source": 6}, {"limit_per_source": True}, {"tenant_id": 22}]:
         with pytest.raises(ValidationError):
             INPUT_MODELS["perceive"].model_validate(invalid)
-
 
 
 def test_perception_http_reads_real_authorized_order_without_claiming_kpis(
