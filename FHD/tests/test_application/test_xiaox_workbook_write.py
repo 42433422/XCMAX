@@ -6,10 +6,15 @@ Fixtures are synthetic workbooks, not the unavailable original customer corpus.
 from __future__ import annotations
 
 import copy
+import hashlib
 import io
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
 from app.application.agent_orchestrator import set_agent_run_repository_for_tests
@@ -24,14 +29,16 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.elt.service_uploads import UploadServiceMixin
+from app.application.employee_runtime.executor import execute_employee_task_local
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.domain.workbook_write_contract import WORKBOOK_WRITER
+from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from app.infrastructure.tenant_scope import tenant_scope
+from app.mod_sdk.employee_tool_registry import office_output_paths
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -39,12 +46,13 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    workspace = tmp_path / "workspace"
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     actor = trusted_actor(permissions=["employee.execute", "tool.excel_analysis.read"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
-    set_agent_run_repository_for_tests(repository)
     parent = AgentRun(
         str(actor.user_id), "按原模板写入两格并保存公式，然后读回工作簿", status="running"
     )
@@ -59,18 +67,27 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
     sheet.title = "Data"
     sheet["A1"], sheet["B1"], sheet["C1"] = "name", "amount", "formula"
     sheet["A2"], sheet["B2"], sheet["D2"] = "old", 1, "protected"
-    content = io.BytesIO()
-    book.save(content)
+    sheet["C2"] = "=B2+1"
+    with io.BytesIO() as stream:
+        book.save(stream)
+        original = stream.getvalue()
     book.close()
-    content.seek(0)
-    with tenant_scope(actor.tenant_id), get_db() as db:
-        upload = UploadServiceMixin().save_upload(
-            db,
-            owner_user_id=actor.user_id,
-            file_name="template.xlsx",
-            content_type=None,
-            stream=content,
+    app = FastAPI()
+    app.include_router(platform_shell_router)
+    with TestClient(app, headers=actor.headers) as client:
+        response = client.post(
+            "/api/platform-shell/chat-office-file-upload",
+            files={
+                "file": (
+                    "template.xlsx",
+                    original,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
+    assert response.status_code == 200, response.text
+    upload = response.json()["data"]
+    assert upload.get("upload_id"), response.text
 
     def forbid_model(*args, **kwargs):
         pytest.fail("the bundled writer/QC must not add a model planner")
@@ -149,6 +166,7 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
             },
         },
     }
+    set_agent_run_repository_for_tests(repository)
     try:
         yield SimpleNamespace(
             actor=actor,
@@ -158,6 +176,8 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
             bridge=bridge,
             grant=grant,
             upload=upload,
+            workspace_copy=workspace / upload["file_path"],
+            original=original,
             params=params,
             invoke=invoke,
             approve=approve,
@@ -166,10 +186,28 @@ def workbook_runtime(trusted_actor, monkeypatch, tmp_path):
         set_agent_run_repository_for_tests(None)
 
 
-def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifact(
-    workbook_runtime,
-):
+def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_runtime):
     state = workbook_runtime
+    upload_id = state.upload["upload_id"]
+    reader = "excel-full-read-employee"
+    with tenant_scope(state.actor.tenant_id):
+        with get_db() as db:
+            owned_copy = Path(db.get(EltUpload, upload_id).storage_path)
+        assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+        read = execute_employee_task_local(
+            reader,
+            "读取上传的工作簿",
+            {"upload_id": upload_id},
+            user_id=state.actor.user_id,
+            runtime_context=state.actor.context,
+        )
+    assert read["success"] is True, read
+    [reader_output] = office_output_paths(reader, read)
+    [sheet] = json.loads(Path(reader_output).read_text(encoding="utf-8"))["sheets"]
+    assert sheet["name"] == "Data"
+    cells = {(cell["row"], cell["col"]): cell["value"] for cell in sheet["cells"]}
+    assert cells[2, 1] == "old"
+    assert cells[2, 2] == 1
     pending = state.invoke("write", state.params)
     assert pending["pending_approval"] is True and not pending["artifacts"]
     child = state.approve(pending)
@@ -183,6 +221,20 @@ def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifa
     ]
     artifact = receipt["artifacts"][0]
     content = read_verified_run_file(child.run_id, artifact)
+    # Exercise the authenticated HTTP download, not only the private file reader.
+    from app.fastapi_routes.domains.agent.artifact_routes import router as artifact_router
+
+    download_app = FastAPI()
+    download_app.include_router(artifact_router)
+    with TestClient(download_app, headers=state.actor.headers) as client:
+        downloaded = client.get(artifact["uri"])
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.headers["cache-control"] == "private, no-store"
+    assert downloaded.content == content
+    assert downloaded.content != state.original
+    with TestClient(download_app) as anonymous:
+        denied = anonymous.get(artifact["uri"])
+    assert denied.status_code in (401, 403)
     with io.BytesIO(content) as stream:
         book = load_workbook(stream, data_only=False)
         assert book["Data"]["A2"].value == "observed-name"
@@ -192,6 +244,8 @@ def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifa
         book.close()
     checks = receipt["verification"]["steps"][0]["checks"]
     quality = next(row["evidence"] for row in checks if row["source"] == "workbook_qc")
+    assert quality["template_sha256"] == hashlib.sha256(state.original).hexdigest()
+    assert quality["artifact_sha256"] == hashlib.sha256(downloaded.content).hexdigest()
     assert quality["formula_recalculation_verified"] is False
     assert quality["sections"]["conformance"] == quality["sections"]["protection"] == "pass"
     next_action = state.invoke(
@@ -202,7 +256,91 @@ def test_actual_owned_writer_and_independent_qc_publish_reusable_original_artifa
     replay = state.invoke("write-retry", state.params)
     assert replay["run_id"] == child.run_id
     assert read_verified_run_file(child.run_id, artifact) == content
+    assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
     assert len(child.tool_calls) == 1 and not child.llm_calls
+
+
+def test_chat_upload_id_through_xiaox_a2_structural_write_and_download(workbook_runtime):
+    state = workbook_runtime
+    upload_id = state.upload["upload_id"]
+    with tenant_scope(state.actor.tenant_id), get_db() as db:
+        upload = db.get(EltUpload, upload_id)
+        owned_copy = Path(upload.storage_path)
+        source_digest = upload.sha256
+    assert source_digest == hashlib.sha256(state.original).hexdigest()
+    assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
+    params = copy.deepcopy(state.params)
+    assert params["input"]["template_path"] == upload_id
+    params["input"]["plan"] = {
+        "plan_version": 1,
+        "phases": [
+            {"phase": "insert_rows", "sheet": "Data", "row": 1, "count": 1},
+            {"phase": "merge_cells", "sheet": "Data", "range": "A1:C1"},
+            {
+                "phase": "cell_writes",
+                "writes": [{"sheet": "Data", "ref": "A1", "value": "Uploaded report"}],
+            },
+            {
+                "phase": "cell_styles",
+                "sheet": "Data",
+                "range": "A1",
+                "font_size": 18,
+                "bold": True,
+                "horizontal": "center",
+            },
+            {"phase": "set_row_height", "sheet": "Data", "row": 1, "height": 30},
+            {"phase": "freeze_panes", "sheet": "Data", "ref": "A3"},
+        ],
+    }
+    pending = state.invoke("structure", params)
+    assert pending["pending_approval"] is True and not pending["artifacts"]
+    child = state.approve(pending)
+    receipt = state.store.receipt_snapshot(state.parent.run_id)[0]["receipt"]
+    assert child.status == "completed" and receipt["verified"] is True, (child.error, receipt)
+    [artifact] = receipt["artifacts"]
+    raw = read_verified_run_file(child.run_id, artifact)
+    from app.fastapi_routes.domains.agent.artifact_routes import router as artifact_router
+
+    app = FastAPI()
+    app.include_router(artifact_router)
+    with TestClient(app, headers=state.actor.headers) as client:
+        response = client.get(artifact["uri"])
+    assert response.status_code == 200, response.text
+    assert response.content == raw != state.original
+    checks = receipt["verification"]["steps"][0]["checks"]
+    quality = next(row["evidence"] for row in checks if row["source"] == "workbook_qc")
+    assert quality["template_sha256"] == source_digest
+    assert quality["artifact_sha256"] == hashlib.sha256(response.content).hexdigest()
+    assert quality["sections"]["conformance"] == quality["sections"]["formulas"] == "pass"
+    assert quality["formula_recalculation_verified"] is False
+    with io.BytesIO(response.content) as stream:
+        book = load_workbook(stream, data_only=False)
+        try:
+            sheet = book["Data"]
+            assert sheet["A1"].value == "Uploaded report"
+            assert {str(region) for region in sheet.merged_cells.ranges} == {"A1:C1"}
+            assert sheet["A1"].font.sz == 18
+            assert sheet["A1"].font.bold is True
+            assert sheet["A1"].alignment.horizontal == "center"
+            assert sheet.row_dimensions[1].height == 30
+            assert sheet.freeze_panes == "A3"
+            assert [sheet.cell(2, col).value for col in range(1, 4)] == [
+                "name",
+                "amount",
+                "formula",
+            ]
+            assert [sheet.cell(3, col).value for col in range(1, 5)] == [
+                "old",
+                1,
+                "=B3+1",
+                "protected",
+            ]
+        finally:
+            book.close()
+    replay = state.invoke("structure-retry", params)
+    assert replay["run_id"] == child.run_id
+    assert read_verified_run_file(child.run_id, artifact) == raw
+    assert owned_copy.read_bytes() == state.workspace_copy.read_bytes() == state.original
 
 
 @pytest.mark.parametrize("override", ["workspace_root", "output_relpath", "template_relpath"])
