@@ -207,3 +207,109 @@ def test_busy_continuation_keeps_original_parent_pointer(monkeypatch, tmp_path):
     assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-parent"
     assert busy["retryable"] is True
 
+@pytest.mark.parametrize("termination", [False, True], ids=["completed", "process-lost"])
+def test_real_process_lock_released_after_termination_or_completion(
+    monkeypatch, tmp_path, termination
+):
+    """Two OS processes share the account lock; a lost worker cannot strand it."""
+    import os
+    import subprocess
+    import sys
+    import textwrap
+    import time
+    from pathlib import Path
+
+    from app.utils.path_io import path_utils
+
+    root = Path(__file__).resolve().parents[2]
+    state_dir = tmp_path / "shared-state"
+    entered, release = tmp_path / "entered", tmp_path / "release"
+    monkeypatch.setattr(
+        path_utils, "get_desktop_state_dir", lambda **_kwargs: str(state_dir)
+    )
+    calls = []
+
+    def execute(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "run_id": kwargs["context"]["agent_runtime_run_id"]}
+
+    monkeypatch.setattr(chat, "_run_runtime_chat", execute)
+    script = textwrap.dedent(
+        """
+        import sys
+        import time
+        from pathlib import Path
+        from app.application.agent_runtime import chat
+        from app.utils.path_io import path_utils
+
+        state, entered, release = map(Path, sys.argv[1:])
+        path_utils.get_desktop_state_dir = lambda **_kwargs: str(state)
+
+        def execute(**_kwargs):
+            entered.write_text("locked", encoding="utf-8")
+            deadline = time.monotonic() + 15
+            while not release.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            return {"success": True}
+
+        chat._run_runtime_chat = execute
+        result = chat.run_runtime_chat(
+            user_id="71", message="first",
+            context={"local_user_id": 71, "session_id": "first"},
+            file_context={},
+        )
+        if not result["success"]:
+            raise SystemExit("worker failed")
+        """
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(root) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    }
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, str(state_dir), str(entered), str(release)],
+        cwd=root,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    context = {
+        "local_user_id": 71,
+        "session_id": "continuation",
+        "agent_runtime_run_id": "original-run",
+    }
+    try:
+        deadline = time.monotonic() + 10
+        while not entered.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert entered.exists(), "separate process never reached the acquired lock"
+        busy = chat.run_runtime_chat(
+            user_id=scoped_conversation_user_id("71", context),
+            message="continue",
+            context=context,
+            file_context={},
+        )
+        assert busy["data"]["error_code"] == "runtime_busy"
+        assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
+        assert not calls, "busy path must never start a second runtime"
+        if termination:
+            process.terminate()
+        else:
+            release.write_text("finish", encoding="utf-8")
+        _, stderr = process.communicate(timeout=10)
+        assert (process.returncode != 0) if termination else (process.returncode == 0), stderr
+
+        resumed = chat.run_runtime_chat(
+            user_id=scoped_conversation_user_id("71", context),
+            message="continue",
+            context=context,
+            file_context={},
+        )
+        assert resumed["success"] is True
+        assert len(calls) == 1
+        assert calls[0]["context"]["agent_runtime_run_id"] == "original-run"
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.communicate(timeout=10)
