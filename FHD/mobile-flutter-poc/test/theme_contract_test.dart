@@ -142,6 +142,38 @@ void main() {
     expect(duration, const Duration(milliseconds: DesignTokens.motionStandardMs));
   });
 
+  testWidgets('Material bottom sheet preserves modal barrier and touch dismissal',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(
+        body: Builder(builder: (context) {
+          return Center(
+            child: FilledButton(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                useSafeArea: true,
+                isScrollControlled: true,
+                builder: (_) => const SafeArea(
+                  child: SizedBox(height: 160, child: Center(child: Text('任务操作'))),
+                ),
+              ),
+              child: const Text('打开操作表单'),
+            ),
+          );
+        }),
+      ),
+    ));
+    await tester.tap(find.text('打开操作表单'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('任务操作'), findsOneWidget);
+    expect(find.byType(ModalBarrier), findsWidgets);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    expect(find.text('任务操作'), findsNothing);
+  });
+
   test('message avatar layout keeps stable Flutter geometry', () {
     expect(MessageAvatarLayout.conversationAvatarSize, 52.0);
     expect(MessageAvatarLayout.bubbleAvatarSize, 40.0);
