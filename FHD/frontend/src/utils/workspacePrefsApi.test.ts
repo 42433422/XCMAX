@@ -4,6 +4,9 @@ import {
   hydrateWorkspacePrefsFromServer,
   queueWorkspacePrefsSync,
   fetchWorkspacePrefs,
+  patchWorkspacePrefs,
+  resetWorkspacePrefsSyncState,
+  WorkspacePrefsConflictError,
 } from './workspacePrefsApi'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
@@ -23,6 +26,7 @@ describe('workspacePrefsApi', () => {
     localStorage.clear()
     invalidateTenantStorageScopeCache()
     vi.clearAllMocks()
+    resetWorkspacePrefsSyncState()
   })
 
   it('applyWorkspacePrefsToLocalCache writes flags', () => {
@@ -91,15 +95,65 @@ describe('workspacePrefsApi', () => {
     await expect(hydrateWorkspacePrefsFromServer()).resolves.toBeNull()
   })
 
-  it('queueWorkspacePrefsSync debounces patch', async () => {
+  it('queueWorkspacePrefsSync debounces and writes only with server revision', async () => {
     vi.useFakeTimers()
-    vi.mocked(apiFetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, data: {} }),
-    } as Response)
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, owner_id: 'tenant:42', revision: 4, data: {} }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, owner_id: 'tenant:42', revision: 5, data: {} }),
+      } as Response)
     queueWorkspacePrefsSync({ product_flow_completed: true }, 100)
     await vi.advanceTimersByTimeAsync(150)
-    expect(apiFetch).toHaveBeenCalled()
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+    const request = vi.mocked(apiFetch).mock.calls[1]
+    expect(request[0]).toBe('/api/workspace/prefs')
+    expect(JSON.parse(String(request[1]?.body))).toEqual({
+      product_flow_completed: true,
+      expected_revision: 4,
+    })
+    vi.useRealTimers()
+  })
+
+  it('rejects another device revision without sending a stale PATCH', async () => {
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, owner_id: 'tenant:42', revision: 7, data: {} }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, owner_id: 'tenant:42', revision: 8, data: {} }),
+      } as Response)
+    await hydrateWorkspacePrefsFromServer()
+    await expect(patchWorkspacePrefs({ host_pack_acknowledged: true }))
+      .rejects.toBeInstanceOf(WorkspacePrefsConflictError)
+    expect(apiFetch).toHaveBeenCalledTimes(2) // hydration GET, verification GET, no PATCH
+  })
+
+  it('surfaces a server 409 and never resubmits the same intent', async () => {
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, owner_id: 'tenant:42', revision: 3, data: {} }),
+      } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 409 } as Response)
+    await expect(patchWorkspacePrefs({ host_pack_acknowledged: false }))
+      .rejects.toBeInstanceOf(WorkspacePrefsConflictError)
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+    const payload = JSON.parse(String(vi.mocked(apiFetch).mock.calls[1][1]?.body))
+    expect(payload.expected_revision).toBe(3)
+  })
+
+  it('invalidates an old pending workspace draft on teardown', async () => {
+    vi.useFakeTimers()
+    queueWorkspacePrefsSync({ workflow_ai_employees: { 'employee-one': true } }, 100)
+    resetWorkspacePrefsSyncState()
+    await vi.advanceTimersByTimeAsync(150)
+    expect(apiFetch).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 })
