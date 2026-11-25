@@ -16,7 +16,7 @@ world = test_enterprise_projection.world
 
 
 def test_employee_projection_refuses_misbound_virtual_user(world):
-    service, sessions, _clock, _permissions = world
+    service, sessions, clock, _permissions = world
     with sessions() as db:
         db.add(
             User(
@@ -38,6 +38,7 @@ def test_employee_projection_refuses_misbound_virtual_user(world):
         assert identity is not None
         identity.username = "ai-employee:employee-a"
         db.commit()
+    clock[0] += 1
     bound = get(service, "employee", "employee-a", force_refresh=True)["state"]
     assert bound["role"] == "ai_employee"
     assert bound["identity_active"] is True
@@ -47,6 +48,7 @@ def test_employee_projection_refuses_misbound_virtual_user(world):
         assert identity is not None
         identity.is_active = False
         db.commit()
+    clock[0] += 1
     stopped = get(service, "employee", "employee-a", force_refresh=True)["state"]
     assert stopped["role"] == "ai_employee"
     assert stopped["identity_active"] is False
@@ -56,6 +58,7 @@ def test_employee_projection_refuses_misbound_virtual_user(world):
         assert identity is not None
         identity.role = "user"
         db.commit()
+    clock[0] += 1
     revoked = get(service, "employee", "employee-a", force_refresh=True)["state"]
     assert revoked["role"] is None
     assert revoked["identity_active"] is None
@@ -65,7 +68,7 @@ def test_employee_projection_refuses_misbound_virtual_user(world):
 
 
 def test_employee_performance_is_scoped_persisted_and_not_business_acceptance(world):
-    service, sessions, _clock, _permissions = world
+    service, sessions, clock, _permissions = world
     finished = datetime.now(UTC)
     with sessions() as db:
         for status, verified, ended in (
@@ -125,6 +128,7 @@ def test_employee_performance_is_scoped_persisted_and_not_business_acceptance(wo
     with sessions() as db:
         db.scalar(select(AiEmployeeProfile)).mod_id = "sales"
         db.commit()
+    clock[0] += 1
     other = get(service, "employee", "employee-a", force_refresh=True)["state"]["performance"]
     assert other["status"] == "unknown"
     assert "recorded_runs" not in other
