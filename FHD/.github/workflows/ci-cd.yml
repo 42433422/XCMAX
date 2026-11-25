@@ -171,6 +171,22 @@ jobs:
             tests/test_routes/test_mobile_super_employee_receipts.py \
             tests/test_services/test_mobile_relay_request_identity.py \
             -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify guarded legacy payment callback, refund and authorization invariants
+        working-directory: FHD
+        run: |
+          uv run --no-sync pytest \
+            tests/test_infrastructure/test_payment_order_store_replay_fence.py \
+            tests/test_routes/test_payment_order_authorization.py \
+            tests/test_routes/test_model_payment_routes.py \
+            -q -o addopts= --junitxml=payment-p0-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          tree = ET.parse("payment-p0-results.xml")
+          cases = tree.findall(".//testcase")
+          assert len(cases) >= 40, "payment control tests must run"
+          assert not tree.findall(".//skipped"), "payment acceptance must not skip"
+          assert not tree.findall(".//failure") and not tree.findall(".//error")
+          PY
       - name: Verify ELT ownership, savepoints, and lost commit receipts on PostgreSQL
         working-directory: FHD
         env:
@@ -206,6 +222,7 @@ jobs:
           path: |
             FHD/agent-postgres-results.xml
             FHD/elt-postgres-results.xml
+            FHD/payment-p0-results.xml
             FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
   # Share one runner checkout for the cheap guard, change classification, and shard plan.
