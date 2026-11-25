@@ -29,6 +29,8 @@ const navItems = vi.hoisted(() => [
   { key: 'im', name: '信息', routeName: 'im', source: 'core', iconClass: 'fa-envelope-o' },
   { key: 'orders', name: '订单管理', routeName: 'orders', source: 'core', iconClass: 'fa-file-text-o' },
   { key: 'customers', name: '客户管理', routeName: 'customers', source: 'core', iconClass: 'fa-users' },
+  { key: 'products', name: '产品管理', routeName: 'products', source: 'core', iconClass: 'fa-cube' },
+  { key: 'template-preview', name: '模板预览', routeName: 'template-preview', source: 'core', iconClass: 'fa-file' },
   {
     key: 'workflow-employee-space',
     name: '员工空间',
@@ -393,6 +395,23 @@ describe('TopQuickNav', () => {
     })
   })
 
+
+  it('only searches and navigates business records exposed by the current permitted menu', async () => {
+    const itemIndex = navItems.findIndex(item => item.key === 'customers')
+    const removed = navItems.splice(itemIndex, 1)
+    getCustomers.mockClear()
+    const wrapper = await mountNav()
+    try {
+      await wrapper.find('input').setValue('华星')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await flushPromises()
+      expect(getCustomers).not.toHaveBeenCalled()
+      expect(optionNames().join()).not.toContain('华星客户')
+    } finally {
+      wrapper.unmount()
+      navItems.splice(itemIndex, 0, ...removed)
+    }
+  })
 
   it('opens task records from the existing read-only task snapshot without executing a tool', async () => {
     const savedDesktop = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
