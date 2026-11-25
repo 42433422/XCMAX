@@ -207,8 +207,9 @@ def bind_selected_industry_for_user(
     *,
     industry_mod_id: str = "",
     owner_id: str | None = None,
+    persist_workspace_prefs: bool = True,
 ) -> dict[str, Any]:
-    """Bind selected industry to both User SSOT fields and tenant workspace prefs."""
+    """Bind industry to User SSOT; optionally skip a redundant preference write."""
     iid = str(industry_id or "").strip()
     if not iid or user is None:
         return {}
@@ -235,6 +236,10 @@ def bind_selected_industry_for_user(
 
     if not resolved_owner:
         return {}
+    if not persist_workspace_prefs:
+        # Caller already completed the guarded workspace preference write.
+        # Reapplying it would increment its revision twice.
+        return get_workspace_prefs(resolved_owner)
     partial: dict[str, Any] = {"selected_industry_id": iid}
     mid = _industry_mod_id_for_workspace(iid, industry_mod_id)
     if mid:
