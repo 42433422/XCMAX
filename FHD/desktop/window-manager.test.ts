@@ -37,7 +37,7 @@ vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
   app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false, focus: vi.fn(), isHidden: vi.fn(() => false) },
   dialog: { showErrorBox: vi.fn() },
-  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
+  screen: { on: vi.fn(), removeListener: vi.fn(), getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
   session: {
     defaultSession: { cookies: { get: sessionMocks.defaultGet } },
@@ -97,6 +97,10 @@ function makeWindow(overrides: Partial<{
     isDestroyed: vi.fn(() => false),
     isVisible: vi.fn(() => overrides.isVisible ?? true),
     isMinimized: vi.fn(() => overrides.isMinimized ?? false),
+    isMaximized: vi.fn(() => false),
+    isFullScreen: vi.fn(() => false),
+    getMinimumSize: vi.fn(() => [800, 640]),
+    setMinimumSize: vi.fn(),
     show: vi.fn(),
     hide: vi.fn(),
     focus: vi.fn(),
@@ -120,6 +124,8 @@ beforeEach(() => {
   desktopRuntime.mainApplicationReady = null
   desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
+  vi.mocked(screen.on).mockClear()
+  vi.mocked(screen.removeListener).mockClear()
   vi.mocked(isTrustedDesktopOrigin).mockReset()
 })
 
@@ -276,11 +282,13 @@ describe('toggleMainWindow（托盘显隐切换语义保持不变）', () => {
   })
 })
 
-it('拉回几乎不在工作区里的窗口，避免托盘单击后仍看不见', () => {
+it('拉回几乎不在工作区里的窗口，避免托盘单击后仍看不见', async () => {
   const win = makeWindow({ isVisible: false })
   win.getBounds = vi.fn(() => ({ x: -4000, y: 80, width: 1280, height: 800 }))
   desktopRuntime.mainWindow = win
   vi.mocked(clampWindowBounds).mockClear()
+  const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+  vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
   showMainWindow()
   expect(clampWindowBounds).toHaveBeenCalled()
   expect(win.setBounds).toHaveBeenCalled()
@@ -560,6 +568,12 @@ describe('同一进程附加窗口', () => {
         for (const cb of listeners.closed || []) cb()
       }),
       getBounds: vi.fn(() => ({ x: 10, y: 10, width: 1200, height: 800 })),
+      isMinimized: vi.fn(() => false),
+      isMaximized: vi.fn(() => false),
+      isFullScreen: vi.fn(() => false),
+      getMinimumSize: vi.fn(() => [800, 640]),
+      setMinimumSize: vi.fn(),
+      setBounds: vi.fn(),
       loadURL: vi.fn(async () => undefined),
       webContents: {
         on: vi.fn(),
@@ -609,6 +623,31 @@ describe('同一进程附加窗口', () => {
     expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({
       ...workArea, minWidth: 720, minHeight: 580,
     }))
+  })
+
+  it('recovers an auxiliary window after display removal and unregisters listeners on close', async () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    desktopRuntime.mainWindow = makeWindow()
+    const aux = fakeAux()
+    vi.mocked(BrowserWindow).mockImplementationOnce(function () { return aux as unknown as BrowserWindow })
+    expect(openAuxiliaryWindow('http://127.0.0.1:17500/')).not.toBeNull()
+    const callbacks = vi.mocked(screen.on).mock.calls as unknown as Array<[string, () => void]>
+    const recover = callbacks.find(([event]) => event === 'display-removed')?.[1]
+    expect(recover).toBeTypeOf('function')
+    const workArea = { x: 0, y: 20, width: 720, height: 580 }
+    aux.getBounds.mockReturnValue({ x: -1200, y: 30, width: 1200, height: 800 })
+    vi.mocked(screen.getDisplayMatching).mockReturnValueOnce({ workArea } as Electron.Display)
+    const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+    vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
+    recover?.()
+    expect(aux.setMinimumSize).toHaveBeenCalledWith(720, 580)
+    expect(aux.setBounds).toHaveBeenCalledWith(workArea)
+    aux.isMaximized.mockReturnValue(true)
+    recover?.()
+    expect(aux.setBounds).toHaveBeenCalledTimes(1)
+    aux.destroy()
+    expect(screen.removeListener).toHaveBeenCalledWith('display-removed', recover)
+    expect(screen.removeListener).toHaveBeenCalledWith('display-metrics-changed', recover)
   })
 
   it('拒绝不可信地址，且不创建窗口', () => {
