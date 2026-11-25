@@ -1627,7 +1627,7 @@ describe('SSE rendering work bounds', () => {
       expect(changes.mock.calls.length).toBeGreaterThanOrEqual(1)
       expect(changes.mock.calls.length).toBeLessThanOrEqual(2)
       const textUpdates = deps.chatRequest.setLoadingProgress.mock.calls
-        .filter(([text]: [string]) => text === '正在生成回复…')
+        .filter(([text]) => text === '正在生成回复…')
       expect(textUpdates).toHaveLength(1)
       expect(messages.value[0].content).toBe('字'.repeat(160))
     } finally {
