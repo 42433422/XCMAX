@@ -521,3 +521,74 @@ def read_training_impact(request_id, state):
         "release_sha": state["delivery"].get("release_sha"),
         "verified_at": experiment.get("observed_at"),
     }
+
+
+def request_postpromotion_regression_rechecks():
+    """Reopen the original Retort impact/recovery tail after a late live stop-loss.
+
+    The existing product outbox decides whether treatment traffic regressed.
+    A compare-and-swap claim prevents duplicate graph re-entry; it never
+    resubmits a customer write or creates a second experiment.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select, update
+
+    from modstore_server.retort_feedback_experiments import (
+        approved_policy,
+        traffic_block_reason,
+    )
+
+    claimed = 0
+    with get_session_factory()() as db:
+        with db.scalars(
+            select(RetortEvolutionRun).where(
+                RetortEvolutionRun.status == "completed",
+                RetortEvolutionRun.effects_json.contains('"training_candidate"', autoescape=True),
+            )
+        ).yield_per(32) as rows:
+            for row in rows:
+                original = row.effects_json
+                effects = json_loads(original, {})
+                source, experiment = effects.get("training_candidate"), effects.get("experiment")
+                if (
+                    not isinstance(source, dict)
+                    or not isinstance(experiment, dict)
+                    or experiment.get("traffic") != "candidate"
+                    or experiment.get("decision") != "promote"
+                    or experiment.get("rollout_verified") is not True
+                ):
+                    continue
+                try:
+                    policy, verified = approved_policy(row)
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if (
+                    verified.get("training_candidate") != source
+                    or policy != source.get("growthbook")
+                    or traffic_block_reason(db, row, verified) != "workflow_execution_stop_loss"
+                ):
+                    continue
+                effects["training_regression_recheck"] = {
+                    "source": "original_experiment_outbox",
+                    "reason": "workflow_execution_stop_loss",
+                    "request_id": row.id,
+                    "release_sha": experiment.get("release_sha"),
+                    "final_snapshot_sha256": experiment.get("final_snapshot_sha256"),
+                }
+                result = db.execute(
+                    update(RetortEvolutionRun)
+                    .where(
+                        RetortEvolutionRun.id == row.id,
+                        RetortEvolutionRun.status == "completed",
+                        RetortEvolutionRun.effects_json == original,
+                    )
+                    .values(
+                        status="impact_recheck",
+                        effects_json=json_dumps(effects),
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                claimed += int(result.rowcount == 1)
+        db.commit()
+    return claimed
