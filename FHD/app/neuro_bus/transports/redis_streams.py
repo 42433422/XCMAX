@@ -23,6 +23,66 @@ DLQ_KEY = "neurobus:dlq"
 CONSUMER_GROUP = "neurobus-workers"
 MAXLEN = 100000
 
+# MAXLEN is a soft retention target, never permission to discard pending work.
+# Redis 6.2+ MINID removes strictly older IDs. Calculate the fence and trim
+# atomically on the server so group creation/delivery/ACK cannot race it.
+TRIM_BATCH = 256
+_SAFE_TRIM = """
+local key = KEYS[1]
+local excess = redis.call('XLEN', key) - tonumber(ARGV[1])
+if excess <= 0 then return 0 end
+
+-- Compare canonical decimal strings: Lua doubles cannot represent every
+-- unsigned 64-bit stream ID exactly.
+local function valid(id)
+    return type(id) == 'string' and string.match(id, '^%d+%-%d+$')
+end
+local function decimal_less(a, b)
+    if #a ~= #b then return #a < #b end
+    return a < b
+end
+local function less(a, b)
+    local am, as = string.match(a, '^(%d+)%-(%d+)$')
+    local bm, bs = string.match(b, '^(%d+)%-(%d+)$')
+    if am ~= bm then return decimal_less(am, bm) end
+    return decimal_less(as, bs)
+end
+
+local groups = redis.call('XINFO', 'GROUPS', key)
+if #groups == 0 then return 0 end
+local fence = nil
+for _, group in ipairs(groups) do
+    local name, delivered, pending_count
+    for i = 1, #group, 2 do
+        if group[i] == 'name' then name = group[i + 1] end
+        if group[i] == 'last-delivered-id' then delivered = group[i + 1] end
+        if group[i] == 'pending' then pending_count = group[i + 1] end
+    end
+    if type(name) ~= 'string' or not valid(delivered)
+        or type(pending_count) ~= 'number' or pending_count < 0 then
+        return 0
+    end
+    -- Keep the last delivered ID and everything newer.
+    if not fence or less(delivered, fence) then fence = delivered end
+    if pending_count > 0 then
+        local pending = redis.call('XPENDING', key, name, '-', '+', 1)
+        if #pending ~= 1 or not valid(pending[1][1]) then return 0 end
+        if less(pending[1][1], fence) then fence = pending[1][1] end
+    end
+    if fence == '0-0' then return 0 end
+end
+
+-- Bound exact trimming to a single batch without overshooting MAXLEN.
+-- The extra entry is the first ID that must remain.
+local batch = math.min(excess, tonumber(ARGV[2]))
+local entries = redis.call('XRANGE', key, '-', '+', 'COUNT', batch + 1)
+if #entries ~= batch + 1 then return 0 end
+local retain = entries[#entries][1]
+if not valid(retain) then return 0 end
+if less(retain, fence) then fence = retain end
+return redis.call('XTRIM', key, 'MINID', '=', fence)
+"""
+
 
 def streams_enabled() -> bool:
     return os.environ.get("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "").strip().lower() == "streams"
@@ -65,8 +125,6 @@ class RedisStreamsBridge:
         msg_id = self._redis.xadd(
             STREAM_KEY,
             fields={"payload": json.dumps(event_dict, ensure_ascii=False)},
-            maxlen=MAXLEN,
-            approximate=True,
         )
         return msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
 
@@ -108,17 +166,35 @@ class RedisStreamsBridge:
         """确认消息已处理。"""
         if self._redis is None:
             return
-        self._redis.xack(STREAM_KEY, CONSUMER_GROUP, msg_id)
+        if self._redis.xack(STREAM_KEY, CONSUMER_GROUP, msg_id):
+            self.trim_acknowledged()
+
+    def trim_acknowledged(self) -> int:
+        """Trim only the acknowledged prefix shared by all existing groups.
+
+        Missing progress or an unsupported Redis command must never fall
+        back to length-based deletion. Maintenance failure must not turn
+        a successful ACK into a failed business receipt.
+        """
+        if self._redis is None:
+            return 0
+        from redis.exceptions import RedisError
+
+        try:
+            return int(self._redis.eval(_SAFE_TRIM, 1, STREAM_KEY, MAXLEN, TRIM_BATCH))
+        except RedisError:
+            logger.warning("safe stream trim failed; retaining backlog", exc_info=True)
+            return 0
 
     def send_to_dlq(self, event_dict: dict[str, Any], original_msg_id: str) -> None:
         """失败消息转入 DLQ 并 ACK 原消息。"""
         if self._redis is None:
             return
+        # No managed DLQ consumer progress yet: retain failures rather
+        # than silently dropping them at a length watermark.
         self._redis.xadd(
             DLQ_KEY,
             {"payload": json.dumps(event_dict, ensure_ascii=False), "original_id": original_msg_id},
-            maxlen=MAXLEN,
-            approximate=True,
         )
         self.ack(original_msg_id)
         logger.warning("message %s moved to DLQ", original_msg_id)
