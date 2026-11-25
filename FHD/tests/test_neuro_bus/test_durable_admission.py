@@ -1,5 +1,6 @@
 """Durable admission is independent of volatile queue acceptance."""
 
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -38,7 +39,8 @@ def test_commit_is_visible_to_an_independent_connection_before_queue(bus, tmp_pa
     event = _event()
     calls = []
 
-    def enqueue(stored):
+    def enqueue(stored, *, _preserve_queue_identity):
+        assert _preserve_queue_identity is True
         reader = EventStore(EventStoreMode.SQLITE, path)
         try:
             actual = reader.get_admitted_event(event.metadata.event_id)
@@ -92,7 +94,7 @@ def test_queue_refusal_preserves_original_receipt_across_reopen(bus, tmp_path):
 def test_memory_store_never_acknowledges_reliable_admission(bus, mode, monkeypatch):
     store = EventStore(mode, ":memory:" if mode == EventStoreMode.SQLITE else None)
     calls = []
-    monkeypatch.setattr(bus, "publish", calls.append)
+    monkeypatch.setattr(bus, "publish", lambda event, **_: calls.append(event))
     try:
         with pytest.raises(RuntimeError, match="file-backed|in-memory"):
             bus.publish_reliable(_event(), event_store=store)
@@ -102,12 +104,10 @@ def test_memory_store_never_acknowledges_reliable_admission(bus, mode, monkeypat
 
 
 def test_insert_failure_does_not_dispatch_or_persist(bus, tmp_path, monkeypatch):
-    import sqlite3
-
     store = EventStore(EventStoreMode.SQLITE, str(tmp_path / "events.sqlite"))
     event = _event()
     calls = []
-    monkeypatch.setattr(bus, "publish", calls.append)
+    monkeypatch.setattr(bus, "publish", lambda event, **_: calls.append(event))
     try:
         assert store._conn is not None
         store._conn.execute(
@@ -119,7 +119,7 @@ def test_insert_failure_does_not_dispatch_or_persist(bus, tmp_path, monkeypatch)
         assert calls == []
         assert store.get_admitted_event(event.metadata.event_id) is None
         store._conn.execute("DROP TRIGGER reject_admission").close()
-        monkeypatch.setattr(bus, "publish", lambda _: True)
+        monkeypatch.setattr(bus, "publish", lambda _, **kwargs: True)
         assert bus.publish_reliable(event, event_store=store).newly_admitted
     finally:
         store.close()
@@ -153,4 +153,66 @@ def test_ordinary_event_retention_does_not_trim_or_replay_admission(tmp_path):
         assert store.get_admitted_event(receipt.event_id) is not None
         assert all(record.event.metadata.event_id != receipt.event_id for record in store.get_all())
     finally:
+        store.close()
+
+
+def test_commit_failure_rolls_back_before_queue(bus, tmp_path, monkeypatch):
+    store = EventStore(EventStoreMode.SQLITE, str(tmp_path / "events.sqlite"))
+    event = _event()
+    calls = []
+    monkeypatch.setattr(bus, "publish", lambda event, **_: calls.append(event))
+    try:
+        connection = store._conn
+        assert connection is not None
+        connection.execute("PRAGMA foreign_keys=ON").close()
+        connection.execute("CREATE TABLE fixture_parent (id TEXT PRIMARY KEY)").close()
+        connection.execute(
+            """CREATE TABLE fixture_child (
+                id TEXT REFERENCES fixture_parent(id) DEFERRABLE INITIALLY DEFERRED
+            )"""
+        ).close()
+        connection.execute(
+            """CREATE TRIGGER fail_at_commit AFTER INSERT ON neuro_admissions
+               BEGIN INSERT INTO fixture_child VALUES ('missing'); END"""
+        ).close()
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            bus.publish_reliable(event, event_store=store)
+        assert calls == []
+        assert store.get_admitted_event(event.metadata.event_id) is None
+        assert not connection.in_transaction
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_reliable_publish_does_not_remint_a_queued_event(bus, tmp_path):
+    store = EventStore(EventStoreMode.SQLITE, str(tmp_path / "events.sqlite"))
+    event = _event()
+    original_id = event.metadata.event_id
+    await bus.start()
+    try:
+        assert bus.publish(event)
+        receipt = bus.publish_reliable(event, event_store=store)
+        assert receipt.event_id == original_id
+        assert receipt.queued is False
+        assert bus._event_queue.size() == 1
+        assert store.get_admitted_event(original_id) is not None
+    finally:
+        await bus.stop()
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_full_local_queue_does_not_erase_durable_admission(bus, tmp_path):
+    limited = NeuroBus(max_queue_size=1)
+    store = EventStore(EventStoreMode.SQLITE, str(tmp_path / "events.sqlite"))
+    await limited.start()
+    try:
+        assert limited.publish(_event())
+        receipt = limited.publish_reliable(_event(), event_store=store)
+        assert receipt.queued is False
+        assert limited._event_queue.size() == 1
+        assert store.get_admitted_event(receipt.event_id) is not None
+    finally:
+        await limited.stop()
         store.close()
