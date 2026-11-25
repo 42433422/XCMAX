@@ -114,6 +114,7 @@ interface ApiListResponse<T> {
   message?: string
   data?: T[]
   categories?: string[]
+  total?: number
 }
 
 interface ApiWriteResponse {
@@ -178,6 +179,8 @@ export function useMaterials() {
   const reads = { materials: createLatestBusinessRead(), warehouses: createLatestBusinessRead(), locations: createLatestBusinessRead(), transactions: createLatestBusinessRead(), suppliers: createLatestBusinessRead() }
   let searchTimer: ReturnType<typeof setTimeout> | undefined
   let materialQueryKey: string | null = null
+  const materialPagination = reactive({ page: 1, pageSize: 50, total: 0 })
+  const transactionPagination = reactive({ page: 1, pageSize: 50, total: 0 })
 
   const showMaterialModal = ref(false)
   const isEditMaterial = ref(false)
@@ -225,7 +228,7 @@ export function useMaterials() {
     }
   }
 
-  const loadMaterials = async () => {
+  const loadMaterials = async (requestedPage = 1) => {
     if (searchTimer !== undefined) clearTimeout(searchTimer)
     searchTimer = undefined
     const keyword = searchQuery.value.trim()
@@ -234,11 +237,19 @@ export function useMaterials() {
     if (key !== materialQueryKey) {
       materials.value = []
       materialQueryKey = key
+      materialPagination.total = 0
+      requestedPage = 1
     }
+    if (materialPagination.page !== requestedPage) materials.value = []
+    materialPagination.page = requestedPage
     await readList('materials', materials, '/api/materials', {
+      page: materialPagination.page, per_page: materialPagination.pageSize,
       ...(keyword ? { search: keyword } : {}),
       ...(category ? { category } : {}),
-    }, response => { if (response.categories) categories.value = response.categories })
+    }, response => {
+      if (response.categories) categories.value = response.categories
+      materialPagination.total = Number(response.total ?? response.data?.length ?? 0)
+    })
   }
 
   const scheduleMaterialsSearch = () => {
@@ -252,7 +263,13 @@ export function useMaterials() {
 
   const loadWarehouses = () => readList('warehouses', warehouses, '/api/inventory/warehouses')
   const loadLocations = (warehouseId: number | string) => readList('locations', locations, '/api/inventory/locations', { warehouse_id: warehouseId })
-  const loadTransactions = () => readList('transactions', transactions, '/api/inventory/transactions', { per_page: 100 })
+  const loadTransactions = async (requestedPage = 1) => {
+    if (transactionPagination.page !== requestedPage) transactions.value = []
+    transactionPagination.page = requestedPage
+    await readList('transactions', transactions, '/api/inventory/transactions', { page: requestedPage, per_page: transactionPagination.pageSize }, response => {
+      transactionPagination.total = Number(response.total ?? response.data?.length ?? 0)
+    })
+  }
   const loadSuppliers = () => readList('suppliers', suppliers, '/api/purchase/suppliers')
 
   const showAddModal = () => {
@@ -493,6 +510,8 @@ export function useMaterials() {
     loadTransactions,
     listLoading,
     listErrors,
+    materialPagination,
+    transactionPagination,
     saving,
     loadSuppliers,
     showAddModal,
