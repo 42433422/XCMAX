@@ -38,9 +38,26 @@ def holdout(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("XCAGI_BENCHMARK_REPORT_DIR", str(tmp_path))
 
-    def write(*, success=True, responses=1, mode="observe", benchmark_set="holdout", **changes):
+    def write(
+        *,
+        success=True,
+        responses=1,
+        mode="observe",
+        benchmark_set="holdout",
+        runtime_admitted=True,
+        **changes,
+    ):
         rows = [
-            [{"task_id": "create", "trial": i, "pass": success, "model_responses": responses}]
+            [
+                {
+                    "task_id": "create",
+                    "trial": i,
+                    "pass": success,
+                    "model_responses": responses,
+                    "runtime_admitted": runtime_admitted,
+                    "exec_pass": success,
+                }
+            ]
             for i in range(3)
         ]
         artifacts = []
@@ -82,6 +99,14 @@ def test_complete_failed_observation_is_not_acceptance(holdout):
     assert marker["evidence"]["pass_k"] == 0
     assert marker["source_sha"] == marker["sha"] == "a" * 40
     assert (directory / "task_holdout_run_mode.json").is_file()
+
+
+def test_observation_verifier_rejects_raw_admission_failure(holdout):
+    directory, write = holdout
+    write(success=False, runtime_admitted=False, responses=0)
+    with pytest.raises(ValueError, match="not admitted to runtime"):
+        verifier.write_task_evidence()
+    assert not (directory / "task_holdout_run_mode.json").exists()
 
 
 def test_real_model_receipts_and_passing_gate_are_distinct(holdout):

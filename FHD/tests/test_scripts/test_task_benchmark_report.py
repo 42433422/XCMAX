@@ -22,8 +22,20 @@ TASKS = [
 
 def outcomes(trial=0, *, create=True, reject=True):
     return [
-        {"task_id": "create", "trial": trial, "pass": create},
-        {"task_id": "reject", "trial": trial, "pass": reject},
+        {
+            "task_id": "create",
+            "trial": trial,
+            "pass": create,
+            "runtime_admitted": True,
+            "exec_pass": create,
+        },
+        {
+            "task_id": "reject",
+            "trial": trial,
+            "pass": reject,
+            "runtime_admitted": True,
+            "exec_pass": reject,
+        },
     ]
 
 
@@ -274,6 +286,26 @@ def test_producer_never_masks_safety_failure_with_aggregate_threshold(producer, 
         producer[0].test_task_set_pass_k()
     report = json.loads((producer[2] / "task_benchmark_report.json").read_text())
     assert report["pass_k"] == 0.5 and report["gate_passed"] is False
+
+
+@pytest.mark.parametrize("mode", ["observe", "gate"])
+def test_producer_rejects_unadmitted_trial_even_at_low_threshold(producer, monkeypatch, mode):
+    monkeypatch.setenv("TASK_BENCHMARK_MODE", mode)
+    monkeypatch.setenv("TASK_BENCHMARK_MIN_PASS", "0.4")
+
+    def rows(trial):
+        result = outcomes(trial, create=False)
+        if trial == 1:
+            result[0]["runtime_admitted"] = False
+        return result
+
+    _producer_trials(producer, monkeypatch, rows)
+    with pytest.raises(pytest.fail.Exception, match="未真正开始执行"):
+        producer[0].test_task_set_pass_k()
+    report = json.loads((producer[2] / "task_benchmark_report.json").read_text())
+    assert report["startup_blocked_tasks"] == ["create"]
+    assert report["pass_k"] == 0.5 and report["gate_passed"] is False
+    assert len(report["trial_artifacts"]) == 3
 
 
 def test_holdout_defaults_to_observation_without_claiming_acceptance(producer, monkeypatch):

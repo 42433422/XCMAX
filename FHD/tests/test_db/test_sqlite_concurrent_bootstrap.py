@@ -11,7 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine
+import pytest
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -99,6 +100,39 @@ def test_concurrent_sqlite_bootstrap_seeds_one_consistent_permission_graph(tmp_p
                 assert role.is_system
                 assert {permission.code for permission in role.permissions} == set(
                     role_spec["permissions"]
+                )
+    finally:
+        engine.dispose()
+
+
+def test_sqlite_rbac_seed_failure_rolls_back_and_retry_is_idempotent(tmp_path: Path):
+    from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'rollback.sqlite3'}", poolclass=NullPool)
+
+    def fail_role_insert(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("INSERT INTO ROLES"):
+            raise RuntimeError("injected role seed failure")
+
+    try:
+        event.listen(engine, "before_cursor_execute", fail_role_insert)
+        try:
+            with pytest.raises(RuntimeError, match="injected role seed failure"):
+                ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
+        finally:
+            event.remove(engine, "before_cursor_execute", fail_role_insert)
+        with Session(engine) as session:
+            assert session.query(Permission).count() == 0
+            assert session.query(Role).count() == 0
+        for _ in range(2):
+            ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
+        with Session(engine) as session:
+            assert session.query(Permission).count() == len(DEFAULT_PERMISSIONS)
+            assert session.query(Role).count() == len(DEFAULT_ROLES)
+            roles = {role.name: role for role in session.query(Role).all()}
+            for spec in DEFAULT_ROLES:
+                assert {permission.code for permission in roles[spec["name"]].permissions} == set(
+                    spec["permissions"]
                 )
     finally:
         engine.dispose()

@@ -344,7 +344,12 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         return (
             False,
             str(admitted.get("error_code") or "runtime admission failed"),
-            {"status": "blocked", "final_output": admitted, "model_responses": 0},
+            {
+                "status": "blocked",
+                "final_output": admitted,
+                "runtime_admitted": False,
+                "model_responses": 0,
+            },
             [],
         )
     parent = drain(admitted["run_id"])
@@ -448,6 +453,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     )
     execution = {
         **parent.to_dict(),
+        "runtime_admitted": True,
         "steps": [step.to_dict() for child in children for step in child.steps],
         "tool_calls": [call.to_dict() for child in children for call in child.tool_calls],
         "final_output": {
@@ -479,8 +485,6 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         seed_sales_period_orders,
     )
 
-    Base.metadata.create_all(engine, checkfirst=True)
-
     data = json.loads(tasks_path.read_text(encoding="utf-8"))
     tasks = data["tasks"]
 
@@ -497,7 +501,6 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
         for task in tasks:
-            _reset_db()
             expect = task.get("expect") or {}
             result: dict[str, Any] = {
                 "task_id": task["task_id"],
@@ -505,17 +508,20 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "difficulty": task.get("difficulty"),
                 "trial": trial,
                 "routing_pass": False,
+                "runtime_admitted": False,
                 "exec_pass": None,
                 "db_pass": None,
                 "pass": False,
                 "failure": None,
             }
             try:
+                _reset_db()
                 seed_records(task.get("fixtures") or [])
                 seed_inventory_quantities(task.get("inventory_quantities") or [])
                 seed_sales_period_orders(task.get("sales_period_orders") or [])
                 seed_ledger_period_entries(task.get("ledger_period_entries") or [])
                 exec_ok, exec_why, executed, nodes = _execute_goal(task)
+                result["runtime_admitted"] = executed.get("runtime_admitted") is True
                 ok, why = _check_no_actions(nodes, expect)
                 if ok:
                     ok, why = _check_routing(nodes, expect)
@@ -551,6 +557,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             result["model_responses"] = (result.get("execution") or {}).get("model_responses", 0)
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
+            out.flush()
 
 
 def main() -> int:

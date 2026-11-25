@@ -33,7 +33,7 @@ from scripts.dev.benchmark_evidence import (
     trial_artifact,
     write_report,
 )
-from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
+from scripts.dev.task_benchmark_report import passes_gate, startup_blocked_task_ids, summarize_trials
 
 BENCH_DIR = Path(__file__).resolve().parent
 RUNNER_PATH = BENCH_DIR / "task_success_runner.py"
@@ -125,14 +125,7 @@ def test_task_set_pass_k():
     execution_mode = "model_workflow" if sum(responses) else "rule_only"
     # A benchmark that catches an infrastructure exception before execution
     # must not report a green pytest result just because observe has floor 0.
-    startup_blocked_tasks = sorted(
-        {
-            row["task_id"]
-            for rows in per_trial
-            for row in rows
-            if row.get("exec_pass") is None
-        }
-    )
+    startup_blocked_tasks = startup_blocked_task_ids(per_trial)
     completed_identity = evidence_identity(spec["path"], execution_mode=execution_mode)
     identity["tracked_source_dirty"] = (
         identity["tracked_source_dirty"]
@@ -149,7 +142,9 @@ def test_task_set_pass_k():
         "startup_blocked_tasks": startup_blocked_tasks,
         "acceptance_mode": mode,
         "min_required": minimum,
-        "gate_passed": mode == "gate" and passes_gate(measured, minimum),
+        "gate_passed": (
+            not startup_blocked_tasks and mode == "gate" and passes_gate(measured, minimum)
+        ),
         "trial_artifacts": [
             trial_artifact(report_directory() / f"task_benchmark_trial_{i}.jsonl")
             for i in range(trials)
