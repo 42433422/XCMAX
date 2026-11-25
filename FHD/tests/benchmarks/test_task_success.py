@@ -123,6 +123,16 @@ def test_task_set_pass_k():
     if any(type(count) is not int or count < 0 for count in responses):
         raise ValueError("model_responses must be nonnegative integers")
     execution_mode = "model_workflow" if sum(responses) else "rule_only"
+    # A benchmark that catches an infrastructure exception before execution
+    # must not report a green pytest result just because observe has floor 0.
+    startup_blocked_tasks = sorted(
+        {
+            row["task_id"]
+            for rows in per_trial
+            for row in rows
+            if row.get("exec_pass") is None
+        }
+    )
     completed_identity = evidence_identity(spec["path"], execution_mode=execution_mode)
     identity["tracked_source_dirty"] = (
         identity["tracked_source_dirty"]
@@ -136,6 +146,7 @@ def test_task_set_pass_k():
         "golden_set": spec["path"].name,
         "execution_mode": execution_mode,
         "model_responses": sum(responses),
+        "startup_blocked_tasks": startup_blocked_tasks,
         "acceptance_mode": mode,
         "min_required": minimum,
         "gate_passed": mode == "gate" and passes_gate(measured, minimum),
@@ -154,6 +165,13 @@ def test_task_set_pass_k():
     for d, s in report["by_domain"].items():
         print(f"  {d:12s} {s['pass_k']}/{s['total']}")
     print(f"报告: {report_path}")
+
+    if startup_blocked_tasks:
+        pytest.fail(
+            f"任务基准未真正开始执行的任务：{startup_blocked_tasks}；"
+            f"原始试验报告见 {report_path}",
+            pytrace=False,
+        )
 
     if mode == "gate":
         assert report["gate_passed"], (
