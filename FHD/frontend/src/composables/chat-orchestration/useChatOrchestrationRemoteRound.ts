@@ -471,7 +471,15 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         latestToolParts = null
         if (!toolProjectionDirty || !parts) return
         toolProjectionDirty = false
-        if (canUpdateStream() && streamMessage) streamMessage.liveSteps = stepsFromAiParts(parts)
+        if (canUpdateStream() && streamMessage) {
+          const projected = stepsFromAiParts(parts)
+          // Cursor replay may contain only the suffix; never drop earlier tools.
+          if (replaying) {
+            const byId = new Map((streamMessage.liveSteps || []).map(step => [step.id, step]))
+            for (const step of projected) byId.set(step.id, { ...byId.get(step.id), ...step })
+            streamMessage.liveSteps = [...byId.values()]
+          } else streamMessage.liveSteps = projected
+        }
       }
       const aiChatRound = useAiSdkChatRound({
         onEvent: (event) => {
