@@ -48,7 +48,7 @@ void main() {
     await tester.pumpWidget(_bubble(
       ChatDeliveryStatus.sent,
       () {},
-      body: '代码如下：\\n```dart\\nconst literal = "<script>not HTML</script>";\\n```',
+      body: '代码如下：\n```dart\nconst literal = "<script>not HTML</script>";\n```',
     ));
     await tester.pumpAndSettle();
     expect(find.byType(SelectableText), findsOneWidget);
