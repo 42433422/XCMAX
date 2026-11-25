@@ -33,6 +33,10 @@ def db_factory(monkeypatch):
         "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
         lambda invoice_id: invoice() if invoice_id == 9 else None,
     )
+    monkeypatch.setattr(
+        archive, "_crm_market_user_owned",
+        lambda tenant_id, market_user_id: tenant_id == 7 and market_user_id == 17,
+    )
     try:
         yield factory
     finally:
@@ -85,19 +89,19 @@ def test_same_reference_with_changed_amount_or_status_is_conflict(db_factory):
             assert len(rows) == 1 and rows[0].amount == Decimal("7.29")
 
 
-def test_no_tenant_does_not_write_and_tenant_references_do_not_mix(db_factory):
+def test_no_tenant_and_foreign_tenant_invoice_are_refused(db_factory):
     assert archive.archive_from_crm_invoice(invoice()) == {
         "archived": False, "reason_code": "tenant_context_required"
     }
-    for tenant in (7, 8):
-        with tenant_scope(tenant):
-            outcome = archive.archive_from_crm_invoice(invoice())
-            assert outcome["archived"]
-            with db_factory() as db:
-                rows = db.scalars(
-                    select(FinancialTransaction).where(FinancialTransaction.tenant_id == tenant)
-                ).all()
-                assert len(rows) == 1 and rows[0].tenant_id == tenant
+    with tenant_scope(7):
+        assert archive.archive_from_crm_invoice(invoice())["archived"] is True
+    with tenant_scope(8):
+        assert archive.archive_from_crm_invoice(invoice()) == {
+            "archived": False, "reason_code": "invoice_tenant_ownership_conflict",
+        }
+    with tenant_scope(7), db_factory() as db:
+        rows = db.scalars(select(FinancialTransaction)).all()
+        assert len(rows) == 1 and rows[0].tenant_id == 7
 
 
 @pytest.mark.parametrize(
