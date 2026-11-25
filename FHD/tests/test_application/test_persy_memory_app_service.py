@@ -768,3 +768,95 @@ def test_erp_memory_requires_live_source_dataset_write_and_typed_field(monkeypat
     assert revalidate_erp_memory(
         memory, foreign, projections=Readable()
     )[0] is None
+
+
+def test_pending_erp_fact_cannot_be_confirmed_after_unobserved_source_change(monkeypatch):
+    """ERP row version is the authority even if no bus event reached Persy."""
+    service = _service()
+    source = {
+        "tenant_id": "2",
+        "actor_id": "7",
+        "mod_id": "",
+        "source": "customers",
+        "entity_type": "customer",
+        "entity_id": "201",
+        "source_version": "sha256:" + "a" * 64,
+        "observed_at": "2026-11-25T12:00:00+00:00",
+        "freshness": "fresh",
+        "knowledge_kind": "fact",
+        "retrieved_from": "authority",
+        "state": {"customer_name": "Original"},
+        "evidence": [{"source": "customers", "row_id": "201"}],
+    }
+
+    class LiveAuthority:
+        revoked = False
+
+        def get(self, kind, identity, **scope):
+            assert (kind, identity) == ("customer", "201")
+            assert scope["verify_only"] is True
+            assert scope["tenant_id"] == "2"
+            if self.revoked:
+                raise PermissionError("read permission revoked")
+            return source
+
+    authority = LiveAuthority()
+    monkeypatch.setattr(
+        "app.application.enterprise_cognition.projection.get_projection_service",
+        lambda: authority,
+    )
+    candidate = service.capture_erp_field(
+        access_context=_access(),
+        entity_type="customer",
+        entity_id="201",
+        field="customer_name",
+    )["candidate"]
+    assert candidate["status"] == "pending"
+
+    # No invalidation event is sent; changing the current ERP SELECT is enough.
+    source = {
+        **source,
+        "source_version": "sha256:" + "b" * 64,
+        "state": {"customer_name": "Corrected"},
+    }
+    rejected = service.mutate(
+        access_context=_access(),
+        memory_id=candidate["memory_id"],
+        action="confirm",
+    )
+    assert rejected["success"] is False
+    assert rejected["error_code"] == "persy_erp_fact_source_changed"
+    assert service.query(access_context=_access(), query="ERP customer")["chunks"] == []
+
+    authority.revoked = True
+    revoked = service.mutate(
+        access_context=_access(),
+        memory_id=candidate["memory_id"],
+        action="confirm",
+    )
+    assert revoked["error_code"] == "persy_erp_fact_source_changed"
+
+    authority.revoked = False
+    source = {
+        **source,
+        "source_version": "sha256:" + "a" * 64,
+        "state": {"customer_name": "Original"},
+    }
+    assert service.mutate(
+        access_context=_access(),
+        memory_id=candidate["memory_id"],
+        action="confirm",
+        patch={"value": "forged"},
+    )["error_code"] == "persy_erp_fact_immutable_source"
+    assert service.mutate(
+        access_context=_access(),
+        memory_id=candidate["memory_id"],
+        action="correct",
+        patch={"value": "forged"},
+    )["error_code"] == "persy_erp_fact_immutable_source"
+    assert service.mutate(
+        access_context=_access(),
+        memory_id=candidate["memory_id"],
+        action="confirm",
+    )["success"] is True
+    assert service.list_memories(access_context=_access(tenant="3"))["memories"] == []
