@@ -218,14 +218,20 @@ def archive_from_crm_invoice(
     amount = Decimal(amount_cents) / 100
     status = str(entry.get("status") or "issued")
     try:
+        from sqlalchemy.exc import IntegrityError
+
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
-        from sqlalchemy.exc import IntegrityError
 
         def find_existing(db):
             return _invoice_archive_existing(
-                db, tenant_id, invoice_id, amount=amount, status=status,
-                counterparty_id=uid, occurred_at=occurred_at,
+                db,
+                tenant_id,
+                invoice_id,
+                amount=amount,
+                status=status,
+                counterparty_id=uid,
+                occurred_at=occurred_at,
                 description=entry["label"],
             )
 
