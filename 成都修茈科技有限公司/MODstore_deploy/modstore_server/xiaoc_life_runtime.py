@@ -650,6 +650,28 @@ class CyclePorts:
                 "status": "completed",
                 "summary": "已核对当前观察，本轮没有新增行动。",
             }
+        if decision["action"] in {"ask_human", "refuse"}:
+            route = decision["action"]
+            # This is a model decision, not an authorization finding or a
+            # human notification. No new task, budget or execution is created.
+            self.details["metacognitive_route"] = {
+                "action": route,
+                "status": "model_suggestion_not_authority",
+                "evidence_refs": decision["evidence_refs"][:8],
+            }
+            self.details["blocked_reason"] = (
+                "model_requested_human_help"
+                if route == "ask_human"
+                else "model_refused_unverified_action"
+            )
+            return {
+                "status": "blocked",
+                "summary": (
+                    "本轮请求人工判断，尚未创建人工交接或执行任务。"
+                    if route == "ask_human"
+                    else "本轮拒绝自动提案或执行，未改变授权策略。"
+                ),
+            }
         goals = []
         suggestion = decision.get("goal") or (
             decision.get("self_assessment")
