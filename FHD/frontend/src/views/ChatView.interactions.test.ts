@@ -1162,6 +1162,20 @@ describe('ChatView interactions', () => {
     expect(latestAssistantPushRef.value).toEqual({ title: '任务完成', description: '发货单已生成' })
   })
 
+  it('输入法确认与 Shift+Enter 不触发发送或阻止默认行为', async () => {
+    const wrapper = await mountChatView()
+    const input = wrapper.get('#messageInput')
+    await input.setValue('正在输入中文')
+    for (const init of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }]) {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      input.element.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    await flushPromises()
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).messageInput).toBe('正在输入中文')
+  })
+
   it('回车发送与输入内容联动', async () => {
     const wrapper = await mountChatView()
     await wrapper.get('#messageInput').setValue('补发这批订单')

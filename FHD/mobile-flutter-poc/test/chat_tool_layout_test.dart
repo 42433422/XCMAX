@@ -5,6 +5,36 @@ import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
 
 void main() {
+  testWidgets('composer grows for multiline drafts on a narrow viewport',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const ChatScreen(
+        conversation: ConversationItem(
+            id: 'pinned:assistant',
+            type: ConversationType.pinnedAssistant,
+            title: '小C',
+            subtitle: '',
+            timestampText: ''),
+        initialMessages: [],
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final field = find.byType(TextField);
+    final initialHeight = tester.getSize(field).height;
+    await tester.enterText(field, '核对订单\n检查库存\n汇总异常');
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(field).textInputAction,
+        TextInputAction.newline);
+    expect(tester.getSize(field).height, greaterThan(initialHeight));
+    expect(find.text('发送'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('chat tools fit a 320px screen at double text size',
       (tester) async {
     tester.view.devicePixelRatio = 1;

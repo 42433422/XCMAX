@@ -210,7 +210,7 @@
           rows="2"
           placeholder="输入消息..."
           :disabled="activeIsLoading"
-          @keydown.enter.exact.prevent="submitMessage"
+          @keydown.enter.exact="handleComposerEnter"
         ></textarea>
         <button class="floating-chat-send" type="submit" :disabled="!draft || activeIsLoading">发送</button>
       </form>
@@ -432,6 +432,12 @@ const ensurePanelInViewport = async () => {
   if (nextRect.top < margin) {
     await placeRootToBottomRight()
   }
+}
+
+const handleComposerEnter = (event: KeyboardEvent) => {
+  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  event.preventDefault()
+  void submitMessage()
 }
 
 const scrollToBottom = async () => {

@@ -898,7 +898,9 @@ const sendQuick = (text: string) => {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // Enter may confirm an IME candidate instead of submitting a message.
+  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault()
     void sendMessage()
   }

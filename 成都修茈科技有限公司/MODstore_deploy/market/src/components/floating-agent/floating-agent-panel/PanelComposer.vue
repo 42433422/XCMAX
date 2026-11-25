@@ -6,7 +6,7 @@
  * footer 元素与隐藏图片 input 留在入口，这里按 corpMode 分支渲染输入条；
  * textarea 高度自适应在组件内完成（经 expose 供入口在语音插入文本后调用）。
  */
-import { ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAgentStore } from '../../../stores/agent'
 import type { VoiceState } from '../../../composables/agent/useVoiceInput'
 import AgentVoiceInput from '../AgentVoiceInput.vue'
@@ -34,6 +34,17 @@ const emit = defineEmits<{
 const agentStore = useAgentStore()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const canSend = computed(() => Boolean(props.draft.trim() || props.hasPendingImage) && !agentStore.isLoading && !props.imagePicking)
+
+function send() {
+  if (canSend.value) emit('send')
+}
+
+function handleComposerEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  event.preventDefault()
+  send()
+}
 
 function onDraftInput(ev: Event) {
   const value = (ev.target as HTMLTextAreaElement).value
@@ -45,8 +56,12 @@ function autoResize() {
   const ta = textareaRef.value
   if (!ta) return
   ta.style.height = 'auto'
-  ta.style.height = Math.min(ta.scrollHeight, 80) + 'px'
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
 }
+
+// Also resize when the host clears the draft, inserts voice text, or switches layouts.
+watch(() => [props.draft, props.corpMode], autoResize, { flush: 'post' })
+onMounted(autoResize)
 
 defineExpose({ autoResize })
 </script>
@@ -88,15 +103,15 @@ defineExpose({ autoResize })
         placeholder="说点什么…"
         rows="1"
         aria-label="发送消息"
-        @keydown.enter.exact.prevent="$emit('send')"
+        @keydown.enter.exact="handleComposerEnter"
         @input="onDraftInput"
       />
       <button
         type="button"
         class="panel-send"
-        :disabled="(!draft.trim() && !hasPendingImage) || agentStore.isLoading || imagePicking"
+        :disabled="!canSend"
         aria-label="发送"
-        @click="$emit('send')"
+        @click="send"
       >
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -143,7 +158,7 @@ defineExpose({ autoResize })
           placeholder="说点什么…"
           rows="1"
           aria-label="发送消息"
-          @keydown.enter.exact.prevent="$emit('send')"
+          @keydown.enter.exact="handleComposerEnter"
           @input="onDraftInput"
         />
         <slot name="autonomy" />
@@ -151,9 +166,9 @@ defineExpose({ autoResize })
       <button
         type="button"
         class="panel-send"
-        :disabled="(!draft.trim() && !hasPendingImage) || agentStore.isLoading || imagePicking"
+        :disabled="!canSend"
         aria-label="发送"
-        @click="$emit('send')"
+        @click="send"
       >
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>

@@ -229,6 +229,19 @@ describe('FloatingChatAssistant', () => {
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
+  it('keeps the draft when Enter confirms an IME candidate or Shift+Enter inserts a line', async () => {
+    const wrapper = await openAssistant()
+    const input = wrapper.get('.floating-chat-input')
+    await input.setValue('中文草稿')
+    for (const init of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }]) {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      input.element.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    expect(sendMessageMock).not.toHaveBeenCalled()
+    expect((input.element as HTMLTextAreaElement).value).toBe('中文草稿')
+  })
+
   it('Enter key submits message', async () => {
     sendMessageMock.mockResolvedValue(undefined)
     const wrapper = await openAssistant()

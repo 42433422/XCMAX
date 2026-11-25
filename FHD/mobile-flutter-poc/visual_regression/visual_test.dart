@@ -73,6 +73,11 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('请整理示例订单'), findsOneWidget);
         await capture(tester, 'chat-draft-$name');
+        await tester.enterText(find.byType(TextField), '整理订单\n核对库存\n列出异常');
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(find.text('整理订单\n核对库存\n列出异常'), findsOneWidget);
+        await capture(tester, 'chat-multiline-draft-$name');
         await tester.tap(find.byTooltip('更多工具'));
         await tester.pumpAndSettle();
         expect(find.text('聊天工具'), findsOneWidget);
