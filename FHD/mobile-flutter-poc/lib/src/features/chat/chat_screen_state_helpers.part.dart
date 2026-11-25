@@ -44,6 +44,22 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   RelayTaskProgress? _activeRelayProgress;
   bool _cancellingRelay = false;
 
+  /// Frame-bounded chat text; the Flyer controller updates only the affected
+  /// bubble, avoiding a full conversation setMessages() on every token.
+  late final ChatStreamFrameBatcher _streamTokenBatcher = ChatStreamFrameBatcher(
+    (messageId, text) {
+      if (!mounted || _chatInvalidated || !_chatForeground ||
+          _stopRequested || _activeAssistantId != messageId) return;
+      _appendMessageBody(messageId, text);
+    },
+  );
+
+  void _queueStreamToken(String assistantId, String text) {
+    if (!mounted || _chatInvalidated || !_chatForeground ||
+        _stopRequested || _activeAssistantId != assistantId) return;
+    _streamTokenBatcher.append(assistantId, text);
+  }
+
   Future<void> _restoreChatDraft() async {
     final repository = _repository;
     if (repository == null) return;
@@ -171,9 +187,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
 
   void _appendMessageBody(String messageId, String token) {
     final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
+    if (index < 0 || token.isEmpty) return;
     final current = _messages[index];
-    _messages[index] = ChatMessage(
+    final updated = ChatMessage(
       id: current.id,
       conversationId: current.conversationId,
       role: current.role,
@@ -187,6 +203,15 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       cacheTimestampMs: current.cacheTimestampMs,
       turnId: current.turnId,
     );
+    _messages[index] = updated;
+    // flutter_chat_core supports a single-row controller update. Keep the
+    // full-list fallback only for a message not yet inserted into the controller.
+    for (final previous in _flyerChatController.messages) {
+      if (previous.id != messageId) continue;
+      unawaited(_flyerChatController.updateMessage(
+        previous, _toFlyerMessage(updated)));
+      return;
+    }
     _syncFlyerChat();
   }
 
