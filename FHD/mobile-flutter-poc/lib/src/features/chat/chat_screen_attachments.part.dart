@@ -18,6 +18,7 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
     setState(() {
       _attachments.clear();
       _failedAttachments.clear();
+      _recoveredAttachmentNames.clear();
       if (_lastSentAttachments.isNotEmpty) _stopRequested = true;
       _lastSentAttachments = const [];
       _attachmentScope = null;
@@ -112,6 +113,7 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
         setState(() {
           _attachmentSizes[attachment] = size;
           _attachments.add(attachment);
+          _recoveredAttachmentNames.removeWhere((name) => name == attachment.name);
           _failedAttachments.remove(file);
         });
       } catch (error) {
@@ -129,7 +131,10 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
     }
     if (mounted) {
       await _checkAttachmentScope();
-      if (mounted) setState(() => _uploading = false);
+      if (mounted) {
+        setState(() => _uploading = false);
+        _scheduleChatDraftSave();
+      }
     }
   }
 
@@ -143,13 +148,30 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text('附件上传中…'),
               ),
+            if (_recoveredAttachmentNames.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: Text('上次上传的附件需要重新选择，旧上传凭证不会自动复用。'),
+              ),
+            for (final name in _recoveredAttachmentNames)
+              _ChatAttachmentRow(
+                name: name,
+                failed: true,
+                onRemove: () {
+                  setState(() => _recoveredAttachmentNames.remove(name));
+                  _scheduleChatDraftSave();
+                },
+              ),
             for (final attachment in _attachments)
               _ChatAttachmentRow(
                   name: attachment.name,
                   size: _attachmentSizes[attachment],
                   onRemove: _sending || _uploading
                       ? null
-                      : () => setState(() => _attachments.remove(attachment))),
+                      : () {
+                            setState(() => _attachments.remove(attachment));
+                            _scheduleChatDraftSave();
+                          }),
             for (final file in _failedAttachments)
               _ChatAttachmentRow(
                   name: file.name,
@@ -160,7 +182,10 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
                       : () => _uploadAttachments([file]),
                   onRemove: _sending || _uploading
                       ? null
-                      : () => setState(() => _failedAttachments.remove(file))),
+                      : () {
+                            setState(() => _failedAttachments.remove(file));
+                            _scheduleChatDraftSave();
+                          }),
           ]),
         ),
       );
