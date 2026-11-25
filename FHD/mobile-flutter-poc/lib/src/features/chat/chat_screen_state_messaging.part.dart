@@ -4,21 +4,72 @@ part of 'chat_screen.dart';
 abstract class _ChatStateMessaging extends _ChatStateHelpers {
   Future<void> _loadRemoteMessages() async {
     final repository = _repository;
-    if (repository == null) return;
+    if (repository == null || _chatInvalidated) return;
+    final epoch = _chatEpoch;
+    final generation = _chatGeneration;
 
     try {
       final remoteMessages = await repository.loadInitialMessages(
         widget.conversation,
       );
-      if (!mounted) return;
-      if (remoteMessages.isNotEmpty) {
+      if (!mounted || _chatInvalidated || epoch != _chatEpoch ||
+          generation != repository.client.authGeneration) return;
+      if (remoteMessages.isNotEmpty && !_sending) {
         setState(() => _messages = remoteMessages);
         _syncFlyerChat();
       }
-    } catch (_) {
-      // Keep the mobile empty state when auth/network is unavailable.
+    } catch (error) {
+      if (error is MobileApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        _revokeChatView();
+        return;
+      }
+      // Keep a scoped, read-only cached view on transport failure.
     }
-    await _resumeInflightRelayIfNeeded();
+    if (!_chatInvalidated && _chatForeground) {
+      await _resumeInflightRelayIfNeeded();
+      await _resumePendingChatTurnsIfNeeded();
+    }
+  }
+
+  void _revokeChatView() {
+    if (!mounted || _chatInvalidated) return;
+    _chatInvalidated = true;
+    _chatEpoch++;
+    _draftTimer?.cancel();
+    setState(() {
+      _messages.clear();
+      _attachments.clear();
+      _failedAttachments.clear();
+      _recoveredAttachmentNames.clear();
+      _sending = false;
+      _activeAssistantId = null;
+      _controller.clear();
+    });
+    _syncFlyerChat();
+  }
+
+  /// Read only the original turn receipt; never replay an uncertain POST.
+  Future<void> _resumePendingChatTurnsIfNeeded() async {
+    if (_resumingPendingChat || _sending || _chatInvalidated ||
+        !_chatForeground) return;
+    _resumingPendingChat = true;
+    try {
+      final pending = _messages.where((message) =>
+          message.role == ChatRole.assistant &&
+          message.turnId.isNotEmpty &&
+          const [
+            ChatDeliveryStatus.pending,
+            ChatDeliveryStatus.sending,
+            ChatDeliveryStatus.queued,
+          ].contains(message.status)).toList(growable: false);
+      for (final message in pending) {
+        if (!mounted || _chatInvalidated || !_chatForeground || _sending) break;
+        await _readOriginalChatTurn(message);
+      }
+    } finally {
+      _resumingPendingChat = false;
+    }
   }
 
   Future<void> _resumeInflightRelayIfNeeded() async {
@@ -145,6 +196,12 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
   Future<void> _send([String? overrideText]) async {
     final text = (overrideText ?? _controller.text).trim();
+    if (_chatInvalidated || !_chatForeground ||
+        _repository?.client.authGeneration != _chatGeneration) return;
+    if (_recoveredAttachmentNames.isNotEmpty) {
+      _showMessage('请重新选择或移除上次的附件后再发送');
+      return;
+    }
     if (text.isEmpty ||
         _sending ||
         _uploading ||
@@ -289,7 +346,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       if (_stopRequested || _activeAssistantId != assistantId) return;
       final pending = error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_PENDING';
       final offline = !pending && isOfflineError(error);
-      final queuedId = offline && attachments.isEmpty
+      final queuedId = offline && !resumeOnly && attachments.isEmpty
           ? await repository.enqueuePendingMessage(
               conversation: widget.conversation,
               body: outgoing,
@@ -308,7 +365,8 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
                 ),
           status: queuedId > 0
               ? ChatDeliveryStatus.queued
-              : pending ? ChatDeliveryStatus.pending : ChatDeliveryStatus.failed,
+              : (pending || (resumeOnly && offline))
+                  ? ChatDeliveryStatus.pending : ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
@@ -329,6 +387,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       _messages.clear();
       _attachments.clear();
       _failedAttachments.clear();
+      _recoveredAttachmentNames.clear();
       _lastSentAttachments = const [];
       _showToolPanel = false;
       _replyTo = null;
