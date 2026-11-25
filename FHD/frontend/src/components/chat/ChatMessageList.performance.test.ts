@@ -69,7 +69,7 @@ describe('bounded chat history and derived content', () => {
     await nextTick()
     const message = f.messages.value[499]
     message.streamStatus = 'streaming'
-    message.content = '# 报告\\n' + '长消息正文\\n'.repeat(3500) + '<img src=x onerror=bad()>'
+    message.content = '# 报告\n' + '长消息正文\n'.repeat(3500) + '<img src=x onerror=bad()>'
     const sanitize = vi.spyOn(DOMPurify, 'sanitize')
     await nextTick()
     const body = f.wrapper.get('[data-message-index="499"] .message-html')

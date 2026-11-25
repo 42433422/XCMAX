@@ -62,7 +62,7 @@ void main() {
   });
 
   testWidgets('long streamed code is plain text until final status', (tester) async {
-    final body = '前言\\n' * 4500 + '```dart\\nconst answer = 42;\\n```';
+    final body = List.filled(4500, '前言\n').join() + '```dart\nconst answer = 42;\n```';
     await tester.pumpWidget(_bubble(ChatDeliveryStatus.sending, () {}, body: body));
     await tester.pumpAndSettle();
     expect(find.byType(SelectableText), findsNothing);
