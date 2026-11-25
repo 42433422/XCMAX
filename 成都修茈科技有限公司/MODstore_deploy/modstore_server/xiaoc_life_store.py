@@ -585,7 +585,11 @@ def manage_operating_goal(
             kind="goal_management",
             status=action,
             summary=f"经营目标 {goal_id} 已进行 {action} 管理",
-            evidence_refs=[*goal.get("evidence_refs", [])[:29], f"admin:{actor_user_id}", f"goal:{goal_id}"],
+            evidence_refs=[
+                *goal.get("evidence_refs", [])[:29],
+                f"admin:{actor_user_id}",
+                f"goal:{goal_id}",
+            ],
             details={
                 "actor_user_id": actor_user_id,
                 "goal_id": goal_id,
