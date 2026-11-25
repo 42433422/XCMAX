@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -388,6 +389,104 @@ def test_csrf_double_submit_still_protects_both_mutation_routes(
     assert response.status_code == 403
     assert target.is_dir()
     isolated_manager.unload_mod.assert_not_called()
+
+
+@pytest.fixture
+def upload_manager(monkeypatch, signed_runtime_mod):
+    from app.infrastructure.mods import mod_manager
+    from app.infrastructure.mods.registry import ModRegistry
+
+    manager = mod_manager.ModManager(mods_root=str(signed_runtime_mod.root))
+    registry = ModRegistry()
+    monkeypatch.setattr(mod_manager, "get_mod_registry", lambda: registry)
+    monkeypatch.setattr(mod_manager, "get_mod_manager", lambda: manager)
+    monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")
+    return manager
+
+
+@pytest.mark.parametrize(
+    "session_id,owner_scope", [("mod-session-1", "tenant:1"), ("mod-session-admin", "session:50")]
+)
+def test_signed_upload_binds_receipt_to_authenticated_workspace(
+    uninstall_client, signed_runtime_mod, upload_manager, admin_session, session_id, owner_scope
+):
+    from app.infrastructure.mods.install_receipts import read_verified_install
+
+    package, _, manifest = signed_runtime_mod.build_package()
+    mod_id = manifest["id"]
+    headers = _authenticated(uninstall_client, session_id)
+    with Path(package).open("rb") as stream:
+        response = uninstall_client.post(
+            "/api/mod-store/upload",
+            params={"activate": "false"},
+            files={"file": ("fixture.zip", stream, "application/zip")},
+            headers=headers,
+        )
+    assert response.status_code == 200 and response.json()["success"] is True
+    receipt = read_verified_install(mod_id, mods_root=upload_manager.mods_root)
+    assert receipt is not None and receipt["owner_scope"] == owner_scope
+    assert receipt["signature_verified"] is True
+
+    response = uninstall_client.post(
+        "/api/mod-store/uninstall", json={"mod_id": mod_id}, headers=headers
+    )
+    assert response.status_code == 200 and response.json()["success"] is True
+    assert not (signed_runtime_mod.root / mod_id).exists()
+
+
+def test_anonymous_upload_keeps_signed_global_install_unowned(
+    uninstall_client, signed_runtime_mod, upload_manager, tmp_path
+):
+    from app.infrastructure.mods.install_receipts import read_verified_install
+
+    source = tmp_path / "global-source"
+    source.mkdir()
+    manifest = {"id": "global-upload-fixture", "name": "Global Mod", "version": "1.0.0"}
+    (source / "manifest.json").write_text(json.dumps(manifest))
+    package, _, _ = signed_runtime_mod.build_package(source=source)
+    with Path(package).open("rb") as stream:
+        response = uninstall_client.post(
+            "/api/mod-store/upload",
+            params={"activate": "false"},
+            files={"file": ("fixture.zip", stream, "application/zip")},
+            headers={"X-CSRF-Token": "fixture-csrf-token"},
+        )
+    assert response.status_code == 200 and response.json()["success"] is True
+    receipt = read_verified_install(manifest["id"], mods_root=upload_manager.mods_root)
+    assert receipt is not None and receipt["owner_scope"] == ""
+
+
+@pytest.mark.parametrize(
+    "session_id,signed,reason",
+    [
+        (None, True, "requires an owner"),
+        ("mod-session-3", True, "requires an owner"),
+        ("mod-session-1", False, "签名验证失败"),
+    ],
+)
+def test_account_upload_without_active_owner_or_required_signature_does_not_install(
+    uninstall_client, signed_runtime_mod, upload_manager, session_id, signed, reason
+):
+    package, _, manifest = signed_runtime_mod.build_package(signed=signed)
+    headers = (
+        _authenticated(uninstall_client, session_id)
+        if session_id
+        else {"X-CSRF-Token": "fixture-csrf-token"}
+    )
+    with Path(package).open("rb") as stream:
+        response = uninstall_client.post(
+            "/api/mod-store/upload",
+            params={"activate": "false"},
+            files={"file": ("fixture.zip", stream, "application/zip")},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert response.json()["success"] is False
+    assert reason in response.json()["message"]
+    assert not (signed_runtime_mod.root / manifest["id"]).exists()
+    assert not (
+        signed_runtime_mod.root / ".install-receipts" / manifest["id"] / "receipt.json"
+    ).exists()
 
 
 @pytest.fixture
