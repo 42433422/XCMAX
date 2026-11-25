@@ -993,6 +993,19 @@ def begin_cycle_graph(claim: dict[str, Any]) -> bool:
         if active.get("graph_started"):
             return False
         active["graph_started"] = True
+        _event(
+            session,
+            f"life:graph:{claim['cycle_id']}",
+            kind="life_transition",
+            status="graph_started",
+            summary="原认知图已通过单次准入，禁止重复启动。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
         return True
 
     return _mutate(begin)
@@ -1045,13 +1058,29 @@ def prepare_native_closeout(
     """Freeze an independently verified receipt before the native terminal write."""
     marker = {"source_checkpoint_id": source_checkpoint_id, "receipt": receipt}
 
-    def prepare(data: dict[str, Any], _session: Session) -> bool:
+    def prepare(data: dict[str, Any], session: Session) -> bool:
         active = data.get("active_cycle") or {}
         if not _matches_claim(active, claim) or not _native_closeout_eligible(active):
             return False
         if (previous := active.get("native_closeout")) is not None:
             return bool(previous == marker)
         active["native_closeout"] = marker
+        _event(
+            session,
+            f"life:closeout:{claim['cycle_id']}",
+            kind="life_transition",
+            status="closeout_prepared",
+            summary="原运行已冻结核实的检查点回执，未重放执行。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:act"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+                "source_checkpoint_sha256": hashlib.sha256(
+                    source_checkpoint_id.encode("utf-8")
+                ).hexdigest(),
+            },
+        )
         return True
 
     return _mutate(prepare)
@@ -1075,6 +1104,19 @@ def admit_cycle_act(claim: dict[str, Any]) -> bool:
             return False
         active["act_admitted"] = True
         active["act_admitted_at"] = utcnow().isoformat()
+        _event(
+            session,
+            f"life:act:{claim['cycle_id']}",
+            kind="life_transition",
+            status="act_admitted",
+            summary="原运行的首个副作用节点已单次准入。",
+            evidence_refs=[f"life:graph:{claim['cycle_id']}"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
         return True
 
     return _mutate(admit)
@@ -1183,7 +1225,23 @@ def mark_model_attempt(claim: dict[str, Any]) -> None:
     def mark(data: dict[str, Any], session: Session) -> None:
         if not _claim_active(data, session, claim):
             raise LifePolicyError("原模型授权已失效，禁止新增外呼")
-        data["active_cycle"]["outbound_attempted"] = True
+        active = data["active_cycle"]
+        if active.get("outbound_attempted"):
+            return
+        active["outbound_attempted"] = True
+        _event(
+            session,
+            f"life:outbound:{claim['cycle_id']}",
+            kind="life_transition",
+            status="model_attempted",
+            summary="模型外呼意图已持久标记；未知用量仍必须核对。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+            },
+        )
 
     _mutate(mark)
 

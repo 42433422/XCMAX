@@ -149,7 +149,10 @@ def experiences(
     _admin: User = Depends(require_admin),
 ) -> dict[str, Any]:
     with get_session_factory()() as session:
-        statement = select(XiaoCLifeEvent).where(XiaoCLifeEvent.identity_id == IDENTITY_ID)
+        statement = select(XiaoCLifeEvent).where(
+            XiaoCLifeEvent.identity_id == IDENTITY_ID,
+            XiaoCLifeEvent.kind != "life_transition",
+        )
         if query.strip():
             statement = statement.where(
                 XiaoCLifeEvent.summary.icontains(query.strip(), autoescape=True)

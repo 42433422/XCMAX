@@ -898,6 +898,66 @@ def test_repeated_lifecycle_command_still_checks_expected_revision(database):
 
 
 
+def test_graph_act_outbound_and_closeout_have_idempotent_persistent_audit(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    assert store.begin_cycle_graph(claim)
+    assert not store.begin_cycle_graph(claim)
+    for phase in ("observe", "decide"):
+        store.record_cycle_phase(claim, phase)
+    assert store.admit_cycle_act(claim)
+    assert not store.admit_cycle_act(claim)
+    store.mark_model_attempt(claim)
+    store.mark_model_attempt(claim)
+    store.record_cycle_phase(claim, "act")
+    receipt = {"status": "verified", "actual_tokens": 0}
+    assert store.prepare_native_closeout(claim, "checkpoint:original", receipt)
+    assert store.prepare_native_closeout(claim, "checkpoint:original", receipt)
+    with database() as session:
+        rows = session.scalars(
+            select(XiaoCLifeEvent).where(
+                XiaoCLifeEvent.kind == "life_transition",
+                XiaoCLifeEvent.id.in_(
+                    [
+                        f"life:graph:{claim['cycle_id']}",
+                        f"life:act:{claim['cycle_id']}",
+                        f"life:outbound:{claim['cycle_id']}",
+                        f"life:closeout:{claim['cycle_id']}",
+                    ]
+                ),
+            )
+        ).all()
+    assert len(rows) == 4
+    assert {row.status for row in rows} == {
+        "graph_started",
+        "act_admitted",
+        "model_attempted",
+        "closeout_prepared",
+    }
+    details = [json.loads(row.details_json) for row in rows]
+    assert "lease_token" not in json.dumps(details)
+
+
+def test_experiences_api_keeps_lifecycle_audit_in_separate_state_feed(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    store.record_cycle_phase(claim, "observe")
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=7, is_admin=True
+    )
+    with TestClient(app) as client:
+        experiences = client.get("/life/experiences").json()
+        status = client.get("/life").json()
+    assert experiences["items"]
+    assert all(item["kind"] != "life_transition" for item in experiences["items"])
+    assert any(item["status"] == "observe" for item in status["lifecycle_events"])
+    assert status["activity"]["id"] == claim["cycle_id"]
+
+
 def test_lifecycle_phase_transitions_are_append_only_and_concurrent_retries_idempotent(
     database,
 ):
