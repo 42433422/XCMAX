@@ -114,6 +114,7 @@ describe('workspacePrefsApi', () => {
     expect(JSON.parse(String(request[1]?.body))).toEqual({
       product_flow_completed: true,
       expected_revision: 4,
+      expected_owner_id: 'tenant:42',
     })
     vi.useRealTimers()
   })
@@ -146,6 +147,7 @@ describe('workspacePrefsApi', () => {
     expect(apiFetch).toHaveBeenCalledTimes(2)
     const payload = JSON.parse(String(vi.mocked(apiFetch).mock.calls[1][1]?.body))
     expect(payload.expected_revision).toBe(3)
+    expect(payload.expected_owner_id).toBe('tenant:42')
   })
 
   it('invalidates an old pending workspace draft on teardown', async () => {
