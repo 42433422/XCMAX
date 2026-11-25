@@ -36,6 +36,9 @@ def initialize_event_store(connection: sqlite3.Connection) -> None:
             sequence_number INTEGER NOT NULL, state TEXT NOT NULL,
             created_at TEXT NOT NULL, version INTEGER DEFAULT 1, metadata TEXT)""",
         "CREATE INDEX IF NOT EXISTS idx_snapshots_stream ON neuro_snapshots(stream_id)",
+        """CREATE TABLE IF NOT EXISTS neuro_admissions (
+            event_id TEXT PRIMARY KEY, event_data TEXT NOT NULL,
+            event_sha256 TEXT NOT NULL, admitted_at REAL NOT NULL)""",
     )
     for statement in statements:
         connection.execute(statement).close()
