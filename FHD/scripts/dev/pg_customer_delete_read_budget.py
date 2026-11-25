@@ -143,6 +143,7 @@ def _probe(engine, tenant_id, ids):
                 raise EvidenceBlocked("preflight did not reject a linked-customer batch")
             if not result.get("affected_units") or result.get("deleted_count") != 0:
                 raise EvidenceBlocked("preflight receipt lacks denied associations")
+            explained_sql = set()
             for sql, params in observed:
                 normalized = sql.lstrip().upper()
                 if not normalized.startswith("SELECT"):
@@ -159,18 +160,22 @@ def _probe(engine, tenant_id, ids):
                     else "products" if "products" in sql.lower()
                     else "shipments"
                 )
-                if label not in plans:
-                    try:
-                        raw = conn.exec_driver_sql(
-                            "EXPLAIN (FORMAT JSON) " + sql, params
-                        ).scalar_one()
-                        plans[label] = _summarize_plan(raw)
-                    except Exception as exc:
-                        raise EvidenceBlocked(
-                            f"PostgreSQL EXPLAIN failed for {label}: {type(exc).__name__}"
-                        ) from None
-            if not plans:
-                raise EvidenceBlocked("no application SQL execution plans captured")
+                if sql in explained_sql:
+                    continue
+                explained_sql.add(sql)
+                # Both shipment GROUP BY variants must have their own plan.
+                plan_key = f"query_{len(plans) + 1}_{label}"
+                try:
+                    raw = conn.exec_driver_sql(
+                        "EXPLAIN (FORMAT JSON) " + sql, params
+                    ).scalar_one()
+                    plans[plan_key] = _summarize_plan(raw)
+                except Exception as exc:
+                    raise EvidenceBlocked(
+                        f"PostgreSQL EXPLAIN failed for {label}: {type(exc).__name__}"
+                    ) from None
+            if len(plans) < 4:
+                raise EvidenceBlocked("customer + product + two shipment query plans required")
             return {
                 "elapsed_ms": round(duration_ms, 3),
                 "sql_total": len(observed),
