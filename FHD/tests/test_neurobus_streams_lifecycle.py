@@ -306,3 +306,36 @@ async def test_duplicate_remote_ingress_does_not_remint_pending_event_id(redis_c
     finally:
         bus._stream_waiters.clear()
         bus._running = False
+
+
+def test_previous_consumer_pending_survives_new_consumer_progress(redis_client, monkeypatch):
+    """Rolling worker replacement must retain the previous PEL payload.
+
+    This checks consumer replacement, not a still-active legacy XADD MAXLEN writer.
+    """
+    monkeypatch.setattr(streams, "MAXLEN", 2)
+    bus, old = _bus(redis_client)
+    old._ensure_group()
+    original = _event()
+    old_id = old.publish(original.to_dict())
+    assert old.consume(count=1, block_ms=20)[0]["_msg_id"] == old_id
+
+    newer = streams.RedisStreamsBridge(bus, redis_client, consumer_id="new-release")
+    ids = [newer.publish(_event().to_dict()) for _ in range(6)]
+    assert [m["_msg_id"] for m in newer.consume(count=6, block_ms=20)] == ids
+    for message_id in ids:
+        assert newer.ack(message_id)
+
+    # The prior owner's unacknowledged event must retain its exact serialized payload.
+    retained = redis_client.xrange(streams.STREAM_KEY, min=old_id, max=old_id)
+    assert len(retained) == 1
+    assert retained[0][0].decode() == old_id
+    assert redis_client.xpending(streams.STREAM_KEY, streams.CONSUMER_GROUP)["pending"] == 1
+
+    _, claimed, *_ = redis_client.xautoclaim(
+        streams.STREAM_KEY, streams.CONSUMER_GROUP, "new-release",
+        min_idle_time=0, start_id="0-0", count=8,
+    )
+    assert [raw_id.decode() for raw_id, _ in claimed] == [old_id]
+    assert not old.ack(old_id)
+    assert newer.ack(old_id)
