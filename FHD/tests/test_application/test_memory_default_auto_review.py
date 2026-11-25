@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import runpy
+import shutil
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -167,6 +171,7 @@ def test_working_memory_default_and_explicit_override():
     finally:
         reset_working_memory()
 
+
 def test_authority_does_not_trust_review_flag_without_matching_evidence(memory):
     from app.application.persy_memory_utils import _memory_owner_id
 
@@ -189,3 +194,27 @@ def test_authority_does_not_trust_review_flag_without_matching_evidence(memory):
         auto_review_capture=True,
     )
     assert result["candidate"]["status"] == "pending"
+
+
+def test_flattened_release_provisioner_with_explicit_output(tmp_path, monkeypatch):
+    source = Path(__file__).resolve().parents[2] / "scripts/dev/provision_memory_model.py"
+    build = tmp_path / "build"
+    build.mkdir()
+    script = build / source.name
+    shutil.copyfile(source, script)
+    output = build / "memory-model"
+
+    # Model provisioning itself belongs to the real container acceptance gate.
+    # Exercise the actual copied CLI without a download or a mocked import.
+    namespace = runpy.run_path(str(script))
+    entry = namespace["main"]
+    seen = []
+
+    def provision(root):
+        seen.append(root)
+        return {"model": "test-only"}
+
+    monkeypatch.setitem(entry.__globals__, "provision", provision)
+    monkeypatch.setattr(sys, "argv", [str(script), "--output", str(output)])
+    assert entry() == 0
+    assert seen == [output.resolve()]
