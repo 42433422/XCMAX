@@ -38,7 +38,7 @@ bash FHD/scripts/deploy/check-staging-health.sh --ssh    # + CVM 本机 :5101
 
 未在独立验收执行环境中提供 XCAGI_INDEPENDENT_AUDIT_HMAC_KEY 时，所有等级必须 BLOCKED。此密钥由独立验收方通过受保护的 CI 环境提供，不能存储在仓库、生产 Agent、模型提示或证据目录内。测试夹具的密钥不具有生产授权效力。
 
-验收目录要求 manifest.json 和 manifest.hmac，以及签名清单中绑定 SHA-256 的八类 JSON 文件：model（真实模型与工具回执、冻结留出集）、business（员工、系统、审批、客户确认与账本回读）、heartbeat（持久生命状态与连续心跳）、faults（异常注入及零重复副作用）、goals（自主发现并执行目标）、ledger（逐日独立会计对账）、security（八类越权负控）、improvement（L5 成对留出集、独立复盘与回滚）。所有文件绑定一致的 40 位 source_sha，明确 environment=production。报告只引用内容哈希和脱敏身份，原始客户数据不得提交到公开仓库。
+验收目录要求 manifest.json 和 manifest.hmac，以及签名清单中绑定 SHA-256 的八类 JSON 文件：model（真实模型与工具回执、冻结留出集）、business（员工、系统、审批、客户确认与账本回读）、heartbeat（持久生命状态与连续心跳）、faults（异常注入及零重复副作用）、goals（自主发现并执行目标）、ledger（逐日独立会计对账）、security（八类越权负控）、improvement（L5 成对留出集、独立复盘与回滚）。证据协议使用 schema_version=2。签名的 manifest 必须包含 release_artifact_sha256（实际生产发行制品 SHA-256）和 deployment_receipt_sha256（生产部署成功回执 SHA-256），八类原始证据必须同时绑定这两个值，不能拿另一版本的业务回执证明本次候选。所有文件还须绑定一致的 40 位 source_sha，明确 environment=production。独立审核员必须将制品哈希与签名制品、生产部署回执和制品发布清单逐一外部复核；字段一致或 HMAC 正确本身不能证明制品真实部署。报告只引用内容哈希和脱敏身份，原始客户数据不得提交到公开仓库。
 
 硬门槛：
 - **L1**：L01 来源绑定 + L02 真实模型任务至少一例成功 + L09 负控全过。
