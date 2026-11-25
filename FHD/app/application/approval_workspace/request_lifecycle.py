@@ -10,6 +10,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.db.models.user import User
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -220,6 +221,21 @@ class RequestLifecycle:
             if req.applicant_id != actor:
                 return JSONResponse(
                     {"success": False, "message": "只有申请人可以撤回"}, status_code=403
+                )
+            # Hold the original applicant row through the withdrawal commit.
+            # Account deactivation or tenant transfer must not race this CAS.
+            applicant = (
+                db.query(User)
+                .filter(User.id == actor, User.is_active.is_(True))
+                .with_for_update(read=True)
+                .first()
+            )
+            if applicant is None or (
+                req.tenant_id is not None and applicant.tenant_id != req.tenant_id
+            ):
+                return JSONResponse(
+                    {"success": False, "message": "申请人已停用或企业归属发生变更"},
+                    status_code=403,
                 )
             if req.status not in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value):
                 return JSONResponse(
