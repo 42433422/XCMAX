@@ -220,3 +220,63 @@ def test_missing_redis_client_cannot_start():
     with pytest.raises(RuntimeError, match="client missing"):
         bridge.start()
     assert not bridge.get_stats()["running"]
+
+
+def test_integrated_safe_trim_preserves_slow_group_and_out_of_order_ack(redis_client, monkeypatch):
+    """A04 ownership ACK and A05 progress trim must hold on the same code."""
+    monkeypatch.setattr(streams, "MAXLEN", 2)
+    monkeypatch.setattr(streams, "TRIM_BATCH", 2)
+    _, bridge = _bus(redis_client)
+    bridge._ensure_group()
+    redis_client.xgroup_create(streams.STREAM_KEY, "lagging", id="0-0")
+    ids = [bridge.publish(_event().to_dict()) for _ in range(8)]
+    assert all(ids)
+    assert [row["_msg_id"] for row in bridge.consume(count=8, block_ms=20)] == ids
+
+    # Fast group's ACKs arrive out of order; id0 is still unacknowledged.
+    for msg_id in ids[1:]:
+        assert bridge.ack(msg_id)
+    assert redis_client.xlen(streams.STREAM_KEY) == 8
+    redis_client.xreadgroup("lagging", "old", {streams.STREAM_KEY: ">"}, count=5)
+    redis_client.xack(streams.STREAM_KEY, "lagging", *ids[:4])
+    assert bridge.ack(ids[0])
+    assert redis_client.xlen(streams.STREAM_KEY) == 6
+    assert bridge.trim_acknowledged() == 2
+    assert [row_id.decode() for row_id, _ in redis_client.xrange(streams.STREAM_KEY)] == ids[4:]
+
+    # A replacement worker can still claim the earliest pending payload.
+    _, rows, *_ = redis_client.xautoclaim(
+        streams.STREAM_KEY, "lagging", "replacement", min_idle_time=0,
+        start_id="0-0", count=8,
+    )
+    assert len(rows) == 1 and rows[0][0].decode() == ids[4]
+    assert redis_client.xpending(streams.STREAM_KEY, "lagging")["pending"] == 1
+    redis_client.xack(streams.STREAM_KEY, "lagging", ids[4])
+    redis_client.xreadgroup("lagging", "replacement", {streams.STREAM_KEY: ">"}, count=8)
+    redis_client.xack(streams.STREAM_KEY, "lagging", *ids[5:])
+    while bridge.trim_acknowledged():
+        pass
+    assert [row_id.decode() for row_id, _ in redis_client.xrange(streams.STREAM_KEY)] == ids[-2:]
+
+
+def test_rolling_worker_takeover_fences_old_ack_before_trim(redis_client, monkeypatch):
+    """Same-version worker replacement; this is not a mixed-binary rollout test."""
+    monkeypatch.setattr(streams, "MAXLEN", 1)
+    bus, original = _bus(redis_client)
+    original._ensure_group()
+    event = _event()
+    msg_id = original.publish(event.to_dict())
+    assert original.consume(count=1, block_ms=20)[0]["_msg_id"] == msg_id
+
+    replacement = streams.RedisStreamsBridge(bus, redis_client, consumer_id="replacement")
+    reclaimed = redis_client.xclaim(
+        streams.STREAM_KEY, streams.CONSUMER_GROUP, "replacement",
+        min_idle_time=0, message_ids=[msg_id],
+    )
+    assert reclaimed and reclaimed[0][0].decode() == msg_id
+    # An ACK from the old consumer must not remove another owner's PEL entry.
+    assert not original.ack(msg_id)
+    assert redis_client.xpending(streams.STREAM_KEY, streams.CONSUMER_GROUP)["pending"] == 1
+    assert redis_client.xrange(streams.STREAM_KEY)[0][0].decode() == msg_id
+    assert replacement.ack(msg_id)
+    assert redis_client.xpending(streams.STREAM_KEY, streams.CONSUMER_GROUP)["pending"] == 0
