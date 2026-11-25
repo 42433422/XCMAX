@@ -67,7 +67,92 @@ jobs:
             exit 1
           fi
 
-      - name: Run isolated 13-task x 3-trial original holdout
+      # The isolated trial creates a real local user/session, not a Market
+      # account. Use the original deployment route qualification, not a fake
+      # Market login, an injected principal or a generated PASS receipt.
+      - name: Qualify the explicit independent deployment route before holdout
+        env:
+          HOLDOUT_ROUTE_METADATA: ${{ vars.XCAGI_HOLDOUT_RUNTIME_ROUTE_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python - <<'PY'
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          from app.application.agent_runtime.configuration import get_deployment_runtime_settings
+          from app.infrastructure.codex.policy import ModelRoute, RuntimePolicyError
+
+          reports = Path("test_reports")
+          reports.mkdir(exist_ok=True)
+          marker = reports / "holdout_runtime_preflight.json"
+          root = Path(os.environ["RUNNER_TEMP"]) / (
+              "xcmax-holdout-runtime-" + os.environ["GITHUB_RUN_ID"] + "-"
+              + os.environ["GITHUB_RUN_ATTEMPT"]
+          )
+          qualification = root / "qualification.json"
+
+          def record(reason, *, status="BLOCKED"):
+              marker.write_text(json.dumps({
+                  "status": status, "reason": reason,
+                  "source_sha": os.environ["GITHUB_SHA"],
+              }) + "\n")
+              print(status + ": " + reason)
+
+          required = {
+              "provider_id", "upstream_vendor", "context_window",
+              "max_output_tokens", "response_model", "gateway_kind",
+          }
+          try:
+              metadata = json.loads(os.environ.get("HOLDOUT_ROUTE_METADATA") or "{}")
+              if not isinstance(metadata, dict) or set(metadata) != required:
+                  raise ValueError("expected exact non-secret route metadata")
+              if metadata["gateway_kind"] not in {"responses", "litellm"}:
+                  raise ValueError("requires an independently qualified deployment gateway")
+              if not os.environ.get("OPENAI_BASE_URL"):
+                  raise ValueError("explicit gateway URL required")
+              route = {
+                  **metadata,
+                  "base_url": os.environ["OPENAI_BASE_URL"],
+                  "model": os.environ["OPENAI_MODEL"],
+                  "api_key_env": "OPENAI_API_KEY",
+                  "failover_policy": "disabled",
+              }
+              ModelRoute(**route).token()
+          except (KeyError, TypeError, ValueError):
+              record("explicit_deployment_route_configuration_missing_or_invalid")
+              raise SystemExit(1) from None
+
+          root.mkdir(mode=0o700, exist_ok=False)
+          config = root / "runtime.json"
+          config.write_text(json.dumps({
+              "engine": "codex", "surfaces": ["chat", "employee"],
+              "route": route, "runtime_root": str(root),
+              "qualification_file": str(qualification),
+          }) + "\n")
+          os.environ["XCAGI_AGENT_RUNTIME_CONFIG"] = str(config)
+          try:
+              settings = get_deployment_runtime_settings()
+              settings.require_qualified().token()
+          except (RuntimePolicyError, OSError, RuntimeError):
+              record("independent_deployment_qualification_failed")
+              raise SystemExit(1) from None
+          finally:
+              # Preserve only original non-secret qualification evidence, never
+              # runtime.json, credentials, process state or the runtime directory.
+              destination = reports / "holdout_runtime_evidence"
+              for evidence in [qualification, *root.glob("attempt-*/evidence.json")]:
+                  if evidence.is_file() and not evidence.is_symlink():
+                      target = destination / evidence.relative_to(root)
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(evidence, target)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("XCAGI_AGENT_RUNTIME_CONFIG=" + str(config) + "\n")
+          record("independent_deployment_qualification_verified", status="QUALIFIED")
+          PY
+
         run: |
           python -m pytest -q --tb=short \
             tests/benchmarks/test_task_success.py \
@@ -101,6 +186,14 @@ jobs:
           verified_path = Path("test_reports/task_holdout_run_mode.json")
           status = "BLOCKED"
           reason = "no_complete_trial_report_or_model_preflight_failed"
+          preflight = Path("test_reports/holdout_runtime_preflight.json")
+          if preflight.exists():
+              try:
+                  setup = json.loads(preflight.read_text())
+                  if setup.get("source_sha") == os.environ["GITHUB_SHA"] and setup.get("status") == "BLOCKED":
+                      reason = setup["reason"]
+              except (KeyError, ValueError, OSError):
+                  reason = "runtime_preflight_evidence_unreadable"
           category_counts = {}
           if path.exists():
               try:
@@ -158,6 +251,8 @@ jobs:
             FHD/test_reports/task_holdout_run_mode.json
             FHD/test_reports/task_benchmark_trial_*.jsonl
             FHD/test_reports/holdout_13x3_status.json
+            FHD/test_reports/holdout_runtime_preflight.json
+            FHD/test_reports/holdout_runtime_evidence/
             FHD/holdout-13x3-junit.xml
           if-no-files-found: warn
           retention-days: 14
