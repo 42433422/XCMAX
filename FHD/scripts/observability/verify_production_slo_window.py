@@ -236,18 +236,118 @@ def observation_ledger(
     }
 
 
+def compare_error_rate_windows(evidence_dir: Path, *, now: datetime | None = None) -> dict[str, Any]:
+    """Read the two latest independent, comparable production API error-rate windows.
+
+    Reuse the original evidence-chain and telemetry contracts. This is a
+    read-only platform risk observation, not a customer-specific failure rate,
+    an approved operating goal, or proof of a successful business outcome.
+    """
+    observed_at = now or datetime.now(UTC)
+    if observed_at.tzinfo is None:
+        raise ValueError("verification time must include a timezone")
+    observed_at = observed_at.astimezone(UTC)
+    records, blockers, chain_tip, epoch, _audit = load_evidence_chain(evidence_dir)
+    result: dict[str, Any] = {
+        "schema": "xcagi.production_error_rate_comparison/v1",
+        "passed": False,
+        "status": "blocked",
+        "scope": "production_api_error_rate_not_customer_failure_rate",
+        "metric_id": "SLO-API-03",
+        "verified_at": observed_at.isoformat(),
+        "chain_tip": chain_tip,
+        "chain_epoch": epoch,
+        "blockers": list(blockers),
+        "execution_authorized": False,
+    }
+    if blockers:
+        return result
+    active = [row for row in records if row.get("chain_epoch", "") == epoch]
+    ordered = []
+    for row in active:
+        end = _timestamp(row.get("generated_at"))
+        recorded = _timestamp(row.get("recorded_at"))
+        if end is None or recorded is None or not end <= recorded <= observed_at:
+            result["blockers"].append("invalid_collection_timestamp")
+            return result
+        ordered.append((end, recorded, row))
+    ordered.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    if len(ordered) < 2:
+        result["blockers"].append("two_active_chain_records_required")
+        return result
+    recent_end, _, recent = ordered[0]
+    baseline_end, _, baseline = ordered[1]
+    if observed_at - recent_end > timedelta(hours=24):
+        result["blockers"].append("latest_collection_stale")
+    if recent.get("window") != "1d" or baseline.get("window") != "1d":
+        result["blockers"].append("independent_one_day_windows_required")
+    # Both windows must be disjoint and close enough to represent adjacent
+    # daily collection periods. A rolling 30d snapshot never passes.
+    gap = recent_end - timedelta(days=1) - baseline_end
+    if not timedelta(0) <= gap <= timedelta(hours=1):
+        result["blockers"].append("windows_overlap_or_not_adjacent")
+    identity = ("mode", "release_id", "prometheus_url", "transport")
+    if any(recent.get(key) != baseline.get(key) for key in identity):
+        result["blockers"].append("source_or_release_scope_changed")
+
+    windows = []
+    for label, end, row in (
+        ("baseline", baseline_end, baseline),
+        ("recent", recent_end, recent),
+    ):
+        if not telemetry_admissible(row):
+            result["blockers"].append(f"{label}:telemetry_inadmissible")
+            continue
+        reading = row["readings"]["SLO-API-03"]
+        value = _numeric(reading.get("reading_numeric"))
+        samples = _numeric(reading.get("sample_count"))
+        if (
+            value is None
+            or not 0 <= value <= 1
+            or samples is None
+            or samples < SAMPLE_MINIMUMS["SLO-API-03"]
+        ):
+            result["blockers"].append(f"{label}:error_rate_or_sample_invalid")
+            continue
+        windows.append({
+            "role": label,
+            "start": (end - timedelta(days=1)).isoformat(),
+            "end": end.isoformat(),
+            "rate": value,
+            "sample_count": samples,
+            "evidence_hash": row["evidence_hash"],
+            "chain_hash": row["chain_hash"],
+        })
+    if result["blockers"]:
+        return result
+    previous, current = windows
+    delta = current["rate"] - previous["rate"]
+    result.update(
+        passed=True,
+        status="observed_increase" if delta > 0 else "no_observed_increase",
+        windows=windows,
+        error_rate_delta=delta,
+    )
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--release-id", default="")
     parser.add_argument("--required-days", type=int, default=90)
     parser.add_argument("--observation-days", type=int, default=0)
+    parser.add_argument("--compare-error-windows", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if args.observation_days:
+    if args.compare_error_windows:
+        if args.observation_days or args.release_id:
+            parser.error("--compare-error-windows cannot be combined with other verification modes")
+        result = compare_error_rate_windows(args.evidence_dir)
+    elif args.observation_days:
         result = observation_ledger(args.evidence_dir, days=args.observation_days)
     elif not args.release_id:
-        parser.error("--release-id is required unless --observation-days is set")
+        parser.error("--release-id is required unless an observation mode is set")
     else:
         result = verify_window(
             args.evidence_dir,
