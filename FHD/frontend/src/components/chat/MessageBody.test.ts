@@ -211,4 +211,28 @@ describe('MessageBody', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('math')
   })
+  it('delegates copy without leaking detached feedback timers', async () => {
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue(
+      '<div class="md-code"><div class="md-code__head"><button type="button" class="md-code__copy">复制</button></div><code class="md-code__body">const x = 1</code></div>',
+    )
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountBody({ content: 'code fixture' })
+      await wrapper.get('.md-code__copy').trigger('click')
+      await Promise.resolve()
+      expect(writeText).toHaveBeenCalledWith('const x = 1')
+      expect(wrapper.get('.md-code__copy').text()).toBe('已复制')
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
+      wrapper.unmount()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+      else Reflect.deleteProperty(navigator, 'clipboard')
+    }
+  })
 })
