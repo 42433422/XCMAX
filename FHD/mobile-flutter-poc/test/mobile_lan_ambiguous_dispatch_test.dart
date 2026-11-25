@@ -181,6 +181,47 @@ void main() {
     expect(await store.pendingMessageCount(), 0);
   });
 
+  test('stale auth-generation backlog cannot starve current receipt GETs', () async {
+    client.receiptKnown = false;
+    await expectLater(
+      repository.streamMessage(
+        conversation: conversation,
+        body: '写入企业库存',
+        idempotencyKey: 'stable-original-turn',
+      ),
+      throwsA(isA<MobileApiException>()
+          .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')),
+    );
+    for (var i = 0; i < 6; i++) {
+      await store.enqueueMessage(
+        conversationId: conversation.id,
+        conversationType: conversation.type,
+        title: conversation.title,
+        body: 'old write $i',
+        authGeneration: client.authGeneration + 1,
+        idempotencyKey: 'old-turn-$i',
+        requiresReconciliation: true,
+      );
+    }
+    await store.enqueueMessage(
+      conversationId: conversation.id,
+      conversationType: conversation.type,
+      title: conversation.title,
+      body: '写入企业库存',
+      authGeneration: client.authGeneration,
+      idempotencyKey: 'stable-original-turn',
+      requiresReconciliation: true,
+    );
+    client.receiptKnown = true;
+    expect(await repository.flushPendingMessages(), 1);
+    expect(client.attemptedPosts, 1);
+    expect(client.receiptReads, 2);
+    expect(await store.pendingMessageCount(), 6);
+    final remaining = await store.pendingMessages(limit: 10);
+    expect(remaining.every((row) => row.requiresReconciliation), isTrue);
+    expect(remaining.every((row) => row.idempotencyKey.startsWith('old-turn-')), isTrue);
+  });
+
   test('credential generation mismatch does not discard unknown work', () async {
     final id = await store.enqueueMessage(
       conversationId: conversation.id,

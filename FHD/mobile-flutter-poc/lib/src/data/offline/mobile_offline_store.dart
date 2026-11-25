@@ -443,10 +443,21 @@ class MobileOfflineStore {
     });
   }
 
-  Future<List<PendingOutboxMessage>> pendingMessages({int limit = 5}) async {
+  Future<List<PendingOutboxMessage>> pendingMessages({
+    int limit = 5,
+    int? authGeneration,
+  }) async {
+    // Unknown rows from an older credential generation must stay durable,
+    // but must not consume the bounded reconciliation batch for this account.
+    final scoped = authGeneration != null;
     final rows = await _db.customSelect(
-      "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') ORDER BY updated_at ASC, id ASC LIMIT ?",
-      variables: [Variable<int>(limit)],
+      "SELECT * FROM outbox_messages WHERE status IN ('pending', 'sending', 'unknown') "
+      "${scoped ? 'AND auth_generation = ? ' : ''}"
+      "ORDER BY updated_at ASC, id ASC LIMIT ?",
+      variables: [
+        if (scoped) Variable<int>(authGeneration),
+        Variable<int>(limit),
+      ],
     ).get();
     return rows.map((row) {
       final data = row.data;

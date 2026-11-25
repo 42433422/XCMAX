@@ -410,7 +410,8 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       final scope = await _offlineScope();
       final store = await openOfflineStore(expectedScope: scope);
       if (store == null || scope != await _offlineScope()) return 0;
-      final pending = await store.pendingMessages(limit: 5);
+      final pending = await store.pendingMessages(
+          limit: 5, authGeneration: _client.authGeneration);
       for (final item in pending) {
         if (scope != await _offlineScope()) break;
         if (item.authGeneration != _client.authGeneration) {
