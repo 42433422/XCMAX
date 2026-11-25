@@ -39,7 +39,9 @@ from modstore_server.llm_gateway_contract import (
 from modstore_server.llm_key_resolver import read_chat_route_token
 from modstore_server.llm_model_concurrency import (
     concurrency_key,
-    controller as concurrency,
+)
+from modstore_server.llm_model_concurrency import controller as concurrency
+from modstore_server.llm_model_concurrency import (
     is_throttled,
     retry_after_seconds,
 )

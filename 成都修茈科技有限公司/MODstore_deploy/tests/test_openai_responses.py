@@ -25,8 +25,8 @@ from modstore_server.llm_gateway_contract import codex_route_contract
 from modstore_server.llm_key_resolver import ChatRouteSnapshot, chat_route_token
 from modstore_server.llm_model_concurrency import (
     concurrency_key,
-    controller as concurrency,
 )
+from modstore_server.llm_model_concurrency import controller as concurrency
 from tests.platform_model_support import isolated as isolated
 from tests.test_llm_client_requests import db as db
 
