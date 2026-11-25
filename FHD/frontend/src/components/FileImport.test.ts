@@ -178,6 +178,23 @@ describe('FileImport', () => {
     expect(wrapper.text()).toContain('test.xlsx')
   })
 
+  it.each([1000, 10000])('bounds preview DOM while retaining all %i selected file identities', async (count) => {
+    const wrapper = mountFileImport()
+    const input = wrapper.find('.file-input')
+    const files = Array.from({ length: count }, (_, i) => createFile('file-' + i + '.xlsx', '', 0))
+    Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+    await input.trigger('change')
+    expect(wrapper.text()).toContain('已选择文件 (' + count + ')')
+    expect(wrapper.findAll('.file-item')).toHaveLength(60)
+    await wrapper.get('.file-preview-pagination button:last-child').trigger('click')
+    expect(wrapper.findAll('.file-item')).toHaveLength(60)
+    expect(wrapper.find('.file-name').text()).toBe('file-60.xlsx')
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    expect(wrapper.find('.file-list').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('renders file list with file name and size', async () => {
     const wrapper = mountFileImport()
     const input = wrapper.find('.file-input')
