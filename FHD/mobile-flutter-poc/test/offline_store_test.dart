@@ -258,15 +258,19 @@ void main() {
     expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
   });
 
-  test('an undispatched connection failure may retry the same original key', () async {
+  test('an attempted dispatch remains read-only even after socket or timeout errors', () async {
     final id = await store.enqueueMessage(conversationId: 'c1',
         conversationType: ConversationType.pinnedAssistant, title: '小C',
-        body: '未建立连接', authGeneration: 1, idempotencyKey: 'not-sent');
+        body: '写入订单', authGeneration: 1, idempotencyKey: 'original-turn');
     await store.markSending(id);
-    await store.markFailed(id, 'connection refused');
-    final entry = (await store.pendingMessages()).single;
-    expect(entry.requiresReconciliation, isFalse);
-    expect(entry.idempotencyKey, 'not-sent');
+    for (final error in ['connection refused', 'socket reset', 'timeout']) {
+      await store.markFailed(id, error);
+      final entry = (await store.pendingMessages()).single;
+      expect(entry.requiresReconciliation, isTrue);
+      expect(entry.idempotencyKey, 'original-turn');
+    }
+    await store.markFailed(id, '原任务已确认终止', terminal: true);
+    expect(await store.pendingMessages(), isEmpty);
   });
 
   test('cached pending receipt retains its turn across restart and update', () async {
