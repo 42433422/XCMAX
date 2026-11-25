@@ -85,13 +85,15 @@ def _items_from_db(
             )
             if market_user_id:
                 q = q.filter(FinancialTransaction.counterparty_id == int(market_user_id))
+            if track:
+                q = q.filter(FinancialTransaction.transaction_type == track)
             rows = q.limit(limit).all()
             for row in rows:
                 cents = int(Decimal(str(row.amount or 0)) * 100)
                 entry = {
                     "source_type": "financial_transaction",
                     "source_id": row.id,
-                    "track": track or str(row.transaction_type or "manual"),
+                    "track": str(row.transaction_type or "manual"),
                     "amount_cents": cents,
                     "status": str(row.status or ""),
                     "invoice_no": "",
@@ -130,7 +132,10 @@ def list_ledger(
             return items[:cap]
     except RECOVERABLE_ERRORS:
         logger.debug("crm invoice ledger fallback skipped", exc_info=True)
-    return _items_from_pipeline(market_user_id, limit=cap)
+    return [
+        row for row in _items_from_pipeline(market_user_id, limit=cap)
+        if track is None or row.get("track") == track
+    ]
 
 
 def summarize_ledger(*, market_user_id: int | None = None) -> dict[str, Any]:
@@ -153,6 +158,7 @@ def _invoice_archive_existing(
     status: str,
     counterparty_id: int | None,
     occurred_at: datetime,
+    description: str,
 ) -> dict[str, Any] | None:
     """An exact replay may reuse the original row; drift requires review."""
     from app.db.models.finance import FinancialTransaction
@@ -171,6 +177,7 @@ def _invoice_archive_existing(
         or row.status != status
         or row.counterparty_id != counterparty_id
         or row.transaction_date != occurred_at
+        or row.description != description
     ):
         return {"archived": False, "reason_code": "invoice_archive_conflict"}
     return {"archived": True, "transaction_id": row.id, "idempotent": True}
@@ -185,21 +192,29 @@ def archive_from_crm_invoice(
     tenant_id = current_tenant_id()
     if tenant_id is None:
         return {"archived": False, "reason_code": "tenant_context_required"}
-    entry = _ledger_item_from_invoice(inv)
-    invoice_id = int(inv.get("id") or 0)
+    if type(inv.get("id")) is not int:
+        return {"archived": False, "reason_code": "invoice_identity_required"}
+    invoice_id = inv["id"]
     if invoice_id <= 0:
         return {"archived": False, "reason_code": "invoice_identity_required"}
-    amount_cents = int(entry["amount_cents"])
-    if amount_cents < 0:
+    # The legacy display facade guesses whether "amount" means yuan or cents.
+    # That heuristic is not an authoritative accounting source.
+    amount_cents = inv.get("amount_cents")
+    if type(amount_cents) is not int or amount_cents < 0:
         return {"archived": False, "reason_code": "invoice_amount_invalid"}
-    raw_date = str(entry.get("occurred_at") or "")
+    entry = _ledger_item_from_invoice(inv)
+    raw_date = str(inv.get("issued_at") or "")
     try:
         occurred_at = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
     except ValueError:
         return {"archived": False, "reason_code": "invoice_date_required"}
-    if occurred_at.tzinfo is not None:
-        occurred_at = occurred_at.astimezone(UTC).replace(tzinfo=None)
-    uid = int(market_user_id or inv.get("market_user_id") or 0) or None
+    if occurred_at.tzinfo is None:
+        return {"archived": False, "reason_code": "invoice_timezone_required"}
+    occurred_at = occurred_at.astimezone(UTC).replace(tzinfo=None)
+    raw_uid = market_user_id if market_user_id is not None else inv.get("market_user_id")
+    if raw_uid is not None and (type(raw_uid) is not int or raw_uid <= 0):
+        return {"archived": False, "reason_code": "invoice_counterparty_invalid"}
+    uid = raw_uid
     amount = Decimal(amount_cents) / 100
     status = str(entry.get("status") or "issued")
     try:
@@ -211,6 +226,7 @@ def archive_from_crm_invoice(
             return _invoice_archive_existing(
                 db, tenant_id, invoice_id, amount=amount, status=status,
                 counterparty_id=uid, occurred_at=occurred_at,
+                description=entry["label"],
             )
 
         try:
