@@ -121,6 +121,25 @@ def test_incompatible_bounds_and_explicit_exclusion_block_without_cross_owner_le
     assert goal_conflicts(goal, [opposite], now=now)[0]["reason"] == "explicit_mutual_exclusion"
 
 
+def test_candidate_source_and_success_condition_cannot_be_silently_rewritten(operating):
+    now, _, state, goal, _ = operating
+    assert governance_gate(goal, state["goals"], now=now)["status"] == "reviewable"
+    for field, changed in (
+        ("acceptance", {**goal["acceptance"], "target": 1}),
+        ("evidence_refs", ["customer-value-gap:" + "a" * 64]),
+        ("observation", {**goal["observation"], "source_owner": "untrusted"}),
+    ):
+        corrupted = {**goal, field: changed}
+        assert governance_gate(corrupted, [corrupted], now=now)["status"] == (
+            "blocked_invalid_candidate"
+        )
+    assert governance_gate(
+        {**goal, "review_deadline": (now - timedelta(seconds=1)).isoformat()},
+        state["goals"],
+        now=now,
+    )["status"] == "blocked_invalid_candidate"
+
+
 def test_dependencies_require_original_independent_receipts(operating):
     _, _, state, goal, _ = operating
     predecessor = deepcopy(goal)
