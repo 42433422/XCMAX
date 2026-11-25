@@ -162,10 +162,22 @@ void main() {
         home: DesktopToolWebViewScreen(
             title: '客户', path: '/customers', api: api)));
     await tester.pump();
+    final oldDelegate = platform.delegate!;
+    final oldGeneration = api.authGeneration;
+    final oldLoads = platform.loads;
+    expect(find.byKey(const ValueKey('mock-webview')), findsOneWidget);
     await api.saveLocalSettings(serverMode: 'cloud');
     await tester.pump();
-    expect(find.text('连接已切换，请重新打开页面'), findsOneWidget);
+    // Backend changes now invalidate the same execution epoch as account changes.
+    expect(api.authGeneration, greaterThan(oldGeneration));
+    expect(find.text('账号已切换，请重新打开页面'), findsOneWidget);
     expect(find.byKey(const ValueKey('mock-webview')), findsNothing);
+    expect(
+      await oldDelegate.navigate!(const NavigationRequest(
+          url: 'http://10.0.0.9:5011/customers', isMainFrame: true)),
+      NavigationDecision.prevent,
+    );
+    expect(platform.loads, oldLoads);
   });
   testWidgets('failed page offers retry on the selected backend',
       (tester) async {

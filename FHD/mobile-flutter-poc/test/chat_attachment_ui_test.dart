@@ -162,8 +162,8 @@ void main() {
         expect(repo.plainBodies, ['帮我安排并完成这个任务：继续旧任务']);
       } else {
         expect(repo.plainBodies, isEmpty);
-        if (change == 'account') {
-          // A previous account's draft must not remain visible or executable.
+        if (change == 'account' || change == 'backend' || change == 'tenant') {
+          // A previous execution scope's draft must not remain visible or executable.
           expect(find.text('继续旧任务'), findsNothing);
           expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
               isEmpty);
