@@ -46,6 +46,17 @@ _IDENTITY_FIELDS = (
 )
 
 
+def has_legacy_runtime_binding(run: AgentRun) -> bool:
+    """Detect unreconciled persisted runtime protocols, including partial upgrades."""
+    return (
+        run.intent == "codex.runtime"
+        or run.metadata.get("runtime_type") == "codex"
+        or "codex_runtime" in run.metadata
+        or "_codex_queued_request" in run.metadata
+        or "codex_result" in run.final_output
+    )
+
+
 class XiaoxBindingError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -101,11 +112,7 @@ class XiaoxBindingStore:
     def _reject_legacy_binding(run: AgentRun) -> None:
         # Do not initialize a second ledger over a pre-upgrade binding,
         # including cleanup/error paths, before reconciling its effects.
-        if (
-            run.intent == "codex.runtime"
-            or run.metadata.get("runtime_type") == "codex"
-            or "codex_runtime" in run.metadata
-        ):
+        if has_legacy_runtime_binding(run):
             raise XiaoxBindingError(
                 "runtime_migration_required", "原运行绑定尚待迁移，禁止重建运行状态"
             )
