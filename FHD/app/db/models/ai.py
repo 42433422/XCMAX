@@ -98,6 +98,9 @@ class AIConversationSession(Base):
 
 class UserPreference(Base):
     __tablename__ = "user_preferences"
+    __table_args__ = (
+        Index("uq_user_preferences_owner_key", "user_id", "preference_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String, nullable=False)
