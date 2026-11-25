@@ -25,7 +25,7 @@ def cases(monkeypatch):
                     "source_group_sha256": prefix + "a" * 56,
                     "source_sha256": [prefix + "b" * 56],
                     "manifest_sha256": prefix + "1" * 56,
-                    "expected_reference_sha256": prefix + "2" * 56,
+                    "expected_reference_sha256": {"final.xlsx": prefix + "2" * 56},
                     "contract_sha256": prefix + "3" * 56,
                     "source_evidence_sha256": prefix + "4" * 56,
                     "expected_files": [{"private_oracle": "ORACLE_MUST_NOT_REACH_MODEL"}],
