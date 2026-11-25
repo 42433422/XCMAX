@@ -21,6 +21,10 @@ def owned(monkeypatch, tmp_path):
 
     monkeypatch.setattr(path_utils, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(
+        "app.application.tools.workflow_spreadsheet_scope.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
         "app.application.elt.service_uploads.get_app_data_dir", lambda: str(tmp_path)
     )
     client = SimpleNamespace(headers={})
@@ -126,7 +130,9 @@ def test_unregistered_legacy_upload_is_never_adopted(owned, monkeypatch, tmp_pat
     with tenant_scope(int(context["tenant_id"])):
         assert resolve_owned_upload_path("uploads/foreign.csv", context) == "uploads/foreign.csv"
         with get_db() as db:
-            assert db.query(EltUpload).filter(EltUpload.storage_path == str(shared)).count() == 0
+            assert (
+                db.query(EltUpload).filter(EltUpload.storage_path == str(shared)).count() == 0
+            )
 
 
 def test_prefixed_chat_upload_path_resolves_by_original_file_name(owned):
@@ -135,8 +141,7 @@ def test_prefixed_chat_upload_path_resolves_by_original_file_name(owned):
 
     with tenant_scope(int(context["tenant_id"])):
         assert (
-            resolve_owned_upload_path("uploads/chat/7a9193dba432-price.csv", context)
-            == str(file)
+            resolve_owned_upload_path("uploads/chat/7a9193dba432-price.csv", context) == str(file)
         )
 
 
@@ -210,3 +215,202 @@ def test_text_preview_reports_character_limit():
     text, coverage = _decode(b"a" * (MAX_TEXT + 1), ".csv")
     assert len(text) == MAX_TEXT
     assert coverage["truncated"] is True
+
+
+@pytest.fixture
+def duplicate_workbooks(owned):
+    import io
+
+    from openpyxl import Workbook
+
+    from app.application.elt.service_uploads import register_chat_upload
+
+    context, _ = owned
+    user = SimpleNamespace(id=int(context["user_id"]), tenant_id=int(context["tenant_id"]))
+    receipts = []
+    for amount in (120, 999):
+        workbook = Workbook()
+        workbook.active.append(["product", "amount"])
+        workbook.active.append(["paint", amount])
+        stream = io.BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        stream.seek(0)
+        receipts.append(
+            register_chat_upload(
+                user=user,
+                filename="report.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                stream=stream,
+            )
+        )
+    return context, receipts[0], receipts[1]
+
+
+def _read_snapshot(context, reference, receipt):
+    from openpyxl import load_workbook
+
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+
+    with (
+        tenant_scope(int(context["tenant_id"])),
+        workflow_file_snapshot(reference, context) as snapshot,
+    ):
+        assert hashlib.sha256(snapshot.read_bytes()).hexdigest() == receipt["sha256"]
+        workbook = load_workbook(snapshot, read_only=True, data_only=True)
+        try:
+            return workbook.active["B2"].value
+        finally:
+            workbook.close()
+
+
+def test_current_workbook_attachment_is_pinned_despite_newer_same_name(duplicate_workbooks):
+    from app.application.agent_orchestrator.attachment_inputs import resolve_attachment_context
+
+    context, first, second = duplicate_workbooks
+    assert first["upload_id"] != second["upload_id"]
+    assert first["sha256"] != second["sha256"]
+    context = {**context, "attachment_upload_ids": [first["upload_id"]]}
+    context, _ = resolve_attachment_context(context)
+    assert context["file_context"]["verified_uploads"][0]["upload_id"] == first["upload_id"]
+    assert _read_snapshot(context, "report.xlsx", first) == 120
+    assert _read_snapshot(context, "uploads/chat/7a9193dba432-report.xlsx", first) == 120
+    assert _read_snapshot(context, second["upload_id"], second) == 999
+
+
+def test_same_name_is_ambiguous_without_unique_conversation_binding(duplicate_workbooks):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+
+    context, first, second = duplicate_workbooks
+    unbound = {key: value for key, value in context.items() if key != "attachment_upload_ids"}
+    both = {**context, "attachment_upload_ids": [first["upload_id"], second["upload_id"]]}
+    with tenant_scope(int(context["tenant_id"])):
+        for runtime in (unbound, both):
+            with (
+                pytest.raises(PermissionError, match="多个同名"),
+                workflow_file_snapshot("report.xlsx", runtime),
+            ):
+                pytest.fail("ambiguous filename must not produce a snapshot")
+    assert _read_snapshot(both, first["upload_id"], first) == 120
+
+
+def test_followup_reuses_original_excel_reference(duplicate_workbooks):
+    context, first, _ = duplicate_workbooks
+    context = {key: value for key, value in context.items() if key != "attachment_upload_ids"}
+    original_path = "uploads/chat/7a9193dba432-report.xlsx"
+    context["last_excel_analysis_context"] = {
+        "excel_analysis": {"file_path": original_path, "upload_id": first["upload_id"]}
+    }
+    assert _read_snapshot(context, original_path, first) == 120
+    assert _read_snapshot(context, "report.xlsx", first) == 120
+
+
+def test_expired_bound_workbook_never_falls_back_to_newer_upload(duplicate_workbooks):
+    from app.application.elt.errors import EltError
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.db.session import get_db
+
+    context, first, second = duplicate_workbooks
+    context = {**context, "attachment_upload_ids": [first["upload_id"]]}
+    with tenant_scope(int(context["tenant_id"])):
+        with get_db() as db:
+            row = db.query(EltUpload).filter(EltUpload.id == first["upload_id"]).one()
+            row.expires_at = datetime(2000, 1, 1)
+        for reference in ("report.xlsx", "uploads/chat/7a9193dba432-report.xlsx"):
+            with (
+                pytest.raises(PermissionError, match="过期"),
+                workflow_file_snapshot(reference, context),
+            ):
+                pytest.fail("expired bound attachment must not produce a snapshot")
+        with (
+            pytest.raises(EltError, match="过期"),
+            workflow_file_snapshot(first["upload_id"], context),
+        ):
+            pytest.fail("expired explicit ID must not produce a snapshot")
+    assert _read_snapshot(context, second["upload_id"], second) == 999
+
+
+def test_missing_bound_workbook_and_unregistered_path_fail_closed(duplicate_workbooks):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+
+    context, first, _ = duplicate_workbooks
+    missing = {**context, "attachment_upload_ids": ["missing-upload", first["upload_id"]]}
+    unbound = {key: value for key, value in context.items() if key != "attachment_upload_ids"}
+    with tenant_scope(int(context["tenant_id"])):
+        for reference, runtime in (
+            ("report.xlsx", missing),
+            ("uploads/chat/unknown-report.xlsx", unbound),
+        ):
+            with pytest.raises(PermissionError), workflow_file_snapshot(reference, runtime):
+                pytest.fail("unbound or missing attachment must not produce a snapshot")
+
+
+def test_verified_workbook_reader_and_result_receipt(duplicate_workbooks, monkeypatch, tmp_path):
+    import io
+
+    from openpyxl import Workbook, load_workbook
+
+    from app.application.agent_orchestrator.artifact_files import (
+        read_verified_run_file,
+        store_scoped_run_file,
+    )
+    from app.application.tools.workflow_spreadsheet_scope import office_reader_input
+
+    monkeypatch.setattr(
+        "app.application.tools.workflow_spreadsheet_scope.get_app_data_dir", lambda: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.artifact_files.get_app_data_dir", lambda: str(tmp_path)
+    )
+    context, first, _ = duplicate_workbooks
+    context = {
+        **context,
+        "attachment_upload_ids": [first["upload_id"]],
+        "run_id": "xlsx-identity-regression",
+        "step_id": "read",
+        "node_id": "read",
+        "call_id": "read-1",
+        "input_sha256": first["sha256"],
+    }
+    with (
+        tenant_scope(int(context["tenant_id"])),
+        office_reader_input(
+            "excel-full-read-employee", {"file_path": "report.xlsx"}, context
+        ) as payload,
+    ):
+        source = load_workbook(payload["file_path"], read_only=True, data_only=True)
+        try:
+            result = Workbook()
+            result.active.append(["verified_amount", source.active["B2"].value])
+            output = io.BytesIO()
+            result.save(output)
+            result.close()
+        finally:
+            source.close()
+        receipt = store_scoped_run_file(output.getvalue(), name="result.xlsx", context=context)
+    raw = read_verified_run_file(context["run_id"], receipt)
+    assert hashlib.sha256(raw).hexdigest() == receipt["metadata"]["sha256"]
+    verified = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        assert verified.active["B1"].value == 120
+    finally:
+        verified.close()
+
+
+def test_exact_path_cannot_override_same_name_conversation_binding(duplicate_workbooks):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.db.session import get_db
+
+    context, first, second = duplicate_workbooks
+    context = {**context, "attachment_upload_ids": [first["upload_id"]]}
+    with tenant_scope(int(context["tenant_id"])):
+        with get_db() as db:
+            other_path = (
+                db.query(EltUpload.storage_path).filter(EltUpload.id == second["upload_id"]).scalar()
+            )
+        with (
+            pytest.raises(PermissionError, match="身份冲突"),
+            workflow_file_snapshot(other_path, context),
+        ):
+            pytest.fail("a conflicting exact path must not replace the bound attachment")
+    assert _read_snapshot(context, second["upload_id"], second) == 999
