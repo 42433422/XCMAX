@@ -275,6 +275,12 @@ class RbacAppService:
             user = db.query(User).filter(User.id == user_id).first()
             if user is None or (tenant_id is not None and user.tenant_id != tenant_id):
                 _fail("用户不存在", 404)
+            # Even a platform-scoped caller cannot attach another tenant's
+            # namespaced role or a platform-admin role to a tenant user.
+            if not role_belongs_to_user(user_role, user.tenant_id):
+                _fail("角色不属于该用户所属租户", 403)
+            if user_role == "admin" and user.tenant_id is not None:
+                _fail("租户用户不能分配平台管理员角色", 403)
             if user.role != user_role:
                 user.role = user_role
                 revoked = int(
