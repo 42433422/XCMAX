@@ -254,7 +254,7 @@ def checkout(
             local_user_id=local_user_id,
             tenant_id=checkout_user.tenant_id,
         )
-    except OSError as e:
+    except (OSError, ValueError) as e:
         logger.exception("[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e)
         return JSONResponse(
             {"success": False, "message": "订单记录失败，尚未提供付款入口，请稍后重试"},
@@ -318,14 +318,20 @@ async def alipay_trade_notify(request: Request):
         out_trade_no = str(data.get("out_trade_no") or "")
         trade_no = str(data.get("trade_no") or "")
         total_amount = str(data.get("total_amount") or "")
-        reason, snap = mp_orders.apply_notify_paid(
-            out_trade_no=out_trade_no,
-            trade_no=trade_no,
-            total_amount=total_amount,
-        )
-        if reason in {"amount_mismatch", "trade_mismatch"}:
+        try:
+            reason, snap = mp_orders.apply_notify_paid(
+                out_trade_no=out_trade_no,
+                trade_no=trade_no,
+                total_amount=total_amount,
+            )
+        except (OSError, ValueError):
+            # Do not acknowledge a verified payment if the quarantine or
+            # authoritative local order cannot be read/written durably.
+            logger.exception("[model-payment] verified notification persistence failed")
+            return PlainTextResponse("fail", status_code=503)
+        if reason in {"amount_mismatch", "trade_mismatch", "invalid_notify"}:
             return PlainTextResponse("fail", status_code=400)
-        if reason in {"fulfillment_pending", "unknown_order"}:
+        if reason in {"fulfillment_pending", "unknown_order", "reconciliation_required"}:
             # Unknown orders are unsettled money, not a successful delivery.
             # Never stop provider retries before an operator can reconcile
             # the merchant order ID against the authoritative payment record.
@@ -470,8 +476,16 @@ def refund_trade(request: Request, body: dict[str, Any] = Body(default_factory=d
                 "refund_reason": refund_reason,
             },
         )
-    except OSError as e:
+    except (OSError, ValueError) as e:
         logger.exception("[model-payment] 写入退款本地记录失败: %s", e)
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "支付渠道可能已退款，但本地对账回执落库失败，必须查询原退款单后人工对账，禁止自动重试",
+                "requires_reconciliation": True,
+            },
+            status_code=503,
+        )
 
     logger.info("[model-payment] refund ok out_trade_no=%s amount=%s", out_trade_no, refund_amount)
     return JSONResponse({"success": True, "data": res.get("raw")})
