@@ -72,6 +72,7 @@ class TestGetCustomersSession:
                 get_customers_session()
             host_session.assert_not_called()
 
+
 # ---------------------------------------------------------------------------
 # reset_customers_engine
 # ---------------------------------------------------------------------------

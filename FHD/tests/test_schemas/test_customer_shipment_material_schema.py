@@ -27,7 +27,6 @@ class TestCustomerSchema:
         u = CustomerUpdate()
         assert u.name is None
 
-
     def test_legacy_write_aliases_use_backend_validation_and_ignore_client_tenant(self):
         value = CustomerCompatMutation.model_validate(
             {

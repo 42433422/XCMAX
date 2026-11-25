@@ -18,6 +18,7 @@ def get_customers_session():
         raise RuntimeError("Customer repository did not provide a session")
     return session
 
+
 def reset_customers_engine() -> None:
     """为向下兼容保留的空实现。
 

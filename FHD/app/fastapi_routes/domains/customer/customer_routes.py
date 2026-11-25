@@ -273,7 +273,10 @@ def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse
 @router.post("/customers")
 @router.post("/customers/", include_in_schema=False)
 @publish_route_event(RouteEvents.DB_QUERY, domain="customers")
-def customers_create(request: Request, body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation)) -> JSONResponse:
+def customers_create(
+    request: Request,
+    body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
+) -> JSONResponse:
     payload = body.model_dump(exclude_unset=True)
     name, cp, ph, addr = _customer_body_name_contact(payload)
     if not name:
@@ -308,7 +311,9 @@ def customers_create(request: Request, body: CustomerCompatMutation = Body(defau
 @router.put("/customers/{customer_id}")
 @router.put("/customers/{customer_id}/", include_in_schema=False)
 def customers_update(
-    request: Request, customer_id: int, body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation)
+    request: Request,
+    customer_id: int,
+    body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
 ) -> JSONResponse:
     payload = body.model_dump(exclude_unset=True)
     name, cp, ph, addr = _customer_body_name_contact(payload)

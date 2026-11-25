@@ -78,6 +78,7 @@ class CustomerListResponse(BaseModel):
     per_page: int
     count: int
 
+
 class CustomerCompatMutation(BaseModel):
     """Validated legacy /customers write contract; never trust client tenant fields."""
 
