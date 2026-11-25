@@ -40,6 +40,9 @@ jobs:
           test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
           test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
           cp candidate/FHD/frontend/playwright.interaction-perf.config.ts baseline/FHD/frontend/
+          cp candidate/FHD/frontend/playwright.long-list-perf.config.ts baseline/FHD/frontend/
+          mkdir -p baseline/FHD/frontend/list-perf
+          cp -R candidate/FHD/frontend/list-perf/. baseline/FHD/frontend/list-perf/
           mkdir -p baseline/FHD/frontend/interaction-perf
           cp -R candidate/FHD/frontend/interaction-perf/. baseline/FHD/frontend/interaction-perf/
           cp candidate/FHD/frontend/e2e/startup-readiness-fixture.ts baseline/FHD/frontend/e2e/
@@ -68,6 +71,24 @@ jobs:
               npx playwright test --config playwright.interaction-perf.config.ts
             ) > "$RUNNER_TEMP/ui-perf/$side/runner.log" 2>&1 || status=1
             cat "$RUNNER_TEMP/ui-perf/$side/runner.log"
+          done
+          exit "$status"
+      - name: Measure long-list DOM and Chromium heap on identical dev fixtures
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          for side in baseline candidate; do
+            (
+              set -e
+              sha="$(git -C "$side" rev-parse HEAD)"
+              cd "$side/FHD/frontend"
+              export SOURCE_SHA="$sha"
+              export UI_PERF_OUTPUT_DIR="$RUNNER_TEMP/ui-perf/$side/long-list"
+              if [[ "$side" == candidate ]]; then export LIST_PERF_ASSERT_BOUNDED=1; else export LIST_PERF_ASSERT_BOUNDED=0; fi
+              npx playwright test --config playwright.long-list-perf.config.ts
+            ) > "$RUNNER_TEMP/ui-perf/$side/long-list.log" 2>&1 || status=1
+            cat "$RUNNER_TEMP/ui-perf/$side/long-list.log"
           done
           exit "$status"
       - name: Upload raw measurements and execution logs
