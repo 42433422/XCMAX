@@ -174,3 +174,27 @@ def test_quality_audit_deduplicates_sources_and_does_not_score_unknowns(database
     assert review.decision_quality_report(7, as_of=as_of - timedelta(days=365))[
         "reviewed_count"
     ] == 0
+
+
+def test_owner_scoped_quality_route_uses_authenticated_identity(monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from modstore_server import strategic_portfolio_api
+
+    calls = []
+    monkeypatch.setattr(
+        review,
+        "decision_quality_report",
+        lambda owner_user_id: calls.append(owner_user_id) or {"owner_user_id": owner_user_id},
+    )
+    app = FastAPI()
+    app.include_router(strategic_portfolio_api.router)
+    app.dependency_overrides[strategic_portfolio_api.require_admin] = lambda: SimpleNamespace(id=7)
+    with TestClient(app) as client:
+        response = client.get("/portfolios/quality")
+        assert response.status_code == 200
+        assert response.json() == {"owner_user_id": 7}
+    assert calls == [7]
