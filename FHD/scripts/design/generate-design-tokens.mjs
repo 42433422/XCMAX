@@ -64,4 +64,38 @@ for(const [elementName,desktopRef,marketRef] of elementMappings){
  if(!desktopElements.includes(elementName+': var('+desktopRef+')'))throw Error('Desktop Element Plus mapping missing: '+elementName);
  if(!marketTokenSource.includes(elementName+': var('+marketRef+')'))throw Error('Market Element Plus mapping missing: '+elementName);
 }
-console.log('All three generated design-token outputs and desktop/Market aliases verified');
+
+/* Keep completed migrations from regressing. This is a scoped gate, not a
+ * claim that all existing legacy components are tokenized. */
+const migratedDesktopStyles = [
+  'frontend/src/views/AdminBusinessCustomersView.css',
+  'frontend/src/components/workflow/EmployeeWorkspaceScene.css',
+];
+const definedDesktopTokens = new Set(
+  [...(result.css + '\n' + desktopElements).matchAll(/(--xc-[\w-]+)\s*:/g)].map(match => match[1]),
+);
+function migratedStyleViolations(source) {
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  const errors = [];
+  if (/#[0-9a-f]{3,8}\b|(?:rgba?|hsla?)\(/i.test(css)) errors.push('literal color');
+  for (const [, name] of css.matchAll(/var\(\s*(--xc-[\w-]+)/g)) {
+    if (!definedDesktopTokens.has(name)) errors.push('undefined token ' + name);
+  }
+  for (const [, property, value] of css.matchAll(/(?:^|[;{])\s*(font-size|font-weight|border-radius|box-shadow|line-height|(?:margin|padding)(?:-[\w-]+)?|gap)\s*:\s*([^;{}]+)(?=[;}]|$)/gm)) {
+    if (!value.includes('var(') && !/^(?:0(?:\s+0)*|inherit|none|normal)$/.test(value.trim())) {
+      errors.push('unregistered ' + property + ': ' + value.trim());
+    }
+  }
+  return errors;
+}
+if (migratedStyleViolations('.test { color: #123456; font-size: 19px; }').length !== 2 ||
+    migratedStyleViolations('.test { color: var(--xc-not-a-real-token); }').length !== 1 ||
+    migratedStyleViolations('.test { color: var(--xc-color-text); padding: 0; }').length !== 0) {
+  throw Error('Migrated style audit negative/positive control failed');
+}
+for (const path of migratedDesktopStyles) {
+  const violations = migratedStyleViolations(read(path));
+  if (violations.length) throw Error('Design token consumption violation: ' + path + ': ' + violations.join(', '));
+}
+
+console.log('All three generated design-token outputs, desktop/Market aliases and migrated desktop styles verified');
