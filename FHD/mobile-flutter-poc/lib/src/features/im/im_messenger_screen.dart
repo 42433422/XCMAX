@@ -389,16 +389,19 @@ class _ImMessengerScreenState extends State<ImMessengerScreen>
     if (_conversationId <= 0 || _invalidated || !_foreground) return;
     final conversationId = _conversationId;
     final epoch = _requestEpoch;
+    final idsBeforeRead = _messages.map((message) => message.id).toSet();
     try {
       final messages = await _repository.loadImMessages(conversationId);
       if (!mounted || _invalidated || !_foreground ||
           conversationId != _conversationId || epoch != _requestEpoch ||
           _authGeneration != _repository.client.authGeneration) return;
       setState(() {
-        // Preserve live frames arriving while the HTTP resync was in flight.
+        // Server snapshot wins. Only preserve new live frames that arrived
+        // after the GET began; stale/deleted cached messages must not survive.
         final merged = <int, ImMessage>{
           for (final message in messages) message.id: message,
-          for (final message in _messages) message.id: message,
+          for (final message in _messages)
+            if (!idsBeforeRead.contains(message.id)) message.id: message,
         };
         _messages = merged.values.toList()..sort((a, b) => a.id.compareTo(b.id));
         _error = '';
