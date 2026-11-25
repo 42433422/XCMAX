@@ -20,7 +20,7 @@ vi.mock('@/api/chat', () => ({ default: {
 vi.mock('@/utils/tts', () => ({ speakText: vi.fn(), stopSpeaking: vi.fn(), cleanTextForSpeech: (text: string) => text }))
 
 const waiting: ChatPlannerPayload = {
-  success: false, response: '请补充客户名称', runtime: 'codex', run_id: 'parent-1',
+  success: false, response: '请补充客户名称', runtime: 'xiaox', run_id: 'parent-1',
   execution_state: 'waiting_user', needs_user_input: true,
   runtime_context_update: { agent_runtime_run_id: 'parent-1', conversation_id: 'room-1' },
 }

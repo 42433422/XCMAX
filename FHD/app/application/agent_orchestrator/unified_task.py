@@ -33,11 +33,11 @@ def task_capabilities(run: AgentRun) -> dict[str, bool]:
     from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
 
     status = str(run.status or "")
-    if run.metadata.get("runtime_type") == "codex":
+    if run.metadata.get("runtime_type") == "xiaox":
         from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 
         safe = not requires_retry_reconciliation(run) and not (
-            run.metadata.get("codex_runtime") or {}
+            run.metadata.get("xiaox_runtime") or {}
         ).get("model_reconciliation_required")
         return {
             "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
@@ -49,9 +49,9 @@ def task_capabilities(run: AgentRun) -> dict[str, bool]:
             "evidence": True,
         }
     context = run.metadata.get("runtime_context") or {}
-    codex_child = context.get("source") == "codex_runtime" and bool(context.get("parent_run_id"))
+    xiaox_child = context.get("source") == "xiaox_runtime" and bool(context.get("parent_run_id"))
     retryable = (
-        status in {"failed", "blocked"} and not codex_child and not safe_continuation_error(run)
+        status in {"failed", "blocked"} and not xiaox_child and not safe_continuation_error(run)
     )
     return {
         "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
@@ -59,7 +59,7 @@ def task_capabilities(run: AgentRun) -> dict[str, bool]:
         in {"queued", "planning", "running", "retrying", "waiting_user", "paused", "blocked"},
         "retry": retryable,
         "approve": status == "waiting_user",
-        "resume": status == "paused" and not codex_child,
+        "resume": status == "paused" and not xiaox_child,
         "evidence": True,
     }
 

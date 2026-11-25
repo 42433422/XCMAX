@@ -16,8 +16,8 @@ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.enterprise_goal import EnterpriseGoalBinding
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 from tests.test_application.test_enterprise_goals import Projections, definition
 
 MESSAGE = "为订单 42 安排剩余数量出库，先审批"
@@ -53,7 +53,7 @@ def pending_write(execution_env):
     ]
     state.drain(parent.run_id)
     parent = repo.get(parent.run_id)
-    rows = parent.metadata["codex_runtime"]["calls"]
+    rows = parent.metadata["xiaox_runtime"]["calls"]
     child = repo.get(rows["deliver"]["child_run_id"])
     assert child.status == "waiting_user" and not child.tool_calls
     return child

@@ -45,7 +45,7 @@ def _employee_gate_contract(
     config: dict[str, Any],
     tools: list[dict[str, Any]],
 ) -> str:
-    from app.infrastructure.codex.binding import canonical_digest
+    from app.infrastructure.xiaox.binding import canonical_digest
 
     return canonical_digest({"manifest": manifest, "config": config, "tools": tools})
 
@@ -415,7 +415,7 @@ class EmployeeAgent:
                         task,
                         handler_list,
                         {
-                            "error": "Codex 员工入口暂不支持混合执行器配置",
+                            "error": "Xiaox 员工入口暂不支持混合执行器配置",
                             "error_code": "employee_runtime_handlers_unsupported",
                             "retryable": False,
                         },
@@ -640,7 +640,7 @@ class EmployeeAgent:
         )
 
 
-def restore_codex_employee_gate(
+def restore_xiaox_employee_gate(
     employee_id: str,
     original_runtime_context: dict[str, Any],
     *,
@@ -652,7 +652,7 @@ def restore_codex_employee_gate(
     fields. A changed pack or tool schema requires a new authorization; this
     helper cannot silently widen an existing run's permissions.
     """
-    from app.application.employee_runtime.agent_runner import _codex_employee_tool_scope
+    from app.application.employee_runtime.agent_runner import _xiaox_employee_tool_scope
     from app.mod_sdk.product_plane import employee_execution_block_reason
 
     if not employee_id or original_runtime_context.get("employee_id") != employee_id:
@@ -675,7 +675,7 @@ def restore_codex_employee_gate(
     gate = employee._build_agent_gate(manifest, config, workspace, input_data)
     if gate is None:
         raise ValueError("原员工工具授权门未恢复")
-    return _codex_employee_tool_scope(tools, gate)
+    return _xiaox_employee_tool_scope(tools, gate)
 
 
-__all__ = ["EmployeeAgent", "restore_codex_employee_gate"]
+__all__ = ["EmployeeAgent", "restore_xiaox_employee_gate"]

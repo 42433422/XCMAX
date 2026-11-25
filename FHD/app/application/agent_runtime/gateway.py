@@ -1,7 +1,7 @@
-"""Bind authenticated product requests to the qualified local Codex runtime.
+"""Bind authenticated product requests to the qualified local Xiaox runtime.
 
 Requests supply neither credentials nor a provider. The host binds the original goal
-without preplanning business actions; a Codex invocation never falls back into another engine.
+without preplanning business actions; a Xiaox invocation never falls back into another engine.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgen
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_permission import redact
-from app.application.agent_runtime.codex_runtime import run_codex_agent
+from app.application.agent_runtime.xiaox_runtime import run_xiaox_agent
 from app.application.agent_runtime.configuration import (
     RuntimeSetupError,
     get_account_runtime_settings,
@@ -33,17 +33,17 @@ from app.domain.task_lifecycle.agent_runtime_contract import (
 )
 from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result
 from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
-from app.infrastructure.codex.binding import (
-    CodexBindingError,
-    CodexBindingStore,
+from app.infrastructure.xiaox.binding import (
+    XiaoxBindingError,
+    XiaoxBindingStore,
 )
-from app.infrastructure.codex.local_server import LocalRuntimeServer
-from app.infrastructure.codex.policy import (
+from app.infrastructure.xiaox.local_server import LocalRuntimeServer
+from app.infrastructure.xiaox.policy import (
     RuntimePolicyError,
     RuntimeSettings,
     runtime_settings,
 )
-from app.infrastructure.codex.tools import CodexToolBridge
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _PRIVATE_KEYS = frozenset(
@@ -121,7 +121,7 @@ def public_runtime_result(value: Any) -> Any:
 def _failure(code: str, message: str, *, run_id: str = "") -> dict[str, Any]:
     return {
         "handler": "agent",
-        "runtime": "codex",
+        "runtime": "xiaox",
         "run_id": run_id,
         "ok": False,
         "business_completed": False,
@@ -142,24 +142,24 @@ def _failure(code: str, message: str, *, run_id: str = "") -> dict[str, Any]:
 
 def _trusted_context(raw: dict[str, Any]) -> tuple[dict[str, Any], str]:
     if not isinstance(raw, dict):
-        raise CodexBindingError("runtime_identity_required", "运行需要可信登录身份")
+        raise XiaoxBindingError("runtime_identity_required", "运行需要可信登录身份")
     context = copy.deepcopy(raw)
     actor = _bound_actor(context)
     owner = str(actor.id)
     if context.get("local_user_id") not in (None, "", actor.id, owner):
-        raise CodexBindingError("owner_changed", "会话持久用户与登录身份不一致")
+        raise XiaoxBindingError("owner_changed", "会话持久用户与登录身份不一致")
     conversation = str(context.get("conversation_id") or "")
     session = str(context.get("session_id") or "")
     if conversation and session and conversation != session:
-        raise CodexBindingError("conversation_changed", "会话标识不一致")
+        raise XiaoxBindingError("conversation_changed", "会话标识不一致")
     if (conversation or session) and (
         type(context.get("_conversation_revision")) is not int
         or context["_conversation_revision"] < 0
     ):
-        raise CodexBindingError("conversation_changed", "会话缺少可信历史版本")
+        raise XiaoxBindingError("conversation_changed", "会话缺少可信历史版本")
     turn = context.get("turn_id")
     if not isinstance(turn, str) or not turn.strip() or len(turn) > 160:
-        raise CodexBindingError("runtime_request_identity_required", "运行需要稳定的服务端请求标识")
+        raise XiaoxBindingError("runtime_request_identity_required", "运行需要稳定的服务端请求标识")
     # These are always supplied by the host's explicit factory arguments or
     # qualified deployment configuration, never copied from request metadata.
     for key in (
@@ -210,7 +210,7 @@ def _actions(value: list[str] | None) -> list[str] | None:
     if not isinstance(value, list) or any(
         not isinstance(action, str) or not action.strip() or "." not in action for action in value
     ):
-        raise CodexBindingError("invalid_allowed_actions", "员工工具授权列表无效")
+        raise XiaoxBindingError("invalid_allowed_actions", "员工工具授权列表无效")
     return sorted(set(value))
 
 
@@ -223,7 +223,7 @@ def _same_owner(
 ) -> None:
     original = run.metadata.get("runtime_context") or {}
     if run.user_id != owner:
-        raise CodexBindingError("owner_changed", "原任务不属于当前登录账号")
+        raise XiaoxBindingError("owner_changed", "原任务不属于当前登录账号")
     # Actor seals must match as well as IDs. A different session cannot borrow
     # the authorization frozen into a previous worker's task.
     fields = tuple(
@@ -231,11 +231,11 @@ def _same_owner(
     )
     for key in fields:
         if original.get(key) != incoming.get(key):
-            raise CodexBindingError("owner_changed", "原任务的身份、会话或员工范围已变化")
+            raise XiaoxBindingError("owner_changed", "原任务的身份、会话或员工范围已变化")
     merge_runtime_context(run, {key: incoming[key] for key in fields if key in incoming})
     _bound_actor(original)
     if error := continuation_conversation_error(run, original):
-        raise CodexBindingError("conversation_changed", error)
+        raise XiaoxBindingError("conversation_changed", error)
 
 
 def _insert_parent(
@@ -281,7 +281,7 @@ def _duplicate_result(run: AgentRun, request: dict[str, Any]) -> dict[str, Any]:
 
 
 def _record_request_result(
-    store: CodexBindingStore,
+    store: XiaoxBindingStore,
     run_id: str,
     request_key: str,
     result: dict[str, Any],
@@ -298,7 +298,7 @@ def _record_request_result(
         ):
             run.status = "blocked"
             run.error = str(result.get("error") or "运行未能启动")
-            run.final_output["codex_result"] = copy.deepcopy(result)
+            run.final_output["xiaox_result"] = copy.deepcopy(result)
             run.add_event(
                 "runtime.admission.failed", run.error, {"error_code": result.get("error_code")}
             )
@@ -382,7 +382,7 @@ async def run_runtime_task_async(
                 )
             )
         ):
-            raise CodexBindingError("invalid_request", "任务或完成模式无效")
+            raise XiaoxBindingError("invalid_request", "任务或完成模式无效")
         context, owner = _trusted_context(runtime_context)
         from app.domain.task_lifecycle.execution_mode import (
             CONTEXT_KEY,
@@ -394,25 +394,25 @@ async def run_runtime_task_async(
         actions = _actions(allowed_actions)
         repository = _repository or get_agent_run_repository()
         if not isinstance(repository, SQLAlchemyAgentRunRepository):
-            raise CodexBindingError("durable_storage_required", "运行需要持久化任务仓储")
-        store = CodexBindingStore(repository)
+            raise XiaoxBindingError("durable_storage_required", "运行需要持久化任务仓储")
+        store = XiaoxBindingStore(repository)
         parent = repository.get(resolved_id) if run_id else None
         previous = None
         if run_id:
             if parent is None:
-                raise CodexBindingError("binding_missing", "原运行任务不存在")
+                raise XiaoxBindingError("binding_missing", "原运行任务不存在")
             _same_owner(parent, context, owner)
-            if parent.intent != "codex.runtime" or parent.metadata.get("runtime_type") != "codex":
-                raise CodexBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Codex")
+            if parent.intent != "xiaox.runtime" or parent.metadata.get("runtime_type") != "xiaox":
+                raise XiaoxBindingError("runtime_changed", "不能把其他引擎的任务恢复为 Xiaox")
             previous = parent.metadata.get("runtime_route") or (
-                parent.metadata.get("codex_runtime") or {}
+                parent.metadata.get("xiaox_runtime") or {}
             ).get("runtime_config")
         ancestor = None
         parent_run_id = str(context.get("parent_run_id") or "")
         if not run_id and parent_run_id:
             ancestor = repository.get(parent_run_id)
             if ancestor is None:
-                raise CodexBindingError("parent_missing", "员工父任务不存在")
+                raise XiaoxBindingError("parent_missing", "员工父任务不存在")
             _same_owner(ancestor, context, owner, ancestor=True)
         queued_payload = {
             "task": task,
@@ -439,27 +439,27 @@ async def run_runtime_task_async(
             assert parent is not None  # Resolved and owner-checked before loading credentials.
             stored_task_id = parent.metadata.get("runtime_task_id")
             if _task_id is not None and _task_id != stored_task_id:
-                raise CodexBindingError("request_conflict", "原运行任务的宿主任务标识不能改变")
+                raise XiaoxBindingError("request_conflict", "原运行任务的宿主任务标识不能改变")
             if stored_task_id is not None and (
                 (parent.metadata.get("task_context") or {}).get("task_id") != stored_task_id
             ):
-                raise CodexBindingError("request_conflict", "原运行任务的任务绑定已改变")
+                raise XiaoxBindingError("request_conflict", "原运行任务的任务绑定已改变")
             requested["task_id"] = stored_task_id
             if parent.metadata.get("runtime_gate_required") and gate is None:
-                raise CodexBindingError("gate_required", "原任务的员工工具检查不可省略")
+                raise XiaoxBindingError("gate_required", "原任务的员工工具检查不可省略")
             if parent.metadata.get("runtime_instruction_digest") != instruction_digest:
-                raise CodexBindingError("runtime_changed", "原任务的运行指令不能改变")
+                raise XiaoxBindingError("runtime_changed", "原任务的运行指令不能改变")
             if parent.metadata.get("runtime_completion_mode") != completion_mode:
-                raise CodexBindingError("runtime_changed", "原任务的完成判定不能改变")
+                raise XiaoxBindingError("runtime_changed", "原任务的完成判定不能改变")
             if parent.metadata.get(METADATA_KEY, "execute") != mode:
-                raise CodexBindingError("runtime_changed", "原任务的执行模式不能改变")
+                raise XiaoxBindingError("runtime_changed", "原任务的执行模式不能改变")
             stored_actions = parent.metadata.get("runtime_allowed_actions")
             if actions is None:
                 actions = copy.deepcopy(stored_actions)
                 requested["allowed_actions"] = actions
             elif actions != stored_actions:
-                raise CodexBindingError("owner_changed", "原任务的工具授权范围不能改变")
-            store._validate_goal(parent, parent.metadata.get("codex_runtime") or {})
+                raise XiaoxBindingError("owner_changed", "原任务的工具授权范围不能改变")
+            store._validate_goal(parent, parent.metadata.get("xiaox_runtime") or {})
         else:
             # Authorization revisions and mutable tool configuration must not
             # turn a repeated client request into a new executable task.
@@ -479,14 +479,14 @@ async def run_runtime_task_async(
             seed["owner"] = owner
             if _task_id is not None:
                 seed["task_id"] = _task_id
-            resolved_id = "run_codex_" + canonical_digest(seed)[:48]
+            resolved_id = "run_xiaox_" + canonical_digest(seed)[:48]
             if ancestor is not None:
                 parent_context = ancestor.metadata.get("task_context") or {}
                 context["parent_task_id"] = parent_context.get("task_id") or ancestor.run_id
                 context["root_run_id"] = parent_context.get("root_run_id") or ancestor.run_id
             else:
                 context["root_run_id"] = resolved_id
-            context.update(task_id=_task_id or resolved_id, source="codex_runtime")
+            context.update(task_id=_task_id or resolved_id, source="xiaox_runtime")
             parent = repository.get(resolved_id)
             if parent is not None:
                 _same_owner(parent, context, owner)
@@ -495,10 +495,10 @@ async def run_runtime_task_async(
             request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
             if request is not None:
                 if request.get("digest") != digest:
-                    raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
+                    raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
                 return _duplicate_result(parent, request)
             if not is_resume:
-                raise CodexBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
+                raise XiaoxBindingError("request_conflict", "原运行任务缺少已绑定的请求标识")
             if parent.status != "blocked":
                 store._validate_control(parent)
         elif ancestor is not None:
@@ -509,9 +509,9 @@ async def run_runtime_task_async(
         )
         explicit_settings = settings is not None
         settings = settings or runtime_settings()
-        if settings.engine != "codex":
+        if settings.engine != "xiaox":
             return _failure(
-                "runtime_not_selected", "当前部署未选择 Codex 运行时", run_id=resolved_id
+                "runtime_not_selected", "当前部署未选择 Xiaox 运行时", run_id=resolved_id
             )
         if (
             not explicit_settings
@@ -519,7 +519,7 @@ async def run_runtime_task_async(
             and not os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip()
         ):
             if run_id and previous is None:
-                raise CodexBindingError(
+                raise XiaoxBindingError(
                     "runtime_changed", "原任务缺少模型路由绑定，请恢复原部署配置。"
                 )
             options = {"qualify": False} if deferred else {}
@@ -528,18 +528,18 @@ async def run_runtime_task_async(
             )
         surface = "employee" if context.get("employee_id") else "chat"
         if surface not in settings.surfaces:
-            raise RuntimePolicyError("当前入口未启用固定 Codex 执行器")
+            raise RuntimePolicyError("当前入口未启用固定 Xiaox 执行器")
         route = settings.route if deferred else settings.require_qualified()
         if route is None or settings.runtime_root is None:
-            raise RuntimePolicyError("Codex model route and private runtime_root are required")
+            raise RuntimePolicyError("Xiaox model route and private runtime_root are required")
         if not deferred:
             route.token()  # Credentials and real qualification precede business execution.
         if is_resume and parent is not None:
             if parent.metadata.get("runtime_route_identity") != route.identity:
-                raise CodexBindingError("runtime_changed", "原任务的模型路由不能改变")
+                raise XiaoxBindingError("runtime_changed", "原任务的模型路由不能改变")
         queue = None
         if start_queued:
-            from app.infrastructure.codex.queued_runtime import (
+            from app.infrastructure.xiaox.queued_runtime import (
                 durable_queue,
                 stage_queued_request,
             )
@@ -547,10 +547,10 @@ async def run_runtime_task_async(
             queue = durable_queue(repository)
         if not is_resume:
             parent = AgentRun(
-                user_id=owner, message=task, run_id=resolved_id, intent="codex.runtime"
+                user_id=owner, message=task, run_id=resolved_id, intent="xiaox.runtime"
             )
             parent.metadata.update(
-                runtime_type="codex",
+                runtime_type="xiaox",
                 runtime_task_id=_task_id,
                 runtime_context=context,
                 runtime_route_identity=route.identity,
@@ -560,9 +560,9 @@ async def run_runtime_task_async(
                 runtime_completion_mode=completion_mode,
                 **{METADATA_KEY: mode},
                 runtime_allowed_actions=actions,
-                _codex_system_prompt=system_prompt,
-                _codex_input_data=copy.deepcopy(input_data),
-                _codex_history=copy.deepcopy(history),
+                _xiaox_system_prompt=system_prompt,
+                _xiaox_input_data=copy.deepcopy(input_data),
+                _xiaox_history=copy.deepcopy(history),
                 runtime_requests={
                     request_key: {
                         "digest": canonical_digest(requested),
@@ -574,7 +574,7 @@ async def run_runtime_task_async(
             )
             if start_paused or start_queued:
                 parent.status = "paused" if start_paused else "queued"
-                parent.metadata["codex_runtime"] = {
+                parent.metadata["xiaox_runtime"] = {
                     "generation": 0,
                     "coordinator_active": False,
                     "revoked": True,
@@ -590,7 +590,7 @@ async def run_runtime_task_async(
                     "resume_required": True,
                     "output": "任务已保存，恢复后开始执行。",
                 }
-                parent.final_output["codex_result"] = copy.deepcopy(staged)
+                parent.final_output["xiaox_result"] = copy.deepcopy(staged)
                 parent.metadata["runtime_requests"][request_key].update(
                     state="completed", result=copy.deepcopy(staged)
                 )
@@ -600,7 +600,7 @@ async def run_runtime_task_async(
             apply_task_context(parent, context)
             apply_ai_budget_metadata(parent, context)
             if error := continuation_conversation_error(parent, context):
-                raise CodexBindingError("conversation_changed", error)
+                raise XiaoxBindingError("conversation_changed", error)
             parent, created = _insert_parent(repository, parent, queue=queue)
             _same_owner(parent, context, owner)
             if created:
@@ -608,30 +608,30 @@ async def run_runtime_task_async(
         assert parent is not None
         request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
         if request is not None and request.get("digest") != digest:
-            raise CodexBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
+            raise XiaoxBindingError("request_conflict", "同一请求标识已绑定不同任务内容")
         if request is not None and not admitted:
             return _duplicate_result(parent, request)
         if start_paused:
-            return dict(public_runtime_result(parent.final_output["codex_result"]))
+            return dict(public_runtime_result(parent.final_output["xiaox_result"]))
         if start_queued and not is_resume:
             from app.application.agent_orchestrator.task_dispatcher import (
                 notify_agent_task_dispatcher,
             )
 
             notify_agent_task_dispatcher()
-            return dict(public_runtime_result(parent.final_output["codex_result"]))
+            return dict(public_runtime_result(parent.final_output["xiaox_result"]))
         if is_resume:
             queue_resume = start_queued or parent.status == "blocked"
             if queue_resume:
-                from app.infrastructure.codex.queued_runtime import stage_queued_request
+                from app.infrastructure.xiaox.queued_runtime import stage_queued_request
 
             if parent.status == "blocked":
-                from app.application.agent_runtime.codex_runtime import _resume_error
+                from app.application.agent_runtime.xiaox_runtime import _resume_error
 
                 rows = store.receipt_snapshot(resolved_id)
                 binding = store.get(resolved_id)
                 if error := _resume_error(store, binding, rows):
-                    raise CodexBindingError("reconciliation_required", error)
+                    raise XiaoxBindingError("reconciliation_required", error)
                 parent = binding.run
 
             def claim(run: AgentRun, _metadata: dict[str, Any]) -> None:
@@ -640,12 +640,12 @@ async def run_runtime_task_async(
                 requests = run.metadata.setdefault("runtime_requests", {})
                 if request_key in requests:
                     if requests[request_key].get("digest") != digest:
-                        raise CodexBindingError(
+                        raise XiaoxBindingError(
                             "request_conflict", "同一请求标识已绑定不同任务内容"
                         )
                     return
                 if len(requests) >= 256:
-                    raise CodexBindingError("request_limit", "运行任务已达到续跑请求上限")
+                    raise XiaoxBindingError("request_limit", "运行任务已达到续跑请求上限")
                 requests[request_key] = {
                     "digest": digest,
                     "state": "admitted",
@@ -661,12 +661,12 @@ async def run_runtime_task_async(
                 from app.application.agent_orchestrator.task_dispatcher import (
                     notify_agent_task_dispatcher,
                 )
-                from app.infrastructure.codex.queued_runtime import enqueue_resume
+                from app.infrastructure.xiaox.queued_runtime import enqueue_resume
 
                 queued = enqueue_resume(store, parent, claim)
                 admitted = True
                 notify_agent_task_dispatcher()
-                return dict(public_runtime_result(queued.final_output["codex_result"]))
+                return dict(public_runtime_result(queued.final_output["xiaox_result"]))
             claimed = store.update(resolved_id, claim)
             if not admitted:
                 return _duplicate_result(
@@ -675,22 +675,23 @@ async def run_runtime_task_async(
         from fastapi import FastAPI
 
         from app.application.planner_compat.runtime import publish_admitted_chat_run
-        from app.infrastructure.codex import CodexTransportConfig
-        from app.infrastructure.codex.mcp_server import MCP_PATH
-        from app.infrastructure.codex.mcp_server import router as mcp_router
-        from app.infrastructure.codex.model_gateway import MODEL_PATH
-        from app.infrastructure.codex.model_gateway import router as model_router
+        from app.infrastructure.xiaox import XiaoxTransportConfig
+        from app.infrastructure.xiaox.mcp_server import MCP_PATH
+        from app.infrastructure.xiaox.mcp_server import router as mcp_router
+        from app.infrastructure.xiaox.model_gateway import MODEL_PATH
+        from app.infrastructure.xiaox.model_gateway import router as model_router
 
         publish_admitted_chat_run(resolved_id, str(context["turn_id"]))
         app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-        app.state.codex_binding_store = store
-        app.state.codex_run_id = resolved_id
-        app.state.codex_tool_bridge = CodexToolBridge(store, gate=gate, run_id=resolved_id)
-        app.state.codex_model_route = route
+        app.state.xiaox_binding_store = store
+        app.state.xiaox_run_id = resolved_id
+        bridge = XiaoxToolBridge(store, gate=gate, run_id=resolved_id)
+        app.state.xiaox_tool_bridge = bridge
+        app.state.xiaox_model_route = route
         app.include_router(model_router)
         app.include_router(mcp_router)
         with LocalRuntimeServer(app) as server:
-            config = CodexTransportConfig(
+            config = XiaoxTransportConfig(
                 runtime_root=settings.runtime_root,
                 scope_id=resolved_id,
                 model=route.model,
@@ -703,7 +704,7 @@ async def run_runtime_task_async(
                 codex_bin=settings.codex_bin,
                 turn_timeout_seconds=settings.turn_timeout_seconds,
             )
-            result = await run_codex_agent(
+            result = await run_xiaox_agent(
                 run_id=resolved_id,
                 task=task,
                 system_prompt=_goal_instructions(system_prompt),
@@ -715,6 +716,7 @@ async def run_runtime_task_async(
                 allowed_actions=actions,
                 runtime_config={**route.runtime_identity(), "gate_required": gate is not None},
                 answer_to_waiting_input=answer_to_waiting_input,
+                tool_bridge=bridge,
                 on_event=(lambda event: on_event(public_runtime_result(event)))
                 if on_event
                 else None,
@@ -737,7 +739,7 @@ async def run_runtime_task_async(
             except RECOVERABLE_ERRORS:
                 pass  # Preserve cancellation; durable coordinator receipts remain authoritative.
         raise
-    except (AgentModAuthorizationError, RuntimePolicyError, CodexBindingError) as exc:
+    except (AgentModAuthorizationError, RuntimePolicyError, XiaoxBindingError) as exc:
         result = _failure(
             getattr(exc, "code", "runtime_policy_blocked"), str(exc), run_id=resolved_id
         )

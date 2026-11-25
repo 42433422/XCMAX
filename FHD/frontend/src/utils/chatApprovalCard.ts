@@ -64,14 +64,14 @@ export function parseApprovalCardFromPayload(data: ChatPlannerPayload): ChatAppr
   const action = asString(envelope.action).trim()
   if (!Object.keys(explicit).length && action !== 'workflow_confirmation_required' && action !== 'approval_pending') return null
   const raw = { ...inner, ...explicit }
-  const codex = data.runtime === 'codex' || envelope.runtime === 'codex'
+  const xiaox = data.runtime === 'xiaox' || envelope.runtime === 'xiaox'
   const childRunId = asString(explicit.run_id || explicit.agent_run_id).trim()
   const parentRunId = asString(data.run_id || data.agent_run_id || envelope.run_id).trim()
   // A runtime parent coordinates receipts. Only the explicit business child
   // can receive an approval grant; never borrow the parent's envelope ID.
-  if (codex && (!childRunId || childRunId === parentRunId
+  if (xiaox && (!childRunId || childRunId === parentRunId
     || (explicit.run_id && explicit.agent_run_id && explicit.run_id !== explicit.agent_run_id))) return null
-  const runId = codex ? childRunId
+  const runId = xiaox ? childRunId
     : asString(raw.run_id || raw.agent_run_id || envelope.run_id || envelope.agent_run_id || data.run_id || data.agent_run_id)
   return restoreApprovalCard({
     version: Number(raw.version) || 1,

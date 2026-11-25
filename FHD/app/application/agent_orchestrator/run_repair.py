@@ -21,10 +21,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 def _requires_frozen_parameters(
     run: AgentRun, runtime_context: dict[str, Any] | None, *, repository: Any = None
 ) -> bool:
-    """Codex owns replanning; its child graph cannot mint a second model loop."""
+    """Xiaox owns replanning; its child graph cannot mint a second model loop."""
     contexts = (run.metadata.get("runtime_context") or {}, runtime_context or {})
-    if run.metadata.get("runtime_type") == "codex" or any(
-        context.get("source") == "codex_runtime" for context in contexts
+    if run.metadata.get("runtime_type") == "xiaox" or any(
+        context.get("source") == "xiaox_runtime" for context in contexts
     ):
         return True
     parent_ids = {str(context.get("parent_run_id") or "") for context in contexts} - {""}
@@ -37,7 +37,7 @@ def _requires_frozen_parameters(
             repository = get_agent_run_repository()
         for parent_id in parent_ids:
             parent = repository.get(parent_id)
-            if parent is None or parent.metadata.get("runtime_type") == "codex":
+            if parent is None or parent.metadata.get("runtime_type") == "xiaox":
                 return True
     except RECOVERABLE_ERRORS:
         # Missing ancestry is never authority to change a persisted request.
@@ -260,5 +260,56 @@ class RunRepair:
         return {}
 
     @staticmethod
-    def can_auto_execute(step: AgentStep) -> bool:
-        return str(step.risk or "").lower() == "low" and bool(step.idempotent)
+    def auto_execution_decision(
+        step: AgentStep, runtime_context: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        """Return the autonomy decision that authorizes this step without a new human click.
+
+        The strict step contract still governs by default. Only the user's
+        auto-approval mode may consult the shared autonomy policy, so hard
+        boundaries, unregistered actions and vetoes keep blocking.
+        """
+        if str(step.risk or "").lower() == "low" and bool(step.idempotent):
+            return {"decision": "allow", "reason": "low-risk idempotent step", "risk": "low"}
+        context = runtime_context if isinstance(runtime_context, dict) else {}
+        if str(context.get("chat_approval_mode") or "").strip() != "auto":
+            return None
+        from app.domain.autonomy.autonomy_guard import evaluate_risk
+        from app.domain.autonomy.risk_types import ProhibitedActionError, RiskLevel, parse_risk_level
+
+        try:
+            decision = evaluate_risk(
+                {
+                    "action": f"{step.tool_id}.{step.action}" if step.tool_id else step.action,
+                    "tool_id": step.tool_id,
+                    "operation": step.action,
+                },
+                context,
+                action_id=f"auto_approval:{step.step_id}",
+                source="agent_orchestrator.chat_auto_approval",
+            )
+        except ProhibitedActionError:
+            return None
+        if decision.decision == "blocked":
+            return None
+        rank = {
+            RiskLevel.LOW: 0,
+            RiskLevel.MEDIUM: 1,
+            RiskLevel.HIGH: 2,
+            RiskLevel.BLOCKED: 3,
+        }
+        declared = parse_risk_level(step.risk, default=RiskLevel.MEDIUM)
+        if rank[decision.risk_level] < rank[declared]:
+            # 登记风险低于步骤声明风险时保持等待，避免自动审批降低门槛。
+            return None
+        return {
+            "decision": "auto_approved",
+            "reason": "chat_approval_mode=auto: 用户已对本轮开启自动审批",
+            "risk": decision.risk_level.value,
+        }
+
+    @staticmethod
+    def can_auto_execute(
+        step: AgentStep, runtime_context: dict[str, Any] | None = None
+    ) -> bool:
+        return RunRepair.auto_execution_decision(step, runtime_context) is not None

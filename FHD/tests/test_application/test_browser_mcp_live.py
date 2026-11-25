@@ -41,8 +41,8 @@ from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_c
 from app.application.tools.mcp import registry
 from app.db.models.user import Session as UserSession
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
-from app.infrastructure.codex.binding import CodexBindingStore
-from app.infrastructure.codex.tools import CodexToolBridge
+from app.infrastructure.xiaox.binding import XiaoxBindingStore
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.time import utc_now_naive
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -109,8 +109,8 @@ class LiveRuntime:
     repository: SQLAlchemyAgentRunRepository
     run_ids: tuple[str, str]
     actor: object
-    store: CodexBindingStore
-    bridge: CodexToolBridge
+    store: XiaoxBindingStore
+    bridge: XiaoxToolBridge
     tokens: tuple[str, str]
     queue: SQLAlchemyTaskExecutionRepository
     receipts: dict[int, dict] = field(default_factory=dict)
@@ -196,18 +196,18 @@ def browser_runtime(tmp_path, monkeypatch, trusted_actor):
         for _ in range(2)
     )
     for run in runs:
-        run.metadata.update(runtime_type="codex", runtime_context=context)
+        run.metadata.update(runtime_type="xiaox", runtime_context=context)
         contract = build_goal_contract(run)
         run.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
         repository.save(run)
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     runtime = LiveRuntime(
         config,
         repository,
         (runs[0].run_id, runs[1].run_id),
         actor,
         store,
-        CodexToolBridge(store, AgentOrchestrator(repository=repository)),
+        XiaoxToolBridge(store, AgentOrchestrator(repository=repository)),
         (store.create(runs[0].run_id).mcp_token, store.create(runs[1].run_id).mcp_token),
         SQLAlchemyTaskExecutionRepository(session_factory=actor.factory),
     )

@@ -67,10 +67,10 @@ def build_goal_contract(
     """Persist the user's request; this contract neither plans nor authorizes actions."""
     if not isinstance(run.message, str) or not run.message.strip():
         raise AgentRuntimeContractError("invalid_goal", "原始任务不能为空")
-    historical = history if history is not None else run.metadata.get("_codex_history")
+    historical = history if history is not None else run.metadata.get("_xiaox_history")
     request = {
         "text": run.message,
-        "input_data": copy.deepcopy(run.metadata.get("_codex_input_data")),
+        "input_data": copy.deepcopy(run.metadata.get("_xiaox_input_data")),
         "attachments": copy.deepcopy(attachments or []),
         "context_evidence": copy.deepcopy(context_evidence or []),
         "history": [

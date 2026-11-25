@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from app.infrastructure.excel.date_norm import date_like_columns
+from app.utils.json_safe import json_safe
 
 
 def dataframe_schema_snapshot(df: pd.DataFrame, sample_rows: int = 3) -> dict[str, Any]:
@@ -18,7 +19,10 @@ def dataframe_schema_snapshot(df: pd.DataFrame, sample_rows: int = 3) -> dict[st
         "column_count": int(len(df.columns)),
         "columns": list(df.columns.astype(str)),
         "dtypes": {str(k): str(v) for k, v in df.dtypes.items()},
-        "sample_rows": df.head(sample_rows).replace({float("nan"): None}).to_dict(orient="records"),
+        # 日期列会给出 Timestamp/NaT，必须先转成 JSON 安全值，否则下游回执序列化失败。
+        "sample_rows": json_safe(
+            df.head(sample_rows).replace({float("nan"): None}).to_dict(orient="records")
+        ),
     }
 
 

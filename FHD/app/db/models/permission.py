@@ -88,6 +88,7 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "查看员工", "code": "employee.list", "module": "employee"},
     {"name": "执行员工任务", "code": "employee.execute", "module": "employee"},
     {"name": "读取表格", "code": "tool.excel_analysis.read", "module": "reports"},
+    {"name": "导出 Excel 表格", "code": "tool.excel_analysis.export", "module": "reports"},
     {"name": "系统配置", "code": "admin.system_config", "module": "admin"},
     {"name": "查看企业知识", "code": "dataset.read", "module": "knowledge"},
     {"name": "管理企业知识", "code": "dataset.write", "module": "knowledge"},
@@ -135,6 +136,7 @@ DEFAULT_ROLES: list[_RoleSeed] = [
             "tool.sales.create_order",
             "tool.inventory.stock_out",
             "tool.finance.create_transaction",
+            "tool.excel_analysis.export",
         ],
     },
     {

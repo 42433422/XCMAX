@@ -9,7 +9,7 @@
         --tasks tests/benchmarks/task_golden_set.json \
         --trial 0 --out /tmp/trial_0.jsonl
 
-评测链路：instruction → qualified Codex runtime → durable host child tasks
+评测链路：instruction → qualified Xiaox runtime → durable host child tasks
 （包含审批、依赖和工具结果校验）→ DB 终态断言（复用
 business_db_write_verification._model_config 的实体映射 SSOT）。
 """
@@ -32,7 +32,7 @@ _TRIAL_BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 
 def _bootstrap_isolated_db() -> None:
-    """在导入 app 之前设置隔离环境：独立 SQLite 文件；模型仅使用显式配置且已认证的 Codex 路由。"""
+    """在导入 app 之前设置隔离环境：独立 SQLite 文件；模型仅使用显式配置且已认证的 Xiaox 路由。"""
     global _BOOTED
     if _BOOTED:
         return
@@ -57,7 +57,7 @@ def _bootstrap_isolated_db() -> None:
 
 def _completed_model_requests(metadata: dict[str, Any]) -> int:
     """Count only original-run requests that actually returned and settled usage."""
-    calls = metadata.get("codex_runtime", {}).get("model_requests", {})
+    calls = metadata.get("xiaox_runtime", {}).get("model_requests", {})
     return sum(
         row.get("state") == "completed" and isinstance(row.get("usage"), dict)
         for row in calls.values()
@@ -250,7 +250,7 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
 
 
 def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
-    """Use the same authenticated Codex/SQL queue as product requests.
+    """Use the same authenticated Xiaox/SQL queue as product requests.
 
     The caller's explicit scenario answers/approvals are the only continuation
     authority. No expected success can approve an action or select another model.
@@ -282,10 +282,10 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     from app.db.models.user import User
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
-    from app.infrastructure.codex.binding import CodexBindingStore
-    from app.infrastructure.codex.receipt_projection import (
-        refresh_codex_receipts,
-        resume_ready_codex_runs,
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
+    from app.infrastructure.xiaox.receipt_projection import (
+        refresh_xiaox_receipts,
+        resume_ready_xiaox_runs,
     )
     from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
@@ -348,7 +348,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
             [],
         )
     parent = drain(admitted["run_id"])
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     approvals, answers = list(task.get("approvals") or []), list(task.get("answers") or [])
     error = ""
     for _ in range(32):
@@ -383,7 +383,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
                     break
                 parent = drain(parent.run_id)
                 continue
-            if resume_ready_codex_runs(repository=repository):
+            if resume_ready_xiaox_runs(repository=repository):
                 parent = drain(parent.run_id)
                 continue
             break
@@ -434,8 +434,8 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
                 authenticated_actor_binding=principal.actor_authorization,
             )
         drain(child.run_id)
-        parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
-    parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+        parent = refresh_xiaox_receipts(repository.get(parent.run_id), repository=repository)
+    parent = refresh_xiaox_receipts(repository.get(parent.run_id), repository=repository)
     rows = store.receipt_snapshot(parent.run_id)
     children = [repository.get(row["child_run_id"]) for row in rows]
     nodes = [SimpleNamespace(tool_id=row["tool_id"], action=row["action"]) for row in rows]

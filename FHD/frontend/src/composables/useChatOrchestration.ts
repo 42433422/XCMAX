@@ -51,7 +51,6 @@ import { approvalApi } from '@/api/approval'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
-import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { chatExecutionOutcome, readChatExecution } from '@/components/chat/chatFailureRecovery'
 import { activeChatTurnMessage, activeChatTurnStatus, droppedRoundFromHistory, readActiveChatTurn, type ActiveChatTurn } from '@/utils/droppedRoundPresentation'
@@ -610,7 +609,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
    */
   function stopReply(options?: { supersede?: boolean }) {
     localViewRevision++
-    const stopped = chatSessionActivity.cancelSession()
+    const stopped = chatSessionActivity.cancelSession(sessionId.value, { showStopNotice: !options?.supersede })
     chatRequest.cancelPendingChatBatch(sessionId.value)
     chatRequest.stopLoadingProgress()
     clearVoiceQueue()
@@ -625,18 +624,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       return plain.length > 0
     })
     if (kept.length !== messages.value.length) messages.value = kept
-    if (options?.supersede) return
-    const routeMetadata = lastChatModelRoute(sessionId.value, resolveChatIdentity(String(modsStore.activeModId || '')))
-    addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai', routeMetadata ? { routeMetadata } : undefined)
   }
 
   async function sendMessage(message: string, turn?: { retryOf?: string; idempotencyKey?: string; destructiveConfirmed?: boolean }) {
     if (isRecalling.value) return
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
     if (isLoading.value) stopReply({ supersede: true })
-    const generation = chatSessionActivity.beginRound(taskSessionId)
-    generation.setLoading(true)
     const turnId = createBusinessHarnessId('turn')
+    const generation = chatSessionActivity.beginRound(taskSessionId, turnId)
+    generation.setLoading(true)
     addMessage(message, 'user', { turnId })
     refreshLocalHistorySessions?.()
     const origin = retainConversationMessages?.(taskSessionId)
@@ -967,6 +963,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     orderNumberFetching,
     isLoading,
     isStreamingReply,
+    pendingTurnId: chatSessionActivity.pendingTurnId,
+    stoppedTurnId: chatSessionActivity.stoppedTurnId,
     isExecuting,
     stateSteps,
     latestAssistantPush,

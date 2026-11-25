@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import os
+import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
@@ -106,6 +107,16 @@ def _fresh_upload_cutoff():
     return utc_now_naive() - timedelta(hours=hours)
 
 
+def _upload_basename_candidates(value: str) -> list[str]:
+    """聊天上传返回的文件路径带随机前缀，这里同时保留原名候选。"""
+    name = Path(value).name
+    candidates = [name]
+    unprefixed = re.fullmatch(r"[0-9a-fA-F]{8,32}-(.+)", name)
+    if unprefixed is not None and unprefixed.group(1) != name:
+        candidates.append(unprefixed.group(1))
+    return candidates
+
+
 def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
     """把用户可见的文件名换成当前账号自己的上传存储路径。
 
@@ -115,6 +126,33 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
     value = str(file_path or "").strip()
     if not value:
         return value
+    selected = context.get("attachment_upload_ids")
+    if selected is not None:
+        if (
+            not isinstance(selected, list)
+            or not 1 <= len(selected) <= 4
+            or any(not isinstance(item, str) or not item or len(item) > 80 for item in selected)
+            or len(set(selected)) != len(selected)
+        ):
+            raise PermissionError("附件引用无效，请重新上传")
+        actor = _bound_actor(context)
+        with get_db() as db:
+            uploads = db.query(EltUpload).filter(
+                EltUpload.id.in_(selected),
+                EltUpload.owner_user_id == actor.id,
+                EltUpload.tenant_id == tenant_id_for_write(),
+                EltUpload.expires_at > utc_now_naive(),
+            ).all()
+            if len(uploads) != len(selected):
+                raise PermissionError("选中的附件不可用，请重新上传")
+            for upload in uploads:
+                if value in {upload.id, upload.storage_path}:
+                    return str(upload.storage_path or upload.id)
+            candidates = _upload_basename_candidates(value)
+            matches = [upload for upload in uploads if upload.file_name in candidates]
+            if len(matches) != 1:
+                raise PermissionError("无法唯一匹配选中的附件，请使用上传凭据")
+            return str(matches[0].storage_path or matches[0].id)
     try:
         actor = _bound_actor(context)
         with get_db() as db:
@@ -129,7 +167,7 @@ def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
                 return str(exact.storage_path or exact.id)
             by_name = (
                 query.filter(
-                    EltUpload.file_name == Path(value).name,
+                    EltUpload.file_name.in_(_upload_basename_candidates(value)),
                     EltUpload.storage_path != "",
                     EltUpload.expires_at > utc_now_naive(),
                     # 只认刚上传的文件：历史同名文件不能被静默当成本次输入。
@@ -150,7 +188,7 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     actor = _bound_actor(context)
     prior = _run_file(file_path, context)
     if prior is None:
-        from app.infrastructure.codex.receipts import read_action_artifact
+        from app.infrastructure.xiaox.receipts import read_action_artifact
 
         prior = read_action_artifact(file_path, context)
     if prior is not None:
@@ -159,7 +197,12 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
         file_path = resolve_owned_upload_path(file_path, context)
         analysis = excel_analysis_from_runtime(context) or {}
         reference = analysis.get("upload_id")
-        if isinstance(reference, str) and reference and file_path == analysis.get("file_path"):
+        if (
+            "attachment_upload_ids" not in context
+            and isinstance(reference, str)
+            and reference
+            and file_path == analysis.get("file_path")
+        ):
             file_path = reference
         with get_db() as db:
             upload_id = (

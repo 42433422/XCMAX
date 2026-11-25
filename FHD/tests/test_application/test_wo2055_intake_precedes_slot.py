@@ -14,9 +14,9 @@ from app.application.agent_runtime.chat import runtime_chat_payload
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
-from tests.test_application.test_codex_goal_verifier import verifier as verifier
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
+from tests.test_application.test_xiaox_goal_verifier import verifier as verifier
 
 SERVICE = "app.application.planner_compat_service"
 STREAM = "app.fastapi_routes.xcagi_compat_chat_stream"
@@ -41,7 +41,7 @@ DEFECT_MESSAGE = "保存采购订单报错，点保存没有任何反应。期�
     ],
 )
 @pytest.mark.parametrize("restart", [False, True])
-def test_registered_intake_uses_dynamic_codex_and_truthful_original_receipt(
+def test_registered_intake_uses_dynamic_xiaox_and_truthful_original_receipt(
     monkeypatch,
     guide,
     message,
@@ -103,7 +103,7 @@ def test_registered_intake_uses_dynamic_codex_and_truthful_original_receipt(
         assert len(state.transports) == 1
         assert state.model_requests == []
         assert calls == [], "medium-risk submit must wait for explicit approval"
-        assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
+        assert result["runtime"] == "xiaox" and result["requires_confirmation"] is True, result
         parent_id = result["run_id"]
         contract = repo.get(parent_id).metadata["runtime_goal_contract"]
         assert contract["request"]["text"] == message
@@ -144,7 +144,7 @@ def test_registered_intake_uses_dynamic_codex_and_truthful_original_receipt(
         assert parent.metadata["runtime_goal_contract"] == contract
         assert plan_fingerprint(plan_from_dict(run.metadata["plan"])) == approved_fingerprint
         assert len(state.transports) == 1 and not hasattr(service, "_pending_workflows")
-        result = runtime_chat_payload(parent.final_output["codex_result"])
+        result = runtime_chat_payload(parent.final_output["xiaox_result"])
 
     assert calls == [(actor.session_id, "7", message)], (
         approval_result,
@@ -154,7 +154,7 @@ def test_registered_intake_uses_dynamic_codex_and_truthful_original_receipt(
     assert state.model_requests == [], (
         "approval or remote acceptance flags are not final goal proof"
     )
-    assert parent.final_output["codex_result"]["business_completed"] is False
+    assert parent.final_output["xiaox_result"]["business_completed"] is False
     text = str(result["response"])
     assert "当前没有采购订单。" not in text
     assert run is not None and len(run.tool_calls) == 1
@@ -239,7 +239,7 @@ def test_approval_freeze_is_idempotent_detached_and_elevates_all_required_nodes(
 def test_chat_projection_preserves_independent_verdict_and_original_receipts(verifier, verdict):
     import copy
 
-    from tests.test_application.test_codex_goal_verifier import goal, response, review
+    from tests.test_application.test_xiaox_goal_verifier import goal, response, review
 
     accepted = verdict == "verified"
     if accepted:

@@ -16,7 +16,7 @@ ACTIVE_STATES = frozenset({"queued", "planning", "running", "retrying", "submitt
 def base_runtime_result(run_id: str) -> dict[str, Any]:
     return {
         "handler": "agent",
-        "runtime": "codex",
+        "runtime": "xiaox",
         "run_id": run_id,
         "ok": False,
         "business_completed": False,

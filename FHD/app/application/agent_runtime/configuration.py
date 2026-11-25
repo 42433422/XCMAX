@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ from filelock import FileLock, Timeout
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route
-from app.infrastructure.codex.policy import (
+from app.infrastructure.xiaox.policy import (
     CODEX_VERSION,
     QUALIFICATION_CHECKS,
     ModelRoute,
@@ -30,14 +31,16 @@ from app.infrastructure.codex.policy import (
     qualification_host_identity,
     runtime_settings,
 )
-from app.infrastructure.codex.transport import _write_private
+from app.infrastructure.xiaox.transport import _write_private
 from app.infrastructure.modstore_transport import MarketModelError, httpx_sync_client
 from app.utils.path_io.path_utils import get_desktop_state_dir
+
+_ROUTE_READ_ATTEMPTS = 3
 
 _QUALIFICATION_ERRORS = {
     "runtime_qualification_required": "当前路由的运行验收尚未完成。",
     "runtime_qualification_failed": "当前模型尚未通过独立运行验收。",
-    "runtime_qualification_unavailable": "本机 Codex 运行组件不可用，请检查安装。",
+    "runtime_qualification_unavailable": "本机 Xiaox 运行组件不可用，请检查安装。",
     "runtime_qualification_evidence_missing": "模型的流式、工具、压缩或恢复检查尚未全部通过。",
     "runtime_qualification_config_invalid": "本机运行验收目录无效，请检查私有数据目录。",
     "runtime_qualification_limit": "运行验收已达到调用或响应上限。",
@@ -134,7 +137,8 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
     capacities = snapshot.get("model_capabilities") or {}
     if (
         not isinstance(runtime, dict)
-        or runtime.get("schema") != "xcmax.codex-route.v1"
+        # 平台模型快照仍可能下发历史 schema 标识，两者都表示同一 Responses 路由。
+        or runtime.get("schema") not in {"xcmax.xiaox-route.v1", "xcmax.codex-route.v1"}
         or runtime.get("codex_version") != CODEX_VERSION
         or runtime.get("gateway_kind") != "market"
         or runtime.get("failover_policy") != "disabled"
@@ -153,7 +157,7 @@ def _model_route(prepared: PreparedChatRoute) -> ModelRoute:
     ):
         raise RuntimeSetupError(
             "runtime_configuration_required",
-            "当前模型缺少 Codex 运行信息，请在模型设置中核对上游模型、容量和 Responses 支持。",
+            "当前模型缺少 Xiaox 运行信息，请在模型设置中核对上游模型、容量和 Responses 支持。",
         )
     try:
         return ModelRoute(
@@ -203,7 +207,7 @@ def _qualified_settings(
     retry_hint: str | None = None,
 ) -> tuple[RuntimeSettings, bool]:
     """One bounded attempt per exact owner/route, serialized with existing filelock."""
-    from app.infrastructure.codex.qualification import qualify_runtime
+    from app.infrastructure.xiaox.qualification import qualify_runtime
 
     qualification = settings.qualification_file
     route = settings.route
@@ -361,21 +365,40 @@ def get_deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
 
 
 def _prepared_route(connection: Connection, selected: tuple[str, str] | None) -> PreparedChatRoute:
-    try:
-        snapshot = resolve_account_route(connection, httpx_sync_client, selected, runtime="codex")
-    except MarketModelError as exc:
-        message = {
-            "CODEX_MODEL_UNSUPPORTED": "当前模型地址或密钥协议不支持独立运行，请在已有模型设置中核对模型服务。",
-            "CODEX_MODEL_METADATA_REQUIRED": "当前模型缺少已确认的独立上游厂商和真实模型标识，请在模型设置中核对。",
-            "CODEX_MODEL_CAPACITY_REQUIRED": "当前模型缺少有效的上下文容量和最大输出量，请在模型设置中补全。",
-            "CODEX_ROUTE_SIGNING_UNAVAILABLE": "平台暂时无法签发当前账号的模型路由，请联系管理员检查模型网关配置。",
-        }.get(exc.code or "", "平台模型配置暂时不可用，请检查账号连接和已保存的模型设置。")
-        raise RuntimeSetupError("runtime_configuration_required", message) from exc
-    except httpx.RequestError as exc:
-        raise RuntimeSetupError(
-            "runtime_platform_unavailable", "平台模型配置暂时无法读取，请检查网络后重试。"
-        ) from exc
+    # The route read is a plain GET with no model usage, so a connection-level
+    # failure means nothing was sent or spent; retry a transient DNS/proxy miss
+    # instead of failing the whole turn once.
+    for attempt in range(_ROUTE_READ_ATTEMPTS):
+        try:
+            snapshot = resolve_account_route(
+                connection, httpx_sync_client, selected, runtime="codex"
+            )
+            break
+        except MarketModelError as exc:
+            message = {
+                "CODEX_MODEL_UNSUPPORTED": "当前模型地址或密钥协议不支持独立运行，请在已有模型设置中核对模型服务。",
+                "CODEX_MODEL_METADATA_REQUIRED": "当前模型缺少已确认的独立上游厂商和真实模型标识，请在模型设置中核对。",
+                "CODEX_MODEL_CAPACITY_REQUIRED": "当前模型缺少有效的上下文容量和最大输出量，请在模型设置中补全。",
+                "XIAOX_ROUTE_SIGNING_UNAVAILABLE": "平台暂时无法签发当前账号的模型路由，请联系管理员检查模型网关配置。",
+            }.get(exc.code or "", "平台模型配置暂时不可用，请检查账号连接和已保存的模型设置。")
+            raise RuntimeSetupError("runtime_configuration_required", message) from exc
+        except httpx.RequestError as exc:
+            if attempt + 1 >= _ROUTE_READ_ATTEMPTS:
+                raise RuntimeSetupError(
+                    "runtime_platform_unavailable", "平台模型配置暂时无法读取，请检查网络后重试。"
+                ) from exc
+            time.sleep(0.4 * (attempt + 1))
     return PreparedChatRoute(connection, (snapshot["provider"], snapshot["model"]), snapshot)
+
+
+def _turn_timeout_seconds() -> int:
+    """单轮预算；默认 300 秒，可通过环境变量放宽但不得超过对话总预算。"""
+    raw = os.environ.get("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "300").strip()
+    try:
+        value = int(float(raw))
+    except ValueError:
+        value = 300
+    return max(60, min(value, 570))
 
 
 def _account_runtime_inputs(
@@ -413,7 +436,7 @@ def _account_runtime_inputs(
     try:
         root = (
             Path(get_desktop_state_dir(create=False)).expanduser().resolve()
-            / "codex-runtime"
+            / "xiaox-runtime"
             / scope
         )
     except OSError as exc:
@@ -425,6 +448,7 @@ def _account_runtime_inputs(
         route=route,
         runtime_root=root,
         qualification_file=evidence_root / "qualification.json",
+        turn_timeout_seconds=_turn_timeout_seconds(),
     )
     return settings, scope, prepared
 
@@ -541,7 +565,7 @@ def _runtime_qualification_status(settings: RuntimeSettings) -> dict[str, Any]:
         settings.route.token()
     status: dict[str, Any] = {
         "success": True,
-        "runtime": "codex",
+        "runtime": "xiaox",
         "codex_version": CODEX_VERSION,
         "qualification": "required",
         "route": settings.route.runtime_identity() if settings.route else {},

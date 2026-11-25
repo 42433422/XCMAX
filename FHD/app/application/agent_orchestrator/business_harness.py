@@ -125,9 +125,9 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     chat_payload = final_output.get("chat_payload")
     if isinstance(chat_payload, dict):
         payloads.append(chat_payload)
-    codex_result = final_output.get("codex_result")
-    if isinstance(codex_result, dict):
-        payloads.append(codex_result)
+    xiaox_result = final_output.get("xiaox_result")
+    if isinstance(xiaox_result, dict):
+        payloads.append(xiaox_result)
     return payloads
 
 
@@ -223,7 +223,7 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         for candidate in (
             payload.get("response"),
             payload.get("message"),
-            payload.get("output") if payload.get("runtime") == "codex" else None,
+            payload.get("output") if payload.get("runtime") == "xiaox" else None,
             nested.get("message"),
             nested.get("summary"),
         ):
@@ -464,8 +464,8 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     runtime_key = next(
         (
             key
-            for key in ("codex_result", "chat_payload")
-            if isinstance(value := final_output.get(key), dict) and value.get("runtime") == "codex"
+            for key in ("xiaox_result", "chat_payload")
+            if isinstance(value := final_output.get(key), dict) and value.get("runtime") == "xiaox"
         ),
         "",
     )

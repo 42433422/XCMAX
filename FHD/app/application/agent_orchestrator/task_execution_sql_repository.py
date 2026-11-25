@@ -424,7 +424,7 @@ class SQLAlchemyTaskExecutionRepository:
     ) -> AgentTaskExecution | None:
         return self._transition(run_id, state, error_code=error_code)
 
-    def reconcile_codex_receipts(self, run_repository: Any, previous: AgentRun) -> AgentRun | None:
+    def reconcile_xiaox_receipts(self, run_repository: Any, previous: AgentRun) -> AgentRun | None:
         """Project verified delegated results without claiming or replaying a worker.
 
         This restricted reconciliation event is not a general lifecycle edge.
@@ -437,23 +437,23 @@ class SQLAlchemyTaskExecutionRepository:
         )
         from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord
         from app.domain.task_lifecycle.control import SessionBook, remember
-        from app.infrastructure.codex.binding import (
-            CodexBinding,
-            CodexBindingError,
-            CodexBindingStore,
+        from app.infrastructure.xiaox.binding import (
+            XiaoxBinding,
+            XiaoxBindingError,
+            XiaoxBindingStore,
         )
-        from app.infrastructure.codex.receipt_projection import (
+        from app.infrastructure.xiaox.receipt_projection import (
             project_receipt_state,
             projection_allowed,
         )
-        from app.infrastructure.codex.receipts import read_call_receipt
+        from app.infrastructure.xiaox.receipts import read_call_receipt
 
         if not isinstance(run_repository, SQLAlchemyAgentRunRepository) or not projection_allowed(
             previous
         ):
             return None
-        store = CodexBindingStore(run_repository)
-        binding = CodexBinding(previous)
+        store = XiaoxBindingStore(run_repository)
+        binding = XiaoxBinding(previous)
         store._validate_goal(previous, binding.metadata)
         rows, children = [], {}
         for call_id, call in binding.metadata["calls"].items():
@@ -469,7 +469,7 @@ class SQLAlchemyTaskExecutionRepository:
         projected = project_receipt_state(previous, rows)
         if projected is None:
             return None
-        result = projected.final_output["codex_result"]
+        result = projected.final_output["xiaox_result"]
         if projected.status == "completed" and not (
             result.get("business_completed") is True
             and result.get("verified_operations") is True
@@ -482,12 +482,12 @@ class SQLAlchemyTaskExecutionRepository:
         code = (
             "needs_verification"
             if result.get("reconciliation_required")
-            else "codex_receipt_projection"
+            else "xiaox_receipt_projection"
         )
         now = utc_now_iso()
         with self.transaction() as db, run_repository.transaction(read_only=True) as runs:
             if db.get_bind() is not runs.get_bind():
-                raise CodexBindingError("durable_storage_required", "父任务与队列不属于同一数据库")
+                raise XiaoxBindingError("durable_storage_required", "父任务与队列不属于同一数据库")
             execution = db.get(AgentTaskExecutionRecord, previous.run_id)
             if execution is not None:
                 if (
@@ -537,7 +537,7 @@ class SQLAlchemyTaskExecutionRepository:
             if projected.status != result["execution_state"] and not (
                 projected.status == "blocked" and result["execution_state"] == "unknown"
             ):
-                raise CodexBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
+                raise XiaoxBindingError("evidence_mismatch", "父任务投影未通过宿主结果核验")
             if execution is not None:
                 remember(
                     body, at=now, source=str(execution.state), target=target, code=code, actor=""

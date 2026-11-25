@@ -93,7 +93,7 @@ class AgentTaskDispatcher:
         self._coordinator: threading.Thread | None = None
         self._outcome_worker: threading.Thread | None = None
         self._last_outcome_recovery = float("-inf")
-        self._codex_resume_cursor: dict[str, str] = {}
+        self._xiaox_resume_cursor: dict[str, str] = {}
 
     @property
     def instance_id(self) -> str:
@@ -203,7 +203,7 @@ class AgentTaskDispatcher:
                 reconcile_pending_verifications,
             )
             from app.application.enterprise_cognition.outcomes import reconcile_pending_outcomes
-            from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+            from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
             try:
                 reconcile_pending_verifications(
@@ -216,13 +216,13 @@ class AgentTaskDispatcher:
             except RECOVERABLE_ERRORS:
                 logger.warning("enterprise outcome reconciliation remains pending", exc_info=True)
             try:
-                resume_ready_codex_runs(
+                resume_ready_xiaox_runs(
                     repository=self._run_repo,
                     stopped=self._stop.is_set,
-                    cursor=self._codex_resume_cursor,
+                    cursor=self._xiaox_resume_cursor,
                 )
             except RECOVERABLE_ERRORS:
-                logger.warning("original Codex continuation remains pending", exc_info=True)
+                logger.warning("original Xiaox continuation remains pending", exc_info=True)
             self._wake.set()
 
         self._outcome_worker = threading.Thread(
@@ -282,17 +282,17 @@ class AgentTaskDispatcher:
         error_code = ""
         state = "failed"
         abandon = False
-        codex_run = False
+        xiaox_run = False
         effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
             orchestrator = self._orchestrator_factory(repository)
             preview = self._run_repo.get(execution.run_id)
-            if preview is not None and preview.metadata.get("runtime_type") == "codex":
-                from app.infrastructure.codex.queued_runtime import execute_queued_runtime
+            if preview is not None and preview.metadata.get("runtime_type") == "xiaox":
+                from app.infrastructure.xiaox.queued_runtime import execute_queued_runtime
 
-                codex_run = True
+                xiaox_run = True
                 if not isinstance(self._run_repo, SQLAlchemyAgentRunRepository):
-                    raise RuntimeError("queued Codex execution requires durable SQL storage")
+                    raise RuntimeError("queued Xiaox execution requires durable SQL storage")
                 with worker_claim_scope(self._run_repo, execution, owner_id):
                     result = execute_queued_runtime(self._run_repo, execution, owner_id)
                 state = {
@@ -307,7 +307,7 @@ class AgentTaskDispatcher:
                     error_code = (
                         "needs_verification"
                         if result.get("reconciliation_required")
-                        else str(result.get("error_code") or "codex_request_failed")
+                        else str(result.get("error_code") or "xiaox_request_failed")
                     )
                 return
             if preview is not None and cross_module_ready(preview):
@@ -370,7 +370,7 @@ class AgentTaskDispatcher:
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                if codex_run:
+                if xiaox_run:
                     error_code = "needs_verification"
                 else:
                     failed_run = self._orchestrator_factory(repository).fail_dispatched_run(

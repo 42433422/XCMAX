@@ -255,7 +255,7 @@ def _plan(run, step, data, context, goal):
         and event.run_id == child.run_id
         for event in child.events
     )
-    dynamic = child.metadata.get("runtime_type") == "codex"
+    dynamic = child.metadata.get("runtime_type") == "xiaox"
     if dynamic:
         from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
@@ -266,7 +266,7 @@ def _plan(run, step, data, context, goal):
                 return None
         constraints = runtime.get("_runtime_goal_constraints") or {}
         if (
-            child.intent != "codex.runtime"
+            child.intent != "xiaox.runtime"
             or child.message != step.params["message"]
             or child.metadata.get("runtime_task_id") != task_id
             or constraints.get("goal_binding_sha256") != goal["binding_sha256"]

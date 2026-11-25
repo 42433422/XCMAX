@@ -93,6 +93,70 @@ def bind_chat_turn_context(message: str, context: MutableMapping[str, Any]) -> N
     context[_INPUT_FINGERPRINT_KEY] = _input_fingerprint(str(message or ""), context)
 
 
+def apply_turn_execution_mode(
+    data: MutableMapping[str, Any], context: MutableMapping[str, Any], text: str = ""
+) -> str:
+    """Resolve the persisted mode; request fields may tighten, only the user may release."""
+    from app.domain.task_lifecycle.execution_mode import (
+        CONTEXT_KEY,
+        CONVERSATION_KEY,
+        ExecutionModeError,
+        normalize_mode,
+        requested_mode_from_text,
+        tighten,
+    )
+
+    stored = normalize_mode(data.get(CONVERSATION_KEY))
+    explicit = requested_mode_from_text(text)
+    if stored == "plan" and explicit == "execute":
+        mode = "execute"
+    elif explicit is None:
+        try:
+            mode = tighten(stored, context.get(CONTEXT_KEY))
+        except ExecutionModeError as exc:
+            raise ConversationRevisionError(str(exc)) from exc
+    else:
+        try:
+            mode = tighten(stored, explicit)
+        except ExecutionModeError as exc:
+            raise ConversationRevisionError(str(exc)) from exc
+    data[CONVERSATION_KEY] = mode
+    context[CONTEXT_KEY] = mode
+    return mode
+
+
+def set_execution_mode(context: MutableMapping[str, Any], mode: str) -> str:
+    """Explicit host action for entering plan mode or releasing it for one conversation."""
+    from app.domain.task_lifecycle.execution_mode import (
+        CONTEXT_KEY,
+        CONVERSATION_KEY,
+        normalize_mode,
+    )
+
+    resolved = normalize_mode(mode)
+    key = conversation_key(context)
+    if key:
+        with _lock(key):
+            data = _read(key, context)
+            data[CONVERSATION_KEY] = resolved
+            _write(key, data)
+    context[CONTEXT_KEY] = resolved
+    return resolved
+
+
+def attach_execution_mode(context: MutableMapping[str, Any]) -> str:
+    """Read-only binding for entry points that do not persist a chat turn."""
+    from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, CONVERSATION_KEY, tighten
+
+    key = conversation_key(context)
+    if not key:
+        context[CONTEXT_KEY] = "execute"
+        return "execute"
+    mode = tighten(_read(key, context).get(CONVERSATION_KEY), context.get(CONTEXT_KEY))
+    context[CONTEXT_KEY] = mode
+    return mode
+
+
 def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """同一轮重复提交不再执行。进行中的轮次不会被另一条消息覆盖。"""
     key = conversation_key(context)
@@ -105,6 +169,13 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         bind_chat_turn_context(text, context)
         turn_id = str(context.get("turn_id") or "")
         data = _read(key, context)
+        try:
+            apply_turn_execution_mode(data, context, text)
+        except ConversationRevisionError:
+            return {
+                **_payload("当前会话处于方案模式，不能直接执行；请先明确解除方案模式。", "rejected"),
+                "error_code": "EXECUTION_MODE_LOCKED",
+            }
         prior = _user_turn(data, turn_id)
         if prior is not None and not _same_input(prior, text, context):
             return {
@@ -817,6 +888,7 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     revision = snapshot["revision"]
     if context and _REVISION_KEY in context and context[_REVISION_KEY] != revision:
         raise ConversationRevisionError("conversation changed after this turn started")
+    stored_mode = data.get("execution_mode")
     if data.get("scope") != scope or data.get("revision") != revision:
         snapshot = task_conversation_store.memory_snapshot(**scope, include_messages=True)
         if snapshot is None or snapshot["revision"] != revision:
@@ -833,6 +905,8 @@ def _read(key: str, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
         "summary": data.get("summary") if isinstance(data.get("summary"), dict) else None,
         "scope": scope,
         "revision": revision,
+        # Server-owned plan/execute mode must survive the projection rebuild below.
+        "execution_mode": stored_mode if stored_mode is not None else data.get("execution_mode"),
     }
 
 
@@ -1016,8 +1090,11 @@ def _release_turn(key: str, turn_id: str) -> None:
 
 
 __all__ = [
+    "apply_turn_execution_mode",
+    "attach_execution_mode",
     "conversation_key",
     "prepare_chat_turn",
+    "set_execution_mode",
     "recent_conversation_messages",
     "settle_chat_turn",
     "stored_turn_receipt",

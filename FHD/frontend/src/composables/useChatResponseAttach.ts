@@ -140,7 +140,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
   }
 
   /**
-   * 把最近 agent_run task 的 RunEvent[] 重建为 Codex 风格执行流 trace，
+   * 把最近 agent_run task 的 RunEvent[] 重建为 Xiaox 风格执行流 trace，
    * 挂到最近一条 AI 消息上（在 ChatMessageList 内联渲染）。
    *
    * 数据来源：useAgentRunEvents.ts 的 buildAgentRunTaskUpdate 会把 events

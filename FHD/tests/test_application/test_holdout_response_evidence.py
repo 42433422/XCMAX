@@ -14,12 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
     "metadata,expected",
     [
         ({}, 0),
-        ({"codex_runtime": {"model_requests": {"x": {"state": "unknown", "usage": {}}}}}, 0),
-        ({"codex_runtime": {"model_requests": {"x": {"state": "failed", "usage": {}}}}}, 0),
-        ({"codex_runtime": {"model_requests": {"x": {"state": "completed"}}}}, 0),
+        ({"xiaox_runtime": {"model_requests": {"x": {"state": "unknown", "usage": {}}}}}, 0),
+        ({"xiaox_runtime": {"model_requests": {"x": {"state": "failed", "usage": {}}}}}, 0),
+        ({"xiaox_runtime": {"model_requests": {"x": {"state": "completed"}}}}, 0),
         (
             {
-                "codex_runtime": {
+                "xiaox_runtime": {
                     "model_requests": {"x": {"state": "completed", "usage": {"total_tokens": 20}}}
                 }
             },

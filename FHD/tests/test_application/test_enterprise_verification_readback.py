@@ -15,8 +15,8 @@ from app.application.enterprise_cognition.goals import GoalService
 from app.application.enterprise_cognition.service import EnterpriseCognitionService
 from app.application.tools.enterprise_cognition import execute_enterprise_cognition
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 from tests.test_application.test_enterprise_acceptance import _seed_order
 from tests.test_application.test_sales_verification_readback import verify
 from tests.test_application.test_verification_readback import invocation
@@ -194,7 +194,7 @@ def test_plan_verifies_only_original_child_admission_and_preserves_business_appr
     assert business["evidence"]["admitted_tasks"][0]["source"] == "enterprise_authority"
     waiting = dynamic_chat_runtime.drain(child.run_id)
     assert waiting.status == "waiting_user"
-    business_child_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+    business_child_id = waiting.metadata["xiaox_runtime"]["calls"]["confirm"]["child_run_id"]
     business_child = repository.get(business_child_id)
     assert business_child.steps[0].risk == "high" and not business_child.tool_calls
     assert (

@@ -224,7 +224,10 @@ def create_agent_run(
 
     try:
         from app.application.agent_runtime.gateway import run_runtime_task
-        from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+        from app.application.ai_chat.dialogue_memory import (
+            attach_execution_mode,
+            bind_chat_turn_context,
+        )
         from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
 
         # The onboarding/chat task client supplies a conversation reference,
@@ -232,6 +235,7 @@ def create_agent_run(
         runtime_context.pop("_conversation_revision", None)
         with agent_mod_execution_scope(principal.mod_authorization):
             bind_chat_turn_context(message, runtime_context)
+            attach_execution_mode(runtime_context)
 
         result = run_runtime_task(
             task=message,
@@ -627,10 +631,10 @@ def _control_agent_run(
         if error is not None:
             return error
         assert current is not None
-        if current.metadata.get("runtime_type") == "codex":
-            from app.fastapi_routes.domains.agent.route_support import control_codex_run
+        if current.metadata.get("runtime_type") == "xiaox":
+            from app.fastapi_routes.domains.agent.route_support import control_xiaox_run
 
-            return control_codex_run(
+            return control_xiaox_run(
                 current,
                 action=action,
                 principal=principal,
@@ -638,9 +642,9 @@ def _control_agent_run(
                 body=control_input or {"runtime_context": runtime_context or {}},
             )
         if action == "resume":
-            from app.fastapi_routes.domains.agent.route_support import guard_codex_child_control
+            from app.fastapi_routes.domains.agent.route_support import guard_xiaox_child_control
 
-            denied = guard_codex_child_control(
+            denied = guard_xiaox_child_control(
                 current,
                 action=action,
                 principal=principal,
@@ -768,15 +772,15 @@ def retry_agent_run(
         if error is not None:
             return error
         assert run is not None
-        if run.metadata.get("runtime_type") == "codex":
-            from app.fastapi_routes.domains.agent.route_support import control_codex_run
+        if run.metadata.get("runtime_type") == "xiaox":
+            from app.fastapi_routes.domains.agent.route_support import control_xiaox_run
 
-            return control_codex_run(
+            return control_xiaox_run(
                 run, action="retry", principal=principal, orchestrator=orchestrator
             )
-        from app.fastapi_routes.domains.agent.route_support import guard_codex_child_control
+        from app.fastapi_routes.domains.agent.route_support import guard_xiaox_child_control
 
-        denied = guard_codex_child_control(
+        denied = guard_xiaox_child_control(
             run, action="retry", principal=principal, orchestrator=orchestrator
         )
         if denied is not None:

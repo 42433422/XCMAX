@@ -145,6 +145,43 @@ def test_business_success_requires_verified_completed_receipt(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("admitted", [False, True])
+async def test_json_timeout_returns_only_original_admitted_run(admitted):
+    from app.application.planner_compat import runtime
+
+    admission, paths = _components(Mock())
+    calls = []
+
+    def worker():
+        calls.append("started")
+        if admitted:
+            runtime.publish_admitted_chat_run("original-run", "test-turn")
+
+    async def mainline(*_args, **_kwargs):
+        await asyncio.to_thread(worker)
+        raise TimeoutError
+
+    trace = Mock(side_effect=AssertionError("timeout must not create a synthetic run"))
+    executor = ChatTurnExecutor(
+        ChatBackends(mainline),
+        ChatResponses(lambda _timeout: {"requires_reconciliation": True}, lambda _error: None),
+        ChatTrace(attach=trace),
+        await_with_timeout,
+    )
+    app = CompatChatApplication(
+        admission, executor, paths, Mock(), Mock(), lambda _r: "standard", lambda: 5, AsyncMock()
+    )
+    body = XcagiCompatChatBody(
+        message="需要核对的原操作", mode="online", context={"turn_id": "test-turn"}
+    )
+    result = await app.single(Mock(), body)
+    assert calls == ["started"]
+    assert result["requires_reconciliation"] is True
+    assert result.get("run_id") == ("original-run" if admitted else None)
+    trace.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_online_json_and_stream_share_the_langgraph_mainline():
     receipt = {"success": True, "response": "已查询考勤", "data": {"id": 1}}
     business = Mock(side_effect=AssertionError("online route must use the mainline"))

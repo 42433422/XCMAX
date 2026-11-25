@@ -153,7 +153,7 @@ def failed_service(child, tmp_path, monkeypatch):
         )
 
     service = CodexSuperEmployeeService(storage_root=tmp_path / "messages", codex_cli_runner=run)
-    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-xiaox")
     monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
     monkeypatch.setattr(service, "_is_task_intent", lambda text, context: False)
     monkeypatch.setattr(service, "_should_reply_with_cli", lambda text, context: True)
@@ -205,7 +205,7 @@ def test_service_stream_requires_successful_terminal_receipt(
 ):
     service = CodexSuperEmployeeService(storage_root=tmp_path / "messages")
     runtime = executor(child, "file", 7)
-    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-xiaox")
     monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
     monkeypatch.setattr(service, "_is_task_intent", lambda text, context: False)
 

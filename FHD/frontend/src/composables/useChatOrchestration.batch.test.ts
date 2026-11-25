@@ -264,10 +264,10 @@ describe('useChatOrchestration batch/json', () => {
     )
   })
 
-  it('retains a Codex child approval and parent continuation on a success=false JSON wait', async () => {
+  it('retains a Xiaox child approval and parent continuation on a success=false JSON wait', async () => {
     enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
     requestChatByModeWithTimeout.mockResolvedValueOnce({
-      success: false, response: '等待原任务审批', runtime: 'codex', run_id: 'parent', execution_state: 'waiting_approval',
+      success: false, response: '等待原任务审批', runtime: 'xiaox', run_id: 'parent', execution_state: 'waiting_approval',
       runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' },
       data: { action: 'approval_pending', data: { approval_card: { run_id: 'child', approval_required: true } } },
     })
@@ -283,7 +283,7 @@ describe('useChatOrchestration batch/json', () => {
   it.each([false, true])('keeps a preserved parent on a blocked JSON admission without showing the round as waiting (batch=%s)', async (batch) => {
     enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(batch ? ['first', 'second'] : ['only-one']))
     const blocked = {
-      success: false, message: 'runtime_not_qualified', runtime: 'codex', run_id: 'parent', execution_state: 'blocked',
+      success: false, message: 'runtime_not_qualified', runtime: 'xiaox', run_id: 'parent', execution_state: 'blocked',
       runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's', status: 'waiting_user' },
     }
     if (batch) {

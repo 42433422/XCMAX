@@ -152,7 +152,7 @@ class TestInjectExcelVectorContextDeep:
 @pytest.mark.parametrize("source", ["basic", "pro", None])
 def test_unqualified_fixed_runtime_never_falls_back_to_local_reply_or_tool(message, source):
     """All source labels and utterances require the same qualified executor."""
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
 
     service = _make_service()
     with (
@@ -167,7 +167,7 @@ def test_unqualified_fixed_runtime_never_falls_back_to_local_reply_or_tool(messa
         result = service.process_chat("unified-failure", message, source=source)
     assert not hasattr(service, "workflow_planner")
     assert result["success"] is False
-    assert result["runtime"] == "codex"
+    assert result["runtime"] == "xiaox"
     assert result["data"]["error_code"] == "runtime_policy_blocked"
     assert result["data"]["business_receipts"] == []
     assert result["data"]["tool_calls"] == []
@@ -201,7 +201,7 @@ def test_unsigned_context_cannot_supply_business_owner():
     ],
 )
 def test_file_context_reaches_model_without_direct_import(file_context):
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
 
     service = _make_service()
     with (
@@ -240,7 +240,7 @@ def test_file_context_reaches_model_without_direct_import(file_context):
     ["connection refused", "timed out", "api_key=private-test-secret", "unknown internal error"],
 )
 def test_runtime_policy_failure_is_safe_and_does_not_call_legacy_chat(reason):
-    from app.infrastructure.codex.policy import RuntimePolicyError
+    from app.infrastructure.xiaox.policy import RuntimePolicyError
 
     service = _make_service()
     with (
@@ -264,7 +264,7 @@ def test_runtime_policy_failure_is_safe_and_does_not_call_legacy_chat(reason):
 
 @pytest.mark.parametrize("source", ["basic", "pro", "xcagi-pro", "PRO_MODE", "professional"])
 def test_all_source_labels_execute_the_same_fixed_runtime(source):
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
 
     service = _make_service()
     with (
@@ -293,6 +293,6 @@ def test_all_source_labels_execute_the_same_fixed_runtime(source):
     assert not hasattr(service, "workflow_planner")
     assert result["success"] is True
     assert result["response"] == "这是模型生成的说明"
-    assert result["runtime"] == "codex"
+    assert result["runtime"] == "xiaox"
     assert result["run_id"] == "fixed-parent"
     assert not result.get("toolCall")

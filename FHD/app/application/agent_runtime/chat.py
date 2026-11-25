@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.infrastructure.codex.policy import RuntimePolicyError
+from app.infrastructure.xiaox.policy import RuntimePolicyError
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。只有确需企业数据、实际操作或续办原业务任务时，才发现当前账号的企业能力并按契约调用。"
@@ -32,8 +32,10 @@ def stream_runtime_event(event: dict[str, Any]) -> None:
 def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -> dict[str, Any]:
     state = str(result.get("execution_state") or result.get("exit_status") or "failed")
     waiting = state in {"waiting_user", "waiting_approval"}
+    queued = state == "queued"
     retained = (
         result.get("resume_required") is True
+        or queued
         or bool(result.get("run_id"))
         and (
             result.get("reconciliation_required") is True
@@ -61,7 +63,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "success": bool(result.get("ok")),
         "response": text,
         "message": text,
-        "runtime": "codex",
+        "runtime": "xiaox",
         "run_id": result.get("run_id"),
         "agent_run_id": result.get("run_id"),
         "execution_state": state,
@@ -74,12 +76,14 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "runtime_context_update": {
             "agent_runtime_run_id": result.get("run_id") if waiting or retained else None,
             "conversation_id": conversation_id,
-            "status": "waiting_user" if retained else state,
+            # queued is a follow state, not a user-input wait: the client must
+            # keep the run id to read terminal events but must not resubmit.
+            "status": "queued" if queued else ("waiting_user" if retained else state),
         },
         "data": {
             "action": "approval_pending" if card else "runtime_reply",
             "text": text,
-            "runtime": "codex",
+            "runtime": "xiaox",
             "run_id": result.get("run_id"),
             "execution_state": state,
             "business_completed": result.get("business_completed") is True,
@@ -109,7 +113,7 @@ def run_runtime_chat(
     context: dict[str, Any],
     file_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run every general chat through the authenticated Codex task gateway."""
+    """Run every general chat through the authenticated Xiaox task gateway."""
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
@@ -134,6 +138,11 @@ def run_runtime_chat(
             on_event=stream_runtime_event,
             # Chat turn admission supplies a new stable turn_id for a genuine user answer.
             answer_to_waiting_input=bool(run_id),
+            # A new chat turn must survive the observation connection: hand it
+            # to the durable queue instead of executing inside the HTTP stream.
+            # Resumes keep their original binding and existing blocked-parent
+            # queueing rules.
+            start_queued=not run_id,
         )
         if run_id and str(result.get("error_code") or result.get("exit_status")) in {
             "runtime_not_selected",

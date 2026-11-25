@@ -1,4 +1,4 @@
-"""Admit an entity-bound Codex task and restrict each original approved action."""
+"""Admit an entity-bound Xiaox task and restrict each original approved action."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ class EnterpriseExecutionService:
         mod_id: str = "",
         runtime_context: dict[str, Any],
     ) -> AgentRun:
-        """Keep the public admission action while the one Codex kernel chooses actions."""
+        """Keep the public admission action while the one Xiaox kernel chooses actions."""
         from app.application.agent_orchestrator.run_sql_repository import (
             SQLAlchemyAgentRunRepository,
         )

@@ -1325,7 +1325,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 approval_scope_matches,
             )
 
-            if not self._can_auto_execute(step) and not (
+            auto_decision = self.auto_execution_decision(step, runtime_context)
+            if auto_decision is None and not (
                 approved and approved in {step.step_id, step.node_id}
             ):
                 step.status = "waiting_user"
@@ -1343,6 +1344,21 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 stopped_for_interaction = True
                 return {"success": True, "requires_approval": True, "step_id": step.step_id}
+            if auto_decision is not None and not self._can_auto_execute(step):
+                # 自动审批模式下由共享自治策略授权，仍写事件供事后核对。
+                run.add_event(
+                    "step.auto_approved",
+                    f"自动审批模式按策略授权步骤 {step.node_id}",
+                    {
+                        "step_id": step.step_id,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "risk": auto_decision.get("risk"),
+                        "decision": auto_decision.get("decision"),
+                        "reason": auto_decision.get("reason"),
+                    },
+                )
+                self._repo.save(run)
             denial = actor_tool_denial(tool_id, action, runtime_context, step.params)
             if denial is not None:
                 step.status, step.output = "failed", denial
@@ -1734,6 +1750,8 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     _params_patch_from_repair = staticmethod(RunRepair.params_patch_from_repair)
 
     _can_auto_execute = staticmethod(RunRepair.can_auto_execute)
+
+    auto_execution_decision = staticmethod(RunRepair.auto_execution_decision)
 
     def _execute_step(
         self,

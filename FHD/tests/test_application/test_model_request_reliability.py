@@ -21,10 +21,10 @@ from app.infrastructure.llm.retry_policy import (
 def test_connection_failure_is_known_not_started_without_exposing_provider_details(failure):
     error = getattr(httpx, failure)("private-host-name")
     assert is_safe_transport_retry(error)
-    details = model_failure_details(error, stage="codex.responses", attempt=3, elapsed_ms=12.34)
+    details = model_failure_details(error, stage="xiaox.responses", attempt=3, elapsed_ms=12.34)
     assert details["retryable"] is True and details["outcome"] == "not_started"
     assert details["failure_kind"] == "transport_unavailable"
-    assert details["stage"] == "codex.responses" and details["attempt"] == 3
+    assert details["stage"] == "xiaox.responses" and details["attempt"] == 3
     assert details["elapsed_ms"] == 12.3 and details["output_started"] is False
     assert "private-host-name" not in json.dumps(details)
 
@@ -42,7 +42,7 @@ def test_connection_failure_is_known_not_started_without_exposing_provider_detai
 def test_unconfirmed_output_has_no_replay_authority(failure):
     error = failure("unconfirmed-response")
     assert is_transport_error(error) and not is_safe_transport_retry(error)
-    details = model_failure_details(error, stage="codex.responses", attempt=1, elapsed_ms=12.3)
+    details = model_failure_details(error, stage="xiaox.responses", attempt=1, elapsed_ms=12.3)
     assert details["retryable"] is False and details["outcome"] == "unknown"
     assert details["failure_kind"] == "transport_unknown"
     assert "unconfirmed-response" not in json.dumps(details)
@@ -57,7 +57,7 @@ def test_output_started_remains_unknown_even_if_later_connection_error_is_wrappe
         error.__cause__ = cause
     assert is_safe_transport_retry(error)
     details = model_failure_details(
-        error, stage="codex.responses", attempt=1, elapsed_ms=12.3, output_started=True
+        error, stage="xiaox.responses", attempt=1, elapsed_ms=12.3, output_started=True
     )
     assert details["outcome"] == "unknown" and details["retryable"] is False
     assert details["failure_kind"] == "transport_unknown" and details["output_started"] is True
@@ -72,11 +72,11 @@ def test_output_started_remains_unknown_even_if_later_connection_error_is_wrappe
     ],
 )
 def test_provider_failure_and_cancellation_keep_bounded_diagnostics(failure, kind):
-    details = model_failure_details(failure, stage="codex.responses", attempt=3, elapsed_ms=12.3)
+    details = model_failure_details(failure, stage="xiaox.responses", attempt=3, elapsed_ms=12.3)
     assert details["failure_kind"] == kind
     assert details["outcome"] == "unknown" and details["elapsed_ms"] == 12.3
     assert details["retryable"] is False and details["http_status"] is None
-    assert details["stage"] == "codex.responses" and details["attempt"] == 3
+    assert details["stage"] == "xiaox.responses" and details["attempt"] == 3
     assert "private" not in json.dumps(details)
 
 
@@ -102,7 +102,7 @@ def test_sdk_transport_wrappers_only_grant_replay_for_unsent_requests(wrapper, f
     error.__cause__ = getattr(httpx, failure)("private provider detail")
     assert is_safe_transport_retry(error) is safe
     assert is_transport_error(error)
-    details = model_failure_details(error, stage="codex.responses", attempt=1, elapsed_ms=12.3)
+    details = model_failure_details(error, stage="xiaox.responses", attempt=1, elapsed_ms=12.3)
     assert details["retryable"] is safe
     assert details["outcome"] == ("not_started" if safe else "unknown")
     assert "private provider detail" not in json.dumps(details)
@@ -125,7 +125,7 @@ def test_httpx2_compatibility_exception_names_do_not_require_the_optional_sdk(fa
     wrapped = APIConnectionError(request=httpx.Request("POST", "https://model.invalid"))
     wrapped.__cause__ = cause
     assert is_safe_transport_retry(wrapped) is safe
-    details = model_failure_details(wrapped, stage="codex.responses", attempt=1, elapsed_ms=12.3)
+    details = model_failure_details(wrapped, stage="xiaox.responses", attempt=1, elapsed_ms=12.3)
     assert details["retryable"] is safe
     assert details["outcome"] == ("not_started" if safe else "unknown")
     assert "private provider detail" not in json.dumps(details)
@@ -136,10 +136,34 @@ def test_application_wrapper_does_not_inherit_transport_retry_authority():
     wrapped.__cause__ = httpx.ConnectError("other-operation")
     assert not is_safe_transport_retry(wrapped)
     assert not is_transport_error(wrapped)
-    details = model_failure_details(wrapped, stage="codex.responses", attempt=1, elapsed_ms=12.3)
+    details = model_failure_details(wrapped, stage="xiaox.responses", attempt=1, elapsed_ms=12.3)
     assert details["retryable"] is False and details["outcome"] == "unknown"
     assert details["failure_kind"] == "model_response_invalid"
     assert "private application failure" not in json.dumps(details)
+
+
+def test_unresolved_upstream_settlement_stays_unknown_without_replay():
+    payload = {
+        "detail": {
+            "code": "CODEX_REQUEST_UNRESOLVED",
+            "state": "settling",
+            "request_id": "cr-1",
+            "hold_no": "AIH1",
+        }
+    }
+    response = httpx.Response(
+        409, json=payload, request=httpx.Request("POST", "https://model.invalid")
+    )
+    error = httpx.HTTPStatusError(
+        "private provider detail", request=response.request, response=response
+    )
+    details = model_failure_details(error, stage="xiaox.responses", attempt=1, elapsed_ms=90.3)
+    assert details["http_status"] == 409
+    assert details["failure_kind"] == "usage_unsettled"
+    assert details["retryable"] is False and details["outcome"] == "unknown"
+    dumped = json.dumps(details)
+    assert "CODEX_REQUEST_UNRESOLVED" not in dumped
+    assert "AIH1" not in dumped and "cr-1" not in dumped
 
 
 @pytest.mark.parametrize(

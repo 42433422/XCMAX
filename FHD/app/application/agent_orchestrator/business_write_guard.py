@@ -145,7 +145,7 @@ def capture_worker_claim():
 
 
 def worker_claim_owns_run(run_id):
-    """Accept a child only through the queued Codex parent's durable call binding."""
+    """Accept a child only through the queued Xiaox parent's durable call binding."""
     claim = _claim.get()
     if claim is None:
         return False
@@ -158,15 +158,15 @@ def worker_claim_owns_run(run_id):
     if parent is None or child is None:
         return False
     if (
-        parent.intent != "codex.runtime"
-        or parent.metadata.get("runtime_type") != "codex"
+        parent.intent != "xiaox.runtime"
+        or parent.metadata.get("runtime_type") != "xiaox"
         or child.user_id != parent.user_id
         or tenant_id_of_run(child) != tenant_id_of_run(parent)
         or mod_id_of_run(child) != mod_id_of_run(parent)
         or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != parent.run_id
     ):
         return False
-    calls = (parent.metadata.get("codex_runtime") or {}).get("calls") or {}
+    calls = (parent.metadata.get("xiaox_runtime") or {}).get("calls") or {}
     return any(
         isinstance(call, dict) and call.get("child_run_id") == child.run_id
         for call in calls.values()

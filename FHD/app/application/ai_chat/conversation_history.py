@@ -220,7 +220,7 @@ def persist_chat_turn(
         "businessResult": extract_payload_business_result(response_data),
     }
     continuation = response_data.get("runtime_context_update")
-    if response_data.get("runtime") == "codex" and isinstance(continuation, dict):
+    if response_data.get("runtime") == "xiaox" and isinstance(continuation, dict):
         ui_payload["runtimeContinuation"] = {
             "runId": continuation.get("agent_runtime_run_id"),
             "status": str(

@@ -1727,18 +1727,21 @@
         "view": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "list": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [],
           "availability": "shared"
         },

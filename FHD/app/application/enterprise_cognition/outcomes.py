@@ -57,7 +57,7 @@ def _unknown(reason: str) -> dict[str, Any]:
     }
 
 
-def _codex_execution_evidence(
+def _xiaox_execution_evidence(
     run: AgentRun, bound_at: datetime, repository
 ) -> tuple[dict[str, Any], list[dict]]:
     """Read the original approved child effects, never a parent's projected transcript."""
@@ -67,16 +67,16 @@ def _codex_execution_evidence(
         validate_runtime_goal,
     )
     from app.domain.task_lifecycle.agent_runtime_results import model_unsettled
-    from app.infrastructure.codex.binding import CodexBinding, CodexBindingStore
-    from app.infrastructure.codex.receipts import read_call_receipt
+    from app.infrastructure.xiaox.binding import XiaoxBinding, XiaoxBindingStore
+    from app.infrastructure.xiaox.receipts import read_call_receipt
 
     try:
         validate_runtime_goal(run)
     except ValueError as exc:
         raise OutcomeEvidenceError("goal_contract_changed") from exc
     result = ensure_terminal_business_result(run)
-    runtime_result = run.final_output.get("codex_result") or {}
-    metadata = run.metadata.get("codex_runtime") or {}
+    runtime_result = run.final_output.get("xiaox_result") or {}
+    metadata = run.metadata.get("xiaox_runtime") or {}
     if (
         run.status != "completed"
         or result.get("success") is not True
@@ -89,7 +89,7 @@ def _codex_execution_evidence(
     # Outcome verification is read-only until its one observation CAS. Using
     # receipt_snapshot here would refresh the parent ledger mid-read and make
     # that CAS stale (or accidentally include a later runtime generation).
-    store, runtime_binding = CodexBindingStore(repository), CodexBinding(run)
+    store, runtime_binding = XiaoxBindingStore(repository), XiaoxBinding(run)
     rows = []
     for call_id, call in metadata.get("calls", {}).items():
         receipt = read_call_receipt(store, runtime_binding, call)
@@ -141,8 +141,8 @@ def _codex_execution_evidence(
 def _execution_evidence(
     run: AgentRun, bound_at: datetime, *, repository=None
 ) -> tuple[dict[str, Any], list[dict]]:
-    if run.metadata.get("runtime_type") == "codex":
-        return _codex_execution_evidence(run, bound_at, repository or get_agent_run_repository())
+    if run.metadata.get("runtime_type") == "xiaox":
+        return _xiaox_execution_evidence(run, bound_at, repository or get_agent_run_repository())
     result = ensure_terminal_business_result(run)
     if (
         run.status != "completed"
@@ -385,23 +385,23 @@ class OutcomeService:
         runtime = run.metadata.get("runtime_context") or {}
         if str(runtime.get("mod_id") or "") != mod_id:
             return _unknown("run_not_accessible")
-        # The original goal belongs to the Codex parent. A single approved
+        # The original goal belongs to the Xiaox parent. A single approved
         # action may change an intermediate state without finishing that goal.
         # Its receipt remains evidence; it must not create a separate outcome
         # or memory candidate for the whole parent's objective.
         if (
-            run.metadata.get("runtime_type") != "codex"
-            and runtime.get("source") == "codex_runtime"
+            run.metadata.get("runtime_type") != "xiaox"
+            and runtime.get("source") == "xiaox_runtime"
             and runtime.get("parent_run_id")
         ):
             parent = repository.get(str(runtime["parent_run_id"]))
-            if parent and parent.metadata.get("runtime_type") == "codex":
+            if parent and parent.metadata.get("runtime_type") == "xiaox":
                 return _unknown("original_goal_parent_required")
         binding = runtime.get("enterprise_cognition") or {}
         plan_binding = ((run.metadata.get("plan") or {}).get("metadata") or {}).get(
             "enterprise_cognition"
         )
-        if run.metadata.get("runtime_type") == "codex":
+        if run.metadata.get("runtime_type") == "xiaox":
             from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
             try:
@@ -624,8 +624,8 @@ def _eligible(run, now: float) -> bool:
         run.status == "completed"
         and context.get("enterprise_cognition")
         and not (
-            run.metadata.get("runtime_type") != "codex"
-            and context.get("source") == "codex_runtime"
+            run.metadata.get("runtime_type") != "xiaox"
+            and context.get("source") == "xiaox_runtime"
             and context.get("parent_run_id")
         )
         and state.get("status") != "recorded"
@@ -677,9 +677,9 @@ def _candidates(repository, now: float, limit: int):
                 AgentRunRecord.status == "completed",
                 field("metadata", "runtime_context", "enterprise_cognition").is_not(None),
                 or_(
-                    field("metadata", "runtime_type") == "codex",
+                    field("metadata", "runtime_type") == "xiaox",
                     func.coalesce(field("metadata", "runtime_context", "source"), "")
-                    != "codex_runtime",
+                    != "xiaox_runtime",
                 ),
                 func.coalesce(field("metadata", _KEY, "status"), "") != "recorded",
                 func.coalesce(field("metadata", _KEY, "next_attempt_at"), 0) <= now,

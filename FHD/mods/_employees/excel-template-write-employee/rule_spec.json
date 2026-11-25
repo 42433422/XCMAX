@@ -19,7 +19,7 @@
   "requirements": [
     "Use direct_python only; handlers must be [\"direct_python\"].",
     "Input is plan.json (or payload.plan); template resolved from payload.template_path/template_relpath, bundled templates/, or plan.template.path.",
-    "Execute phases in order: clear_ranges, cell_writes, formula_writes, retain_sheets/remove_sheets.",
+    "Execute phases in order: clear_ranges, cell_writes, formula_writes, insert_rows, merge_cells, set_row_height, freeze_panes, cell_styles, retain_sheets/remove_sheets.",
     "Preserve template styles, merged cells and existing formulas; never evaluate formulas.",
     "Writes hitting protected_ranges are skipped and recorded as violations; payload.strict_protected fails instead.",
     "Write outputs/filled.xlsx and write_report.json; pass plan.expected through untouched for QC.",

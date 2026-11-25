@@ -8,7 +8,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from app.domain.workbook_write_contract import WORKBOOK_QC, WORKBOOK_WRITER
+from app.domain.workbook_write_contract import (
+    WORKBOOK_NATIVE_PHASES,
+    WORKBOOK_QC,
+    WORKBOOK_STRUCTURAL_PHASES,
+    WORKBOOK_WRITER,
+)
 
 
 def is_workbook_write(params: dict) -> bool:
@@ -104,10 +109,30 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
             report = module.run_qc(filled, plan, template_path=template)
     sections = report.get("sections") or {}
     checked = {name: item.get("status") for name, item in sections.items()}
+    native_count = sum(
+        isinstance(phase, dict) and phase.get("phase") in WORKBOOK_NATIVE_PHASES
+        for phase in plan.get("phases") or ()
+    )
+    style_count = sum(
+        isinstance(phase, dict) and phase.get("phase") == "cell_styles"
+        for phase in plan.get("phases") or ()
+    )
+    structural_count = sum(
+        isinstance(phase, dict) and phase.get("phase") in WORKBOOK_STRUCTURAL_PHASES
+        for phase in plan.get("phases") or ()
+    )
+    conformance_stats = (sections.get("conformance") or {}).get("stats") or {}
     valid = (
         report.get("verdict") == "PASS"
         and checked.get("conformance") == checked.get("formulas") == "pass"
         and (not plan.get("protected_ranges") or checked.get("protection") == "pass")
+        and (not native_count or conformance_stats.get("native_phases_checked") == native_count)
+        # 旧版 QC 不检查样式/结构操作时不能静默放行已声明的计划。
+        and (not style_count or int(conformance_stats.get("style_cells_checked") or 0) > 0)
+        and (
+            not structural_count
+            or conformance_stats.get("structural_phases_checked") == structural_count
+        )
     )
     status = (
         "verified" if valid else "failed" if report.get("verdict") == "FAIL" else "inconclusive"
@@ -116,7 +141,13 @@ def verify_workbook(run: Any, step: Any, call: Any, output: dict, context: dict)
         status,
         "result_verified" if valid else "result_workbook_qc_unmet",
         "workbook_qc",
-        verification_scope="planned_cells_formulas_and_protected_ranges",
+        verification_scope=(
+            "planned_cells_formulas_protected_ranges_structural_and_native_objects"
+            if native_count
+            else "planned_cells_formulas_protected_ranges_and_structural_operations"
+            if structural_count
+            else "planned_cells_formulas_and_protected_ranges"
+        ),
         template_sha256=original["sha256"],
         artifact_sha256=artifacts[0]["metadata"]["sha256"],
         sections=checked,

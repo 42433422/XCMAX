@@ -74,7 +74,7 @@ async def account_runtime_qualification_status(request: Request, user=Depends(ge
         runtime_qualification_status,
     )
     from app.application.modstore_conversation_app import request_model_scope
-    from app.infrastructure.codex.policy import RuntimePolicyError, runtime_settings
+    from app.infrastructure.xiaox.policy import RuntimePolicyError, runtime_settings
 
     managed_by = (
         "deployment" if os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip() else "account"
@@ -110,7 +110,7 @@ async def qualify_account_runtime(
     """Run or explicitly retry only this authenticated account's exact model route."""
     from app.application.agent_runtime.configuration import get_account_runtime_settings
     from app.application.modstore_conversation_app import request_model_scope
-    from app.infrastructure.codex.policy import CODEX_VERSION, RuntimePolicyError, runtime_settings
+    from app.infrastructure.xiaox.policy import CODEX_VERSION, RuntimePolicyError, runtime_settings
 
     try:
         if os.environ.get("XCAGI_AGENT_RUNTIME_CONFIG", "").strip():
@@ -119,7 +119,7 @@ async def qualify_account_runtime(
             settings = runtime_settings()
             settings.require_qualified().token()
             if settings.runtime_root is None:
-                raise RuntimePolicyError("Codex private runtime_root is required")
+                raise RuntimePolicyError("Xiaox private runtime_root is required")
         else:
             with request_model_scope(request):
                 settings = await asyncio.to_thread(
@@ -127,7 +127,7 @@ async def qualify_account_runtime(
                 )
         return {
             "success": True,
-            "runtime": "codex",
+            "runtime": "xiaox",
             "codex_version": CODEX_VERSION,
             "qualification": "passed",
             "route": settings.require_qualified().runtime_identity(),

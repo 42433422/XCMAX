@@ -31,9 +31,9 @@ from app.application.agent_orchestrator.task_progress import fallback_task_progr
 from app.application.agent_orchestrator.unified_task import task_capabilities
 from app.domain.task_lifecycle.adapters import canonical_execution_state
 from app.infrastructure.auth.agent_principal import AgentPrincipal
-from app.infrastructure.codex.binding import (
-    CodexBindingError,
-    CodexBindingStore,
+from app.infrastructure.xiaox.binding import (
+    XiaoxBindingError,
+    XiaoxBindingStore,
     canonical_digest,
 )
 from app.utils.json_safe import json_safe
@@ -43,14 +43,14 @@ logger = logging.getLogger(__name__)
 PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
 PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
 PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
-_CODEX_CONTROL_MESSAGES = {
+_XIAOX_CONTROL_MESSAGES = {
     "reconciliation_required": "原任务执行结果尚需核对，暂不能恢复或重试",
     "owner_changed": "任务身份或授权已变化，请确认当前账号与原任务的业务范围",
     "identity_override": "续跑不能修改原任务的运行范围，请从原任务继续操作",
     "run_inactive": "终态任务不能恢复；重新执行业务请提交新任务",
 }
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
-_CODEX_PUBLIC_CONTROL_CODES = {
+_XIAOX_PUBLIC_CONTROL_CODES = {
     "binding_conflict": "binding_conflict",
     "binding_missing": "binding_missing",
     "budget_exceeded": "budget_exceeded",
@@ -225,8 +225,8 @@ def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -
     data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
     metadata = data.get("metadata") or {}
     if (
-        metadata.get("runtime_type") == "codex"
-        or (metadata.get("runtime_context") or {}).get("source") == "codex_runtime"
+        metadata.get("runtime_type") == "xiaox"
+        or (metadata.get("runtime_context") or {}).get("source") == "xiaox_runtime"
     ):
         from app.application.agent_runtime.gateway import public_runtime_result
 
@@ -267,18 +267,18 @@ def run_response(
 ) -> dict[str, Any]:
     if run_owned_by(run, principal):
         from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-        from app.infrastructure.codex.receipt_projection import refresh_codex_receipts
+        from app.infrastructure.xiaox.receipt_projection import refresh_xiaox_receipts
 
-        parent = run if run.metadata.get("runtime_type") == "codex" else None
+        parent = run if run.metadata.get("runtime_type") == "xiaox" else None
         context = run.metadata.get("runtime_context") or {}
         if (
             parent is None
-            and context.get("source") == "codex_runtime"
+            and context.get("source") == "xiaox_runtime"
             and context.get("parent_run_id")
         ):
             parent = get_agent_run_repository().get(str(context["parent_run_id"]))
         if parent is not None and run_owned_by(parent, principal):
-            refreshed = refresh_codex_receipts(parent)
+            refreshed = refresh_xiaox_receipts(parent)
             if parent.run_id == run.run_id:
                 run = refreshed
     execution = get_task_execution_repository().get(run.run_id)
@@ -419,9 +419,9 @@ def sync_execution_terminal_state(run: Any) -> None:
         get_task_execution_repository().transition(run.run_id, state)
 
 
-def _children(store: CodexBindingStore, run: Any) -> list[Any]:
+def _children(store: XiaoxBindingStore, run: Any) -> list[Any]:
     children = {}
-    for call in (run.metadata.get("codex_runtime") or {}).get("calls", {}).values():
+    for call in (run.metadata.get("xiaox_runtime") or {}).get("calls", {}).values():
         child = store.repository.get(str(call.get("child_run_id") or ""))
         if child is None:
             task = store.repository.get_task(
@@ -436,12 +436,12 @@ def _children(store: CodexBindingStore, run: Any) -> list[Any]:
             or mod_id_of_run(child) != mod_id_of_run(run)
             or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != run.run_id
         ):
-            raise CodexBindingError("owner_changed", "原子任务归属已变化")
+            raise XiaoxBindingError("owner_changed", "原子任务归属已变化")
         children[child.run_id] = child
     return list(children.values())
 
 
-def guard_codex_child_control(
+def guard_xiaox_child_control(
     run: Any,
     *,
     action: str,
@@ -451,9 +451,9 @@ def guard_codex_child_control(
 ) -> JSONResponse | None:
     context = run.metadata.get("runtime_context") or {}
     parent_id = str(context.get("parent_run_id") or "")
-    if context.get("source") != "codex_runtime" or not parent_id:
+    if context.get("source") != "xiaox_runtime" or not parent_id:
         return None
-    code = "codex_child_retry_forbidden" if action == "retry" else "codex_parent_control_required"
+    code = "xiaox_child_retry_forbidden" if action == "retry" else "xiaox_parent_control_required"
     message = (
         "请先核对原父任务；不能绕过父任务预算重新执行子任务"
         if action == "retry"
@@ -461,8 +461,8 @@ def guard_codex_child_control(
     )
     try:
         if action == "retry":
-            raise CodexBindingError(code, message)
-        store = CodexBindingStore(orchestrator._repo)
+            raise XiaoxBindingError(code, message)
+        store = XiaoxBindingStore(orchestrator._repo)
         binding = store.get(parent_id)
         parent, metadata = binding.run, binding.metadata
         store._validate_authority(parent, metadata)
@@ -491,10 +491,10 @@ def guard_codex_child_control(
             or requires_retry_reconciliation(parent)
             or metadata.get("model_reconciliation_required")
         ):
-            raise CodexBindingError(code, message)
-    except CodexBindingError:
+            raise XiaoxBindingError(code, message)
+    except XiaoxBindingError:
         logger.warning(
-            "Codex child control denied: action=%s run_id=%s parent_run_id=%s",
+            "Xiaox child control denied: action=%s run_id=%s parent_run_id=%s",
             action,
             run.run_id,
             parent_id,
@@ -507,7 +507,7 @@ def guard_codex_child_control(
     return None
 
 
-def control_codex_run(
+def control_xiaox_run(
     run: Any,
     *,
     action: str,
@@ -518,7 +518,7 @@ def control_codex_run(
     """Called only after the normal route's authenticated ownership check."""
     from app.application.agent_runtime.gateway import run_runtime_task
 
-    store = CodexBindingStore(orchestrator._repo)
+    store = XiaoxBindingStore(orchestrator._repo)
     data = body or {}
     try:
         if action in {"pause", "cancel"}:
@@ -529,7 +529,7 @@ def control_codex_run(
             store.close(run.run_id, "paused" if action == "pause" else "cancelled")
             for child in _children(store, store.repository.get(run.run_id)):
                 method(child.run_id, requested_by=principal.user_id)
-            if (controlled.metadata.get("codex_runtime") or {}).get("calls"):
+            if (controlled.metadata.get("xiaox_runtime") or {}).get("calls"):
                 store.receipt_snapshot(run.run_id)
             return JSONResponse(run_response(store.repository.get(run.run_id), principal=principal))
 
@@ -538,10 +538,10 @@ def control_codex_run(
         if principal.actor_authorization != context.get("_actor_authorization") or (
             principal.mod_authorization or None
         ) != (context.get("_mod_authorization") or None):
-            raise CodexBindingError("owner_changed", "恢复需要原任务的可信登录与业务范围")
+            raise XiaoxBindingError("owner_changed", "恢复需要原任务的可信登录与业务范围")
         store._validate_authority(run, binding.metadata)
         if run.status in {"completed", "cancelled", "rejected"}:
-            raise CodexBindingError("run_inactive", "终态任务不能恢复；重新执行业务请提交新任务")
+            raise XiaoxBindingError("run_inactive", "终态任务不能恢复；重新执行业务请提交新任务")
         if (
             requires_retry_reconciliation(run)
             or binding.metadata.get("model_reconciliation_required")
@@ -550,46 +550,46 @@ def control_codex_run(
                 for call in (binding.metadata.get("model_requests") or {}).values()
             )
         ):
-            raise CodexBindingError("reconciliation_required", "原任务结果尚需核对，不能续跑")
+            raise XiaoxBindingError("reconciliation_required", "原任务结果尚需核对，不能续跑")
         rows = store.receipt_snapshot(run.run_id)
         if any(row.get("state") in {"unknown", "claimed"} for row in rows):
-            raise CodexBindingError("reconciliation_required", "原调用结果尚未确定，不能重放")
-        prompt = run.metadata.get("_codex_system_prompt")
+            raise XiaoxBindingError("reconciliation_required", "原调用结果尚未确定，不能重放")
+        prompt = run.metadata.get("_xiaox_system_prompt")
         if not isinstance(prompt, str):
-            raise CodexBindingError(
+            raise XiaoxBindingError(
                 "resume_context_missing", "原任务缺少服务端运行指令，请重新发起任务"
             )
         actions = run.metadata.get("runtime_allowed_actions")
         gate = None
-        original_input = copy.deepcopy(run.metadata.get("_codex_input_data"))
+        original_input = copy.deepcopy(run.metadata.get("_xiaox_input_data"))
         if run.metadata.get("runtime_gate_required"):
-            from app.application.employee_runtime.agent import restore_codex_employee_gate
+            from app.application.employee_runtime.agent import restore_xiaox_employee_gate
 
-            restored_actions, gate = restore_codex_employee_gate(
+            restored_actions, gate = restore_xiaox_employee_gate(
                 str(context.get("employee_id") or ""),
                 context,
                 input_data=original_input,
             )
             if sorted(restored_actions) != sorted(actions or []):
-                raise CodexBindingError("owner_changed", "原员工能力目录已变化，请重新发起任务")
+                raise XiaoxBindingError("owner_changed", "原员工能力目录已变化，请重新发起任务")
         raw_context = data.get("runtime_context") or {}
         if not isinstance(raw_context, dict) or set(raw_context) - {"turn_id"}:
-            raise CodexBindingError("identity_override", "续跑不能修改原任务的运行范围")
+            raise XiaoxBindingError("identity_override", "续跑不能修改原任务的运行范围")
         request_id = (
             data.get("request_id") or raw_context.get("turn_id") or f"control_{uuid.uuid4().hex}"
         )
         if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 160:
-            raise CodexBindingError("invalid_request", "续跑请求标识无效")
+            raise XiaoxBindingError("invalid_request", "续跑请求标识无效")
         context["turn_id"] = request_id
         message = data.get("message")
         if message is not None and (
             not isinstance(message, str) or not message.strip() or len(message) > 16000
         ):
-            raise CodexBindingError("invalid_request", "补充信息无效")
+            raise XiaoxBindingError("invalid_request", "补充信息无效")
         turn_input = original_input
         if "attachment_upload_ids" in data:
             if not binding.metadata.get("waiting_input") or not message:
-                raise CodexBindingError("input_not_requested", "只有原任务等待补充时可以提交新附件")
+                raise XiaoxBindingError("input_not_requested", "只有原任务等待补充时可以提交新附件")
             upload_ids = data["attachment_upload_ids"]
             if (
                 not isinstance(upload_ids, list)
@@ -599,7 +599,7 @@ def control_codex_run(
                 )
                 or len(set(upload_ids)) != len(upload_ids)
             ):
-                raise CodexBindingError("invalid_request", "附件引用格式无效")
+                raise XiaoxBindingError("invalid_request", "附件引用格式无效")
             # References are untrusted turn data. The compiler must resolve
             # current ownership, expiry and bytes again before any model request.
             turn_input = {**(original_input or {}), "attachment_upload_ids": upload_ids}
@@ -611,13 +611,13 @@ def control_codex_run(
                 and not binding.metadata.get("revoked")
                 and float(binding.metadata.get("expires_at", 0)) > time.time()
             ):
-                raise CodexBindingError("binding_conflict", "原任务仍有活动执行者")
+                raise XiaoxBindingError("binding_conflict", "原任务仍有活动执行者")
             command = store.repository.request_task_control(
                 run.run_id, "resume", requested_by=principal.user_id
             )
             generation = binding.metadata.get("generation")
             if not isinstance(generation, int) or isinstance(generation, bool):
-                raise CodexBindingError("binding_missing", "原运行授权版本无效")
+                raise XiaoxBindingError("binding_missing", "原运行授权版本无效")
 
             def resume(parent, metadata):
                 if metadata.get("generation") != generation or parent.status in {
@@ -625,7 +625,7 @@ def control_codex_run(
                     "cancelled",
                     "rejected",
                 }:
-                    raise CodexBindingError("binding_conflict", "原任务状态已变化")
+                    raise XiaoxBindingError("binding_conflict", "原任务状态已变化")
                 parent.status = "running"
                 parent.error = ""
                 parent.metadata["control"] = {
@@ -634,7 +634,7 @@ def control_codex_run(
                     "command_id": command.command_id,
                 }
                 parent.add_event(
-                    "run.resumed", "原 Codex 任务恢复", {"command_id": command.command_id}
+                    "run.resumed", "原 Xiaox 任务恢复", {"command_id": command.command_id}
                 )
 
             store.update(run.run_id, resume)
@@ -683,20 +683,20 @@ def control_codex_run(
             else 409
         )
         return JSONResponse(response, status_code=code)
-    except (CodexBindingError, ValueError) as exc:
+    except (XiaoxBindingError, ValueError) as exc:
         logger.warning(
-            "Codex run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True
+            "Xiaox run control denied: action=%s run_id=%s", action, run.run_id, exc_info=True
         )
         # Exception attributes can contain internal details; only static public codes cross HTTP.
         raw_error_code = getattr(exc, "code", None)
-        error_code = _CODEX_PUBLIC_CONTROL_CODES.get(
+        error_code = _XIAOX_PUBLIC_CONTROL_CODES.get(
             raw_error_code if isinstance(raw_error_code, str) else "", "runtime_control_denied"
         )
         return JSONResponse(
             {
                 "success": False,
                 "error_code": error_code,
-                "message": _CODEX_CONTROL_MESSAGES.get(
+                "message": _XIAOX_CONTROL_MESSAGES.get(
                     error_code, "任务操作未完成，请刷新原任务并核对状态、授权和执行结果"
                 ),
             },
@@ -706,8 +706,8 @@ def control_codex_run(
 
 __all__ = [
     "PUBLIC_APPROVAL_ERROR",
-    "control_codex_run",
-    "guard_codex_child_control",
+    "control_xiaox_run",
+    "guard_xiaox_child_control",
     "enqueue_run",
     "internal_error_response",
     "owned_run",

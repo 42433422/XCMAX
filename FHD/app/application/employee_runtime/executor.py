@@ -499,7 +499,7 @@ def execute_employee_task_local(
     reader = next((pack for pack in candidates if pack in EMPLOYEE_BY_SUFFIX.values()), None)
     writer = WORKBOOK_WRITER in candidates
     if (
-        reader
+        (reader or writer)
         and context_only
         and not any(
             key in (input_data or {})
@@ -520,6 +520,17 @@ def execute_employee_task_local(
 
         if denial := actor_tool_denial("employee", "context", context):
             return {"success": False, **denial}
+        if writer:
+            # Introspection must not be answered with a write denial: the caller
+            # asked which inputs the writer requires, so return that contract.
+            from app.domain.workbook_write_contract import WORKBOOK_WRITE_INPUT
+
+            return {
+                "success": True,
+                "employee_id": employee_id,
+                "context": "workbook_write",
+                "input_schema": WORKBOOK_WRITE_INPUT,
+            }
         reader, input_data = None, None
     scope = (
         office_reader_input(reader, input_data or {}, context)

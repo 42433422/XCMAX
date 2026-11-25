@@ -91,6 +91,37 @@ class LlmCallLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class LlmModelConcurrency(Base):
+    """Adaptive per-model admission limit shared by every worker (see llm_model_concurrency)."""
+
+    __tablename__ = "llm_model_concurrency"
+
+    model_key: Mapped[str] = mapped_column(String(160), primary_key=True)
+    limit_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    min_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    max_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    success_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cooldown_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class LlmModelLease(Base):
+    """One in-flight upstream call; expired rows are reclaimed after a crash."""
+
+    __tablename__ = "llm_model_leases"
+
+    lease_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    model_key: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class LlmClientRequest(Base):
     """One billed chat execution per client idempotency key (see llm_client_requests)."""
 

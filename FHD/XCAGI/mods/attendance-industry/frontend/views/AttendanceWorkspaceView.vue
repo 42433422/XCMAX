@@ -2,6 +2,7 @@
   <section class="attendance-workspace" aria-label="考勤工作区">
     <header class="workspace-header">
       <h1>考勤工作区</h1>
+      <p>主系统统一维护部门、人员、排班资源和考勤记录。</p>
       <nav aria-label="考勤工作区功能">
         <router-link
           v-for="item in sections"

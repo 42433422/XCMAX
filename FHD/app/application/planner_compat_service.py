@@ -470,6 +470,8 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
     metadata = request_route_metadata(request)
     if metadata:
         payload["route_metadata"] = metadata
+    if payload.get("observation_timeout") is True:
+        return payload
     _persist_compat_chat_turn(body, payload)
     _settle_dialogue_turn(body, payload, "completed" if payload.get("success") else "failed")
     return payload

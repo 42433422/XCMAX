@@ -31,7 +31,7 @@ from tests.test_application.test_owned_planner_attachments import owned as owned
 
 @pytest.mark.parametrize("event", ["received", "completed"])
 def test_neuro_failure_does_not_replace_fixed_executor(event):
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
 
     svc = _make_svc()
     with (
@@ -56,7 +56,7 @@ def test_neuro_failure_does_not_replace_fixed_executor(event):
     ):
         result = svc.process_chat("u1", "说明工作方式")
     assert result["response"] == "已读取"
-    assert result["runtime"] == "codex"
+    assert result["runtime"] == "xiaox"
     execute.assert_called_once()
     assert execute.call_args.kwargs["completion_mode"] == "auto"
     assert not hasattr(svc, "workflow_planner")
@@ -65,7 +65,7 @@ def test_neuro_failure_does_not_replace_fixed_executor(event):
 @pytest.mark.parametrize("sheet_name", [None, "Sheet2"])
 def test_registered_upload_reaches_runtime_goal_without_implicit_import(owned, sheet_name):
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.agent_runtime.codex_runtime import _input_text
+    from app.application.agent_runtime.xiaox_runtime import _input_text
     from app.application.agent_runtime.goal_admission import prepare_runtime_goal
 
     context, _ = owned

@@ -3,11 +3,6 @@
     <div v-if="!inAnalyzer" class="ecosystem-home">
       <div class="ecosystem-home-title">AI生态应用</div>
       <div class="launcher-grid">
-        <button v-if="!isAdminConsoleSpa()" class="app-launcher" type="button" data-tour="ecosystem-launcher-kellai" @click="goShellPage('data-sources')">
-          <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true"><i class="fa fa-comments"></i></span>
-          <span class="app-launcher-name">客来来</span>
-          <span class="app-launcher-desc">渠道连接、客户消息、联系人、数据接入与自动化</span>
-        </button>
         <button class="app-launcher app-launcher--kitten" type="button" @click="enterAnalyzer('kitten')">
           <span class="app-launcher-icon app-launcher-icon--kitten" aria-hidden="true">
             <KittenLauncherIcon />

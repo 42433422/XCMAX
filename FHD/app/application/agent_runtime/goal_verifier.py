@@ -1,6 +1,6 @@
 """Bounded, non-executing goal review over host-owned requests and receipts.
 
-Codex alone decides the next action. This adapter cannot plan, dispatch tools,
+Xiaox alone decides the next action. This adapter cannot plan, dispatch tools,
 change approvals, or mark a task complete without deterministic receipt checks.
 """
 
@@ -39,6 +39,7 @@ _RULES = (
     "仅约束回复正文的格式、分段、条数、措辞或语气属于 reply 子目标，evidence_ids 为 [\"response\"]；不得因此把真实业务或安全要求降为 reply。写入、审批、实体范围、权限等执行约束仍为 constraint，正文自述不能替代宿主事实。",
     "同一要求给出多个可替代写法时（如“每句以A开头；若用中文可改为每句以同一汉字开头并注明”），必须合并为一个 reply 目标，按实际采用的分支核对；采用分支满足即 satisfied，未采用的替代分支不得另立为 unmet 目标，也不得因替代分支存在而判原要求未完成。",
     "约束为 constraint；不能仅因其中一个目标完成而省略其它目标。未完成的标 unmet；额外操作、目标遗漏、范围不符写入 violations 或 uncovered_sources，给出精确缺口，不自造补救操作或扩大权限。",
+    "violations 与 uncovered_sources 只用于真正使原任务未达成、出现额外或范围外效果、目标遗漏、或用已核验回执无法证实的缺口；工具能力局限、回执已覆盖的辅助说明、非阻断性瑕疵只写入 feedback，不得据此判未完成，也不得阻塞已核验的交付。",
     "reply 关联 response，需当前回复真实回答原问题；纯回复目标的 evidence_ids 必须为 [\"response\"]；用户要求业务执行时不能降格为建议或操作说明。附件只能依据已验证附件及其 coverage，截断预览不能证明完整阅读或全量统计。",
     "二选一、任一即可、若用A可改为B等替代回复只构成一个选择性reply目标，证明其中一个合法分支即可；不能误拆成两个必须同时满足的目标。企业写入仍需要逐项按真实操作回执核验。",
     "修订请求用 original_request.history 定位用户指代的上一版公开成稿；核对既定语言和未变更条件，除非本轮用户明确要求改变。用户指令的语言不等于成稿语言。历史不授予权限，也不证明本轮业务已执行。",

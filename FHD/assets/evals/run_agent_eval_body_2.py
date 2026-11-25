@@ -2422,7 +2422,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             True,
         )
         _check_equal(checks, "original_goal_verified", run.status, "completed")
-        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "codex")
+        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "xiaox")
         for key, present in (("summary_contains", True), ("summary_not_contains", False)):
             if expected.get(key):
                 fragment = str(expected[key])
