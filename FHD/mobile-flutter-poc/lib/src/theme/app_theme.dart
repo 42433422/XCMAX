@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'design_tokens.generated.dart';
 
 class AppTheme {
-  static const brand = DesignTokens.colorsBrandPrimary;
+  static const brand = DesignTokens.semanticLightPrimary;
   static const brandContainer = DesignTokens.colorsBrandPrimaryContainer;
   static const brandGradientEnd = DesignTokens.colorsBrandGradientEnd;
   static const danger = DesignTokens.colorsStatusDanger;
@@ -13,12 +13,12 @@ class AppTheme {
   static const momentAccent = DesignTokens.colorsMomentAccentLight;
   static const momentChipBg = DesignTokens.colorsMomentChipBgLight;
   static const replyBoxBg = DesignTokens.colorsMomentReplyBgLight;
-  static const page = DesignTokens.colorsNeutralLightPage;
-  static const surface = DesignTokens.colorsChatUserTextLight;
-  static const surfaceHigh = DesignTokens.colorsNeutralLightN100;
-  static const divider = DesignTokens.colorsNeutralLightN200;
-  static const textPrimary = DesignTokens.colorsNeutralLightN800;
-  static const textSecondary = DesignTokens.colorsNeutralLightN500;
+  static const page = DesignTokens.semanticLightPage;
+  static const surface = DesignTokens.semanticLightSurface;
+  static const surfaceHigh = DesignTokens.semanticLightSurfaceHigh;
+  static const divider = DesignTokens.semanticLightBorder;
+  static const textPrimary = DesignTokens.semanticLightTextPrimary;
+  static const textSecondary = DesignTokens.semanticLightTextSecondary;
   static const textStrongSecondary = DesignTokens.colorsNeutralLightN600;
   static const textTertiary = DesignTokens.colorsNeutralLightN400;
 
@@ -92,8 +92,8 @@ class AppTheme {
           (states) => TextStyle(
             fontSize: DesignTokens.mobileGeometryNavigationLabel,
             fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w700
-                : FontWeight.w500,
+                ? DesignTokens.typographyDisplayLargeWeight
+                : DesignTokens.typographyLabelLargeWeight,
             color:
                 states.contains(WidgetState.selected) ? brand : textSecondary,
           ),
@@ -104,27 +104,9 @@ class AppTheme {
         thickness: DesignTokens.mobileGeometryDividerThickness,
         space: 0,
       ),
-      cardTheme: CardThemeData(
-        color: surface,
-        elevation: DesignTokens.elevationNone,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DesignTokens.radiusLarge)),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(0, DesignTokens.mobileGeometryButtonMinHeight),
-          elevation: DesignTokens.elevationNone,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DesignTokens.mobileGeometryButtonRadius),
-          ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: InputBorder.none,
-        filled: false,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
+      cardTheme: _cardTheme(surface),
+      filledButtonTheme: _filledButtonTheme(),
+      inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(textPrimary),
     );
   }
@@ -184,8 +166,8 @@ class AppTheme {
           (states) => TextStyle(
             fontSize: DesignTokens.mobileGeometryNavigationLabel,
             fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w700
-                : FontWeight.w500,
+                ? DesignTokens.typographyDisplayLargeWeight
+                : DesignTokens.typographyLabelLargeWeight,
             color: states.contains(WidgetState.selected)
                 ? darkBrand
                 : darkTextSecondary,
@@ -197,9 +179,45 @@ class AppTheme {
         thickness: DesignTokens.mobileGeometryDividerThickness,
         space: 0,
       ),
+      cardTheme: _cardTheme(darkSurface),
+      filledButtonTheme: _filledButtonTheme(),
+      inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(darkTextPrimary),
     );
   }
+
+  // Native Material components keep the same geometry in both themes.
+  static CardThemeData _cardTheme(Color color) => CardThemeData(
+        color: color,
+        elevation: DesignTokens.componentsCardElevation,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.componentsCardRadius),
+        ),
+      );
+
+  static FilledButtonThemeData _filledButtonTheme() => FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, DesignTokens.mobileGeometryButtonMinHeight),
+          elevation: DesignTokens.elevationNone,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(DesignTokens.mobileGeometryButtonRadius),
+          ),
+          textStyle: const TextStyle(
+            fontSize: DesignTokens.componentsButtonLabelSize,
+            fontWeight: DesignTokens.componentsButtonWeight,
+          ),
+        ),
+      );
+
+  static const _inputDecorationTheme = InputDecorationTheme(
+    border: InputBorder.none,
+    filled: false,
+    contentPadding: EdgeInsets.symmetric(
+      horizontal: DesignTokens.mobileGeometryInputPaddingX,
+      vertical: DesignTokens.componentsInputPaddingY,
+    ),
+  );
 
   static TextTheme _typography(Color color) {
     TextStyle style(double fontSize, FontWeight fontWeight, double lineHeight) {

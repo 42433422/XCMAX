@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
 import 'package:xcagi_flutter_poc/src/theme/design_tokens.generated.dart';
@@ -63,6 +64,30 @@ void main() {
     expect(DesignTokens.motionReducedMs, 0);
     expect(AppTheme.light().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
     expect(AppTheme.dark().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
+  });
+
+  test('Material component geometry is identical in light and dark themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      final style = theme.filledButtonTheme.style!;
+      expect(style.minimumSize!.resolve(<WidgetState>{})!.height,
+          DesignTokens.mobileGeometryButtonMinHeight);
+      final shape = style.shape!.resolve(<WidgetState>{}) as RoundedRectangleBorder;
+      expect(shape.borderRadius,
+          BorderRadius.circular(DesignTokens.mobileGeometryButtonRadius));
+      expect(style.textStyle!.resolve(<WidgetState>{})!.fontSize,
+          DesignTokens.componentsButtonLabelSize);
+      expect(style.textStyle!.resolve(<WidgetState>{})!.fontWeight,
+          DesignTokens.componentsButtonWeight);
+      expect(theme.cardTheme.elevation, DesignTokens.componentsCardElevation);
+      expect((theme.cardTheme.shape! as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(DesignTokens.componentsCardRadius));
+      expect(theme.inputDecorationTheme.contentPadding, const EdgeInsets.symmetric(
+        horizontal: DesignTokens.mobileGeometryInputPaddingX,
+        vertical: DesignTokens.componentsInputPaddingY,
+      ));
+    }
+    expect(AppTheme.light().cardTheme.color, XcagiThemeColors.light.surface);
+    expect(AppTheme.dark().cardTheme.color, XcagiThemeColors.dark.surface);
   });
 
   test('message avatar layout keeps stable Flutter geometry', () {
