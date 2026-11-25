@@ -149,3 +149,33 @@ def revalidate_erp_memory(
         },
     }
     return checked, True
+
+
+def sanitize_erp_memory_view(
+    record: dict[str, Any], access: DatasetAccessContext
+) -> dict[str, Any]:
+    """Never disclose a superseded or unauthorized ERP claim in a list/graph.
+
+    Retain only the non-sensitive memory identity and revision to allow the
+    existing owner to delete/review it. Raw value, historical revisions and
+    provenance are withheld until the original ERP read is authorized again.
+    """
+    checked, is_erp_bound = revalidate_erp_memory(record, access)
+    if not is_erp_bound:
+        return record
+    if checked is not None:
+        return checked
+    sanitized = dict(record)
+    sanitized.update(
+        key="erp_fact_reference_redacted",
+        value=None,
+        statement="ERP 事实来源已变化或不可访问，需要重新核验",
+        evidence=[],
+        history=[],
+        eligible_for_planner=False,
+        strength=0.0,
+        erp_fact_verification={"status": "unknown", "memory_reuse_allowed": False},
+        erp_requires_reconciliation=True,
+    )
+    sanitized.pop("relation_path", None)
+    return sanitized
