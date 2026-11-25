@@ -4,20 +4,20 @@
       {{ msg.content }}
     </div>
 
-    <div v-else-if="msg.role === 'assistant'" class="bubble bubble--assistant">
+    <div v-else-if="msg.role === 'assistant'" class="bubble bubble--assistant" :class="{ 'bubble--error': msg.isError }" :role="msg.isError ? 'alert' : undefined">
       <template v-if="msg.isLoading">
-        <span class="bubble-dots"><span /><span /><span /></span>
+        <span class="bubble-dots" role="status" aria-label="正在思考"><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /></span>
       </template>
       <template v-else>
         <!-- Simple markdown: convert \n to <br> and **bold** -->
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <span class="bubble-text" v-html="renderText(msg.content)" />
+        <div class="bubble-text" v-html="renderText(msg.content)" />
       </template>
     </div>
 
     <div v-else-if="msg.role === 'tool_call'" class="bubble bubble--tool">
       <span class="bubble-tool-icon">⚙️</span>
-      <span>{{ msg.toolCall?.name || '工具调用' }}: {{ formatArgs(msg.toolCall?.args) }}</span>
+      <span>{{ msg.toolCall?.name || '工具调用' }} · 参数已隐藏</span>
     </div>
 
     <div v-else-if="msg.role === 'action_preview'" class="bubble bubble--preview">
@@ -29,25 +29,34 @@
       </div>
     </div>
 
+    <div v-if="(msg.role === 'user' || msg.role === 'assistant') && msg.content && !msg.isLoading" class="bubble-actions">
+      <button type="button" class="bubble-copy" aria-label="复制消息正文" @click="copyMessage">复制</button>
+      <span v-if="copyFeedback" role="status" class="bubble-copy-status">{{ copyFeedback }}</span>
+    </div>
     <time class="bubble-time">{{ formatTime(msg.timestamp) }}</time>
   </article>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { AgentMessage } from '../../types/agent'
 import { renderButlerBubbleHtml } from '../../utils/butlerBubbleText'
 
-defineProps<{ msg: AgentMessage }>()
+const props = defineProps<{ msg: AgentMessage }>()
+const copyFeedback = ref('')
+
+async function copyMessage() {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+    await navigator.clipboard.writeText(props.msg.content)
+    copyFeedback.value = '已复制'
+  } catch {
+    copyFeedback.value = '复制失败'
+  }
+}
 
 function renderText(content: string): string {
   return renderButlerBubbleHtml(content)
-}
-
-function formatArgs(args?: Record<string, unknown>): string {
-  if (!args) return ''
-  return Object.entries(args)
-    .map(([k, v]) => `${k}=${String(v)}`)
-    .join(', ')
 }
 
 function riskLabel(risk?: string): string {
@@ -200,4 +209,13 @@ function formatTime(ts: number): string {
 .bubble-text :deep(.bubble-link:hover) {
   color: #93c5fd;
 }
+
+.bubble--error { border-color: rgba(248, 113, 113, .42); }
+.bubble-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.bubble-copy { background: transparent; border: 0; border-radius: 6px; color: inherit; opacity: .7; font-size: .72rem; padding: 4px 7px; cursor: pointer; }
+.bubble-copy:hover, .bubble-copy:focus-visible { opacity: 1; background: rgba(148,163,184,.12); }
+.bubble-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.bubble-copy-status { font-size: .72rem; }
+.bubble-text :deep(.bubble-code) { margin: 6px 0; padding: 9px 11px; max-width: 100%; overflow-x: auto; white-space: pre; border-radius: 8px; background: rgba(15,23,42,.35); color: inherit; font: .83rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-reduced-motion: reduce) { .bubble-dots span { animation: none; } }
 </style>
