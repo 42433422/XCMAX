@@ -14,7 +14,7 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
-| product-definition（产品宪章与领域术语） | [XCAGI 产品宪章 V1.0](../../specs/product-lines-3-plus-2.md) | 产品所有者确认的 P001–P100 目标契约、术语、12 系统、六级语义及迁移边界；不替代运行定价、账号、制品、证据等现行权威源 |
+| product-definition（产品宪章与领域术语） | [XCAGI 产品宪章 V1.0](../../specs/product-lines-3-plus-2.md) | 产品所有者确认的 P001–P100 产品契约、I001–I050 架构实施规范、术语、12 核心系统、六级语义及 12 组施工治理；不替代运行定价、账号、制品、证据等现行权威源 |
 | 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层；[实机协议](e2e/desktop-real-machine-acceptance-protocol.md)与[验收模板](e2e/templates/desktop-acceptance-template.md)遵循同一原包身份和证据放行要求 |
 | audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
