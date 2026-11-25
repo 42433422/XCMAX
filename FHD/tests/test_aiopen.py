@@ -535,9 +535,6 @@ def test_legacy_openclaw_chat_does_not_dispatch_or_create_receipt(client, path):
     repo.assert_not_called()
 
 
-
-
-
 def test_screen_ws_command_roundtrip(client, monkeypatch):
     """A trusted authenticated screen is visible only to a matching bound key."""
     from app.application.aiopen.service import generate_api_key
