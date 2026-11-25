@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.db.db_base import Base
@@ -27,9 +30,30 @@ from app.domain.shared_services import purchase_return_posting
 from app.infrastructure.tenant_scope import tenant_scope
 
 
-@pytest.fixture
-def original_purchase(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'purchase-return.sqlite'}")
+@pytest.fixture(params=["sqlite", "postgres"])
+def original_purchase(tmp_path, monkeypatch, request):
+    server = None
+    schema = None
+    if request.param == "postgres":
+        raw = os.getenv("XCAGI_TEST_POSTGRES_URL", "").strip()
+        if not raw:
+            pytest.skip("BLOCKED: PostgreSQL acceptance requires XCAGI_TEST_POSTGRES_URL")
+        url = make_url(raw)
+        if url.get_backend_name() != "postgresql" or not (
+            url.database or ""
+        ).endswith("_test"):
+            pytest.fail("PostgreSQL integration must target a database ending in _test")
+        schema = "purchase_return_" + uuid.uuid4().hex[:16]
+        server = create_engine(raw, pool_pre_ping=True)
+        with server.begin() as conn:
+            conn.execute(text(f"CREATE SCHEMA {schema}"))
+        engine = create_engine(
+            raw,
+            pool_pre_ping=True,
+            connect_args={"options": f"-c search_path={schema}"},
+        )
+    else:
+        engine = create_engine(f"sqlite:///{tmp_path / 'purchase-return.sqlite'}")
     Base.metadata.create_all(engine)
 
     with tenant_scope(3), Session(engine) as db:
@@ -144,6 +168,10 @@ def original_purchase(tmp_path, monkeypatch):
         yield engine, request_data, receipt_id
     finally:
         engine.dispose()
+        if server is not None and schema is not None:
+            with server.begin() as conn:
+                conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+            server.dispose()
 
 
 def test_approved_return_reverses_exact_two_batches_and_one_payable(original_purchase):
