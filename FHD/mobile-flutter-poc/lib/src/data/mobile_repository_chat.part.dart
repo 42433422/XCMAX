@@ -344,6 +344,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       body: body,
       authGeneration: generation,
       idempotencyKey: idempotencyKey,
+      // This call site runs only after a send threw; a timeout cannot prove
+      // the POST was never committed. Resume by receipt GET, never resend.
+      requiresReconciliation: true,
     );
   }
 
