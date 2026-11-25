@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from app.application.agent_runtime import chat
-from app.infrastructure.codex.policy import RuntimePolicyError
+from app.application.agent_runtime.configuration import RuntimePolicyError
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def entry(monkeypatch):
 
 def test_new_chat_uses_fixed_executor_and_host_goal_admission(entry):
     invoke, execute, service = entry
-    assert invoke({"session_id": "original"})["runtime"] == "codex"
+    assert invoke({"session_id": "original"})["runtime"] == chat._RUNTIME_KIND
     execute.assert_called_once()
     assert execute.call_args.kwargs["completion_mode"] == "auto"
     assert "admit_goal" not in execute.call_args.kwargs
@@ -39,7 +39,7 @@ def test_new_chat_uses_fixed_executor_and_host_goal_admission(entry):
 def test_retired_pending_plan_cannot_select_another_executor(entry):
     invoke, execute, service = entry
     service._pending_workflows["owner"] = {"runtime_context": {"session_id": "original"}}
-    assert invoke({"session_id": "original"})["runtime"] == "codex"
+    assert invoke({"session_id": "original"})["runtime"] == chat._RUNTIME_KIND
     execute.assert_called_once()
     service._hydrate_pending_workflow.assert_not_called()
 
@@ -151,7 +151,7 @@ def test_unverified_business_narration_is_not_streamed(monkeypatch):
     chat.stream_runtime_event(event)
     delta.assert_not_called()
     chat.stream_runtime_event({**event, "runtime_goal_mode": "reply"})
-    delta.assert_called_once_with("已全部完成")
+    delta.assert_not_called()
 
 
 def test_unknown_work_retains_original_task_pointer():
@@ -216,3 +216,57 @@ def test_server_history_retains_continuation_and_terminal_clear(monkeypatch, sta
         "status": state,
         "sessionId": "original",
     }
+
+
+def test_reconfiguration_resumes_original_run_without_new_dispatch(entry):
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+
+    invoke, execute, _ = entry
+    context = {"session_id": "original", "agent_runtime_run_id": "run-existing"}
+    execute.side_effect = RuntimeSetupError(
+        "runtime_configuration_required", "private route configuration"
+    )
+    failed = invoke(context)
+    assert failed["success"] is False
+    assert failed["data"]["error_code"] == "runtime_configuration_required"
+    assert failed["runtime_context_update"]["agent_runtime_run_id"] == "run-existing"
+    execute.side_effect = None
+    execute.return_value = {
+        "ok": True,
+        "run_id": "run-existing",
+        "execution_state": "completed",
+        "output": "原任务已核对",
+    }
+    resumed = invoke(context)
+    assert resumed["success"] is True
+    assert resumed["run_id"] == "run-existing"
+    assert resumed["runtime_context_update"]["conversation_id"] == "original"
+    assert resumed["runtime_context_update"]["agent_runtime_run_id"] is None
+    assert [call.kwargs["run_id"] for call in execute.call_args_list] == [
+        "run-existing", "run-existing"
+    ]
+    assert all(call.kwargs["answer_to_waiting_input"] for call in execute.call_args_list)
+
+
+def test_stream_progress_and_setup_failure_never_emit_unverified_draft(monkeypatch, entry):
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+
+    deltas = Mock()
+    notes = Mock()
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", deltas)
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", notes)
+    invoke, execute, _ = entry
+    execute.side_effect = RuntimeSetupError("runtime_account_model_required", "private key")
+    failed = invoke({"session_id": "original", "agent_runtime_run_id": "existing"})
+    assert failed["data"]["error_code"] == "runtime_account_model_required"
+    assert failed["execution_state"] == "blocked"
+    chat.stream_runtime_event({
+        "method": "item/agentMessage/delta", "runtime_goal_mode": "reply",
+        "payload": {"delta": "not-yet-verified"},
+    })
+    deltas.assert_not_called()
+    chat.stream_runtime_event({
+        "method": "item/started",
+        "payload": {"item": {"type": "mcpToolCall"}},
+    })
+    notes.assert_called_once()
