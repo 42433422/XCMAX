@@ -981,3 +981,144 @@ def test_pending_step_keeps_acknowledgement_and_never_dispatches_twice(tmp_path,
     assert recovered.tool_calls[0].output == original
     assert len(dispatches) == len(charges) == 1
     assert recovered.steps[0].attempt_count == 1
+
+
+def test_terminal_evidence_rechecks_actual_sqlite_row_before_claiming_success(
+    tmp_path, monkeypatch
+):
+    """The child readback, not a successful transport envelope, governs the parent."""
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_verified
+
+    repo, runner, run, step, context, _readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    database = tmp_path / "actual-effect.sqlite3"
+
+    def read_database(**_kwargs):
+        # This is a second SQLite connection, not the dispatcher's return value.
+        with sqlite3.connect(database) as db:
+            actual = db.execute("SELECT id,name FROM effects WHERE id=1").fetchone()
+        return (
+            _passed()
+            if actual == (1, "A")
+            else {"status": "inconclusive", "code": "database_row_missing", "checks": []}
+        )
+
+    _adapter(monkeypatch, read_database)
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    assert summarize_verification(run)["accepted"] is True
+    call = run.tool_calls[0]
+
+    def original_child_row():
+        report = call.metadata["verification"]
+        operation = {"tool_id": step.tool_id, "action": step.action, "params": step.params}
+        return {
+            **operation,
+            "fingerprint": canonical_digest(operation),
+            "child_run_id": run.run_id,
+            "child_task_id": "original-child-task",
+            "state": "completed",
+            "read_only": False,
+            "receipt": {
+                "run_id": run.run_id,
+                "task_id": "original-child-task",
+                "status": "completed",
+                "success": report["accepted"],
+                "verified": report["accepted"],
+                "verification": report,
+            },
+        }
+
+    assert receipt_verified(original_child_row()) is True
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='tampered' WHERE id=1")
+
+    negative = verify_step_result(run=run, step=step, call=call, context=context)
+    assert negative["accepted"] is False
+    assert summarize_verification(run)["accepted"] is False
+    assert receipt_verified(original_child_row()) is False
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='A' WHERE id=1")
+    recovered = verify_step_result(run=run, step=step, call=call, context=context)
+    assert recovered["accepted"] is True
+    assert receipt_verified(original_child_row()) is True
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+
+def test_terminal_evidence_reads_real_xlsx_and_rejects_corrupt_original(
+    tmp_path, monkeypatch, trusted_actor
+):
+    """A genuine export is read back from disk; tampering revokes its verification."""
+    from app.application.agent_orchestrator.artifact_files import artifact_path
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
+
+    actor = trusted_actor(role="admin")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.artifact_files.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    step = AgentStep(
+        node_id="export",
+        tool_id="reports",
+        action="export",
+        params={"report_type": "sales", "data": [{"product": "A", "quantity": 2}]},
+        status="completed",
+        attempt_count=1,
+    )
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message="Export approved rows",
+        status="blocked",
+        steps=[step],
+        metadata={"runtime_context": copy.deepcopy(actor.context)},
+    )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=copy.deepcopy(step.params),
+        status="completed",
+        metadata={"attempt_count": 1},
+    )
+    run.tool_calls.append(call)
+    freeze_verification_contract(
+        run, step, call, get_tool_action_spec("reports", "export"), actor.context
+    )
+    step.output = _registered_router_reports(
+        step.action, step.params,
+        {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(step.params),
+        },
+        "shared",
+        run.message,
+    )
+    assert step.output["success"] is True
+    call.output = copy.deepcopy(step.output)
+    bind_execution_receipt(call)
+    verified = verify_step_result(run=run, step=step, call=call, context=actor.context)
+    assert verified["accepted"] is True
+    assert any(item["source"] in {"run_artifact", "report_data", "report_export", "report_sql"}
+               for item in verified["checks"])
+
+    artifact = step.output["artifacts"][0]
+    path = artifact_path(run.run_id, artifact["artifact_id"])
+    with path.open("ab") as output:
+        output.write(b"tampered-after-export")
+
+    rejected = verify_step_result(run=run, step=step, call=call, context=actor.context)
+    assert rejected["accepted"] is False
+    assert rejected["status"] in {"failed", "inconclusive"}
+    assert summarize_verification(run)["accepted"] is False
+    # The original producer must never be invoked just to verify a file.
+    assert step.attempt_count == len(run.tool_calls) == 1
