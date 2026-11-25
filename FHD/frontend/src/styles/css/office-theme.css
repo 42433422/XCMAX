@@ -684,7 +684,7 @@ html.xcagi-electron body:not(.pro-mode-active) .right-panel {
   backdrop-filter: none;
 }
 
-html.xcagi-electron body:not(.pro-mode-active) .sidebar {
+html.xcagi-electron body:not(.pro-mode-active):not([data-sidebar-theme^="dark-"]) .sidebar {
   background: rgba(248, 250, 252, 0.98);
 }
 
