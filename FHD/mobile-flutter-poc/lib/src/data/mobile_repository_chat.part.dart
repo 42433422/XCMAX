@@ -397,7 +397,7 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
   }
 
-  /// 依次重放待发送消息；跨账号的旧队列直接丢弃，避免串号。
+  /// 只读核对已持久化的原任务；旧版 pending 不能证明尚未派发。
   Future<int> flushPendingMessages() async {
     if (_flushingOutbox) return 0;
     _flushingOutbox = true;
@@ -426,7 +426,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             ),
             body: item.body,
             idempotencyKey: item.idempotencyKey,
-            resumeOnly: item.requiresReconciliation,
+            // Legacy pending rows may have been downgraded after a lost POST.
+            // No persisted row proves that the server never received it.
+            resumeOnly: true,
             cacheUserMessage: false,
           );
           await store.markSent(item.id);
