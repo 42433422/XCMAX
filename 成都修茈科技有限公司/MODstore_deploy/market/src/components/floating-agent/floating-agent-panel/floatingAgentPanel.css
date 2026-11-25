@@ -275,6 +275,12 @@
 .panel-send svg { width: 16px; height: 16px; color: #fff; }
 .panel-send:hover:not(:disabled) { background: rgba(59, 130, 246, 0.38); }
 .panel-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.panel-send--stop,
+.butler-panel--light .panel-send--stop { background: rgba(100, 116, 139, .14); border: 1px solid rgba(148, 163, 184, .3); }
+.panel-send--stop svg { color: var(--xc-color-text, #cbd5e1); }
+.panel-send--stop:hover:not(:disabled),
+.butler-panel--light .panel-send--stop:hover:not(:disabled) { background: rgba(100, 116, 139, .26); }
+
 
 .panel-tools {
   display: flex;
