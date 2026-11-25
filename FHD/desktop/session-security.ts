@@ -2,30 +2,30 @@ import { session } from 'electron'
 import { DEFAULT_PORT } from './desktop-config'
 import { isTrustedDesktopOrigin } from './desktop-navigation'
 
-/**
- * 媒体权限（麦克风/音频）仅放行可信本地 origin。
- * 语音输入与语音转写依赖 media 权限；其他 origin 一律拒绝。
- */
+/** Explicit audio-only requests from the trusted desktop main frame. */
+export function isAllowedDesktopMedia(input: {
+  permission: string
+  topUrl: string
+  requestUrl: string
+  details?: { mediaTypes?: string[]; mediaType?: string; isMainFrame?: boolean }
+}): boolean {
+  const { permission, topUrl, requestUrl, details } = input
+  const mediaTypes = details?.mediaTypes ?? (details?.mediaType ? [details.mediaType] : [])
+  return permission === 'media' && details?.isMainFrame !== false &&
+    Array.isArray(mediaTypes) && mediaTypes.length > 0 &&
+    mediaTypes.every(type => type === 'audio' || type === 'microphone') &&
+    isTrustedDesktopOrigin(topUrl, DEFAULT_PORT) &&
+    isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT)
+}
+
+/** 媒体权限仅放行可信本地音频，未知或视频请求默认拒绝。 */
 export function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
-      .map(type => String(type))
-    const wantsAudio =
-      permission === 'media' &&
-      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
-    const requestUrl =
-      (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
-    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT))
+    callback(isAllowedDesktopMedia({ permission, topUrl: webContents.getURL(), requestUrl: details.requestingUrl || webContents.getURL(), details }))
   })
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
-      .map(type => String(type))
-    const wantsAudio =
-      permission === 'media' &&
-      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
-    const origin = requestingOrigin || webContents?.getURL() || ''
-    return wantsAudio && isTrustedDesktopOrigin(origin, DEFAULT_PORT)
+    return isAllowedDesktopMedia({ permission, topUrl: webContents?.getURL() || '', requestUrl: requestingOrigin, details })
   })
 }
 

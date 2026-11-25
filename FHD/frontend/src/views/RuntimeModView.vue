@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { apiFetch } from '@/utils/apiBase'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { createRuntimeModSdk, loadRuntimeMod, type RuntimeModMetadata } from '@/utils/runtimeModSdk'
 
 const props = defineProps<{ modId: string }>()
@@ -17,16 +18,23 @@ let generation = 0
 let cleanup: (() => void) | undefined
 let pending: AbortController | undefined
 
+function safelyUnmount(unmount?: () => void) {
+  try { unmount?.() } catch {
+    // A failed extension cleanup must not abort the host's account/route transition.
+    console.warn('[runtime-mod] extension cleanup failed')
+  }
+}
+
 function dispose() {
   pending?.abort()
   pending = undefined
-  try { cleanup?.() } finally {
+  try { safelyUnmount(cleanup) } finally {
     cleanup = undefined
     element.value?.replaceChildren()
   }
 }
 
-watch(() => [element.value, props.modId, route.fullPath, account.tenantId, account.localUserId, account.marketUserId], async () => {
+watch(() => [element.value, props.modId, route.fullPath, getAuthSessionEpoch(), account.tenantId, account.localUserId, account.marketUserId, account.impersonatingMarketUserId, account.tenantIsOwner, account.isAdminAccount, account.permissions.slice().sort().join('\u0000')], async () => {
   const current = ++generation
   dispose()
   if (!element.value) return
@@ -39,6 +47,7 @@ watch(() => [element.value, props.modId, route.fullPath, account.tenantId, accou
     const response = await apiFetch(`/api/mods/runtime/${encodeURIComponent(props.modId)}`, { signal: controller.signal })
     const body = await response.json()
     if (!response.ok || body.success !== true) throw new Error(typeof body.detail === 'string' ? body.detail : '无法验证当前扩展或账号权限')
+    if (current !== generation || controller.signal.aborted) return
     const metadata = body.data as RuntimeModMetadata
     if (metadata.mod_id !== props.modId) throw new Error('扩展身份与当前页面不一致')
     if (metadata.requires_restart) throw new Error('扩展已安装，请重启客户端后使用新版本')
@@ -48,7 +57,7 @@ watch(() => [element.value, props.modId, route.fullPath, account.tenantId, accou
     element.value.replaceChildren(mountPoint)
     const unmount = await module.mount(mountPoint, createRuntimeModSdk(metadata, route, controller.signal, (path) => router.push(path)))
     if (typeof unmount !== 'function') throw new Error('扩展未提供页面清理接口')
-    if (current !== generation || controller.signal.aborted) unmount()
+    if (current !== generation || controller.signal.aborted) safelyUnmount(unmount)
     else {
       cleanup = unmount
       // The host owns the durable retry and actual business probe. Mount alone
@@ -66,7 +75,7 @@ watch(() => [element.value, props.modId, route.fullPath, account.tenantId, accou
   } catch (cause) {
     if (current === generation && !controller.signal.aborted) {
       error.value = cause instanceof Error ? cause.message : '扩展加载失败'
-      element.value?.replaceChildren()
+      dispose()
     }
   } finally {
     if (current === generation) loading.value = false
