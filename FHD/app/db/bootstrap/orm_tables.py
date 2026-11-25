@@ -2,17 +2,36 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import Logger
 from typing import Literal
 
 from sqlalchemy import MetaData, Table
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from app.db.bootstrap.contracts import InspectorFactory
 from app.db.db_base import Base
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+
+@contextmanager
+def _serialized_schema_bind(engine: Engine) -> Iterator[Engine | Connection]:
+    """Serialize SQLite file schema creation before checking which tables exist.
+
+    checkfirst=True is not a process lock: two instances can both see a missing
+    table and attempt to create it. BEGIN IMMEDIATE reserves the writer before
+    inspection and keeps the reservation through the DDL. In-memory SQLite
+    retains its previous connection-pool behavior.
+    """
+    if engine.dialect.name != "sqlite" or engine.url.database in (None, ":memory:"):
+        yield engine
+        return
+    with engine.begin() as connection:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        yield connection
+
 
 GroupName = Literal[
     "auth",
@@ -151,17 +170,18 @@ class OrmBootstrap:
         if engine is None or (group.sqlite_only and engine.dialect.name != "sqlite"):
             return
         try:
-            existing = set(self.inspect(engine).get_table_names() or [])
-            missing = [table for table in group.tables if table.name not in existing]
-            if missing:
-                self.logger.info(
-                    "%s 缺少表 %s，正在通过 ORM 创建 …", group.operation, [t.name for t in missing]
-                )
-                self.metadata.create_all(
-                    engine,
-                    tables=missing if group.missing_only else list(group.tables),
-                    checkfirst=True,
-                )
+            with _serialized_schema_bind(engine) as bind:
+                existing = set(self.inspect(bind).get_table_names() or [])
+                missing = [table for table in group.tables if table.name not in existing]
+                if missing:
+                    self.logger.info(
+                        "%s 缺少表 %s，正在通过 ORM 创建 …", group.operation, [t.name for t in missing]
+                    )
+                    self.metadata.create_all(
+                        bind,
+                        tables=missing if group.missing_only else list(group.tables),
+                        checkfirst=True,
+                    )
             if seed is not None:
                 seed(engine)
         except RECOVERABLE_ERRORS as exc:
@@ -173,7 +193,8 @@ class OrmBootstrap:
         self, engine: Engine, group: TableGroup, *, label: str, swallow_errors: bool
     ) -> None:
         try:
-            self.metadata.create_all(engine, tables=list(group.tables), checkfirst=True)
+            with _serialized_schema_bind(engine) as bind:
+                self.metadata.create_all(bind, tables=list(group.tables), checkfirst=True)
         except RECOVERABLE_ERRORS as exc:
             if not swallow_errors:
                 raise

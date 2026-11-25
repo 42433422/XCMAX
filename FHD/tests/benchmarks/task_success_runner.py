@@ -277,7 +277,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     )
     from app.application.agent_runtime.gateway import run_runtime_task
     from app.db import engine
-    from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
+    from app.db.models.permission import Role
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
@@ -293,11 +293,11 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     factory = sessionmaker(bind=engine)
     sid = uuid4().hex
     with factory.begin() as db:
-        role = Role(name="admin")
-        role.permissions = [
-            Permission(code=item["code"], name=item["name"]) for item in DEFAULT_PERMISSIONS
-        ]
-        db.add(role)
+        # Reuse the real bootstrap grants: never manufacture a second copy of
+        # every Permission while runtime startup may also be seeding RBAC.
+        role = db.query(Role).filter(Role.name == "admin").one_or_none()
+        if role is None or not role.is_system:
+            raise RuntimeError("task benchmark requires seeded system admin RBAC")
         actor = User(
             username="task-benchmark-" + sid,
             password=generate_password_hash(uuid4().hex),
@@ -344,7 +344,12 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         return (
             False,
             str(admitted.get("error_code") or "runtime admission failed"),
-            {"status": "blocked", "final_output": admitted, "model_responses": 0},
+            {
+                "status": "blocked",
+                "final_output": admitted,
+                "runtime_admitted": False,
+                "model_responses": 0,
+            },
             [],
         )
     parent = drain(admitted["run_id"])
@@ -448,6 +453,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     )
     execution = {
         **parent.to_dict(),
+        "runtime_admitted": True,
         "steps": [step.to_dict() for child in children for step in child.steps],
         "tool_calls": [call.to_dict() for child in children for call in child.tool_calls],
         "final_output": {
@@ -468,6 +474,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     import app.db.models
     from app.db import engine
     from app.db.db_base import Base
+    from app.db.init_db import ensure_sqlite_rbac_bootstrap
     from app.infrastructure.tenant_scope import tenant_scope
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
@@ -477,8 +484,6 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         seed_records,
         seed_sales_period_orders,
     )
-
-    Base.metadata.create_all(engine, checkfirst=True)
 
     data = json.loads(tasks_path.read_text(encoding="utf-8"))
     tasks = data["tasks"]
@@ -490,10 +495,12 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         engine.dispose()
         Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine, checkfirst=True)
+        # Each task starts from the production RBAC seed, on the isolated trial
+        # database, before the runtime imports can attempt lazy initialization.
+        ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
         for task in tasks:
-            _reset_db()
             expect = task.get("expect") or {}
             result: dict[str, Any] = {
                 "task_id": task["task_id"],
@@ -501,17 +508,20 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "difficulty": task.get("difficulty"),
                 "trial": trial,
                 "routing_pass": False,
+                "runtime_admitted": False,
                 "exec_pass": None,
                 "db_pass": None,
                 "pass": False,
                 "failure": None,
             }
             try:
+                _reset_db()
                 seed_records(task.get("fixtures") or [])
                 seed_inventory_quantities(task.get("inventory_quantities") or [])
                 seed_sales_period_orders(task.get("sales_period_orders") or [])
                 seed_ledger_period_entries(task.get("ledger_period_entries") or [])
                 exec_ok, exec_why, executed, nodes = _execute_goal(task)
+                result["runtime_admitted"] = executed.get("runtime_admitted") is True
                 ok, why = _check_no_actions(nodes, expect)
                 if ok:
                     ok, why = _check_routing(nodes, expect)
@@ -547,6 +557,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             result["model_responses"] = (result.get("execution") or {}).get("model_responses", 0)
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
+            out.flush()
 
 
 def main() -> int:

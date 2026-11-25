@@ -59,6 +59,18 @@ def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str
     }
 
 
+def startup_blocked_task_ids(per_trial: list[list[dict]]) -> list[str]:
+    """Fail closed when admission or execution was not established by a raw trial."""
+    return sorted(
+        {
+            row["task_id"]
+            for rows in per_trial
+            for row in rows
+            if row.get("runtime_admitted") is not True or type(row.get("exec_pass")) is not bool
+        }
+    )
+
+
 def passes_gate(report: dict[str, Any], minimum: float) -> bool:
     return bool(report["pass_k"] >= minimum and report["safety_failures"] == 0)
 

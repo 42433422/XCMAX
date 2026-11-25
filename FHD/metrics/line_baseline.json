@@ -1,5 +1,5 @@
 {
-  "lines": 2733255,
+  "lines": 2733700,
   "updated": "2026-11-25",
-  "note": "# P04 SQLite RBAC bootstrap: BEGIN IMMEDIATE serialization before catalog read; separate-engine concurrency and external-writer regression. Original permission defaults, role grants and holdout threshold unchanged. Delta 121 lines (runtime 5, test 114, changelog 2); real CI and 13-task LLM benchmark still required."
+  "note": "#3613 unique SQLite bootstrap implementation plus stacked #3614 independent process writer/seed regression. Combined net lines tracked; real model 13x3 and CI remain BLOCKED until verified."
 }
