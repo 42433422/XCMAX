@@ -123,4 +123,40 @@ void main() {
     expect(originalDispatch['channel'], 'super');
     expect(originalDispatch['base_url'], 'http://127.0.0.1:59999/');
   });
+
+  test('legacy pending row never replays a possibly accepted original POST', () async {
+    client.receiptKnown = false;
+    await expectLater(
+      repository.streamMessage(
+        conversation: conversation,
+        body: '写入企业库存',
+        idempotencyKey: 'stable-original-turn',
+      ),
+      throwsA(isA<MobileApiException>()
+          .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')),
+    );
+    expect(client.attemptedPosts, 1);
+
+    // Older versions could downgrade an ambiguous send to pending.
+    final id = await store.enqueueMessage(
+      conversationId: conversation.id,
+      conversationType: conversation.type,
+      title: conversation.title,
+      body: '写入企业库存',
+      authGeneration: client.authGeneration,
+      idempotencyKey: 'stable-original-turn',
+    );
+    expect(id, greaterThan(0));
+    expect((await store.pendingMessages()).single.requiresReconciliation, isFalse);
+    expect(await repository.flushPendingMessages(), 0);
+    expect(client.attemptedPosts, 1);
+    expect(client.receiptReads, 2);
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+
+    client.receiptKnown = true;
+    expect(await repository.flushPendingMessages(), 1);
+    expect(client.attemptedPosts, 1);
+    expect(client.receiptReads, 3);
+    expect(await store.pendingMessageCount(), 0);
+  });
 }
