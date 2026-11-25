@@ -109,7 +109,8 @@ class RedisStreamsBridge:
         from redis.exceptions import RedisError
 
         try:
-            self._redis.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
+            # A newly created group must not skip retained, unread history.
+            self._redis.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="0-0", mkstream=True)
             logger.info("created consumer group %s on %s", CONSUMER_GROUP, STREAM_KEY)
         except RedisError as e:
             # BUSYGROUP 表示已存在（进程重启后重复创建是正常路径）。
