@@ -1,5 +1,5 @@
 {
-  "lines": 2733247,
-  "updated": "2026-11-25",
-  "note": "M07 持续运行可验证：监控回执改为可验证证据并对失败告警重试（净 +113 行），属运维验收链路补强。"
+  "lines": 2733249,
+  "updated": "2026-11-26",
+  "note": "安全发布门禁：清除 clear-text logging 高危（CLI 仅输出 status/evidence_ref/reason）并将 zod 升至已修复 4.6.6（净 +4 行），属发布必需修复。"
 }
