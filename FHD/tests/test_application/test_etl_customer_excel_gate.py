@@ -462,3 +462,91 @@ def test_missing_business_sheet_is_not_a_multisheet_pass(tmp_path, monkeypatch):
     report = evaluate_workbook(path, {}, data_dir=tmp_path / "gate", evidence_class="unit_test")
     assert report["checks"]["B31-18"] == "fail"
     assert report["checks"]["B31-16"] == "fail"
+
+@pytest.mark.parametrize("raw", ["{", "[]", '"untrusted"', "null"])
+def test_b31_malformed_manual_baseline_blocks_before_business_writes(tmp_path, raw):
+    original = tmp_path / "customer-original.xlsx"
+    original.write_bytes(b"not a workbook")
+    oracle = tmp_path / "baseline.json"
+    oracle.write_text(raw, encoding="utf-8")
+    verdict = release_status({
+        "XCAGI_ELT_CUSTOMER_EXCEL": str(original),
+        "XCAGI_ELT_MANUAL_BASELINE": str(oracle),
+    })
+    assert verdict["status"] == "BLOCKED"
+    assert verdict["release_pass"] is False
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def _source_evidence_case(tmp_path):
+    import hashlib
+
+    original = tmp_path / "customer-original.xlsx"
+    workbook = Workbook()
+    workbook.active.append(["姓名", "工号", "日期", "上班1打卡时间", "下班1打卡时间"])
+    workbook.active.append(["甲", "E01", "2026-03-02", "08:00", "17:30"])
+    workbook.save(original)
+    workbook.close()
+    sha = hashlib.sha256(original.read_bytes()).hexdigest()
+    base = {
+        "version": "1.0.0.7", "task_id": "t1",
+        "tenant_id": "tenant1", "customer_id": "customer1",
+        "build_sha": "a" * 40,
+    }
+    evidence = {
+        **base, "evidence_class": "customer_original", "sha256": sha,
+        "confirmed": True,
+        "source_receipt": {
+            **base, "source_sha256": sha,
+            "upload_receipt_id": "upload1", "uploaded_by": "customer1",
+        },
+        "approval_receipt": {
+            **base, "source_sha256": sha, "status": "approved",
+            "approval_id": "approval1", "approved_by": "reviewer1",
+            "plan_sha256": "b" * 64,
+        },
+    }
+    oracle = tmp_path / "baseline.json"
+    env = {
+        "XCAGI_ELT_CUSTOMER_EXCEL": str(original),
+        "XCAGI_ELT_MANUAL_BASELINE": str(oracle),
+        "XCAGI_ELT_GATE_BUILD_SHA": "a" * 40,
+    }
+    return original, oracle, evidence, env
+
+
+@pytest.mark.parametrize("drift", [
+    "no_hash", "source_tenant", "approval_customer",
+    "wrong_build", "no_approval", "missing_task",
+])
+def test_b31_unbound_real_original_cannot_mutate_business_db(tmp_path, drift):
+    original, oracle, evidence, env = _source_evidence_case(tmp_path)
+    if drift == "no_hash":
+        evidence.pop("sha256")
+    elif drift == "source_tenant":
+        evidence["source_receipt"]["tenant_id"] = "foreign-tenant"
+    elif drift == "approval_customer":
+        evidence["approval_receipt"]["customer_id"] = "other-customer"
+    elif drift == "wrong_build":
+        env["XCAGI_ELT_GATE_BUILD_SHA"] = "c" * 40
+    elif drift == "no_approval":
+        evidence.pop("approval_receipt")
+    else:
+        evidence.pop("task_id")
+    oracle.write_text(json.dumps(evidence, ensure_ascii=False), encoding="utf-8")
+    verdict = release_status(env)
+    assert verdict["status"] == "BLOCKED"
+    assert verdict["release_pass"] is False
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
+def test_b31_mismatched_source_sha_rejected_without_business_write(tmp_path):
+    _original, oracle, evidence, env = _source_evidence_case(tmp_path)
+    evidence["sha256"] = "0" * 64
+    oracle.write_text(json.dumps(evidence), encoding="utf-8")
+    verdict = release_status(env)
+    assert verdict["status"] == "FAIL"
+    assert verdict["release_pass"] is False
+    assert not list(tmp_path.glob("**/*.sqlite"))
+
+
