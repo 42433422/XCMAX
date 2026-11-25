@@ -1,10 +1,17 @@
 import { getAppBase } from '@/utils/apiBase'
 import type { Router, RouteRecordRaw } from 'vue-router'
 import type { RuntimeModMetadata } from '@/utils/runtimeModSdk'
+import { captureAuthSession } from '@/utils/authSessionCache'
 
 export type ModRouteApiEntry = { mod_id: string; routes_path: string; runtime?: RuntimeModMetadata }
 
-type RuntimeRegistration = { revision: string; names: Set<string>; remove: (() => void)[] }
+type RuntimeRegistration = {
+  revision: string
+  names: Set<string>
+  remove: (() => void)[]
+  routes: RouteRecordRaw[]
+  current: () => boolean
+}
 const runtimeRegistrationsByRouter = new WeakMap<Router, Map<string, RuntimeRegistration>>()
 
 function retireRuntimeRoutes(router: Router, modId: string): void {
@@ -14,13 +21,23 @@ function retireRuntimeRoutes(router: Router, modId: string): void {
   previous?.remove.forEach(remove => remove())
 }
 
-function registerRuntimeRoutes(router: Router, entry: ModRouteApiEntry): boolean {
+/** Retire obsolete account/session routes before matching a new navigation. */
+export function retireStaleRuntimeRoutes(router: Router): void {
+  for (const [modId, registration] of runtimeRegistrationsByRouter.get(router) ?? []) {
+    if (!registration.current()) retireRuntimeRoutes(router, modId)
+  }
+}
+
+function registerRuntimeRoutes(
+  router: Router, entry: ModRouteApiEntry, current: () => boolean,
+): 'ok' | 'invalid' | 'failed' {
+  if (!current()) return 'failed'
   const metadata = entry.runtime
   if (!metadata || metadata.mod_id !== entry.mod_id || metadata.sdk_version !== 1 ||
     !/^[a-z0-9][a-z0-9_-]{0,95}$/.test(entry.mod_id) ||
     !/^[a-f0-9]{64}$/.test(metadata.package_sha256) ||
     typeof metadata.owner_scope !== 'string' || !metadata.owner_scope.trim() ||
-    typeof metadata.package_version !== 'string' || !metadata.package_version.trim()) return false
+    typeof metadata.package_version !== 'string' || !metadata.package_version.trim()) return 'invalid'
   const registrations = runtimeRegistrationsByRouter.get(router) ?? new Map<string, RuntimeRegistration>()
   runtimeRegistrationsByRouter.set(router, registrations)
   const previous = registrations.get(entry.mod_id)
@@ -33,26 +50,46 @@ function registerRuntimeRoutes(router: Router, entry: ModRouteApiEntry): boolean
       names.has(route.name) || paths.has(route.path)) return false
     if (router.getRoutes().some(existing => (existing.name === route.name || existing.path === route.path) &&
       !(typeof existing.name === 'string' && previous?.names.has(existing.name) && existing.meta.mod === entry.mod_id))) return false
+    // A host parameterized Mod path is also a collision, even if its text differs.
+    if (router.resolve(route.path).matched.some(existing =>
+      existing.path.startsWith('/mod/') && existing.path.includes(':') && existing.meta.mod !== entry.mod_id
+    )) return false
     names.add(route.name); paths.add(route.path)
     return true
-  })) return false
+  })) return 'invalid'
   const revision = JSON.stringify([metadata.owner_scope, metadata.package_sha256, metadata.package_version, metadata.routes])
-  if (previous?.revision === revision) return true
+  if (previous?.revision === revision) return 'ok'
+  const routes = metadata.routes.map(route => ({
+    path: route.path,
+    name: route.name,
+    component: () => import('@/views/RuntimeModView.vue'),
+    props: { modId: entry.mod_id },
+    meta: { title: route.title, mod: entry.mod_id },
+  }) as RouteRecordRaw)
   retireRuntimeRoutes(router, entry.mod_id)
   const remove: (() => void)[] = []
   try {
-    for (const route of metadata.routes) remove.push(router.addRoute({
-      path: route.path,
-      name: route.name,
-      component: () => import('@/views/RuntimeModView.vue'),
-      props: { modId: entry.mod_id },
-      meta: { title: route.title, mod: entry.mod_id },
-    }))
-    registrations.set(entry.mod_id, { revision, names, remove })
-    return true
+    for (const route of routes) {
+      if (!current()) throw new Error('auth session changed during route registration')
+      remove.push(router.addRoute(route))
+    }
+    registrations.set(entry.mod_id, { revision, names, routes, current, remove })
+    return 'ok'
   } catch {
-    remove.forEach(undo => undo())
-    return false
+    remove.reverse().forEach(undo => undo())
+    // A transient addRoute failure must not erase the previous valid revision.
+    // Never restore a revision whose account or authentication session expired.
+    if (previous?.current() && current()) {
+      const restored: (() => void)[] = []
+      try {
+        for (const route of previous.routes) restored.push(router.addRoute(route))
+        registrations.set(entry.mod_id, { ...previous, remove: restored })
+      } catch {
+        restored.reverse().forEach(undo => undo())
+        registrations.delete(entry.mod_id)
+      }
+    }
+    return 'failed'
   }
 }
 
@@ -208,17 +245,32 @@ export function ensureGlobModRoutes(router: Router): Promise<void> {
  * Registers mod Vue routes (from mods/<id>/frontend/routes.js) on the app router.
  * Must run after router is created and before navigating to mod paths.
  */
-export async function registerModRoutes(router: Router, entries: ModRouteApiEntry[] | undefined | null): Promise<void> {
-  if (!entries?.length) return
+export async function registerModRoutes(
+  router: Router,
+  entries: ModRouteApiEntry[] | undefined | null,
+  options: { reconcileRuntime?: boolean } = {},
+): Promise<void> {
+  retireStaleRuntimeRoutes(router)
+  if (!entries) return
+  const current = captureAuthSession()
+  if (options.reconcileRuntime) {
+    const allowed = new Set(entries.filter(entry => entry.runtime !== undefined).map(entry => entry.mod_id))
+    for (const modId of runtimeRegistrationsByRouter.get(router)?.keys() ?? []) {
+      if (!allowed.has(modId)) retireRuntimeRoutes(router, modId)
+    }
+  }
+  if (!entries.length) return
 
   let shouldRefreshCurrentRoute = false
 
   for (const entry of entries) {
+    if (!current()) return
     const { mod_id } = entry
     if (entry.runtime !== undefined) {
-      if (registerRuntimeRoutes(router, entry)) shouldRefreshCurrentRoute = true
-      else retireRuntimeRoutes(router, mod_id)
-      // An invalid runtime contract must never fall back to a bundled module.
+      const outcome = registerRuntimeRoutes(router, entry, current)
+      if (outcome === 'ok') shouldRefreshCurrentRoute = true
+      else if (outcome === 'invalid') retireRuntimeRoutes(router, mod_id)
+      // A transient failure preserves the last valid revision; invalid contracts revoke it.
       continue
     }
     if (!mod_id || registeredModIds.has(mod_id)) continue
@@ -232,6 +284,7 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
     }
     try {
       const mod = await modRouteLoaders[key]()
+      if (!current()) return
       const routes = extractRoutesFromModule(mod)
       for (const r of routes) {
         const currentBefore = router.currentRoute.value
@@ -276,6 +329,7 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
     await new Promise<void>((r) => window.setTimeout(r, 0))
   }
 
+  if (!current()) return
   const finalTargetFullPath = currentRefreshFullPath(router)
   if (shouldRefreshCurrentRoute || shouldReplaceWithRefreshTarget(router, finalTargetFullPath)) {
     await replaceWithRefreshTarget(router)
