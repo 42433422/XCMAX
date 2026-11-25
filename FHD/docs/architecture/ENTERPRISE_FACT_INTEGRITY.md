@@ -58,7 +58,13 @@ observation time is not an effective-business-time ledger.
    reinforcement is emitted; `erp_revalidation_dropped` and incomplete
    coverage expose the uncertainty. Matching sources produce a sentence
    synthesized from the verified ERP field, not the remembered free text.
-   Historical review remains a review-only record.
+   Historical review remains a review-only record; revoked or superseded
+   historical ERP facts are redacted even in time-travel queries. Persy lists
+   and relationship graphs also redact old field values, evidence and revision
+   history when source access or version checks fail, while keeping a memory ID
+   for the existing authorized deletion path. Unverified ERP-bound claims are
+   excluded from legacy MemoryV2 prompt formatting, vector, Mem0 and relation
+   recall because those paths lack a live source principal.
 5. After a correction, save a **new versioned** source reference. Correct or
    delete the old Persy MemoryV2 claim via the existing authorized mutation
    path. Its revision history and tombstone remain authoritative to vector and
@@ -87,12 +93,16 @@ before being reported as executed.
 
 This increment implements a scoped fact **verification fence** and typed
 private MemoryV2 recall recheck, not a new source of ERP truth or automatic
-deletion of every copied memory. Ordinary chat-derived enterprise statements
+deletion of every copied memory. Only allowlisted scalar fields of orders,
+inventory movements, financial transactions/journals and customers may be
+converted into typed ERP memory candidates; raw notes and nested arrays are
+excluded. Ordinary chat-derived enterprise statements
 with no independently verified ERP binding remain conversational claims and
 must not be treated as current ERP evidence. The private capture operation
 is currently an application service, not a new public HTTP/tool action.
-Sharing ERP-backed memory with other employees remains blocked until the
-existing Persy list/graph paths also enforce recipient-specific ERP RBAC.
+Sharing ERP-backed memory with other employees remains disabled through
+`capture_erp_field`, because no shared-MemoryV2 promotion contract has been
+verified against each recipient's source permissions.
 
 Remaining acceptance requires an audited mapping from **all** pre-existing
 ERP-derived MemoryV2 claims to source identity, automatic reconciliation
