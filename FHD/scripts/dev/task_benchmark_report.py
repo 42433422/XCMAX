@@ -34,6 +34,15 @@ def classify_trial_failure(row: dict[str, Any]) -> str | None:
         if any(code in failure for code in ("http 500", "http 502", "http 503", "http 504")):
             return "model_provider_service"
     if row.get("runtime_admitted") is not True:
+        execution = row.get("execution")
+        output = execution.get("final_output") if isinstance(execution, dict) else None
+        if (
+            isinstance(output, dict)
+            and output.get("execution_state") == "blocked"
+            and output.get("failure_stage") == "runtime_setup"
+            and output.get("error_code") == "runtime_login_required"
+        ):
+            return "runtime_account_auth"
         return "runtime_admission"
     if type(row.get("exec_pass")) is not bool:
         return "runtime_execution_unverified"

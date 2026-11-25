@@ -153,6 +153,7 @@ jobs:
           record("independent_deployment_qualification_verified", status="QUALIFIED")
           PY
 
+      - name: Run isolated 13-task x 3-trial original holdout
         run: |
           python -m pytest -q --tb=short \
             tests/benchmarks/test_task_success.py \
@@ -200,7 +201,9 @@ jobs:
                   report = json.loads(path.read_text())
                   category_counts = report.get("failure_categories") or {}
                   if category_counts.get("model_provider_auth"):
-                      reason = "model_provider_credentials_or_authorization_rejected"
+                      status, reason = "AUTH_BLOCKED", "model_provider_credentials_or_authorization_rejected"
+                  elif category_counts.get("runtime_account_auth"):
+                      status, reason = "AUTH_BLOCKED", "runtime_account_login_required"
                   elif category_counts.get("model_provider_service") or category_counts.get("model_provider_rate_limit"):
                       reason = "model_provider_unavailable_or_rate_limited"
                   elif category_counts.get("database_lock") or category_counts.get("database_error"):

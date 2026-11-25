@@ -395,3 +395,31 @@ def test_failure_cause_counts_preserve_original_success_threshold():
     measured = summarize_trials(TASKS, [rows])
     assert measured["failure_categories"] == {"database_lock": 1, "model_provider_auth": 1}
     assert measured["pass_k"] == 0 and not passes_gate(measured, 0.4)
+
+
+@pytest.mark.parametrize(
+    "output, admitted, expected",
+    [
+        (
+            {
+                "error_code": "runtime_login_required",
+                "execution_state": "blocked",
+                "failure_stage": "runtime_setup",
+            },
+            False,
+            "runtime_account_auth",
+        ),
+        ({"error_code": "runtime_login_required"}, False, "runtime_admission"),
+        ({"error_code": "runtime_login_required"}, True, "runtime_execution_unverified"),
+        (None, False, "runtime_admission"),
+    ],
+)
+def test_runtime_account_auth_requires_structured_setup_receipt(output, admitted, expected):
+    row = {
+        "pass": False,
+        "failure": "runtime_login_required",
+        "runtime_admitted": admitted,
+        "exec_pass": None,
+        "execution": {"final_output": output},
+    }
+    assert classify_trial_failure(row) == expected
