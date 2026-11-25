@@ -593,15 +593,25 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             dropped = len(selected) - len(checked)
             selected = checked
         erp_revalidation_dropped = 0
-        if not review_only and selected:
-            from app.application.enterprise_cognition.memory_reference import revalidate_erp_memory
+        if selected:
+            from app.application.enterprise_cognition.memory_reference import (
+                revalidate_erp_memory,
+                sanitize_erp_memory_view,
+            )
 
             verified = []
             for score, row in selected:
-                safe_row, bound_to_erp = revalidate_erp_memory(row, access)
-                if bound_to_erp and safe_row is None:
-                    erp_revalidation_dropped += 1
-                    continue
+                if review_only:
+                    # Historical facts remain review-only, and current source
+                    # visibility is still mandatory before showing old values.
+                    safe_row = sanitize_erp_memory_view(row, access)
+                    if safe_row.get("erp_requires_reconciliation"):
+                        erp_revalidation_dropped += 1
+                else:
+                    safe_row, bound_to_erp = revalidate_erp_memory(row, access)
+                    if bound_to_erp and safe_row is None:
+                        erp_revalidation_dropped += 1
+                        continue
                 if safe_row is not None:
                     verified.append((score, safe_row))
             selected = verified
