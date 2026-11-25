@@ -87,7 +87,7 @@ def _items_from_db(
                 q = q.filter(FinancialTransaction.counterparty_id == int(market_user_id))
             rows = q.limit(limit).all()
             for row in rows:
-                cents = int(float(row.amount or 0) * 100)
+                cents = int(Decimal(row.amount or 0) * 100)
                 entry = {
                     "source_type": "financial_transaction",
                     "source_id": row.id,
@@ -144,44 +144,128 @@ def summarize_ledger(*, market_user_id: int | None = None) -> dict[str, Any]:
     return summary
 
 
+def _invoice_archive_existing(
+    db: Any,
+    tenant_id: int,
+    invoice_id: int,
+    *,
+    amount: Decimal,
+    status: str,
+    counterparty_id: int | None,
+    occurred_at: datetime,
+) -> dict[str, Any] | None:
+    """An exact replay may reuse the original row; drift requires review."""
+    from app.db.models.finance import FinancialTransaction
+
+    row = db.query(FinancialTransaction).filter(
+        FinancialTransaction.tenant_id == tenant_id,
+        FinancialTransaction.transaction_type == "contract",
+        FinancialTransaction.reference_type == "crm_invoice",
+        FinancialTransaction.reference_id == invoice_id,
+    ).one_or_none()
+    if row is None:
+        return None
+    if (
+        row.amount != amount
+        or row.currency != "CNY"
+        or row.status != status
+        or row.counterparty_id != counterparty_id
+        or row.transaction_date != occurred_at
+    ):
+        return {"archived": False, "reason_code": "invoice_archive_conflict"}
+    return {"archived": True, "transaction_id": row.id, "idempotent": True}
+
+
 def archive_from_crm_invoice(
     inv: dict[str, Any], *, market_user_id: int | None = None
 ) -> dict[str, Any]:
-    uid = int(market_user_id or inv.get("market_user_id") or 0)
+    """Archive one original CRM invoice without claiming that it was paid."""
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    tenant_id = current_tenant_id()
+    if tenant_id is None:
+        return {"archived": False, "reason_code": "tenant_context_required"}
     entry = _ledger_item_from_invoice(inv)
+    invoice_id = int(inv.get("id") or 0)
+    if invoice_id <= 0:
+        return {"archived": False, "reason_code": "invoice_identity_required"}
+    amount_cents = int(entry["amount_cents"])
+    if amount_cents < 0:
+        return {"archived": False, "reason_code": "invoice_amount_invalid"}
+    raw_date = str(entry.get("occurred_at") or "")
+    try:
+        occurred_at = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+    except ValueError:
+        return {"archived": False, "reason_code": "invoice_date_required"}
+    if occurred_at.tzinfo is not None:
+        occurred_at = occurred_at.astimezone(UTC).replace(tzinfo=None)
+    uid = int(market_user_id or inv.get("market_user_id") or 0) or None
+    amount = Decimal(amount_cents) / 100
+    status = str(entry.get("status") or "issued")
     try:
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
+        from sqlalchemy.exc import IntegrityError
 
-        amount_cents = int(entry.get("amount_cents") or 0)
-        with SessionLocal() as db:
-            txn = FinancialTransaction(
-                transaction_type=str(entry.get("track") or "contract"),
-                amount=Decimal(amount_cents) / Decimal(100),
-                reference_type="crm_invoice",
-                reference_id=int(inv.get("id") or 0) or None,
-                description=entry.get("label"),
-                status=str(entry.get("status") or "archived"),
-                counterparty_id=uid or None,
-                transaction_date=datetime.now(UTC).replace(tzinfo=None),
+        def find_existing(db):
+            return _invoice_archive_existing(
+                db, tenant_id, invoice_id, amount=amount, status=status,
+                counterparty_id=uid, occurred_at=occurred_at,
             )
-            db.add(txn)
-            db.commit()
-            db.refresh(txn)
-            return {"archived": True, "transaction_id": txn.id}
-    except RECOVERABLE_ERRORS as exc:
-        logger.debug("DB archive skipped: %s", exc)
-        return {"archived": True, "transaction_id": None, "local_only": True, "entry": entry}
+
+        try:
+            with SessionLocal() as db:
+                existing = find_existing(db)
+                if existing is not None:
+                    return existing
+                txn = FinancialTransaction(
+                    transaction_type="contract",
+                    tenant_id=tenant_id,
+                    currency="CNY",
+                    amount=amount,
+                    reference_type="crm_invoice",
+                    reference_id=invoice_id,
+                    description=entry["label"],
+                    status=status,
+                    counterparty_id=uid,
+                    transaction_date=occurred_at,
+                )
+                db.add(txn)
+                db.commit()
+                db.refresh(txn)
+                return {"archived": True, "transaction_id": txn.id, "idempotent": False}
+        except IntegrityError:
+            # A concurrent writer may have committed the same business reference.
+            # The unique key protects it; only an exact readback counts as success.
+            with SessionLocal() as db:
+                return find_existing(db) or {
+                    "archived": False, "reason_code": "invoice_archive_concurrent_conflict"
+                }
+    except RECOVERABLE_ERRORS:
+        logger.warning("CRM invoice archive unavailable", exc_info=True)
+        return {"archived": False, "reason_code": "invoice_archive_unavailable"}
 
 
 def rebuild_ledger_archive(*, market_user_id: int | None = None) -> dict[str, Any]:
     from app.domain.shared_services.user_cs_crm_store import list_crm_invoices
 
     data = list_crm_invoices(market_user_id=market_user_id, limit=500)
-    rows = data.get("items") if isinstance(data, dict) else []
-    rebuilt = 0
-    for inv in rows or []:
-        if isinstance(inv, dict):
-            archive_from_crm_invoice(inv, market_user_id=market_user_id)
-            rebuilt += 1
-    return {"rebuilt": rebuilt, "market_user_id": market_user_id}
+    rows = data.get("items") if isinstance(data, dict) else None
+    total = data.get("total") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or type(total) is not int or total < len(rows):
+        return {
+            "rebuilt": 0, "rejected": 0, "complete": False,
+            "reason_code": "invoice_source_unavailable", "market_user_id": market_user_id,
+        }
+    rebuilt = rejected = 0
+    for inv in rows:
+        outcome = archive_from_crm_invoice(inv, market_user_id=market_user_id) if isinstance(inv, dict) else {"archived": False}
+        rebuilt += outcome.get("archived") is True
+        rejected += outcome.get("archived") is not True
+    return {
+        "rebuilt": rebuilt,
+        "rejected": rejected,
+        "complete": total == len(rows) and rejected == 0,
+        "reason_code": "invoice_source_truncated" if total != len(rows) else ("invoice_archive_rejected" if rejected else None),
+        "market_user_id": market_user_id,
+    }
