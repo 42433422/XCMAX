@@ -28,7 +28,7 @@ const sessionMocks = vi.hoisted(() => {
   }
 })
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import fs from 'node:fs'
 import http from 'node:http'
 import { createHmac } from 'node:crypto'
@@ -589,6 +589,26 @@ describe('同一进程附加窗口', () => {
     created[0].destroy()
     expect(desktopWindowCount()).toBe(MAX_DESKTOP_WINDOWS - 1)
     expect(openAuxiliaryWindow(url)).not.toBeNull()
+  })
+
+  it('clamps auxiliary bounds and native minimum size to a small secondary display', async () => {
+    vi.mocked(isTrustedDesktopOrigin).mockReturnValue(true)
+    const main = makeWindow()
+    const origin = { x: -710, y: 20, width: 1280, height: 800 }
+    main.getBounds = vi.fn(() => origin)
+    desktopRuntime.mainWindow = main
+    const workArea = { x: -720, y: 0, width: 720, height: 580 }
+    vi.mocked(screen.getDisplayMatching).mockReturnValueOnce({ workArea } as Electron.Display)
+    const actual = await vi.importActual<typeof import('./window-state')>('./window-state')
+    vi.mocked(clampWindowBounds).mockImplementationOnce(actual.clampWindowBounds)
+    vi.mocked(BrowserWindow).mockImplementationOnce(function () {
+      return fakeAux() as unknown as BrowserWindow
+    })
+    expect(openAuxiliaryWindow('http://127.0.0.1:17500/')).not.toBeNull()
+    expect(screen.getDisplayMatching).toHaveBeenCalledWith(origin)
+    expect(BrowserWindow).toHaveBeenCalledWith(expect.objectContaining({
+      ...workArea, minWidth: 720, minHeight: 580,
+    }))
   })
 
   it('拒绝不可信地址，且不创建窗口', () => {
