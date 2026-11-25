@@ -72,6 +72,7 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
     Input must match the exact approved snapshot: return_no, inbound_id, items.
     Replayed return identities return their original receipt, never post twice.
     """
+    from app.db.models.accounting import JournalEntry
     from app.domain.shared_services.accounting_services import create_journal_entry
     from app.domain.shared_services.purchase_service import _line_amount, _write_lock
 
@@ -115,6 +116,8 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                     ApprovalRecord.request_id == approval_id,
                     ApprovalRecord.approver_id == approval.approved_by,
                     ApprovalRecord.action == ApprovalAction.APPROVE.value,
+                    ApprovalRecord.tenant_id == tenant_id,
+                    ApprovalRecord.is_passed.is_(True),
                 ).first() is None
             ):
                 raise PurchaseReturnRefused("原退货审批缺失、无独立批准人或无审计回执")
@@ -170,10 +173,66 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                     PurchaseInboundItem.tenant_id == tenant_id,
                     PurchaseInboundItem.id.in_(source),
                 )
+                .order_by(PurchaseInboundItem.id)
                 .with_for_update().all()
             }
             if set(inbound_lines) != set(source):
                 raise PurchaseReturnRefused("退货行与原已完成入库凭证不匹配")
+
+            # Verify original posted batch movements and AP source before
+            # reversing any stock or payable. A missing source blocks posting.
+            expected_by_stock: dict[
+                tuple[int, int, str | None, int | None], Decimal
+            ] = {}
+            for origin in receipt.items:
+                if origin.tenant_id != tenant_id:
+                    raise PurchaseReturnRefused("原入库行租户不一致")
+                key = (
+                    origin.product_id, receipt.warehouse_id,
+                    origin.batch_no, origin.location_id,
+                )
+                expected_by_stock[key] = expected_by_stock.get(key, Decimal("0")) + Decimal(
+                    str(origin.quantity)
+                )
+            observed_by_stock: dict[
+                tuple[int, int, str | None, int | None], Decimal
+            ] = {}
+            transactions = db.query(InventoryTransaction).filter(
+                InventoryTransaction.tenant_id == tenant_id,
+                InventoryTransaction.reference_type == "purchase_inbound",
+                InventoryTransaction.reference_id == receipt.id,
+            ).all()
+            for transaction in transactions:
+                if transaction.transaction_type != "in":
+                    raise PurchaseReturnRefused("原入库库存流水方向异常")
+                key = (
+                    transaction.product_id, transaction.warehouse_id,
+                    transaction.batch_no, transaction.location_id,
+                )
+                observed_by_stock[key] = observed_by_stock.get(key, Decimal("0")) + Decimal(
+                    str(transaction.quantity)
+                )
+            if not expected_by_stock or expected_by_stock != observed_by_stock:
+                raise PurchaseReturnRefused("原入库批次流水未独立对齐，禁止退货")
+            source_journals = db.query(JournalEntry).filter(
+                JournalEntry.tenant_id == tenant_id,
+                JournalEntry.reference_type == "purchase_inbound",
+                JournalEntry.reference_id == receipt.id,
+            ).all()
+            original_total = Decimal(str(receipt.total_amount or 0))
+            if original_total > 0:
+                if len(source_journals) != 1:
+                    raise PurchaseReturnRefused("原入库应付凭证缺失或重复")
+                original_journal = source_journals[0]
+                if (
+                    original_journal.status != "posted"
+                    or original_journal.reversed_at is not None
+                    or Decimal(str(original_journal.debit_total or 0)) != original_total
+                    or Decimal(str(original_journal.credit_total or 0)) != original_total
+                ):
+                    raise PurchaseReturnRefused("原入库应付凭证未过账或金额不匹配")
+            elif source_journals:
+                raise PurchaseReturnRefused("零金额入库存在来源不明的财务凭证")
 
             now = datetime.now()
             total = Decimal("0")
@@ -185,7 +244,7 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
             )
             db.add(posted)
             db.flush()
-            for line_id, quantity in source.items():
+            for line_id, quantity in sorted(source.items()):
                 origin = inbound_lines[line_id]
                 previous = (
                     db.query(PurchaseReturnItem.quantity)
