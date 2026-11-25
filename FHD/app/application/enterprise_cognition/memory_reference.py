@@ -78,9 +78,7 @@ _ALLOWED_ERP_FIELDS: dict[str, frozenset[str]] = {
             "is_credit_note",
         }
     ),
-    "customer": frozenset(
-        {"customer_name", "credit_limit", "credit_used", "is_credit_limited"}
-    ),
+    "customer": frozenset({"customer_name", "credit_limit", "credit_used", "is_credit_limited"}),
 }
 
 
@@ -220,9 +218,7 @@ def revalidate_erp_memory(
     return checked, True
 
 
-def sanitize_erp_memory_view(
-    record: dict[str, Any], access: DatasetAccessContext
-) -> dict[str, Any]:
+def sanitize_erp_memory_view(record: dict[str, Any], access: DatasetAccessContext) -> dict[str, Any]:
     """Never disclose a superseded or unauthorized ERP claim in a list/graph.
 
     Retain only the non-sensitive memory identity and revision to allow the
