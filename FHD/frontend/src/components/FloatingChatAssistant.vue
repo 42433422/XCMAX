@@ -195,7 +195,14 @@
 
       <div v-else ref="messageListRef" class="floating-chat-messages" @scroll.passive="onMessageScroll">
         <div v-for="(msg, idx) in visibleMessages" :key="`${idx}-${msg.time}`" class="floating-chat-message" :class="msg.role">
-          <div class="floating-chat-bubble" v-html="sanitizeChatBubbleHtml(msg.content)"></div>
+          <div class="floating-chat-bubble">
+            <MessageBody
+              v-if="msg.role === 'ai'"
+              :content="aiMarkdownSourceFromContent(msg.content)"
+              :streaming="isStreamingReply && idx === visibleMessages.length - 1"
+            />
+            <div v-else v-html="sanitizeChatBubbleHtml(msg.content)"></div>
+          </div>
           <div class="floating-chat-time">{{ msg.time }}</div>
         </div>
         <div v-if="activeIsLoading && !isStreamingReply" class="floating-chat-message ai" role="status" aria-live="polite">
@@ -227,6 +234,8 @@ import { requestVoiceCallStart, voiceCallActive, voiceChatBridge } from '@/compo
 import { saveVoiceTurnSettings, voiceTurnSettings } from '@/composables/voiceTurnSettings'
 import { publicAssetUrl } from '@/utils/publicAssetUrl'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
+import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
+import MessageBody from '@/components/chat/MessageBody.vue'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 
 const props = defineProps({
