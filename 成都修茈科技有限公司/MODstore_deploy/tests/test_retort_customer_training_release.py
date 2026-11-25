@@ -154,7 +154,16 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
                 event_id="experiment.postpromotion_observed:" + observation_id,
             )
             db.commit()
-    # Uses original outbox stop-loss, never a submitted model verdict.
+    # Stop-loss blocks the next real assignment immediately, even before the
+    # original scheduler has restarted the completed Retort recovery tail.
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
     assert training.request_postpromotion_regression_rechecks() == 1
     assert training.request_postpromotion_regression_rechecks() == 0
     with get_session_factory()() as db:
