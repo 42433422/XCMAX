@@ -85,6 +85,7 @@ t('Flutter light onPrimary', lightSurface, lightPrimary);
 t('Flutter light onSecondary', 'colors.neutral_light.n900', 'colors.status.success');
 t('Flutter light onError', 'colors.neutral_light.n900', 'colors.status.danger');
 t('Flutter light tertiary text on surface', 'colors.neutral_light.n500', lightSurface);
+t('Flutter light tertiary text on elevated surface', 'colors.neutral_light.n500', 'colors.neutral_light.n100');
 t('Flutter dark tertiary text on high surface', mobile + 'dark_text_tertiary', mobile + 'dark_surface_high');
 t('Flutter dark onPrimary', 'colors.neutral_light.n900', 'colors.brand.primary_light');
 t('Flutter dark onSecondary', 'colors.neutral_light.n900', 'colors.status.success');
