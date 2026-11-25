@@ -13,6 +13,7 @@ from app.fastapi_routes.domains.agent.route_support import authenticated_runtime
 from app.infrastructure.auth.agent_principal import require_agent_principal
 from app.infrastructure.tenant_scope import tenant_scope
 from evals.run_agent_eval import _authenticated_route_fixture
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
@@ -135,14 +136,65 @@ def test_unregistered_legacy_upload_is_never_adopted(owned, monkeypatch, tmp_pat
             )
 
 
-def test_prefixed_chat_upload_path_resolves_by_original_file_name(owned):
-    context, file = owned
-    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+def test_prefixed_chat_upload_path_resolves_by_original_file_name(
+    trusted_actor, monkeypatch, tmp_path
+):
+    """Use the real route's random path, never invent a prefix in the positive control."""
+    import io
+    from pathlib import Path
 
-    with tenant_scope(int(context["tenant_id"])):
-        assert (
-            resolve_owned_upload_path("uploads/chat/7a9193dba432-price.csv", context) == str(file)
-        )
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from openpyxl import Workbook
+
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.fastapi_routes.platform_shell_routes import router
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path / "workspace"))
+    actor = trusted_actor(permissions=["employee.execute", "tool.excel_analysis.read"])
+    app = FastAPI()
+    app.include_router(router)
+    originals = []
+    receipts = []
+    with TestClient(app, headers=actor.headers) as client:
+        for amount in (120, 999):
+            book = Workbook()
+            book.active.append(["product", "amount"])
+            book.active.append(["paint", amount])
+            with io.BytesIO() as stream:
+                book.save(stream)
+                original = stream.getvalue()
+            book.close()
+            response = client.post(
+                "/api/platform-shell/chat-office-file-upload",
+                files={
+                    "file": (
+                        "report.xlsx",
+                        original,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+            assert response.status_code == 200, response.text
+            receipts.append(response.json()["data"])
+            originals.append(original)
+    first, second = receipts
+    assert first["upload_id"] != second["upload_id"]
+    legacy_path = first["file_path"]
+    assert legacy_path.startswith("uploads/chat/")
+    assert Path(legacy_path).name.endswith("-report.xlsx")
+    assert legacy_path != second["file_path"]
+    context = {**actor.context, "attachment_upload_ids": [first["upload_id"]]}
+    with tenant_scope(actor.tenant_id):
+        for reference in (first["upload_id"], legacy_path, "report.xlsx"):
+            with workflow_file_snapshot(reference, context) as snapshot:
+                assert snapshot.read_bytes() == originals[0]
+        with workflow_file_snapshot(second["upload_id"], actor.context) as snapshot:
+            assert snapshot.read_bytes() == originals[1]
+        for reference in (legacy_path, "report.xlsx"):
+            with pytest.raises(PermissionError), workflow_file_snapshot(reference, actor.context):
+                pytest.fail("an unbound random path or ambiguous name is not an upload identity")
 
 
 def test_registered_upload_round_trip_and_missing_tenant(owned):
