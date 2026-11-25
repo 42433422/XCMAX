@@ -324,3 +324,29 @@ def test_account_route_requires_request_scoped_credentials(override):
     }
     with pytest.raises(RuntimePolicyError):
         _route(**{**values, **override})
+
+
+@pytest.mark.parametrize("engine", ["codex", "xiaox"])
+def test_legacy_deployment_label_selects_same_executor_without_rewriting(
+    tmp_path, monkeypatch, engine
+):
+    from dataclasses import asdict
+
+    root = tmp_path / "codex-runtime"
+    root.mkdir()
+    config = tmp_path / "runtime.json"
+    config.write_text(json.dumps({
+        "engine": engine,
+        "route": asdict(_route()),
+        "runtime_root": str(root),
+        "qualification_file": str(root / "qualification.json"),
+    }))
+    original = config.read_bytes()
+    monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", str(config))
+    settings = runtime_settings()
+    assert settings.engine == "xiaox"
+    assert settings.route == _route()
+    assert settings.runtime_root == root
+    assert config.read_bytes() == original
+    with pytest.raises(RuntimePolicyError):
+        settings.require_qualified()
