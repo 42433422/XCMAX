@@ -112,6 +112,7 @@ def revalidate_erp_memory(
             actor_id=access.actor_id,
             mod_id=access.mod_id,
             force_refresh=True,
+            verify_only=True,
         )
         verification = verify_source_reference(snapshot, version, token)
     except (PermissionError, ValueError, TypeError):
