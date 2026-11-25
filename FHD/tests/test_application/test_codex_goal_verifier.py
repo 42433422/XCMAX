@@ -325,7 +325,11 @@ def test_claimed_verified_receipt_cannot_override_rejected_host_verification(ver
     report = verifier.verify()
     assert report["status"] == "needs_work" and not report["accepted"]
     assert "缺少独立核验" in report["feedback"]
-    assert verifier.classify(report)[1]["business_completed"] is False
+    status, result = verifier.classify(report)
+    assert status == "blocked" and not result["business_completed"]
+    assert result["tool_calls"][0]["success"] is True
+    assert result["tool_calls"][0]["verified"] is False
+    assert result["verified_operations"] is False
 
 
 def test_unknown_effect_inside_completed_receipt_blocks_goal_success(verifier):
