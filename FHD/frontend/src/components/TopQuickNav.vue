@@ -1,11 +1,15 @@
 <template>
+  <button type="button" class="top-quick-nav__narrow-trigger" aria-label="打开全局搜索"
+    aria-haspopup="dialog" :aria-expanded="paletteOpen ? 'true' : 'false'" @click="openCommandPalette">
+    <i class="fa fa-search" aria-hidden="true"></i>
+  </button>
   <Teleport to="body">
     <div v-if="paletteOpen" class="top-quick-nav__scrim" @mousedown.prevent="closeAndRestore" />
   </Teleport>
   <Teleport to="body" :disabled="!paletteOpen">
   <div ref="paletteRootRef" class="top-quick-nav" :class="{ 'top-quick-nav--palette': paletteOpen }"
     :role="paletteOpen ? 'dialog' : undefined" :aria-modal="paletteOpen ? 'true' : undefined"
-    :aria-label="paletteOpen ? '工作空间命令面板' : undefined"
+    :aria-label="paletteOpen ? (desktopEnabled ? '工作空间命令面板' : '全局搜索') : undefined"
     @keydown="onPaletteKeydown">
     <i class="fa fa-search top-quick-nav__icon" aria-hidden="true"></i>
     <input
@@ -59,11 +63,11 @@
       </ul>
     </Teleport>
     <div v-if="paletteOpen" class="top-quick-nav__footer">
-      <button type="button" :disabled="filtered[highlightIndex]?.kind !== 'nav'"
+      <button v-if="desktopEnabled" type="button" :disabled="filtered[highlightIndex]?.kind !== 'nav'"
         @click="toggleFavoriteHighlighted">
         {{ preferences.favorites.includes(filtered[highlightIndex]?.key) ? '取消常用' : '设为常用' }}
       </button>
-      <button type="button" :aria-expanded="shortcutsVisible" @click="shortcutsVisible = !shortcutsVisible">快捷键设置</button>
+      <button v-if="desktopEnabled" type="button" :aria-expanded="shortcutsVisible" @click="shortcutsVisible = !shortcutsVisible">快捷键设置</button>
       <button type="button" @click="closeAndRestore">Esc 关闭</button>
     </div>
     <section v-if="paletteOpen && shortcutsVisible" class="top-quick-nav__settings" aria-label="自定义快捷键">
@@ -338,6 +342,10 @@ function scheduleRecordSearch() {
 watch(searchPermissionKey, scheduleRecordSearch, { flush: 'sync' })
 watch(query, scheduleRecordSearch)
 
+watch(() => filtered.value.length, length => {
+  if (highlightIndex.value >= length) highlightIndex.value = 0
+}, { flush: 'sync' })
+
 watch(highlightIndex, () => {
   void nextTick(() => {
     const node = document.querySelector('#top-quick-nav-list .top-quick-nav__option.highlighted')
@@ -434,7 +442,7 @@ function closeAfterNavigation() {
 }
 
 function openCommandPalette() {
-  if (!desktopEnabled || !inputRef.value || inputRef.value.closest('[inert]')) return
+  if (!inputRef.value || inputRef.value.closest('[inert]')) return
   if (!paletteOpen.value) {
     const active = document.activeElement
     restoreTarget = active instanceof HTMLElement && active !== inputRef.value ? active : null
@@ -472,7 +480,7 @@ function onGlobalKeydown(event) {
   if (!desktopEnabled || event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return
   if (event.getModifierState?.('AltGraph')) return
   const command = workspaceCommandForKey(event, preferences.value.shortcuts, macPlatform)
-  if (!command) return
+  if (!command || (command !== 'palette' && !commandOptions.value.some(item => item.id === command))) return
   const active = document.activeElement
   const input = inputRef.value
   if (!input || input.closest('[inert]')) return
@@ -491,12 +499,12 @@ function onGlobalKeydown(event) {
 }
 
 function onNativeWorkspaceCommand(command) {
-  if (!desktopEnabled || inputRef.value?.closest('[inert]')) return
+  if (!desktopEnabled || !inputRef.value || inputRef.value.closest('[inert]')) return
   const active = document.activeElement
   if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]') &&
     !paletteRootRef.value?.contains(active)) return
   if (command === 'palette') { openCommandPalette(); return }
-  if (['chat', 'new-chat', 'new-task', 'sessions', 'tasks'].includes(command)) {
+  if (commandOptions.value.some(item => item.id === command)) {
     closeAndRestore()
     emit('command', command)
   }
@@ -646,6 +654,9 @@ function onKeydown(event) {
   position: fixed;
   z-index: 4601;
   top: min(18vh, 180px);
+  top: min(18dvh, 180px);
+  max-height: calc(100dvh - min(18dvh, 180px) - 12px);
+  overflow-y: auto;
   left: 50%;
   width: min(680px, calc(100vw - 36px));
   transform: translateX(-50%);
@@ -677,6 +688,7 @@ function onKeydown(event) {
 .top-quick-nav__star { color: #b48b24; margin-left: auto; }
 .top-quick-nav__footer {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding: 10px 0;
@@ -708,6 +720,7 @@ function onKeydown(event) {
   font-size: 12px;
 }
 .top-quick-nav__settings select {
+  max-width: 100%;
   background: var(--el-fill-color-blank, #fff);
   color: inherit;
   border: 1px solid var(--el-border-color, #b8c6d6);
@@ -835,9 +848,35 @@ function onKeydown(event) {
   text-align: center;
 }
 
+.top-quick-nav__narrow-trigger { display: none; }
 @media (max-width: 1023px) {
   .top-quick-nav:not(.top-quick-nav--palette) {
     display: none;
   }
+  .top-quick-nav__narrow-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--xc-color-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-color-text);
+    background: var(--xc-color-surface);
+    cursor: pointer;
+  }
+  .top-quick-nav__narrow-trigger:focus-visible {
+    outline: 2px solid var(--xc-color-primary);
+    outline-offset: 2px;
+  }
+}
+@media (max-width: 480px) {
+  .top-quick-nav.top-quick-nav--palette {
+    top: 12px;
+    max-height: calc(100dvh - 24px);
+    width: calc(100vw - 24px);
+  }
+  .top-quick-nav__settings label { flex-wrap: wrap; }
 }
 </style>
