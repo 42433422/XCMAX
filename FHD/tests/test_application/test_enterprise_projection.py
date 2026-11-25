@@ -1122,3 +1122,88 @@ def test_separate_source_commits_never_restore_an_old_fact_token(world):
         order = db.get(SalesOrder, 101)
         assert order.state == "sent"
         assert order.payment_state == "partial"
+
+
+def test_persy_memoryv2_sql_authority_revokes_recall_without_bus_event(world, monkeypatch):
+    """Real SQL source changes invalidate MemoryV2/Persy reuse, not history itself."""
+    from app.application.dataset_rag_app_service import DatasetAccessContext
+    from app.application.persy_memory_app_service import PersyMemoryApplicationService
+    from app.application.persy_memory_utils import _memory_owner_id
+    from app.application.user_memory.retrieve import filter_recalled_memories
+    from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
+
+    projection, sessions, clock, permissions = world
+    monkeypatch.setattr(UserMemoryStore, "_instance", None)
+    monkeypatch.setattr(UserMemoryService, "_instance", None)
+    memory = UserMemoryService(storage_type="memory")
+    persy = PersyMemoryApplicationService(memory)
+    monkeypatch.setattr(
+        "app.application.enterprise_cognition.projection.get_projection_service",
+        lambda: projection,
+    )
+    access = DatasetAccessContext(
+        actor_id="1",
+        tenant_id="11",
+        permissions=frozenset({"dataset.read", "dataset.write"}),
+    )
+    owner = _memory_owner_id(access)
+
+    def capture_and_confirm():
+        result = persy.capture_erp_field(
+            access_context=access,
+            entity_type="customer",
+            entity_id="201",
+            field="customer_name",
+        )
+        assert result["success"] is True
+        candidate = result["candidate"]
+        assert candidate["status"] == "pending"
+        approved = persy.mutate(
+            access_context=access, memory_id=candidate["memory_id"], action="confirm"
+        )
+        assert approved["success"] is True
+        return candidate["memory_id"]
+
+    original_id = capture_and_confirm()
+    assert any(
+        row["memory_id"] == original_id and row["status"] == "active"
+        for row in memory.list_memories(owner)
+    )
+    before = persy.query(access_context=access, query="ERP customer")
+    assert any("Customer A" in row["text"] for row in before["chunks"])
+
+    # No memory mutation or bus delivery: read the committed business row again.
+    with sessions.begin() as db:
+        db.get(Customer, 201).customer_name = "Customer B"
+    clock[0] += 1
+    assert any(row["memory_id"] == original_id for row in memory.list_memories(owner))
+    stale = persy.query(access_context=access, query="ERP customer")
+    assert stale["chunks"] == []
+    assert stale["erp_revalidation_dropped"] >= 1
+    assert "Customer A" not in repr(persy.list_memories(access_context=access))
+    legacy_hits = [
+        {
+            "content": "Customer A",
+            "metadata": {
+                "source_memory_id": original_id,
+                "source_owner_id": owner,
+                "source_revision": row["revision"],
+            },
+            "score": 1.0,
+        }
+        for row in memory.list_memories(owner)
+        if row["memory_id"] == original_id
+    ]
+    assert legacy_hits
+    assert filter_recalled_memories(owner, legacy_hits, memory_service=memory) == []
+
+    current_id = capture_and_confirm()
+    assert current_id != original_id
+    current = persy.query(access_context=access, query="ERP customer")
+    assert any("Customer B" in row["text"] for row in current["chunks"])
+    permissions.remove("customer.view")
+    denied = persy.query(access_context=access, query="ERP customer")
+    assert denied["chunks"] == []
+    assert "Customer B" not in repr(persy.list_memories(access_context=access))
+    with sessions() as db:
+        assert db.get(Customer, 201).customer_name == "Customer B"
