@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.application.mobile_extensions.protocols import (
@@ -52,6 +52,7 @@ def _personal_mod_denied() -> JSONResponse:
 class MobileWorkspacePrefsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_ai_employees: dict[str, bool]
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
 
 
 @dataclass(frozen=True)
@@ -150,7 +151,10 @@ class WorkspaceRoutes:
             )
 
             return await patch_workspace_prefs_endpoint(
-                WorkspacePrefsPatch(workflow_ai_employees=body.workflow_ai_employees), request
+                WorkspacePrefsPatch(
+                    workflow_ai_employees=body.workflow_ai_employees,
+                    expected_revision=body.expected_revision,
+                ), request
             )
 
         @router.get("/mods", response_model=None)
