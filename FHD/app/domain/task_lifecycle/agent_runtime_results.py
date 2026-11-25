@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
 from app.domain.task_lifecycle.results import (
+    execution_result_error,
     execution_result_outcome_unknown,
     execution_result_proven_not_executed,
 )
@@ -46,6 +47,18 @@ def receipt_state(row: dict[str, Any]) -> str:
     }:
         return "unknown"
     return str(receipt.get("status") or row.get("state") or "unknown")
+
+
+def receipt_verified(row: dict[str, Any]) -> bool:
+    """Only host-backed, settled receipts can be presented as verified operations."""
+    receipt = row.get("receipt")
+    return (
+        isinstance(receipt, dict)
+        and receipt_state(row) == "completed"
+        and receipt.get("success") is True
+        and receipt.get("verified") is True
+        and not execution_result_error(receipt)
+    )
 
 
 def model_unsettled(metadata: dict[str, Any]) -> bool:
@@ -110,8 +123,7 @@ def classify_runtime_result(
             "task_id": row.get("child_task_id"),
             "success": receipt_state(row) == "completed"
             and (row.get("receipt") or {}).get("success") is True,
-            "verified": isinstance(row.get("receipt"), dict)
-            and row["receipt"].get("verified") is True,
+            "verified": receipt_verified(row),
             "execution_state": receipt_state(row),
         }
         for row in rows
@@ -170,13 +182,7 @@ def classify_runtime_result(
             output=question,
         )
         return "waiting_user"
-    verified_rows = [
-        row
-        for row in rows
-        if receipt_state(row) == "completed"
-        and (row.get("receipt") or {}).get("success") is True
-        and (row.get("receipt") or {}).get("verified") is True
-    ]
+    verified_rows = [row for row in rows if receipt_verified(row)]
     report = metadata.get("goal_verification")
     if not isinstance(report, dict):
         report = {}
