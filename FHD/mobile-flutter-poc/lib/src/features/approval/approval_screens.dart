@@ -202,7 +202,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
   late Future<ApprovalDetail> _future;
   final _opinionController = TextEditingController();
   var _working = false;
+  var _needsReconciliation = false;
   var _status = '';
+  late final int _generation;
 
   @override
   void initState() {
@@ -211,6 +213,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       context,
       explicit: widget.repository,
     );
+    _generation = _repository.client.authGeneration;
     _future = _load();
   }
 
@@ -337,13 +340,15 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                 WeBlockButton(
                                   text: '通过',
                                   onPressed: () => _confirm(true),
-                                  enabled: detail.canAct && !_working,
+                                  enabled: detail.canAct && !_working && !_needsReconciliation &&
+                                      !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                                 const SizedBox(height: 8),
                                 WeBlockOutlinedButton(
                                   text: '驳回',
                                   onPressed: () => _confirm(false),
-                                  enabled: detail.canAct && !_working,
+                                  enabled: detail.canAct && !_working && !_needsReconciliation &&
+                                      !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                               ],
                             ),
@@ -357,8 +362,14 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
   }
 
   Future<ApprovalDetail> _load() async {
-    if (widget.initialDetail != null) return widget.initialDetail!;
-    return _repository.loadApprovalDetail(widget.id);
+    if (_repository.client.authGeneration != _generation) {
+      throw StateError('账号已切换，请重新打开审批');
+    }
+    final detail = await _repository.loadApprovalDetail(widget.id);
+    if (_repository.client.authGeneration != _generation) {
+      throw StateError('账号已切换，请重新打开审批');
+    }
+    return detail;
   }
 
   Future<void> _confirm(bool approve) async {
@@ -373,20 +384,48 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
         onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
-    if (accepted != true || !mounted || _working) return;
+    if (accepted != true || !mounted || _working || _needsReconciliation) return;
     setState(() => _working = true);
     try {
+      // The displayed initial detail is not a write authorization.
+      final before = await _load();
+      if (!before.canAct || before.id != widget.id) {
+        throw StateError('原审批已变更或无权操作，请刷新');
+      }
       final opinion = _opinionController.text.trim();
+      _needsReconciliation = true;
       if (approve) {
         await _repository.approveApproval(widget.id, opinion);
       } else {
         await _repository.rejectApproval(widget.id, opinion);
       }
-      if (!mounted) return;
+      if (!mounted || _repository.client.authGeneration != _generation) return;
+      _needsReconciliation = false;
       setState(() => _status = approve ? '审批已通过' : '审批已驳回');
       Navigator.of(context).maybePop();
     } catch (error) {
-      if (mounted) setState(() => _status = mobileErrorText(error));
+      if (!mounted) return;
+      if (_needsReconciliation) {
+        setState(() => _status = '审批提交结果待核对，请勿重复操作。');
+        try {
+          final latest = await _load();
+          if (!mounted) return;
+          setState(() {
+            _future = Future.value(latest);
+            if (!latest.canAct) {
+              _needsReconciliation = false;
+              _status = '审批状态已由服务端更新，请查看最新结果';
+            }
+          });
+        } catch (_) {
+          // A failed receipt read must not enable the original write again.
+        }
+      } else {
+        setState(() {
+          _status = mobileErrorText(error);
+          _future = _load();
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
