@@ -172,7 +172,7 @@ class DeadLetterQueue:
         self._entries = self._state.entries
         self._stats = self._state.stats
         self._alert_callbacks: list[Callable[[DeadLetterEntry], None]] = []
-        self._replay_callbacks: list[Callable[[NeuroEvent], None]] = []
+        self._replay_callbacks: list[Callable[[NeuroEvent], bool | None]] = []
         self._replay_paused = False
         self._runtime = _runtime()
         initialized = False
@@ -450,8 +450,8 @@ class DeadLetterQueue:
         """注册告警回调"""
         self._alert_callbacks.append(callback)
 
-    def on_replay(self, callback: Callable[[NeuroEvent], None]) -> None:
-        """注册重播回调"""
+    def on_replay(self, callback: Callable[[NeuroEvent], bool | None]) -> None:
+        """注册重播回调；显式 False 表示未接受，None 兼容旧回调。"""
         self._replay_callbacks.append(callback)
 
     def _trigger_alert(self, entry: DeadLetterEntry) -> None:
@@ -540,7 +540,13 @@ class NeuroBusDLQIntegration:
         return self._dlq
 
     def handle_failure(
-        self, event: NeuroEvent, error: Exception, retry_count: int, handler_name: str | None = None
+        self,
+        event: NeuroEvent,
+        error: Exception,
+        retry_count: int,
+        handler_name: str | None = None,
+        *,
+        retry_exhausted: bool | None = None,
     ) -> str:
         """
         处理失败，决定进入死信队列
@@ -548,7 +554,10 @@ class NeuroBusDLQIntegration:
         Returns:
             死信条目 ID
         """
-        if retry_count >= self._max_retries:
+        # Legacy callers may omit the explicit terminal outcome. The bus always
+        # supplies it because a numeric count cannot prove why execution stopped.
+        exhausted = retry_count >= self._max_retries if retry_exhausted is None else retry_exhausted
+        if exhausted:
             reason = DeadLetterReason.RETRY_EXHAUSTED
         elif isinstance(error, (TimeoutError, asyncio.TimeoutError)):
             reason = DeadLetterReason.TIMEOUT
@@ -571,8 +580,8 @@ class NeuroBusDLQIntegration:
     def setup_replay_to_bus(self, bus: EventPublisher) -> None:
         """设置重播到 NeuroBus"""
 
-        def replay_callback(event: NeuroEvent) -> None:
-            bus.publish(event)
+        def replay_callback(event: NeuroEvent) -> bool:
+            return bus.publish(event)
 
         self._dlq.on_replay(replay_callback)
 

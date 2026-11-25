@@ -419,22 +419,36 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 sync_future.add_done_callback(self._sync_futures.discard)
                 await asyncio.shield(asyncio.wrap_future(sync_future))
 
-        retry_count = 0
+        # Convert the event's remaining lifetime to a monotonic deadline once.
+        # Queue age, all attempts and backoff consume the same bounded budget.
+        loop = asyncio.get_running_loop()
+        age_sec = max(0.0, time.time() - event.metadata.timestamp)
+        remaining_sec = max(0.0, event.metadata.timeout_ms / 1000 - age_sec)
+        budget_sec = min(self._handler_timeout_sec, remaining_sec)
+        deadline = loop.time() + budget_sec
+        operation_name = getattr(subscription.handler, "__name__", "handler")
+        retry_context = None
         try:
-            async with asyncio.timeout(self._handler_timeout_sec):
-                if self._rel_retry_handler is not None:
-                    domain = event.metadata.domain or "default"
-                    retry_handler = self._rel_retry_handler.get_handler(domain)
-                    try:
-                        await retry_handler.execute(
-                            _invoke,
-                            operation_name=getattr(subscription.handler, "__name__", "handler"),
-                        )
-                    except RECOVERABLE_ERRORS:
-                        retry_count = retry_handler._config.max_retries
-                        raise
-                else:
+            if self._rel_retry_handler is not None:
+                domain = event.metadata.domain or "default"
+                retry_handler = self._rel_retry_handler.get_handler(domain)
+                # A synchronous timeout does not establish that a side effect failed.
+                retry_context = retry_handler.new_context(
+                    operation_name, retry_timeouts=subscription.is_async
+                )
+                await retry_handler.execute(
+                    _invoke,
+                    operation_name=operation_name,
+                    retry_context=retry_context,
+                    deadline=deadline,
+                )
+            else:
+                async with asyncio.timeout_at(deadline):
+                    if loop.time() >= deadline:
+                        raise TimeoutError("Handler execution budget exhausted")
                     await _invoke()
+                    if loop.time() >= deadline:
+                        raise TimeoutError("Handler execution budget exhausted")
             subscription.record_call(success=True)
             if self._rel_circuit is not None:
                 self._rel_circuit.record_success()
@@ -447,9 +461,18 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 if sync_future is not None and not sync_future.done():
                     try:
                         await asyncio.shield(asyncio.wrap_future(sync_future))
-                    except RECOVERABLE_ERRORS:
-                        pass
-            logger.exception("Handler error for event %s: %s", event, e)
+                    except BOUNDARY_ERRORS:
+                        logger.exception("Timed-out synchronous handler finished with an error")
+            retry_count = retry_context.retry_count if retry_context is not None else 0
+            retry_exhausted = retry_context is not None and retry_context.retry_exhausted
+            logger.exception(
+                "Handler error for event %s: %s (retries=%s, exhausted=%s, budget=%.3fs)",
+                event,
+                e,
+                retry_count,
+                retry_exhausted,
+                budget_sec,
+            )
             subscription.record_call(success=False)
             self._error_count += 1
             if self._rel_circuit is not None:
@@ -461,6 +484,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         e,
                         retry_count=retry_count,
                         handler_name=getattr(subscription.handler, "__name__", None),
+                        retry_exhausted=retry_exhausted,
                     )
                     record_delivery_metric(self._enable_metrics, "dead_lettered")
                 except RECOVERABLE_ERRORS as dlq_exc:
