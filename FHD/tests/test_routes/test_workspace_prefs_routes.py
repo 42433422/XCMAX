@@ -329,8 +329,8 @@ def test_workspace_revision_is_shared_across_clients_and_stale_patch_gets_409(mo
 
 
 def test_workspace_stale_industry_update_rejected_before_binding(monkeypatch):
-    from app.fastapi_routes import workspace_prefs_routes as routes
     from app.application.tenant_workspace_prefs import WorkspacePrefsVersionConflict
+    from app.fastapi_routes import workspace_prefs_routes as routes
 
     user = SimpleNamespace(id=7)
     bind = MagicMock()
