@@ -807,8 +807,22 @@ def prior_self_assessment(state: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def cognition_prompt_bound(messages: list[dict[str, str]]) -> int:
+    return (
+        len(
+            json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        )
+        * 4
+        + 256
+    )
+
+
 def cognition_messages(
-    state: dict[str, Any], domain: str, facts: list[dict[str, Any]]
+    state: dict[str, Any],
+    domain: str,
+    facts: list[dict[str, Any]],
+    *,
+    max_prompt_tokens: int | None = None,
 ) -> tuple[list[dict[str, str]], set[str]]:
     """Keep the actual prompt below the existing conservative planning bound."""
     selected: dict[str, dict[str, Any]] = {}
@@ -854,8 +868,17 @@ def cognition_messages(
         row["text"] = str(row.get("text") or "")[:350]
     # The platform ledger uses UTF-8 bytes * 4 as a conservative input bound.
     # Retain valid JSON and at least one actual observation while shrinking.
-    while len(json.dumps(payload, ensure_ascii=False).encode()) > 4200:
-        observations = payload["observations"]
+    observations = payload["observations"]
+    while True:
+        serialized = json.dumps(payload, ensure_ascii=False)
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": serialized},
+        ]
+        if len(serialized.encode()) <= 4200 and (
+            max_prompt_tokens is None or cognition_prompt_bound(messages) <= max_prompt_tokens
+        ):
+            return messages, {row["ref"] for row in observations}
         longest = max(observations, key=lambda row: len(row["text"]), default=None)
         if longest and len(longest["text"]) > 60:
             longest["text"] = longest["text"][: len(longest["text"]) // 2]
@@ -867,17 +890,10 @@ def cognition_messages(
             payload["interests"].pop()
         elif payload["prior_self_assessment"]:
             payload["prior_self_assessment"].popitem()
-        else:
+        elif len(payload["mission"]) > 50:
             payload["mission"] = payload["mission"][:50]
-            break
-    serialized = json.dumps(payload, ensure_ascii=False)
-    if len(serialized.encode()) > 4200:
-        raise CognitionContextError("life_cycle_prompt_budget_exhausted")
-    refs = {row["ref"] for row in payload["observations"]}
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": serialized},
-    ], refs
+        else:
+            raise CognitionContextError("life_cycle_prompt_budget_exhausted")
 
 
 def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> LifeDecision:

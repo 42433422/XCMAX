@@ -24,6 +24,7 @@ from modstore_server.xiaoc_goal_management import (
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
+    cognition_prompt_bound,
     cognitive_review_facts,
     feedback_facts,
     goal_review_facts,
@@ -552,7 +553,12 @@ class CyclePorts:
             admission["max_total_tokens"], self.claim["reserved_tokens"]
         )
         try:
-            messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+            messages, refs = cognition_messages(
+                self.state,
+                self.domain,
+                state["facts"],
+                max_prompt_tokens=admission["max_total_tokens"] - 128,
+            )
         except CognitionContextError as exc:
             raise LifeBlocked(str(exc)) from exc
         self.details["attention"] = {
@@ -560,15 +566,7 @@ class CyclePorts:
             "observations_considered": len(state["facts"]),
             "status": "bounded_context_not_authorization",
         }
-        prompt_bound = (
-            len(
-                json.dumps(
-                    messages, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                ).encode()
-            )
-            * 4
-            + 256
-        )
+        prompt_bound = cognition_prompt_bound(messages)
         output_bound = min(
             1600,
             admission["max_output_tokens"],
