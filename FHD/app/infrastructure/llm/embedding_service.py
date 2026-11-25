@@ -1,14 +1,14 @@
 """真实 embedding 服务：支持本地 sentence-transformers 与远端 OpenAI 兼容 API。
 
 设计要点：
-- 未配置时用本地 hash 向量；显式 ``disabled`` 时 ``is_available`` 为 False。
+- 未配置或 auto 时优先使用已预置的 FastEmbed 模型，否则使用本地 hash；显式 disabled 关闭。
 - 单例 + lazy load：模型在首次 ``embed`` 调用时才加载，避免启动慢。
 - 通过环境变量 ``FHD_EMBEDDING_MODE`` 切换 ``local`` / ``remote`` / ``disabled``。
 - 同时实现 ``EmbedderPort`` 协议（``embed_texts`` / ``embed_query``），可作为 Excel/
   UserMemory 等向量服务的 embedder 直接注入。
 
 环境变量：
-  FHD_EMBEDDING_MODE             local | remote | hash | disabled（未配置时为 hash）
+  FHD_EMBEDDING_MODE             auto | fastembed | local | remote | hash | disabled（默认 auto）
   FHD_EMBEDDING_LOCAL_MODEL      本地模型名（默认 sentence-transformers/all-MiniLM-L6-v2，
                                   中文可用 BAAI/bge-small-zh-v1.5）
   FHD_EMBEDDING_REMOTE_URL       远端 /v1/embeddings 端点
@@ -40,7 +40,7 @@ _HASH_EMBED_DIM = 192
 
 
 def _resolve_mode() -> EmbeddingMode:
-    """从环境变量解析 embedding 模式；未配置时用 hash，显式 disabled 才关闭。"""
+    """解析显式模式；自动模式的最终向量空间由构造函数一次性选择。"""
     raw = (os.environ.get("FHD_EMBEDDING_MODE", "") or "").strip().lower()
     if raw in ("local", "sentence-transformers", "st"):
         return "local"
@@ -52,11 +52,30 @@ def _resolve_mode() -> EmbeddingMode:
         return "hash"
     if raw in ("disabled", "off", "none"):
         return "disabled"
-    # Unset mode: honor an explicit RAG off, otherwise hash on desktop and web.
+    # Auto/unset: honor explicit RAG off; hash is the safe base for local preflight.
     rag = (os.environ.get("XCAGI_RAG_ENABLED", "") or "").strip().lower()
     if rag in {"0", "false", "no", "off"}:
         return "disabled"
     return "hash"
+
+
+def _cached_fastembed() -> tuple[Any, int] | None:
+    """Use provisioned weights only; never fetch a model on a default offline path.
+
+    Select a single vector space before publishing the fingerprint. A failed
+    probe falls back to hash for the lifetime of this instance, not per vector.
+    """
+    model_name = os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL") or _DEFAULT_FASTEMBED_MODEL
+    try:
+        from fastembed import TextEmbedding
+
+        model = TextEmbedding(model_name=model_name, local_files_only=True)
+        probe = next(iter(model.embed(["dimension_probe"])), None)
+        if probe is not None and len(probe) > 0:
+            return model, len(probe)
+    except (*RECOVERABLE_ERRORS, RuntimeError) as exc:
+        logger.info("FastEmbed preflight unavailable; using hash: %s", type(exc).__name__)
+    return None
 
 
 class EmbeddingService(EmbedderPort):
@@ -72,6 +91,14 @@ class EmbeddingService(EmbedderPort):
     def __init__(self, mode: EmbeddingMode | None = None) -> None:
         # 不在 __init__ 加载模型；lazy load 在首次 embed 时触发。
         self._mode: EmbeddingMode = mode if mode is not None else _resolve_mode()
+        configured = (os.environ.get("FHD_EMBEDDING_MODE") or "").strip().lower()
+        cached = (
+            _cached_fastembed()
+            if mode is None and configured in {"", "auto"} and self._mode == "hash"
+            else None
+        )
+        if cached is not None:
+            self._mode = "fastembed"
         self._model_name = {
             "local": os.environ.get("FHD_EMBEDDING_LOCAL_MODEL") or _DEFAULT_LOCAL_MODEL,
             "fastembed": os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL")
@@ -91,10 +118,10 @@ class EmbeddingService(EmbedderPort):
             json.dumps(identity, sort_keys=True).encode("utf-8")
         ).hexdigest()
         self._model: Any | None = None  # SentenceTransformer 实例
-        self._fastembed_model: Any | None = None  # fastembed.TextEmbedding 实例
-        self._dim_cache: int | None = None
+        self._fastembed_model: Any | None = cached[0] if cached is not None else None
+        self._dim_cache: int | None = cached[1] if cached is not None else None
         self._load_lock = threading.Lock()
-        self._load_attempted: bool = False  # 标记是否已尝试加载，避免重复尝试
+        self._load_attempted: bool = cached is not None  # 避免重复加载已预置模型
 
     # ---------------- 单例 ----------------
     @classmethod

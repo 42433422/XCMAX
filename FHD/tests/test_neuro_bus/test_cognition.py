@@ -272,10 +272,20 @@ class TestWorkingMemory:
             snapshot = wm.recall()
         assert snapshot.is_empty
 
-    def test_recall_long_term_disabled_by_default(self):
-        """默认不启用长期记忆。"""
+    def test_recall_long_term_enabled_by_default(self):
+        """长期记忆默认启用，显式关闭仍有效。"""
         wm = WorkingMemory(session_id="sess1", user_id="u1")
-        assert wm._enable_long_term is False
+        assert wm._enable_long_term is True
+        assert WorkingMemory(enable_long_term=False)._enable_long_term is False
+
+    def test_working_memory_rebuilds_when_enablement_changes(self):
+        first = get_working_memory(session_id="sess1", user_id="u1")
+        disabled = get_working_memory(
+            session_id="sess1", user_id="u1", enable_long_term=False
+        )
+        assert disabled is not first
+        assert disabled._enable_long_term is False
+        assert get_working_memory(session_id="sess1", user_id="u1")._enable_long_term is True
 
     def test_recall_long_term_returns_items(self):
         """启用长期记忆时返回向量召回结果。"""
