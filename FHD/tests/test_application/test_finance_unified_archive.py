@@ -69,7 +69,7 @@ def test_same_reference_with_changed_amount_or_status_is_conflict(db_factory):
     with tenant_scope(7):
         first = archive.archive_from_crm_invoice(invoice())
         assert first["archived"]
-        for changed in (invoice(amount_cents=730), invoice(status="paid")):
+        for changed in (invoice(amount_cents=730), invoice(status="paid"), invoice(label="forged")):
             outcome = archive.archive_from_crm_invoice(changed)
             assert outcome == {
                 "archived": False,
@@ -99,6 +99,10 @@ def test_no_tenant_does_not_write_and_tenant_references_do_not_mix(db_factory):
         (invoice(id=0), "invoice_identity_required"),
         (invoice(amount_cents=-10), "invoice_amount_invalid"),
         (invoice(issued_at=""), "invoice_date_required"),
+        (invoice(issued_at="2026-11-01T09:00:00"), "invoice_timezone_required"),
+        (invoice(amount_cents=None, amount=250), "invoice_amount_invalid"),
+        (invoice(amount_cents=True), "invoice_amount_invalid"),
+        (invoice(market_user_id="17"), "invoice_counterparty_invalid"),
     ],
 )
 def test_invalid_original_rejected_without_booked_row(db_factory, payload, reason):
@@ -134,3 +138,12 @@ def test_api_does_not_return_success_on_incomplete_rebuild(monkeypatch):
     result = finance_unified_ledger_rebuild(FinanceLedgerRebuildBody())
     assert isinstance(result, JSONResponse)
     assert result.status_code == 409
+
+
+def test_ledger_track_is_read_from_original_transaction_not_requested_category(db_factory):
+    with tenant_scope(7):
+        assert archive.archive_from_crm_invoice(invoice())["archived"]
+        contract = archive._items_from_db(None, track="contract", limit=10)
+        token = archive._items_from_db(None, track="token", limit=10)
+    assert len(contract) == 1 and contract[0]["track"] == "contract"
+    assert token == []
