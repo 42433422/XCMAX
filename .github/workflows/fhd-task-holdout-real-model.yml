@@ -98,6 +98,7 @@ jobs:
           from pathlib import Path
 
           path = Path("test_reports/task_holdout_report.json")
+          verified_path = Path("test_reports/task_holdout_run_mode.json")
           status = "BLOCKED"
           reason = "no_complete_trial_report_or_model_preflight_failed"
           category_counts = {}
@@ -105,9 +106,30 @@ jobs:
               try:
                   report = json.loads(path.read_text())
                   category_counts = report.get("failure_categories") or {}
-                  if report.get("model_responses", 0) > 0 and report.get("trials") == 3:
-                      status = "PASS" if report.get("gate_passed") is True else "FAIL"
-                      reason = "model_trial_scores_verified" if status == "PASS" else "business_or_safety_gate_failed"
+                  if category_counts.get("model_provider_auth"):
+                      reason = "model_provider_credentials_or_authorization_rejected"
+                  elif category_counts.get("model_provider_service") or category_counts.get("model_provider_rate_limit"):
+                      reason = "model_provider_unavailable_or_rate_limited"
+                  elif category_counts.get("database_lock") or category_counts.get("database_error"):
+                      reason = "database_startup_blocked"
+                  elif report.get("startup_blocked_tasks"):
+                      reason = "runtime_admission_or_execution_unverified"
+                  elif verified_path.exists():
+                      verified = json.loads(verified_path.read_text())
+                      if (
+                          verified.get("status") == "VERIFIED"
+                          and verified.get("source_sha") == os.environ["GITHUB_SHA"]
+                          and verified.get("gate_passed") is True
+                          and report.get("gate_passed") is True
+                          and report.get("total_tasks") == 13
+                          and report.get("trials") == 3
+                          and report.get("model_responses", 0) > 0
+                      ):
+                          status, reason = "PASS", "independent_original_receipt_verified"
+                      else:
+                          reason = "independent_verifier_not_satisfied"
+                  elif report.get("model_responses", 0) > 0 and report.get("trials") == 3:
+                      status, reason = "FAIL", "business_or_safety_threshold_not_met"
                   else:
                       reason = "no_verified_real_model_response_or_incomplete_trials"
               except (ValueError, OSError):

@@ -1,5 +1,5 @@
 {
-  "lines": 2733686,
+  "lines": 2733709,
   "updated": "2026-11-25",
-  "note": "#3613: SQLite bootstrap plus model-vs-database failure categories with regression evidence, explicit net code growth; no relaxation to benchmark or security thresholds. Correct full PR net line growth +410 against main 21c7225, including previously uncounted +335. Exact-SHA real 13x3 holdout CI and fail-closed credential/report uploads: +142 tracked lines."
+  "note": "#3613: SQLite bootstrap plus model-vs-database failure categories with regression evidence, explicit net code growth; no relaxation to benchmark or security thresholds. Correct full PR net line growth +410 against main 21c7225, including previously uncounted +335. Exact-SHA real 13x3 holdout CI and fail-closed credential/report uploads: +142 tracked lines. Strict VERIFIED-only holdout marker and infrastructure-error categories: 23 net lines."
 }
