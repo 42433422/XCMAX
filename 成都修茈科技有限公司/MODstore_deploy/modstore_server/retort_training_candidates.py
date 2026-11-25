@@ -516,6 +516,8 @@ def read_training_impact(request_id, state):
                     and recheck.get("final_snapshot_sha256")
                     == progress.get("final_snapshot_sha256")
                     and bool(recheck.get("final_snapshot_sha256"))
+                    and isinstance(recheck.get("promoted_at"), str)
+                    and bool(recheck["promoted_at"])
                     and policy == source["growthbook"]
                     and execution_stop_loss(db, row, policy)
                 )
@@ -584,15 +586,28 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
 
     progress = effects.get("experiment") or {}
     life = policy.get("lifecycle") or {}
-    start = aware(progress.get("closed_at"))
+    recheck = effects.get("training_regression_recheck")
+    recheck_bound = (
+        isinstance(recheck, dict)
+        and recheck.get("request_id") == row.id
+        and recheck.get("release_sha") == progress.get("release_sha")
+        and recheck.get("final_snapshot_sha256") == progress.get("final_snapshot_sha256")
+        and recheck.get("reason") == "workflow_execution_stop_loss"
+        and bool(recheck.get("promoted_at"))
+    )
+    start = aware(recheck["promoted_at"] if recheck_bound else progress.get("closed_at"))
     if (
         start is None
-        or start.utcoffset() is None
         or observed_at.tzinfo is None
         or start > observed_at
-        or progress.get("traffic") != "candidate"
-        or progress.get("decision") != "promote"
         or progress.get("rollout_verified") is not True
+        or not (
+            recheck_bound
+            or (
+                progress.get("traffic") == "candidate"
+                and progress.get("decision") == "promote"
+            )
+        )
     ):
         return None
     start = start.astimezone(UTC)
@@ -795,6 +810,7 @@ def request_postpromotion_regression_rechecks():
                     "request_id": row.id,
                     "release_sha": experiment.get("release_sha"),
                     "final_snapshot_sha256": experiment.get("final_snapshot_sha256"),
+                    "promoted_at": experiment.get("closed_at"),
                 }
                 result = db.execute(
                     update(RetortEvolutionRun)
