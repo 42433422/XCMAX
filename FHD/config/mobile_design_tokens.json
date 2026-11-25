@@ -20,7 +20,7 @@
   },
   "colors": {
     "brand": {
-      "primary": "#6366F1",
+      "primary": "#5B5DE5",
       "primary_light": "#818CF8",
       "primary_dark": "#4F46E5",
       "primary_container": "#EAEBFE",
@@ -424,7 +424,7 @@
         "dark_text_primary": "#F2F3F5",
         "dark_text_secondary": "#9AA0A6",
         "dark_text_strong_secondary": "#B6BBC2",
-        "dark_text_tertiary": "#7A7F87",
+        "dark_text_tertiary": "#949AA2",
         "dark_brand_container": "#1A3A80",
         "dark_brand_gradient_end": "#3F6FD8",
         "light_on_brand_container": "#312E81",
