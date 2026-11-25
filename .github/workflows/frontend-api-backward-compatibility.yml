@@ -1,0 +1,32 @@
+name: Frontend API backward compatibility
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'FHD/**'
+      - '.github/workflows/frontend-api-backward-compatibility.yml'
+permissions:
+  contents: read
+jobs:
+  published-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate detection with negative controls
+        run: python3 -m unittest discover -s FHD/scripts/dev -p test_check_openapi_compat.py -v
+      - name: Compare source-pinned published contracts
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          git show "$BASE_SHA:FHD/assets/contracts/openapi.json" > "$RUNNER_TEMP/base-openapi.json"
+          python3 FHD/scripts/dev/check_openapi_compat.py "$RUNNER_TEMP/base-openapi.json" FHD/assets/contracts/openapi.json
+          printf 'baseline=%s\ncandidate=%s\n' "$BASE_SHA" "$HEAD_SHA"
