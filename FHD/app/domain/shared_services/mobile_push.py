@@ -109,11 +109,15 @@ def enqueue_outbox(
     user_id: int, title: str, body: str, data: Optional[Dict[str, Any]] = None
 ) -> bool:
     """写入自建推送离线队列。客户端 /api/notifications/pending 轮询拉取(WorkManager 后台通道)。"""
-    from app.db.models.mobile_notification import MobileNotificationOutbox
-    from app.db.session import get_db
+    from app.db.models.mobile_notification import MobileNotificationOutbox, notification_recipient_scope
+    from app.db.models.user import User
+    from app.db.session import get_db, get_host_db
 
     payload = data or {}
     try:
+        with get_host_db() as host_db:
+            recipient = host_db.get(User, int(user_id))
+            scope = notification_recipient_scope(recipient) if recipient is not None and recipient.is_active else ""
         with get_db() as db:
             bind = db.get_bind()
             if not sa_inspect(bind).has_table(MobileNotificationOutbox.__tablename__):
@@ -121,6 +125,7 @@ def enqueue_outbox(
             db.add(
                 MobileNotificationOutbox(
                     user_id=int(user_id),
+                    recipient_scope=scope,
                     title=(title or "")[:200],
                     body=body or "",
                     route=str(payload.get("route") or "")[:300],
