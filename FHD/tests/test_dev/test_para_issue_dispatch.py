@@ -942,3 +942,27 @@ def test_ordinary_lookup_error_never_falls_through_to_create(issue, monkeypatch)
     with pytest.raises(SystemExit) as exc:
         mod.run(_args())
     assert exc.value.code == 6
+
+@pytest.mark.parametrize("http_status", [404, 405])
+def test_unupgraded_dispatch_service_blocks_without_run_id_retry(issue, monkeypatch, http_status):
+    import urllib.error
+
+    _completed(monkeypatch)
+
+    def obsolete_lookup(*_args):
+        raise urllib.error.HTTPError(
+            "https://example.invalid/api/service/mac-control/issues/5/task",
+            http_status,
+            "legacy server has no stable issue lookup",
+            {},
+            None,
+        )
+
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", obsolete_lookup)
+    monkeypatch.setattr(
+        mod.DispatchClient, "create", lambda *a: pytest.fail("must not dispatch to old service")
+    )
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    with pytest.raises(SystemExit) as exc:
+        mod.run(_args())
+    assert exc.value.code == 6
