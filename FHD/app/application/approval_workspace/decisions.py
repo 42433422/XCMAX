@@ -21,6 +21,7 @@ from app.db.models.approval import (
     ApprovalRequest,
     ApprovalStatus,
 )
+from app.db.models.user import User
 
 from .access import supported_approval_flow, unsupported_approval_policy
 from .outcomes import execution_handed_off, execution_outcome, persist_outcome
@@ -35,6 +36,14 @@ from .protocols import (
     WorkspaceResponse,
 )
 from .repository import ApprovalRepository
+
+
+def _active_decision_actor(db: Session, req: ApprovalRequest, actor: int) -> bool:
+    """An old reviewer list cannot reauthorize a deactivated or moved user."""
+    user = db.query(User).filter(User.id == actor, User.is_active.is_(True)).first()
+    return user is not None and (
+        req.tenant_id is None or user.tenant_id == req.tenant_id
+    )
 
 
 def _claim_open_step(db: Session, req: ApprovalRequest, target: str) -> bool:
@@ -99,6 +108,11 @@ class ApprovalDecisions:
                 return JSONResponse(
                     {"success": False, "message": f"当前状态不可审批：{req.status}"},
                     status_code=400,
+                )
+            if not _active_decision_actor(db, req, actor):
+                return JSONResponse(
+                    {"success": False, "message": "审批人已停用或企业归属发生变更"},
+                    status_code=403,
                 )
             current_node = req.current_node
             if current_node is None:
@@ -285,6 +299,11 @@ class ApprovalDecisions:
                 return JSONResponse(
                     {"success": False, "message": f"当前状态不可拒绝：{req.status}"},
                     status_code=400,
+                )
+            if not _active_decision_actor(db, req, actor):
+                return JSONResponse(
+                    {"success": False, "message": "审批人已停用或企业归属发生变更"},
+                    status_code=403,
                 )
             node = req.current_node
             workflow_without_node = node is None and self.access.is_workflow(req)
