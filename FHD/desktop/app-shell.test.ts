@@ -105,6 +105,7 @@ it('targets the focused auxiliary shell window but never an unowned surface', ()
     show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() },
   }
   const original = desktopRuntime.mainWindow
+  const originalAuxiliaryWindows = [...desktopRuntime.auxiliaryWindows]
   try {
     desktopRuntime.mainWindow = main as unknown as typeof desktopRuntime.mainWindow
     const aux = auxiliary as unknown as Electron.BrowserWindow
@@ -119,6 +120,7 @@ it('targets the focused auxiliary shell window but never an unowned surface', ()
     expect(auxiliary.webContents.send).toHaveBeenCalledTimes(1)
   } finally {
     desktopRuntime.auxiliaryWindows.clear()
+    for (const window of originalAuxiliaryWindows) desktopRuntime.auxiliaryWindows.add(window)
     desktopRuntime.mainWindow = original
     vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(null)
   }
