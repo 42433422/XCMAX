@@ -442,7 +442,7 @@ class MobileOfflineStore {
   Future<void> markFailed(int id, String error, {bool requiresReconciliation = false, bool terminal = false}) async {
     await _db.customUpdate(
       'UPDATE outbox_messages SET attempts = attempts + 1, '
-      "status = CASE WHEN ? = 1 THEN 'failed' WHEN ? = 1 THEN 'unknown' WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
+      "status = CASE WHEN ? = 1 THEN 'failed' WHEN ? = 1 OR status IN ('sending', 'unknown') THEN 'unknown' WHEN attempts + 1 >= $_maxQueuedAttempts THEN 'failed' ELSE 'pending' END, "
       'last_error = ?, updated_at = ? WHERE id = ?',
       variables: [
         Variable<int>(terminal ? 1 : 0),
