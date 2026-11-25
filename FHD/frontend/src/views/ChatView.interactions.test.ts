@@ -584,10 +584,24 @@ describe('ChatView interactions', () => {
     expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
   })
 
+  it('新建任务草稿不直接执行 Agent，也不丢弃未发送消息', async () => {
+    const wrapper = await mountChatView()
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('原授权与审批'), 'info')
+    await wrapper.get('#messageInput').setValue('尚未发送的任务目标')
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('草稿'), 'warning')
+  })
+
   it('独立任务工作区不响应主对话的新建及历史会话快捷命令', async () => {
     await mountChatView({ workspaceTaskId: 'task-1', workspaceConversationId: 'conv-1' })
     window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
     window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    window.dispatchEvent(new Event('xcagi:workspace-new-task'))
     await flushPromises()
     expect(mockChatViewApi.newConversation).not.toHaveBeenCalled()
     expect(mockChatViewApi.showHistoryPanel).not.toHaveBeenCalled()
