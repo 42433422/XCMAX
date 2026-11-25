@@ -1,0 +1,109 @@
+name: XCMAX SQLite Bootstrap Independent Process Regression
+
+on:
+  push:
+    branches: [fix/sqlite-rbac-bootstrap-serial-20261125]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [fix/sqlite-bootstrap-holdout-20261125]
+    paths:
+      - "FHD/app/db/bootstrap/**"
+      - "FHD/tests/test_db/test_sqlite_concurrent_bootstrap.py"
+      - "FHD/tests/test_db/test_sqlite_rbac_concurrent.py"
+      - ".github/workflows/fhd-sqlite-bootstrap-process.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sqlite-process-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  four-startups-and-writer:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify candidate identity
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          echo "SQLite bootstrap source commit: $EXPECTED_HEAD"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Install pinned dependencies
+        run: |
+          set -euo pipefail
+          pins="$(python scripts/dev/check_requirements_lock.py --test-toolchain-pins)"
+          read -r -a requirements <<< "$pins"
+          uv pip install --system --python "$(command -v python)" \
+            -r requirements-server-api.txt \
+            -r ops/deploy/requirements-dev.txt "${requirements[@]}"
+          uv pip check --system --python "$(command -v python)"
+
+      - name: Ruff bootstrap and independent process tests
+        run: |
+          ruff check app/db/bootstrap/orm_tables.py app/db/bootstrap/seeding.py \
+            tests/test_db/test_sqlite_concurrent_bootstrap.py \
+            tests/test_db/test_sqlite_rbac_concurrent.py
+
+      - name: SQLite four-process startup, external lock and idempotency
+        run: |
+          python -m pytest -q --tb=short \
+            tests/test_db/test_sqlite_concurrent_bootstrap.py \
+            tests/test_db/test_sqlite_rbac_concurrent.py \
+            tests/test_db/test_init_db.py \
+            tests/test_db/test_payment_refund_permission_migration.py \
+            --junitxml=sqlite-process-acceptance.xml
+
+      - name: Require real independent-process receipts
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+
+          path = Path("sqlite-process-acceptance.xml")
+          if not path.is_file():
+              raise SystemExit("BLOCKED: no SQLite process JUnit evidence")
+          names = {
+              "test_concurrent_sqlite_bootstrap_seeds_one_consistent_permission_graph",
+              "test_independent_process_writer_lock_is_respected",
+              "test_sqlite_rbac_seed_failure_rolls_back_and_retry_is_idempotent",
+          }
+          rows = ET.parse(path).findall(".//testcase")
+          for name in sorted(names):
+              matches = [row for row in rows if row.get("name") == name]
+              if len(matches) != 1 or any(
+                  matches[0].find(tag) is not None for tag in ("skipped", "error", "failure")
+              ):
+                  raise SystemExit("BLOCKED: missing/failed process receipt: " + name)
+          print("PASS: three exact-HEAD process and rollback cases")
+          PY
+
+      - name: Preserve JUnit evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sqlite-process-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
+          path: FHD/sqlite-process-acceptance.xml
+          if-no-files-found: warn
+          retention-days: 14

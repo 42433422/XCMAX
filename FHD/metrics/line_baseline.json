@@ -1,5 +1,5 @@
 {
-  "lines": 2733775,
+  "lines": 2733885,
   "updated": "2026-11-25",
-  "note": "#3613 unique SQLite DDL/admin/RBAC bootstrap plus independent #3614 two-process contention regression. Source net growth +641 against fixed main 21c7225, no duplicate seeding or lowered gates; 13x3 real model receipts still required."
+  "note": "#3613 unique SQLite DDL/admin/RBAC bootstrap plus independent #3614 two-process contention regression. Source net growth +641 against fixed main 21c7225, no duplicate seeding or lowered gates; 13x3 real model receipts still required. Dedicated independent-process CI adds +110 tracked lines and requires non-skipped JUnit receipts."
 }
