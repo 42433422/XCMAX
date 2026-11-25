@@ -184,4 +184,20 @@ describe('Business data table', () => {
     expect(view.get('.no-more-tip').text()).toBe('没有更多数据了')
   })
 
+  it('uses one controlled server page without pretending that loaded rows are the entire dataset', async () => {
+    const view = open({ data: [{ id: 51, name: '客户51' }], serverPagination: { page: 2, pageSize: 50, total: 130 }, hasMore: true })
+    expect(view.get('nav').attributes('aria-label')).toBe('服务端分页')
+    expect(view.get('nav').text()).toContain('2 / 3 · 共 130 条')
+    expect(view.find('.has-more-tip').exists()).toBe(false)
+    expect(view.find('.no-more-tip').exists()).toBe(false)
+    await view.get('.data-table-wrapper').trigger('scroll')
+    expect(view.emitted('load-more')).toBeUndefined()
+    await view.get('nav button:last-child').trigger('click')
+    expect(view.emitted('page-change')).toEqual([[3]])
+    expect(view.get('nav').text()).toContain('2 / 3')
+    await view.setProps({ serverPagination: { page: 3, pageSize: 50, total: 130 }, loading: true })
+    expect(view.get('nav button:first-child').element.disabled).toBe(true)
+    expect(view.get('nav button:last-child').element.disabled).toBe(true)
+  })
+
 })
