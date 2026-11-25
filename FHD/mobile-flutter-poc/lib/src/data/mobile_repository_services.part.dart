@@ -79,6 +79,21 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return response.data?.items ?? const <AiCirclePost>[];
   }
 
+  Future<List<PendingNotification>> loadNotificationInbox() async {
+    final response = await _client.notificationInbox();
+    if (!response.success || response.data == null) {
+      throw MobileRepositoryException(response.message.ifEmpty('通知加载失败'));
+    }
+    return response.data!.notifications;
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    final response = await _client.markNotificationRead(id);
+    if (!response.success || response.data?.id != id || response.data?.isRead != true) {
+      throw MobileRepositoryException(response.message.ifEmpty('未收到原通知的已读回执'));
+    }
+  }
+
   Future<List<PendingNotification>> loadPendingNotifications() async {
     final response = await _client.pendingNotifications();
     if (!response.success) {
