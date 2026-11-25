@@ -56,6 +56,9 @@ jobs:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
       - name: Reject an unfrozen or non-main iOS release source
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
@@ -209,7 +212,8 @@ jobs:
           if len(archives) != 1:
               raise SystemExit('Exactly one signed IPA candidate is required')
           archive = archives[0]
-          digest = hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest()
+          with archive.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
           (archive_dir / (archive.name + '.sha256')).write_text(
               f'{digest}  {archive.name}\n', encoding='utf-8')
           receipt = {
