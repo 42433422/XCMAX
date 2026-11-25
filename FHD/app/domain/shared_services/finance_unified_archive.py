@@ -225,6 +225,30 @@ def archive_from_crm_invoice(
     source_uid = inv.get("market_user_id")
     if market_user_id is not None and source_uid is not None and source_uid != market_user_id:
         return {"archived": False, "reason_code": "invoice_counterparty_conflict"}
+
+    # A caller-supplied invoice dictionary is NOT an original business voucher.
+    # Read the CRM source independently before creating any financial record.
+    try:
+        from app.domain.shared_services.user_cs_crm_store import get_crm_invoice_by_id
+
+        original = get_crm_invoice_by_id(invoice_id)
+    except RECOVERABLE_ERRORS:
+        logger.warning("CRM original invoice cannot be read back", exc_info=True)
+        return {"archived": False, "reason_code": "invoice_source_unavailable"}
+    if not isinstance(original, dict):
+        return {"archived": False, "reason_code": "invoice_source_missing"}
+    authoritative = _ledger_item_from_invoice(original)
+    incoming = _ledger_item_from_invoice(inv)
+    identity_fields = (
+        "source_id", "market_user_id", "invoice_no", "amount_cents",
+        "status", "occurred_at", "label",
+    )
+    if any(
+        authoritative.get(field) != incoming.get(field)
+        for field in identity_fields
+    ):
+        return {"archived": False, "reason_code": "invoice_source_conflict"}
+
     amount = Decimal(amount_cents) / 100
     status = str(entry.get("status") or "issued")
     try:
