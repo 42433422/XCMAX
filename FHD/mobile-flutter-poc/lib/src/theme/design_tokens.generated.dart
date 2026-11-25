@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 abstract final class DesignTokens {
-  static const Color colorsBrandPrimary = Color(0xFF6366F1);
+  static const Color colorsBrandPrimary = Color(0xFF5B5DE5);
   static const Color colorsBrandPrimaryLight = Color(0xFF818CF8);
   static const Color colorsBrandPrimaryDark = Color(0xFF4F46E5);
   static const Color colorsBrandPrimaryContainer = Color(0xFFEAEBFE);
@@ -120,7 +120,7 @@ abstract final class DesignTokens {
   static const Color semanticLightTextPrimary = Color(0xFF1F2329);
   static const Color semanticLightTextSecondary = Color(0xFF646A73);
   static const Color semanticLightBorder = Color(0xFFDEE0E3);
-  static const Color semanticLightPrimary = Color(0xFF6366F1);
+  static const Color semanticLightPrimary = Color(0xFF5B5DE5);
   static const Color semanticDarkPage = Color(0xFF1A1A1A);
   static const Color semanticDarkSurface = Color(0xFF242424);
   static const Color semanticDarkSurfaceHigh = Color(0xFF2E2E2E);
@@ -140,7 +140,7 @@ abstract final class DesignTokens {
   static const Color mobileColorsDarkTextPrimary = Color(0xFFF2F3F5);
   static const Color mobileColorsDarkTextSecondary = Color(0xFF9AA0A6);
   static const Color mobileColorsDarkTextStrongSecondary = Color(0xFFB6BBC2);
-  static const Color mobileColorsDarkTextTertiary = Color(0xFF7A7F87);
+  static const Color mobileColorsDarkTextTertiary = Color(0xFF949AA2);
   static const Color mobileColorsDarkBrandContainer = Color(0xFF1A3A80);
   static const Color mobileColorsDarkBrandGradientEnd = Color(0xFF3F6FD8);
   static const Color mobileColorsLightOnBrandContainer = Color(0xFF312E81);
