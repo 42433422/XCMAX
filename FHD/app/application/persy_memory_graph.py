@@ -258,6 +258,34 @@ class PersyMemoryGraphMixin:
                         "error_code": "global_preference_only",
                         "message": "跨企业共享仅适用于明确声明的个人偏好",
                     }
+            if normalized_action in {"confirm", "correct"}:
+                # Confirming a pending ERP claim is a new trust decision. A
+                # source may change or lose permission before the user confirms,
+                # even when no invalidation event was ever delivered.
+                from app.application.enterprise_cognition.memory_reference import (
+                    revalidate_erp_memory,
+                )
+                from app.domain.user_memory.policy import is_erp_bound_memory
+
+                original = next(
+                    row
+                    for row in self.memory_service.list_memories(owner_id)
+                    if row.get("memory_id") == target_id
+                )
+                if is_erp_bound_memory(original):
+                    if normalized_action == "correct" or patch:
+                        return {
+                            "success": False,
+                            "error_code": "persy_erp_fact_immutable_source",
+                            "message": "ERP 字段只能从权威来源重新捕获，不可手工改写",
+                        }
+                    checked, _ = revalidate_erp_memory(original, access)
+                    if checked is None:
+                        return {
+                            "success": False,
+                            "error_code": "persy_erp_fact_source_changed",
+                            "message": "ERP 来源已变更、撤销或不可访问，请重新核验",
+                        }
             if normalized_action == "confirm":
                 result = self.memory_service.confirm_memory_candidate(
                     owner_id,
