@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import threading
 import time
+from contextlib import closing
 
 import pytest
 
@@ -246,5 +248,47 @@ def test_async_handler_cannot_report_success_after_budget(monkeypatch):
         (entry,) = dlq.get_all_entries()
         assert entry.retry_count == 0
         assert entry.reason == DeadLetterReason.TIMEOUT
+    finally:
+        bus._executor.shutdown(wait=True)
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_timeout_does_not_prove_absence_of_committed_effect(monkeypatch, tmp_path, committed):
+    bus, dlq = make_bus(monkeypatch, budget=0.5)
+    receipt_path = tmp_path / "independent-receipts.sqlite3"
+    event = NeuroEvent("test.event", {})
+    event_id = event.metadata.event_id
+    with closing(sqlite3.connect(receipt_path)) as writer, writer:
+        writer.execute("CREATE TABLE receipts (event_id TEXT PRIMARY KEY)")
+    calls = 0
+
+    async def handler(incoming):
+        nonlocal calls
+        calls += 1
+        if committed:
+            with closing(sqlite3.connect(receipt_path)) as writer, writer:
+                writer.execute(
+                    "INSERT INTO receipts VALUES (?)", (incoming.metadata.event_id,)
+                )
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            # The handler returns late, regardless of whether it committed.
+            return
+
+    try:
+        subscription = HandlerSubscription("test.event", handler)
+        assert not asyncio.run(bus._call_handler(subscription, event))
+        (entry,) = dlq.get_all_entries()
+        assert entry.original_event.metadata.event_id == event_id
+        assert entry.retry_count == 0
+        assert entry.reason == DeadLetterReason.TIMEOUT
+        assert calls == 1
+        # A separate connection reads durable state rather than handler claims.
+        with closing(sqlite3.connect(receipt_path)) as reader:
+            rows = reader.execute(
+                "SELECT event_id FROM receipts WHERE event_id = ?", (event_id,)
+            ).fetchall()
+        assert rows == ([(event_id,)] if committed else [])
     finally:
         bus._executor.shutdown(wait=True)
