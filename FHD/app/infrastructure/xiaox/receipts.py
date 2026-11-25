@@ -268,6 +268,8 @@ def read_call_receipt(
 
 def action_parent(context: dict[str, Any]) -> tuple[XiaoxBindingStore, XiaoxBinding, Any] | None:
     """Resolve a child through host-owned SQL identity and the original call ledger."""
+    if context.get("source") == "codex_runtime":
+        raise PermissionError("原运行回执尚待迁移，不可绕过任务来源校验")
     if context.get("source") != "xiaox_runtime" or not context.get("parent_run_id"):
         return None
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
