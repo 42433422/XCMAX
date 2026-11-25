@@ -42,7 +42,7 @@ MACOS_ONLY = [
     "FHD/scripts/package/build-installer.sh",
 ]
 MOBILE_ONLY = ["FHD/mobile-flutter-poc/lib/main.dart"]
-ETL_OUTPUT_SECURITY = ["FHD/app/application/shipment_excel_etl_security.py"]
+ELT_OUTPUT_SECURITY = ["FHD/app/application/shipment_excel_elt_security.py"]
 METRIC_SNAPSHOTS = [
     "FHD/metrics/dora-20261029.json",
     "FHD/metrics/slo-production/20261029T150013Z-40896990546-1.json",
@@ -212,8 +212,8 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             "FHD/app/application/employee_runtime/__init__.py",
             "FHD/app/application/employee_runtime/handoff_identity.py",
             "FHD/app/application/employee_runtime/workspace_io.py",
-            "FHD/app/application/shipment_excel_etl_security.py",
-            "FHD/app/application/shipment_etl/directory_listing.py",
+            "FHD/app/application/shipment_excel_elt_security.py",
+            "FHD/app/application/shipment_elt/directory_listing.py",
             "FHD/.github/workflows/ci-cd.yml",
             "FHD/uv.lock",
             "FHD/pyproject.toml",
@@ -230,8 +230,53 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             with self.subTest(category=category):
                 self.assertFalse(decide(category, BACKEND_ONLY))
 
-    def test_shipment_etl_output_security_runs_cross_platform_contract(self) -> None:
-        self.assertTrue(decide("runtime_contract", ETL_OUTPUT_SECURITY))
+    def test_shipment_elt_native_sources_and_tests_run_cross_platform_contract(
+        self,
+    ) -> None:
+        for path in (
+            *ELT_OUTPUT_SECURITY,
+            "FHD/app/application/shipment_elt/directory_listing.py",
+            "FHD/app/application/shipment_elt/batching.py",
+            "FHD/tests/test_application/test_shipment_etl_component_boundaries.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(decide("runtime_contract", [path]))
+
+    def test_shared_receipts_authority_and_persisted_workers_run_native_contract(
+        self,
+    ) -> None:
+        for path in (
+            "FHD/app/domain/task_lifecycle/results.py",
+            "FHD/app/domain/task_lifecycle/agent_runtime_results.py",
+            "FHD/app/application/agent_orchestrator/approval_grant.py",
+            "FHD/app/application/agent_orchestrator/business_write_guard.py",
+            "FHD/app/application/agent_orchestrator/catalog_product_worker.py",
+            "FHD/app/application/agent_orchestrator/worker_repository.py",
+            "FHD/app/application/agent_orchestrator/task_execution_sql_repository.py",
+            "FHD/app/application/agent_runtime/pipeline.py",
+            "FHD/app/application/employee_runtime/result_verifier.py",
+            "FHD/app/application/approval_workspace/decisions.py",
+            "FHD/app/application/tool_execution_deadline.py",
+            "FHD/app/application/agent_task_context.py",
+            "FHD/app/application/facades/tools_facade.py",
+            "FHD/app/application/tools/surface_authority.py",
+            "FHD/app/domain/shared_services/tools_execution_service.py",
+            "FHD/app/domain/shared_services/tools_workflow_common.py",
+            "FHD/app/infrastructure/llm/client.py",
+            "FHD/app/infrastructure/chat_stream_lifetime.py",
+            "FHD/app/infrastructure/tenant_scope.py",
+            "FHD/app/infrastructure/auth/agent_mod_scope.py",
+            "FHD/tests/test_domain/test_task_lifecycle_acceptance.py",
+            "FHD/tests/test_application/test_approval_scope_binding.py",
+            "FHD/tests/test_application/test_worker_claim_boundary.py",
+            "FHD/tests/test_application/test_tool_process_streaming.py",
+            "FHD/tests/test_infrastructure/test_codex_transport_contract.py",
+            "scripts/dev/change_classifier.py",
+            "scripts/dev/test_change_classifier.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue((Path(__file__).resolve().parents[2] / path).is_file())
+                self.assertTrue(decide("runtime_contract", [path]))
 
     def test_codex_process_authority_and_dependencies_run_cross_platform_contract(
         self,
@@ -248,6 +293,15 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             "FHD/requirements-server-api.txt",
             "FHD/ops/deploy/requirements-server-api.lock.txt",
             "FHD/uv.lock",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_artifact_verification.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_customer_delivery.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/capability_trainer.py",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_training.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_replay_capture.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_business_promptfoo.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_workflow_training_dataset.py",
         ):
             with self.subTest(path=path):
                 self.assertTrue(decide("runtime_contract", [path]))
@@ -260,6 +314,11 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             "FHD/app/infrastructure/codex_notes.py",
             "FHD/app/infrastructure/codex_other/launcher.py",
             "FHD/app/application/agent_orchestrator/tool_process_notes.md",
+            "FHD/app/domain/task_lifecycle_notes.py",
+            "FHD/app/application/agent_orchestrator_other/worker.py",
+            "FHD/tests/test_application/test_worker_claim_boundary.py.bak",
+            "FHD/tests/test_application/test_tool_process.md",
+            "FHD/tests/test_domain/test_task_lifecycle_notes.md",
             *FRONTEND_ONLY,
         ):
             with self.subTest(path=path):
@@ -325,9 +384,7 @@ class CliContractTests(unittest.TestCase):
             ) as diff,
         ):
             report = Path(tmp) / "classification.json"
-            source = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], text=True
-            ).strip()
+            source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
             self.assertEqual(
                 classifier_main(
                     [

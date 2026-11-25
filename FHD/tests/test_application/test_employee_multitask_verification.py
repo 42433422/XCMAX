@@ -156,10 +156,10 @@ def _host_case(env, task_id, operation, **payload):
 def _native_request(target="employee-b", key="original-delegated-read"):
     return {
         "target": target,
-        "permissions": ["customers.query"],
-        "delegated_tool": "customers",
-        "delegated_action": "query",
-        "delegated_params": {"keyword": "交接客户甲"},
+        "permissions": ["business_db.read"],
+        "delegated_tool": "business_db",
+        "delegated_action": "read",
+        "delegated_params": {"entity": "customers", "keyword": "交接客户甲"},
         "idempotency_key": key,
     }
 
@@ -200,13 +200,13 @@ def test_original_host_employee_results_verify_from_child_runs_without_replay(
     if operation == "chain":
         arguments = {
             "employees": env.employees,
-            "permissions": ["customers.query"],
+            "permissions": ["business_db.read"],
             "steps": [
                 {
                     "step_id": f"customer-{index}",
-                    "tool": "customers",
-                    "action": "query",
-                    "params": {"keyword": "交接客户甲"},
+                    "tool": "business_db",
+                    "action": "read",
+                    "params": {"entity": "customers", "keyword": "交接客户甲"},
                 }
                 for index in range(4)
             ],
@@ -418,7 +418,7 @@ def test_child_read_requires_original_ancestry_and_live_parent_fence(
     execute, checked = AgentToolExecutor.execute, []
 
     def fenced(self, step, *, runtime_context):
-        if (step.tool_id, step.action) != ("customers", "query"):
+        if (step.tool_id, step.action) != ("business_db", "read"):
             return execute(self, step, runtime_context=runtime_context)
         context, params = copy.deepcopy(runtime_context), copy.deepcopy(step.params)
         if fault.startswith("original_") or fault == "cycle":
@@ -492,6 +492,13 @@ def test_host_four_employee_sales_file_is_read_back_and_changed_bytes_fail(tmp_p
     monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     with business_workspace(workspace):
         task_id = invoke(workspace, "start")["task_id"]
+        chain_plan = business_plan()
+        chain_plan["permissions"][0] = "business_db.read"
+        chain_plan["steps"][0].update(
+            tool="business_db",
+            action="read",
+            params={**chain_plan["steps"][0]["params"], "entity": "customers"},
+        )
         context = {
             **_ACTOR.get(),
             "task_id": task_id,
@@ -513,7 +520,7 @@ def test_host_four_employee_sales_file_is_read_back_and_changed_bytes_fail(tmp_p
                         "task": "Generate the approved sales file",
                         "continuity_action": "chain",
                         "task_id": task_id,
-                        "input": business_plan(),
+                        "input": chain_plan,
                     },
                 )
             ],

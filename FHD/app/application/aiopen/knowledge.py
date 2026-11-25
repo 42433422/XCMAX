@@ -10,6 +10,8 @@ import threading
 from collections import Counter
 from typing import Any
 
+from app.infrastructure.aiopen.principal_context import current_execution_context
+
 from .catalog_builder import find_operation, get_catalog, load_glossary
 
 _INDEX_LOCK = threading.Lock()
@@ -94,6 +96,8 @@ def _search_item(score: float, entry: dict[str, Any]) -> dict[str, Any]:
     raw_semantics = entry.get("semantics")
     semantics = raw_semantics if isinstance(raw_semantics, dict) else {}
     item = {
+        "kind": entry.get("kind"),
+        "executable": entry.get("executable") is True,
         "operation_id": entry.get("operation_id"),
         "method": entry.get("method"),
         "path": entry.get("path"),
@@ -118,7 +122,11 @@ def knowledge_search(app: Any, args: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         limit = 10
     domain = str((args or {}).get("domain") or "").strip().lower()
-    entries = list(get_catalog(app).get("operations") or [])
+    entries = [
+        entry
+        for entry in get_catalog(app, current_execution_context()).get("operations") or []
+        if entry.get("kind") == "capability" and entry.get("executable") is True
+    ]
     if domain:
         entries = [entry for entry in entries if str(entry.get("domain")) == domain]
     if not entries:
@@ -136,7 +144,7 @@ def operation_describe(app: Any, args: dict[str, Any]) -> dict[str, Any]:
     operation_id = str((args or {}).get("operation_id") or "").strip()
     if not operation_id:
         return {"success": False, "message": "operation_id 不能为空", "code": "INVALID_ARGUMENT"}
-    entry = find_operation(get_catalog(app), operation_id)
+    entry = find_operation(get_catalog(app, current_execution_context()), operation_id)
     if entry is None:
         return {
             "success": False,
@@ -147,7 +155,7 @@ def operation_describe(app: Any, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def catalog_coverage(app: Any) -> dict[str, Any]:
-    entries = list(get_catalog(app).get("operations") or [])
+    entries = list(get_catalog(app, current_execution_context()).get("operations") or [])
     total = len(entries)
     risks = Counter(str(entry.get("risk") or "read") for entry in entries)
     toolsets = Counter(str(entry.get("toolset") or "root") for entry in entries)

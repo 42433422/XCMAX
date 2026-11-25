@@ -11,6 +11,7 @@ NOTIFY="python3 ${OPS_ROOT}/lib/notify.py"
 
 BACKUP_DIR="${OPS_BACKUP_DIR:-/var/backups/xcmax}"
 FHD_ENV="${OPS_FHD_ENV:-/root/fhd-full.env}"
+FHD_DIR="${OPS_FHD_DIR:-${OPS_FHD_DEPLOY_ROOT:-/opt/fhd-full}/XCAGI}"
 MODSTORE_ENV="${OPS_MODSTORE_ENV:-/etc/xcmax/modstore.env}"
 MODSTORE_DIR="${OPS_MODSTORE_DIR:-/root/XCMAX/成都修茈科技有限公司/MODstore_deploy}"
 MODSTORE_DB="${OPS_MODSTORE_DB:-${MODSTORE_DIR}/modstore.db}"
@@ -131,7 +132,7 @@ backup_pg_url() {
     local container="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -im1 postgres || true)"
     [[ -n "$container" ]] || { fail "$label 缺少 pg_dump 且没有可用 Postgres 容器"; return; }
     docker exec "$container" pg_dump -Fc -d "$url" >"$out" 2>>"$LOG" || { fail "$label pg_dump 失败（容器 $container）"; return; }
-    docker exec "$container" pg_restore --list "$out" >/dev/null 2>>"$LOG" || { fail "$filename 容器 pg_restore --list 验证失败"; return; }
+    docker exec -i "$container" pg_restore --list <"$out" >/dev/null 2>>"$LOG" || { fail "$filename 容器 pg_restore --list 验证失败"; return; }
   fi
   log "$label PG 备份完成: $(du -h "$out" | cut -f1)"
 }
@@ -148,11 +149,16 @@ backup_fhd_pg() {
     return
   fi
   if [[ "$url" == sqlite* ]]; then
-    log "FHD DATABASE_URL 是 sqlite，按文件备份"
-    local db_file="${url#sqlite:///}"
-    if [[ -f "$db_file" && "$DRY_RUN" != "1" ]]; then
-      gzip -c "$db_file" > "$DEST/fhd_sqlite.db.gz" || fail "FHD sqlite 备份失败"
-    fi
+    local db
+    [[ "$url" =~ ^sqlite(\+(pysqlite|aiosqlite))?:/// ]] || {
+      fail "FHD SQLite URL 不支持或缺少数据库路径"; return 1;
+    }
+    db="${url#*:///}"
+    db="${db%%\?*}"
+    [[ -n "$db" && "$db" != :memory: ]] || { fail "FHD SQLite 无可备份文件"; return 1; }
+    # Match the service WorkingDirectory, never cron's current directory.
+    [[ "$db" == /* ]] || db="$FHD_DIR/$db"
+    backup_sqlite "FHD" "$db" "fhd_sqlite.db.gz"
     return
   fi
   backup_pg_url "FHD" "fhd_pg.dump" "$url"
@@ -179,41 +185,57 @@ backup_modstore_pg() {
   fi
 }
 
-# ------------------------------------------------------------- MODstore
+# --------------------------------------------------------------- SQLite
+# SQLite's online backup API includes committed WAL pages; raw gzip/cp does not.
+backup_sqlite() {
+  local label="$1" db="$2" filename="$3"
+  [[ -f "$db" ]] || { fail "$label SQLite 源文件不存在"; return 1; }
+  [[ "$DRY_RUN" == 1 ]] && { log "[dry-run] 将在线备份 $label SQLite"; return; }
+  if ! python3 - "$db" "$DEST/$filename" <<'PYSQLITE' 2>>"$LOG"; then
+import contextlib
+import gzip
+import os
+from pathlib import Path
+import shutil
+import sqlite3
+import sys
+import tempfile
+import time
+
+source, output = map(Path, sys.argv[1:])
+deadline = time.monotonic() + 300
+
+def progress(status, remaining, total):
+    if time.monotonic() >= deadline:
+        raise TimeoutError("SQLite backup exceeded 300 seconds")
+
+with tempfile.TemporaryDirectory(prefix=".sqlite-backup-", dir=output.parent) as staging:
+    snapshot = Path(staging) / "snapshot.db"
+    with contextlib.closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True, timeout=30)) as src:
+        with contextlib.closing(sqlite3.connect(snapshot)) as dst:
+            src.backup(dst, pages=256, progress=progress)
+            if dst.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                raise RuntimeError("SQLite backup integrity check failed")
+    archive = Path(staging) / "snapshot.db.gz"
+    with snapshot.open("rb") as src, gzip.open(archive, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    archive.chmod(0o600)
+    with archive.open("rb") as handle:
+        os.fsync(handle.fileno())
+    os.replace(archive, output)
+PYSQLITE
+    fail "$label SQLite 在线备份/校验失败"
+    return 1
+  fi
+  log "$label SQLite 在线备份完成: $filename"
+}
+
 backup_modstore_sqlite() {
   local db="$MODSTORE_DB"
   if [[ ! -f "$db" ]]; then
-    # 常见变体：instance/ 或 data/ 下
     db="$(find "$MODSTORE_DIR" -maxdepth 2 -name 'modstore.db' -type f 2>/dev/null | head -1 || true)"
   fi
-  if [[ -z "$db" || ! -f "$db" ]]; then
-    fail "未找到 MODstore SQLite（找过 $MODSTORE_DB 与 $MODSTORE_DIR 下两层）"
-    return
-  fi
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] 将备份 SQLite: $db"
-    return
-  fi
-  local snap="$DEST/modstore_sqlite.db"
-  if ! python3 - "$db" "$snap" <<'PY' 2>>"$LOG"; then
-import sqlite3, sys
-src = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True, timeout=30)
-dst = sqlite3.connect(sys.argv[2])
-if hasattr(src, "backup"):  # py3.7+ 在线一致性快照
-    with dst:
-        src.backup(dst)
-else:  # py3.6 退路：只读连接逐语句导出
-    dst.executescript("".join(src.iterdump()))
-row = dst.execute("PRAGMA quick_check").fetchone()
-src.close(); dst.close()
-if row and row[0] != "ok":
-    raise SystemExit("quick_check: %s" % row[0])
-PY
-    fail "MODstore SQLite 备份/校验失败: $db"
-    return
-  fi
-  gzip -f "$snap" || { fail "gzip modstore_sqlite 失败"; return; }
-  log "MODstore SQLite 备份完成: $(du -h "$snap.gz" | cut -f1)（源 $db）"
+  backup_sqlite "MODstore" "$db" "modstore_sqlite.db.gz"
 }
 
 # --------------------------------------------------------------- configs

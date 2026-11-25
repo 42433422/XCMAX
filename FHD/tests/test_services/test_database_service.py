@@ -78,8 +78,59 @@ class TestBackupDatabase:
         verify_conn.close()
         assert rows == [("important data",)]
 
+    def test_same_second_backups_preserve_both_recovery_points(self, tmp_path, service):
+        (tmp_path / "backups").mkdir()
+        with sqlite3.connect(tmp_path / "live.db") as db:
+            db.execute("CREATE TABLE proof (value TEXT)")
+            db.execute("INSERT INTO proof VALUES ('before')")
+        with patch.object(db_mod, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 11, 23, 12, 0, 0)
+            before = service.backup_database()
+            with sqlite3.connect(tmp_path / "live.db") as db:
+                db.execute("UPDATE proof SET value='after'")
+            after = service.backup_database()
+        assert before["success"] and after["success"]
+        assert before["file_path"] != after["file_path"]
+        for snapshot, expected in ((before, "before"), (after, "after")):
+            assert service.restore_database(snapshot["file_path"])["success"]
+            with sqlite3.connect(tmp_path / "live.db") as db:
+                assert db.execute("SELECT value FROM proof").fetchone() == (expected,)
+
 
 class TestRestoreDatabase:
+    @pytest.mark.parametrize("state", ["applying", "applied"])
+    @pytest.mark.parametrize("same_actor", [True, False])
+    def test_restore_never_reopens_consumed_code_proposal(
+        self, tmp_path, service, state, same_actor
+    ):
+        live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
+        with sqlite3.connect(live) as db:
+            db.executescript(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY, market_user_id INTEGER, "
+                "tenant_id INTEGER); INSERT INTO users VALUES (1, 101, 10);"
+                "CREATE TABLE proof (value TEXT); INSERT INTO proof VALUES ('before');"
+                "CREATE TABLE code_edit_proposals (edit_id TEXT PRIMARY KEY, "
+                "user_id INTEGER REFERENCES users(id), scope_json TEXT, "
+                "payload_json TEXT, state TEXT);"
+                "INSERT INTO code_edit_proposals VALUES ('edit-1', 1, "
+                '\'{"user_id":1,"tenant_id":10,"workspace_root":"/workspace"}\', '
+                "'{}', 'pending');"
+            )
+            with sqlite3.connect(backup) as snapshot:
+                db.backup(snapshot)
+            db.execute("UPDATE code_edit_proposals SET state=?", (state,))
+            db.execute("UPDATE proof SET value='after'")
+        if not same_actor:
+            with sqlite3.connect(backup) as snapshot:
+                snapshot.execute("UPDATE users SET tenant_id=20")
+        result = service.restore_database(str(backup))
+        assert result["success"] is same_actor
+        with sqlite3.connect(live) as db:
+            assert db.execute("SELECT state FROM code_edit_proposals").fetchone() == (state,)
+            assert db.execute("SELECT value FROM proof").fetchone() == (
+                "before" if same_actor else "after",
+            )
+
     @pytest.mark.parametrize(
         "case",
         [
@@ -491,6 +542,7 @@ class TestServiceReExportGuard:
 
     def test_backup_database_uses_hot_backup_not_shutil_copy(self, tmp_path, service):
         db_file = tmp_path / "live.db"
+        (tmp_path / "backups").mkdir()
         with sqlite3.connect(db_file) as db:
             db.execute("CREATE TABLE t (id INTEGER)")
         with patch.object(DatabaseService, "_hot_backup", return_value=False) as mock_hot:

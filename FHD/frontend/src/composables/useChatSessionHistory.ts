@@ -213,7 +213,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
             role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
             content: normalizeServerContentToHtml(asString(row.content)),
             time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
-            ...chatMessageExtrasFromServerRow(row),
+            ...chatMessageExtrasFromServerRow({ ...row, durable: dataRow.durable === true }),
           }
         })) {
           const index = localMessages.findIndex((local, i) => !matched.has(i)

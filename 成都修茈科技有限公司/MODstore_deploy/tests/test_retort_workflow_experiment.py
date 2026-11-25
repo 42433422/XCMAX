@@ -127,6 +127,50 @@ async def test_owned_generation_consumes_assignment_and_records_static_result(wo
 
 
 @pytest.mark.asyncio
+async def test_observation_commit_failure_rolls_back_graph_and_retry_creates_once(
+    workflow_experiment, monkeypatch
+):
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+
+    from modstore_server.models import WorkflowEdge, WorkflowNode
+
+    run = workflow_experiment
+    start(run)
+    original_record = runtime.record_observation
+    original_commit = Session.commit
+    failed = False
+
+    def observe(*args, session=None, **kwargs):
+        if session is not None:
+            session.info["commit_observation"] = True
+        return original_record(*args, session=session, **kwargs)
+
+    def commit(session):
+        nonlocal failed
+        if session.info.pop("commit_observation", False) and not failed:
+            failed = True
+            raise OperationalError("COMMIT", {}, RuntimeError("observation storage unavailable"))
+        return original_commit(session)
+
+    monkeypatch.setattr(runtime, "record_observation", observe)
+    monkeypatch.setattr(Session, "commit", commit)
+    result = await run["generate"]()
+    assert failed and result["ok"] is False
+    workflow_id = run["workflows"][run["users"][0]]
+    with get_session_factory()() as db:
+        assert db.query(WorkflowNode).filter_by(workflow_id=workflow_id).count() == 0
+        assert db.query(WorkflowEdge).filter_by(workflow_id=workflow_id).count() == 0
+    assert [row["success"] for row in observations(run)] == [False]
+    result = await run["generate"]()
+    assert result["ok"] is True and result["sandbox_ok"] is True
+    with get_session_factory()() as db:
+        assert db.query(WorkflowNode).filter_by(workflow_id=workflow_id).count() == 2
+        assert db.query(WorkflowEdge).filter_by(workflow_id=workflow_id).count() == 1
+    assert [row["success"] for row in observations(run)] == [False, True]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fault", ["model", "json", "static_validation", "exception", "cancel"])
 async def test_generation_failure_cannot_be_counted_as_improvement(workflow_experiment, fault):
     run = workflow_experiment

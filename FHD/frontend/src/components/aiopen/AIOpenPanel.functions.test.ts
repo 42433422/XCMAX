@@ -98,7 +98,7 @@ function setupDefaultApiResponses(overrides: Record<string, unknown> = {}) {
       name: 'AIOPEN',
       tools: [
         { name: 'api_catalog', description: 'list APIs' },
-        { name: 'api_call', description: 'call API' },
+        { name: 'operation_call', description: '执行已登记能力', inputSchema: { type: 'object', properties: { operation_id: { type: 'string' }, params: { type: 'object' }, request_id: { type: 'string' } } } },
       ],
     },
     ...overrides.manifest,
@@ -307,7 +307,7 @@ describe('AIOpenPanel functions', () => {
 
   // --- toggleWechat ---
 
-  it('toggleWechat calls wechat-gateway API', async () => {
+  it('toggleWechat calls canonical config API', async () => {
     const wrapper = await mountPanel()
     mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true } })
     // Find the wechat checkbox (last switch-row in advanced)
@@ -317,7 +317,7 @@ describe('AIOpenPanel functions', () => {
     if (wechatCheckbox) {
       await wechatCheckbox.setValue(true)
       await flushPromises()
-      const wechatCalls = mockSafeJsonRequest.mock.calls.filter((c) => String(c[0]).includes('/wechat-gateway'))
+      const wechatCalls = mockSafeJsonRequest.mock.calls.filter((c) => String(c[0]) === '/api/aiopen/config' && String(c[1]?.body).includes('wechat_open'))
       expect(wechatCalls.length).toBeGreaterThan(0)
     }
   })
@@ -339,14 +339,14 @@ describe('AIOpenPanel functions', () => {
 
   // --- sendToOpenclaw ---
 
-  it('sendToOpenclaw calls openclaw chat API', async () => {
+  it('sendToOpenclaw calls canonical capability API', async () => {
     const wrapper = await mountPanel()
     mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true } })
     const sendBtn = wrapper.findAll('.aiopen-row button').find((b) => b.text().includes('发送'))
     if (sendBtn) {
       await sendBtn.trigger('click')
       await flushPromises()
-      const chatCalls = mockSafeJsonRequest.mock.calls.filter((c) => String(c[0]).includes('/openclaw/chat'))
+      const chatCalls = mockSafeJsonRequest.mock.calls.filter((c) => String(c[0]) === '/api/tools/execute')
       expect(chatCalls.length).toBeGreaterThan(0)
     }
   })

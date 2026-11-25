@@ -68,14 +68,14 @@ def build_collaboration_context_result(
         "employee_id": employee_id,
         "pack": {"id": pack["pack_id"], "version": pack.get("version")},
         "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-        "success": True,
+        "success": not degraded,
         "result": {
             "task": task,
             "handlers": handler_list,
             "outputs": [
                 {
                     "handler": "collaboration_context",
-                    "ok": True,
+                    "ok": not degraded,
                     "output": text,
                 }
             ],
@@ -107,14 +107,17 @@ def build_interactive_chat_fallback_result(
         "employee_id": employee_id,
         "pack": {"id": pack["pack_id"], "version": pack.get("version")},
         "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-        "success": True,
+        "success": False,
+        "error": str(reasoning.get("error") or "员工认知模型暂不可用"),
+        "error_code": str(reasoning.get("error_code") or "employee_cognition_unavailable"),
+        "retryable": bool(reasoning.get("retryable", False)),
         "result": {
             "task": task,
             "handlers": handler_list,
             "outputs": [
                 {
                     "handler": "interactive_chat_fallback",
-                    "ok": True,
+                    "ok": False,
                     "output": text,
                 }
             ],

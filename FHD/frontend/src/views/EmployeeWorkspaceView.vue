@@ -33,11 +33,4 @@ import EmployeeWorkspaceScene from '@/components/workflow/EmployeeWorkspaceScene
   color: #0f172a;
 }
 
-.ews-page-sub {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #64748b;
-  max-width: 52rem;
-}
 </style>

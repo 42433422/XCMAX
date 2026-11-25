@@ -250,7 +250,7 @@ class TestActionVendorConvert:
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
-            "def convert_file(*a, **k):\n    raise RuntimeError('boom')\n"
+            "def convert_file(*a, **k):\n    raise OSError('boom')\n"
         )
         # Provide a file_path so we get past the missing-file check
         src = tmp_path / "src.txt"
@@ -400,7 +400,7 @@ class TestCognitionFhd:
             ),
             patch(
                 "app.application.employee_runtime.agent_runner._run_async",
-                side_effect=RuntimeError("llm down"),
+                side_effect=ConnectionError("llm down"),
             ),
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")

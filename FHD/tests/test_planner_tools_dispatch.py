@@ -19,8 +19,8 @@ if not (EXCEL_MOD / "manifest.json").is_file():
 def test_planner_excel_tools_manifest_execution_owner():
     data = json.loads((EXCEL_MOD / "manifest.json").read_text(encoding="utf-8"))
     cfg = data.get("config") or {}
-    assert cfg.get("tools_execution_owner") == "mod"
-    assert "excel_analysis" in (cfg.get("native_planner_tools") or [])
+    assert cfg.get("tools_execution_owner") == "registered_capability"
+    assert "native_planner_tools" not in cfg
 
 
 def test_execute_workflow_tool_delegates_to_native_first(monkeypatch):
@@ -28,7 +28,10 @@ def test_execute_workflow_tool_delegates_to_native_first(monkeypatch):
 
     monkeypatch.setattr(
         "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
-        lambda *a, **k: ('{"source":"mod:test","success":true}', "xcagi-planner-excel-tools"),
+        lambda *a, **k: (
+            '{"source":"mod:test","success":true}',
+            "xcagi-planner-excel-tools",
+        ),
     )
     raw = wf.execute_workflow_tool("excel_analysis", {})
     parsed = json.loads(raw)
@@ -53,21 +56,8 @@ def test_resolve_executor_facade_vs_host(monkeypatch):
     )
     assert resolve_planner_tool_executor().__name__ == "execute_planner_workflow_tool"
     raw = execute_planner_workflow_tool("excel_chart_recommend", {})
-    assert "suggestions" in json.loads(raw)
-
-
-def test_execute_planner_tool_from_body_mod_native_path(monkeypatch):
-    from app.mod_sdk.planner_tools import execute_planner_tool_from_body
-    from app.shell.xcagi_mods_discover import mods_dir
-
-    monkeypatch.delenv("XCAGI_ROOT", raising=False)
-    monkeypatch.delenv("XCAGI_MODS_DIR", raising=False)
-    monkeypatch.setenv("XCAGI_PLANNER_TOOLS_VIA_MOD", "1")
-    assert mods_dir() == REPO / "mods"
-    out = execute_planner_tool_from_body({"tool_name": "excel_chart_recommend", "arguments": {}})
-    assert out.get("success") is True
-    assert out.get("execution_path") == "mod_native"
-    assert out.get("mod_id") == "xcagi-planner-excel-tools"
+    assert json.loads(raw)["error_code"] == "unknown_tool"
+    assert json.loads(raw)["execution_status"] == "not_started"
 
 
 @pytest.mark.parametrize("source", ["canonical", "legacy", "root_env", "mods_env"])
@@ -80,7 +70,12 @@ def test_discovery_selects_one_mod_tree_with_explicit_roots_first(tmp_path, monk
         repo / "XCAGI" / "mods",
         tmp_path / "custom" / "mods",
     )
-    roots = {"canonical": canonical, "legacy": legacy, "root_env": explicit, "mods_env": explicit}
+    roots = {
+        "canonical": canonical,
+        "legacy": legacy,
+        "root_env": explicit,
+        "mods_env": explicit,
+    }
     for index, root in enumerate((canonical, legacy, explicit)):
         if source == "legacy" and root == canonical:
             continue

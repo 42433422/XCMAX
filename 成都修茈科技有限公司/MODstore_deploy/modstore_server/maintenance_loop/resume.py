@@ -124,7 +124,7 @@ def _pending_execution_candidate(memory: Dict[str, Any], user_id: int) -> Option
             )
             and last.get("action") == final["policy_decision"].get("action")
         )
-        if recorded and isinstance(last, dict) and pending.get("outcome_recoverable") is True:
+        if isinstance(last, dict) and recorded and pending.get("outcome_recoverable") is True:
             recorded = (
                 last.get("outcome_projection_id")
                 == hashlib.sha256(

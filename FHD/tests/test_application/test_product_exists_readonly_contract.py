@@ -219,7 +219,7 @@ def test_query_backend_exception_preserves_failure(product_context, monkeypatch,
     service = get_products_service()
 
     def unavailable(*args, **kwargs):
-        raise RuntimeError("synthetic operational failure")
+        raise OSError("synthetic operational failure")
 
     failure = SimpleNamespace(find_all=unavailable, get=unavailable, record_metric=unavailable)
     monkeypatch.setattr(service, component, failure)

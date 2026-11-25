@@ -57,11 +57,12 @@ class Span:
             self.span_id = uuid.uuid4().hex[:16]
         self._otel_span = None
         try:
-            from opentelemetry import trace
             from opentelemetry.context import Context
 
+            from app.infrastructure.llm.trace_store import get_runtime_tracer
+
             parent = otel_context(self.trace_id, self.parent_id) or Context()
-            self._otel_span = trace.get_tracer("xcagi.neurobus").start_span(
+            self._otel_span = get_runtime_tracer("xcagi.neurobus").start_span(
                 self.name, context=parent, attributes=self.tags
             )
             context = self._otel_span.get_span_context()

@@ -10,9 +10,8 @@ import { api } from '../../api'
 import { getMarketPageKnowledge, getStructuredPageSummary } from '../../content/siteKnowledge'
 import { checkXiaoCLifeAction, minimumSkillLevel } from './xiaocLifeActionGuard'
 
-let _msgId = 0
 function nextId() {
-  return `msg-${Date.now()}-${++_msgId}`
+  return `msg-${crypto.randomUUID()}`
 }
 
 function makeUserMsg(content: string): AgentMessage {
@@ -85,7 +84,7 @@ export function useAgentEngine() {
       if (!uploaded && !opts?.withScreenshot) {
         const matchedSkill = skillRegistry.matchByIntent(context)
         if (matchedSkill && !turn.conversationId) {
-          const blocked = await checkXiaoCLifeAction(minimumSkillLevel(matchedSkill.id))
+          const blocked = await checkXiaoCLifeAction(minimumSkillLevel(matchedSkill.id), isCurrent)
           if (!isCurrent()) return
           if (!blocked) {
             const result = await matchedSkill.execute(context)
@@ -102,6 +101,7 @@ export function useAgentEngine() {
       await callLLMBrain(context, turn, {
         withScreenshot: opts?.withScreenshot ?? false,
         imageDataUrl: uploaded || null,
+        requestId: [...agentStore.messages].reverse().find((message) => message.role === 'user')?.id || nextId(),
       })
     } catch (e: unknown) {
       if (!isCurrent()) return
@@ -117,12 +117,13 @@ export function useAgentEngine() {
     }
   }
 
-  async function callLLMBrain(context: AgentContext, turn: AgentTurn, opts: { withScreenshot: boolean; imageDataUrl?: string | null }) {
+  async function callLLMBrain(context: AgentContext, turn: AgentTurn, opts: { withScreenshot: boolean; imageDataUrl?: string | null; requestId: string }) {
     let screenshotDataUrl: string | null =
       typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim() ? opts.imageDataUrl.trim() : null
     if (!screenshotDataUrl && opts.withScreenshot) {
       try {
         const { captureViewport } = await import('../../utils/agent/screenshotCapture')
+        if (!turn.isCurrent()) return
         const captured = await captureViewport({ signal: turn.signal, autoTextFallback: false })
         if (!captured.ok || captured.kind !== 'image' || !captured.dataUrl?.startsWith('data:image/')) {
           throw new Error('Missing screenshot')
@@ -160,6 +161,7 @@ export function useAgentEngine() {
     const response = (await api.agentButlerChat(
       {
         messages,
+        request_id: opts.requestId,
         conversation_id: turn.conversationId,
         page_context: context.pageSummary,
       },
@@ -185,7 +187,7 @@ export function useAgentEngine() {
 
   async function handleToolCalls(toolCalls: LLMToolCall[], _context: AgentContext, turn: AgentTurn) {
     const firstTool = toolCalls[0]
-    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2)
+    const blocked = await checkXiaoCLifeAction(toolCalls.length > 1 ? 3 : 2, turn.isCurrent)
     if (!turn.isCurrent()) return
     if (blocked) {
       turn.updateReply({ content: blocked.message, isLoading: false, isError: true })
@@ -231,7 +233,7 @@ export function useAgentEngine() {
             userMessage: '',
             history: agentStore.messages.slice(-6),
           }
-          const blockedSkill = await checkXiaoCLifeAction(minimumSkillLevel(skill.id))
+          const blockedSkill = await checkXiaoCLifeAction(minimumSkillLevel(skill.id), turn.isCurrent)
           if (!turn.isCurrent()) return
           result = blockedSkill ?? (await skill.execute(ctx, args))
         } else {

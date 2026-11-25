@@ -72,6 +72,7 @@ const electronMocks = vi.hoisted(() => {
     showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true }))
   }
   const ipcMain = { handle: vi.fn() }
+  const globalShortcut = { unregisterAll: vi.fn() }
   const shell = { openPath: vi.fn(), openExternal: vi.fn(() => Promise.resolve()) }
   const session = {
     defaultSession: {
@@ -102,6 +103,7 @@ const electronMocks = vi.hoisted(() => {
     Notification,
     dialog,
     ipcMain,
+    globalShortcut,
     shell,
     session,
     screen,
@@ -810,10 +812,14 @@ describe('main — startup failure notice stays non-blocking', () => {
 })
 
 describe('main — desktop CSP defense-in-depth injection', () => {
-  it('injects fallback CSP for a trusted local mainFrame without an existing CSP', async () => {
+  it.each<Record<string, string[]>>([
+    {},
+    { 'Content-Security-Policy': ['', ' \t'] },
+    { 'Content-Security-Policy-Report-Only': ["script-src 'none'"] },
+  ])('injects fallback CSP for a trusted local mainFrame without an enforced CSP: %j', async responseHeaders => {
     const { resolveDesktopCspInjection } = await import('./main.js')
     const csp = resolveDesktopCspInjection({
-      responseHeaders: {},
+      responseHeaders,
       resourceType: 'mainFrame',
       url: 'http://127.0.0.1:17500/',
     })
@@ -826,14 +832,22 @@ describe('main — desktop CSP defense-in-depth injection', () => {
     expect(csp).toContain("frame-ancestors 'self'")
   })
 
-  it.each(['Content-Security-Policy', 'content-security-policy'])('preserves an existing %s header', async (header) => {
+  it.each<Record<string, string[]>>([
+    { 'Content-Security-Policy': ["default-src 'self'; media-src 'self' data:"] },
+    { 'content-security-policy': ["default-src 'self'; media-src 'self' data:"] },
+    { 'Content-Security-Policy': ["script-src 'nonce-response-only'"] },
+    { 'content-security-policy': ["script-src 'none'", "frame-ancestors 'none'"] },
+    { 'Content-Security-Policy': [''], 'CONTENT-SECURITY-POLICY': ["script-src 'none'"] },
+  ])('preserves every existing enforced policy without replacing it with fallback: %j', async responseHeaders => {
     const { resolveDesktopCspInjection } = await import('./main.js')
+    const original = structuredClone(responseHeaders)
     const csp = resolveDesktopCspInjection({
-      responseHeaders: { [header]: ["default-src 'self'; media-src 'self' data:"] },
+      responseHeaders,
       resourceType: 'mainFrame',
       url: 'http://127.0.0.1:17500/',
     })
     expect(csp).toBeNull()
+    expect(responseHeaders).toEqual(original)
   })
 
   it('does not inject for sub-resources (non-mainFrame)', async () => {
@@ -854,5 +868,102 @@ describe('main — desktop CSP defense-in-depth injection', () => {
       url: 'https://evil.example.com/',
     })
     expect(csp).toBeNull()
+  })
+})
+
+describe('main — verified backend shutdown', () => {
+  let signalListeners: Map<'SIGTERM' | 'SIGINT', Set<unknown>>
+
+  beforeEach(() => {
+    vi.resetModules()
+    signalListeners = new Map((['SIGTERM', 'SIGINT'] as const).map(signal => [
+      signal, new Set<unknown>(process.listeners(signal)),
+    ]))
+    electronMocks.app.on.mockClear()
+    electronMocks.app.quit.mockClear()
+    electronMocks.app.isQuitting = false
+    electronMocks.app.whenReady.mockImplementation(() => new Promise<void>(() => {}))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    for (const [signal, existing] of signalListeners) {
+      for (const listener of process.listeners(signal)) {
+        if (!existing.has(listener)) process.removeListener(signal, listener)
+      }
+    }
+    electronMocks.app.whenReady.mockResolvedValue(undefined)
+    electronMocks.app.on.mockClear()
+    electronMocks.app.isQuitting = false
+  })
+
+  async function boot() {
+    const backend = await import('./backend-process.js')
+    const resilience = await import('./desktop-resilience.js')
+    const windows = await import('./window-manager.js')
+    vi.spyOn(resilience, 'initializeLocalCrashReporting').mockImplementation(() => {})
+    const stopped = vi.spyOn(backend, 'stopBackend').mockResolvedValue(undefined)
+    const writeLog = vi.spyOn(backend, 'writeBackendLog').mockImplementation(() => {})
+    const watch = vi.spyOn(backend, 'startBackendHealthWatchdog').mockImplementation(() => {})
+    vi.spyOn(backend, 'stopBackendHealthWatchdog').mockImplementation(() => {})
+    const show = vi.spyOn(windows, 'showMainWindow').mockImplementation(() => {})
+    resilience.recordDesktopProcessStart(electronMocks.__userDataDir, writeLog)
+    vi.stubEnv('XCAGI_DESKTOP_TEST', undefined)
+    await import('./main.js')
+    const emit = (name: string, event: { preventDefault(): void } = { preventDefault: vi.fn() }) => {
+      const handler = electronMocks.app.on.mock.calls.find(call => call[0] === name)?.[1]
+      expect(handler, `registered ${name}`).toBeTypeOf('function')
+      handler(event)
+      return event
+    }
+    const lifetime = () => JSON.parse(fs.readFileSync(path.join(electronMocks.__userDataDir, 'session-lifecycle.json'), 'utf8'))
+    return { stopped, writeLog, watch, show, emit, lifetime, ...(await import('./runtime-state.js')) }
+  }
+
+  it('keeps a failed shutdown retryable and never acknowledges an unverified child exit', async () => {
+    const { stopped, writeLog, watch, show, emit, lifetime, desktopRuntime } = await boot()
+    const child = { pid: 42, exitCode: null, signalCode: null } as never
+    desktopRuntime.backendProcess = child
+    let reject!: (reason: Error) => void
+    stopped.mockReturnValueOnce(new Promise<void>((_resolve, fail) => { reject = fail }))
+    emit('before-quit')
+    const first = emit('will-quit')
+    emit('will-quit')
+    expect(first.preventDefault).toHaveBeenCalledOnce()
+    expect(stopped).toHaveBeenCalledOnce()
+    const attempt = desktopRuntime.backendShutdownPromise!.catch(() => {})
+    reject(new Error('backend still owns the database'))
+    await attempt
+
+    expect(desktopRuntime.backendShutdownComplete).toBe(false)
+    expect(desktopRuntime.backendShutdownPromise).toBeNull()
+    expect(desktopRuntime.backendProcess).toBe(child)
+    expect(electronMocks.app.quit).not.toHaveBeenCalled()
+    expect(electronMocks.app.isQuitting).toBe(false)
+    expect(lifetime().clean).toBe(false)
+    expect(writeLog).toHaveBeenCalledWith(expect.stringContaining('backend still owns the database'))
+    expect(show).toHaveBeenCalledOnce()
+    expect(watch).toHaveBeenCalledOnce()
+
+    stopped.mockImplementationOnce(async () => { desktopRuntime.backendProcess = null })
+    emit('before-quit')
+    emit('will-quit')
+    await desktopRuntime.backendShutdownPromise
+    expect(stopped).toHaveBeenCalledTimes(2)
+    expect(desktopRuntime.backendShutdownComplete).toBe(true)
+    expect(electronMocks.app.quit).toHaveBeenCalledOnce()
+  })
+
+  it('writes the clean marker only at confirmed quit and preserves the signal reason', async () => {
+    const { emit, lifetime, desktopRuntime } = await boot()
+    const signal = process.listeners('SIGTERM').find(listener => !signalListeners.get('SIGTERM')!.has(listener))!
+    signal('SIGTERM')
+    emit('before-quit')
+    expect(lifetime().clean).toBe(false)
+    emit('will-quit')
+    await desktopRuntime.backendShutdownPromise
+    expect(lifetime().clean).toBe(false)
+    emit('quit')
+    expect(lifetime()).toMatchObject({ clean: true, reason: 'SIGTERM' })
   })
 })

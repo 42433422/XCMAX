@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.security.lan_ip import get_client_ip
 from app.utils.resilience.rate_limiter import check_rate_limit
 
 
@@ -58,7 +59,10 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/platform-shell/"):
             return await call_next(request)
 
-        client = request.client.host if request.client else "unknown"
+        client = (
+            get_client_ip(request.scope, os.environ.get("LAN_TRUSTED_PROXIES", "").split(","))
+            or "unknown"
+        )
         endpoint = f"global:{path.split('/')[2] if path.count('/') >= 2 else 'api'}"
         key = f"{client}:{endpoint}"
 

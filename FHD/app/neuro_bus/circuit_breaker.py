@@ -29,7 +29,7 @@ from app.neuro_bus.circuit_breaker_primitives import (
 from app.neuro_bus.circuit_breaker_primitives import (
     CircuitBreakerOpen as CircuitBreakerOpen,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class CircuitBreaker(CircuitBreakerExecutionMixin):
         for callback in self._state_change_callbacks:
             try:
                 callback(old_state, new_state, ctx)
-            except RECOVERABLE_ERRORS as e:
+            except BOUNDARY_ERRORS as e:
                 logger.warning("Circuit [%s] state change callback failed: %s", self._name, e)
 
     def can_execute(self) -> bool:

@@ -12,6 +12,7 @@ import { createPinia, setActivePinia } from 'pinia'
 // ── 外部依赖 mock ─────────────────────────────────────────
 
 const mockAuthApiLogin = vi.fn()
+const mockAuthApiOfflineLogin = vi.fn()
 const mockAuthApiGetOidcStatus = vi.fn()
 const mockAuthApiIssueAuthQr = vi.fn()
 const mockAuthApiPollAuthQr = vi.fn()
@@ -19,6 +20,7 @@ const mockAuthApiPollAuthQr = vi.fn()
 vi.mock('@/api/auth', () => ({
   authApi: {
     login: (...args: unknown[]) => mockAuthApiLogin(...args),
+    offlineLogin: (...args: unknown[]) => mockAuthApiOfflineLogin(...args),
     getOidcStatus: (...args: unknown[]) => mockAuthApiGetOidcStatus(...args),
     issueAuthQr: (...args: unknown[]) => mockAuthApiIssueAuthQr(...args),
     pollAuthQr: (...args: unknown[]) => mockAuthApiPollAuthQr(...args),
@@ -483,6 +485,65 @@ describe('LoginView functions – tryAutoLogin', () => {
       expect(request).toHaveBeenCalledTimes(2)
       expect(vm.errorMessage).toBe('')
       expect(vm.loading).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+})
+
+describe('LoginView offline password entry', () => {
+  beforeEach(() => {
+    resetLoginMocks()
+    mockFetchProductSku.mockResolvedValue('generic')
+    mockIsDesktopShell.mockReturnValue(true)
+    mockHasRecentEnterpriseSessionHint.mockReturnValue(false)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(false)
+    mockLoadLoginPreferences.mockReturnValue({
+      rememberPassword: true, autoLogin: false, username: 'known-local-user', password: 'saved-password',
+    })
+    mockAuthApiOfflineLogin.mockResolvedValue({ success: true })
+    mockAuthApiLogin.mockResolvedValue({ success: true })
+  })
+
+  it('clears cached credentials before offline submission and requires a newly entered password', async () => {
+    const { wrapper, router } = await mountLoginView()
+    try {
+      await flushPromises()
+      expect((wrapper.get('#lv-password').element as HTMLInputElement).value).toBe('saved-password')
+      await wrapper.get('.login-offline').trigger('click')
+      expect((wrapper.get('#lv-username').element as HTMLInputElement).value).toBe('known-local-user')
+      expect((wrapper.get('#lv-password').element as HTMLInputElement).value).toBe('')
+      expect(wrapper.get('.login-submit').text()).toBe('离线登录')
+      expect(wrapper.find('.login-options').exists()).toBe(false)
+      expect(mockAuthApiOfflineLogin).not.toHaveBeenCalled()
+      await wrapper.get('.login-form').trigger('submit')
+      expect(mockAuthApiOfflineLogin).not.toHaveBeenCalled()
+      await wrapper.get('#lv-password').setValue('retyped-password')
+      const vm = wrapper.vm as any
+      vm.autoLogin = true
+      await vm.tryAutoLogin()
+      expect(mockAuthApiOfflineLogin).not.toHaveBeenCalled()
+      await wrapper.get('.login-form').trigger('submit')
+      await flushPromises()
+      expect(mockAuthApiOfflineLogin).toHaveBeenCalledExactlyOnceWith('known-local-user', 'retyped-password')
+      expect(mockAuthApiLogin).not.toHaveBeenCalled()
+      expect(mockAuthApiIssueAuthQr).not.toHaveBeenCalled()
+      expect(mockSaveLoginPreferences).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/')
+    } finally { wrapper.unmount() }
+  })
+
+  it('returns to online password login without carrying over the offline password', async () => {
+    const { wrapper } = await mountLoginView()
+    try {
+      await flushPromises()
+      await wrapper.get('.login-offline').trigger('click')
+      await wrapper.get('#lv-password').setValue('offline-password')
+      await wrapper.findAll('[role="tab"]')[0].trigger('click')
+      expect((wrapper.get('#lv-password').element as HTMLInputElement).value).toBe('')
+      await wrapper.get('#lv-password').setValue('online-password')
+      await wrapper.get('.login-form').trigger('submit')
+      await flushPromises()
+      expect(mockAuthApiLogin).toHaveBeenCalledExactlyOnceWith('known-local-user', 'online-password', 'enterprise', '')
+      expect(mockAuthApiOfflineLogin).not.toHaveBeenCalled()
     } finally { wrapper.unmount() }
   })
 })

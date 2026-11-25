@@ -283,7 +283,7 @@ class TestAnomalyDetector:
 
         # 模拟 model.predict 抛异常
         detector._model = MagicMock()
-        detector._model.predict.side_effect = RuntimeError("boom")
+        detector._model.predict.side_effect = ValueError("invalid model input")
 
         result = detector.predict("reflex", 0.5, True, True)
         assert result.is_anomaly is False
@@ -584,8 +584,8 @@ class TestSubconsciousMLHandler:
     ):
         """异常检测器抛异常时不影响主流程。"""
         mock_det = MagicMock(spec=AnomalyDetector)
-        mock_det.add_sample.side_effect = RuntimeError("boom")
-        mock_det.predict.side_effect = RuntimeError("boom")
+        mock_det.add_sample.side_effect = ValueError("invalid model input")
+        mock_det.predict.side_effect = ValueError("invalid model input")
 
         handler = SubconsciousMLHandler(
             embedder=mock_embedder,
@@ -602,8 +602,8 @@ class TestSubconsciousMLHandler:
     ):
         """预测器抛异常时不影响主流程。"""
         mock_pred = MagicMock(spec=PatternPredictor)
-        mock_pred.observe.side_effect = RuntimeError("boom")
-        mock_pred.predict.side_effect = RuntimeError("boom")
+        mock_pred.observe.side_effect = ValueError("invalid model input")
+        mock_pred.predict.side_effect = ValueError("invalid model input")
 
         handler = SubconsciousMLHandler(
             embedder=mock_embedder,

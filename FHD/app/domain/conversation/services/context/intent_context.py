@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -275,10 +275,13 @@ class IntentContext:
             notifier = self._get_notifier()
             if notifier:
                 pending_data = pending.to_dict()
-                if event == "created":
-                    notifier.notify_pending_created(user_id, pending_data)
-                elif event == "updated":
-                    notifier.notify_pending_updated(user_id, pending_data)
+                try:
+                    if event == "created":
+                        notifier.notify_pending_created(user_id, pending_data)
+                    elif event == "updated":
+                        notifier.notify_pending_updated(user_id, pending_data)
+                except BOUNDARY_ERRORS as e:
+                    logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
         except RECOVERABLE_ERRORS as e:
             logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 
@@ -287,7 +290,10 @@ class IntentContext:
         try:
             notifier = self._get_notifier()
             if notifier:
-                notifier.notify_pending_cleared(user_id, reason)
+                try:
+                    notifier.notify_pending_cleared(user_id, reason)
+                except BOUNDARY_ERRORS as e:
+                    logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
         except RECOVERABLE_ERRORS as e:
             logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 
@@ -297,7 +303,10 @@ class IntentContext:
             notifier = self._get_notifier()
             if notifier:
                 pending_data = pending.to_dict()
-                notifier.notify_pending_preserved(user_id, pending_data, action)
+                try:
+                    notifier.notify_pending_preserved(user_id, pending_data, action)
+                except BOUNDARY_ERRORS as e:
+                    logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
         except RECOVERABLE_ERRORS as e:
             logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 

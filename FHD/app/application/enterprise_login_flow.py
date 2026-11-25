@@ -286,7 +286,7 @@ async def run_offline_login(
     sku: str,
     background_tasks: BackgroundTasks | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
-    """桌面离线登录：只校验本机账号密码，不请求市场。"""
+    """桌面离线登录：已有成功登录证据后重新验密码，不请求市场或 MFA。"""
     if not _is_desktop_runtime():
         message = "离线登录仅在桌面端可用"
         return None, JSONResponse(
@@ -297,7 +297,14 @@ async def run_offline_login(
             },
             status_code=403,
         )
-    result = auth_app_service.login(username, password, enforce_mfa=False)
+    result = auth_app_service.login(username, password, enforce_mfa=False, offline=True)
+    if (result.get("error") or {}).get(
+        "code"
+    ) == DESKTOP_ADMIN_FORBIDDEN_CODE or is_admin_account_kind(
+        (result.get("user") or {}).get("role")
+    ):
+        delete_session_quiet(result.get("session_id"))
+        return None, JSONResponse(forbidden_payload(), status_code=_login_client_http_status(403))
     if not result.get("success"):
         message = "账号或密码不正确，或该账号尚未在本机登录过"
         return None, JSONResponse(
@@ -308,9 +315,6 @@ async def run_offline_login(
             },
             status_code=_login_client_http_status(401),
         )
-    if is_admin_account_kind((result.get("user") or {}).get("role")):
-        delete_session_quiet(result.get("session_id"))
-        return None, JSONResponse(forbidden_payload(), status_code=_login_client_http_status(403))
     session_id = result.get("session_id")
     result = await finalize_enterprise_login(
         result=result,

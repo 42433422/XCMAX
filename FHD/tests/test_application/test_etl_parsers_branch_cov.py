@@ -630,7 +630,7 @@ def test_parse_file_xlsx_compat_fallback_on_generic_error(tmp_path):
         "app.application.elt.shipment_compat_parser.parse_delivery_note_with_compat_profile"
     ) as compat:
         compat.return_value = compat_ds
-        with patch("app.application.elt.parsers._parse_workbook", side_effect=RuntimeError("boom")):
+        with patch("app.application.elt.parsers._parse_workbook", side_effect=ValueError("boom")):
             ds = parse_file(p, target_type="products")
     assert ds.source_features["kind"] == "compat"
 
@@ -1535,7 +1535,7 @@ def test_parse_file_xlsx_regional_raises_non_elt_falls_back(tmp_path):
         compat.return_value = compat_ds
         with patch(
             "app.application.elt.parser_regions.parse_customer_product_regions",
-            side_effect=RuntimeError("boom"),
+            side_effect=ValueError("boom"),
         ):
             ds = parse_file(p, target_type="customer_products")
     assert ds.source_features["kind"] == "compat"

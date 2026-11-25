@@ -10,7 +10,7 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.schemas.ocr_schema import (
     OcrAnalyzeResponse,
@@ -50,52 +50,15 @@ def _ocr_user_id(user=Depends(get_logged_in_user)) -> str:
 
 def _run_ocr_agent(
     *,
-    request: Request | None,
-    user_id: str,
+    request: Request,
     action: str,
-    node_id: str,
-    message: str,
     params: dict[str, Any],
-) -> Any:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-
-    plan = PlanGraph(
-        plan_id=f"ocr_{action}",
-        intent=f"ocr_{action}",
-        todo_steps=["通过 AgentOrchestrator 执行 OCR 工具"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="ocr",
-                action=action,
-                params=dict(params or {}),
-                risk="low",
-                idempotent=True,
-                description="Execute OCR through the unified Agent runtime.",
-            )
-        ],
-        risk_level="low",
-        metadata={"source": "ocr_route", "route": "/api/ocr"},
+) -> tuple[dict[str, Any], int]:
+    return run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "ocr", "action": action, "params": params},
+        route_path=str(request.url.path),
     )
-    return AgentOrchestrator().start_run_from_plan(
-        user_id=user_id,
-        message=message,
-        plan=plan,
-        runtime_context={
-            "source": "ocr_route",
-            "route_action": action,
-            "request_path": str(getattr(getattr(request, "url", None), "path", "") or ""),
-        },
-    )
-
-
-def _ocr_status(payload: dict[str, Any]) -> int:
-    if payload.get("success"):
-        return 200
-    if str(payload.get("error_code") or "") == "ocr_exception":
-        return 500
-    return 400
 
 
 async def _resolve_ocr_path(
@@ -121,17 +84,12 @@ async def ocr_recognize(
                 {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
             )
 
-        run = await run_in_threadpool(
+        result, status_code = await run_in_threadpool(
             _run_ocr_agent,
             request=request,
-            user_id=user_id,
             action="recognize",
-            node_id="ocr_recognize",
-            message=f"OCR recognize: {resolved_path}",
             params={"file_path": resolved_path},
         )
-        result = _agent_node_output(run, "ocr_recognize")
-        status_code = _ocr_status(result)
         return JSONResponse(result, status_code=status_code)
     except RECOVERABLE_ERRORS:
         logger.exception("OCR识别失败")
@@ -148,16 +106,12 @@ def ocr_extract(
         text = data.get("text", "")
         if not text:
             return JSONResponse({"success": False, "message": "文本不能为空"}, status_code=400)
-        run = _run_ocr_agent(
+        result, status_code = _run_ocr_agent(
             request=request,
-            user_id=user_id,
             action="extract",
-            node_id="ocr_extract",
-            message="OCR extract structured data",
             params={"text": str(text)},
         )
-        result = _agent_node_output(run, "ocr_extract")
-        return JSONResponse(result, status_code=_ocr_status(result))
+        return JSONResponse(result, status_code=status_code)
     except RECOVERABLE_ERRORS:
         logger.exception("提取结构化数据失败")
         return JSONResponse(
@@ -175,16 +129,12 @@ def ocr_analyze(
         text = data.get("text", "")
         if not text:
             return JSONResponse({"success": False, "message": "文本不能为空"}, status_code=400)
-        run = _run_ocr_agent(
+        result, status_code = _run_ocr_agent(
             request=request,
-            user_id=user_id,
             action="analyze",
-            node_id="ocr_analyze",
-            message="OCR analyze text",
             params={"text": str(text)},
         )
-        result = _agent_node_output(run, "ocr_analyze")
-        return JSONResponse(result, status_code=_ocr_status(result))
+        return JSONResponse(result, status_code=status_code)
     except RECOVERABLE_ERRORS:
         logger.exception("分析文本失败")
         return JSONResponse(
@@ -206,17 +156,13 @@ async def ocr_recognize_and_extract(
                 {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
             )
 
-        run = await run_in_threadpool(
+        result, status_code = await run_in_threadpool(
             _run_ocr_agent,
             request=request,
-            user_id=user_id,
             action="recognize_and_extract",
-            node_id="ocr_recognize_and_extract",
-            message=f"OCR recognize and extract: {resolved_path}",
             params={"file_path": resolved_path},
         )
-        result = _agent_node_output(run, "ocr_recognize_and_extract")
-        return JSONResponse(result, status_code=_ocr_status(result))
+        return JSONResponse(result, status_code=status_code)
     except RECOVERABLE_ERRORS:
         logger.exception("OCR识别和提取失败")
         return JSONResponse(

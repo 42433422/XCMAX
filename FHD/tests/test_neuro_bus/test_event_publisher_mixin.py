@@ -37,7 +37,7 @@ def test_publish_event_custom_priority():
 def test_publish_event_failure_returns_empty():
     with patch(
         "app.neuro_bus.event_publisher_mixin.get_neuro_bus",
-        side_effect=RuntimeError("bus down"),
+        side_effect=ConnectionError("bus down"),
     ):
         svc = _DemoService()
         assert svc._publish_event("demo.fail", {}) == ""

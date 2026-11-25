@@ -1,4 +1,4 @@
-"""Capability-loop verification over explicitly supplied tool operations."""
+"""Verify discovery → controlled read → original task receipt without business writes."""
 
 from __future__ import annotations
 
@@ -16,94 +16,69 @@ class CapabilityProbe:
         self,
         state: RuntimeState,
         catalog: Callable[[], dict[str, Any]],
-        select_path: Callable[[list[dict[str, Any]], str], str | None],
-        api_call: ToolCall,
-        chat: ToolCall,
+        operation_call: ToolCall,
         cursor: Callable[[], CursorHub],
     ) -> None:
         self._state = state
         self._catalog = catalog
-        self._select_path = select_path
-        self._api_call = api_call
-        self._chat = chat
+        self._operation_call = operation_call
         self._cursor = cursor
 
     def run(self, app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-        """catalog → api_call → chat → ui_sessions 闭环自检。"""
-
-        def _step_http_ok(res: dict[str, Any]) -> bool:
-            code = res.get("status_code")
-            try:
-                status = int(code) if code is not None else 599
-            except (TypeError, ValueError):
-                status = 599
-            return bool(res.get("success")) and status < 400
-
-        steps: list[dict[str, Any]] = []
         catalog = self._catalog()
-        routes: list[dict[str, Any]] = [
-            item for item in catalog.get("routes") or [] if isinstance(item, dict)
+        entries = [row for row in catalog.get("capabilities") or [] if isinstance(row, dict)]
+        requested = str(args.get("operation_id") or "")
+        candidates = [
+            row for row in entries if row.get("read_only") is True and row.get("risk") == "low"
         ]
-        enabled_count = sum(1 for r in routes or [] if isinstance(r, dict) and r.get("enabled"))
-        steps.append(
+        selected = (
+            next((row for row in candidates if row.get("operation_id") == requested), None)
+            if requested
+            else next((row for row in candidates if not row.get("required_params")), None)
+        )
+        steps: list[dict[str, Any]] = [
             {
                 "step": "api_catalog",
-                "ok": bool(catalog.get("success")),
-                "enabled_count": enabled_count,
-                "total_count": len(routes or []),
+                "ok": catalog.get("success") is True,
+                "capability_count": len(entries),
             }
+        ]
+        receipt: dict[str, Any] = {}
+        if selected is not None and catalog.get("success") is True:
+            receipt = self._operation_call(
+                app,
+                {
+                    "operation_id": selected["operation_id"],
+                    "params": args.get("params", {}),
+                    "request_id": args.get("request_id"),
+                },
+            )
+        verified = (
+            receipt.get("success") is True
+            and receipt.get("execution_state") == "completed"
+            and bool(receipt.get("run_id"))
         )
-        probe = self._select_path(routes, str(args.get("probe_path") or ""))
-        if probe:
-            call_res = self._api_call(app, {"path": probe, "method": "GET"})
-            steps.append(
-                {
-                    "step": "api_call",
-                    "ok": _step_http_ok(call_res),
-                    "path": probe,
-                    "status_code": call_res.get("status_code"),
-                    "message": call_res.get("message"),
-                }
-            )
-        else:
-            steps.append(
-                {
-                    "step": "api_call",
-                    "ok": False,
-                    "message": "无已启用白名单路径可探测；请先 seed 全能力白名单",
-                }
-            )
-        msg = str(args.get("message") or "").strip() or "AIOPEN 全调用闭环探测"
-        chat_res = self._chat(app, {"message": msg})
         steps.append(
             {
-                "step": "chat",
-                "ok": _step_http_ok(chat_res),
-                "status_code": chat_res.get("status_code"),
-                "message": chat_res.get("message"),
+                "step": "operation_call",
+                "ok": verified,
+                "operation_id": selected.get("operation_id") if selected else None,
+                "run_id": receipt.get("run_id"),
+                "task_id": receipt.get("task_id"),
+                "execution_state": receipt.get("execution_state", "not_started"),
+                "message": receipt.get("message")
+                or "仅探测当前账号可用的明确只读能力；写动作不能用作自检。",
             }
         )
         sessions = self._cursor().sessions_info()
-        remote_on = bool(self._state.remote_control_enabled)
-        steps.append(
-            {
-                "step": "ui_sessions",
-                "ok": True,
-                "remote_control_enabled": remote_on,
-                "session_count": len(sessions),
-                "ui_ready": remote_on and len(sessions) > 0,
-            }
-        )
-        core_ok = all(
-            bool(s.get("ok")) for s in steps if s.get("step") in {"api_catalog", "api_call", "chat"}
-        )
+        ready = self._state.remote_control_enabled and bool(sessions)
         return {
-            "success": core_ok,
-            "closed_loop": core_ok,
-            "ui_loop_ready": remote_on and len(sessions) > 0,
+            "success": verified,
+            "closed_loop": verified,
+            "verification_scope": "capability_discovery_read_execution_receipt",
+            "ui_loop_ready": ready,
             "steps": steps,
-            "hint": "API/对话闭环已通"
-            + ("；虚拟光标已就绪" if remote_on and sessions else "；UI 闭环需面板开启「本页待命」")
-            if core_ok
-            else "闭环未通过：请检查白名单、鉴权与 unified_chat 是否可写",
+            "hint": "只读能力执行回执已核验"
+            if verified
+            else "能力自检未完成，请检查当前账号授权和原任务回执。",
         }

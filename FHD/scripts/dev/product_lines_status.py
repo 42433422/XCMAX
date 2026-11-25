@@ -41,6 +41,7 @@ REPO_ROOT = FHD_ROOT.parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "xcagi_common"))
 
+from benchmark_evidence import recorded_provenance
 from verify_version_anchors import canonical_version, toolchain_version
 from xcagi_common.release_catalog import release_inventory_errors
 
@@ -471,7 +472,8 @@ def build_status() -> dict:
             "source": cfg["sources"]["coverage"],
             "committed_head": coverage.get("committed_head", {}),
             "ratchet_floors": coverage.get("ratchet_floors", {}),
-            "quality_gate": coverage.get("quality_gate", {}),
+            "provenance": recorded_provenance(coverage.get("committed_head", {})),
+            "recorded_quality_gate": coverage.get("quality_gate", {}),
         },
         "capability_totals": cap_data["stats"],
         "capability_warnings": cap_warnings,
@@ -625,7 +627,7 @@ def render_doc(status: dict) -> str:
     else:
         out.append("VERSION.md 未提供「各端交付等级」表。")
     out.append("")
-    out.append("## 6. 覆盖率（`coverage` 域，唯一数字源）")
+    out.append("## 6. 覆盖率历史证据（`coverage` 域，唯一数字源）")
     out.append("")
     out.append(
         f"后端行 {head.get('backend_line_pct')}% / 分支 {head.get('backend_branch_pct')}%；"
@@ -635,7 +637,13 @@ def render_doc(status: dict) -> str:
     out.append("")
     out.append(f"棘轮 floor：后端行 {floors.get('backend_line')} / 分支 {floors.get('backend_branch')}；"
                f"前端行 {floors.get('frontend_lines')} / 分支 {floors.get('frontend_branches')}。"
-               f"门禁结论：{coverage['quality_gate'].get('status')}。")
+               f"原记录门禁：{coverage['recorded_quality_gate'].get('status')}。")
+    out.append("")
+    out.append(
+        f"本版验证：{coverage['provenance']['current_source_status']}。"
+        "数值仅适用于上述采样版本；本页生成时间不更新测试时间。"
+        "当前 HEAD 需独立绑定源码 SHA 与原始测试凭据，不能沿用历史通过结论。"
+    )
     out.append("")
     out.append("任何文档引用覆盖率必须引用本表或 `FHD/metrics/coverage-dual-summary.json`，不得另抄一份数字。")
     out.append("")

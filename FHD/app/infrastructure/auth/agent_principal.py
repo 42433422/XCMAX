@@ -100,6 +100,7 @@ def _test_header_enabled() -> bool:
 def _mobile_principal(payload: dict[str, Any]) -> AgentPrincipal:
     from app.db import HostSessionLocal
     from app.db.models.user import Session as UserSession
+    from app.infrastructure.session.session_manager import session_has_expired
     from app.utils.time import utc_now_naive
 
     with HostSessionLocal() as db:
@@ -116,6 +117,7 @@ def _mobile_principal(payload: dict[str, Any]) -> AgentPrincipal:
             and str(row.user_id) == str(payload["user_id"])
             and row.user is not None
             and row.user.is_active
+            and not session_has_expired(db, row)
         ):
             principal = _from_user(row.user)
             if principal is not None:

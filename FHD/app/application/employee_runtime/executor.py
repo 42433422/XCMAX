@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import inspect
 import json
 import logging
 import os
 import uuid
-from contextvars import copy_context
 from pathlib import Path
 from typing import Any
 
-from app.application.employee_runtime.agent_runner import run_agent_handler
+from app.application.employee_runtime.agent_runner import _run_async, run_agent_handler
 from app.application.employee_runtime.loader import (
     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
     direct_python_pack_trust_error,
@@ -125,14 +123,7 @@ def _import_module_from_path(module_path: Path, module_label: str):
 def _run_maybe_async(fn, *args, **kwargs):
     out = fn(*args, **kwargs)
     if inspect.isawaitable(out):
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(out)
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(copy_context().run, asyncio.run, out).result()
+        return _run_async(out)
     return out
 
 

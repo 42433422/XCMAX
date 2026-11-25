@@ -291,7 +291,7 @@ jobs:
             --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
           assignee="${{ vars.SECURITY_ISSUE_ASSIGNEE }}"
           if [ -z "$assignee" ] && [ -f .github/CODEOWNERS ]; then
-            assignee="$(grep -m1 '^/.github/' .github/CODEOWNERS | awk '{print $1}' | tr -d '@')"
+            assignee="$(awk '$1 == "/.github/workflows/" {sub(/^@/, "", $2); print $2; exit}' .github/CODEOWNERS)"
           fi
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$REPO" --body "$body"

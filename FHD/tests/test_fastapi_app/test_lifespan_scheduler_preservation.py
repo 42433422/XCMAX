@@ -66,6 +66,8 @@ def runtime(monkeypatch):
     )
     isolate("app.fastapi_app.mod_startup", ["wait_for_background_mod_load"])
     isolate("app.fastapi_app.resource_cleanup", asynchronous=["close_llm_http_clients"])
+    isolate("app.infrastructure.llm.trace_store", ["reset_trace_store"])
+    isolate("app.fastapi_app.enterprise_cs_scheduler", ["start_enterprise_cs_scheduler"])
     isolate("app.application.employee_runtime.scheduler", ["stop_employee_scheduler"])
     isolate("app.domain.shared_services.mobile_relay_desktop_client", ["stop_desktop_relay_poller"])
     isolate("app.neuro_bus.bus_setup", asynchronous=["teardown_neuro_bus"])
@@ -149,6 +151,7 @@ def test_scheduler_and_elt_survive_lifespan(runtime, passive, fast_start, shutdo
     calls["stop_paid_asset_installs"].assert_awaited_once_with()
     calls["close_llm_http_clients"].assert_awaited_once_with()
     calls["teardown_neuro_bus"].assert_awaited_once_with()
+    calls["reset_trace_store"].assert_called_once_with()
     assert calls["schedule_deferred_heavy_startup"].await_count == int(fast_start)
     assert calls["cancel_deferred_heavy_startup"].await_count == int(fast_start)
 
@@ -171,3 +174,4 @@ def test_scheduler_failure_does_not_block_other_lifecycle_cleanup(runtime, failu
     calls["stop_auto_sync_scheduler"].assert_called_once_with()
     calls["stop_paid_asset_installs"].assert_awaited_once_with()
     calls["teardown_neuro_bus"].assert_awaited_once_with()
+    calls["reset_trace_store"].assert_called_once_with()

@@ -124,16 +124,18 @@ function bootstrap(): void {
       }
     })
 
-    const noteShutdown = (reason: string) => {
+    let shutdownReason = 'before-quit'
+    const noteShutdown = () => {
+      if (!desktopRuntime.backendShutdownComplete) return
       try {
-        recordDesktopCleanExit(app.getPath('userData'), reason, writeBackendLog)
+        recordDesktopCleanExit(app.getPath('userData'), shutdownReason, writeBackendLog)
       } catch (error) {
         writeBackendLog(`[shutdown] marker failed: ${error instanceof Error ? error.message : error}\n`)
       }
     }
     for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       process.once(signal, () => {
-        noteShutdown(signal)
+        shutdownReason = signal
         app.quit()
       })
     }
@@ -141,8 +143,10 @@ function bootstrap(): void {
     app.on('before-quit', () => {
       app.isQuitting = true
       stopBackendHealthWatchdog()
-      noteShutdown('before-quit')
     })
+    // before-quit and will-quit can still be cancelled; only a confirmed quit
+    // after the owned writer stopped is evidence of a clean session.
+    app.on('quit', noteShutdown)
 
     // will-quit runs after BrowserWindows have closed, so renderer keep-alive
     // connections no longer prevent the backend from shutting down gracefully.
@@ -153,9 +157,18 @@ function bootstrap(): void {
       }
       event.preventDefault()
       if (!desktopRuntime.backendShutdownPromise) {
-        desktopRuntime.backendShutdownPromise = stopBackend().finally(() => {
+        desktopRuntime.backendShutdownPromise = stopBackend().then(() => {
           desktopRuntime.backendShutdownComplete = true
           app.quit()
+        }, error => {
+          desktopRuntime.backendShutdownPromise = null
+          app.isQuitting = false
+          writeBackendLog(`[shutdown] backend stop failed: ${error instanceof Error ? error.message : error}\n`)
+          // will-quit has already closed the windows. Reuse the normal reopen
+          // path so the user can retry quitting without losing the live owner.
+          showMainWindow()
+          startBackendHealthWatchdog()
+          showStartupFailureNotice('后端尚未安全停止，已取消退出。请稍后重试退出；数据和恢复记录已保留。')
         })
       }
     })
@@ -250,11 +263,11 @@ function bootstrap(): void {
       }
 
       if (pendingRollback?.recoveryRequired) {
-        const rollback = await triggerRollbackSafe('Windows 后端迁移失败后的持久恢复')
+        const rollback = await triggerRollbackSafe('桌面后端迁移失败后的持久恢复')
         showStartupFailureNotice(
           rollback?.scheduled
-            ? 'Windows 数据迁移失败，正在通过已验证恢复记录还原旧程序、Mod 与数据库；请等待 XCAGI 自动重启。'
-            : 'Windows 数据迁移失败，恢复尚未启动。恢复记录和快照已保留；请不要继续更新，并重启 XCAGI 重试或联系支持。',
+            ? '数据迁移失败，正在通过已验证恢复记录还原旧程序与数据库；请等待 XCAGI 自动重启。'
+            : '数据迁移失败，恢复尚未启动。恢复记录和快照已保留；请不要继续更新，并重启 XCAGI 重试或联系支持。',
         )
         releaseWindowsBeforeRollbackQuit()
         app.quit()

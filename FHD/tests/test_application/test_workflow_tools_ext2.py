@@ -1,8 +1,4 @@
-"""Tests for app.application.tools.workflow — deep coverage for remaining uncovered branches.
-
-Focus: execute_workflow_tool, handle_excel_analysis edge cases, registry functions,
-run_natural_language_pandas, and import excel to database branches.
-"""
+"""Workflow composition and the retained spreadsheet analysis contract."""
 
 from __future__ import annotations
 
@@ -12,19 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def _legacy_builtin_tool_unit_scope(monkeypatch):
-    """Exercise built-in tool handlers without querying an unrelated tenant tool DB."""
-    from app.application import agent_tool_lifecycle
-
-    monkeypatch.setattr(
-        agent_tool_lifecycle, "execute_if_registered", lambda *_args, **_kwargs: None
-    )
-
-
-# ========================= _parse_excel_header_row_1based - extended =======
 
 
 class TestParseExcelHeaderRow1BasedExtended:
@@ -69,9 +52,6 @@ class TestParseExcelHeaderRow1BasedExtended:
 
         result = _parse_excel_header_row_1based({"header_row": 2})
         assert result == 2
-
-
-# ========================= handle_excel_analysis - deep ====================
 
 
 class TestHandleExcelAnalysisDeep:
@@ -261,7 +241,7 @@ class TestHandleExcelAnalysisDeep:
         assert result["success"] is True
         assert result["row_count"] == 1
 
-    def test_excel_query_action(self, tmp_path):
+    def test_query_expression_filters_rows(self, tmp_path):
         import pandas as pd
 
         from app.application.tools.workflow import handle_excel_analysis
@@ -270,27 +250,20 @@ class TestHandleExcelAnalysisDeep:
         xlsx_path = str(tmp_path / "nlq.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with (
-            patch(
-                "app.application.tools.workflow.resolve_safe_excel_path",
-                return_value=Path(xlsx_path),
-            ),
-            patch("app.application.tools.workflow.run_natural_language_pandas") as mock_run,
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path",
+            return_value=Path(xlsx_path),
         ):
-            mock_run.return_value = {
-                "generated_code": "",
-                "result_kind": "dataframe",
-                "row_count": 2,
-                "records": [],
-            }
             result = handle_excel_analysis(
                 {
                     "file_path": xlsx_path,
-                    "action": "excel_query",
-                    "natural_language": "show all",
+                    "action": "query",
+                    "query_expression": "value > 1",
                 }
             )
-        assert result["action"] == "excel_query"
+        assert result["success"] is True
+        assert result["action"] == "query"
+        assert result["records"] == [{"name": "B", "value": 2}]
 
     def test_read_with_customer_hint(self, tmp_path):
         import pandas as pd
@@ -334,104 +307,6 @@ class TestHandleExcelAnalysisDeep:
         assert result["header_row"] == 1
 
 
-# ========================= run_natural_language_pandas - extended ==========
-
-
-class TestRunNaturalLanguagePandasExtended:
-    def test_empty_code(self):
-        import pandas as pd
-
-        from app.application.tools.workflow import run_natural_language_pandas
-
-        df = pd.DataFrame({"name": ["A"], "value": [1]})
-        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
-            result = run_natural_language_pandas(df, "show all")
-        assert result["result_kind"] == "dataframe"
-        assert result["generated_code"] == ""
-
-    def test_exception_in_translation(self):
-        import pandas as pd
-
-        from app.application.tools.workflow import run_natural_language_pandas
-
-        df = pd.DataFrame({"name": ["A"], "value": [1]})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas",
-            side_effect=OSError("llm down"),
-        ):
-            result = run_natural_language_pandas(df, "show all")
-        assert result["error"] == "excel_query_failed"
-
-    def test_translation_unavailable(self):
-        import pandas as pd
-
-        from app.application.tools.workflow import run_natural_language_pandas
-
-        df = pd.DataFrame({"name": ["A"], "value": [1]})
-        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
-            result = run_natural_language_pandas(df, "show all")
-        assert result["error"] == "query_translation_failed"
-        assert result["generated_code"] == ""
-
-    def test_successful_translation(self):
-        import pandas as pd
-
-        from app.application.tools.workflow import run_natural_language_pandas
-
-        df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
-        with patch(
-            "app.application.tools.workflow.adapters.translate_pandas",
-            return_value="result = df[df['value'] > 1]",
-        ):
-            result = run_natural_language_pandas(df, "value greater than 1")
-        assert result["result_kind"] == "dataframe"
-        assert result["row_count"] == 1
-
-
-# ========================= get_workflow_tool_registry - extended ===========
-
-
-class TestGetWorkflowToolRegistryExtended:
-    def test_base_registry_count(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        assert (
-            len(reg) >= 5
-        )  # At least excel_analysis, excel_schema, excel_join, excel_chart, import_excel
-
-    def test_registry_caching(self):
-        from app.application.tools.workflow import get_workflow_tool_registry
-
-        # First call populates cache
-        with patch("app.application.tools.workflow._workflow_tool_registry_cache", None):
-            with patch("app.application.tools.workflow._workflow_registry_cache_ver", None):
-                reg = get_workflow_tool_registry()
-        assert isinstance(reg, list)
-
-    def test_registry_with_bulk_token(self):
-        from app.application.tools.workflow import get_workflow_tool_registry
-
-        with patch.dict("os.environ", {"FHD_DB_WRITE_TOKEN": "test_token"}):
-            with patch("app.application.tools.workflow._workflow_tool_registry_cache", None):
-                with patch("app.application.tools.workflow._workflow_registry_cache_ver", None):
-                    reg = get_workflow_tool_registry()
-        tool_names = [t["function"]["name"] for t in reg]
-        assert "products_bulk_import" in tool_names
-
-    def test_invalidate_registry(self):
-        from app.application.tools.workflow import invalidate_workflow_tool_registry
-
-        with patch("app.application.tools.workflow._workflow_tool_registry_cache", [{"old": True}]):
-            invalidate_workflow_tool_registry()
-            from app.application.tools.workflow import _workflow_tool_registry_cache
-
-            assert _workflow_tool_registry_cache is None
-
-
-# ========================= execute_workflow_tool - extended ================
-
-
 class TestExecuteWorkflowToolExtended:
     def test_string_args_parsed(self):
         from app.application.tools.workflow import execute_workflow_tool
@@ -458,7 +333,8 @@ class TestExecuteWorkflowToolExtended:
 
         result = execute_workflow_tool("excel_chart_recommend", {"file_path": "test.xlsx"})
         parsed = json.loads(result)
-        assert "suggestions" in parsed
+        assert parsed["error_code"] == "unknown_tool"
+        assert parsed["execution_status"] == "not_started"
 
     def test_unknown_tool_returns_json(self):
         from app.application.tools.workflow import execute_workflow_tool
@@ -500,36 +376,3 @@ class TestExecuteWorkflowToolExtended:
         ):
             result = execute_workflow_tool("native_tool", {})
         assert isinstance(result, str)
-
-
-# ========================= _base_registry - tool definitions ==============
-
-
-class TestBaseRegistryToolDefinitions:
-    def test_excel_schema_understand_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "excel_schema_understand" in names
-
-    def test_excel_join_compare_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "excel_join_compare" in names
-
-    def test_excel_chart_recommend_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "excel_chart_recommend" in names
-
-    def test_generate_office_document_tool(self):
-        from app.application.tools.workflow import _base_registry
-
-        reg = _base_registry()
-        names = [t["function"]["name"] for t in reg]
-        assert "generate_office_document" in names

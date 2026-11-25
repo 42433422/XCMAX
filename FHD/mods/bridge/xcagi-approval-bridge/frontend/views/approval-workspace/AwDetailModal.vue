@@ -2,12 +2,12 @@
 import Modal from '@/components/Modal.vue'
 import { computed } from 'vue'
 import type { ApprovalWorkspaceCtx } from './assemble'
-import { salesApprovalPreview } from './awHelpers'
+import { getExecutionBadge, salesApprovalPreview } from './awHelpers'
 
 const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
-  showDetails, closeDetails, selectedRequest, canApprove, approve, reject,
+  showDetails, closeDetails, selectedRequest, canApprove, approve, reject, viewDetails, detailLoading, detailError,
   getBusinessLabel, getStatusLabel, getActionIcon, formatRequestTitle, formatTime, getWorkflowExecutionStatusLabel,
 } = props.tm
 const pendingRequest = computed(() => ['pending', 'in_progress'].includes(selectedRequest.value?.status || ''))
@@ -23,6 +23,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
       max-width="800px"
       @close="closeDetails"
     >
+      <p v-if="detailError" role="alert">{{ detailError }}</p>
       <div v-if="selectedRequest" class="request-detail" data-tutorial-id="approval-detail">
         <div class="detail-section">
           <h4>基本信息</h4>
@@ -104,7 +105,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
           <h4>AI 工作流执行</h4>
           <div
             class="workflow-execution-panel"
-            :class="{ failed: selectedRequest.workflow_execution.success === false }"
+            :class="{ failed: getExecutionBadge(selectedRequest.workflow_execution)?.tone === 'fail' }"
           >
             <div class="workflow-execution-head">
               <span class="workflow-execution-status">
@@ -152,6 +153,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
         </div>
       </div>
       <template #footer>
+        <button v-if="selectedRequest?.workflow_execution" type="button" :disabled="detailLoading" @click="viewDetails(selectedRequest.id)">刷新执行结果</button>
         <button class="btn btn-link" @click="closeDetails">
           <i class="fa fa-times"></i> 关闭
         </button>

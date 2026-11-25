@@ -52,119 +52,6 @@ ACTION_ALIASES = {
     "write": "write",
 }
 
-REQUIRED_PARAMS_BY_TOOL_ACTION = {
-    ("products", "create"): ["name_or_model"],
-    ("customers", "create"): ["unit_name"],
-    ("customers", "update"): ["id"],
-    ("customers", "delete"): ["id"],
-    ("customers", "batch_delete"): ["ids"],
-    ("products", "update"): ["id"],
-    ("products", "delete"): ["id"],
-    ("products", "batch_create"): ["products"],
-    ("products", "batch_delete"): ["ids"],
-    ("materials", "create"): ["name"],
-    ("materials", "update"): ["id"],
-    ("materials", "delete"): ["id"],
-    ("materials", "batch_delete"): [],
-    ("inventory", "update_storage_location"): ["location_id"],
-    ("inventory", "delete_warehouse"): ["warehouse_id"],
-    ("inventory", "update_warehouse"): ["warehouse_id"],
-    ("inventory", "stock_in"): ["quantity"],
-    ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
-    ("inventory", "transfer"): ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
-    ("purchase", "update_supplier"): ["supplier_id"],
-    ("purchase", "delete_supplier"): ["supplier_id"],
-    ("purchase", "update_order"): ["order_id"],
-    ("purchase", "approve_order"): ["order_id"],
-    ("purchase", "cancel_order"): ["order_id"],
-    ("finance", "create_transaction"): ["transaction_type", "amount"],
-    ("finance", "update_transaction"): ["transaction_id"],
-    ("finance", "delete_transaction"): ["transaction_id"],
-    ("finance", "journal_entry_create"): ["lines"],
-    ("finance", "journal_entry_reverse"): ["entry_id"],
-    ("finance", "aging_report"): ["account_type", "days"],
-    ("finance", "chart_seed"): [],
-    ("inventory", "inventory_count"): ["product_id", "warehouse_id", "actual_quantity"],
-    ("inventory", "query_transactions"): [],
-    ("customers", "add_address"): ["customer_id", "address_type", "address"],
-    ("customers", "set_credit_limit"): ["customer_id", "credit_limit"],
-    ("customers", "get_addresses"): [],
-    ("mrp", "create_bom"): ["product_id", "lines"],
-    ("mrp", "query_boms"): [],
-    ("mrp", "get_bom"): ["bom_id"],
-    ("mrp", "create_order"): ["bom_id", "quantity"],
-    ("mrp", "confirm_order"): ["order_id"],
-    ("mrp", "consume"): ["order_id", "warehouse_id"],
-    ("mrp", "finish"): ["order_id", "warehouse_id"],
-    ("mrp", "query_orders"): [],
-    ("sales", "quote"): ["items"],
-    ("sales", "create_order"): ["items"],
-    ("sales", "confirm"): ["order_id"],
-    ("sales", "deliver"): ["order_id"],
-    ("sales", "invoice"): ["order_id"],
-    ("sales", "payment"): ["order_id", "amount"],
-    ("sales", "cancel"): ["order_id"],
-    ("shipment_records", "update"): ["id"],
-    ("shipment_records", "delete"): ["id"],
-    ("shipment_orders", "generate"): ["unit_name", "products"],
-    ("shipment_orders", "generate_batch"): ["shipments"],
-    ("shipment_orders", "print"): ["file_path"],
-    ("shipment_orders", "clear_shipment"): ["purchase_unit"],
-    ("shipment_orders", "set_sequence"): ["sequence"],
-    ("shipment_orders", "reset_sequence"): [],
-    ("shipment_orders", "clear_all"): [],
-    ("shipment_orders", "delete"): ["id"],
-    ("template_extract", "extract"): ["file_path"],
-    ("print", "print_label"): ["file_path"],
-    ("print", "print_document"): ["file_path"],
-    ("print", "test"): ["printer_name"],
-    ("print", "save_printer_selection"): [],
-    ("print", "workflow_label_dispatch"): ["model_number"],
-    ("printer_list", "set_default"): ["printer_name"],
-    ("wechat", "refresh_contact_cache"): [],
-    ("wechat", "refresh_messages_cache"): [],
-    ("employee", "execute"): ["task"],
-    ("employee", "context"): ["task"],
-    ("business_db", "read"): ["entity"],
-    ("business_db", "write"): ["entity", "operation", "payload"],
-    ("dataset_rag", "query"): ["dataset_id", "query"],
-    ("dataset_rag", "clear_dataset"): ["dataset_id"],
-    ("ocr", "recognize"): ["file_path"],
-    ("ocr", "request"): ["request_id", "image_url"],
-    ("ocr", "extract"): ["text"],
-    ("ocr", "analyze"): ["text"],
-    ("ocr", "recognize_and_extract"): ["file_path"],
-    ("business_event", "print_label"): ["document_name"],
-    ("business_event", "inventory_update"): ["product_id"],
-    ("business_event", "shipment_create"): ["unit_name"],
-    ("system_maintenance", "set_default_printer"): ["printer_name"],
-    ("system_maintenance", "enable_startup"): [],
-    ("system_maintenance", "disable_startup"): [],
-    ("system_maintenance", "backup_database"): [],
-    ("system_maintenance", "delete_database_backup"): ["backup_file"],
-    ("system_maintenance", "restore_database"): ["backup_file"],
-    ("system_maintenance", "clear_performance_cache"): [],
-    ("system_maintenance", "invalidate_performance_cache"): ["keys"],
-    ("system_maintenance", "reinitialize_performance"): [],
-    ("excel_vector_index", "execute"): ["file_path"],
-    ("excel_vector_index", "query"): ["index_id", "query"],
-    ("excel_analyzer", "analyze"): ["file_path"],
-    ("excel_toolkit", "view"): ["file_path"],
-    ("excel_toolkit", "merged"): ["file_path"],
-    ("excel_toolkit", "styles"): ["file_path"],
-    ("excel_toolkit", "structure"): ["file_path"],
-    ("label_template_generator", "execute"): ["image_path"],
-    ("document_template", "create"): [],
-    ("document_template", "update"): ["id"],
-    ("document_template", "delete"): ["id"],
-    ("document_template", "ingest"): [],
-    ("document_template", "upload"): [],
-    ("excel_import", "execute_import"): ["pending_import_id"],
-    ("excel_import", "import_records"): ["records"],
-    ("unit_products_import", "execute_import"): ["saved_name", "unit_name"],
-    ("generate_office_document", "execute"): [],
-}
-
 
 def _normalize_action(action: str, params: dict | None = None) -> str:
     raw = str(action or "").strip()
@@ -186,15 +73,18 @@ def _normalize_action(action: str, params: dict | None = None) -> str:
 def _validate_required_params(tool_id: str, action: str, params: dict | None) -> tuple[bool, str]:
     from app.application.shipment_inputs import missing_shipment_call_fields
 
-    missing = missing_shipment_call_fields(tool_id, action, dict(params or {}))
+    payload = dict(params or {})
+    missing = missing_shipment_call_fields(tool_id, action, payload)
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
-    required = REQUIRED_PARAMS_BY_TOOL_ACTION.get(
-        (str(tool_id or "").strip(), str(action or "").strip()), []
-    )
+    if (tool_id, action) == ("shipment_records", "create") and "purchase_unit" in payload:
+        payload["unit_name"] = payload.get("unit_name") or payload["purchase_unit"]
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    spec = get_tool_action_spec(tool_id, action)
+    required = spec.required_params if spec is not None else []
     if not required:
         return True, ""
-    payload = dict(params or {})
     missing = [
         key
         for key in required
@@ -209,14 +99,10 @@ def _validate_required_params(tool_id: str, action: str, params: dict | None) ->
     return True, ""
 
 
-def get_workflow_tool_registry() -> dict:
-    """Return built-in tools plus configured external MCP tools."""
-    from resources.config.risk_actions_loader import get_workflow_tools_from_registry
+def get_workflow_tool_registry(
+    runtime_context: dict | None = None, *, include_aiopen: bool = False
+) -> dict:
+    """Project the execution contracts; context-bearing discovery is account scoped."""
+    from app.application.capability_catalog import workflow_registry
 
-    registry = get_workflow_tools_from_registry()
-    try:
-        from app.application.tools.mcp.registry import merge_mcp_tools
-
-        return merge_mcp_tools(registry)
-    except ImportError:
-        return registry
+    return workflow_registry(runtime_context, include_aiopen=include_aiopen)

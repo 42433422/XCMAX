@@ -8,6 +8,7 @@ import re
 import sys
 import threading
 import time
+from collections.abc import AsyncIterator, Callable
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping
 
@@ -243,7 +244,14 @@ class RateLimitedProvider:
             admit_model_call(self._inner, kwargs=kwargs)
             return await self._inner.chat_completion(messages, **kwargs)
 
-    async def stream_chat_completion(self, messages: list[dict[str, Any]], **kwargs: Any):
+    @property
+    def stream_chat_completion(self) -> Callable[..., AsyncIterator[str]] | None:
+        """Preserve the inner provider's optional streaming capability."""
+        if not callable(getattr(self._inner, "stream_chat_completion", None)):
+            return None
+        return self._stream_chat_completion
+
+    async def _stream_chat_completion(self, messages: list[dict[str, Any]], **kwargs: Any):
         stream = getattr(self._inner, "stream_chat_completion", None)
         if stream is None:
             return

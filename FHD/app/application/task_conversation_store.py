@@ -414,6 +414,7 @@ class TaskConversationStore:
             "success": True,
             "id": session_id,
             "title": session.get("title") if isinstance(session, dict) else None,
+            "message_count": session["message_count"] if isinstance(session, dict) else 0,
             "revision": session.get("revision") if isinstance(session, dict) else None,
             "mod_id": mod_id,
             **page,

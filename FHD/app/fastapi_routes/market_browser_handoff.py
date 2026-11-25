@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.infrastructure.auth.dependencies import resolve_session_user
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 router = APIRouter()
 
@@ -105,7 +105,9 @@ async def market_browser_handoff(body: BrowserHandoffRequest, request: Request):
     except HTTPException as exc:
         exc.headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
         raise
-    except RECOVERABLE_ERRORS as exc:
+    except BOUNDARY_ERRORS:
         raise HTTPException(
-            503, "市场会话暂时不可用，请重试", headers={"Cache-Control": "no-store"}
-        ) from exc
+            503,
+            "市场会话暂时不可用，请重试",
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        ) from None

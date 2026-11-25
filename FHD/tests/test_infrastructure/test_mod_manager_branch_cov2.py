@@ -507,10 +507,10 @@ class TestModAllowedForApiLoad:
         ):
             assert _mod_allowed_for_api_load("any-mod") is False
 
-    def test_runtime_error_returns_false(self) -> None:
+    def test_operational_error_returns_false(self) -> None:
         with patch(
             "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             assert _mod_allowed_for_api_load("any-mod") is False
 

@@ -15,7 +15,7 @@ from typing import Any, cast
 
 from app.application.local_file_access.extract import extract_text
 from app.application.local_file_access.paths import iter_candidate_files
-from app.application.local_file_access.service import DATASET_ID
+from app.application.local_file_access.service import DATASET_ID, LocalFileAccessError
 from app.db.models.local_file import LocalFileDocument, LocalFileGrant
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import tenant_scope
@@ -209,7 +209,7 @@ def _sync_grant(grant_id: int, owner_id: int, tenant: int) -> None:
                     continue
                 document_id = (
                     state.document_id
-                    if state is not None
+                    if state is not None and state.document_id
                     else _document_id(grant_id, candidate.relative_path)
                 )
                 text, parser, parser_meta = extract_text(candidate.path)
@@ -234,7 +234,10 @@ def _sync_grant(grant_id: int, owner_id: int, tenant: int) -> None:
                         access_context=access,
                     )
                 if not isinstance(result, dict) or result.get("success") is not True:
-                    raise RuntimeError(str((result or {}).get("message") or "知识库写入失败"))
+                    message = result.get("message") if isinstance(result, dict) else None
+                    raise LocalFileAccessError(
+                        "local_file_ingest_failed", str(message or "知识库写入失败")
+                    )
                 # 以知识库回执里的 document_id 为准，删除时才能命中同一条文档。
                 stored_id = str(((result.get("document") or {}).get("document_id")) or document_id)
                 _upsert_document(
@@ -247,7 +250,7 @@ def _sync_grant(grant_id: int, owner_id: int, tenant: int) -> None:
                     stored_id,
                 )
                 indexed += 1
-            except RECOVERABLE_ERRORS as exc:
+            except (LocalFileAccessError,) + RECOVERABLE_ERRORS as exc:
                 failed += 1
                 _record_failure(grant_id, owner_id, tenant, path, str(exc))
                 audit_log(

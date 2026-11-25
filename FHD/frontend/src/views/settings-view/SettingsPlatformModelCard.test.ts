@@ -3,6 +3,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import SettingsPlatformModelCard from './SettingsPlatformModelCard.vue'
 import { platformModelApi, notifyPlatformModelChanged, type PlatformModelConfig, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
 import { appConfirm } from '@/utils/appDialog'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 vi.mock('@/api/platformModel', () => ({ notifyPlatformModelChanged: vi.fn(), platformModelApi: { list: vi.fn(), save: vi.fn(), test: vi.fn() } }))
 vi.mock('@/utils/appDialog', () => ({ appConfirm: vi.fn() }))
@@ -231,5 +233,42 @@ describe('platform model settings', () => {
     await flushPromises()
     expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('')
     expect(wrapper.text()).not.toContain('连接测试成功')
+  })
+
+  it.each(['account', 'session'])('clears the previous administrator draft and retires a late save on %s change', async scope => {
+    let finish!: (value: ReturnType<typeof saveResult>) => void
+    vi.mocked(platformModelApi.save).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = await render()
+    await wrapper.get('#platform-model-key').setValue('synthetic-old-account-key')
+    await wrapper.get('form').trigger('submit')
+    const signal = vi.mocked(platformModelApi.save).mock.calls[0][2]
+    const next = { ...stored, model: 'new-account-model', revision: 'new-account-revision' }
+    vi.mocked(platformModelApi.list).mockResolvedValue({ ...configList(), providers: [next] })
+    if (scope === 'account') productReadAccountEpoch.value++
+    else invalidateEnterpriseSessionCache()
+    expect(signal?.aborted).toBe(true)
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('')
+    expect(wrapper.get<HTMLInputElement>('#platform-model-id').element.value).toBe(next.model)
+    finish(saveResult())
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('#platform-model-id').element.value).toBe(next.model)
+    expect(wrapper.text()).not.toContain('平台模型配置已保存')
+    expect(notifyPlatformModelChanged).not.toHaveBeenCalled()
+  })
+
+  it.each(['account', 'session'])('ignores a previous administrator configuration read after %s changes', async scope => {
+    let finish!: (value: PlatformModelList) => void
+    vi.mocked(platformModelApi.list).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = await render()
+    const signal = vi.mocked(platformModelApi.list).mock.calls[0][0]
+    if (scope === 'account') productReadAccountEpoch.value++
+    else invalidateEnterpriseSessionCache()
+    expect(signal?.aborted).toBe(true)
+    await flushPromises()
+    finish({ ...configList(), providers: [{ ...stored, model: 'stale-account-model' }] })
+    await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('#platform-model-id').element.value).toBe(stored.model)
+    expect(platformModelApi.list).toHaveBeenCalledTimes(2)
   })
 })

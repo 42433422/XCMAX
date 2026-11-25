@@ -1,4 +1,4 @@
-import type { AgentRun } from '@/api/agentRuns'
+import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 const EXECUTION_EVENT_TYPES = new Set(['tool.started', 'tool.completed', 'tool.failed', 'step.waiting_user', 'step.blocked'])
@@ -69,4 +69,12 @@ export function runHasUncertainReceipt(run: AgentRun): boolean {
       )
     })
   )
+}
+
+/** Lightweight task streams retain the same receipt boundary as full run details. */
+export function taskHasUncertainReceipt(task: AgentTaskSummary): boolean {
+  const activeRun = task.active_run && (!task.active_run_id || task.active_run.run_id === task.active_run_id)
+    ? task.active_run
+    : task.runs?.find(run => run.run_id === task.active_run_id)
+  return task.status === 'unknown' || task.metadata?.reconciliation_required === true || Boolean(activeRun && runHasUncertainReceipt(activeRun))
 }

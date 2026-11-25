@@ -7,6 +7,7 @@ from contextlib import contextmanager as _shared_scope_contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 import app.domain.shared_services.deepseek_intent_service as ds
@@ -36,6 +37,32 @@ def _shared_scope_case_0(rule):
         yield None
 
 
+@pytest.fixture
+def distilled_sdk(monkeypatch, tmp_path):
+    import app.domain.shared_services.distilled_intent_service as distilled
+
+    monkeypatch.setattr(distilled.DistilledIntentRecognizer, "_instance", None)
+    monkeypatch.setattr(distilled, "_distilled_recognizer", None)
+    monkeypatch.setattr(distilled, "CHECKPOINT_DIR", str(tmp_path))
+    monkeypatch.setenv("USE_CUDA", "0")
+    (tmp_path / "best.pt").mkdir()
+    sdk = MagicMock()
+    sdk.AutoTokenizer.from_pretrained.return_value.return_value = {}
+    model = sdk.AutoModelForSequenceClassification.from_pretrained.return_value
+    model.to.return_value = model
+    torch = MagicMock()
+    with patch.dict(
+        "sys.modules",
+        {
+            "transformers": sdk,
+            "torch": torch,
+            "torch.nn": torch.nn,
+            "torch.nn.functional": torch.nn.functional,
+        },
+    ):
+        yield distilled, sdk
+
+
 class TestGetApiKeyExtended:
     def test_get_api_key_from_config_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
@@ -63,7 +90,7 @@ class TestGetApiKeyExtended:
         r = DeepSeekIntentRecognizer(api_key=None)
         with patch(
             "app.utils.path_io.path_utils.get_resource_path",
-            side_effect=RuntimeError("path fail"),
+            side_effect=PermissionError("path fail"),
         ):
             assert r._get_api_key() == ""
 
@@ -215,7 +242,7 @@ class TestGetDeepseekApiKeyExtended:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with patch(
             "app.utils.path_io.path_utils.get_resource_path",
-            side_effect=RuntimeError("fail"),
+            side_effect=PermissionError("fail"),
         ):
             assert get_deepseek_api_key() == ""
 
@@ -263,7 +290,7 @@ class TestRecognizeAsyncExtended:
         async def side_effect(*a, **k):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                raise RuntimeError("first fail")
+                raise httpx.ConnectError("first fail")
             return {
                 "choices": [
                     {"message": {"content": '{"intent": "greet", "confidence": 0.8, "slots": {}}'}}
@@ -284,7 +311,7 @@ class TestRecognizeAsyncExtended:
         msg = "RECOGNIZE_ALL_FAIL_UNIQUE_007"
         with patch(
             "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(side_effect=RuntimeError("always fail")),
+            new=AsyncMock(side_effect=httpx.ConnectError("always fail")),
         ):
             out = await recognizer.recognize(msg)
         assert out["intent"] is None
@@ -365,20 +392,41 @@ class TestHybridRecognizeExtended:
             out = await h.recognize("msg")
         assert out["intent_source"] == "rule"
 
-    async def test_distilled_recoverable_error_falls_through(self) -> None:
+    async def test_distilled_recoverable_error_falls_through(self, distilled_sdk) -> None:
         h = HybridIntentWithDeepSeek(
             use_deepseek=False, use_distilled=False, confidence_threshold=0.5
         )
-        mock_distilled = MagicMock()
-        mock_distilled.is_available.return_value = True
-        mock_distilled.recognize.side_effect = RuntimeError("distilled fail")
-        h.distilled_recognizer = mock_distilled
+        distilled, sdk = distilled_sdk
+        model = sdk.AutoModelForSequenceClassification.from_pretrained.return_value
+        model.side_effect = RuntimeError("distilled fail")
+        h.distilled_recognizer = distilled.get_distilled_recognizer()
+        failure = h.distilled_recognizer.recognize("msg")
+        assert failure["source"] == "distilled_error"
+        assert failure["intent"] is None
+        model.reset_mock()
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with _shared_scope_case_0(rule):
             out = await h.recognize("msg")
         # Should fall through to no-deepseek branch
         assert out["intent_source"] == "rule"
+        assert out["distilled_intent"] is None
+        assert out["distilled_confidence"] == 0.0
+        assert out["final_intent"] is None
+        model.assert_called_once_with()
+
+    def test_distilled_internal_runtime_error_propagates(self, distilled_sdk) -> None:
+        distilled, sdk = distilled_sdk
+
+        class InvalidTensorMap(dict):
+            def items(self):
+                raise RuntimeError("invalid tensor map")
+
+        sdk.AutoTokenizer.from_pretrained.return_value.return_value = InvalidTensorMap()
+        recognizer = distilled.get_distilled_recognizer()
+        with pytest.raises(RuntimeError, match="^invalid tensor map$"):
+            recognizer.recognize("msg")
+        sdk.AutoModelForSequenceClassification.from_pretrained.return_value.assert_not_called()
 
     async def test_goodbye_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
@@ -493,13 +541,24 @@ class TestHybridInitExtended:
             h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
         assert h.use_distilled is False
 
-    def test_init_distilled_load_error(self) -> None:
-        with patch(
-            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
-            side_effect=RuntimeError("load fail"),
-        ):
-            h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
+    @pytest.mark.parametrize("stage", ["tokenizer", "model", "cuda", "eval"])
+    def test_init_distilled_load_error(self, distilled_sdk, monkeypatch, stage) -> None:
+        _, sdk = distilled_sdk
+        monkeypatch.setenv("USE_CUDA", "1")
+        model = sdk.AutoModelForSequenceClassification.from_pretrained.return_value
+        operation = {
+            "tokenizer": sdk.AutoTokenizer.from_pretrained,
+            "model": sdk.AutoModelForSequenceClassification.from_pretrained,
+            "cuda": model.to,
+            "eval": model.eval,
+        }[stage]
+        operation.side_effect = RuntimeError("load fail")
+        h = HybridIntentWithDeepSeek(use_distilled=True, use_deepseek=False)
         assert h.use_distilled is False
+        assert h.distilled_recognizer.is_available() is False
+        assert h.distilled_recognizer.model is None
+        assert h.distilled_recognizer.tokenizer is None
+        operation.assert_called_once()
 
 
 class TestSingletonsExtended:
@@ -510,14 +569,17 @@ class TestSingletonsExtended:
         assert r.confidence_threshold == 0.7
         reset_deepseek_intent_services()
 
-    def test_get_hybrid_with_distilled(self) -> None:
+    def test_get_hybrid_with_distilled(self, distilled_sdk) -> None:
         reset_deepseek_intent_services()
-        with patch(
-            "app.domain.shared_services.distilled_intent_service.get_distilled_recognizer",
-            side_effect=RuntimeError("no distilled"),
-        ):
-            h = get_hybrid_intent_with_deepseek(use_deepseek=False, use_distilled=True)
+        _, sdk = distilled_sdk
+        sdk.AutoModelForSequenceClassification.from_pretrained.side_effect = RuntimeError(
+            "no distilled"
+        )
+        h = get_hybrid_intent_with_deepseek(use_deepseek=False, use_distilled=True)
         assert h is not None
+        assert h.use_distilled is False
+        assert h.distilled_recognizer.is_available() is False
+        sdk.AutoModelForSequenceClassification.from_pretrained.assert_called_once()
         reset_deepseek_intent_services()
 
     def test_reset_clears_singletons(self) -> None:

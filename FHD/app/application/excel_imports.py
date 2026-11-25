@@ -20,14 +20,12 @@ from app.domain.app_pure.excel_imports import _pick_first as _pick_first
 from app.domain.app_pure.excel_imports import (
     resolve_customer_excel_columns as resolve_customer_excel_columns,
 )
-from app.domain.app_pure.excel_imports import run_bulk_import as run_bulk_import
 
 __all__ = [
     "_norm_header",
     "_norm_model",
     "_parse_price",
     "resolve_customer_excel_columns",
-    "run_bulk_import",
 ]
 
 

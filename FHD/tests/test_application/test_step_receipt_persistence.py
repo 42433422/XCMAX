@@ -20,8 +20,8 @@ from app.db.db_base import Base
 
 
 @pytest.mark.parametrize("failed_sink", [None, "artifacts", "observation"])
-@pytest.mark.parametrize("unknown", [False, True])
-def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, unknown):
+@pytest.mark.parametrize("result_state", ["completed", "unknown", "waiting_user"])
+def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, result_state):
     def no_network(*args, **kwargs):
         raise AssertionError("synthetic receipt tests prohibit network/model access")
 
@@ -35,25 +35,21 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         db.exec_driver_sql("CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, receipt TEXT)")
     step = AgentStep("write", "synthetic", "write")
     run = AgentRun(user_id="synthetic", message="persist original receipt", steps=[step])
-    receipt = {
-        "success": not unknown,
-        "receipt_id": "original-committed-effect",
-        "artifacts": [
-            {
-                "artifact_id": "synthetic-receipt",
-                "artifact_type": "json",
-                "content": {"receipt_id": "original-committed-effect"},
-            }
-        ],
-    }
+    context = {"tenant_id": "7", "user_id": run.user_id, "actor_id": run.user_id}
+    run.metadata["runtime_context"] = dict(context)
+    unknown = result_state == "unknown"
+    receipt = {"success": not unknown, "receipt_id": "original-committed-effect"}
     if unknown:
         receipt.update(outcome="unknown", retryable=False, reconciliation_required=True)
+    elif result_state == "waiting_user":
+        receipt.update(requires_user_decision=True, question="Continue with the proposed rows?")
+    receipt["artifacts"] = [
+        {"artifact_id": "original-table", "artifact_type": "table", "content": {"rows": []}}
+    ]
     original_receipt = copy.deepcopy(receipt)
-    expected_output = (
-        {**original_receipt, "message": "任务尚未完成"} if unknown else original_receipt
-    )
     observed = []
-    verified = []
+    verified_calls = []
+    dispatched = []
 
     def readback():
         with sqlite3.connect(path) as reopened:
@@ -65,36 +61,52 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
             effects = reopened.execute("SELECT receipt FROM synthetic_effects").fetchall()
         assert effects == [(receipt["receipt_id"],)]
         stored_step, stored_call = payload["steps"][0], payload["tool_calls"][0]
-        assert (
-            stored_step["status"] == stored_call["status"] == ("failed" if unknown else "completed")
-        )
+        assert stored_call["status"] == ("failed" if unknown else "completed")
+        assert stored_step["status"] == ("failed" if unknown else result_state)
+        if result_state == "waiting_user":
+            assert payload["status"] == "waiting_user"
         assert stored_step["output"] == stored_call["output"]
         assert stored_step["finished_at"] == stored_call["finished_at"] != ""
         assert stored_step["attempt_count"] == stored_call["metadata"]["attempt_count"] == 1
-        assert stored_step["output"] == expected_output
         if unknown:
+            assert {key: stored_step["output"][key] for key in receipt} == receipt
+            assert stored_step["output"].get("error_code") != "tool_timeout_unknown"
             assert payload["metadata"]["non_retryable"] is True
             assert payload["metadata"]["recovery"]["state"] == "manual_reconciliation_required"
+        else:
+            assert stored_step["output"] == receipt
         return payload
+
+    def execute(*args, **kwargs):
+        dispatched.append(1)
+        with sqlite3.connect(path) as business:
+            business.execute(
+                "INSERT INTO synthetic_effects(receipt) VALUES(?)",
+                (receipt["receipt_id"],),
+            )
+        return receipt
 
     def verify_committed_effect(*, run, step, call, output, context):
         assert (step.tool_id, step.action) == ("synthetic", "write")
         assert context["run_id"] == run.run_id
         assert call.metadata["verification_contract"]["read_only"] is False
         assert output == original_receipt
-        persisted = readback()
-        report = persisted["tool_calls"][0]["metadata"]["verification"]
-        assert report["status"] == "pending" and report["accepted"] is False
-        verified.append(call.call_id)
+        payload = readback()
+        assert payload["tool_calls"][0]["metadata"]["verification"]["status"] == "pending"
+        assert [event["event_type"] for event in payload["events"]] == ["tool.started"]
+        with sqlite3.connect(path) as independent:
+            row = independent.execute("SELECT id, receipt FROM synthetic_effects").fetchone()
+        assert row == (1, output["receipt_id"])
+        verified_calls.append(call.call_id)
         return {
             "status": "verified",
-            "code": "synthetic_effect_read_back",
+            "code": "committed_effect_matches",
             "checks": [
                 {
-                    "check_id": "committed_effect",
+                    "check_id": "original_effect",
                     "status": "passed",
-                    "source": "separate_sqlite_connection",
-                    "evidence": {"receipt_id": persisted["steps"][0]["output"]["receipt_id"]},
+                    "source": "separate_database_connection",
+                    "evidence": {"row_id": row[0], "receipt_id": row[1]},
                 }
             ],
         }
@@ -103,14 +115,6 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         "app.application.agent_orchestrator.verification_readback.verify_independent_result",
         verify_committed_effect,
     )
-
-    def execute(*args, **kwargs):
-        with sqlite3.connect(path) as business:
-            business.execute(
-                "INSERT INTO synthetic_effects(receipt) VALUES(?)",
-                (receipt["receipt_id"],),
-            )
-        return receipt
 
     def sink(name):
         def apply(*args, **kwargs):
@@ -122,10 +126,21 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
 
         return apply
 
-    spec = ToolActionSpecV2(tool_id="synthetic", action="write", timeout_seconds=2)
+    spec = ToolActionSpecV2(
+        tool_id=step.tool_id,
+        action=step.action,
+        timeout_seconds=2,
+        output_schema={
+            "type": "object",
+            "required": ["success", "receipt_id"],
+            "properties": {"success": {"type": "boolean"}, "receipt_id": {"type": "string"}},
+        },
+    )
     dependencies = SimpleNamespace(
         action_spec=lambda *_: spec,
-        validate=lambda *_: ToolValidationResult(True, spec.tool_id, spec.action, spec=spec),
+        validate=lambda *_: ToolValidationResult(
+            ok=True, tool_id=spec.tool_id, action=spec.action, spec=spec
+        ),
         refresh_budget=lambda _: None,
     )
     execution = StepExecution(
@@ -136,36 +151,28 @@ def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_
         attach_artifacts=sink("artifacts"),
         observe=sink("observation"),
     )
-    node_outputs = {}
-    expected_sinks = ["observation"] if unknown else ["artifacts", "observation"]
-    raises = failed_sink in expected_sinks
     try:
-        if raises:
+        sink_reached = failed_sink and not (unknown and failed_sink == "artifacts")
+        if sink_reached:
             with pytest.raises(RuntimeError, match=f"synthetic {failed_sink} failure"):
-                execution.execute_step(run, step, runtime_context={}, node_outputs=node_outputs)
+                execution.execute_step(run, step, runtime_context=context, node_outputs={})
         else:
-            execution.execute_step(run, step, runtime_context={}, node_outputs=node_outputs)
+            execution.execute_step(run, step, runtime_context=context, node_outputs={})
         persisted = readback()
-        assert observed == (
-            ["artifacts"] if raises and failed_sink == "artifacts" else expected_sinks
-        )
-        assert verified == ([] if unknown else [run.tool_calls[0].call_id])
+        expected_sinks = ["observation"] if unknown else ["artifacts", "observation"]
+        if not unknown and failed_sink == "artifacts":
+            expected_sinks = ["artifacts"]
+        assert observed == expected_sinks
+        assert dispatched == [1]
         assert receipt == original_receipt
-        assert node_outputs == (
-            {step.node_id: original_receipt} if not unknown and not raises else {}
-        )
+        assert verified_calls == ([] if unknown else [run.tool_calls[0].call_id])
         events = [event["event_type"] for event in persisted["events"]]
         expected_events = ["tool.started"]
-        if not (raises and failed_sink == "artifacts"):
+        if unknown or failed_sink != "artifacts":
             expected_events.append("verification.failed" if unknown else "verification.verified")
-        if not raises:
+        if not sink_reached:
             expected_events.append("tool.failed" if unknown else "tool.completed")
         assert events == expected_events
-        report = persisted["tool_calls"][0]["metadata"]["verification"]
-        assert report["status"] == (
-            "failed" if unknown else "pending" if failed_sink == "artifacts" else "verified"
-        )
-        assert report["accepted"] is (not unknown and failed_sink != "artifacts")
         reopened_repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
         assert reopened_repo.get(run.run_id).to_dict() == persisted
     finally:

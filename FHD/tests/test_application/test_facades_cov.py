@@ -223,7 +223,7 @@ class TestShipmentEventPrimaryEnabled:
             ),
             patch(
                 "app.application.facades.shipment_event_primary.run_coroutine_on_neuro_loop",
-                side_effect=RuntimeError("loop error"),
+                side_effect=TimeoutError("loop error: coroutine timed out"),
             ),
         ):
             result = facade.create_shipment("公司A", [])

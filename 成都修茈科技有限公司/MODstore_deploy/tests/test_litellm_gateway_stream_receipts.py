@@ -77,18 +77,28 @@ def test_fallback_receipts_preserve_both_router_layers(headers, used, count):
     r":^litellm\.litellm_core_utils\.model_response_utils$"
 )
 @pytest.mark.parametrize(
-    "fallback_header,receipt,unknown",
+    "fallback_header,receipt,reported_models,unknown",
     [
-        (None, "reported", True),
-        ("0", "reported", False),
-        ("1", "reported", True),
-        ("unreported", "reported", True),
-        ("0", "absent", True),
-        ("0", "partial", True),
+        (None, "reported", None, True),
+        ("0", "reported", None, False),
+        ("1", "reported", None, True),
+        ("unreported", "reported", None, True),
+        ("0", "absent", None, True),
+        ("0", "partial", None, True),
+        ("0", "reported", ("different-upstream-model", None, None), True),
+        ("0", "reported", ("different-upstream-model", GATEWAY_MODEL, GATEWAY_MODEL), True),
+        ("0", "reported", (GATEWAY_MODEL, "different-upstream-model", GATEWAY_MODEL), True),
+        ("0", "reported", (GATEWAY_MODEL, None, None), False),
     ],
 )
 async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
-    gateway_mandate, monkeypatch, fallback_header, receipt, unknown, real_router_runtime
+    gateway_mandate,
+    monkeypatch,
+    fallback_header,
+    receipt,
+    reported_models,
+    unknown,
+    real_router_runtime,
 ):
     from openai import DefaultAsyncHttpxClient
 
@@ -113,6 +123,10 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
                 },
             }
         )
+    for index, event in enumerate(events):
+        reported_model = reported_models[index] if reported_models else GATEWAY_MODEL
+        if reported_model is not None:
+            event["model"] = reported_model
     wire = (
         "".join(
             "data: "
@@ -120,7 +134,6 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
                 {
                     "id": "gateway-receipt",
                     "created": 0,
-                    "model": GATEWAY_MODEL,
                     "object": "chat.completion.chunk",
                     **event,
                 }
@@ -206,17 +219,18 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize(
-    "fallback_header,response_model,unknown",
+    "fallback_header,response_model,usage_model,unknown",
     [
-        (None, GATEWAY_MODEL, True),
-        ("0", GATEWAY_MODEL, False),
-        ("1", GATEWAY_MODEL, True),
-        ("unreported", GATEWAY_MODEL, True),
-        ("0", "different-upstream-model", True),
+        (None, GATEWAY_MODEL, None, True),
+        ("0", GATEWAY_MODEL, None, False),
+        ("1", GATEWAY_MODEL, None, True),
+        ("unreported", GATEWAY_MODEL, None, True),
+        ("0", "different-upstream-model", None, True),
+        ("0", "different-upstream-model", GATEWAY_MODEL, True),
     ],
 )
 async def test_platform_key_gateway_receipts_keep_actual_route_identity(
-    gateway_mandate, monkeypatch, stream, fallback_header, response_model, unknown
+    gateway_mandate, monkeypatch, stream, fallback_header, response_model, usage_model, unknown
 ):
     key = PlatformApiKey(
         "platform-test-key",
@@ -250,6 +264,8 @@ async def test_platform_key_gateway_receipts_keep_actual_route_identity(
                 {"choices": [{"delta": {}, "finish_reason": "stop"}]},
                 {"usage": measured},
             ]
+            if usage_model is not None:
+                frames[-1]["model"] = usage_model
             wire = "".join("data: " + json.dumps(row) + "\n\n" for row in frames)
             return httpx.Response(200, text=wire + "data: [DONE]\n\n", headers=headers)
         return httpx.Response(

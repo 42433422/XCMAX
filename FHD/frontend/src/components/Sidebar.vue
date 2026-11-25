@@ -173,8 +173,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change-view'])
-
 const router = useRouter()
+
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
 const modsStore = useModsStore()

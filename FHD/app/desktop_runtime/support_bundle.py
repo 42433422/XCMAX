@@ -143,6 +143,7 @@ def build_support_bundle_zip(
             "xcagi.log.1",
             "xcagi.log.2",
             "electron-backend.log",
+            "electron-backend.old.log",
             "electron-backend.log.1",
         )
         if (chunk := _tail_bytes(logs_dir / name))

@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { renderButlerBubbleHtml } from './butlerBubbleText'
+import { renderCsBubbleHtml } from './csBubbleText'
 
 describe('renderButlerBubbleHtml', () => {
+  it.each([renderButlerBubbleHtml, renderCsBubbleHtml])('renders original notes as text at the display boundary', (render) => {
+    const fixture = new DOMParser().parseFromString('<img src="x">', 'text/html')
+    const image = fixture.querySelector('img')
+    image?.setAttribute('onerror', 'literal()')
+    expect(image?.getAttribute('src')).toBe('x')
+    expect(image?.getAttribute('onerror')).toBe('literal()')
+    const note = `客户 A&B <script>literal()</script> ${fixture.body.innerHTML} &lt;原实体&gt;`
+    const doc = new DOMParser().parseFromString(render(note), 'text/html')
+    expect(doc.body.textContent).toBe(note)
+    expect(doc.querySelector('script, img, [onerror]')).toBeNull()
+  })
+
   it('linkifies markdown links with 点我跳转 label', () => {
     const html = renderButlerBubbleHtml('请 [点我打开 AI 市场](/market/) 继续')
     expect(html).toContain('href="/market/"')

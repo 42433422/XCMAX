@@ -13,12 +13,23 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.application.agent_runtime import gateway
 from app.application.employee_runtime import agent_runner, executor
-from app.application.tools.workflow_business_db import business_db_tool_specs
 from app.application.tools.workflow_tools.catalog_excel import excel_tool_specs
 from app.infrastructure.codex import policy
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+def _read_contract():
+    # A stored employee declaration is checked against the one current schema.
+    return {
+        "type": "function",
+        "function": {
+            "name": "business_db_read",
+            "parameters": deepcopy(get_tool_action_spec("business_db", "read").input_schema),
+        },
+    }
 
 
 def _allow(name, arguments):
@@ -74,7 +85,7 @@ def test_read_alias_cannot_grant_write_or_change_original_entity_scope(runtime_b
         calls.append((name, arguments))
         return {"ok": True}
 
-    result = _run(tools=[business_db_tool_specs()[0]], gate=gate)
+    result = _run(tools=[_read_contract()], gate=gate)
     assert result["runtime"] == "codex"
     submitted = runtime_boundary[0]
     assert submitted["allowed_actions"] == ["business_db.read"]
@@ -120,7 +131,7 @@ def test_parameter_schema_restrictions_never_expand_or_fetch_remote_references(
     runtime_boundary,
     entity_schema,
 ):
-    tool = deepcopy(business_db_tool_specs()[0])
+    tool = deepcopy(_read_contract())
     tool["function"]["parameters"]["properties"]["entity"] = entity_schema
     _run(tools=[tool], gate=_allow)
     check = runtime_boundary[0]["gate"]
@@ -132,7 +143,7 @@ def test_parameter_schema_restrictions_never_expand_or_fetch_remote_references(
     "tool",
     [
         {"function": {"name": "business_db", "parameters": {"type": "object"}}},
-        excel_tool_specs()[3],  # legacy chart recommendations have no observed-data implementation.
+        {"function": {"name": "excel_chart_recommend", "parameters": {"type": "object"}}},
         {"function": {"name": "products_bulk_import", "parameters": {"type": "object"}}},
         {
             "function": {
@@ -154,7 +165,7 @@ def test_ambiguous_or_unregistered_tool_is_unsupported_without_fallback(runtime_
 
 
 def test_missing_original_gate_is_not_hidden_by_schema_adapter(runtime_boundary):
-    result = _run(tools=[business_db_tool_specs()[0]])
+    result = _run(tools=[_read_contract()])
     assert result["error_code"] == "gate_required"
     assert runtime_boundary == []
 
@@ -394,7 +405,7 @@ def test_handler_delegation_keeps_trusted_history_and_context_outside_input(
         "clerk",
         tmp_path,
         None,
-        agent_tools=[business_db_tool_specs()[0]],
+        agent_tools=[_read_contract()],
         agent_gate=_allow,
         runtime_context=context,
     )
@@ -440,21 +451,25 @@ def test_employee_keeps_sole_runtime_when_account_configuration_is_unavailable(
             {},
             {"excel_join_compare.join", "excel_join_compare.diff"},
         ),
-        ({"employee": {"capabilities": ["批量导入"]}}, {}, {"import_excel_to_database.import"}),
+        (
+            {"employee": {"capabilities": ["批量导入"]}},
+            {},
+            {"elt_import.preview", "elt_import.execute"},
+        ),
         (
             {},
-            {"tools": ["business_db_read", "business_db_write"]},
+            {"tools": ["business_db.read", "business_db.write"]},
             {"business_db.read", "business_db.write"},
         ),
     ],
 )
 def test_default_and_erp_employee_scopes_have_real_canonical_actions(
-    monkeypatch, manifest, config, expected
+    monkeypatch, manifest, config, expected, trusted_actor
 ):
     from app.application.employee_runtime.tool_scope import resolve_employee_tools
 
-    monkeypatch.setattr("app.application.agent_tool_lifecycle.discovery_for_runtime", lambda _: [])
-    declared = resolve_employee_tools("clerk", manifest, config)
+    actor = trusted_actor(role="admin")
+    declared = resolve_employee_tools("clerk", manifest, config, actor.context)
     actions, _ = agent_runner._codex_employee_tool_scope(declared, _allow)
     assert expected.issubset(actions)
     assert all("products_bulk_import" not in action for action in actions)
@@ -548,9 +563,15 @@ def test_employee_document_write_uses_one_durable_child_approval(
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     principal = trusted_actor(permissions=["tool.generate_office_document.execute"])
     actor, _ = employee
-    document = next(
-        t for t in excel_tool_specs() if t["function"]["name"] == "generate_office_document"
-    )
+    document = {
+        "type": "function",
+        "function": {
+            "name": "generate_office_document",
+            "parameters": deepcopy(
+                get_tool_action_spec("generate_office_document", "execute").input_schema
+            ),
+        },
+    }
     monkeypatch.setattr(actor, "_build_agent_tools", lambda *args: [document])
     old_gate = Mock(side_effect=AssertionError("No parallel approval owner may be created"))
     monkeypatch.setattr(
@@ -606,7 +627,7 @@ def test_employee_document_write_uses_one_durable_child_approval(
     old_gate.assert_not_called()
     for tool_id, action in (
         ("generate_office_document", "execute"),
-        ("import_excel_to_database", "import"),
+        ("elt_import", "execute"),
         ("business_db", "write"),
     ):
         spec = get_tool_action_spec(tool_id, action)

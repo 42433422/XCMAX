@@ -296,7 +296,7 @@ class TestConvertUploadFailures:
         _setup_workspace(tmp_path, monkeypatch)
 
         def _boom(*_a, **_k):
-            raise RuntimeError("engine exploded")
+            raise OSError("engine exploded")
 
         monkeypatch.setattr(tac, "_load_convert_attendance_file", lambda: _boom)
         app = _make_app()
@@ -833,7 +833,7 @@ class TestLoadProductsPersonnelRosterFromHost:
 
         @contextmanager
         def _ctx():
-            raise RuntimeError("db down")
+            raise sqlite3.OperationalError("db down")
             yield  # pragma: no cover
 
         monkeypatch.setattr(db_session, "get_db", _ctx)
@@ -867,7 +867,7 @@ class TestCandidateModRootsExtra:
         import app.infrastructure.mods.registry as reg
 
         def _boom():
-            raise RuntimeError("registry broken")
+            raise OSError("registry broken")
 
         monkeypatch.setattr(reg, "get_mod_registry", _boom)
         # 不抛异常即通过

@@ -158,7 +158,7 @@ class TestSubconsciousProcessorProcess:
     async def test_process_error(self):
         with patch("app.domain.neuro.processors.subconscious.get_neuro_bus"):
             proc = SubconsciousProcessor(enable_batching=False)
-            handler = AsyncMock(side_effect=RuntimeError("handler error"))
+            handler = AsyncMock(side_effect=ConnectionError("handler dependency unavailable"))
             proc.register_handler("test_event", handler)
             result = await proc.process(_make_event("test_event"))
             assert result is False

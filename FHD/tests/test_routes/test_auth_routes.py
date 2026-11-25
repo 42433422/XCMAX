@@ -175,7 +175,7 @@ class TestJitCreateLocalUserForEnterprise:
 
     def test_db_error_returns_false(self, auth_mod):
         mock_db = MagicMock()
-        mock_db.__enter__ = MagicMock(side_effect=RuntimeError("db fail"))
+        mock_db.__enter__ = MagicMock(side_effect=ConnectionError("db fail"))
         mock_db.__exit__ = MagicMock(return_value=False)
         with patch("app.db.session.get_db", return_value=mock_db):
             result = auth_mod._jit_create_local_user_for_enterprise("u", "p")
@@ -205,7 +205,7 @@ class TestEnrichRegisterWithTenant:
     def test_tenant_error_handled(self, auth_mod):
         with patch(
             "app.application.enterprise_login_flow.bind_tenant_for_login",
-            side_effect=RuntimeError("fail"),
+            side_effect=ConnectionError("fail"),
         ):
             result = auth_mod._enrich_register_with_tenant(
                 result={"user": {"id": 1}}, username="u", session_id=None, sku="personal"

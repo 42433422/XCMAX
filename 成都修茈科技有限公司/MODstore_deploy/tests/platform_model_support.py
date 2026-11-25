@@ -3,6 +3,7 @@
 import gzip
 import json
 import os
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -139,5 +140,12 @@ def upstream(monkeypatch):
         return real_client(transport=httpx.MockTransport(respond), **kwargs)
 
     monkeypatch.setattr(outbound, "pin_url_outbound_safe", pin)
-    monkeypatch.setattr(transport.httpx, "AsyncClient", client)
+    # Keep the shared httpx classes intact for lazy provider SDK imports.
+    monkeypatch.setattr(
+        transport,
+        "httpx",
+        SimpleNamespace(
+            AsyncClient=client, Response=httpx.Response, RequestError=httpx.RequestError
+        ),
+    )
     return observed

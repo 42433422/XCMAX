@@ -315,7 +315,7 @@ class TestFingerprintStore:
 
     def test_github_incident_lookup_failure_does_not_prove_absence(self) -> None:
         client = MagicMock()
-        client.get.side_effect = RuntimeError("github unavailable")
+        client.get.side_effect = heal.httpx.ConnectError("github unavailable")
 
         with pytest.raises(heal.freshness.LookupFailed):
             heal.find_existing_remediation_issue(
@@ -401,7 +401,7 @@ class TestIncidentBudget:
 
     def test_lookup_failure_fails_closed(self) -> None:
         client = MagicMock()
-        client.get.side_effect = RuntimeError("github unavailable")
+        client.get.side_effect = heal.httpx.ConnectError("github unavailable")
 
         decision = heal.check_incident_budget(
             "CI/CD Pipeline", token="tok", repo="a/b", client=client

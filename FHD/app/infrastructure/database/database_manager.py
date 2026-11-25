@@ -13,8 +13,6 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 
 class DatabaseManager:
     """
@@ -68,15 +66,10 @@ class DatabaseManager:
             with db_manager.get_session() as session:
                 session.query(User).all()
         """
-        session = self._session_factory()
-        try:
+        # SQLAlchemy owns commit, rollback and close for every exceptional exit,
+        # including programming errors that must propagate to the caller.
+        with self._session_factory.begin() as session:
             yield session
-            session.commit()
-        except RECOVERABLE_ERRORS:
-            session.rollback()
-            raise
-        finally:
-            session.close()
 
     def get_session_factory(self):
         """获取会话工厂"""

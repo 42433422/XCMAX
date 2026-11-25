@@ -29,6 +29,7 @@ ExecutionState = Literal[
 
 def dispatched_run_state(run: AgentRun) -> tuple[str, str]:
     """Project the persisted run receipt when its worker yields execution."""
+    from app.application.agent_orchestrator.result_verification import verified_step_output
     from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
     from app.domain.task_lifecycle.results import execution_result_pending_state
 
@@ -36,7 +37,7 @@ def dispatched_run_state(run: AgentRun) -> tuple[str, str]:
     pending = execution_result_pending_state(
         {
             "final_output": run.final_output,
-            "outputs": [step.output for step in run.steps if step.output],
+            "outputs": [verified_step_output(run, step) for step in run.steps if step.output],
         }
     )
     if (

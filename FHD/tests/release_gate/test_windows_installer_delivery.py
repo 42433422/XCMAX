@@ -1,8 +1,13 @@
+import hashlib
+import io
 import json
+import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -97,7 +102,8 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "needs.notice-publication-policy.result == 'success'" in publish["if"]
     runs = "\n".join(step.get("run", "") for step in publish["steps"])
     assert '($unsigned != "true" or .signature_status == "unsigned")' in runs
-    assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
+    assert "verify_upgrade_rollback_evidence.py" in runs
+    assert "--windows-native-dir" in runs
     acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
     assert "windows-acceptance-accounts.mjs" in acceptance
     assert "max-parallel: ${{ fromJson(needs.select-modes.outputs.parallel) }}" in acceptance
@@ -210,7 +216,17 @@ def test_standard_installer_refuses_customer_seed_before_building():
     assert "-p:SunbirdSeedZipPath=" not in script
 
 
-def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_path):
+def _copy_native_controller(destination):
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "verify_upgrade_rollback_evidence.py",
+        "build_closure_reports.py",
+        "verify_desktop_soak.py",
+    ):
+        (destination / name).write_bytes((ROOT / "scripts/release" / name).read_bytes())
+
+
+def test_frozen_promotion_rejects_result_only_claims_without_raw_measurements(tmp_path):
     workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
     steps = workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
     script = next(
@@ -219,6 +235,10 @@ def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_pat
         if s.get("name") == "Verify all five frozen candidate acceptance modes"
     )
     script = script.replace("${{ inputs.release_sha }}", "a" * 40)
+    script = script.replace("${{ github.repository }}", "fixture/repo").replace(
+        "${{ inputs.acceptance_run_id }}", "123"
+    )
+    _copy_native_controller(tmp_path / "release-controller/FHD/scripts/release")
     (tmp_path / "delivery").mkdir()
     (tmp_path / "delivery/delivery-receipt.json").write_text(json.dumps({"sha256": "b" * 64}))
     results = {
@@ -242,12 +262,21 @@ def test_frozen_promotion_accepts_real_mode_results_and_rejects_failures(tmp_pat
                 }
             )
         )
-    command = f'export RUNNER_TEMP="{tmp_path}";\n{script}'
-    assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode == 0
+    command = f'export RUNNER_TEMP="{tmp_path}" XCAGI_BUILD_SHA="{"a" * 40}" DELIVERY_VERSION="1.0.0.7";\n{script}'
+    result = subprocess.run(["bash", "-eu", "-c", command], cwd=tmp_path, capture_output=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    proof = json.loads((tmp_path / "windows-lifecycle-verification.json").read_text())
+    assert proof["passed"] is False
+    assert "windows_rollback_native_evidence_invalid" in proof["blockers"]
     for path in (tmp_path / "acceptance").glob("*/acceptance.json"):
         original = path.read_text()
         path.write_text(original.replace('"passed": true', '"passed": false'))
-        assert subprocess.run(["bash", "-eu", "-c", command], capture_output=True).returncode != 0
+        assert (
+            subprocess.run(
+                ["bash", "-eu", "-c", command], cwd=tmp_path, capture_output=True
+            ).returncode
+            != 0
+        )
         path.write_text(original)
 
 
@@ -366,3 +395,394 @@ async function run(status, body, expected, reject = false) {
         capture_output=True,
         text=True,
     )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "same_run",
+        "same_run_newer",
+        "not_ancestor",
+        "feature_controller",
+        "completed_previous",
+        "previous_newer",
+        "missing_call_input",
+        "wrong_attempt",
+        "stale_build_attempt",
+        "wrong_artifact",
+        "wrong_workflow",
+        "wrong_sha",
+        "wrong_branch",
+        "previous_running",
+        "previous_failed",
+        "previous_skipped",
+        "previous_cancelled",
+    ],
+)
+def test_reusable_acceptance_keeps_same_run_exception_narrow(case):
+    repo = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load(
+        (repo / "FHD/.github/workflows/windows-candidate-acceptance.yml").read_text()
+    )
+    triggers = workflow.get("on", workflow.get(True))
+    assert "current_release_attempt" in triggers["workflow_call"]["inputs"]
+    assert "current_release_attempt" not in triggers["workflow_dispatch"]["inputs"]
+    script = next(
+        step["with"]["script"]
+        for step in workflow["jobs"]["isolated-install"]["steps"]
+        if step.get("uses", "").startswith("actions/github-script@")
+    )
+    previous = case.startswith("previous_") or case == "completed_previous"
+    run = {
+        "head_sha": "a" * 40,
+        "repository": {"full_name": "fixture/fixture"},
+        "head_repository": {"full_name": "fixture/fixture"},
+        "path": ".github/workflows/fhd-release-desktop.yml",
+        "head_branch": "main",
+        "event": "workflow_dispatch",
+        "status": "completed" if previous else "in_progress",
+        "conclusion": "success" if previous else None,
+        "run_attempt": 2,
+    }
+    environment = {
+        "PATH": os.environ["PATH"],
+        "CANDIDATE_RUN_ID": "50" if previous else "100",
+        "CANDIDATE_SHA": "a" * 40,
+        "CURRENT_RELEASE_ATTEMPT": "" if previous else "2",
+        "GITHUB_RUN_ATTEMPT": "2",
+        "GITHUB_WORKFLOW_REF": "fixture/fixture/.github/workflows/fhd-release-desktop.yml@refs/heads/main",
+        "CANDIDATE_ARTIFACT": "xcagi-windows-installer-" + "a" * 40
+        if previous
+        else "xcagi-desktop-windows-enterprise",
+    }
+    if case == "missing_call_input":
+        environment["CURRENT_RELEASE_ATTEMPT"] = ""
+    if case == "wrong_attempt":
+        environment["CURRENT_RELEASE_ATTEMPT"] = "1"
+    if case == "stale_build_attempt":
+        run["run_attempt"] = 1
+    if case == "wrong_artifact":
+        environment["CANDIDATE_ARTIFACT"] = "another-artifact"
+    if case == "wrong_workflow":
+        run["path"] = ".github/workflows/unrelated.yml"
+    if case == "wrong_sha":
+        run["head_sha"] = "b" * 40
+    if case in {"same_run_newer", "not_ancestor", "previous_newer"}:
+        run["head_sha"] = "b" * 40
+    if case == "feature_controller":
+        environment["GITHUB_WORKFLOW_REF"] = (
+            "fixture/fixture/.github/workflows/fhd-release-desktop.yml@refs/heads/feature"
+        )
+    if case == "wrong_branch":
+        run["head_branch"] = "candidate"
+    if case == "previous_running":
+        run.update(status="in_progress", conclusion=None)
+    if case in {"previous_failed", "previous_skipped", "previous_cancelled"}:
+        run["conclusion"] = case.removeprefix("previous_")
+    harness = """
+const fs = require('node:fs');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const execute = new (Object.getPrototypeOf(async function(){}).constructor)('github', 'context', input.script);
+const github = { rest: { actions: { getWorkflowRun: async () => ({ data: input.run }) }, repos: {compareCommits: async ({base}) => ({data: {status: input.ancestry, merge_base_commit: {sha: base}}})} } };
+execute(github, {runId: 100, sha: input.controllerSha, repo: {owner: 'fixture', repo: 'fixture'}}).catch(error => { console.error(error.message); process.exitCode = 1; });
+"""
+    result = subprocess.run(
+        ["node", "-e", harness],
+        input=json.dumps(
+            {
+                "script": script,
+                "run": run,
+                "controllerSha": "b" * 40
+                if case in {"same_run_newer", "not_ancestor"}
+                else "a" * 40,
+                "ancestry": "diverged" if case == "not_ancestor" else "ahead",
+            }
+        ),
+        env=environment,
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+    assert result.returncode == (
+        0 if case in {"same_run", "same_run_newer", "completed_previous"} else 1
+    ), result.stderr
+
+
+@pytest.mark.parametrize(
+    "job_name,working,paths",
+    [
+        ("publish-interim-windows-pointer", ".", {"FHD/scripts/release"}),
+        ("release-preflight", ".", {"FHD/scripts/security", "scripts/ci"}),
+        ("macos", "FHD", {"FHD/scripts/release"}),
+        ("generate-manifest", "FHD", {"FHD/scripts/release", "FHD/scripts/dev"}),
+    ],
+)
+def test_release_gate_controllers_keep_the_product_checkout_frozen(job_name, working, paths):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    job = workflow["jobs"][job_name]
+    assert job["steps"][0]["with"]["ref"] == "${{ inputs.release_sha }}"
+    controller = next(
+        step for step in job["steps"] if step.get("with", {}).get("path") == "release-controller"
+    )
+    assert controller["with"]["ref"] == "${{ github.sha }}"
+    assert controller["with"]["persist-credentials"] is False
+    assert set(controller["with"]["sparse-checkout"].splitlines()) == paths
+    assert job.get("defaults", workflow["defaults"])["run"]["working-directory"] == working
+    gates = (
+        "verify_upgrade_rollback_evidence.py",
+        "verify_security_scan_pair.py",
+        "check_release_scope_evidence.py",
+    )
+    for step in job["steps"]:
+        for token in step.get("run", "").split():
+            if token.endswith(gates):
+                prefix = "../" if working == "FHD" else ""
+                assert token.startswith(prefix + "release-controller/FHD/scripts/")
+                assert (ROOT / token.split("release-controller/FHD/", 1)[1]).is_file()
+    if job_name in {"release-preflight", "publish-interim-windows-pointer"}:
+        assert "github.ref == 'refs/heads/main'" in job["if"]
+    if job_name != "publish-interim-windows-pointer":
+        runs = "\n".join(step.get("run", "") for step in job["steps"])
+        path = "../release-controller" if working == "FHD" else "release-controller"
+        assert 'test "$GITHUB_REF" = refs/heads/main' in runs
+        assert f'test "$(git -C {path} rev-parse HEAD)" = "$GITHUB_SHA"' in runs
+
+
+def _frozen_controller_workspace(tmp_path, legacy_verifier=None):
+    """Execute real Git/CLI/ZIP paths; only GitHub's external transport is replaced."""
+    from tests.release_gate.test_upgrade_rollback_evidence import _native_windows
+
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def git(*args, cwd=source):
+        return subprocess.check_output(
+            ["git", *args], cwd=cwd, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+
+    def commit(message, cwd=source):
+        git("add", ".", cwd=cwd)
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-qm",
+            message,
+            cwd=cwd,
+        )
+        return git("rev-parse", "HEAD", cwd=cwd)
+
+    git("init", "-q", "-b", "main")
+    legacy = source / "FHD/scripts/release/verify_upgrade_rollback_evidence.py"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(
+        legacy_verifier
+        or "import argparse\np = argparse.ArgumentParser()\np.add_argument('--evidence', required=True)\np.add_argument('--release-sha', required=True)\np.parse_args()\n"
+    )
+    release_sha = commit("Frozen product with the legacy claims-only CLI")
+    _copy_native_controller(legacy.parent)
+    controller_sha = commit("Current native acceptance controller")
+    candidate = tmp_path / "candidate"
+    git("clone", "-q", str(source), str(candidate))
+    git("checkout", "-q", release_sha, cwd=candidate)
+    git("clone", "-q", str(source), str(candidate / "release-controller"))
+    runner = tmp_path / "runner"
+    delivery = runner / "delivery"
+    delivery.mkdir(parents=True)
+    installer = delivery / "XCAGI-Enterprise-Setup-1.0.0.7-x64-unsigned.exe"
+    installer.write_bytes(b"immutable installer fixture")
+    digest = hashlib.sha256(installer.read_bytes()).hexdigest()
+    installer.with_suffix(".exe.sha256").write_text(f"{digest}  {installer.name}\n")
+    (delivery / "delivery-receipt.json").write_text(
+        json.dumps(
+            {
+                "version": "1.0.0.7",
+                "git_sha": release_sha,
+                "sha256": digest,
+                "filename": installer.name,
+                "delivery_mode": "manual_installer",
+                "runner_install_smoke": "passed",
+                "stable_auto_update": False,
+                "signature_status": "unsigned",
+                "authenticode_status": "NotSigned",
+            }
+        )
+    )
+    _native_windows(runner / "acceptance", release_sha)
+    run = {
+        "id": 12,
+        "run_attempt": 2,
+        "head_sha": controller_sha,
+        "head_branch": "main",
+        "path": ".github/workflows/fhd-windows-candidate-acceptance.yml",
+        "repository": {"full_name": "fixture/repo"},
+        "head_repository": {"full_name": "fixture/repo"},
+        "event": "workflow_dispatch",
+        "status": "completed",
+        "conclusion": "success",
+        "run_started_at": "2026-09-04T00:00:00Z",
+        "updated_at": "2026-09-04T00:30:00Z",
+    }
+    api_root = tmp_path / "api"
+    api_root.mkdir()
+    routes, artifacts = {}, []
+
+    def response(route, payload):
+        filename = str(len(routes))
+        (api_root / filename).write_bytes(
+            payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        )
+        routes[route] = filename
+
+    for number, directory in enumerate(sorted((runner / "acceptance").iterdir()), 20):
+        record = directory / "acceptance.json"
+        row = json.loads(record.read_text(encoding="utf-8-sig"))
+        row["candidate_sha256"] = digest
+        record.write_text(json.dumps(row))
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as bundle:
+            for path in directory.iterdir():
+                bundle.writestr(path.name, path.read_bytes())
+        raw = stream.getvalue()
+        artifacts.append(
+            {
+                "id": number,
+                "name": directory.name,
+                "expired": False,
+                "size_in_bytes": len(raw),
+                "workflow_run": {"id": 12, "head_sha": controller_sha},
+                "created_at": "2026-09-04T00:25:00Z",
+                "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+            }
+        )
+        response(f"repos/fixture/repo/actions/artifacts/{number}/zip", raw)
+    response(
+        "repos/fixture/repo/actions/runs/11",
+        {
+            **run,
+            "id": 11,
+            "head_sha": release_sha,
+            "path": ".github/workflows/fhd-release-desktop.yml",
+        },
+    )
+    response("repos/fixture/repo/actions/runs/12", run)
+    response("repos/fixture/repo/actions/runs/12/attempts/2", run)
+    response(
+        "repos/fixture/repo/actions/runs/12/artifacts?per_page=100&page=1",
+        {"total_count": 5, "artifacts": artifacts},
+    )
+    response(f"repos/fixture/repo/compare/{release_sha}...{controller_sha}", {"status": "ahead"})
+    response(f"repos/fixture/repo/compare/{controller_sha}...main", {"status": "identical"})
+    (api_root / "routes.json").write_text(json.dumps(routes))
+    gh = tmp_path / "gh"
+    gh.write_text(
+        "#!/usr/bin/env python3\nimport json, os, pathlib, sys\nroot = pathlib.Path(os.environ['FAKE_API'])\nroutes = json.loads((root / 'routes.json').read_text())\nsys.stdout.buffer.write((root / routes[sys.argv[2]]).read_bytes())\n"
+    )
+    gh.chmod(0o700)
+    env = {
+        "PATH": os.pathsep.join(
+            (str(tmp_path), str(Path(sys.executable).parent), os.environ["PATH"])
+        ),
+        "FAKE_API": str(api_root),
+        "RUNNER_TEMP": str(runner),
+        "RELEASE_SHA": release_sha,
+        "XCAGI_BUILD_SHA": release_sha,
+        "CONTROLLER_SHA": controller_sha,
+        "CONTROLLER_REF": "refs/heads/main",
+        "GITHUB_REPOSITORY": "fixture/repo",
+        "CANDIDATE_RUN": "11",
+        "ACCEPTANCE_RUN": "12",
+        "DELIVERY_VERSION": "1.0.0.7",
+        "WINDOWS_UNSIGNED": "false",
+    }
+    return candidate, installer, env, routes
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "none",
+        "feature_controller",
+        "wrong_controller_sha",
+        "wrong_candidate_sha",
+        "wrong_run_sha",
+        "bad_zip",
+        "changed_installer",
+    ],
+)
+def test_frozen_product_uses_current_native_controller_without_rebuilding(tmp_path, corruption):
+    candidate, installer, env, routes = _frozen_controller_workspace(tmp_path)
+    legacy = subprocess.run(
+        [
+            sys.executable,
+            "FHD/scripts/release/verify_upgrade_rollback_evidence.py",
+            "--evidence",
+            "unused",
+            "--release-sha",
+            env["RELEASE_SHA"],
+            "--windows-native-dir",
+            "unused",
+        ],
+        cwd=candidate,
+        capture_output=True,
+        text=True,
+    )
+    assert (
+        legacy.returncode == 2 and "unrecognized arguments: --windows-native-dir" in legacy.stderr
+    )
+    if corruption == "feature_controller":
+        env["CONTROLLER_REF"] = "refs/heads/feature"
+    if corruption == "wrong_controller_sha":
+        env["CONTROLLER_SHA"] = "a" * 40
+    if corruption == "wrong_candidate_sha":
+        env["RELEASE_SHA"] = "a" * 40
+    api_root = Path(env["FAKE_API"])
+    if corruption == "wrong_run_sha":
+        path = api_root / routes["repos/fixture/repo/actions/runs/11"]
+        row = json.loads(path.read_text())
+        row["head_sha"] = "a" * 40
+        path.write_text(json.dumps(row))
+    if corruption == "bad_zip":
+        path = api_root / routes["repos/fixture/repo/actions/artifacts/20/zip"]
+        path.write_bytes(path.read_bytes() + b"corruption")
+    if corruption == "changed_installer":
+        installer.write_bytes(b"different installer")
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    steps = {
+        step.get("name"): step
+        for step in workflow["jobs"]["publish-interim-windows-pointer"]["steps"]
+    }
+    script = "\n".join(
+        steps[name]["run"]
+        for name in (
+            "Verify frozen mainline source and original run provenance",
+            "Verify all five frozen candidate acceptance modes",
+            "Assert truthful Windows delivery receipt",
+        )
+    )
+    script += "\n" + steps["Generate bounded interim download pointer"]["run"].split("args=(", 1)[0]
+    script = (
+        script.replace("${{ inputs.release_sha }}", env["XCAGI_BUILD_SHA"])
+        .replace("${{ github.repository }}", "fixture/repo")
+        .replace("${{ inputs.acceptance_run_id }}", "12")
+    )
+    result = subprocess.run(
+        ["bash", "-eu", "-c", script],
+        cwd=candidate,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == (0 if corruption == "none" else 1), result.stdout + result.stderr
+    if corruption == "none":
+        proof = json.loads(
+            (Path(env["RUNNER_TEMP"]) / "windows-lifecycle-verification.json").read_text()
+        )
+        assert proof["passed"] is True and proof["release_sha"] == env["RELEASE_SHA"]
+        assert all(
+            source["controller_sha"] == env["CONTROLLER_SHA"] and source["run_attempt"] == 2
+            for source in proof["provenance"].values()
+        )

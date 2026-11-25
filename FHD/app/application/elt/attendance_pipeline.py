@@ -600,9 +600,7 @@ def _header_text(sheet, header_row: int, index: int) -> str:
 def _table_region(columns: dict[str, int], header_row: int, row_number: int) -> str:
     if not columns:
         return f"A{header_row}:A{row_number}"
-    last = max(columns.values()) + 1
-    letter = chr(ord("A") + min(last - 1, 25))
-    return f"A{header_row}:{letter}{row_number}"
+    return f"A{header_row}:{_column_letter(max(columns.values()) + 1)}{row_number}"
 
 
 def _text(value: Any) -> str:

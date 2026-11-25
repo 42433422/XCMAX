@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from fastapi import File, UploadFile
 from fastapi.responses import JSONResponse
 
 
-def register(router, *, logger, get_database_path, _load_products_personnel_roster_from_host) -> None:
+def register(
+    router, *, logger, get_database_path, _load_products_personnel_roster_from_host
+) -> None:
     """在给定 router 上注册 /customers*、/purchase_units、shipment 单位兼容路由。"""
 
     @router.get("/customers", response_model=None)
@@ -139,135 +138,3 @@ def register(router, *, logger, get_database_path, _load_products_personnel_rost
         if not row:
             return JSONResponse({"success": False, "error": "not found"}, status_code=404)
         return {"success": True, "data": dict(row)}
-
-    @router.post("/customers", response_model=None)
-    async def customers_add(data: dict):
-        import datetime
-        import sqlite3
-
-        db_path = get_database_path()
-        conn = sqlite3.connect(str(db_path))
-        cur = conn.cursor()
-        now = datetime.datetime.now().isoformat()
-        cur.execute(
-            "INSERT INTO customers (source_file, customer_name, contact_person, contact_phone, address, purchase_unit, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                data.get("source_file", ""),
-                data.get("customer_name", ""),
-                data.get("contact_person", ""),
-                data.get("contact_phone", ""),
-                data.get("address", ""),
-                data.get("purchase_unit", ""),
-                now,
-                now,
-            ),
-        )
-        new_id = cur.lastrowid
-        conn.commit()
-        conn.close()
-        return {"success": True, "data": {"id": new_id}}
-
-    @router.put("/customers/{customer_id}", response_model=None)
-    async def customers_update(customer_id: int, data: dict):
-        import datetime
-        import sqlite3
-
-        db_path = get_database_path()
-        conn = sqlite3.connect(str(db_path))
-        cur = conn.cursor()
-        now = datetime.datetime.now().isoformat()
-        cur.execute(
-            "UPDATE customers SET customer_name=?, contact_person=?, contact_phone=?, address=?, purchase_unit=?, updated_at=? WHERE id=?",
-            (
-                data.get("customer_name", ""),
-                data.get("contact_person", ""),
-                data.get("contact_phone", ""),
-                data.get("address", ""),
-                data.get("purchase_unit", ""),
-                now,
-                customer_id,
-            ),
-        )
-        conn.commit()
-        conn.close()
-        return {"success": True}
-
-    @router.delete("/customers/{customer_id}", response_model=None)
-    async def customers_delete(customer_id: int):
-        import sqlite3
-
-        db_path = get_database_path()
-        conn = sqlite3.connect(str(db_path))
-        cur = conn.cursor()
-        cur.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
-        conn.commit()
-        conn.close()
-        return {"success": True}
-
-    @router.post("/customers/batch-delete", response_model=None)
-    async def customers_batch_delete(data: dict):
-        import sqlite3
-
-        ids = data.get("ids") or []
-        if not ids:
-            return {"success": True}
-        db_path = get_database_path()
-        conn = sqlite3.connect(str(db_path))
-        cur = conn.cursor()
-        placeholders = ",".join("?" * len(ids))
-        cur.execute(f"DELETE FROM customers WHERE id IN ({placeholders})", ids)
-        conn.commit()
-        conn.close()
-        return {"success": True}
-
-    @router.post("/customers/import", response_model=None)
-    async def customers_import(file: UploadFile = File(...)):
-        import datetime
-        import shutil
-        import sqlite3
-        import tempfile
-
-        import openpyxl
-
-        db_path = get_database_path()
-        suffix = Path(file.filename or "import.xlsx").suffix.lower()
-        if suffix not in {".xlsx", ".xlsm", ".xls"}:
-            return JSONResponse(
-                {"success": False, "error": "unsupported file type"}, status_code=400
-            )
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(file.file, tmp)
-            tmp_path = tmp.name
-        try:
-            wb = openpyxl.load_workbook(tmp_path, data_only=True)
-            ws = wb.active
-            headers = [str(c.value or "").strip() for c in ws[1]]
-            name_idx = headers.index("客户名称") if "客户名称" in headers else 0
-            contact_idx = headers.index("联系人") if "联系人" in headers else -1
-            phone_idx = headers.index("电话") if "电话" in headers else -1
-            addr_idx = headers.index("地址") if "地址" in headers else -1
-            now = datetime.datetime.now().isoformat()
-            conn = sqlite3.connect(str(db_path))
-            cur = conn.cursor()
-            count = 0
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                name = str(row[name_idx] or "").strip() if name_idx < len(row) else ""
-                if not name:
-                    continue
-                contact = (
-                    str(row[contact_idx]) if contact_idx >= 0 and contact_idx < len(row) else ""
-                )
-                phone = str(row[phone_idx]) if phone_idx >= 0 and phone_idx < len(row) else ""
-                addr = str(row[addr_idx]) if addr_idx >= 0 and addr_idx < len(row) else ""
-                cur.execute(
-                    "INSERT INTO customers (source_file, customer_name, contact_person, contact_phone, address, purchase_unit, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (file.filename or "", name, contact, phone, addr, "", now, now),
-                )
-                count += 1
-            conn.commit()
-            conn.close()
-            return {"success": True, "imported": count}
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)

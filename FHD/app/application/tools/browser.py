@@ -9,12 +9,12 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
 from app.application.tools.surface_authority import require_surface_authority
 from app.domain.browser_contract import BrowserExecute, BrowserObserve
+from app.domain.browser_policy import canonical_origin
 from app.domain.browser_receipt import mark_delivery_incomplete
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -27,24 +27,7 @@ def allowed_origins(tenant_id: str) -> frozenset[str]:
     raw = policy.get(tenant_id, []) if isinstance(policy, dict) else []
     if not isinstance(raw, list) or not raw:
         raise ValueError("browser sites are not configured for this tenant")
-    origins: set[str] = set()
-    for item in raw:
-        if not isinstance(item, str):
-            raise ValueError("invalid browser origin policy")
-        url = urlsplit(item)
-        if (
-            url.scheme not in {"http", "https"}
-            or not url.hostname
-            or url.username is not None
-            or url.password is not None
-            or url.path not in {"", "/"}
-            or url.query
-            or url.fragment
-            or "*" in item
-        ):
-            raise ValueError("browser policy must contain exact HTTP(S) origins")
-        origins.add(f"{url.scheme}://{url.netloc.lower()}")
-    return frozenset(origins)
+    return frozenset(canonical_origin(item, configured=True) for item in raw)
 
 
 def _uploads(plan: dict, owner_id: int, tenant_id: str) -> None:

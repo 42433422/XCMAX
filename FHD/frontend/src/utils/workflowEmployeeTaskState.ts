@@ -1,6 +1,6 @@
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import type { WorkflowEmployeeSpaceSnapshot } from '@/stores/workflowEmployeeSpace'
-import { runHasUncertainReceipt } from '@/utils/agentRunExecution'
+import { taskHasUncertainReceipt } from '@/utils/agentRunExecution'
 import { taskProgressPercent, taskStatusLabel } from '@/utils/taskWorkspacePresentation'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
@@ -55,8 +55,7 @@ export function employeeIdOfTask(task: AgentTaskSummary): string {
 }
 
 export function employeeStatusOfTask(task: AgentTaskSummary, employeeId: string): string {
-  const run = task.active_run || task.runs?.find((item) => item.run_id === task.active_run_id)
-  if (task.metadata?.reconciliation_required === true || (run && runHasUncertainReceipt(run))) return 'unknown'
+  if (taskHasUncertainReceipt(task)) return 'unknown'
   if (['paused', 'cancelled', ...ATTENTION].includes(task.status)) return task.status
   const own = taskEmployeeAssignments(task).filter((row) => row.employee_id === employeeId)
   if (!own.length) return taskEmployeeIds(task).length > 1 ? 'unknown' : task.status
@@ -92,8 +91,7 @@ export function employeeTaskSnapshot(input: {
   lastVerifiedAt: number
 }): WorkflowEmployeeSpaceSnapshot {
   const task = input.tasks[0]
-  const run = task?.active_run
-  const uncertain = task?.metadata?.reconciliation_required === true || (run ? runHasUncertainReceipt(run) : false)
+  const uncertain = task ? taskHasUncertainReceipt(task) : false
   const status = uncertain ? 'unknown' : task ? employeeStatusOfTask(task, input.empId) : input.enabled ? 'idle' : 'off'
   const officeState = input.stale
     ? 'offline'

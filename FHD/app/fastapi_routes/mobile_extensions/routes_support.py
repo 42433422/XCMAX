@@ -29,7 +29,7 @@ from app.fastapi_routes.mobile_extensions.models import (
 )
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
 from app.utils.device_system.mobile_api import format_mobile_response, paginate_list
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -179,14 +179,8 @@ class SupportRoutes:
                 return format_mobile_response(data=req.to_dict())
             except HTTPException:
                 raise
-            except RECOVERABLE_ERRORS:
-                logger.exception("mobile_service_bridge_request_respond")
-                return JSONResponse(
-                    format_mobile_response(None, "服务响应失败", success=False, code=500),
-                    status_code=500,
-                )
-            except RECOVERABLE_ERRORS:
-                logger.exception("mobile service-bridge respond failed")
+            except BOUNDARY_ERRORS as exc:
+                logger.error("mobile service-bridge respond failed: %s", type(exc).__name__)
                 return JSONResponse(
                     format_mobile_response(None, "服务响应失败", success=False, code=500),
                     status_code=500,

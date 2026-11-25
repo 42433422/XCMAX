@@ -6,7 +6,7 @@ import logging
 from typing import Any, Protocol
 
 from app.domain.conversation.services.context.intent_context import PendingIntent
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,11 @@ class ContextQuestionMixin:
         try:
             notifier = self._get_notifier()
             if notifier and pending:
-                notifier.notify_pending_preserved(user_id, pending.to_dict(), action)
+                pending_data = pending.to_dict()
+                try:
+                    notifier.notify_pending_preserved(user_id, pending_data, action)
+                except BOUNDARY_ERRORS as error:
+                    logger.warning("[CONTEXT_FACADE] Failed to notify preserved: %s", error)
         except RECOVERABLE_ERRORS as error:
             logger.warning("[CONTEXT_FACADE] Failed to notify preserved: %s", error)
 

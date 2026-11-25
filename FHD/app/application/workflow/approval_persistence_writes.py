@@ -18,6 +18,7 @@ def persist_workflow_approval(
 ) -> dict[str, Any] | None:
     """Persist an interactive approval and its resumable workflow snapshot."""
     from app.application.workflow import approval_persistence as facade
+    from app.application.workflow.approval_service import ApprovalPersistenceError
 
     try:
         from app.db.models.approval import ApprovalFlow, ApprovalFlowNode
@@ -43,7 +44,7 @@ def persist_workflow_approval(
                     or existing.business_type != "workflow_tool"
                     or not facade._is_valid_plan_for_snapshot(plan)
                 ):
-                    raise RuntimeError("已有审批申请与当前身份或状态不一致")
+                    raise ApprovalPersistenceError("已有审批申请与当前身份或状态不一致")
                 try:
                     data = facade.json.loads(existing.business_data or "{}")
                     snapshot = facade.json.loads(
@@ -54,7 +55,7 @@ def persist_workflow_approval(
                         )
                     )
                 except (TypeError, ValueError):
-                    raise RuntimeError("已有审批申请快照无效") from None
+                    raise ApprovalPersistenceError("已有审批申请快照无效") from None
                 stored_snapshot = data.get(facade.SNAPSHOT_KEY) if isinstance(data, dict) else None
                 if isinstance(stored_snapshot, dict):
                     stored_snapshot = dict(stored_snapshot)
@@ -71,7 +72,7 @@ def persist_workflow_approval(
                         data.get("params") != snapshot["node"]["params"],
                     )
                 ):
-                    raise RuntimeError("已有审批申请与当前操作不一致")
+                    raise ApprovalPersistenceError("已有审批申请与当前操作不一致")
                 metadata = {
                     "id": int(existing.id),
                     "request_no": str(existing.request_no),
@@ -83,7 +84,7 @@ def persist_workflow_approval(
             else:
                 applicant = facade._resolve_applicant(db, runtime_context)
                 if applicant is None:
-                    raise RuntimeError("无法从当前登录会话解析审批申请人")
+                    raise ApprovalPersistenceError("无法从当前登录会话解析审批申请人")
                 flow = db.query(ApprovalFlow).filter(ApprovalFlow.flow_key == flow_key).first()
                 if flow is None:
                     flow = ApprovalFlow(
@@ -210,7 +211,7 @@ def persist_workflow_approval(
         except facade.RECOVERABLE_ERRORS:
             facade.logger.debug("neuro_notify_approval_changed skipped")
         return metadata
-    except facade._APPROVAL_STORAGE_ERRORS as exc:
+    except (ApprovalPersistenceError,) + facade._APPROVAL_STORAGE_ERRORS as exc:
         facade.logger.warning(
             "AI 审批持久化到 DB 失败 request_no=%s type=%s",
             request.request_id,

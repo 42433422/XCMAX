@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import debug_client_log as debug_route
 from app.infrastructure.auth import dependencies as auth_deps
-from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.utils.logging import logging_utils
 
 
@@ -22,7 +21,6 @@ def client_and_log(tmp_path, monkeypatch):
     monkeypatch.setattr(auth_deps, "resolve_session_user", lambda _req: None)
     app = FastAPI()
     app.include_router(debug_route.router)
-    app.add_middleware(XSSSanitizerMiddleware)
     with TestClient(app) as client:
         yield client, log_path
 
@@ -109,9 +107,7 @@ def test_unknown_length_stream_is_limited(client_and_log, monkeypatch):
 
 
 @pytest.mark.parametrize("padding,expected", [(0, 200), (20_000, 413)])
-def test_byte_limit_uses_original_json_before_middleware(
-    client_and_log, monkeypatch, padding, expected
-):
+def test_byte_limit_uses_original_json(client_and_log, monkeypatch, padding, expected):
     client, log_path = client_and_log
     _login(monkeypatch)
     body = b" " * padding + json.dumps({"message": "中" * 3000}, ensure_ascii=False).encode()

@@ -139,7 +139,7 @@ def test_route_ingests_notion_page(monkeypatch: pytest.MonkeyPatch) -> None:
         text="#发布规范\n第一段正文",
     )
     monkeypatch.setattr(notion, "fetch_page", lambda _pid: page)
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
@@ -167,7 +167,7 @@ def test_route_maps_notion_failure_and_exclusivity(monkeypatch: pytest.MonkeyPat
         raise DocumentSourceError("未配置 XCAGI_NOTION_TOKEN")
 
     monkeypatch.setattr(notion, "fetch_page", _boom)
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)

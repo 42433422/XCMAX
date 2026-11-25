@@ -185,56 +185,55 @@ class UserMemoryRagApplicationService:
             return {"success": False, "message": "缺少 query_text"}
 
         ttl_days, max_chunks = _memory_vector_limits()
+        cutoff = time.time() - ttl_days * 24 * 60 * 60
         prune = getattr(self._vector_store, "prune_index", None)
         if callable(prune):
-            prune(
-                index_id=user_id,
-                older_than=time.time() - ttl_days * 24 * 60 * 60,
-                max_chunks=max_chunks,
-            )
-        query_vector = self._embedder.embed_query(query_text)
+            prune(index_id=user_id, older_than=cutoff, max_chunks=max_chunks)
+        bounded = max(1, min(20, int(top_k)))
         hits = self._vector_store.query(
             index_id=user_id,
-            query_vector=query_vector,
-            top_k=max(1, min(20, int(top_k))),
-            filters={
-                "created_after": time.time() - ttl_days * 24 * 60 * 60,
-                "governed_only": self._recall_validator is None,
-            },
+            query_vector=self._embedder.embed_query(query_text),
+            top_k=bounded,
+            filters={"created_after": cutoff, "governed_only": self._recall_validator is None},
         )
         from app.application.ai_feature_isolation import allows_channel, current_ai_feature_channel
+        from app.application.user_memory import retrieve
 
-        channel = current_ai_feature_channel()
-        if channel:
+        if channel := current_ai_feature_channel():
             hits = [
                 hit
                 for hit in hits
                 if allows_channel(hit.get("metadata") if isinstance(hit, dict) else None, channel)
             ]
-        safe_hits: list[dict[str, Any]] = []
         hits = self._validated_hits(user_id, hits)
-        if not hits and self._recall_validator is None:
-            from app.application.user_memory.retrieve import recall_authoritative_memories
-
-            hits = recall_authoritative_memories(user_id, query_text, max(1, min(20, int(top_k))))
-        for hit in hits:
-            if not isinstance(hit, dict):
-                continue
-            safe_content, safe_metadata = _memory_safe(hit.get("content"), hit.get("metadata"))
-            safe_hits.append({**hit, "content": safe_content, "metadata": safe_metadata})
-        hits = safe_hits[: max(1, min(20, int(top_k)))]
         floor = (
             _env_float("XCAGI_MEMORY_RAG_MIN_SCORE", 0.0) if min_score is None else float(min_score)
         )
-        if floor > 0:
-            hits = [hit for hit in hits if float(hit.get("score") or 0.0) >= floor]
+
+        def meets_floor(hit: dict[str, Any]) -> bool:
+            return not (floor > 0) or float(hit.get("score") or 0.0) >= floor
+
+        if self._recall_validator is None and not hits:
+            hits = retrieve.recall_authoritative_memories(user_id, query_text, bounded)
+        elif self._recall_validator is None:
+            related = filter(meets_floor, retrieve.relation_recall_hits(user_id, query_text))
+            hits = retrieve.merge_relation_hits(
+                list(filter(meets_floor, hits)),
+                [hit for hit in related if not channel or allows_channel(hit["metadata"], channel)],
+                limit=bounded,
+            )
+        safe_hits = []
+        for hit in [hit for hit in hits if isinstance(hit, dict)][:bounded]:
+            if meets_floor(hit):
+                content, metadata = _memory_safe(hit.get("content"), hit.get("metadata"))
+                safe_hits.append({**hit, "content": content, "metadata": metadata})
         return {
             "success": True,
             "user_id": user_id,
             "query": query_text,
             "top_k": top_k,
             "min_score": floor,
-            "hits": hits,
+            "hits": safe_hits,
         }
 
     def format_for_prompt(
@@ -254,6 +253,8 @@ class UserMemoryRagApplicationService:
         if not hits:
             message = "【UserMemoryRAG】未召回用户记忆片段。"
             return message if len(message) <= budget else ""
+        from app.application.user_memory.retrieve import format_relation_evidence
+
         footer = "优先参考以上片段的意图/习惯（不要编造片段中不存在的信息）。"
         lines: list[str] = ["【UserMemoryRAG】召回到以下用户记忆片段（用于辅助决策）:"]
         for idx, hit in enumerate(hits[:max_hits], start=1):
@@ -277,6 +278,7 @@ class UserMemoryRagApplicationService:
             if len(preview) > 240:
                 preview = preview[:240] + "…"
 
+            preview += format_relation_evidence({**hit, "metadata": md})
             line = (
                 f"{idx}. source={source}; intent={intent}; feedback={user_feedback or '-'}; corrected_intent={corrected_intent or '-'}; "
                 f"last_used={last_used or '-'}; slots({slot_str or '-'}) ; score={score:.4f}\n"

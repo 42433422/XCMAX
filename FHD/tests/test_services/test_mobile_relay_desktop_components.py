@@ -496,7 +496,7 @@ def test_poll_loop_backoff_recovers_without_real_wait(relay, monkeypatch):
     poll = Mock(
         side_effect=[
             httpx.ConnectError("synthetic"),
-            RuntimeError("synthetic"),
+            httpx.ReadTimeout("synthetic"),
             httpx.ConnectError("synthetic"),
             None,
         ]

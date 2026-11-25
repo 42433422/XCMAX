@@ -8,7 +8,7 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = []
 export const ADMIN_OPERATOR_AUX_MENU_ITEMS: CoreMenuCatalogItem[] = []
 export const ADMIN_SIDEBAR_PINNED_TOP_KEYS: string[] = []
 
-export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set<string>(['employee-workflow', 'employee-workbench', 'workflow-employee-space', 'workflow-employee-stitch-full', 'duty-roster-graph'])
+export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set<string>()
 
 export const ADMIN_OPERATOR_CORE_KEYS = ADMIN_OPERATOR_VISIBLE_CORE_KEYS
 

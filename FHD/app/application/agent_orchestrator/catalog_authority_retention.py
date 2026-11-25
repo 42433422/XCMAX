@@ -30,6 +30,7 @@ def preserve_catalog_run_authority(db, run, previous) -> bool:
     This runs before generic generation matching: renewed sessions may change that
     match, but can never change the original operation or its consumed approval.
     New catalog runs must already have a signed operation/head in this transaction.
+    Return whether a validated no-effect reconciliation permanently fenced this run.
     """
 
     def catalog(value):

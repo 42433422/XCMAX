@@ -58,11 +58,9 @@ def refresh_employee_pack_runtime(pack_id: str | None = None) -> dict[str, Any]:
 
 
 def warm_employee_tool_registry() -> dict[str, Any]:
-    """启动时扫描 mods/_employees 并预热工具注册表。"""
-    from app.application.tools.workflow import get_workflow_tool_registry
+    """启动时预热已安装员工元数据；账号工具目录在请求时派生。"""
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
-    reg = get_workflow_tool_registry()
     status = build_employee_tools_status()
     try:
         from app.application.employee_runtime.triggers import refresh_employee_triggers
@@ -70,10 +68,10 @@ def warm_employee_tool_registry() -> dict[str, Any]:
         status["triggers"] = refresh_employee_triggers()
     except RECOVERABLE_ERRORS:
         logger.debug("warm employee triggers skipped", exc_info=True)
+    tool_count = int(status.get("registered_tool_count") or 0)
     logger.info(
-        "employee tool registry warm scan: %s employee tools in workflow registry (total %s)",
-        status.get("registered_tool_count"),
-        len(reg),
+        "employee package warm scan: %s installed tool definitions",
+        tool_count,
     )
     return status
 

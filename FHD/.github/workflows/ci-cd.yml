@@ -358,10 +358,10 @@ jobs:
         if: needs.guard-temp-scripts.outputs.backend_skip != 'true'
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin" 'openai-codex==0.171.0'
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}" 'openai-codex==0.171.0'
           uv pip check --system --python "$(command -v python)"
 
       - name: Set up the real private Mod frontend compiler
@@ -484,10 +484,10 @@ jobs:
       - name: Install dependencies
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
           uv pip check --system --python "$(command -v python)"
           python -m pip list --format=json > dependency-versions.json
 
@@ -973,11 +973,16 @@ jobs:
           import pathlib, subprocess, sys, tomllib
           config = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
           requirements = config["project"]["optional-dependencies"]["dev"]
-          requirement = next(value for value in requirements if value.startswith("import-linter"))
-          subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+          assert any(value.startswith("import-linter") for value in requirements)
+          packages = tomllib.loads(pathlib.Path("uv.lock").read_text())["package"]
+          pinned = [
+              f"{name}=={next(p['version'] for p in packages if p['name'] == name)}"
+              for name in ("import-linter", "grimp")
+          ]
+          subprocess.check_call([sys.executable, "-m", "pip", "install", *pinned])
           PYTHON
 
-      - name: Check sync data-access import contracts
+      - name: Check architecture import contracts
         run: lint-imports --config pyproject.toml --no-cache
 
       - name: Require traceable oversized-source growth review requests
@@ -985,7 +990,8 @@ jobs:
         env:
           GROWTH_BASE: ${{ github.event.pull_request.base.sha }}
           GROWTH_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: python ../scripts/dev/source_growth_review.py --base "$GROWTH_BASE" --head "$GROWTH_HEAD"
+          GROWTH_SOURCE: ${{ github.sha }}
+        run: python ../scripts/dev/source_growth_review.py --base "$GROWTH_BASE" --head "$GROWTH_HEAD" --pr-merge-sha "$GROWTH_SOURCE"
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
@@ -1395,7 +1401,7 @@ jobs:
   # gitops-image-bump 已随假 k8s/GitOps 路径退役（2026-07-01 运维根治）——
   # 生产 CD 的唯一正道是下方 cvm-push-release + 服务器端 fhd-auto-update.sh。
 
-  # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
+  # 手动请求上传已验证制品；缺少 secrets 失败，stable 等待原部署审批。
   cvm-push-release:
     needs: [docker-build-fhd-api]
     if: |
@@ -1420,6 +1426,17 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
 
+      - name: Check out the trusted security controller
+        if: ${{ inputs.release_channel == 'stable' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/security
+            scripts/ci
+
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         uses: actions/download-artifact@v8
@@ -1441,11 +1458,21 @@ jobs:
       - name: Enforce exact-SHA security clearance for stable upload
         if: ${{ inputs.release_channel == 'stable' }}
         working-directory: .
-        run: >-
-          python FHD/scripts/security/verify_security_scan_pair.py
-          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
-          --current-dir "${RUNNER_TEMP}/security-reports/current"
-          --release-sha "${XCAGI_RELEASE_SHA}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_REF: ${{ github.ref }}
+          CONTROLLER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$CONTROLLER_REF" = refs/heads/main
+          test "$(git -C release-controller rev-parse HEAD)" = "$CONTROLLER_SHA"
+          python release-controller/FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${RUNNER_TEMP}/security-reports/previous" \
+            --current-dir "${RUNNER_TEMP}/security-reports/current" \
+            --repository "${{ github.repository }}" \
+            --current-run-id "${{ inputs.security_scan_run_id }}" \
+            --previous-run-id "${{ inputs.previous_security_scan_run_id }}" \
+            --release-sha "${XCAGI_RELEASE_SHA}"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8
@@ -1560,10 +1587,10 @@ jobs:
       - name: Install backend test deps
         run: |
           set -euo pipefail
-          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
-          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
           uv --version
-          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"
+          uv pip install --system --python "$(command -v python)" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${test_requirements[@]}"
           uv pip check --system --python "$(command -v python)"
 
       - name: Install frontend deps

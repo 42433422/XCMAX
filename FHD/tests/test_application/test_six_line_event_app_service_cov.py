@@ -356,7 +356,7 @@ class TestDispatch:
         if outbox.exists():
             outbox.unlink()
 
-        with patch("httpx.post", side_effect=RuntimeError("network error")):
+        with patch("httpx.post", side_effect=ConnectionError("network error")):
             result = svc.dispatch(
                 {"step_id": "O4", "status": "anomaly", "event_type": "payment.anomaly"}
             )
@@ -423,7 +423,7 @@ class TestPostIncidentRemote:
 
     def test_post_error_returns_false(self, svc, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://market.example.com")
-        with patch("httpx.post", side_effect=RuntimeError("network error")):
+        with patch("httpx.post", side_effect=ConnectionError("network error")):
             result = svc._post_incident_remote({"event_type": "test"})
         assert result is False
 

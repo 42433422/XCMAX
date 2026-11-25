@@ -25,6 +25,7 @@
     "security:scan:medium": "bash scripts/security-scan.sh --gate-severity medium"
   },
   "dependencies": {
+    "electron-log": "5.4.4",
     "electron-updater": "6.8.11"
   },
   "devDependencies": {

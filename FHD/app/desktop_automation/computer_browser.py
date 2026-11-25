@@ -6,10 +6,17 @@ import base64
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from typing import TYPE_CHECKING, Annotated, Any, Literal
-from urllib.parse import urlsplit
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from app.domain.browser_policy import canonical_origin as _origin
+from app.domain.browser_policy import locator_strategy, receipt_url
+from app.infrastructure.browser.locators import resolve_locator
+from app.infrastructure.browser.snapshot import (
+    SCREENSHOT_MASK_SELECTOR,
+    redacted_page_snapshot_sync,
+)
 
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Locator, Page
@@ -51,15 +58,7 @@ class BrowserTarget(_Model):
 
     @model_validator(mode="after")
     def one_locator(self) -> BrowserTarget:
-        if (
-            sum(value is not None for value in (self.role, self.label, self.test_id, self.selector))
-            != 1
-        ):
-            raise ValueError("Exactly one locator is required")
-        if self.name is not None and self.role is None:
-            raise ValueError("name requires role")
-        if self.selector and ">>" in self.selector:
-            raise ValueError("Only a single CSS selector is supported")
+        locator_strategy(self.model_dump(exclude_none=True))
         return self
 
 
@@ -122,35 +121,8 @@ class BrowserPlan(_Model):
     verification: BrowserVerification | None = None
 
 
-def _origin(url: str) -> str:
-    """Canonicalize exact HTTP(S) origins; never accept credentials or opaque URLs."""
-    if not isinstance(url, str) or any(ord(char) < 33 for char in url) or "\\" in url:
-        raise ValueError("Invalid URL")
-    parsed = urlsplit(url)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-    ):
-        raise ValueError("HTTP(S) URL without credentials required")
-    host = parsed.hostname.encode("idna").decode("ascii").lower()
-    if "*" in host or "%" in host:
-        raise ValueError("Invalid host")
-    host = f"[{host}]" if ":" in host else host
-    port = parsed.port
-    suffix = f":{port}" if port and port != {"http": 80, "https": 443}[parsed.scheme] else ""
-    return f"{parsed.scheme}://{host}{suffix}"
-
-
 def _locator(page: Page, target: BrowserTarget) -> Locator:
-    if target.role:
-        return page.get_by_role(target.role, name=target.name, exact=True)
-    if target.label:
-        return page.get_by_label(target.label, exact=True)
-    if target.test_id:
-        return page.get_by_test_id(target.test_id)
-    return page.locator("css=" + str(target.selector))
+    return cast("Locator", resolve_locator(page, target.model_dump(exclude_none=True)))
 
 
 class _Cancelled(Exception):
@@ -174,11 +146,9 @@ class PlaywrightComputer:
         executable_path: str | None = None,
         headless: bool = True,
     ) -> None:
-        self.allowed_origins = frozenset(_origin(value) for value in allowed_origins)
-        for value in allowed_origins:
-            parsed = urlsplit(value)
-            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-                raise ValueError("Configure exact origins, not URL paths")
+        self.allowed_origins = frozenset(
+            _origin(value, configured=True) for value in allowed_origins
+        )
         self.executable_path, self.headless = executable_path, headless
 
     def _allowed(self, url: str) -> bool:
@@ -285,14 +255,20 @@ class PlaywrightComputer:
             if not self._allowed(observed_page.url):
                 raise _OriginDenied
             observed_page.set_default_timeout(timeout)
-            snapshot = observed_page.locator("body").aria_snapshot(timeout=timeout)
-            shot = observed_page.screenshot(type="jpeg", quality=65, timeout=budget())
+            snapshot = redacted_page_snapshot_sync(observed_page, timeout=timeout)
+            shot = observed_page.screenshot(
+                type="jpeg",
+                quality=65,
+                mask=[observed_page.locator(SCREENSHOT_MASK_SELECTOR)],
+                timeout=budget(),
+            )
             return {
-                "url": observed_page.url,
+                "url": receipt_url(observed_page.url),
                 "title": observed_page.title()[:1000],
                 "aria_snapshot": snapshot[:16000],
                 "truncated": len(snapshot) > 16000,
                 "content_trust": "untrusted_external_page",
+                "form_values_redacted": True,
                 "data_url": "data:image/jpeg;base64," + base64.b64encode(shot).decode("ascii"),
                 "width": 1280,
                 "height": 800,
@@ -429,6 +405,11 @@ class PlaywrightComputer:
                 status="verification_failed",
                 error_code="computer_verification_failed",
                 message="浏览器后置条件未通过",
+            )
+        except ValueError:
+            result.update(
+                error_code="computer_observation_unavailable",
+                message="页面隐私状态无法核验，未返回截图或页面快照",
             )
         except (Error, OSError):
             result.update(

@@ -37,7 +37,12 @@ from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
-from .super_employee.cli import CliExecutionError, CliExecutor, require_cli_success
+from .super_employee.cli import (
+    CliExecutionError,
+    CliExecutor,
+    cli_exception,
+    require_cli_success,
+)
 from .super_employee.common import _PARA_TOKEN_CACHE as _PARA_TOKEN_CACHE
 from .super_employee.common import _PARA_TOKEN_TTL as _PARA_TOKEN_TTL
 from .super_employee.common import _RELAY_WT_LOCKS as _RELAY_WT_LOCKS
@@ -194,7 +199,7 @@ class SuperEmployeeService:
             profile,
             self._messages,
             MessageSyncPorts(
-                read_rows=lambda: self._read_all_message_rows(),
+                api_url=lambda: self._para_api_url(),
                 reconcile_dispatch=lambda request: self._dispatching.reconcile(request),
                 dispatch_reply=lambda receipt: self._dispatch_reply(receipt),
                 task_reply=lambda task: self._para_task_status_reply(task),
@@ -287,109 +292,9 @@ class SuperEmployeeService:
     def read_dispatch_receipt(
         self, *, user_id: int, request_id: str, task_id: str
     ) -> dict[str, Any] | None:
-        """Read the original dispatch intent without losing unresolved fleet sends.
-
-        Never start message-list CLI backfills; this path only reads persisted
-        receipts, the original request acknowledgement and task status APIs.
-        """
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
-            return None
-        # Atomic outbox replacement permits a snapshot read while its sender
-        # still owns the dispatch lock and is waiting for a remote acknowledgement.
-        request = self._messages.read_dispatch_request(user_id, request_id)
-        if request is None:
-            return None
-        receipt = request.get("dispatch_receipt")
-        if not isinstance(receipt, dict) or receipt.get("request_id") != request_id:
-            return None
-        original_id = str(receipt.get("task_id") or "")
-        if task_id and task_id != original_id:
-            return None
-        recovered = self._dispatching.read_original_receipt(receipt)
-        if recovered is not None:
-            receipt = recovered
-            original_id = str(receipt.get("task_id") or "")
-        uncertain = bool(
-            receipt.get("reconciliation_required")
-            or receipt.get("pending_device_id")
-            or receipt.get("unexpected_task_id")
-            or receipt.get("status") in {"dispatching", "dispatch_unknown", "unknown"}
-        )
-        dispatch = {
-            key: receipt[key]
-            for key in (
-                "request_id",
-                "task_id",
-                "status",
-                "dispatcher",
-                "devices",
-                "accepted",
-                "reconciliation_required",
-                "pending_device_id",
-                "unexpected_task_id",
-            )
-            if key in receipt
-        }
-        if uncertain:
-            dispatch.update(status="dispatch_unknown", reconciliation_required=True)
-        if not original_id:
-            return (
-                {
-                    "dispatch": dispatch,
-                    "assistant_message": {"body": self._dispatch_reply(dispatch)},
-                }
-                if uncertain
-                else None
-            )
-        api_url = str(receipt.get("api_url") or "")
-        if (
-            receipt.get("dispatcher") != "para_api"
-            or not api_url
-            or api_url != self._para_api_url()
-        ):
-            return None
-        try:
-            with self._http_client_factory() as client:
-                token = self._para_token(client, api_url)
-                result = self._para_request(
-                    client, api_url, token, "GET", f"/api/tasks/{original_id}"
-                )
-        except RECOVERABLE_ERRORS:
-            return None
-        task = result.get("task")
-        task = task if isinstance(task, dict) else None
-        if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
-            return None
-        state = str(task.get("status") or "unknown")
-        state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
-        dispatch["task_status"] = state
-        pending = dispatch.get("status") == "dispatch_pending"
-        if not uncertain and not pending:
-            dispatch["status"] = state
-        return {
-            "dispatch": dispatch,
-            "assistant_message": {
-                "body": self._dispatch_reply(dispatch)
-                if uncertain or pending
-                else self._para_task_status_reply(task)
-            },
-        }
-
-    def _record_direct_reply(
-        self,
-        user_msg: dict[str, Any],
-        body: str,
-        dispatch: dict[str, Any],
-        failure: CliExecutionError | None = None,
-    ) -> dict[str, Any]:
-        # Share the local-reply receipt: acceptance follows whether execution
-        # started, and CLI evidence is stored on the message as cli_execution.
-        return self._local_reply_result(
-            user_msg,
-            body=body,
-            dispatcher=str(dispatch.get("dispatcher") or dispatch.get("fallback") or ""),
-            failure=failure,
-            dispatch=dispatch,
+        """Read one persisted dispatch; never run message-list CLI backfills."""
+        return self._sync.read_dispatch_receipt(
+            user_id=user_id, request_id=request_id, task_id=task_id
         )
 
     def invoke(
@@ -436,24 +341,6 @@ class SuperEmployeeService:
             request_id=request_id,
             status="sent",
         )
-        if not previous_request and self._should_reply_with_cli(text, ctx):
-            failure = None
-            try:
-                direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
-                if not direct_body:
-                    raise CliExecutionError(self._p.display_tool, "unavailable", started=False)
-            except CliExecutionError as exc:
-                failure = exc
-                direct_body, direct_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
-            dispatch = {
-                "request_id": request_id,
-                "accepted": True,
-                "queued": False,
-                "para_tier": 1,
-                "device_scope": "local_device",
-                "dispatcher": direct_dispatcher,
-            }
-            return self._record_direct_reply(user_msg, direct_body, dispatch, failure)
         dispatch_request = self._build_dispatch_request(
             request_id=request_id,
             created_at=created_at,
@@ -476,46 +363,39 @@ class SuperEmployeeService:
                 if previous_request.get("raw_context", {}).get(key) != ctx.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
             dispatch_request = previous_request
+        if not previous_request and self._should_reply_with_cli(text, ctx):
+            self._dispatching._persist_receipt(
+                dispatch_request, {"status": "dispatching", "dispatcher": "local_cli"}
+            )
+            try:
+                body, dispatcher = self._compose_direct_chat_reply(text, ctx)
+                if not body:
+                    raise CliExecutionError(self._p.display_tool, "unavailable", started=False)
+            except CliExecutionError as exc:
+                return self._local_reply_result(
+                    user_msg, failure=exc, dispatch_request=dispatch_request
+                )
+            return self._local_reply_result(
+                user_msg, body=body, dispatcher=dispatcher, dispatch_request=dispatch_request
+            )
         dispatch = self._dispatch(dispatch_request)
         if dispatch.get("accepted") is not True and dispatch.get("safe_to_fallback", True):
             self._dispatching._persist_receipt(
                 dispatch_request, {"status": "dispatching", "dispatcher": "local_cli"}
             )
-            failure = None
             try:
-                fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
+                body, dispatcher = self._compose_direct_chat_reply(text, ctx)
             except CliExecutionError as exc:
-                failure = exc
-                fallback_body, fallback_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
-            if fallback_body and (
-                not fallback_body.startswith(f"{self._p.display_tool} CLI 暂时没有返回内容")
-            ):
-                persisted = self._dispatching._persist_receipt(
-                    dispatch_request,
-                    {
-                        **dispatch,
-                        "status": "failed" if failure else "completed",
-                        "accepted": not failure,
-                        "queued": False,
-                        "safe_to_fallback": False,
-                        "para_tier": 1,
-                        "device_scope": "local_device",
-                        "dispatcher": fallback_dispatcher,
-                        "fallback": fallback_dispatcher,
-                        "response": {"text": fallback_body},
-                        **(failure.payload() if failure else {}),
-                    },
+                return self._local_reply_result(
+                    user_msg, failure=exc, dispatch=dispatch, dispatch_request=dispatch_request
                 )
-                return self._record_direct_reply(
+            if body:
+                return self._local_reply_result(
                     user_msg,
-                    fallback_body,
-                    {
-                        **persisted,
-                        "para_tier": 1,
-                        "device_scope": "local_device",
-                        "fallback": fallback_dispatcher,
-                    },
-                    failure,
+                    body=body,
+                    dispatcher=dispatcher,
+                    dispatch=dispatch,
+                    dispatch_request=dispatch_request,
                 )
             self._dispatching._persist_receipt(
                 dispatch_request, {**dispatch, "safe_to_fallback": True}
@@ -523,7 +403,9 @@ class SuperEmployeeService:
         dispatcher_msg = self._message_row(
             user_id=int(user_id),
             role="system",
-            body=self._dispatch_reply(dispatch),
+            body=str(
+                (dispatch.get("response") or {}).get("text") or self._dispatch_reply(dispatch)
+            ),
             created_at=_utc_now(),
             request_id=request_id,
             status=str(dispatch.get("status") or "queued"),
@@ -583,6 +465,7 @@ class SuperEmployeeService:
         dispatcher: str = "",
         failure: CliExecutionError | None = None,
         dispatch: dict[str, Any] | None = None,
+        dispatch_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         uid = int(user_msg["user_id"])
         receipt = failure.payload() if failure else {}
@@ -599,26 +482,34 @@ class SuperEmployeeService:
                 **({"cli_execution": receipt} if failure else {}),
             },
         )
-        self._append_messages([user_msg, assistant])
         incoming = dict(dispatch or {})
-        # Direct CLI: acceptance follows whether execution began. A rejected
-        # remote dispatch keeps accepted=False even if local fallback started.
-        if incoming.get("accepted") is not False:
-            incoming["accepted"] = receipt.get("execution_started", True)
+        # Successful local fallback accepts the task. A failed fallback keeps
+        # the remote rejection while recording whether local execution began.
+        incoming["accepted"] = (
+            incoming.get("accepted", False)
+            if failure is not None and dispatch is not None
+            else receipt.get("execution_started", True)
+        )
         result_dispatch = {
+            **incoming,
             "request_id": user_msg["dispatch_request_id"],
             "queued": False,
-            **incoming,
+            "safe_to_fallback": False,
             "status": status,
             "para_tier": 1,
             "device_scope": "local_device",
             "fallback" if dispatch is not None else "dispatcher": (
                 dispatcher or f"{self._p.tool_name}_cli"
             ),
+            "response": {"text": failure.body if failure else body},
             **receipt,
             "accepted": incoming["accepted"],
             **({"queued": False} if failure else {}),
         }
+        if dispatch_request is not None:
+            result_dispatch["dispatcher"] = dispatcher or f"{self._p.tool_name}_cli"
+            result_dispatch = self._dispatching._persist_receipt(dispatch_request, result_dispatch)
+        self._append_messages([user_msg, assistant])
         return {
             **receipt,
             "employee": {
@@ -694,9 +585,11 @@ class SuperEmployeeService:
                 }
             except CliExecutionError as exc:
                 yield exc.event()
-            except RECOVERABLE_ERRORS as exc:
-                logger.exception("invoke_stream dev_loop failed: %s", exc)
-                yield {"type": "error", "message": f"开发任务执行失败：{exc}"}
+            except (subprocess.SubprocessError,) + RECOVERABLE_ERRORS as exc:
+                logger.error("invoke_stream dev_loop failed: %s", type(exc).__name__)
+                yield CliExecutionError(
+                    self._p.display_tool, "execution_failed", stage="development"
+                ).event()
             return
         prompt = self._cli_prompt(text) if not is_task else self._cli_work_prompt(text, base_cwd)
         yield {"type": "status", "text": f"{self._p.display_tool} 正在思考…"}
@@ -711,8 +604,8 @@ class SuperEmployeeService:
                     elif event["type"] == "status":
                         yield event
                     elif event["type"] == "done":
-                        completed = True
                         final_text = event.get("text", final_text)
+                        completed = True
                     elif event["type"] == "error":
                         yield event
                         return
@@ -724,12 +617,17 @@ class SuperEmployeeService:
             }
         except CliExecutionError as exc:
             yield exc.event()
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("invoke_stream cli failed: %s", exc)
-            yield {
-                "type": "error",
-                "message": f"{self._p.display_tool} CLI 调用失败：{exc}",
-            }
+        except (subprocess.SubprocessError,) + RECOVERABLE_ERRORS as exc:
+            logger.error("invoke_stream cli failed: %s", type(exc).__name__)
+            if isinstance(exc, (OSError, subprocess.SubprocessError)):
+                failure = cli_exception(
+                    self._p.display_tool, exc, partial_text=final_text, started=True
+                )
+            else:
+                failure = CliExecutionError(
+                    self._p.display_tool, "process_error", partial_text=final_text
+                )
+            yield failure.event()
 
     def _cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
         if str(

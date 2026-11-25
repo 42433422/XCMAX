@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -241,6 +242,6 @@ class TestResolveAiMode:
     def test_fallback_online(self):
         m = IntentMixin()
         m.user_preference_service = MagicMock()
-        m.user_preference_service.get_preference.side_effect = RuntimeError("db error")
+        m.user_preference_service.get_preference.side_effect = sqlite3.OperationalError("db error")
         result = m._resolve_ai_mode("user1")
         assert result == "online"

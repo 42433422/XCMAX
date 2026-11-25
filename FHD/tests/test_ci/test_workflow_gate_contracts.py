@@ -2,6 +2,8 @@
 
 import os
 import subprocess
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -136,3 +138,42 @@ def test_parallel_guard_must_pass_even_when_suite_is_irrelevant(gate, guard, sta
     if irrelevant:
         changes.update(SHOULD_RUN="false", SKIP="true", SHARDS="skipped")
     assert run_gate(gate, **changes) != 0
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["FHD/.github/workflows/browser-runtime.yml", ".github/workflows/fhd-browser-runtime.yml"],
+)
+@pytest.mark.parametrize(
+    "problem", [None, "missing-agent", "missing-computer", "skipped", "failure"]
+)
+def test_browser_gate_requires_both_real_adapters(tmp_path, path, problem):
+    jobs = yaml.safe_load((ROOT / path).read_text())["jobs"]
+    step = next(
+        step
+        for step in jobs["browser-runtime-e2e"]["steps"]
+        if step.get("name") == "Reject missing, skipped or failing browser evidence"
+    )
+    names = [
+        "test_form_receipt_upload_and_durable_download",
+        "test_context_isolation_between_runs",
+        "test_screenshot_masks_embedded_frame_rectangle[agent]",
+        "test_screenshot_masks_embedded_frame_rectangle[computer]",
+        "test_browser_executes_under_default_tool_worker_resource_limits",
+    ]
+    if problem and problem.startswith("missing-"):
+        names.remove(f"test_screenshot_masks_embedded_frame_rectangle[{problem[8:]}]")
+    suite = ET.Element("testsuite")
+    for name in names:
+        case = ET.SubElement(suite, "testcase", name=name)
+        if name.endswith("[computer]") and problem in {"skipped", "failure"}:
+            ET.SubElement(case, problem)
+    directory = tmp_path / "browser-runtime"
+    directory.mkdir()
+    ET.ElementTree(suite).write(directory / "results.xml")
+    result = subprocess.run(
+        [sys.executable, "-c", step["run"]],
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        capture_output=True,
+    )
+    assert (result.returncode == 0) == (problem is None), result.stderr.decode()

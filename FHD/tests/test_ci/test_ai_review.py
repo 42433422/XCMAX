@@ -616,7 +616,7 @@ class TestPostLineComment:
 
     def test_exception_returns_false(self) -> None:
         client = MagicMock()
-        client.post.side_effect = RuntimeError("boom")
+        client.post.side_effect = ConnectionError("GitHub API unavailable")
         ok = review.post_line_comment(
             1,
             "f.py",

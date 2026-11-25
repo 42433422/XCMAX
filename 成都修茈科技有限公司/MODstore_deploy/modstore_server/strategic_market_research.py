@@ -182,6 +182,9 @@ async def discover_market(
                 "published_at": published.isoformat() if published else None,
                 "observed_at": now.isoformat(),
                 "date_basis": "search_engine_reported_not_independently_verified",
+                "knowledge_kind": "unknown",
+                "claim_confidence": "unverified",
+                "probability": None,
                 "engine": str(raw.get("engine") or "")[:100],
             }
             sha = digest(snapshot)

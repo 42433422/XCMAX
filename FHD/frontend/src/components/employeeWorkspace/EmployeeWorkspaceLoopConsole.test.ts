@@ -48,7 +48,7 @@ async function setup(query: Record<string, string> = {}) {
     { path: '/', component: { template: '<div />' } },
     { path: '/task/:taskId', name: 'task-workspace', component: { template: '<div />' } },
     { path: '/employees', name: 'duty-roster-graph', component: { template: '<div />' } },
-    { path: '/workflow-employee-space', name: 'workflow-employee-space', component: { template: '<div />' } },
+    { path: '/office', name: 'workflow-employee-space', component: { template: '<div />' } },
     { path: '/workflow-employee-space/stitch-full', name: 'workflow-employee-stitch-full', component: { template: '<div />' } },
   ] })
   await router.push({ path: '/', query })
@@ -62,6 +62,7 @@ async function setup(query: Record<string, string> = {}) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
   setRuntimeTenantStorageScopeInput(null)
   api.listTasks.mockResolvedValue({ success: true, data: [task] })
   api.getTaskRuntime.mockResolvedValue({
@@ -78,6 +79,7 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount()
   document.body.replaceChildren()
+  vi.unstubAllEnvs()
 })
 describe('employee task workspace', () => {
   it('reads durable task evidence and preserves failure status', async () => {
@@ -89,7 +91,11 @@ describe('employee task workspace', () => {
     expect(wrapper.text()).not.toContain('视觉态忙')
     expect(api.getTask).toHaveBeenCalledWith('existing')
   })
-  it('dispatches through the durable employee tool and retries an uncertain submission with the same identity', async () => {
+  it.each([
+    ['', 'desktop_employee_workbench', 'enterprise_desktop', 'workflow-employee-stitch-full'],
+    ['1', 'admin_employee_workspace', 'admin_console', 'duty-roster-graph'],
+  ])('dispatches and retries with stable identity on client %s', async (admin, source, clientSurface, graphRoute) => {
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
     await setup()
     await wrapper
       .findAll('button')
@@ -110,8 +116,12 @@ describe('employee task workspace', () => {
     const second = api.createTask.mock.calls[1][0]
     expect(second.task_id).toBe(first.task_id)
     expect(first).toMatchObject({ tool_id: 'employee', action: 'execute', params: { employee_id: 'auditor', task: '只读检查' } })
+    expect(first.runtime_context).toMatchObject({ source, client_surface: clientSurface })
     expect(first.runtime_context.invoke_mode).toBeUndefined()
+    expect(first.runtime_context).toMatchObject({ source, client_surface: clientSurface })
     expect(wrapper.text()).toContain('再次提交将核对同一任务')
+    await clickButton('员工图谱')
+    expect(wrapper.vm.$route.name).toBe(graphRoute)
   })
   it('does not dispatch a prompt-only employee without an executable runtime', async () => {
     await setup()
@@ -212,7 +222,11 @@ describe('workspace submission and navigation boundaries', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('没有匹配任务')
   })
-  it('refreshes after a persisted update or route selection and returns to the list', async () => {
+  it.each([
+    ['', 'workflow-employee-stitch-full'],
+    ['1', 'duty-roster-graph'],
+  ])('refreshes durable tasks and navigates to the graph for surface %s', async (admin, graphRoute) => {
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', admin)
     const store = await setup()
     api.getTask.mockClear()
     store.tasks = [{ ...task, updated_at: '2026-11-16T13:00:00Z' }]
@@ -231,7 +245,7 @@ describe('workspace submission and navigation boundaries', () => {
     expect(wrapper.vm.$route.query.task).toBeUndefined()
     expect(wrapper.text()).toContain('选择任务，查看工作空间与执行流程')
     await clickButton('员工图谱')
-    expect(wrapper.vm.$route.name).toBe('workflow-employee-stitch-full')
+    expect(wrapper.vm.$route.name).toBe(graphRoute)
   })
   it('routes a task conversation and forwards every runtime control to the selected task', async () => {
     api.getTask.mockResolvedValue({ success: true, data: { ...task, capabilities: { approve: true, pause: true, resume: true, cancel: true, retry: true } } })
@@ -286,6 +300,33 @@ describe('workspace submission and navigation boundaries', () => {
     expect(wrapper.findAllComponents(ElSelect).find(c => c.props('ariaLabel') === '执行员工')!.props('modelValue')).toBe('auditor')
     expect(wrapper.vm.$route.query.compose).toBeUndefined()
     expect(api.createTask).not.toHaveBeenCalled()
+  })
+
+  it('shows a metadata-only uncertain receipt as attention and disables replay in the workbench', async () => {
+    const uncertain = {
+      ...task, status: 'completed', active_run: undefined,
+      metadata: { employee_id: 'auditor', reconciliation_required: true },
+      capabilities: { retry: true },
+    }
+    const verified = { ...uncertain, task_id: 'verified', title: '已核验任务', metadata: { reconciliation_required: false } }
+    api.listTasks.mockResolvedValue({ success: true, data: [uncertain, verified] })
+    api.getTask.mockResolvedValue({ success: true, data: uncertain })
+    await setup({ task: uncertain.task_id })
+    expect(wrapper.find('.workspace-task').text()).toContain('结果待核对')
+    expect(wrapper.find('.workspace-task-header').text()).toContain('结果待核对')
+    expect(wrapper.find('.workspace-task-header').text()).not.toContain('执行完成')
+    expect(wrapper.findAll('button').find(button => button.text() === '重试')!.attributes('disabled')).toBeDefined()
+    expect(wrapper.findComponent(RuntimePanel).props('task').status).toBe('blocked')
+    expect(wrapper.findComponent(RuntimePanel).props('controlState').needsVerification).toBe(true)
+    const filter = wrapper.findAllComponents(ElSelect).find(c => c.props('ariaLabel') === '任务状态筛选')!
+    filter.vm.$emit('update:modelValue', 'completed')
+    await flushPromises()
+    expect(wrapper.findAll('.workspace-task')).toHaveLength(1)
+    expect(wrapper.find('.workspace-task').text()).toContain('已核验任务')
+    filter.vm.$emit('update:modelValue', 'attention')
+    await flushPromises()
+    expect(wrapper.findAll('.workspace-task')).toHaveLength(1)
+    expect(wrapper.find('.workspace-task').text()).toContain('已有巡检任务')
   })
 
   it('disables task controls while the shared task state is stale', async () => {

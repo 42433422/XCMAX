@@ -69,7 +69,6 @@ EXPECTED_ROUTER_PATHS: tuple[tuple[str, str], ...] = (
     ("operations_line", "/api/operations-line"),
     ("ai_intent", "/api/ai"),
     ("ai_kitten", "/api/ai/kitten"),
-    ("ai_qclaw", "/api/ai/qclaw"),
     ("ai_open", "/api/aiopen"),
     ("approval", "/api/approval"),
     ("service_bridge", "/api/service-bridge"),

@@ -160,6 +160,7 @@ def test_active_session_rejects_invalid_local_identity(monkeypatch, mutation):
         user_id=7,
         user=SimpleNamespace(is_active=True, tenant_id=9),
         expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+        verified_trial_expires_at=None,
         impersonating_market_user_id=None,
     )
     if mutation == "expired":

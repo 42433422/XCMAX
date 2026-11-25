@@ -209,7 +209,7 @@ class TestCapabilities:
             ),
             patch(
                 "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
-                side_effect=RuntimeError("boot fail"),
+                side_effect=ImportError("boot fail"),
             ),
         ):
             r = client.get("/api/diagnostics/capabilities")
@@ -233,7 +233,7 @@ class TestCapabilities:
             ) as g,
         ):
             rec = MagicMock()
-            rec.get_engine_status.side_effect = RuntimeError("engine snapshot fail")
+            rec.get_engine_status.side_effect = OSError("engine snapshot fail")
             g.return_value = rec
             r = client.get("/api/diagnostics/capabilities")
         assert r.status_code == 200
@@ -252,7 +252,7 @@ class TestCheckHelpers:
     def test_check_database_unhealthy(self) -> None:
         from app.fastapi_routes.health_k8s import _check_database
 
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db err")):
+        with patch("app.db.session.get_db", side_effect=ConnectionError("db err")):
             out = _check_database()
         assert out["status"] == "unhealthy"
 
@@ -297,7 +297,7 @@ class TestCheckHelpers:
         ) as g:
             rec = MagicMock()
             rec.is_ready.return_value = True
-            rec.get_engine_status.side_effect = RuntimeError("status fail")
+            rec.get_engine_status.side_effect = OSError("status fail")
             g.return_value = rec
             out = _check_ai_service()
         assert out["status"] == "healthy"

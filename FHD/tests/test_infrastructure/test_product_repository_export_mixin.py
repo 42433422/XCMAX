@@ -1,7 +1,9 @@
+import sqlite3
 from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.repositories import product_repository_export_mixin as module
 from app.infrastructure.repositories.product_repository_export_mixin import ProductExportMixin
@@ -12,7 +14,9 @@ def test_export_schema_failure(monkeypatch, failure, message):
     inspector = Mock()
     inspector.get_table_names.return_value = []
     if failure:
-        inspector.get_table_names.side_effect = RuntimeError("db down")
+        inspector.get_table_names.side_effect = OperationalError(
+            None, None, sqlite3.OperationalError("db down")
+        )
     monkeypatch.setattr(module, "get_db", lambda: nullcontext(Mock()))
     monkeypatch.setattr(module, "inspect", lambda bind: inspector)
     result = ProductExportMixin().export_to_excel()

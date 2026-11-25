@@ -288,6 +288,9 @@ def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_
     canonical.write_bytes(b"same name, different package")
     monkeypatch.setattr(catalog_store, "__file__", str(tmp_path / "new" / "catalog_store.py"))
     assert catalog_store.market_archive_path(old_file.name, digest) == migrated
+    stat = migrated.lstat()
+    lstat = type(migrated).lstat
+    monkeypatch.setattr(type(migrated), "lstat", lambda p: stat if p == migrated else lstat(p))
     migrated.write_bytes(b"modified published bytes")
     assert catalog_store.market_archive_path(old_file.name, digest) is None
 

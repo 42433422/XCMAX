@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -46,7 +47,9 @@ def test_missing_user_noop():
 def test_registration_database_failure_is_logged(caplog):
     from app.application.account_registration import apply_account_profile_on_register
 
-    with patch("app.db.session.get_db", side_effect=RuntimeError("db down")) as database:
+    with patch(
+        "app.db.session.get_db", side_effect=sqlite3.OperationalError("db down")
+    ) as database:
         assert apply_account_profile_on_register("fixture-user") is None
     database.assert_called_once_with()
     assert "apply_account_profile_on_register failed for fixture-user" in caplog.text

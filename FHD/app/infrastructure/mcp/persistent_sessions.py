@@ -12,6 +12,7 @@ import asyncio
 import atexit
 import hashlib
 import json
+import math
 import threading
 import time
 import uuid
@@ -21,6 +22,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
+from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -57,7 +59,7 @@ class _Session:
         self._pending: set[Future[Any]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._cancel_scope: CancelScope | None = None
-        self._queue: asyncio.Queue[tuple[Operation, Future[Any]]] | None = None
+        self._queue: asyncio.Queue[tuple[Operation, Future[Any], float]] | None = None
         self._thread = threading.Thread(target=self._run, name="mcp-session", daemon=True)
         self._thread.start()
 
@@ -112,18 +114,21 @@ class _Session:
         assert self._queue is not None
         while not self._lost:
             with fail_after(self.config.session_idle_seconds):
-                operation, future = await self._queue.get()
+                operation, future, deadline = await self._queue.get()
             if self._lost:
                 return
-            with fail_after(self.config.timeout_seconds):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise McpSessionError("mcp_session_lost", self.session_id)
+            with fail_after(remaining):
                 result = await operation(session)
             with self._lock:
                 if not future.done():
                     future.set_result(result)
                 self._pending.discard(future)
 
-    def call(self, operation: Operation) -> Any:
-        if not self._ready.wait(timeout=self.config.timeout_seconds):
+    def call(self, operation: Operation, deadline: float) -> Any:
+        if not self._ready.wait(timeout=max(0.0, deadline - time.monotonic())):
             self.close()
             raise McpSessionError("mcp_session_lost", self.session_id)
         future: Future[Any] = Future()
@@ -135,8 +140,11 @@ class _Session:
             self._pending.add(future)
         try:
             assert self._loop is not None and self._queue is not None
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, (operation, future))
-            return future.result(timeout=self.config.timeout_seconds)
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, (operation, future, deadline))
+            result = future.result(timeout=max(0.0, deadline - time.monotonic()))
+            if time.monotonic() >= deadline:
+                raise FutureTimeout
+            return result
         except (FutureTimeout, RuntimeError):
             self.close()
             raise McpSessionError("mcp_session_lost", self.session_id) from None
@@ -153,6 +161,13 @@ def call_persistent(
 ) -> tuple[Any, str]:
     if not isinstance(scope, str) or not scope.strip() or len(scope) > 512:
         raise McpSessionError("mcp_session_scope_required")
+    # The owning SDK task has a different ContextVar scope. Carry the caller's
+    # absolute deadline through startup, queueing and execution without changing
+    # the session's stable configuration fingerprint or reconnecting it.
+    timeout = remaining_invocation_seconds(config.timeout_seconds)
+    if timeout <= 0 or not math.isfinite(timeout):
+        raise McpSessionError("mcp_session_deadline_exceeded")
+    deadline = time.monotonic() + timeout
     key = (config.name, scope)
     with _LOCK:
         session = _SESSIONS.get(key)
@@ -171,7 +186,7 @@ def call_persistent(
         elif session.fingerprint != _fingerprint(config):
             session.close()
             raise McpSessionError("mcp_session_lost", session.session_id)
-    return session.call(operation), session.session_id
+    return session.call(operation, deadline), session.session_id
 
 
 def close_scope(scope: str, *, server_name: str | None = None) -> int:

@@ -854,9 +854,10 @@ class TestNeuroTracer:
     def test_get_trace(self):
         tracer = NeuroTracer()
         s1 = tracer.start_span("op1")
-        s2 = tracer.start_span("op2", trace_id=s1.trace_id)
-        trace = tracer.get_trace(s1.trace_id)
-        assert len(trace) == 2
+        with s1.context():
+            s2 = tracer.start_span("op2")
+        tracer.start_span("unrelated")
+        assert tracer.get_trace(s1.trace_id) == [s1, s2]
 
     def test_trace_event(self):
         tracer = NeuroTracer()

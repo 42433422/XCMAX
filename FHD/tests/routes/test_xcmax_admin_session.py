@@ -232,7 +232,7 @@ def test_customer_ticket_identity_failures_never_use_another_session(
     if failure == "no_user":
         service.validate_session.return_value = None
     elif failure == "resolver_error":
-        service.validate_session.side_effect = RuntimeError("identity unavailable")
+        service.validate_session.side_effect = ConnectionError("identity unavailable")
     elif failure == "inactive":
         service.validate_session.return_value = SimpleNamespace(id=7, is_active=False)
     else:

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Request
-
 from app.application.planner_compat.protocols import (
     AwaitTimeout,
     ChatBackends,
@@ -15,10 +13,6 @@ from app.application.planner_compat.protocols import (
     Payload,
 )
 from app.application.planner_compat.tracing import TurnTrace
-from app.fastapi_routes.xcagi_compat_chat_models import (
-    XcagiCompatChatBatchBody,
-    XcagiCompatChatBody,
-)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -53,16 +47,3 @@ class ChatTurnExecutor:
                     {"success": False, "message": detail, "response": detail}, mainline=True
                 )
             raise self.responses.http_error(exc) from exc
-
-
-async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
-    """Retain direct executor imports while the public service owns composition."""
-    from app.application.planner_compat_service import execute_compat_chat as execute
-
-    return await execute(request, body)
-
-
-async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
-    from app.application.planner_compat_service import execute_compat_chat_batch as execute
-
-    return await execute(request, body)

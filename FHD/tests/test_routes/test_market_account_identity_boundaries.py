@@ -65,7 +65,7 @@ async def test_unresolved_request_identity_never_reads_another_users_latest_toke
     monkeypatch, resolved, unavailable
 ):
     identity = (
-        Mock(side_effect=RuntimeError("identity unavailable"))
+        Mock(side_effect=ConnectionError("identity store unavailable"))
         if unavailable
         else Mock(return_value=None)
     )

@@ -55,6 +55,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -382,9 +383,10 @@ class TestInitDbAuthBootstrap:
             "app.db.init_db._resolve_auth_bootstrap_engine",
             lambda engine=None, database_url=None: sqlite_engine,
         )
-        with patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")):
-            # swallow_errors=True -> RuntimeError is caught and the function returns
-            # None without propagating.
+        with patch(
+            "sqlalchemy.inspect",
+            side_effect=OperationalError(None, None, sqlite3.OperationalError("inspect failed")),
+        ):
             result = ensure_sqlite_auth_bootstrap(sqlite_engine, swallow_errors=True)
         assert result is None
         # inspect failed before any DDL, so the users table was never created.
@@ -452,11 +454,14 @@ class TestInitDbResolveAuthBootstrapEngine:
 
         fake_engine = MagicMock(spec=Engine)
         with (
-            patch("app.db._create_engine_for_url", side_effect=RuntimeError("cannot create")),
+            patch(
+                "app.db._create_engine_for_url",
+                side_effect=ModuleNotFoundError("database driver unavailable"),
+            ),
             patch("app.db._get_engine", return_value=fake_engine),
         ):
             result = init_db._resolve_auth_bootstrap_engine(
-                database_url="bad://url", engine=fake_engine
+                database_url="postgresql+psycopg://localhost/test", engine=fake_engine
             )
         assert result is fake_engine
 
@@ -471,7 +476,7 @@ class TestInitDbResolveAuthBootstrapEngine:
     def test_resolve_all_failures_returns_none(self, monkeypatch):
         from app.db import init_db
 
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             result = init_db._resolve_auth_bootstrap_engine()
         assert result is None
 
@@ -694,7 +699,7 @@ class TestInitDbOtherTables:
         from app.db.init_db import init_approval_tables
 
         # init_approval_tables tries _get_engine() first; force it to fail so our engine is used
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             init_approval_tables(sqlite_engine)
         with sqlite_engine.connect() as conn:
             tables = conn.execute(
@@ -706,7 +711,7 @@ class TestInitDbOtherTables:
         from app.db.init_db import init_service_bridge_tables
 
         # init_service_bridge_tables tries _get_engine() first; force it to fail so our engine is used
-        with patch("app.db._get_engine", side_effect=RuntimeError("no engine")):
+        with patch("app.db._get_engine", side_effect=ModuleNotFoundError("no DB driver")):
             init_service_bridge_tables(sqlite_engine)
         with sqlite_engine.connect() as conn:
             tables = conn.execute(
@@ -822,7 +827,9 @@ class TestPaddleOcrResolveLocalModelDirs:
     """Cover ``_resolve_local_model_dirs``."""
 
     def test_resolve_local_model_dirs_with_explicit_dirs(self, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_dirs,
+        )
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_DIR", "/det")
         monkeypatch.setenv("PADDLEOCR_TEXT_REC_MODEL_DIR", "/rec")
@@ -832,7 +839,9 @@ class TestPaddleOcrResolveLocalModelDirs:
         assert rec == "/rec"
 
     def test_resolve_local_model_dirs_with_root(self, tmp_dir, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_dirs,
+        )
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_DIR", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_DIR", raising=False)
@@ -852,7 +861,9 @@ class TestPaddleOcrResolveLocalModelDirs:
         assert rec is not None and rec.endswith("PP-OCRv4_mobile_rec_infer")
 
     def test_resolve_local_model_dirs_no_env(self, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_dirs,
+        )
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_DIR", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_DIR", raising=False)
@@ -866,7 +877,9 @@ class TestPaddleOcrResolveLocalModelNames:
     """Cover ``_resolve_local_model_names``."""
 
     def test_resolve_local_model_names_with_env(self, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_names,
+        )
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_NAME", "custom_det")
         monkeypatch.setenv("PADDLEOCR_TEXT_REC_MODEL_NAME", "custom_rec")
@@ -875,7 +888,9 @@ class TestPaddleOcrResolveLocalModelNames:
         assert rn == "custom_rec"
 
     def test_resolve_local_model_names_defaults(self, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_names,
+        )
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_NAME", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_NAME", raising=False)
@@ -884,7 +899,9 @@ class TestPaddleOcrResolveLocalModelNames:
         assert rn == "PP-OCRv4_mobile_rec"
 
     def test_resolve_local_model_names_only_det_env(self, monkeypatch):
-        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _resolve_local_model_names,
+        )
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_NAME", "custom_det")
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_NAME", raising=False)
@@ -954,38 +971,50 @@ class TestPaddleOcrNormalizePredictResult:
     """Cover ``_normalize_predict_result``."""
 
     def test_normalize_list_with_dict(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         result = [{"res": {"rec_texts": ["hello"]}}]
         out = _normalize_predict_result(result)
         assert out == {"rec_texts": ["hello"]}
 
     def test_normalize_object_with_json(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         obj = SimpleNamespace(json={"res": {"rec_texts": ["world"]}})
         out = _normalize_predict_result(obj)
         assert out == {"rec_texts": ["world"]}
 
     def test_normalize_empty_list(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         assert _normalize_predict_result([]) == {}
 
     def test_normalize_non_dict_json(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         obj = SimpleNamespace(json=["not", "a", "dict"])
         assert _normalize_predict_result(obj) == {}
 
     def test_normalize_res_not_dict(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         result = [{"res": "not a dict"}]
         assert _normalize_predict_result(result) == {}
 
     def test_normalize_no_json_attr(self):
-        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import (
+            _normalize_predict_result,
+        )
 
         obj = SimpleNamespace()
         assert _normalize_predict_result(obj) == {}
@@ -1322,7 +1351,10 @@ class TestCustomerRepositoryFindAll:
         mock_query.all.return_value = models
         mock_db.query.return_value = mock_query
 
-        expected = [SimpleNamespace(customer_name="A"), SimpleNamespace(customer_name="B")]
+        expected = [
+            SimpleNamespace(customer_name="A"),
+            SimpleNamespace(customer_name="B"),
+        ]
         with (
             patch("app.infrastructure.repositories.customer_repository_impl.get_db") as gdb,
             patch(
@@ -1547,7 +1579,9 @@ class TestKittenReportCollectPluginResults:
     """Cover ``KittenReportExportService.collect_plugin_results``."""
 
     def test_collect_plugin_results_empty_payload(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         results = service.collect_plugin_results({})
@@ -1557,7 +1591,9 @@ class TestKittenReportCollectPluginResults:
         assert "financial_report" in keys
 
     def test_collect_plugin_results_with_dataset(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         payload = {
@@ -1573,7 +1609,9 @@ class TestKittenReportCollectPluginResults:
         assert "10" in rule_stats["summary"]
 
     def test_collect_plugin_results_with_none_values(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         payload = {"dataset": None, "messages": None, "result": None}
@@ -1582,7 +1620,9 @@ class TestKittenReportCollectPluginResults:
 
     def test_plugin_to_dict_conversion(self):
         from app.domain.shared_services.kitten_report.plugins import PluginResult
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         item = PluginResult(
             key="test",
@@ -1605,7 +1645,9 @@ class TestKittenReportBuildReport:
     """Cover ``KittenReportExportService.build_report``."""
 
     def test_build_report_minimal_payload(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         result = service.build_report({})
@@ -1617,7 +1659,9 @@ class TestKittenReportBuildReport:
         assert len(result["plugins"]) == 6
 
     def test_build_report_with_full_payload(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         payload = {
@@ -1641,7 +1685,9 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_with_html_content(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         payload = {
@@ -1656,7 +1702,9 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_empty_messages(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         payload = {"messages": []}
@@ -1668,30 +1716,40 @@ class TestKittenReportHtmlToText:
     """Cover ``_html_to_text`` static method."""
 
     def test_html_to_text_br_replacement(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         text = KittenReportExportService._html_to_text("a<br>b<br/>c<br />d")
         assert text == "a\nb\nc\nd"
 
     def test_html_to_text_strong_removal(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         text = KittenReportExportService._html_to_text("<strong>bold</strong>")
         assert text == "bold"
 
     def test_html_to_text_entity_replacement(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         text = KittenReportExportService._html_to_text("a&nbsp;b&amp;c")
         assert text == "a b&c"
 
     def test_html_to_text_empty_string(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         assert KittenReportExportService._html_to_text("") == ""
 
     def test_html_to_text_no_html(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         assert KittenReportExportService._html_to_text("plain text") == "plain text"
 
@@ -1700,7 +1758,9 @@ class TestKittenReportFinancialSheet:
     """Cover ``_add_financial_sheet`` indirectly via build_report."""
 
     def test_build_report_with_financial_plugin_data(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         # Patch FinancialReportPlugin to return rich data
@@ -1747,7 +1807,9 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_with_inventory_plugin_data(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         with patch(
@@ -1775,7 +1837,9 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_no_financial_no_inventory(self):
-        from app.domain.shared_services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import (
+            KittenReportExportService,
+        )
 
         service = KittenReportExportService()
         # Both plugins return non-matching keys -> _add_financial_sheet returns early
@@ -1899,7 +1963,7 @@ class TestConsciousProcessorProcess:
         proc = ConsciousProcessor(enable_reliability=False)
 
         def handler(event):
-            raise RuntimeError("handler failed")
+            raise TimeoutError("handler failed: upstream request timed out")
 
         proc.register_handler("test.event", handler)
         event = _make_event("test.event")
@@ -1995,7 +2059,7 @@ class TestConsciousProcessorProcess:
         proc._sla_controller.finish_monitoring = Mock(return_value={"status": "ok"})
         proc._retry_handler = MagicMock()
         proc._retry_handler.execute_for_event = AsyncMock(
-            side_effect=RuntimeError("retry exhausted")
+            side_effect=TimeoutError("retry exhausted")
         )
 
         proc.register_handler("test.event", lambda e: {"ok": True})
@@ -2217,7 +2281,10 @@ class TestExcelAiParseSingle:
     def test_parse_single_parse_failure_returns_422(self, excel_client):
         with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
             mock_parser = MagicMock()
-            mock_parser.parse_single.return_value = {"success": False, "error": "no match"}
+            mock_parser.parse_single.return_value = {
+                "success": False,
+                "error": "no match",
+            }
             mock_get.return_value = mock_parser
 
             response = excel_client.post("/api/ai/parse-single", json={"text": "unknown"})
@@ -2306,14 +2373,18 @@ class TestExcelAiAnalyze:
     def test_ai_analyze_with_file(self, excel_client, tmp_dir):
         with (
             patch(
-                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir",
+                return_value=tmp_dir,
             ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,
         ):
             mock_service = MagicMock()
-            mock_service.analyze_file.return_value = {"success": True, "data": "analyzed"}
+            mock_service.analyze_file.return_value = {
+                "success": True,
+                "data": "analyzed",
+            }
             mock_get.return_value = mock_service
 
             # Create a fake file
@@ -2329,7 +2400,8 @@ class TestExcelAiAnalyze:
     def test_ai_analyze_file_analysis_error_returns_500(self, excel_client, tmp_dir):
         with (
             patch(
-                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir",
+                return_value=tmp_dir,
             ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
@@ -2459,7 +2531,10 @@ class TestExcelAiFileAnalyze:
     def test_ai_file_analyze_failure_returns_400(self, excel_client):
         with patch("app.application.get_file_analysis_app_service") as mock_get:
             mock_service = MagicMock()
-            mock_service.analyze_file.return_value = {"success": False, "error": "bad file"}
+            mock_service.analyze_file.return_value = {
+                "success": False,
+                "error": "bad file",
+            }
             mock_get.return_value = mock_service
 
             response = excel_client.post(
@@ -2484,128 +2559,53 @@ class TestExcelAiFileAnalyze:
 
 
 class TestExcelAiSqliteImport:
-    """Cover ``ai_sqlite_import_unit_products`` endpoint."""
+    """Legacy import is only an authenticated canonical transport."""
 
-    def test_sqlite_import_success(self, excel_client, local_tools, trusted_actor):
-        from app.application.agent_orchestrator import (
-            AgentOrchestrator,
-            InMemoryAgentRunRepository,
-        )
-
-        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
-        repo = InMemoryAgentRunRepository()
-        with (
-            patch(
-                "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-                return_value=repo,
-            ),
-            patch("app.application.get_unit_products_import_app_service") as mock_get,
-        ):
-            mock_service = MagicMock()
-            mock_service.import_unit_products.return_value = {
-                "success": True,
-                "imported": 5,
-                "created_unit": True,
-            }
-            mock_get.return_value = mock_service
-
-            response = excel_client.post(
-                "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name": "Acme"},
-                headers=actor.headers,
-            )
-            assert response.status_code == 202
-            body = response.json()
-            assert body["success"] is False
-            run_id = body["run_id"]
-            run = repo.get(run_id)
-            assert run is not None
-            assert run.status == "waiting_user"
-            assert run.user_id == str(actor.user_id)
-            assert run.intent == "import_unit_products_db"
-            assert run.steps[0].tool_id == "unit_products_import"
-            assert run.steps[0].action == "execute_import"
-            mock_service.import_unit_products.assert_not_called()
-
-            completed = AgentOrchestrator(repository=repo).continue_run(
-                run_id,
-                approved_by=str(actor.user_id),
-            )
-
-        assert completed is not None
-        assert completed.status == "blocked"
-        proof = completed.tool_calls[-1].metadata["verification"]
-        assert proof["status"] == "inconclusive" and proof["accepted"] is False
-        assert proof["code"] == "result_verifier_unavailable"
-        assert completed.tool_calls[-1].output["success"] is True
-        assert completed.final_output.get("business_result", {}).get("success") is not True
-        events = {event.event_type for event in completed.events}
-        assert {"step.approved", "tool.started", "verification.inconclusive"} <= events
-        assert not {"tool.completed", "run.completed"} & events
-        mock_service.import_unit_products.assert_called_once_with(
-            saved_name="test.xlsx",
-            unit_name="Acme",
-            create_purchase_unit=True,
-            skip_duplicates=True,
-        )
-        output = completed.tool_calls[-1].output
-        assert output["success"] is True
-        assert output["created_customers"] == 1
-        assert output["created_products"] == 5
-        assert output["data"]["unit_name"] == "Acme"
-
-    def test_sqlite_import_forged_identity_cannot_create_run(self, excel_client):
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan"
-        ) as start:
+    def test_sqlite_import_requires_session(self, excel_client):
+        with patch("app.application.get_unit_products_import_app_service") as service:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
                 json={"saved_name": "test.xlsx", "unit_name": "Acme", "user_id": "1"},
-                headers={"X-User-Id": "1", "X-Tenant-ID": "7"},
+                headers={"X-User-ID": "1", "Idempotency-Key": "unit-import"},
             )
         assert response.status_code == 401
-        start.assert_not_called()
+        service.assert_not_called()
 
-    def test_sqlite_import_failure_returns_400(self, excel_client):
-        with patch("app.application.get_unit_products_import_app_service") as mock_get:
-            response = excel_client.post(
-                "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "", "unit_name": ""},
-            )
-        mock_get.assert_not_called()
-        assert response.status_code == 400
+    @pytest.mark.parametrize("unit_field", ["unit_name", "unit_name_guess"])
+    def test_sqlite_import_without_tenant_approval_scope_stays_unexecuted(
+        self, excel_client, trusted_actor, unit_field
+    ):
+        from app.infrastructure.tenant_scope import tenant_scope
 
-    def test_sqlite_import_exception_returns_500(self, excel_client, trusted_actor):
-        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
-        with patch(
-            "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
-            side_effect=RuntimeError("db error"),
+        actor = trusted_actor(user_id=7, tenant_id=None, role="admin", tier="admin")
+        with (
+            tenant_scope(None),
+            patch("app.application.get_unit_products_import_app_service") as service,
         ):
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name": "Acme"},
-                headers=actor.headers,
+                json={"saved_name": "test.xlsx", unit_field: "Acme"},
+                headers={**actor.headers, "Idempotency-Key": "unit-import"},
             )
-        assert response.status_code == 500
+        assert response.status_code == 403, response.text
+        assert response.json()["error_code"] == "approval_scope_required"
+        assert response.json()["execution_status"] == "not_started"
+        service.assert_not_called()
 
-    def test_sqlite_import_with_unit_name_guess(self, excel_client, trusted_actor):
-        from app.application.agent_orchestrator import InMemoryAgentRunRepository
-
-        actor = trusted_actor(permissions=["tool.unit_products_import.execute_import"])
-        repo = InMemoryAgentRunRepository()
-        with patch(
-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-            return_value=repo,
-        ):
+    def test_sqlite_import_tenant_cannot_spoof_global_admin(self, excel_client, trusted_actor):
+        actor = trusted_actor(user_id=7, role="admin")
+        with patch("app.application.get_unit_products_import_app_service") as service:
             response = excel_client.post(
                 "/api/ai/sqlite/import_unit_products",
-                json={"saved_name": "test.xlsx", "unit_name_guess": "Guessed"},
-                headers=actor.headers,
+                json={"saved_name": "test.xlsx", "unit_name": "Acme", "user_id": "1"},
+                headers={
+                    **actor.headers,
+                    "X-User-ID": "1",
+                    "Idempotency-Key": "unit-import",
+                },
             )
-        assert response.status_code == 202
-        run = repo.get(response.json()["run_id"])
-        assert run is not None
-        assert run.steps[0].params["unit_name"] == "Guessed"
+        assert response.status_code == 403, response.text
+        service.assert_not_called()
 
 
 class TestExcelSkillsAnalyze:
@@ -2619,7 +2619,9 @@ class TestExcelSkillsAnalyze:
         response = excel_client.post("/api/skills/analyze/excel", json={"sheet_name": "Sheet1"})
         assert response.status_code == 400
 
-    def test_skills_analyze_excel_success(self, excel_client):
+    def test_skills_analyze_excel_reports_read_only_contract_verification(
+        self, excel_client, trusted_actor, local_tools
+    ):
         with patch(
             "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
         ) as mock_get:
@@ -2630,8 +2632,19 @@ class TestExcelSkillsAnalyze:
             response = excel_client.post(
                 "/api/skills/analyze/excel",
                 json={"file_path": "/tmp/test.xlsx", "sheet_name": "Sheet1"},
+                headers={
+                    **trusted_actor(role="admin").headers,
+                    "Idempotency-Key": "phase16-analyze",
+                },
             )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        assert response.json()["agent_status"] == "completed"
+        verification = response.json()["verification"]
+        assert verification["status"] == "not_required" and verification["accepted"] is True
+        assert verification["independently_verified_steps"] == 0
+        assert verification["contract_only_steps"] == 1
+        mock_skill.execute.assert_called_once()
 
     def test_skills_view_excel_empty_body_returns_400(self, excel_client):
         response = excel_client.post("/api/skills/view/excel", json={})
@@ -2641,19 +2654,26 @@ class TestExcelSkillsAnalyze:
         response = excel_client.post("/api/skills/view/excel", json={"action": "view"})
         assert response.status_code == 400
 
-    def test_skills_view_excel_success(self, excel_client):
+    def test_skills_view_excel_success(self, excel_client, trusted_actor, local_tools):
         with patch(
             "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
         ) as mock_get:
             mock_skill = MagicMock()
-            mock_skill.execute.return_value = {"success": True, "data": "viewed"}
+            mock_skill.execute.return_value = {
+                "success": True,
+                "content": [],
+                "row_count": 0,
+            }
             mock_get.return_value = mock_skill
 
             response = excel_client.post(
                 "/api/skills/view/excel",
                 json={"file_path": "/tmp/test.xlsx", "action": "view"},
+                headers=trusted_actor(role="admin").headers,
             )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        mock_skill.execute.assert_called_once()
 
 
 class TestExcelSkillsGenerateLabelTemplate:
@@ -2670,7 +2690,9 @@ class TestExcelSkillsGenerateLabelTemplate:
         )
         assert response.status_code == 400
 
-    def test_generate_label_template_success(self, excel_client):
+    def test_generate_label_template_without_output_file_is_read_only(
+        self, excel_client, trusted_actor, local_tools
+    ):
         with patch(
             "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill"
         ) as mock_get:
@@ -2685,10 +2707,21 @@ class TestExcelSkillsGenerateLabelTemplate:
                     "class_name": "MyTemplate",
                     "enable_ocr": True,
                 },
+                headers={
+                    **trusted_actor(role="admin").headers,
+                    "Idempotency-Key": "phase16-label",
+                },
             )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        assert response.json()["agent_status"] == "completed"
+        assert response.json()["verification"]["status"] == "not_required"
+        assert response.json()["verification"]["contract_only_steps"] == 1
+        mock_skill.execute.assert_called_once()
 
-    def test_generate_label_template_default_class_name(self, excel_client, local_tools):
+    def test_generate_label_template_default_class_name(
+        self, excel_client, local_tools, trusted_actor
+    ):
         with patch(
             "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill"
         ) as mock_get:
@@ -2699,7 +2732,59 @@ class TestExcelSkillsGenerateLabelTemplate:
             response = excel_client.post(
                 "/api/skills/generate-label-template",
                 json={"image_path": "/tmp/label.png"},
+                headers={
+                    **trusted_actor(role="admin").headers,
+                    "Idempotency-Key": "phase16-label-default",
+                },
             )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        assert response.json()["agent_status"] == "completed"
         args = mock_skill.execute.call_args
         assert args.kwargs.get("class_name") == "LabelTemplateGenerator"
+
+
+@pytest.mark.parametrize(
+    "path,body,skill_path",
+    [
+        (
+            "/api/skills/analyze/excel",
+            {"file_path": "/tmp/test.xlsx", "output_json": "/tmp/analysis.json"},
+            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill",
+        ),
+        (
+            "/api/skills/generate-label-template",
+            {"image_path": "/tmp/label.png", "output_file": "/tmp/template.py"},
+            "app.infrastructure.skills.label_template_generator.get_label_template_generator_skill",
+        ),
+    ],
+)
+def test_excel_skill_output_path_requires_independent_write_evidence(
+    excel_client, trusted_actor, monkeypatch, local_tools, path, body, skill_path
+):
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+    repository = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repository,
+    )
+    actor = trusted_actor(role="admin")
+    with patch(skill_path) as skill:
+        skill.return_value.execute.return_value = {"success": True}
+        response = excel_client.post(
+            path,
+            json=body,
+            headers={**actor.headers, "Idempotency-Key": "excel-output-approval"},
+        )
+    assert response.status_code == 202, response.text
+    assert response.json()["success"] is False
+    assert response.json()["outcome"] == "unknown"
+    assert response.json()["error_code"] == "result_verification_required"
+    assert response.json()["retryable"] is False
+    run = repository.get(response.json()["run_id"])
+    assert run.status == "blocked" and len(run.tool_calls) == 1
+    call = run.tool_calls[0]
+    assert call.metadata["verification_contract"]["read_only"] is False
+    assert call.metadata["verification"]["accepted"] is False
+    skill.return_value.execute.assert_called_once()

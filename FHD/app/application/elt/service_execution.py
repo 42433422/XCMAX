@@ -56,6 +56,8 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_ROW_EXECUTION_ERRORS: tuple[type[Exception], ...] = (EltError,) + TRANSACTION_ERRORS
+
 _BATCH_RESULT = Draft202012Validator(
     {
         "type": "object",
@@ -658,7 +660,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                         row.execution_error_code = None
                         row.execution_error_message = None
                     completed_in_chunk += 1
-            except TRANSACTION_ERRORS as exc:
+            except _ROW_EXECUTION_ERRORS as exc:
                 if external_rows:
                     raise  # The worker preserves outcome_unknown; no row replay.
                 if isinstance(exc, EltError) and exc.code == "ELT_OPERATION_LEASE_LOST":

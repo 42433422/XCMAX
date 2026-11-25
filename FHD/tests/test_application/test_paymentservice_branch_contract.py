@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application import paymentservice
 from app.db.models.receivable_allocation import (
@@ -50,7 +51,7 @@ class _Db:
     def commit(self) -> None:
         self.commits += 1
         if self.fail_commit:
-            raise RuntimeError("commit failed")
+            raise OperationalError(None, None, OSError("commit failed"))
 
     def rollback(self) -> None:
         self.rollbacks += 1

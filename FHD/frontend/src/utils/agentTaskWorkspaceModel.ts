@@ -1,7 +1,7 @@
 import type { AgentArtifact, AgentRun, AgentRunEvent, AgentRunStep, AgentTaskSummary, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem, TaskStatus } from '@/composables/useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-import { runHasUncertainReceipt } from '@/utils/agentRunExecution'
+import { runHasUncertainReceipt, taskHasUncertainReceipt } from '@/utils/agentRunExecution'
 
 export interface AgentTaskContext {
   task_id: string
@@ -204,13 +204,14 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
       const runs = asArray<AgentRun>(summary.runs)
       const activeRun = summary.active_run
       const base = groupAgentRunsIntoTasks(runs.length ? runs : activeRun ? [activeRun] : [])[0]
-      const uncertain = summary.status === 'unknown' || (activeRun && runHasUncertainReceipt(activeRun))
+      const uncertain = taskHasUncertainReceipt(summary)
       const rawStatus = uncertain ? 'unknown' : asString(summary.status || activeRun?.status || 'unknown')
       const capabilities = uncertain ? { approve: false, pause: false, resume: false, cancel: false, retry: false, evidence: true } : summary.capabilities
       const controlCommand = summary.control_command
       const pendingControl = controlCommand?.status === 'requested' ? controlCommand.action : ''
-      const taskStage =
-        pendingControl === 'pause'
+      const taskStage = uncertain
+        ? stageOf('unknown')
+        : pendingControl === 'pause'
           ? '正在请求暂停'
           : pendingControl === 'cancel'
             ? '正在请求取消'

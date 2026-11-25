@@ -32,7 +32,7 @@ def _run(run_id: str, *, user_id: str = "u1", mod_id: str = "") -> Any:
     return SimpleNamespace(
         run_id=run_id,
         user_id=user_id,
-        metadata={"runtime_context": {"_mod_authorization": {"mod_id": mod_id}}},
+        metadata={"runtime_context": {"tenant_id": "t1", "_mod_authorization": {"mod_id": mod_id}}},
     )
 
 
@@ -40,8 +40,7 @@ def _principal(mod_id: str = "") -> Any:
     return SimpleNamespace(user_id="u1", tenant_id="t1", mod_authorization={"mod_id": mod_id})
 
 
-def test_task_scope_uses_listed_runs_without_refetching(monkeypatch) -> None:
-    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "t1")
+def test_task_scope_uses_listed_runs_without_refetching() -> None:
     orchestrator = _Orchestrator([_run(f"r{i}") for i in range(20)])
     task = SimpleNamespace(user_id="u1", tenant_id="t1", task_id="task-1")
 
@@ -49,17 +48,14 @@ def test_task_scope_uses_listed_runs_without_refetching(monkeypatch) -> None:
     assert orchestrator.get_run_calls == 0
 
 
-def test_task_scope_still_rejects_runs_bound_to_another_mod(monkeypatch) -> None:
-    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "t1")
+def test_task_scope_still_rejects_runs_bound_to_another_mod() -> None:
     orchestrator = _Orchestrator([_run("r1"), _run("r2", mod_id="other-mod")])
     task = SimpleNamespace(user_id="u1", tenant_id="t1", task_id="task-1")
 
     assert not route_support.task_scope_matches(orchestrator, task, _principal("my-mod"))
 
 
-def test_scoped_tasks_scans_runs_once_for_the_whole_page(monkeypatch) -> None:
-    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "t1")
-
+def test_scoped_tasks_scans_runs_once_for_the_whole_page() -> None:
     class _PagedOrchestrator(_Orchestrator):
         def __init__(self) -> None:
             super().__init__([_run("r1")])
@@ -294,7 +290,7 @@ def test_backfill_marks_success_only_and_retries_failed_scans(legacy_store, monk
     def intermittent(**kwargs):
         calls.append(kwargs)
         if len(calls) == 1:
-            raise RuntimeError("storage temporarily unavailable")
+            raise OSError("storage temporarily unavailable")
         return recent(**kwargs)
 
     monkeypatch.setattr(repository, "recent_task_refs", intermittent)

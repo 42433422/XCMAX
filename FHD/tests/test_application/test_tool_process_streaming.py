@@ -302,8 +302,12 @@ def test_elt_file_deadline_supersedes_startup_and_still_bounds_stalled_stage(
         FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=startup_seconds
     )
     if stage_stalls:
+        assert result["success"] is False
         assert result["outcome"] == "unknown"
+        assert result["error_code"] == "tool_result_unknown"
         assert result["reconciliation_evidence"]["error_code"] == "tool_worker_incomplete"
+        assert result["retryable"] is False
+        assert result["reconciliation_required"] is True
     else:
         assert result == {"success": True}
 

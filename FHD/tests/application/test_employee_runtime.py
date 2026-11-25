@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 
 def _write_csv_read_pack(root: Path, pack_id: str = "csv-full-read-employee") -> Path:
     pack_dir = root / "_employees" / pack_id
@@ -273,17 +275,31 @@ def test_employee_csv_input_rejects_symlink_to_outside_workspace(tmp_path, monke
     assert _resolve_file_path({"file_path": str(link)}, str(workspace)) is None
 
 
-def test_workflow_registry_includes_employee_tools(employee_mods_root):
+def test_workflow_registry_projects_employee_through_authorized_capability(
+    employee_mods_root, trusted_actor
+):
     _write_csv_read_pack(employee_mods_root)
+    from app.application.agent_orchestrator.tool_spec import validate_schema_object
+    from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
     from app.application.tools.workflow import (
         get_workflow_tool_registry,
         invalidate_workflow_tool_registry,
     )
 
     invalidate_workflow_tool_registry()
-    reg = get_workflow_tool_registry()
-    names = [item["function"]["name"] for item in reg if item.get("function")]
-    assert "csv-full-read-employee" in names
+    assert get_workflow_tool_registry() == []
+    actor = trusted_actor(permissions=["employee.execute"])
+    reg = get_workflow_tool_registry(actor.context)
+    assert [item["function"]["name"] for item in reg] == [ERP_CAPABILITY_TOOL_NAME]
+    valid, reason = validate_schema_object(
+        reg[0]["function"]["parameters"],
+        {
+            "tool_id": "employee",
+            "action": "execute",
+            "params": {"employee_id": "csv-full-read-employee", "task": "读取 CSV"},
+        },
+    )
+    assert valid, reason
 
 
 def test_risk_gate_auto_approves_registered_high_action(monkeypatch):

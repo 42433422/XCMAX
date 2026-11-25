@@ -2,7 +2,7 @@
 
 覆盖：
 - 闭环前置门：incident 接收单必须成功 append 之后 handler 才能执行
-- append 抛 RuntimeError（含秘密）-> 不调用 handler、不报告恢复、返回原始健康结果
+- append 抛 OSError（含秘密）-> 不调用 handler、不报告恢复、返回原始健康结果
 - outcome 返回 evidence_unavailable / recovered=False / handler_invoked=False /
   reason_code=event_store_unavailable，且日志与 outcome 不泄漏原始异常秘密
 - 事件存储缺失（store=None）同样 fail-safe
@@ -26,7 +26,7 @@ def _result(component: str, status: HealthStatus, message: str = "msg") -> Healt
 
 
 class _RaisingEventStore:
-    """append 总是抛 RuntimeError 且携带一个秘密字符串的假事件存储。"""
+    """append 总是抛 OSError 且携带一个秘密字符串的假事件存储。"""
 
     def __init__(self, secret: str):
         self.secret = secret
@@ -34,7 +34,7 @@ class _RaisingEventStore:
 
     def append(self, event, stream_id=None):
         self.append_calls += 1
-        raise RuntimeError(self.secret)
+        raise OSError(self.secret)
 
 
 def _fresh_monitor(event_store=None) -> HealthMonitor:
@@ -47,7 +47,7 @@ def _fresh_monitor(event_store=None) -> HealthMonitor:
 
 @pytest.mark.asyncio
 async def test_run_check_store_append_failure_no_handler_no_recovery_no_leak(caplog):
-    """run_check 自动路径：append 抛 RuntimeError 时绝不调用 handler、绝不报告恢复、
+    """run_check 自动路径：append 抛 OSError 时绝不调用 handler、绝不报告恢复、
     返回原始健康结果，且日志/接收单不泄漏秘密。"""
     secret = "TOP-SECRET-STORE-BOOM"
     store = _RaisingEventStore(secret)
@@ -131,7 +131,7 @@ async def test_run_check_absent_store_fails_safe_no_handler():
 @pytest.mark.asyncio
 async def test_run_check_append_failure_blocks_fix_capable_handler(caplog):
     """即使 handler 本可将后置条件修复为 HEALTHY，当事件存储 append 抛含秘密的
-    RuntimeError 时，前置门 fail-safe：handler 绝不执行、绝不报告恢复、直接闭环结果
+    OSError 时，前置门 fail-safe：handler 绝不执行、绝不报告恢复、直接闭环结果
     recovered=False + 固定 event_store_unavailable 原因码，且秘密不泄漏。"""
     secret = "TOP-SECRET-STORE-BOOM"
     store = _RaisingEventStore(secret)

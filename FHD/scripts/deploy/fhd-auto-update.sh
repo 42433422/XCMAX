@@ -242,6 +242,18 @@ PY
 )"
 
 DEPLOY_MODE="${FHD_DEPLOY_MODE:-$DEPLOY_MODE}"
+if [[ -n "${FHD_EXPECTED_RELEASE_SHA:-}" ]] && {
+  [[ ! "$FHD_EXPECTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ "$GIT_SHA" != "$FHD_EXPECTED_RELEASE_SHA" ]];
+}; then
+  log "ERROR: manifest SHA differs from the bound deployment target"
+  exit 78
+fi
+if [[ -n "${FHD_EXPECTED_ARTIFACT_SHA256:-}" ]] && {
+  [[ ! "$FHD_EXPECTED_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] || [[ "$REMOTE_SHA" != "$FHD_EXPECTED_ARTIFACT_SHA256" ]];
+}; then
+  log "ERROR: manifest artifact differs from the bound deployment target"
+  exit 78
+fi
 DEPLOY_MODE="${DEPLOY_MODE:-tarball}"
 CHANNEL="${CHANNEL:-stable}"
 [[ "$ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {

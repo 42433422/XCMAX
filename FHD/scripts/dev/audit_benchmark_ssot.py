@@ -114,6 +114,48 @@ def validate(data: dict[str, Any]) -> list[str]:
             errors.append(
                 f"{prefix}: all three commercial references must map to an advanced criterion"
             )
+    protocol = data.get("digital_life_evaluation")
+    if not isinstance(protocol, dict):
+        errors.append("digital life evidence protocol missing")
+    else:
+        scenarios = protocol.get("scenarios", [])
+        anchors = {
+            gate["id"]
+            for domain in domains
+            for key in ("anchor_60", "anchor_90")
+            for gate in domain.get(key, [])
+        }
+        if (
+            protocol.get("protocol_version") != "1.0.0"
+            or protocol.get("status") != "NOT RUN"
+            or protocol.get("layers") != [
+                "unit", "integration", "real_model", "real_business", "production"
+            ]
+            or protocol.get("seeds") != [17, 29, 43]
+            or not protocol.get("rule")
+            or [item.get("id") for item in scenarios] != [
+                "memory", "cognition", "decision", "execution", "reflection",
+                "recovery", "collaboration", "business"
+            ]
+        ):
+            errors.append("invalid digital life evaluation protocol")
+        for item in scenarios:
+            if (
+                item.get("anchor") not in anchors
+                or item.get("workspace") not in (
+                    "FHD", "成都修茈科技有限公司/MODstore_deploy"
+                )
+                or not item.get("description")
+                or item.get("positive") == item.get("negative")
+                or any(
+                    not re.fullmatch(
+                        r"tests/[a-zA-Z0-9_/]+\.py::test_[a-zA-Z0-9_]+(?:\[[a-zA-Z0-9_-]+\])?",
+                        item.get(kind, ""),
+                    )
+                    for kind in ("positive", "negative")
+                )
+            ):
+                errors.append("invalid digital life scenario mapping")
     return errors
 
 
@@ -187,6 +229,26 @@ def render(data: dict[str, Any]) -> str:
                 f"- `{gate['id']}`（参照 {d['commercial_90'][i]['name']}）：{gate['requirement']}。"
             )
         lines += [""]
+    protocol = data["digital_life_evaluation"]
+    lines += [
+        "## 小 C 独立能力评估（补充实验）",
+        "",
+        f"协议版本：`{protocol['protocol_version']}`；初始状态：`{protocol['status']}`。",
+        "",
+        protocol["rule"],
+        "",
+        "| 场景 | 原锚点 | 核验范围 |",
+        "|---|---|---|",
+    ]
+    for item in protocol["scenarios"]:
+        lines.append(f"| {item['id']} | {item['anchor']} | {item['description']} |")
+    lines += [
+        "",
+        "隔离评估由 `python scripts/dev/xiaoc_independent_eval.py --help` 提供；"
+        "需由独立审计员在无生产凭据的隔离环境执行。"
+        "仅运行既有 pytest 正负例，真实模型、真实业务及生产未接通的证据保持未知。",
+        "",
+    ]
     lines += ["## 统一实验与审计记录", ""]
     lines += [f"- {item}。" for item in data["common_experiments"]]
     lines += [

@@ -141,12 +141,13 @@ def _handoff(workspace: Path, task_id: str, *, runtime_context=None, **extra) ->
         "user_id": "11",
         "task_id": task_id,
         "target_employee": "employee-b",
-        "permissions": ["customers.query", "sales.query"],
-        "delegated_tool": "customers",
-        "delegated_action": "query",
+        "permissions": ["business_db.read", "sales.query"],
+        "delegated_tool": "business_db",
+        "delegated_action": "read",
         "delegated_params": {
+            "entity": "customers",
             "keyword": CUSTOMER,
-            "customer_id": 42,
+            "id": 42,
             "date_from": "2026-11-01",
             "date_to": "2026-11-30",
         },
@@ -191,9 +192,9 @@ def test_employee_a_hands_off_to_employee_b(
     assert payload["parent_task_id"] == parent_id
     assert child_id and child_id != parent_id
     assert payload["execution_status"] == "completed"
-    assert payload["result"]["tool_id"] == "customers"
-    assert payload["result"]["action"] == "query"
-    assert payload["result"]["params"]["customer_id"] == 42
+    assert payload["result"]["tool_id"] == "business_db"
+    assert payload["result"]["action"] == "read"
+    assert payload["result"]["params"]["id"] == 42
     assert payload["result"]["params"]["date_from"] == "2026-11-01"
     assert payload["result"]["params"]["date_to"] == "2026-11-30"
     assert CUSTOMER in json.dumps(payload["result"], ensure_ascii=False)
@@ -209,7 +210,7 @@ def test_employee_a_hands_off_to_employee_b(
     assert child["result_payload"]["child_task_id"] == child_id
     assert stored["status"] == "completed"
     assert stored["result_payload"]["result"]["parent_task_id"] == parent_id
-    assert "customers.query" in payload["delegated_tools"]
+    assert "business_db.read" in payload["delegated_tools"]
     assert "sales.query" in payload["delegated_tools"]
 
 
@@ -255,10 +256,10 @@ def test_unauthorized_handoff_is_rejected(customers_db, tmp_path: Path) -> None:
                 "task_id": started["task_id"],
                 "source": "employee-a",
                 "target": "employee-b",
-                "permissions": ["customers.query"],
+                "permissions": ["business_db.read"],
                 "parent_grant": ["*"],
-                "delegated_tool": "customers",
-                "delegated_action": "query",
+                "delegated_tool": "business_db",
+                "delegated_action": "read",
                 "delegated_params": {},
                 "goal": "越权交接",
             },
@@ -357,13 +358,16 @@ print(json.dumps({
 }))
 """
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH")))
+    )
     completed = subprocess.run(
         [sys.executable, "-c", script, str(workspace), parent_id],
         check=False,
         capture_output=True,
         text=True,
         env=env,
+        timeout=30,
     )
     assert completed.returncode == 0, completed.stderr
     found = json.loads(completed.stdout)
@@ -417,10 +421,10 @@ def _direct(workspace: Path, task_id: str, **extra) -> dict:
         "task_id": task_id,
         "source": "employee-a",
         "target": "employee-b",
-        "permissions": ["customers.query"],
-        "delegated_tool": "customers",
-        "delegated_action": "query",
-        "delegated_params": {"keyword": CUSTOMER, "customer_id": 42},
+        "permissions": ["business_db.read"],
+        "delegated_tool": "business_db",
+        "delegated_action": "read",
+        "delegated_params": {"entity": "customers", "keyword": CUSTOMER, "id": 42},
         "parent_grant": ["*"],
         "target_tenant_id": "11",
     }
@@ -472,15 +476,16 @@ def test_permission_order_does_not_change_the_delegated_call(
     customers_db, tmp_path: Path, signed_handoff_actor
 ) -> None:
     params = {
+        "entity": "customers",
         "keyword": CUSTOMER,
-        "customer_id": 42,
+        "id": 42,
         "date_from": "2026-11-01",
         "date_to": "2026-11-30",
     }
     executed = []
     for name, permissions in (
-        ("forward", ["customers.query", "sales.query"]),
-        ("reverse", ["sales.query", "customers.query"]),
+        ("forward", ["business_db.read", "sales.query"]),
+        ("reverse", ["sales.query", "business_db.read"]),
     ):
         workspace = tmp_path / name
         workspace.mkdir()
@@ -498,4 +503,4 @@ def test_permission_order_does_not_change_the_delegated_call(
         assert payload["parent_task_id"] == started["task_id"]
         assert CUSTOMER in json.dumps(payload["final_output"], ensure_ascii=False)
         executed.append((payload["tool_id"], payload["action"], payload["params"]))
-    assert executed[0] == executed[1] == ("customers", "query", params)
+    assert executed[0] == executed[1] == ("business_db", "read", params)

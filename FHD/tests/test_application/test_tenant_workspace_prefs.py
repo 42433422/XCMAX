@@ -233,14 +233,14 @@ class TestResolveWorkspaceOwnerId:
             ),
             patch(
                 "app.application.session_account_meta.enrich_session_meta_with_tenant",
-                side_effect=RuntimeError("enrich failed"),
+                side_effect=ConnectionError("tenant metadata store unavailable"),
             ),
         ):
             result = resolve_workspace_owner_id(request, user=user)
         # Falls back to user.id since meta is empty
         assert result == "session:5"
 
-    def test_enrich_key_error_suppressed(self):
+    def test_enrich_key_error_propagates(self):
         request = MagicMock()
         user = MagicMock(id=3)
 
@@ -253,9 +253,9 @@ class TestResolveWorkspaceOwnerId:
                 "app.application.session_account_meta.enrich_session_meta_with_tenant",
                 side_effect=KeyError("missing"),
             ),
+            pytest.raises(KeyError, match="missing"),
         ):
-            result = resolve_workspace_owner_id(request, user=user)
-        assert result == "session:3"
+            resolve_workspace_owner_id(request, user=user)
 
     def test_enrich_value_error_suppressed(self):
         request = MagicMock()
@@ -337,7 +337,7 @@ class TestGetWorkspacePrefs:
         )
         assert get_workspace_prefs("tenant:1") == {}
 
-    def test_get_preference_raises_key_error_returns_empty(self, monkeypatch):
+    def test_get_preference_key_error_propagates(self, monkeypatch):
         class FailingService:
             def get_preference(self, user_id, preference_key):
                 raise KeyError("missing key")
@@ -346,12 +346,13 @@ class TestGetWorkspacePrefs:
             "app.domain.shared_services.user_preference_service.get_user_preference_service",
             lambda: FailingService(),
         )
-        assert get_workspace_prefs("tenant:1") == {}
+        with pytest.raises(KeyError, match="missing key"):
+            get_workspace_prefs("tenant:1")
 
-    def test_get_preference_raises_runtime_error_returns_empty(self, monkeypatch):
+    def test_get_preference_connection_error_returns_empty(self, monkeypatch):
         class FailingService:
             def get_preference(self, user_id, preference_key):
-                raise RuntimeError("unexpected")
+                raise ConnectionError("preference store unavailable")
 
         monkeypatch.setattr(
             "app.domain.shared_services.user_preference_service.get_user_preference_service",

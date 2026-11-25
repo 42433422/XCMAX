@@ -32,6 +32,8 @@ from app.fastapi_routes.xcmax_admin import (
     _to_float,
     _to_int,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.test_routes.test_admin_employee_admission import admin_employee as admin_employee
 
 
 @_shared_scope_contextmanager
@@ -168,7 +170,7 @@ class TestMarketAdminProxyBranches:
             ),
             patch(
                 "app.application.self_maintenance_app_service.get_yuangon_onboard_status_local",
-                new=AsyncMock(side_effect=RuntimeError("service down")),
+                new=AsyncMock(side_effect=ConnectionError("onboarding service unavailable")),
             ),
         ):
             result = await admin_routes._market_admin_proxy(
@@ -407,7 +409,7 @@ class TestDigestLocalOrProxyBranches:
             ),
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
-                new=AsyncMock(side_effect=RuntimeError("boom")),
+                new=AsyncMock(side_effect=ConnectionError("digest store unavailable")),
             ),
             patch(
                 "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
@@ -825,7 +827,7 @@ class TestCollectLocalLedger:
     def test_failure_returns_unavailable(self):
         with patch(
             "app.infrastructure.billing.model_usage.list_model_usage_entries",
-            side_effect=RuntimeError("no ledger"),
+            side_effect=FileNotFoundError("no ledger"),
         ):
             result = admin_routes._collect_local_ledger()
         assert result["available"] is False
@@ -881,7 +883,7 @@ class TestCollectCursorUsage:
             patch("os.path.exists", return_value=True),
             patch(
                 "subprocess.run",
-                side_effect=RuntimeError("run failed"),
+                side_effect=PermissionError("cursor-usage is not executable"),
             ),
         ):
             result = admin_routes._collect_cursor_usage()
@@ -1061,7 +1063,7 @@ class TestLocalEndpoints:
             ),
             patch(
                 "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(side_effect=RuntimeError("fail")),
+                new=AsyncMock(side_effect=ConnectionError("maintenance service unavailable")),
             ),
         ):
             resp = client.get("/api/xcmax/local/ops/self-maintenance/status")
@@ -1173,44 +1175,27 @@ class TestLocalEndpoints:
                 stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "run", "input_data": "not-a-dict"},
+                json={
+                    "task": "run",
+                    "input_data": "not-a-dict",
+                    "idempotency_key": "invalid-input",
+                },
             )
         assert resp.status_code == 400
 
-    def test_local_employee_execute_success(self, client: TestClient):
-        with ExitStack() as stack:
-            for cm in _local_employee_execute_session_patches():
-                stack.enter_context(cm)
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.executor.execute_employee_task_local",
-                    return_value={"success": True, "output": "done"},
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
-                    return_value=(True, "ok"),
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
-                    return_value="run-1",
-                )
-            )
-            stack.enter_context(
-                patch(
-                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
-                    return_value=None,
-                )
-            )
-            resp = client.post(
-                "/api/xcmax/local/employees/emp1/execute",
-                json={"task": "run_report"},
-            )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
+    def test_local_employee_execute_success(self, client: TestClient, admin_employee):
+        entry = admin_employee
+        resp = client.post(
+            "/api/xcmax/local/employees/emp1/execute",
+            json={"task": "run_report", "idempotency_key": "admin-cov"},
+            headers=entry.actor.headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is False
+        assert resp.json()["execution_state"] == "unknown"
+        assert resp.json()["run_id"] == resp.json()["agent_run_id"]
+        entry.invocation.assert_called_once()
+        assert entry.repository.get(resp.json()["run_id"]).user_id == str(entry.actor.user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1288,7 +1273,7 @@ class TestSyncEndpoints:
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
                 "app.application.xcmax_sync_app.apply_inbox",
-                side_effect=RuntimeError("apply broke"),
+                side_effect=ConnectionError("sync store unavailable"),
             ),
             patch("app.mod_sdk.audit.write_audit_event"),
         ):

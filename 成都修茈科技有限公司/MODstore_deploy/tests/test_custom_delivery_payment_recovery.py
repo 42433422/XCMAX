@@ -187,6 +187,60 @@ async def test_concurrent_payment_readbacks_dispatch_only_one_original_generatio
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("lost_response", [False, True])
+async def test_checkout_preserves_payment_confirmed_while_creating_another_order(
+    paid_ticket, monkeypatch, lost_response
+):
+    from modstore_server.customer_service_delivery_models import CustomDeliveryPaymentCheckoutBody
+
+    state = paid_ticket
+    confirmed = {}
+
+    async def start(user_id, payload, *, session_id, **kwargs):
+        assert user_id == state.owner.id
+        state.calls.append(session_id)
+        if lost_response:
+            raise TimeoutError("Original production response was lost")
+        return {"session_id": session_id, "status": "running"}
+
+    async def checkout(user_id, **kwargs):
+        assert user_id == state.owner.id
+        assert await readback(state)
+        confirmed["snapshot"] = stored(state)
+        evidence, audits = confirmed["snapshot"]
+        assert evidence["crm"]["payment"]["status"] == "paid" and audits == 1
+        assert evidence["delivery_generation"] == state.calls[0]
+        assert bool(evidence["runs"]) is not lost_response
+        return {"ok": True, "order_id": "NEW-UNPAID-ORDER", "type": "precreate"}
+
+    monkeypatch.setattr(state.workbench, "start_workbench_session_for_user", start)
+    monkeypatch.setattr(state.payment, "create_custom_delivery_payment_order", checkout)
+    conflict = None
+    with state.factory() as db:
+        try:
+            await state.payment.create_custom_delivery_checkout(
+                state.ticket_id,
+                CustomDeliveryPaymentCheckoutBody(),
+                db=db,
+                user=state.owner,
+            )
+        except HTTPException as exc:
+            conflict = exc
+    assert stored(state) == confirmed["snapshot"]
+    assert conflict is not None and conflict.status_code == 409
+    assert state.calls == [confirmed["snapshot"][0]["delivery_generation"]]
+    with state.factory() as db:
+        assert (
+            db.query(CustomerServiceAuditLog)
+            .filter_by(
+                ticket_id=state.ticket_id, event_type="custom_delivery_payment_order_created"
+            )
+            .count()
+            == 0
+        )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("native_status", ["running", "error"])
 async def test_lost_response_recovers_only_original_native_receipt(
     paid_ticket, monkeypatch, native_status

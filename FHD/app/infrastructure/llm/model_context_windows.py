@@ -256,6 +256,7 @@ async def resolve_model_limits(
     requested_provider: str | None = None,
     *,
     messages: list[dict[str, Any]] | None = None,
+    prepared_route: Any = None,
 ) -> ModelLimits:
     """Use only the selected route's metadata; never share an alias across accounts."""
     provider, adapter, scoped = _provider_adapter(provider)
@@ -264,8 +265,16 @@ async def resolve_model_limits(
         snapshot = connection() if callable(connection) else None
         fallback_model = scoped[1] if scoped else None
         prepare = getattr(adapter, "prepare_chat_route", None)
-        prepared = None
-        if callable(prepare):
+        prepared = prepared_route
+        if prepared is not None:
+            from app.application.market_llm.protocols import Connection, PreparedChatRoute
+            from app.infrastructure.modstore_transport import MarketModelError
+
+            if not isinstance(prepared, PreparedChatRoute) or not isinstance(snapshot, Connection):
+                raise MarketModelError({"status": 409})
+            prepared.assert_valid(snapshot, requested_provider, requested_model)
+            vendor, raw_model = prepared.route
+        elif callable(prepare):
             prepared = await prepare(
                 messages or [],
                 requested_provider,
@@ -291,17 +300,25 @@ async def resolve_model_limits(
         limits = _metadata_limits(
             model, info if isinstance(info, Mapping) else {}, "provider_metadata"
         )
+
+        def guard() -> None:
+            _check_connection(connection, snapshot, scoped)
+            if prepared is not None:
+                prepared.assert_valid(snapshot)
+
         return replace(
             limits,
-            request_guard=(
-                (lambda: _check_connection(connection, snapshot, scoped))
-                if callable(connection) or scoped is not None
-                else None
-            ),
+            request_guard=guard if callable(connection) or scoped is not None else None,
             request_options=(
-                {"_prepared_chat_route": prepared, "model": model} if prepared is not None else {}
+                {"_prepared_chat_route": prepared, "model": model, "allow_failover": False}
+                if prepared is not None
+                else {}
             ),
         )
+    if prepared_route is not None:
+        from app.infrastructure.modstore_transport import MarketModelError
+
+        raise MarketModelError({"status": 409})
     default_model = _default_model(provider, adapter)
     model = _name(requested_model) or default_model
     for owner in (provider, adapter):

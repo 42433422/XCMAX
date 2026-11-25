@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
+from app.application.agent_task_context import authenticated_task_owner
 from app.infrastructure.codex.policy import RuntimePolicyError
 
 _INSTRUCTIONS = (
@@ -99,7 +101,55 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
     }
 
 
+_ACTIVE_SLOTS: set[str] = set()
+_ACTIVE_SLOTS_GUARD = threading.Lock()
+
+
 def run_runtime_chat(
+    *,
+    user_id: str,
+    message: str,
+    context: dict[str, Any],
+    file_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Admit one chat turn per account in this process without retaining idle accounts."""
+    session = str(context.get("session_id") or context.get("conversation_id") or "")
+    # The service's user_id is conversation-scoped. Reuse its authenticated
+    # account identity; the gateway still validates authority over every run.
+    owner = authenticated_task_owner(user_id, context)
+    with _ACTIVE_SLOTS_GUARD:
+        busy = owner in _ACTIVE_SLOTS
+        if not busy:
+            _ACTIVE_SLOTS.add(owner)
+    if busy:
+        # Two Codex runtimes for one account used to fail as an unexplained
+        # `unknown` state; report an explicit, retryable admission result instead.
+        run_id = str(context.get("agent_runtime_run_id") or "") or None
+        return runtime_chat_payload(
+            {
+                "ok": False,
+                "run_id": run_id,
+                "resume_required": bool(run_id),
+                "error": "当前账号已有任务正在执行，请稍后重试。",
+                "error_code": "runtime_busy",
+                "execution_state": "blocked",
+                "retryable": True,
+            },
+            conversation_id=session,
+        )
+    try:
+        return _run_runtime_chat(
+            user_id=user_id,
+            message=message,
+            context=context,
+            file_context=file_context,
+        )
+    finally:
+        with _ACTIVE_SLOTS_GUARD:
+            _ACTIVE_SLOTS.remove(owner)
+
+
+def _run_runtime_chat(
     *,
     user_id: str,
     message: str,

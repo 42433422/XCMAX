@@ -78,6 +78,10 @@ function Confirm-Step([string]$Expected, [string]$Prompt) {
 }
 
 function Record([string]$Step, [string]$Result, [string]$Detail) {
+  if ($Result -notin @('PASS', 'FAIL', 'PARTIAL', 'SKIP', 'UNKNOWN')) {
+    $Detail = "无法识别的原结果=$Result；$Detail"
+    $Result = 'UNKNOWN'
+  }
   $script:Results.Add([PSCustomObject]@{ 步骤 = $Step; 结果 = $Result; 说明 = $Detail })
   if ($Result -eq 'FAIL') { Write-Fail ("步骤 [{0}] 记录为 FAIL：{1}" -f $Step, $Detail) }
 }
@@ -537,17 +541,17 @@ Write-Host "  2) 打开 XCAGI → 设置 → 检查更新 → 下载完成后点
 Write-Host "  3) 观察期（约 5 秒稳定性窗口）内不要强制退出；"
 Write-Host "  4) 复核：Get-Content `"<安装目录>\resources\build-info.json`"；Invoke-RestMethod http://127.0.0.1:17500/api/health；"
 Write-Host "     Get-Content `"$env:APPDATA\XCAGI\rollback-marker.json`"（应提示不存在 = 已提交）。"
-Write-Host "  ※ 无新版本可升时记 SKIP（无升级目标），引用 desktop-ota-closed-loop-20260724 证据。"
+Write-Host "  ※ 无升级目标时记 SKIP，本轮未通过；历史报告只供参考，须用当前原包补测。"
 $otaResult = Read-Host "  OTA 执行结果 [PASS/FAIL/SKIP]"
 $otaNote   = Read-Host "  OTA 备注（升级前后版本号/更新源 URL/现象，一行）"
 Record '8a.OTA' $(if ($otaResult) { $otaResult.ToUpper() } else { 'SKIP' }) $otaNote
 
 Write-Host ""
 Write-Host "▶ 回滚（协议第 5 节）：" -ForegroundColor Cyan
-Write-Host "  路径 A（观察期自动回滚，需专用验收机构造坏更新）：更新后启动失败 → 自动还原旧版本；"
+Write-Host "  路径 A（同一原包、隔离验收机故障注入）：更新后启动失败 → 自动还原旧版本；"
 Write-Host ("     取证：Get-Content `"$env:APPDATA\XCAGI\rollback-applied.json`"（应含 reason/fromVersion/toVersion）")
-Write-Host "  路径 B（降级安装）：从历史版本目录下载旧版 exe 覆盖安装，确认版本回到旧版且 health healthy。"
-Write-Host "  ※ 未注入坏更新时记 PARTIAL，引用 rollback.test.ts + update-rollback.e2e.spec.ts 佐证。"
+Write-Host "  路径 B（手动恢复）：核对旧版原包与数据库兼容性，恢复后对账原业务；不能代替自动回滚验收。"
+Write-Host "  ※ 未实测时记 PARTIAL；源码测试可附为参考，不能计作当前原包恢复通过。"
 $rbResult = Read-Host "  回滚执行结果 [PASS/FAIL/PARTIAL/SKIP]"
 $rbNote   = Read-Host "  回滚备注（方式/回滚后版本号/健康状态，一行）"
 Record '8b.回滚' $(if ($rbResult) { $rbResult.ToUpper() } else { 'SKIP' }) $rbNote
@@ -561,9 +565,12 @@ $script:Results | Format-Table -AutoSize | Out-Host
 $failCount = @($script:Results | Where-Object { $_.结果 -eq 'FAIL' }).Count
 $partialCount = @($script:Results | Where-Object { $_.结果 -eq 'PARTIAL' }).Count
 $skipCount = @($script:Results | Where-Object { $_.结果 -eq 'SKIP' }).Count
-Write-Host ("统计：PASS={0} FAIL={1} PARTIAL={2} SKIP={3}" -f (@($script:Results).Count - $failCount - $partialCount - $skipCount), $failCount, $partialCount, $skipCount) -ForegroundColor Gray
-if ($partialCount -gt 0) {
-  Write-Host "PARTIAL 项（未签名包签名校验、备份未新增等）不阻断本轮上机验收，但必须在证据文件中逐条记录原因。" -ForegroundColor Yellow
+$passCount = @($script:Results | Where-Object { $_.结果 -eq 'PASS' }).Count
+$unknownCount = @($script:Results | Where-Object { $_.结果 -eq 'UNKNOWN' }).Count
+Write-Host ("统计：PASS={0} FAIL={1} PARTIAL={2} SKIP={3} UNKNOWN={4}" -f $passCount, $failCount, $partialCount, $skipCount, $unknownCount) -ForegroundColor Gray
+$incompleteCount = $partialCount + $skipCount + $unknownCount
+if ($incompleteCount -gt 0) {
+  Write-Host "PARTIAL / SKIP / UNKNOWN 与缺证据均未通过；逐项记录当前原包身份、原因及补测步骤，保持候选。" -ForegroundColor Yellow
 }
 Write-Host "【证据归档】按模板逐项填写：" -ForegroundColor Yellow
 Write-Host "  模板   ：FHD/docs/e2e/templates/desktop-acceptance-template.md"
@@ -578,5 +585,6 @@ Write-Host ("  工作目录（含下载的安装包与 manifest）：{0}" -f $Wo
 Write-Host ("=" * 72) -ForegroundColor DarkCyan
 
 if ($failCount -gt 0) { Write-Host ("结论：存在 {0} 项 FAIL —— 该平台验收未闭环。" -f $failCount) -ForegroundColor Red; exit 1 }
-Write-Host "结论：本轮引导完成，无 FAIL 记录（以人工确认与证据文件为准）。" -ForegroundColor Green
+if ($incompleteCount -gt 0) { Write-Host "结论：仍有未完成项，验收未闭环。" -ForegroundColor Yellow; exit 2 }
+Write-Host "本轮引导采集完成；原包身份、实际业务与恢复证据仍须独立复核，此输出不是发布授权。" -ForegroundColor Green
 exit 0
