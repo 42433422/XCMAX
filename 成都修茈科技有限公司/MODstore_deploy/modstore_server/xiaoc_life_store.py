@@ -774,15 +774,13 @@ def finish_cycle(
         from modstore_server.xiaoc_life_reflection import failure_classification
 
         received = dict(details or {})
-        received.setdefault(
-            "reflection_receipt",
-            reflection_receipt(
+        if "reflection_receipt" not in received:
+            received["reflection_receipt"] = reflection_receipt(
                 received.get("outcome_feedback"),
                 evidence_refs=evidence_refs,
                 status=status,
                 actual_tokens=actual_tokens,
-            ),
-        )
+            )
         received["failure_classification"] = failure_classification(
             final_status, received.get("reason")
         )
