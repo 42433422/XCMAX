@@ -203,14 +203,18 @@ def _run_runtime_chat(
             # and let the following chat turn create a duplicate business task.
             result.update(run_id=run_id, resume_required=True, execution_state="blocked")
         return runtime_chat_payload(result, conversation_id=session)
-    except RuntimePolicyError:
+    except RuntimePolicyError as exc:
+        from app.application.agent_runtime.configuration import public_runtime_failure
+
+        failure = public_runtime_failure(exc)
         return runtime_chat_payload(
             {
                 "ok": False,
                 "run_id": run_id,
-                "exit_status": "runtime_not_qualified",
-                "error_code": "runtime_not_qualified",
-                "error": "配置的独立运行时尚未通过当前模型路由验收，本轮未启动业务执行。",
+                "exit_status": failure["error_code"],
+                "error_code": failure["error_code"],
+                "error": failure["message"],
+                "failure_stage": "runtime_setup",
                 "resume_required": bool(run_id),
                 "execution_state": "blocked",
             },
