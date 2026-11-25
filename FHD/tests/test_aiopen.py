@@ -742,3 +742,56 @@ def test_key_revocation_failure_is_not_reported_as_revoked(client, monkeypatch):
     assert response.json()["success"] is False and response.json()["revoked"] is False
     assert response.json()["error_code"] == "key_revocation_unavailable"
     assert "private" not in response.text and "original-key" not in response.text
+
+
+def test_probe_alias_uses_shared_key_scope_and_rate_limit(client, monkeypatch):
+    from app.application.aiopen import service
+
+    calls = []
+
+    async def probe(*args):
+        calls.append(args)
+        return {"success": True, "checks": []}
+
+    monkeypatch.setattr("app.fastapi_routes.ai_open.invoke_tool", probe)
+    wrong_scope = service.generate_api_key("other", scopes=["ui_snapshot"])["key"]
+    denied = client.post("/api/aiopen/loop/verify", headers={"X-AIOPEN-Key": wrong_scope}, json={})
+    assert denied.status_code == 403 and denied.json()["code"] == "AIOPEN_SCOPE_DENIED"
+    assert calls == []
+
+    limited = service.generate_api_key("probe", scopes=["capability_loop"], rate_limit_per_min=1)[
+        "key"
+    ]
+    first = client.post("/api/aiopen/loop/verify", headers={"X-AIOPEN-Key": limited}, json={})
+    assert first.status_code == 200
+    replay = client.post(
+        "/api/aiopen/invoke",
+        headers={"X-AIOPEN-Key": limited},
+        json={"tool": "capability_loop", "args": {}},
+    )
+    assert replay.status_code == 429 and replay.json()["code"] == "AIOPEN_RATE_LIMITED"
+    assert len(calls) == 1
+
+
+def test_aiopen_tool_trace_uses_bound_execution_identity(monkeypatch):
+    from app.fastapi_routes import ai_open
+    from app.infrastructure.aiopen.principal_context import execution_context_scope
+
+    captured = {}
+
+    def trace(**kwargs):
+        captured.update(kwargs)
+        return "trace-run"
+
+    monkeypatch.setattr(ai_open, "trace_tool_call", trace)
+    with execution_context_scope({"user_id": "73"}):
+        result = ai_open._trace_aiopen_tool_call(
+            route="/api/aiopen/invoke",
+            channel="aiopen_invoke",
+            tool="capability_loop",
+            args={"user_id": "74"},
+            result={"success": True},
+            user_id="aiopen-api-key",
+        )
+    assert result == "trace-run"
+    assert captured["user_id"] == "73"

@@ -145,6 +145,8 @@ def _trace_aiopen_tool_call(
     result: dict[str, Any],
     user_id: str = "",
 ) -> str:
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
     return trace_tool_call(
         route=route,
         channel=channel,
@@ -153,7 +155,7 @@ def _trace_aiopen_tool_call(
         result=result,
         create_trace_run=create_chat_trace_run,
         logger=logger,
-        user_id=user_id,
+        user_id=str(current_execution_context().get("user_id") or user_id),
     )
 
 
@@ -716,12 +718,11 @@ async def aiopen_loop_verify(
     x_aiopen_key: AiOpenKeyHeader = None,
 ):
     """全调用闭环自检（等同 MCP capability_loop 工具）。"""
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
-    result = await invoke_tool(
-        "capability_loop", body if isinstance(body, dict) else {}, request.app
+    return await aiopen_invoke(
+        request,
+        x_aiopen_key,
+        {"tool": "capability_loop", "args": body if isinstance(body, dict) else {}},
     )
-    return result
 
 
 @router.post("/api/aiopen/config")
