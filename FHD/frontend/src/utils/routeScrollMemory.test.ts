@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { RouteScrollMemory } from './routeScrollMemory'
+import { findRouteScrollRoot, RouteScrollMemory } from './routeScrollMemory'
 
 function setup() {
   const root = document.createElement('section')
@@ -7,6 +7,21 @@ function setup() {
   const scroller = root.querySelector<HTMLElement>('#orders')!
   return { root, scroller }
 }
+
+describe('route scroll root identity', () => {
+  it('excludes old pages and unmarked loading fallbacks', () => {
+    const container = document.createElement('div')
+    container.innerHTML = '<div class="route-view-shell" data-route-scroll-key="/orders"></div><div class="route-view-shell route-view-shell--loading"></div>'
+    expect(findRouteScrollRoot(container, '/settings')).toBeNull()
+    const next = document.createElement('main')
+    next.className = 'route-view-shell'
+    next.setAttribute('data-route-scroll-key', '/settings?tab=general#section')
+    container.appendChild(next)
+    expect(findRouteScrollRoot(container, '/settings?tab=general#section')).toBe(next)
+    container.appendChild(next.cloneNode(true))
+    expect(findRouteScrollRoot(container, '/settings?tab=general#section')).toBeNull()
+  })
+})
 
 describe('RouteScrollMemory', () => {
   it('restores vertical and horizontal offset without rescanning the DOM', () => {
@@ -34,6 +49,20 @@ describe('RouteScrollMemory', () => {
     scroller.className = 'other-section'
     memory.restore('/orders', root)
     expect(scroller.scrollTop).toBe(0)
+  })
+
+  it('restores negative RTL offsets and reports whether a delayed retry is required', () => {
+    const { root, scroller } = setup()
+    const memory = new RouteScrollMemory()
+    scroller.scrollLeft = -40
+    memory.remember('/orders', root)
+    scroller.scrollLeft = 0
+    expect(memory.restore('/orders', null)).toBe(false)
+    expect(memory.restore('/orders', root)).toBe(true)
+    expect(scroller.scrollLeft).toBe(-40)
+    expect(memory.restore('/unvisited', null)).toBe(true)
+    scroller.className = 'different'
+    expect(memory.restore('/orders', root)).toBe(false)
   })
 
   it('bounds remembered routes and clears all scope-specific offsets', () => {
