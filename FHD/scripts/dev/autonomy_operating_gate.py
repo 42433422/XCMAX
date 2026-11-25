@@ -287,14 +287,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--target-level", choices=tuple(LEVELS), default="L6")
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args()
     key = os.environ.get("XCAGI_INDEPENDENT_AUDIT_HMAC_KEY", "").encode("utf-8")
     report = evaluate(args.evidence_dir, args.source_sha, key)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({"levels": report["levels"], "blockers": report["blockers"]}, ensure_ascii=False))
-    return 0 if report["levels"]["L6"] == "PASS" else 1
+    print(json.dumps({"target": args.target_level, "levels": report["levels"], "blockers": report["blockers"]}, ensure_ascii=False))
+    return 0 if report["levels"][args.target_level] == "PASS" else 1
 
 
 if __name__ == "__main__":
