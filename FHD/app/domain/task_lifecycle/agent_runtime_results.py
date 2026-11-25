@@ -42,15 +42,25 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
 
 
 def receipt_state(row: dict[str, Any]) -> str:
+    """Require the durable child state and its latest receipt to agree.
+
+    A late success from a timed-out, cancelled or replaced attempt cannot
+    overwrite the original unknown effect or license a second dispatch.
+    """
     receipt = row.get("receipt")
     if not isinstance(receipt, dict) or not receipt:
         return "unknown"
-    if execution_result_outcome_unknown(receipt, include_execution=True) or row.get("state") in {
-        "claimed",
-        "unknown",
-    }:
+    state = str(row.get("state") or "").strip()
+    reported = str(receipt.get("status") or "").strip()
+    if (
+        not state
+        or not reported
+        or state != reported
+        or state in {"claimed", "unknown", "interrupted", "partial", "timed_out"}
+        or execution_result_outcome_unknown(receipt, include_execution=True)
+    ):
         return "unknown"
-    return str(receipt.get("status") or row.get("state") or "unknown")
+    return state
 
 
 def receipt_verified(row: dict[str, Any]) -> bool:
@@ -65,7 +75,8 @@ def receipt_verified(row: dict[str, Any]) -> bool:
     except (TypeError, ValueError):
         return False
     return (
-        bool(row.get("child_run_id"))
+        row.get("state") == "completed"
+        and bool(row.get("child_run_id"))
         and bool(row.get("child_task_id"))
         and row.get("fingerprint") == fingerprint
         and receipt.get("run_id") == row["child_run_id"]
@@ -150,6 +161,8 @@ def classify_runtime_result(
             exit_status="unknown",
             execution_state="unknown",
             reconciliation_required=True,
+            needs_verification=True,
+            retryable=False,
             error="执行或模型计量结果尚未确定，请核对原任务回执",
             output="执行或模型计量结果尚未确定，请核对原任务回执。",
         )
