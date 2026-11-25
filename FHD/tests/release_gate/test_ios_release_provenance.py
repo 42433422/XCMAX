@@ -31,6 +31,7 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     assert inputs["version"]["required"] is True
     assert "default" not in inputs["version"]
     assert inputs["submit_for_review"]["default"] is False
+    assert inputs["distribute_to_testflight"]["default"] is False
 
     job = workflow["jobs"]["build-and-distribute"]
     assert job["if"] == "github.ref == 'refs/heads/main'"
@@ -59,6 +60,10 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     upload = next(step for step in steps if step.get("name") == "Upload IPA artifact")
     assert upload["with"]["path"] == artifact_path
     assert upload["with"]["if-no-files-found"] == "error"
+    distribution = next(step for step in steps if step.get("name") == "Upload to TestFlight or submit for review")
+    assert distribution["if"] == "inputs.distribute_to_testflight"
+    decode_key = next(step for step in steps if step.get("name") == "Decode App Store Connect API key")
+    assert decode_key["if"] == "inputs.distribute_to_testflight"
 
 
 def _git(root: Path, *args: str) -> str:
@@ -99,3 +104,34 @@ def test_ios_release_sha_guard_checks_actual_git_state(
         check=False,
     )
     assert (result.returncode == 0) == (scenario == "same_main"), result.stderr
+
+
+@pytest.mark.parametrize("path,_", WORKFLOWS, ids=["source", "published"])
+@pytest.mark.parametrize(
+    "distribute,submit,allowed",
+    [
+        ("false", "false", True),
+        ("true", "false", True),
+        ("true", "true", True),
+        ("false", "true", False),
+    ],
+)
+def test_app_review_requires_explicit_distribution_authorization(
+    path: Path, _: str, distribute: str, submit: str, allowed: bool
+) -> None:
+    step = next(
+        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        if row.get("name") == "Require explicit distribution approval for App Review"
+    )
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        env={
+            **os.environ,
+            "DISTRIBUTE_TO_TESTFLIGHT": distribute,
+            "SUBMIT_FOR_REVIEW": submit,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) == allowed
