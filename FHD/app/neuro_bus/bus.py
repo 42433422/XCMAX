@@ -610,7 +610,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if not self._preflight_publish(event):
             record_delivery_metric(self._enable_metrics, "lost")
             return False
-        success = self._event_queue.put(event)
+        success = self._event_queue.put(
+            event, preserve_identity=id(event) in self._stream_waiters
+        )
         if success:
             if id(event) not in self._stream_waiters:
                 self._published_count += 1
