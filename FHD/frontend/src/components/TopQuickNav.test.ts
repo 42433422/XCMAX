@@ -20,12 +20,12 @@ vi.mock('@/api/employeeDirectory', () => ({ fetchEmployeeDirectory }))
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates }, templatePreviewApi: { listTemplates } }))
 const modsStore = reactive({ activeModId: 'mod-a' })
 vi.mock('@/stores/mods', () => ({ useModsStore: () => modsStore }))
-const scopedTasks = reactive({ tasks: [] as any[] })
+const scopedTasks = reactive({ tasks: [] as any[], stale: false })
 vi.mock('@/stores/agentTaskCenter', () => ({
   useAgentTaskCenterStore: () => scopedTasks,
 }))
 
-const navItems = vi.hoisted(() => [
+const navItems = reactive([
   { key: 'chat', name: '智能对话', routeName: 'chat', source: 'core', iconClass: 'fa-comments-o' },
   { key: 'im', name: '信息', routeName: 'im', source: 'core', iconClass: 'fa-envelope-o' },
   { key: 'orders', name: '订单管理', routeName: 'orders', source: 'core', iconClass: 'fa-file-text-o' },
@@ -411,6 +411,63 @@ describe('TopQuickNav', () => {
     } finally {
       wrapper.unmount()
       navItems.splice(itemIndex, 0, ...removed)
+    }
+  })
+
+  it('removes revoked business records immediately and rejects in-flight results even after regrant', async () => {
+    const wrapper = await mountNav()
+    const index = navItems.findIndex(item => item.key === 'customers')
+    const original = navItems[index]
+    let resolveOld!: (value: any) => void
+    try {
+      getCustomers.mockResolvedValueOnce({ success: true, data: [{ id: 98, customer_name: 'RevokedCustomer' }] } as never)
+      await wrapper.find('input').setValue('RevokedCustomer')
+      await vi.waitFor(() => expect(optionNames().join()).toContain('RevokedCustomer'))
+      const stale = [...document.querySelectorAll('.top-quick-nav__option')].find(n => n.textContent?.includes('RevokedCustomer'))!
+      navItems.splice(index, 1)
+      stale.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(optionNames().join()).not.toContain('RevokedCustomer')
+      expect(activeRouter.currentRoute.value.path).toBe('/')
+      navItems.splice(index, 0, original)
+      getCustomers.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+      getCustomers.mockResolvedValue({ success: true, data: [] })
+      await wrapper.find('input').setValue('OldInFlight')
+      await vi.waitFor(() => expect(resolveOld).toBeTypeOf('function'))
+      navItems.splice(index, 1)
+      navItems.splice(index, 0, original)
+      resolveOld({ success: true, data: [{ id: 99, customer_name: 'OldInFlight' }] })
+      await flushPromises()
+      expect(optionNames().join()).not.toContain('OldInFlight')
+    } finally {
+      if (!navItems.some(item => item.key === original.key)) navItems.splice(index, 0, original)
+      wrapper.unmount()
+    }
+  })
+
+  it('searches the same scoped task snapshot in a normal web shell and excludes stale tasks', async () => {
+    scopedTasks.tasks = [{ task_id: 'web-task', title: 'WebScopedTask', conversation_id: 'web-conv', status: 'running' }]
+    const wrapper = await mountNav()
+    try {
+      await wrapper.find('input').setValue('WebScopedTask')
+      expect(optionNames().join()).toContain('WebScopedTask')
+      const old = [...document.querySelectorAll('.top-quick-nav__option')].find(n => n.textContent?.includes('WebScopedTask'))!
+      scopedTasks.stale = true
+      old.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(optionNames().join()).not.toContain('WebScopedTask')
+      expect(activeRouter.currentRoute.value.path).toBe('/')
+      scopedTasks.stale = false
+      await flushPromises()
+      const current = [...document.querySelectorAll('.top-quick-nav__option')].find(n => n.textContent?.includes('WebScopedTask'))!
+      current.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(activeRouter.currentRoute.value.params.taskId).toBe('web-task')
+      expect(activeRouter.currentRoute.value.query.conversation).toBe('web-conv')
+    } finally {
+      wrapper.unmount()
+      scopedTasks.tasks = []
+      scopedTasks.stale = false
     }
   })
 
