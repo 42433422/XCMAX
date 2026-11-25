@@ -14,6 +14,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from modstore_server.strategic_customer_outcomes import CustomerGoalBinding
+from modstore_server.xiaoc_goal_governance import (
+    goal_path,
+    observed_priority,
+    review_milestones,
+)
 from modstore_server.xiaoc_life_policy import LifePolicyError, parse_time
 
 ORIGIN = "customer_value_gap/v1"
@@ -166,7 +171,12 @@ def discover_goal_candidate(
             "evidence_refs": [ref],
             "issue_key": stage,
             "observation": observation,
-            "priority": {"basis": "observed_gap_count", "score": count},
+            "priority": observed_priority(stage, count, value["observed_at"], now=now),
+            "hierarchy": goal_path(
+                state["identity_id"], str(state.get("mission") or ""), goal_id, now=now
+            ),
+            "depends_on_goal_ids": [],
+            "milestones": review_milestones(now=now, deadline=deadline),
             "expected_benefit": "识别并减少已核验缺口；收益金额尚未测量。",
             "risk": "窗口滚动、重复归因、误把缺失证据当成客户失败；不得据此自动改写业务。",
             "cost_estimate": {"status": "unknown", "existing_policy_upper_bound": budget_bound},
@@ -174,6 +184,7 @@ def discover_goal_candidate(
             "acceptance": {
                 "metric": "customer_value_lifecycle_gap_count",
                 "stage": stage,
+                "direction": "min",
                 "baseline": count,
                 "target": 0,
                 "condition": "独立回读同口径及原客户/订单；窗口滚动或缺失来源不能证明改善。",
