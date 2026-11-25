@@ -5,6 +5,9 @@ from __future__ import annotations
 import importlib
 import logging
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+
+from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 from typing import TYPE_CHECKING, Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -31,29 +34,55 @@ class InventoryCountingMixin:
         operator: str | None = None,
         remark: str | None = None,
         confirmed: bool = False,
+        expected_book_quantity: str | None = None,
     ) -> dict[str, Any]:
-        """盘点功能。
-
-        查询当前台账账面数量，计算差异 diff = actual_quantity - book_quantity。
-        - confirmed=False：仅返回差异供对话层反问确认，不实际改动库存。
-        - confirmed=True：按实际数量调整台账并写入一条 transaction_type="count" 流水。
-        """
-        with _facade().get_db() as db:
+        """Preview or CAS-confirm an inventory count without consuming reservations."""
+        try:
+            actual = Decimal(str(actual_quantity))
+            if (
+                not actual.is_finite() or actual < 0
+                or actual != actual.quantize(Decimal("0.0001"))
+            ):
+                raise ValueError("盘点数量必须为四位小数以内的非负数")
+        except (ValueError, TypeError, InvalidOperation):
+            return {"success": False, "message": "盘点数量必须为四位小数以内的非负数"}
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
-                ledger = (
-                    db.query(_facade().InventoryLedger)
-                    .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == warehouse_id,
-                        _facade().InventoryLedger.batch_no == batch_no,
-                    )
-                    .first()
-                )
-                if not ledger:
+                model = _facade().InventoryLedger
+                ledger = db.query(model).filter(
+                    model.product_id == product_id,
+                    model.warehouse_id == warehouse_id,
+                    model.batch_no == batch_no,
+                ).first()
+                if ledger is None:
                     return {"success": False, "message": "库存台账记录不存在，请先入库"}
-                book_quantity = float(ledger.quantity or 0)
-                actual_quantity = float(actual_quantity)
-                diff = actual_quantity - book_quantity
+                book = Decimal(str(ledger.quantity or 0))
+                available = Decimal(str(ledger.available_quantity or 0))
+                reserved = Decimal(str(ledger.reserved_quantity or 0))
+                if min(book, available, reserved) < 0 or book != available + reserved:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_ledger_inconsistent",
+                        "message": "原库存台账不平衡，禁止盘点覆盖，需先独立对账",
+                    }
+                if actual < reserved:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_reservation_conflict",
+                        "message": "盘点实存量低于已冻结库存，请先核实或释放原预留",
+                    }
+                if expected_book_quantity is not None:
+                    try:
+                        expected = Decimal(str(expected_book_quantity))
+                    except (TypeError, ValueError, InvalidOperation):
+                        return {"success": False, "message": "盘点快照数量无效"}
+                    if not expected.is_finite() or expected != book:
+                        return {
+                            "success": False,
+                            "error_code": "inventory_count_stale",
+                            "message": "盘点预览后账面数量已变更，请重新盘点",
+                        }
+                diff = actual - book
                 if not confirmed:
                     return {
                         "success": True,
@@ -63,36 +92,58 @@ class InventoryCountingMixin:
                             "product_id": product_id,
                             "warehouse_id": warehouse_id,
                             "batch_no": batch_no,
-                            "book_quantity": book_quantity,
-                            "actual_quantity": actual_quantity,
-                            "diff": diff,
+                            "book_quantity": float(book),
+                            "actual_quantity": float(actual),
+                            "diff": float(diff),
                         },
                     }
+                if location_id is not None:
+                    location = db.query(_facade().StorageLocation).filter(
+                        _facade().StorageLocation.id == location_id,
+                        _facade().StorageLocation.warehouse_id == warehouse_id,
+                        _facade().StorageLocation.status == "active",
+                    ).first()
+                    if location is None:
+                        return {"success": False, "message": "盘点库位不属于当前仓库或未启用"}
                 now = datetime.now()
-                before_quantity = book_quantity
-                ledger.quantity = actual_quantity
-                ledger.available_quantity = float(ledger.available_quantity or 0) + diff
-                if location_id:
-                    ledger.location_id = location_id
-                ledger.updated_at = now
-                db.flush()
-                transaction = _facade().InventoryTransaction(
+                values = {
+                    model.quantity: actual,
+                    model.available_quantity: actual - reserved,
+                    model.updated_at: now,
+                }
+                if location_id is not None:
+                    values[model.location_id] = location_id
+                changed = db.query(model).filter(
+                    model.id == ledger.id,
+                    model.tenant_id == ledger.tenant_id,
+                    model.quantity == book,
+                    model.available_quantity == available,
+                    model.reserved_quantity == reserved,
+                ).update(values, synchronize_session=False)
+                if changed != 1:
+                    db.rollback()
+                    return {
+                        "success": False,
+                        "error_code": "inventory_count_stale",
+                        "message": "盘点确认时库存已并发变化，未覆盖新库存",
+                    }
+                db.refresh(ledger)
+                db.add(_facade().InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="count",
                     product_id=product_id,
                     warehouse_id=warehouse_id,
-                    location_id=location_id,
+                    location_id=location_id or ledger.location_id,
                     batch_no=batch_no,
                     quantity=diff,
-                    before_quantity=before_quantity,
-                    after_quantity=actual_quantity,
+                    before_quantity=book,
+                    after_quantity=actual,
                     reference_type="inventory_count",
                     transaction_date=now,
                     operator=operator,
                     remark=remark,
                     created_at=now,
-                )
-                db.add(transaction)
+                ))
                 db.commit()
                 return {
                     "success": True,
@@ -102,9 +153,9 @@ class InventoryCountingMixin:
                         "product_id": product_id,
                         "warehouse_id": warehouse_id,
                         "batch_no": batch_no,
-                        "book_quantity": before_quantity,
-                        "actual_quantity": actual_quantity,
-                        "diff": diff,
+                        "book_quantity": float(book),
+                        "actual_quantity": float(actual),
+                        "diff": float(diff),
                         "total_quantity": float(ledger.quantity),
                     },
                 }
