@@ -193,6 +193,81 @@ class MobileOfflineStore {
     );
   }
 
+  // ── Scoped chat composer restoration ───────────────────────────
+  // Draft text is local to this account/server database. Uploaded bytes and
+  // reusable upload IDs are deliberately excluded: the remote upload receipt
+  // can expire or be revoked while the app is closed.
+  static const _draftLifetimeMs = 7 * 24 * 60 * 60 * 1000;
+  static const _maxDraftChars = 16000;
+
+  String _draftKey(String conversationId) =>
+      'chat-draft:${jsonEncode(conversationId)}';
+
+  Future<void> saveChatDraft(String conversationId, String text,
+      {List<String> attachmentNames = const []}) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    final safeNames = attachmentNames
+        .where((name) => name.trim().isNotEmpty)
+        .take(4)
+        .map((name) => name.length > 180 ? name.substring(0, 180) : name)
+        .toList(growable: false);
+    final safeText = text.length > _maxDraftChars
+        ? text.substring(0, _maxDraftChars) : text;
+    if (safeText.isEmpty && safeNames.isEmpty) {
+      await clearChatDraft(id);
+      return;
+    }
+    final data = jsonEncode({
+      'text': safeText,
+      'attachment_names': safeNames,
+      'expires_at': DateTime.now().millisecondsSinceEpoch + _draftLifetimeMs,
+    });
+    await _db.customUpdate(
+      'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+      variables: [Variable<String>(_draftKey(id)), Variable<String>(data)],
+    );
+  }
+
+  Future<Map<String, Object?>> readChatDraft(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const {};
+    final rows = await _db.customSelect(
+      'SELECT value FROM meta WHERE key = ?',
+      variables: [Variable<String>(_draftKey(id))],
+    ).get();
+    if (rows.isEmpty) return const {};
+    try {
+      final raw = jsonDecode('${rows.single.data['value']}');
+      if (raw is! Map) throw const FormatException('draft not an object');
+      final expiresAt = raw['expires_at'];
+      if (expiresAt is! int || expiresAt <= DateTime.now().millisecondsSinceEpoch) {
+        await clearChatDraft(id);
+        return const {};
+      }
+      final text = raw['text'];
+      final names = raw['attachment_names'];
+      return {
+        'text': text is String ? text : '',
+        'attachment_names': names is List
+            ? names.whereType<String>().take(4).toList(growable: false)
+            : const <String>[],
+      };
+    } catch (_) {
+      await clearChatDraft(id);
+      return const {};
+    }
+  }
+
+  Future<void> clearChatDraft(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    await _db.customUpdate(
+      'DELETE FROM meta WHERE key = ?',
+      variables: [Variable<String>(_draftKey(id))],
+    );
+  }
+
   // ── 进行中的中继任务 ────────────────────────────────────────
 
   Future<void> saveTurnDispatch(String conversationId, String turnId,
