@@ -10,7 +10,9 @@ permissions:
   contents: read
 concurrency:
   group: frontend-interaction-performance-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # Keep the currently running paired measurement stable while other frontend
+  # workers push commits into the integration PR. GitHub coalesces pending runs.
+  cancel-in-progress: false
 jobs:
   browser:
     runs-on: ubuntu-24.04
