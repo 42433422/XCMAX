@@ -281,3 +281,43 @@ def test_incomplete_original_batch_evidence_blocks_return(original_purchase):
         assert result["success"] is False
     with tenant_scope(3), Session(engine) as db:
         assert db.scalars(select(PurchaseReturn)).all() == []
+
+
+def test_postgres_concurrent_same_approval_posted_once(original_purchase):
+    from concurrent.futures import ThreadPoolExecutor
+
+    engine, data, _ = original_purchase
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Parallel approval claim acceptance requires real PostgreSQL")
+
+    def submit(_):
+        with tenant_scope(3):
+            return PurchaseService().post_purchase_return(data)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(submit, range(8)))
+    assert all(r["success"] is True for r in results), results
+    assert sum(r.get("idempotent") is False for r in results) == 1
+    assert len({r["return_id"] for r in results}) == 1
+    with tenant_scope(3), Session(engine) as db:
+        assert len(db.scalars(select(PurchaseReturn)).all()) == 1
+        assert len(db.scalars(
+            select(JournalEntry).where(JournalEntry.reference_type == "purchase_return")
+        ).all()) == 1
+
+
+def test_approver_revocation_prevents_posting_and_does_not_change_stock(original_purchase):
+    engine, data, _ = original_purchase
+    with tenant_scope(3), Session(engine) as db:
+        user = db.get(User, 102)
+        user.is_active = False
+        db.commit()
+    with tenant_scope(3):
+        outcome = PurchaseService().post_purchase_return(data)
+    assert outcome["success"] is False
+    with tenant_scope(3), Session(engine) as db:
+        assert db.scalars(select(PurchaseReturn)).all() == []
+        assert all(
+            row.quantity == Decimal("5")
+            for row in db.scalars(select(InventoryLedger)).all()
+        )
