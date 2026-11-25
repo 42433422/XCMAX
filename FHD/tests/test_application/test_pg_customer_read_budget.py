@@ -93,3 +93,84 @@ def test_explain_requires_postgres_json_plan():
         "estimated_rows": 1,
         "indexes": ["idx_tenant"],
     }
+
+
+def test_report_sha_must_match_checked_out_git_commit(monkeypatch):
+    from types import SimpleNamespace
+
+    module = load()
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout="b" * 40,
+        ),
+    )
+    with pytest.raises(module.EvidenceBlocked, match="actual checkout HEAD"):
+        module._verify_checkout_head("a" * 40)
+    module._verify_checkout_head("b" * 40)
+
+
+def test_checkout_identity_unavailable_is_blocked(monkeypatch):
+    module = load()
+
+    def no_git(*_args, **_kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(module.subprocess, "run", no_git)
+    with pytest.raises(module.EvidenceBlocked, match="SHA unavailable"):
+        module._verify_checkout_head("a" * 40)
+
+
+def test_pg_report_preserves_latency_and_sql_count_samples(monkeypatch):
+    from types import SimpleNamespace
+
+    module = load()
+    a = args()
+    a.runs = 2
+    a.max_sql = 5
+    a.max_p95_ms = 100.0
+    class FakeConnect:
+        def __enter__(self):
+            return mock_connection
+
+        def __exit__(self, *_args):
+            return None
+
+    mock_connection = SimpleNamespace(
+        exec_driver_sql=lambda _sql: SimpleNamespace(
+            scalar_one=lambda: "16.2",
+        ),
+    )
+    fake_engine = SimpleNamespace(
+        dialect=SimpleNamespace(name="postgresql"),
+        connect=lambda: FakeConnect(),
+        dispose=lambda: None,
+    )
+    monkeypatch.setenv(a.dsn_env, "postgresql://test-only-do-not-connect")
+    monkeypatch.setattr(module, "create_engine", lambda *_args, **_kwargs: fake_engine)
+    monkeypatch.setattr(module, "_verify_checkout_head", lambda expected: None)
+    monkeypatch.setattr(module, "_samples", lambda *_args: {
+        1000: [1] * 1000,
+        10000: [2] * 10000,
+    })
+    invocations = []
+
+    def fake_probe(_engine, _tenant, ids):
+        invocations.append(len(ids))
+        return {
+            "elapsed_ms": float(len(invocations) * 10),
+            "sql_total": 4,
+            "sql_selects": 4,
+            "denied_association_count": 1,
+            "plans": {"query_1_customers": {"node": "Index Scan"}},
+        }
+
+    monkeypatch.setattr(module, "_probe", fake_probe)
+    report = module.run(a)
+    assert invocations == [1000, 1000, 10000, 10000]
+    assert report["status"] == "PASS"
+    assert report["head_sha"] == a.head_sha
+    assert report["groups"][0]["latency_samples_ms"] == [10.0, 20.0]
+    assert report["groups"][1]["sql_count_samples"] == [4, 4]
+    assert report["groups"][1]["p95_ms"] == 40.0
