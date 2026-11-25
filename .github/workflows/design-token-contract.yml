@@ -34,3 +34,4 @@ jobs:
         with:
           node-version: '22'
       - run: node FHD/scripts/design/generate-design-tokens.mjs --check
+      - run: node FHD/scripts/design/audit-accessibility-contrast.mjs
