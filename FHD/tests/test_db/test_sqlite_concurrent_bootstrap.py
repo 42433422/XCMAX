@@ -6,16 +6,20 @@ Both DDL checkfirst and the read-before-insert RBAC seed must be serialized.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from app.db.bootstrap.seeding import seed_rbac
 from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES, Permission, Role
 from app.db.models.user import User
 
@@ -134,5 +138,55 @@ def test_sqlite_rbac_seed_failure_rolls_back_and_retry_is_idempotent(tmp_path: P
                 assert {permission.code for permission in roles[spec["name"]].permissions} == set(
                     spec["permissions"]
                 )
+    finally:
+        engine.dispose()
+
+
+def test_rbac_seed_waits_for_external_writer_without_expanding_grants(tmp_path: Path):
+    from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
+    url = f"sqlite+pysqlite:///{tmp_path / 'writer.sqlite3'}"
+    engine = create_engine(url, connect_args={"timeout": 15}, poolclass=NullPool)
+    write_attempt = Event()
+
+    def seed_from_independent_connection():
+        worker = create_engine(url, connect_args={"timeout": 15}, poolclass=NullPool)
+
+        def watch_begin(conn, cursor, statement, parameters, context, executemany):
+            if statement.strip().upper() == "BEGIN IMMEDIATE":
+                write_attempt.set()
+
+        try:
+            event.listen(worker, "before_cursor_execute", watch_begin)
+            seed_rbac(worker, logger=logging.getLogger(__name__))
+        finally:
+            worker.dispose()
+
+    try:
+        ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
+        with engine.connect() as writer, ThreadPoolExecutor(max_workers=1) as executor:
+            writer.exec_driver_sql("BEGIN IMMEDIATE")
+            future = executor.submit(seed_from_independent_connection)
+            try:
+                assert write_attempt.wait(timeout=10)
+                assert not future.done()
+            finally:
+                writer.commit()
+            future.result(timeout=30)
+        with Session(engine) as session:
+            permissions = session.query(Permission).all()
+            assert len(permissions) == len(DEFAULT_PERMISSIONS)
+            assert {permission.code for permission in permissions} == {
+                spec["code"] for spec in DEFAULT_PERMISSIONS
+            }
+            roles = session.query(Role).all()
+            assert len(roles) == len(DEFAULT_ROLES)
+            expected = {spec["name"]: set(spec["permissions"]) for spec in DEFAULT_ROLES}
+            assert {role.name: {perm.code for perm in role.permissions} for role in roles} == expected
+            assert all(
+                permission.code != "model_payment.refund"
+                for role in roles
+                for permission in role.permissions
+            )
     finally:
         engine.dispose()
