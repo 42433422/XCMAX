@@ -35,21 +35,50 @@ def _ledger_path() -> Path:
     )
 
 
+_AUDIT_EVENT_TYPE = "owner_audit_recorded"
+_AUDIT_VERDICTS = frozenset({"approved", "rejected", "needs-review"})
+
+
+def _read_records(path: Path) -> List[Dict[str, Any]]:
+    """Read existing events without modifying historical lines."""
+    records = []
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+    return records
+
+
+def _append_line(path: Path, record: Dict[str, Any]) -> None:
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 def append_event(event: Dict[str, Any]) -> Dict[str, Any]:
-    """追加一个事件到 ledger。返回写入的完整记录（含 event_id / timestamp）。"""
-    record: Dict[str, Any] = {
-        "event_id": str(uuid.uuid4()),
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-    record.update(event)
-    record.setdefault("owner_audit", {"audited": False, "audited_at": None, "verdict": None})
+    """Append a decision. Event time is not a trusted arrival timestamp.
+
+    event_id and recorded_at always come from this process; owner audit state
+    cannot be supplied by a proposer. Human audit records have a separate API.
+    """
+    if not isinstance(event, dict) or event.get("event_type") == _AUDIT_EVENT_TYPE:
+        raise ValueError("invalid_evolution_event")
+    now = datetime.now(UTC).isoformat()
+    record: Dict[str, Any] = dict(event)
+    record["event_id"] = str(uuid.uuid4())
+    record.setdefault("timestamp", now)  # Legacy callers may provide event time.
+    record["recorded_at"] = now
+    record["owner_audit"] = {"audited": False, "audited_at": None, "verdict": None}
 
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
     with _LEDGER_LOCK:
-        with path.open("a", encoding="utf-8") as f:
-            f.write(line)
+        _append_line(path, record)
     return record
 
 
@@ -59,69 +88,98 @@ def list_events(
     final_status: Optional[str] = None,
     since_days: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """读 ledger 并按条件过滤。"""
+    """Project owner audit revisions from the append-only journal.
+
+    This is a local decision journal, NOT an independent business-growth proof.
+    The underlying historical event bytes remain intact after an audit.
+    """
     path = _ledger_path()
     if not path.is_file():
         return []
-    cutoff: Optional[datetime] = None
-    if since_days is not None:
-        cutoff = datetime.now(UTC) - timedelta(days=since_days)
+    cutoff = datetime.now(UTC) - timedelta(days=since_days) if since_days is not None else None
+    audit_by_target: Dict[str, Dict[str, Any]] = {}
+    original_events = []
+    for row in _read_records(path):
+        if row.get("event_type") == _AUDIT_EVENT_TYPE:
+            target = row.get("audit_target_event_id")
+            verdict = row.get("audit_verdict")
+            audited_at = row.get("audited_at")
+            if (
+                isinstance(target, str)
+                and target
+                and verdict in _AUDIT_VERDICTS
+                and isinstance(audited_at, str)
+                and audited_at
+            ):
+                audit_by_target[target] = {
+                    "audited": True,
+                    "audited_at": audited_at,
+                    "verdict": verdict,
+                }
+            continue
+        original_events.append(row)
 
     out: List[Dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
+    for row in original_events:
+        if event_type and row.get("event_type") != event_type:
+            continue
+        if final_status and row.get("final_status") != final_status:
+            continue
+        if cutoff:
             try:
-                evt = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event_type and evt.get("event_type") != event_type:
-                continue
-            if final_status and evt.get("final_status") != final_status:
-                continue
-            if cutoff:
-                ts_str = evt.get("timestamp", "")
-                try:
-                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    if ts < cutoff:
-                        continue
-                except (ValueError, TypeError):
+                ts = datetime.fromisoformat(row.get("timestamp", "").replace("Z", "+00:00"))
+                if ts.tzinfo is None or ts < cutoff:
                     continue
-            out.append(evt)
+            except (ValueError, TypeError, AttributeError):
+                continue
+        current = dict(row)
+        audit = audit_by_target.get(row.get("event_id"))
+        if audit is not None:
+            current["owner_audit"] = audit
+        out.append(current)
     return out
 
 
 def mark_audited(event_id: str, verdict: str) -> bool:
-    """标记某个事件已审计。重写 ledger 文件以更新对应行。"""
+    """Append an audit decision, never rewrite the decision or a previous audit.
+
+    Repeating the same decision is idempotent; a changed decision creates a new
+    auditable revision. This API does not itself establish independent approval.
+    """
+    if not isinstance(event_id, str) or not event_id:
+        raise ValueError("invalid_evolution_event_id")
+    if verdict not in _AUDIT_VERDICTS:
+        raise ValueError("invalid_evolution_audit_verdict")
     path = _ledger_path()
     if not path.is_file():
         return False
-    found = False
-    lines_out: List[str] = []
     with _LEDGER_LOCK:
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    evt = json.loads(line)
-                except json.JSONDecodeError:
-                    lines_out.append(line.rstrip("\n"))
-                    continue
-                if evt.get("event_id") == event_id:
-                    evt["owner_audit"] = {
-                        "audited": True,
-                        "audited_at": datetime.now(UTC).isoformat(),
-                        "verdict": verdict,
-                    }
-                    lines_out.append(json.dumps(evt, ensure_ascii=False, sort_keys=True))
-                    found = True
-                else:
-                    lines_out.append(line.rstrip("\n"))
-        if found:
-            with path.open("w", encoding="utf-8") as f:
-                for ln in lines_out:
-                    f.write(ln + "\n")
-    return found
+        rows = _read_records(path)
+        if not any(
+            row.get("event_id") == event_id and row.get("event_type") != _AUDIT_EVENT_TYPE
+            for row in rows
+        ):
+            return False
+        previous = next(
+            (
+                row for row in reversed(rows)
+                if row.get("event_type") == _AUDIT_EVENT_TYPE
+                and row.get("audit_target_event_id") == event_id
+            ),
+            None,
+        )
+        if previous and previous.get("audit_verdict") == verdict:
+            return True
+        now = datetime.now(UTC).isoformat()
+        audit = {
+            "event_id": str(uuid.uuid4()),
+            "event_type": _AUDIT_EVENT_TYPE,
+            "timestamp": now,
+            "recorded_at": now,
+            "audit_target_event_id": event_id,
+            "audit_verdict": verdict,
+            "audited_at": now,
+            "previous_audit_event_id": previous.get("event_id") if previous else None,
+        }
+        _append_line(path, audit)
+    return True
