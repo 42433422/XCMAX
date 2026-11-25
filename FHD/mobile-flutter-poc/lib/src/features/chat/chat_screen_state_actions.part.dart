@@ -3,7 +3,7 @@ part of 'chat_screen.dart';
 // 工具面板、页面导航、语音输入与 git 操作入口。
 abstract class _ChatStateActions extends _ChatAttachmentActions {
   Future<void> _openTools() async {
-    if (_showToolPanel) return;
+    if (_showToolPanel || !_chatScopeCurrent) return;
     FocusScope.of(context).unfocus();
     setState(() => _showToolPanel = true);
     try {
@@ -45,7 +45,7 @@ abstract class _ChatStateActions extends _ChatAttachmentActions {
       if (!mounted || action == null) return;
       final current = await _currentToolScope();
       if (!mounted) return;
-      if (current != scope) {
+      if (current != scope || !_chatScopeCurrent) {
         _showMessage('账号或连接已切换，请重新打开工具');
         return;
       }
@@ -147,7 +147,7 @@ abstract class _ChatStateActions extends _ChatAttachmentActions {
   }
 
   Future<void> _runGitOperation(String branch, String op) async {
-    if (_runningGitOp) return;
+    if (_runningGitOp || !_chatScopeCurrent) return;
     final repository = widget.repository;
     if (repository == null) {
       _showMessage('未绑定电脑工具，无法执行 $op');

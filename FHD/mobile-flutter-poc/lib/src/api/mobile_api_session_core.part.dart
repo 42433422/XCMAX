@@ -38,6 +38,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     MobileSessionData? Function(MobileSessionData current) update, {
     int? authGeneration,
     bool passwordIsPlaintext = false,
+    bool invalidateConnectionScope = true,
   }) {
     final generation = authGeneration ?? _authGeneration;
     final write = _sessionWrites.then((_) async {
@@ -68,12 +69,39 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
       if (generation != _authGeneration) return;
       await _sessionStore.save(stored);
       final visible = await _decodeSavedCredential(stored);
-      if (generation == _authGeneration) _rememberSession(visible);
+      if (generation == _authGeneration) {
+        // The same login can change enterprise or backend. Fence the old
+        // view and all outstanding calls before publishing the new session.
+        // Login/pairing that replaces credentials already starts an epoch.
+        if (invalidateConnectionScope &&
+            _credentialIdentity(current) == _credentialIdentity(stored) &&
+            _connectionIdentity(current) != _connectionIdentity(stored)) {
+          _beginAuthChange();
+        }
+        _rememberSession(visible);
+      }
     });
     // Keep later logout/login writes ordered even when an earlier write fails.
     _sessionWrites = write.catchError((Object _) {});
     return write;
   }
+
+  Object _credentialIdentity(MobileSessionData session) => (
+        session.userId,
+        session.accessToken,
+        session.sessionId,
+        session.marketAccessToken,
+      );
+
+  Object _connectionIdentity(MobileSessionData session) => (
+        session.accountKind,
+        session.relayAccountId,
+        session.relayTenantId,
+        session.serverMode.trim().toLowerCase(),
+        session.fhdHost.trim(),
+        session.localBaseUrl.trim(),
+        session.relayBaseUrl.trim(),
+      );
 
   int _beginAuthChange() {
     _refreshInFlight = null;

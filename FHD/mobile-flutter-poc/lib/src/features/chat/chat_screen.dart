@@ -76,21 +76,7 @@ class _ChatScreenState extends _ChatStateActions
     _attachmentSessionSubscription = _repository?.client.sessionChanges
         .listen((_) {
       if (_repository?.client.authGeneration != _chatGeneration) {
-        _streamTokenBatcher.clear();
-        _draftTimer?.cancel();
-        _chatInvalidated = true;
-        if (mounted) {
-          setState(() {
-            _messages.clear();
-            _attachments.clear();
-            _failedAttachments.clear();
-            _recoveredAttachmentNames.clear();
-            _activeAssistantId = null;
-            _sending = false;
-            _controller.clear();
-          });
-          _syncFlyerChat();
-        }
+        _revokeChatView();
       } else {
         unawaited(_checkAttachmentScope());
       }

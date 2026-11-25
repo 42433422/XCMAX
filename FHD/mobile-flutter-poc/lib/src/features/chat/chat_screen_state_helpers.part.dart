@@ -64,6 +64,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
     _streamTokenBatcher.append(assistantId, text);
   }
 
+  bool get _chatScopeCurrent => !_chatInvalidated &&
+      (_repository?.client.authGeneration ?? 0) == _chatGeneration;
+
   Future<void> _restoreChatDraft() async {
     final repository = _repository;
     if (repository == null) return;
@@ -97,7 +100,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   }
 
   void _scheduleChatDraftSave() {
-    if (_restoringDraft || _chatInvalidated) return;
+    if (_restoringDraft || !_chatScopeCurrent) return;
     _draftTouched = true;
     _draftTimer?.cancel();
     _draftTimer = Timer(const Duration(milliseconds: 300),
@@ -106,7 +109,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
 
   void _persistChatDraftSnapshot() {
     final repository = _repository;
-    if (repository == null || _chatInvalidated) return;
+    if (repository == null || !_chatScopeCurrent) return;
     final text = _controller.text;
     final attachmentNames = <String>{
       ..._attachments.map((attachment) => attachment.name),

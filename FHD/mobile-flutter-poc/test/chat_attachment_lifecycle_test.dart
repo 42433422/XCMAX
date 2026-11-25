@@ -49,6 +49,7 @@ class _Repository extends MobileRepository {
       : super(client: api);
 
   final Map<String, Object?> draft;
+  final savedDrafts = <String>[];
 
   @override
   Future<Map<String, Object?>> loadChatComposerDraft(String conversationId) async =>
@@ -56,7 +57,9 @@ class _Repository extends MobileRepository {
 
   @override
   Future<void> saveChatComposerDraft(String conversationId, String text,
-      {List<String> attachmentNames = const []}) async {}
+      {List<String> attachmentNames = const []}) async {
+    savedDrafts.add(text);
+  }
 
   @override
   Future<List<ChatMessage>> loadInitialMessages(
@@ -83,6 +86,45 @@ Future<void> _showChat(
 }
 
 void main() {
+  testWidgets('same-login tenant switch fences a pending draft and attachments',
+      (tester) async {
+    final api = _AttachmentApi();
+    final repository = _Repository(api);
+    addTearDown(repository.dispose);
+    addTearDown(api.dispose);
+    await _showChat(tester, repository);
+    final original = await api.loadSession();
+    final generation = api.authGeneration;
+    await tester.enterText(find.byType(TextField).last, 'old tenant draft');
+    // Switch before the 300ms debounce. Credentials intentionally do not change.
+    await api.saveSession(original.copyWith(relayTenantId: 'tenant-next'));
+    expect(api.authGeneration, generation + 1);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('old tenant draft'), findsNothing);
+    expect(find.textContaining('请返回后重新打开此会话'), findsOneWidget);
+    expect(repository.savedDrafts, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    expect(repository.savedDrafts, isEmpty);
+  });
+
+  test('connection change fences old epoch, preference save does not', () async {
+    final api = _AttachmentApi();
+    addTearDown(api.dispose);
+    final original = await api.loadSession();
+    final generation = api.authGeneration;
+    await api.saveLocalSettings(themeMode: 'dark');
+    expect(api.authGeneration, generation);
+    await api.saveSession((await api.loadSession()).copyWith(
+      serverMode: 'lan',
+      localBaseUrl: 'http://127.0.0.1:19090/',
+    ));
+    expect(api.authGeneration, generation + 1);
+    await api.saveSession(original, authGeneration: generation);
+    expect((await api.loadSession()).localBaseUrl, 'http://127.0.0.1:19090/');
+  });
+
   testWidgets('restored attachment names are removable and not ready receipts',
       (tester) async {
     final api = _AttachmentApi();

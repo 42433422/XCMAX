@@ -68,7 +68,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
             next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
       );
-    }, authGeneration: generation);
+    }, authGeneration: generation, invalidateConnectionScope: false);
     if (generation == _authGeneration) await registerDeviceTokenIfNeeded();
     return generation == _authGeneration ? generation : null;
   }
@@ -233,7 +233,8 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
       }
       shouldRegisterDevice = next.hasAuth;
       return next;
-    }, authGeneration: generation);
+    }, authGeneration: generation,
+        invalidateConnectionScope: preserveActiveAuth || access.isEmpty);
     if (generation == _authGeneration && shouldRegisterDevice) {
       await registerDeviceTokenIfNeeded();
     }
