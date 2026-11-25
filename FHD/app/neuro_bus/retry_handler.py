@@ -50,26 +50,41 @@ class RetryConfig:
 class RetryContext:
     """重试上下文"""
 
-    def __init__(self, config: RetryConfig, operation_name: str):
+    def __init__(
+        self, config: RetryConfig, operation_name: str, *, retry_timeouts: bool = True
+    ):
         self._config = config
         self._operation_name = operation_name
-        self._attempt = 0
+        self._attempt = 0  # Scheduled retries, used only for backoff.
+        self._started_attempts = 0
+        self._retry_timeouts = retry_timeouts
+        self.retry_exhausted = False
         self._last_error: Exception | None = None
         self._success = False
         self._total_delay = 0.0
 
-    def should_retry(self, error: Exception) -> bool:
-        """判断是否应该重试"""
-        # 检查重试次数
-        if self._attempt >= self._config.max_retries:
-            return False
+    @property
+    def retry_count(self) -> int:
+        """Number of invocations started after the initial invocation."""
+        return max(0, self._started_attempts - 1)
 
-        # 检查异常类型
+    def record_attempt(self) -> None:
+        self._started_attempts += 1
+        self.retry_exhausted = False
+
+    def should_retry(self, error: Exception) -> bool:
+        """Distinguish an ineligible error from exhausted retry capacity."""
+        self._last_error = error
+        self.retry_exhausted = False
         if not isinstance(error, self._config.retryable_exceptions):
+            return False
+        if not self._retry_timeouts and isinstance(error, TimeoutError):
+            return False
+        if self._attempt >= self._config.max_retries:
+            self.retry_exhausted = True
             return False
 
         self._attempt += 1
-        self._last_error = error
         return True
 
     def get_delay(self) -> float:
@@ -96,7 +111,9 @@ class RetryContext:
         """获取重试报告"""
         return {
             "operation": self._operation_name,
-            "attempts": self._attempt + (1 if self._success else 0),
+            "attempts": self._started_attempts,
+            "retry_count": self.retry_count,
+            "retry_exhausted": self.retry_exhausted,
             "max_retries": self._config.max_retries,
             "success": self._success,
             "total_delay_sec": self._total_delay,
@@ -114,56 +131,68 @@ class RetryHandler:
     def __init__(self, config: RetryConfig | None = None):
         self._config = config or RetryConfig()
 
+    def new_context(
+        self, operation_name: str, *, retry_timeouts: bool = True
+    ) -> RetryContext:
+        return RetryContext(self._config, operation_name, retry_timeouts=retry_timeouts)
+
     async def execute(
         self,
         operation: Callable,
         *args,
         operation_name: str | None = None,
         on_retry: Callable[[Exception, int], None] | None = None,
+        retry_context: RetryContext | None = None,
+        deadline: float | None = None,
         **kwargs,
     ) -> Any:
-        """
-        异步执行，带重试
-        """
-        context = RetryContext(self._config, operation_name or operation.__name__)
-
-        while True:
-            try:
-                result = await operation(*args, **kwargs)
-                context.record_success()
-
-                if context._attempt > 0:
-                    report = context.get_report()
-                    logger.info(
-                        "Retry succeeded after %s attempts: %s", report["attempts"], operation_name
-                    )
-
-                return result
-
-            except RECOVERABLE_ERRORS as e:
-                if not context.should_retry(e):
-                    # 不可重试或次数耗尽
-                    report = context.get_report()
-                    logger.error(
-                        "Retry exhausted for %s: %s attempts, last error: %s",
+        """Use one event-loop deadline for all invocations and backoff waits."""
+        context = retry_context or self.new_context(
+            operation_name or getattr(operation, "__name__", "operation")
+        )
+        loop = asyncio.get_running_loop()
+        async with asyncio.timeout_at(deadline):
+            while True:
+                if deadline is not None and loop.time() >= deadline:
+                    raise TimeoutError("Retry execution budget exhausted")
+                context.record_attempt()
+                try:
+                    result = await operation(*args, **kwargs)
+                except RECOVERABLE_ERRORS as e:
+                    if deadline is not None and loop.time() >= deadline:
+                        raise TimeoutError("Retry execution budget exhausted") from e
+                    if not context.should_retry(e):
+                        logger.error(
+                            "Retry stopped for %s: %s attempts, exhausted=%s",
+                            operation_name,
+                            context.get_report()["attempts"],
+                            context.retry_exhausted,
+                        )
+                        raise
+                    delay = context.get_delay()
+                    if deadline is not None and delay >= deadline - loop.time():
+                        raise TimeoutError("Insufficient retry backoff budget") from e
+                    logger.warning(
+                        "Retry %s/%s for %s after %.2fs delay",
+                        context._attempt,
+                        self._config.max_retries,
                         operation_name,
-                        report["attempts"],
-                        e,
+                        delay,
                     )
-                    raise
-
-                # 计算延迟
-                delay = context.get_delay()
-
-                logger.warning(
-                    f"Retry {context._attempt}/{self._config.max_retries} "
-                    f"for {operation_name} after {delay:.2f}s delay, error: {e}"
-                )
-
-                if on_retry:
-                    on_retry(e, context._attempt)
-
-                await asyncio.sleep(delay)
+                    if on_retry:
+                        on_retry(e, context._attempt)
+                    await asyncio.sleep(delay)
+                else:
+                    if deadline is not None and loop.time() >= deadline:
+                        raise TimeoutError("Retry execution budget exhausted")
+                    context.record_success()
+                    if context.retry_count:
+                        logger.info(
+                            "Retry succeeded after %s attempts: %s",
+                            context.get_report()["attempts"],
+                            operation_name,
+                        )
+                    return result
 
     def execute_sync(
         self,
@@ -179,6 +208,7 @@ class RetryHandler:
         context = RetryContext(self._config, operation_name or operation.__name__)
 
         while True:
+            context.record_attempt()
             try:
                 result = operation(*args, **kwargs)
                 context.record_success()
