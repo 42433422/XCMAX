@@ -62,6 +62,7 @@ describe.each([true, false])('PanelComposer corpMode=%s', (corpMode) => {
       const input = wrapper.get('textarea')
       const dispatch = (init: KeyboardEventInit = {}) => {
         const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      if ('keyCode' in init) Object.defineProperty(event, 'keyCode', { configurable: true, value: 229 })
         input.element.dispatchEvent(event)
         return event
       }
