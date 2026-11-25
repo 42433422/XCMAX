@@ -38,8 +38,7 @@ class _ChatRichBody extends StatelessWidget {
   final TextStyle style;
   final Color codeBackground;
 
-  static final RegExp _fencedCode =
-      RegExp(r'```[^\r\n`]*\r?\n([\s\S]*?)```');
+  static final RegExp _fencedCode = RegExp(r'```[^\r\n`]*\r?\n([\s\S]*?)```');
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +78,9 @@ class _ChatRichBody extends StatelessWidget {
       );
       cursor = match.end;
     }
-    if (cursor < text.length) blocks.add(Text(text.substring(cursor), style: style));
+    if (cursor < text.length) {
+      blocks.add(Text(text.substring(cursor), style: style));
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
