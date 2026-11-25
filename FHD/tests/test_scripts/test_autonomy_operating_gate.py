@@ -13,6 +13,8 @@ from scripts.dev.autonomy_operating_gate import ARTIFACTS, FAULTS, NEGATIVE, eva
 SHA = "a" * 40
 AUDITOR_SHA = "b" * 40
 DIGEST = "c" * 64
+RELEASE_ARTIFACT = "d" * 64
+DEPLOYMENT_RECEIPT = "e" * 64
 KEY = b"isolated-test-only-independent-auditor-key-not-a-real-production-key"
 NOW = datetime(2026, 11, 25, 20, tzinfo=UTC)
 
@@ -77,11 +79,15 @@ def write_fixture(root, change=None):
         change(rows)
     evidence = {}
     for name in ARTIFACTS:
-        data = {**rows[name], "source_sha": SHA, "environment": "production"}
+        data = {**rows[name], "source_sha": SHA, "environment": "production",
+                "release_artifact_sha256": RELEASE_ARTIFACT,
+                "deployment_receipt_sha256": DEPLOYMENT_RECEIPT}
         raw = json.dumps(data, ensure_ascii=False).encode()
         (root / f"{name}.json").write_bytes(raw)
         evidence[name] = {"path": f"{name}.json", "sha256": hashlib.sha256(raw).hexdigest()}
-    manifest = {"schema_version": 1, "source_sha": SHA, "auditor_source_sha": AUDITOR_SHA,
+    manifest = {"schema_version": 2, "source_sha": SHA, "auditor_source_sha": AUDITOR_SHA,
+                "release_artifact_sha256": RELEASE_ARTIFACT,
+                "deployment_receipt_sha256": DEPLOYMENT_RECEIPT,
                 "auditor_id": "independent-reviewer", "run_id": "audit-run-1",
                 "captured_at": stamp(NOW - timedelta(minutes=5)), "artifacts": evidence}
     raw = json.dumps(manifest).encode()
@@ -105,6 +111,8 @@ def test_synthetic_signed_fixture_only_tests_verifier_logic(tmp_path):
     report = verify(write_fixture(tmp_path))
     assert report["highest_certifiable_level"] == "L6"
     assert all(x == "PASS" for x in report["checks"].values())
+    assert report["provenance"]["release_artifact_sha256"] == RELEASE_ARTIFACT
+    assert report["provenance"]["deployment_receipt_sha256"] == DEPLOYMENT_RECEIPT
     # Production acceptance additionally requires the independently controlled key,
     # original external receipts, authorised deployment and actual elapsed time.
 
@@ -179,3 +187,39 @@ def test_missing_actual_elapsed_time_blocks_8h_and_72h(tmp_path):
     assert result["checks"]["L04"] == "BLOCKED"
     assert result["checks"]["L05"] == "BLOCKED"
     assert result["checks"]["L09"] == "PASS"
+
+
+
+@pytest.mark.parametrize("field", ["release_artifact_sha256", "deployment_receipt_sha256"])
+def test_signed_manifest_release_identity_cannot_drift(tmp_path, field):
+    write_fixture(tmp_path)
+    path = tmp_path / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest[field] = "f" * 64
+    raw = json.dumps(manifest).encode()
+    path.write_bytes(raw)
+    (tmp_path / "manifest.hmac").write_text(hmac.new(KEY, raw, hashlib.sha256).hexdigest())
+    report = verify(tmp_path)
+    assert report["checks"]["L01"] == "BLOCKED"
+    assert report["levels"]["L6"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("field", ["release_artifact_sha256", "deployment_receipt_sha256"])
+def test_resigned_raw_artifact_cannot_switch_deployment_identity(tmp_path, field):
+    write_fixture(tmp_path)
+    artifact = tmp_path / "model.json"
+    data = json.loads(artifact.read_text())
+    data[field] = "f" * 64
+    raw_artifact = json.dumps(data).encode()
+    artifact.write_bytes(raw_artifact)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["artifacts"]["model"]["sha256"] = hashlib.sha256(raw_artifact).hexdigest()
+    raw_manifest = json.dumps(manifest).encode()
+    manifest_path.write_bytes(raw_manifest)
+    (tmp_path / "manifest.hmac").write_text(
+        hmac.new(KEY, raw_manifest, hashlib.sha256).hexdigest()
+    )
+    report = verify(tmp_path)
+    assert report["checks"]["L01"] == "BLOCKED"
+    assert report["highest_certifiable_level"] is None
