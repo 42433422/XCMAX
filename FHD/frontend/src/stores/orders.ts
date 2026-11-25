@@ -8,6 +8,7 @@ interface OperationResult {
   success: boolean
   data?: unknown
   message?: string
+  stale?: boolean
 }
 
 export const useOrdersStore = defineStore('orders', () => {
@@ -33,47 +34,42 @@ export const useOrdersStore = defineStore('orders', () => {
     return []
   }
 
-  async function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
+  // The latest read alone may update state; slow filter responses are never authoritative.
+  let readRevision = 0
+  async function readOrders(request: () => Promise<unknown>, fallback: string): Promise<OperationResult> {
+    const revision = ++readRevision
     loading.value = true
     error.value = null
     try {
-      const data = await ordersApi.getOrders(params)
-      if (data?.success === false) {
-        error.value = data?.message || '加载订单失败'
+      const data = await request()
+      if (revision !== readRevision) return { success: false, stale: true }
+      const response = asRecord(data)
+      if (response.success === false) {
+        error.value = String(response.message || fallback)
         return { success: false, message: error.value }
       }
       orders.value = normalizeOrders(data)
       return { success: true }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '加载订单失败'
-      console.error('加载订单失败:', e)
+      if (revision !== readRevision) return { success: false, stale: true }
+      error.value = e instanceof Error ? e.message : fallback
+      console.error(fallback, e)
       return { success: false, message: error.value }
     } finally {
-      loading.value = false
+      if (revision === readRevision) loading.value = false
     }
   }
 
-  async function searchOrders(keyword: string): Promise<OperationResult> {
-    loading.value = true
-    error.value = null
-    try {
-      const data = await ordersApi.searchOrders(keyword)
-      if (data?.success === false) {
-        error.value = data?.message || '搜索订单失败'
-        return { success: false, message: error.value }
-      }
-      orders.value = normalizeOrders(data)
-      return { success: true }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '搜索订单失败'
-      console.error('搜索订单失败:', e)
-      return { success: false, message: error.value }
-    } finally {
-      loading.value = false
-    }
+  function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
+    return readOrders(() => ordersApi.getOrders(params), '加载订单失败')
+  }
+
+  function searchOrders(keyword: string): Promise<OperationResult> {
+    return readOrders(() => ordersApi.searchOrders(keyword), '搜索订单失败')
   }
 
   async function deleteOrder(orderNumber: string): Promise<OperationResult> {
+    ++readRevision // a business mutation invalidates older reads
     loading.value = true
     error.value = null
     try {
@@ -94,6 +90,7 @@ export const useOrdersStore = defineStore('orders', () => {
   }
 
   async function updateOrder(orderNumber: string, payload: Record<string, unknown>): Promise<OperationResult> {
+    ++readRevision // a business mutation invalidates older reads
     loading.value = true
     error.value = null
     try {
@@ -116,6 +113,7 @@ export const useOrdersStore = defineStore('orders', () => {
   }
 
   async function clearAllOrders(): Promise<OperationResult> {
+    ++readRevision // a business mutation invalidates older reads
     loading.value = true
     error.value = null
     try {

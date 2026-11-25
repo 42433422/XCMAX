@@ -196,6 +196,29 @@ describe('useOrdersStore', () => {
     expect(store.error).toBe('Server error')
   })
 
+  it('discards an older read when a newer search has completed', async () => {
+    let finishOlder!: (value: unknown) => void
+    ;(ordersApi.getOrders as any).mockImplementation(() => new Promise((resolve) => { finishOlder = resolve }))
+    const older = store.fetchOrders()
+    ;(ordersApi.searchOrders as any).mockResolvedValue({ success: true, data: [{ id: 2, order_number: 'NEW' }] })
+    expect((await store.searchOrders('NEW')).success).toBe(true)
+    finishOlder({ success: true, data: [{ id: 1, order_number: 'OLD' }] })
+    expect(await older).toMatchObject({ success: false, stale: true })
+    expect(store.orders.map((order) => order.order_number)).toEqual(['NEW'])
+    expect(store.loading).toBe(false)
+  })
+
+  it('does not restore cleared orders from a response started before deletion', async () => {
+    let finishOlder!: (value: unknown) => void
+    ;(ordersApi.getOrders as any).mockImplementation(() => new Promise((resolve) => { finishOlder = resolve }))
+    const older = store.fetchOrders()
+    ;(ordersApi.clearAllOrders as any).mockResolvedValue({ success: true })
+    expect((await store.clearAllOrders()).success).toBe(true)
+    finishOlder({ success: true, data: [{ id: 1, order_number: 'REMOVED' }] })
+    expect(await older).toMatchObject({ stale: true })
+    expect(store.orders).toEqual([])
+  })
+
   it('orderCount computed returns correct count', async () => {
     ;(ordersApi.getOrders as any).mockResolvedValue({
       data: [{ id: 1 }, { id: 2 }, { id: 3 }],
