@@ -564,6 +564,28 @@ def test_verified_child_receipts_are_projected_not_fabricated(setup_runtime):
     assert result["run_events"][-1]["event_type"] == "runtime.xiaox.finished"
 
 
+
+@pytest.mark.parametrize("same_provenance", [True, False])
+def test_legacy_child_receipt_projection_preserves_original_record(same_provenance):
+    run = Store().run
+    rows = [receipt()]
+    runtime._project_child_calls(run, rows)
+    previous = run.tool_calls[0]
+    previous.call_id = previous.call_id.replace("xiaox_", "codex_", 1)
+    previous.metadata["source"] = "codex_child_receipt"
+    if not same_provenance:
+        previous.metadata["child_run_id"] = "another-child"
+    original = copy.deepcopy(previous.to_dict())
+
+    runtime._project_child_calls(run, rows)
+    runtime._project_child_calls(run, rows)
+
+    assert run.tool_calls[0].to_dict() == original
+    assert len(run.tool_calls) == (1 if same_provenance else 2)
+    if not same_provenance:
+        assert run.tool_calls[1].metadata["child_run_id"] == "run-child"
+
+
 def test_verified_operations_do_not_satisfy_a_missing_original_goal(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])

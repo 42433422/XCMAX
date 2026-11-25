@@ -117,6 +117,13 @@ def _input_text(
 def _project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
     """Display child receipts while retaining their original verification owner."""
     known = {call.call_id for call in run.tool_calls}
+    # Historical display records remain immutable; only exact child provenance
+    # can identify a pre-rename projection of the same persisted receipt.
+    legacy = {
+        (call.call_id, call.metadata.get("child_run_id"), call.metadata.get("child_call_id"))
+        for call in run.tool_calls
+        if (call.metadata or {}).get("source") == "codex_child_receipt"
+    }
     for row in rows:
         child_id = str(row.get("child_run_id") or "")
         if not child_id:
@@ -124,10 +131,9 @@ def _project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
         for raw in (row.get("receipt") or {}).get("tool_calls") or []:
             if not isinstance(raw, dict) or not raw.get("call_id"):
                 continue
-            projection_id = (
-                "xiaox_" + hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
-            )
-            if projection_id in known:
+            suffix = hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
+            projection_id = "xiaox_" + suffix
+            if projection_id in known or ("codex_" + suffix, child_id, raw["call_id"]) in legacy:
                 continue
             payload = copy.deepcopy(raw)
             payload["call_id"] = projection_id
