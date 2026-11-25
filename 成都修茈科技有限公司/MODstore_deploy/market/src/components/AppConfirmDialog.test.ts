@@ -54,4 +54,12 @@ describe('全局敏感操作确认弹窗', () => {
     await wrapper!.get('.app-confirm-dialog__confirm').trigger('click')
     expect(await second.answer).toBe(true)
   })
+  it('simultaneous sensitive confirmations reject the previous pending action', async () => {
+    const prior = confirmDanger({ title: '删除 A', message: '第一次请求' })
+    const current = confirmDanger({ title: '删除 B', message: '第二次请求' })
+    expect(await prior).toBe(false)
+    resolveDangerConfirm(false)
+    expect(await current).toBe(false)
+  })
+
 })
