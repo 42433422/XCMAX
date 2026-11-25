@@ -194,7 +194,10 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
     ) == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
-@pytest.mark.parametrize("tamper", ["no_outbox_regression", "release_changed", "snapshot_changed"])
+@pytest.mark.parametrize(
+    "tamper",
+    ["no_outbox_regression", "no_outbox_source_fault", "release_changed", "snapshot_changed"],
+)
 def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
     released_customer_training, tamper
 ):
@@ -210,8 +213,13 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
         progress = effects["experiment"]
         effects["training_regression_recheck"] = {
             "source": "original_experiment_outbox",
-            "reason": "workflow_execution_stop_loss",
+            "reason": (
+                "workflow_postpromotion_source_unverified"
+                if tamper == "no_outbox_source_fault"
+                else "workflow_execution_stop_loss"
+            ),
             "request_id": run["id"],
+            "promoted_at": progress["closed_at"],
             "release_sha": (
                 "f" * 40 if tamper == "release_changed" else progress["release_sha"]
             ),
@@ -364,7 +372,29 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         assert postpromotion_stop_reason(db, row, run["spec"]) == (
             "workflow_postpromotion_source_unverified"
         )
-        db.rollback()
+        db.commit()
+
+    # Unverifiable evidence must trigger the original withdrawal tail, not
+    # merely a temporary traffic guard or a fabricated business regression.
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert row.status == "impact_recheck"
+        effects = json_loads(row.effects_json, {})
+        assert effects["training_regression_recheck"]["reason"] == (
+            "workflow_postpromotion_source_unverified"
+        )
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "workflow_postpromotion_source_unverified"
+    assert second["experiment"]["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])

@@ -512,7 +512,8 @@ def read_training_impact(request_id, state):
                 bound = (
                     isinstance(recheck, dict)
                     and recheck.get("source") == "original_experiment_outbox"
-                    and recheck.get("reason") == "workflow_execution_stop_loss"
+                    and recheck.get("reason")
+                    in {"workflow_execution_stop_loss", "workflow_postpromotion_source_unverified"}
                     and recheck.get("request_id") == request_id
                     and recheck.get("release_sha") == progress.get("release_sha")
                     and recheck.get("release_sha") == delivery.get("release_sha")
@@ -523,9 +524,11 @@ def read_training_impact(request_id, state):
                     and bool(recheck["promoted_at"])
                     and policy == source["growthbook"]
                     and (
-                        execution_stop_loss(db, row, policy)
-                        or postpromotion_stop_reason(db, row, policy)
-                        == "workflow_execution_stop_loss"
+                        (
+                            recheck["reason"] == "workflow_execution_stop_loss"
+                            and execution_stop_loss(db, row, policy)
+                        )
+                        or postpromotion_stop_reason(db, row, policy) == recheck["reason"]
                     )
                 )
             except (KeyError, TypeError, ValueError):
@@ -554,7 +557,11 @@ def read_training_impact(request_id, state):
                 (
                     "experiment_inconclusive"
                     if experiment.get("inconclusive")
-                    else "experiment_regression"
+                    else (
+                        "workflow_postpromotion_source_unverified"
+                        if reject and recheck["reason"] == "workflow_postpromotion_source_unverified"
+                        else "experiment_regression"
+                    )
                 ),
             )
     return {
@@ -599,7 +606,9 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         and recheck.get("request_id") == row.id
         and recheck.get("release_sha") == progress.get("release_sha")
         and recheck.get("final_snapshot_sha256") == progress.get("final_snapshot_sha256")
-        and recheck.get("reason") == "workflow_execution_stop_loss"
+        and recheck.get("source") == "original_experiment_outbox"
+        and recheck.get("reason")
+        in {"workflow_execution_stop_loss", "workflow_postpromotion_source_unverified"}
         and bool(recheck.get("promoted_at"))
     )
     start = aware(recheck["promoted_at"] if recheck_bound else progress.get("closed_at"))
@@ -820,11 +829,14 @@ def request_postpromotion_regression_rechecks():
                                 )
                             )
                     continue
-                if block != "workflow_execution_stop_loss":
+                if block not in {
+                    "workflow_execution_stop_loss",
+                    "workflow_postpromotion_source_unverified",
+                }:
                     continue
                 effects["training_regression_recheck"] = {
                     "source": "original_experiment_outbox",
-                    "reason": "workflow_execution_stop_loss",
+                    "reason": block,
                     "request_id": row.id,
                     "release_sha": experiment.get("release_sha"),
                     "final_snapshot_sha256": experiment.get("final_snapshot_sha256"),
