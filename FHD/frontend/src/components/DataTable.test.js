@@ -120,6 +120,43 @@ describe('Business data table', () => {
     expect(view.findAll('tbody tr[data-row-id]')).toHaveLength(2)
   })
 
+  it('supports accessible column widths, numeric local sorting and explicit remote sorting', async () => {
+    const data = [{ id: 1, quantity: 20 }, { id: 2, quantity: 3 }]
+    const view = open({ columns: [{ key: 'quantity', label: '库存', sortable: true, width: 120, minWidth: 80, align: 'right' }], data })
+    expect(view.get('thead th:nth-child(1)').attributes('style')).toContain('width: 120px')
+    const heading = view.get('.data-table-sort')
+    await heading.trigger('click')
+    expect(view.findAll('tbody tr[data-row-id]').map((row) => row.attributes('data-row-id'))).toEqual(['2', '1'])
+    expect(view.get('thead th').attributes('aria-sort')).toBe('ascending')
+    expect(view.emitted('sort-change')?.at(-1)).toEqual([{ key: 'quantity', order: 'ascending', scope: 'loaded' }])
+    await heading.trigger('click')
+    expect(view.findAll('tbody tr[data-row-id]').map((row) => row.attributes('data-row-id'))).toEqual(['1', '2'])
+    await heading.trigger('click')
+    expect(view.get('thead th').attributes('aria-sort')).toBe('none')
+    await view.setProps({ remoteSort: true })
+    await heading.trigger('click')
+    expect(view.emitted('sort-change')?.at(-1)?.[0]).toMatchObject({ scope: 'server' })
+    expect(view.findAll('tbody tr[data-row-id]').map((row) => row.attributes('data-row-id'))).toEqual(['1', '2'])
+  })
+
+  it('shows read failures rather than a misleading empty result and allows retry', async () => {
+    const view = open({ error: '客户读取失败', data: [] })
+    expect(view.get('tbody [role="alert"]').text()).toContain('客户读取失败')
+    await view.get('.data-table-retry').trigger('click')
+    expect(view.emitted('retry')).toEqual([[]])
+    await view.setProps({ error: '' })
+    expect(view.get('.empty-state').text()).toBe('暂无数据')
+  })
+
+  it('synchronizes select-all with a controlled external selection', async () => {
+    const view = open({ selectable: true, rowKey: 'recordId', data: [{ id: 7, recordId: 'A' }, { id: 8, recordId: 'B' }], selectedIds: ['A', 'B'] })
+    expect(view.get('thead input').element.checked).toBe(true)
+    await view.setProps({ selectedIds: ['B'] })
+    await nextTick()
+    expect(view.get('thead input').element.checked).toBe(false)
+    expect(view.findAll('tbody input').map((item) => item.element.checked)).toEqual([false, true])
+  })
+
   it('requests the next page only near the bottom of the actual scroll container', async () => {
     const view = open({ data: [{ id: 1, name: 'A' }] })
     const scroll = view.get('.data-table-wrapper')

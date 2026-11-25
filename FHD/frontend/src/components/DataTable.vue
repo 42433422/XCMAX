@@ -4,9 +4,14 @@
       <thead>
         <tr>
           <th v-if="selectable">
-            <input type="checkbox" v-model="localSelectAll" @change.stop="handleSelectAll" />
+            <input type="checkbox" v-model="localSelectAll" aria-label="选择全部已加载记录" @change.stop="handleSelectAll" />
           </th>
-          <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
+          <th v-for="col in columns" :key="col.key" :style="columnStyle(col)" :aria-sort="col.sortable ? (sortKey === col.key ? sortDirection : 'none') : undefined">
+            <button v-if="col.sortable" type="button" class="data-table-sort" :title="remoteSort ? '交由服务端排序' : '仅对已加载记录排序'" @click="toggleSort(col.key)">
+              {{ col.label }} <span aria-hidden="true">{{ sortKey === col.key ? (sortDirection === 'ascending' ? '↑' : sortDirection === 'descending' ? '↓' : '↕') : '↕' }}</span>
+            </button>
+            <template v-else>{{ col.label }}</template>
+          </th>
           <th v-if="$slots.actions">操作</th>
         </tr>
       </thead>
@@ -15,7 +20,10 @@
           <td :colspan="totalColumns" class="empty-state">加载中...</td>
         </tr>
         <tr v-else-if="localData.length === 0 && !loading">
-          <td :colspan="totalColumns" class="empty-state">{{ emptyText }}</td>
+          <td v-if="error" :colspan="totalColumns" class="empty-state" role="alert">
+            {{ error }} <button type="button" class="data-table-retry" @click="emit('retry')">重试</button>
+          </td>
+          <td v-else :colspan="totalColumns" class="empty-state">{{ emptyText }}</td>
         </tr>
         <template v-else>
           <tr
@@ -28,12 +36,12 @@
               <input
                 type="checkbox"
                 :value="getRowId(row)"
+                :aria-label="`选择记录 ${String(getRowId(row))}`"
                 v-model="localSelectedIds"
                 @click.stop
-                @change="handleCheckboxChange(row, $event)"
               />
             </td>
-            <td v-for="col in columns" :key="col.key">
+            <td v-for="col in columns" :key="col.key" :style="columnStyle(col)">
               <slot :name="`cell-${col.key}`" :row="row" :value="getCellValue(row, col)">
                 {{ formatCell(row, col) }}
               </slot>
@@ -118,9 +126,11 @@ const props = defineProps({
     type: String,
     default: '500px',
   },
+  error: { type: String, default: '' },
+  remoteSort: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:selectedIds', 'select-change', 'row-click', 'load-more'])
+const emit = defineEmits(['update:selectedIds', 'select-change', 'row-click', 'load-more', 'sort-change', 'retry'])
 
 const tableWrapper = ref(null)
 const slots = useSlots()
@@ -148,6 +158,37 @@ const totalColumns = computed(() => {
 })
 
 const localData = computed(() => props.data)
+const sortKey = ref('')
+const sortDirection = ref('none')
+const sortCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
+const columnStyle = (column) => {
+  const length = (value) => typeof value === 'number' ? `${value}px` : value
+  return {
+    width: length(column.width),
+    minWidth: length(column.minWidth),
+    textAlign: ['left', 'center', 'right'].includes(column.align) ? column.align : undefined,
+  }
+}
+function toggleSort(key) {
+  sortDirection.value = sortKey.value !== key || sortDirection.value === 'none'
+    ? 'ascending' : sortDirection.value === 'ascending' ? 'descending' : 'none'
+  sortKey.value = sortDirection.value === 'none' ? '' : key
+  page.value = 0
+  emit('sort-change', { key: sortKey.value || null, order: sortDirection.value, scope: props.remoteSort ? 'server' : 'loaded' })
+}
+const sortedData = computed(() => {
+  if (props.remoteSort || !sortKey.value) return localData.value
+  const column = props.columns.find((item) => item.key === sortKey.value && item.sortable)
+  if (!column) return localData.value
+  const compare = (a, b) => {
+    const left = getCellValue(a, column)
+    const right = getCellValue(b, column)
+    if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1
+    if (typeof left === 'number' && typeof right === 'number') return left - right
+    return sortCollator.compare(String(left), String(right))
+  }
+  return [...localData.value].sort((a, b) => (sortDirection.value === 'descending' ? -1 : 1) * compare(a, b))
+})
 // Real table rows support arbitrary heights and custom slot contents.
 // Limit mounted rows independently of the caller's server-side paging.
 const PAGE_SIZE = 100
@@ -155,7 +196,7 @@ const page = ref(0)
 const pageCount = computed(() => Math.max(1, Math.ceil(localData.value.length / PAGE_SIZE)))
 const pageStart = computed(() => page.value * PAGE_SIZE)
 const isLastPage = computed(() => page.value === pageCount.value - 1)
-const visibleData = computed(() => localData.value.slice(pageStart.value, pageStart.value + PAGE_SIZE))
+const visibleData = computed(() => sortedData.value.slice(pageStart.value, pageStart.value + PAGE_SIZE))
 
 function changePage(next) {
   page.value = Math.max(0, Math.min(next, pageCount.value - 1))
@@ -193,9 +234,12 @@ watch(
   { deep: true },
 )
 
-const getRowId = (row) => {
-  return row.id ?? row[props.rowKey] ?? row
-}
+const getRowId = (row) => row[props.rowKey] ?? row.id ?? row
+
+watch([localSelectedIds, localData], () => {
+  localSelectAll.value = localData.value.length > 0
+    && localData.value.every((row) => localSelectedIds.value.includes(getRowId(row)))
+}, { deep: true, immediate: true })
 
 const isFocusedRow = (row) => {
   const id = String(props.highlightId || '')
@@ -207,7 +251,7 @@ watch(
   async () => {
     const id = String(props.highlightId || '')
     if (!id || !tableWrapper.value) return
-    const index = localData.value.findIndex((row) => String(getRowId(row) ?? '') === id)
+    const index = sortedData.value.findIndex((row) => String(getRowId(row) ?? '') === id)
     if (index < 0) return
     const targetPage = Math.floor(index / PAGE_SIZE)
     if (targetPage !== page.value) changePage(targetPage)
@@ -238,19 +282,7 @@ const formatCell = (row, col) => {
 }
 
 const handleSelectAll = () => {
-  if (localSelectAll.value) {
-    localSelectedIds.value = localData.value.map((row, index) => getRowId(row))
-  } else {
-    localSelectedIds.value = []
-  }
-}
-
-const handleCheckboxChange = (row, event) => {
-  console.log('[DataTable] checkbox changed:', getRowId(row), event.target.checked)
-}
-
-const handleRowClick = (row, index) => {
-  emit('row-click', { row, index })
+  localSelectedIds.value = localSelectAll.value ? localData.value.map(getRowId) : []
 }
 
 defineExpose({
@@ -260,7 +292,7 @@ defineExpose({
   },
   selectAll: () => {
     localSelectAll.value = true
-    localSelectedIds.value = localData.value.map((row, index) => getRowId(row))
+    localSelectedIds.value = localData.value.map(getRowId)
   },
 })
 </script>
@@ -285,6 +317,17 @@ defineExpose({
   font-size: 13px;
 }
 
+.data-table-sort,
+.data-table-retry {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.data-table-sort { display: inline-flex; align-items: center; gap: 6px; font-weight: inherit; padding: 0; }
+.data-table-sort:focus-visible, .data-table-retry:focus-visible { outline: 2px solid var(--primary-color, #0b72d9); outline-offset: 3px; }
+.data-table-retry { margin-left: 10px; text-decoration: underline; }
 .data-table th,
 .data-table td {
   padding: 12px 14px;
