@@ -202,3 +202,55 @@ def test_diagnostic_contract_rejects_client_identity_and_unbounded_scan():
     for invalid in [{"limit_per_source": 6}, {"limit_per_source": True}, {"tenant_id": 22}]:
         with pytest.raises(ValidationError):
             INPUT_MODELS["perceive"].model_validate(invalid)
+
+
+
+def test_perception_http_reads_real_authorized_order_without_claiming_kpis(
+    trusted_actor, monkeypatch
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.db.models.sales import SalesOrder
+    from app.fastapi_routes.domains.agent.task_routes import router
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(role="perception-reader", permissions=["tool.sales.query"])
+    monkeypatch.setattr("app.db.SessionLocal", actor.factory)
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        order = SalesOrder(order_no="PERCEPTION-REAL", state="confirmed", total_amount=10)
+        db.add(order)
+        db.flush()
+        order_id = str(order.id)
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        unauthorized = client.post(
+            "/api/enterprise/cognition",
+            json={"action": "perceive", "params": {}},
+        )
+        assert unauthorized.status_code == 401
+        response = client.post(
+            "/api/enterprise/cognition",
+            json={"action": "perceive", "params": {"limit_per_source": 2}},
+            headers=actor.headers,
+        )
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        assert payload["business_data_written"] is False
+        assert payload["enterprise_wide_verified"] is False
+        assert payload["observation_verified"] is True
+        sales = payload["domains"]["B03"]["sources"][0]
+        assert sales["status"] in {"fresh_sample", "partial_sample"}
+        rows = [sample["snapshot"] for sample in sales["samples"] if sample["status"] == "fresh"]
+        assert any(row["entity_id"] == order_id for row in rows)
+        assert all(row["tenant_id"] == str(actor.tenant_id) for row in rows)
+        assert payload["domains"]["B01"]["required_metrics"]["revenue"]["knowledge_kind"] == "unknown"
+        assert payload["domains"]["B01"]["sources"][0]["status"] == "permission_denied"
+        forged = client.post(
+            "/api/enterprise/cognition",
+            json={"action": "perceive", "params": {"tenant_id": actor.tenant_id + 1}},
+            headers=actor.headers,
+        )
+        assert forged.status_code == 422
