@@ -77,7 +77,7 @@ class PackageInstaller:
                     self._logger.warning("无法删除临时 Mod 包: %s", path)
 
     def _install(
-        self, path: str, *, verify_signature: bool, activate: bool
+        self, path: str, *, verify_signature: bool, activate: bool, owner_scope: str = ""
     ) -> ModStoreInstallResult:
         if self._artifact(path) == ARTIFACT_EMPLOYEE_PACK:
             ok, message = self._employees().install_from_package(
@@ -87,7 +87,7 @@ class PackageInstaller:
                 self._mark_tenant_owned(path)
             return ModStoreInstallResult(success=bool(ok), message=message, data=None)
         ok, message, metadata = self._mods().install_mod_package(
-            path, verify_signature=verify_signature, activate=activate
+            path, verify_signature=verify_signature, activate=activate, owner_scope=owner_scope
         )
         data = (
             dataclasses.asdict(metadata)
@@ -176,7 +176,14 @@ class PackageInstaller:
                 files.normalized, verify_signature=install_verify, activate=activate
             )
 
-    async def upload(self, file: UploadFile, activate: bool) -> ModStoreInstallResult:
+    async def upload(
+        self,
+        file: UploadFile,
+        activate: bool,
+        *,
+        owner_scope: str = "",
+        owner_scope_check: Callable[[], str] | None = None,
+    ) -> ModStoreInstallResult:
         closed = False
         try:
             if not (file.filename or "").lower().endswith((".xcemp", ".zip")):
@@ -199,7 +206,14 @@ class PackageInstaller:
                 finally:
                     closed = True
                 files.normalized = self._normalize_upload(files.source)
-                return self._install(files.normalized, verify_signature=True, activate=activate)
+                if owner_scope_check is not None and owner_scope_check() != owner_scope:
+                    raise HTTPException(status_code=403, detail="上传期间工作区归属已变更")
+                return self._install(
+                    files.normalized,
+                    verify_signature=True,
+                    activate=activate,
+                    owner_scope=owner_scope,
+                )
         finally:
             if not closed:
                 await file.close()

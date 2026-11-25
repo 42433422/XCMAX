@@ -4,7 +4,7 @@ on:
   push:
     branches: [fix/employee-org-dispatch-guard-20261125]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [fix/p0-rbac-atomic-revocation-20261125]
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: employee-ci-only
         ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       XCAGI_TEST_POSTGRES_URL: postgresql+psycopg://postgres:employee-ci-only@127.0.0.1:5432/postgres
     defaults:
@@ -55,13 +55,17 @@ jobs:
             -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "${requirements[@]}"
           uv pip check --system --python "$(command -v python)"
 
-      - name: Ruff auth and employee regression
+      - name: Ruff auth, employee and Mod regression
         run: |
           ruff check app/application/rbac_app_service.py app/security/web_jwt.py \
             tests/test_application/test_employee_handoff_durability.py \
             tests/test_application/test_employee_projection_identity_binding.py \
             tests/test_application/test_group_chat_organization_dispatch_guards.py \
-            tests/test_security/test_web_jwt_revocation.py
+            tests/test_security/test_web_jwt_revocation.py \
+            tests/test_application/test_rbac_atomic_revocation.py \
+            app/fastapi_routes/mod_store/install_routes.py app/fastapi_routes/mod_store/packages.py \
+            tests/test_deep_mods/test_mod_uninstall_authorization.py \
+            tests/test_routes/test_mod_store_component_boundaries.py
 
       - name: Cross-domain original execution and PG readback
         run: |
@@ -72,6 +76,10 @@ jobs:
             tests/test_application/test_employee_handoff_durability.py::test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked \
             tests/test_application/test_employee_projection_identity_binding.py \
             tests/test_application/test_group_chat_organization_dispatch_guards.py \
+            tests/test_application/test_enterprise_projection.py::test_foreign_tenant_owner_and_rbac_cannot_reuse_cache \
+            tests/test_application/test_enterprise_projection.py::test_mod_scope_and_owner_change_revalidated \
+            tests/test_deep_mods/test_mod_uninstall_authorization.py \
+            tests/test_routes/test_mod_store_component_boundaries.py \
             --junitxml=rbac-employee-handoff.xml
 
       - name: Reject skipped cross-domain checks
@@ -95,7 +103,23 @@ jobs:
                   matched[0].find(tag) is not None for tag in ("skipped", "error", "failure")
               ):
                   raise SystemExit("BLOCKED: missing/failed cross-domain check: " + required)
-          print("PASS: same HEAD PostgreSQL revocation + in-flight employee handoff")
+          # Parameterized cases must all be present, and none may be skipped.
+          for prefix, count in (
+              ("test_signed_upload_binds_receipt_to_authenticated_workspace", 2),
+              ("test_invalid_credentials_cannot_fall_back_to_anonymous_global_upload", 3),
+              ("test_upload_rechecks_session_after_normalization_before_install", 1),
+              ("test_anonymous_upload_keeps_signed_global_install_unowned", 1),
+              ("test_other_customer_cannot_unload_or_remove_owner_install", 2),
+              ("test_admin_cannot_remove_another_accounts_install", 1),
+              ("test_foreign_tenant_owner_and_rbac_cannot_reuse_cache", 1),
+              ("test_mod_scope_and_owner_change_revalidated", 1),
+          ):
+              matched = [c for c in cases if c.get("name", "").split("[", 1)[0] == prefix]
+              if len(matched) != count or any(
+                  c.find(tag) is not None for c in matched for tag in ("skipped", "error", "failure")
+              ):
+                  raise SystemExit("BLOCKED: missing/failed resource boundary check: " + prefix)
+          print("PASS: same HEAD PostgreSQL revocation + employee handoff + Mod and tenant boundaries")
           PY
 
       - name: Upload original JUnit

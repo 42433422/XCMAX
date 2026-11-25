@@ -90,14 +90,12 @@ def signed_runtime_mod(tmp_path, monkeypatch, mod_accounts):
     root.mkdir()
     monkeypatch.setattr(install_receipts, "_root", lambda _mods_root: root)
 
-    def install(
+    def build_package(
         *,
         mod_id="unknown-ui-fixture",
         version="1.0.0",
         content="export function mount() { return () => {} }",
-        owner="tenant:1",
         signed=True,
-        loaded=False,
         source=None,
     ):
         source = source or tmp_path / f"source-{mod_id}-{version}"
@@ -127,6 +125,12 @@ def signed_runtime_mod(tmp_path, monkeypatch, mod_accounts):
             include_signature=signed,
             private_key=str(secret) if signed else None,
         )
+        return package, source, manifest
+
+    def install(
+        *, mod_id="unknown-ui-fixture", owner="tenant:1", signed=True, loaded=False, **kwargs
+    ):
+        package, source, manifest = build_package(mod_id=mod_id, signed=signed, **kwargs)
         install_receipts.install_extracted(
             mods_root=str(root),
             extracted_root=str(source),
@@ -138,4 +142,4 @@ def signed_runtime_mod(tmp_path, monkeypatch, mod_accounts):
         )
         return root / mod_id
 
-    return SimpleNamespace(install=install, root=root)
+    return SimpleNamespace(build_package=build_package, install=install, root=root)
