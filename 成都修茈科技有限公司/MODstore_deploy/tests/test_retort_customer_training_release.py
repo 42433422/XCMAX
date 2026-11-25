@@ -110,7 +110,9 @@ def test_exact_released_and_running_treatment_reaches_original_promotion(
         assert effects["experiment"]["traffic"] == "candidate"
 
 
-def test_late_postpromotion_failure_reopens_original_training_compensation(released_customer_training):
+def test_late_postpromotion_failure_reopens_original_training_compensation(
+    released_customer_training,
+):
     from modstore_server.eventing.db_outbox import enqueue
 
     run = released_customer_training
@@ -226,13 +228,9 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
             ),
             "request_id": run["id"],
             "promoted_at": None if tamper == "clock_changed" else progress["closed_at"],
-            "release_sha": (
-                "f" * 40 if tamper == "release_changed" else progress["release_sha"]
-            ),
+            "release_sha": ("f" * 40 if tamper == "release_changed" else progress["release_sha"]),
             "final_snapshot_sha256": (
-                "f" * 64
-                if tamper == "snapshot_changed"
-                else progress["final_snapshot_sha256"]
+                "f" * 64 if tamper == "snapshot_changed" else progress["final_snapshot_sha256"]
             ),
         }
         row.status = "impact_recheck"
@@ -255,7 +253,7 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
 
 
 def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
-    released_customer_training
+    released_customer_training,
 ):
     from modstore_server.eventing.db_outbox import enqueue
 
@@ -316,7 +314,9 @@ def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
     assert training.request_postpromotion_regression_rechecks() == 0
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, run["id"])
-        assert len(json_loads(row.effects_json, {})["training_online_observations"]["snapshots"]) == 1
+        assert (
+            len(json_loads(row.effects_json, {})["training_online_observations"]["snapshots"]) == 1
+        )
 
 
 @pytest.mark.parametrize("fault", ["non_boolean", "wrong_stage", "reverse_time", "malformed_json"])

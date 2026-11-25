@@ -215,9 +215,7 @@ def postpromotion_stop_reason(db, row, spec):
     if original is None:
         return ""
     effects = json_loads(row.effects_json, {})
-    evidence = postpromotion_effect_snapshot(
-        db, row, spec, effects, observed_at=datetime.now(UTC)
-    )
+    evidence = postpromotion_effect_snapshot(db, row, spec, effects, observed_at=datetime.now(UTC))
     if evidence is None:
         # No snapshot is normal before promotion, but an already promoted
         # candidate must not continue with a missing/invalid rollout clock.

@@ -574,7 +574,8 @@ def read_training_impact(request_id, state):
                     if experiment.get("inconclusive")
                     else (
                         "workflow_postpromotion_source_unverified"
-                        if reject and recheck["reason"] == "workflow_postpromotion_source_unverified"
+                        if reject
+                        and recheck["reason"] == "workflow_postpromotion_source_unverified"
                         else "experiment_regression"
                     )
                 ),
@@ -648,10 +649,7 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         or progress.get("rollout_verified") is not True
         or not (
             recheck_bound
-            or (
-                progress.get("traffic") == "candidate"
-                and progress.get("decision") == "promote"
-            )
+            or (progress.get("traffic") == "candidate" and progress.get("decision") == "promote")
         )
     ):
         return None
@@ -736,13 +734,19 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
     sample_count = successes + failures
     return {
         "status": (
-            "source_unverified" if unverified else "observational_only" if sample_count else "unknown"
+            "source_unverified"
+            if unverified
+            else "observational_only" if sample_count else "unknown"
         ),
         "scope": "postpromotion_absolute_outcomes_not_causal_lift",
         "reason": (
             "invalid_original_receipts"
             if unverified
-            else "no_control_arm_after_rollout" if sample_count else "no_verified_postpromotion_outcomes"
+            else (
+                "no_control_arm_after_rollout"
+                if sample_count
+                else "no_verified_postpromotion_outcomes"
+            )
         ),
         "source": "original_experiment_outbox",
         "experiment_id": progress.get("experiment_id"),
@@ -803,9 +807,8 @@ def request_postpromotion_regression_rechecks():
                     policy, verified = approved_policy(row)
                 except (ValueError, KeyError, TypeError):
                     continue
-                if (
-                    verified.get("training_candidate") != source
-                    or policy != source.get("growthbook")
+                if verified.get("training_candidate") != source or policy != source.get(
+                    "growthbook"
                 ):
                     continue
                 from modstore_server.workflow_customer_feedback import (
@@ -826,9 +829,8 @@ def request_postpromotion_regression_rechecks():
                     history = existing.get("snapshots") if isinstance(existing, dict) else None
                     if history is None:
                         history = []
-                    if (
-                        not isinstance(history, list)
-                        or any(not isinstance(item, dict) for item in history)
+                    if not isinstance(history, list) or any(
+                        not isinstance(item, dict) for item in history
                     ):
                         continue
                     snapshot_date = observed_at.date().isoformat()

@@ -334,7 +334,6 @@ def _measured(db, execution, binding, due):
     return result["success"], result["evidence_sha256"], result["reason"]
 
 
-
 def reconcile_postpromotion_customer_outcomes(request_id, *, session):
     """Write product-outcome receipts separately from frozen randomized samples.
 

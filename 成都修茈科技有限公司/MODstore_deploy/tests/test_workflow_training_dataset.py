@@ -530,10 +530,7 @@ def test_business_sealing_scores_independent_reports_not_raw_model_grades(
     assert evidence["reason"] == "training_business_evidence_origin_unverified"
 
 
-
-@pytest.mark.parametrize(
-    "tamper", ["manifest_sha256", "source_evidence_sha256", "output_sha256"]
-)
+@pytest.mark.parametrize("tamper", ["manifest_sha256", "source_evidence_sha256", "output_sha256"])
 def test_paired_replay_cannot_claim_l5_from_swapped_source_or_missing_output(cases, tamper):
     bundle, tests, verified = _sealed_inputs(cases)
     evidence = verified[1, 1]["business_evidence"]

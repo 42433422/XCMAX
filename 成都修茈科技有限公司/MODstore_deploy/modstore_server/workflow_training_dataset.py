@@ -240,10 +240,7 @@ def seal_business_evidence(bundle, tests, verified, verdict):
                     isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha)
                     for sha in output.values()
                 )
-                and (
-                    verified[arm, index]["pass"] is False
-                    or set(output) == set(references)
-                )
+                and (verified[arm, index]["pass"] is False or set(output) == set(references))
             )
             if not source_bound:
                 return {
@@ -254,7 +251,9 @@ def seal_business_evidence(bundle, tests, verified, verdict):
                     "holdout_verified": False,
                     "reason": "training_business_evidence_origin_unverified",
                 }
-    development = [index for index, partition in enumerate(partitions) if partition == "development"]
+    development = [
+        index for index, partition in enumerate(partitions) if partition == "development"
+    ]
     holdout = [index for index, partition in enumerate(partitions) if partition == "holdout"]
     holdout_passed = bool(holdout) and all(verified[1, index]["pass"] is True for index in holdout)
     no_regression = all(

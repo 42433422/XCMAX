@@ -285,7 +285,6 @@ def test_rollout_new_graph_keeps_provenance_without_new_experimental_samples(cus
     assert observations(env["run"]) == before
 
 
-
 def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
     customer_workflow,
 ):
@@ -314,17 +313,13 @@ def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
     assert env["binding"]["rollout_admitted"] is True
     assert env["binding"]["metric_admitted"] is False
     business_receipts(env, acceptance_id="approved-followup-" + uuid4().hex)
-    Clock.value = parse_datetime(env["binding"]["customer_outcome_due_at"]) + timedelta(
-        seconds=1
-    )
+    Clock.value = parse_datetime(env["binding"]["customer_outcome_due_at"]) + timedelta(seconds=1)
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, env["run"]["id"])
         row.status = "completed"
         db.commit()
     with get_session_factory()() as db:
-        result = feedback.reconcile_postpromotion_customer_outcomes(
-            env["run"]["id"], session=db
-        )
+        result = feedback.reconcile_postpromotion_customer_outcomes(env["run"]["id"], session=db)
         assert result == {"observed": 1, "pending": 0}
         db.commit()
     with get_session_factory()() as db:
@@ -346,8 +341,11 @@ def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
 
         effects = json_loads(db.get(RetortEvolutionRun, env["run"]["id"]).effects_json, {})
         snapshot = postpromotion_effect_snapshot(
-            db, db.get(RetortEvolutionRun, env["run"]["id"]),
-            env["run"]["spec"], effects, observed_at=Clock.value,
+            db,
+            db.get(RetortEvolutionRun, env["run"]["id"]),
+            env["run"]["spec"],
+            effects,
+            observed_at=Clock.value,
         )
         assert snapshot["status"] == "observational_only"
         assert snapshot["successes"] == 1
@@ -355,9 +353,10 @@ def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
     assert feedback.reconcile_customer_executions(env["run"]["id"])["observed"] == 0
     assert observations(env["run"]) == original
     with get_session_factory()() as db:
-        assert feedback.reconcile_postpromotion_customer_outcomes(
-            env["run"]["id"], session=db
-        ) == {"observed": 0, "pending": 0}
+        assert feedback.reconcile_postpromotion_customer_outcomes(env["run"]["id"], session=db) == {
+            "observed": 0,
+            "pending": 0,
+        }
 
 
 def test_repeated_customer_executions_remain_one_account_for_failure_guard(customer_workflow):
