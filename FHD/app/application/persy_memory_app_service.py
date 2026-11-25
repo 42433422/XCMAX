@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
 import threading
+from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -68,6 +71,8 @@ from app.domain.user_memory.policy import is_recallable_memory
 from app.security.secrets_redactor import redact_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
+
 _SENSITIVE_PATTERN = re.compile(
     r"(?:password|passcode|api[_ -]?key|access[_ -]?token|secret|验证码|密码|密钥)",
     re.I,
@@ -80,6 +85,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
     def __init__(self, memory_service: UserMemoryService | None = None) -> None:
         self._memory_service = memory_service
         self._lock = threading.RLock()
+        self._review_cursors: OrderedDict[str, str] = OrderedDict()
 
     @property
     def memory_service(self) -> UserMemoryService:
@@ -164,6 +170,170 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             source=source,
         )
 
+    @staticmethod
+    def _auto_review_enabled() -> bool:
+        return (os.environ.get("XCAGI_MEMORY_AUTO_REVIEW") or "1").strip().lower() not in {
+            "0", "false", "off", "no",
+        }
+
+    def _historical_proof(
+        self,
+        access: DatasetAccessContext,
+        scope: str,
+        record: dict[str, Any],
+        sessions: dict[str, list[tuple]],
+    ) -> dict[str, Any] | None:
+        """Re-read server-owned chat history; a self-reported excerpt is not proof."""
+        from app.application.ai_chat.dialogue_memory import conversation_key
+        from app.domain.shared_services.conversation_service import ConversationService
+
+        for evidence in record.get("evidence") or []:
+            if not isinstance(evidence, dict) or evidence.get("kind") != "conversation_turn":
+                continue
+            if (
+                evidence.get("scope") != scope
+                or str(evidence.get("tenant_id") or "") != str(access.tenant_id)
+                or str(evidence.get("mod_id") or "") != str(access.mod_id or "")
+            ):
+                continue
+            session = str(evidence.get("session_id") or "")
+            excerpt = str(evidence.get("user_excerpt") or "")
+            if not session or review_explicit_capture(record, excerpt, scope) is None:
+                continue
+            key = conversation_key(
+                {
+                    "actor_id": access.actor_id,
+                    "tenant_id": access.tenant_id,
+                    "mod_id": access.mod_id,
+                    "session_id": session,
+                }
+            )
+            if not key:
+                continue
+            if session not in sessions:
+                sessions[session] = ConversationService().get_session_messages(
+                    session, limit=1000, user_id=access.actor_id
+                )
+            for row in sessions[session]:
+                if len(row) < 7 or row[3] != "user" or str(row[4]).strip() != excerpt:
+                    continue
+                try:
+                    metadata = json.loads(row[6]) if isinstance(row[6], str) else row[6]
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(metadata, dict):
+                    continue
+                harness = metadata.get("business_harness")
+                if (
+                    not isinstance(harness, dict)
+                    or harness.get("recall_bound") is not True
+                    or harness.get("conversation_key") != key
+                ):
+                    continue
+                return {
+                    "scope": scope,
+                    "actor_id": access.actor_id,
+                    "tenant_id": access.tenant_id,
+                    "mod_id": access.mod_id,
+                    "session_id": session,
+                    "user_excerpt": excerpt,
+                    "message_id": str(row[0]),
+                    "conversation_key": key,
+                }
+        return None
+
+    def _review_pending_owner(
+        self,
+        access: DatasetAccessContext,
+        scope: str,
+        *,
+        limit: int,
+        after: str,
+    ) -> dict[str, Any]:
+        owner = _memory_owner_id(access, scope)
+        if not owner:
+            return _scope_denied()
+        if not self._auto_review_enabled():
+            return {"success": True, "enabled": False, "examined": 0, "activated": 0}
+        rows = sorted(
+            (
+                row for row in self.memory_service.list_memories(owner, status="pending")
+                if str(row.get("memory_id") or "") > after
+            ),
+            key=lambda row: str(row["memory_id"]),
+        )
+        bounded = max(1, min(100, int(limit)))
+        selected = rows[:bounded]
+        sessions: dict[str, list[tuple]] = {}
+        results = []
+        activated = 0
+        for row in selected:
+            memory_id = str(row["memory_id"])
+            try:
+                proof = self._historical_proof(access, scope, row, sessions)
+                if proof is None:
+                    results.append({"memory_id": memory_id, "status": "pending", "reason": "source_not_verified"})
+                    continue
+                result = self.memory_service.auto_review_pending_memory(
+                    owner, memory_id, expected_revision=int(row.get("revision") or 1), proof=proof
+                )
+                state = str(result.get("review_status") or "pending")
+                activated += int(state == "active")
+                results.append(
+                    {
+                        "memory_id": memory_id,
+                        "status": state,
+                        "reason": result.get("reason"),
+                        "projection": result.get("projection"),
+                    }
+                )
+            except RECOVERABLE_ERRORS:
+                logger.warning("Historical memory review requires retry", exc_info=True)
+                results.append({"memory_id": memory_id, "status": "pending", "reason": "retry_required"})
+        return {
+            "success": True,
+            "enabled": True,
+            "scope": scope,
+            "examined": len(selected),
+            "activated": activated,
+            "next_cursor": str(selected[-1]["memory_id"]) if len(rows) > bounded else None,
+            "results": results,
+        }
+
+    def auto_review_pending(
+        self,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None,
+        scope: str = "user",
+        limit: int = 50,
+        after: str = "",
+    ) -> dict[str, Any]:
+        access = _coerce_access_context(access_context)
+        if access is None or not access.actor_id or not access.tenant_id:
+            return _scope_denied()
+        denied = _permission_denied(access, DATASET_WRITE_PERMISSION)
+        if denied is not None:
+            return denied
+        if scope not in {"user", "tenant", "global_preference"}:
+            return {"success": False, "error_code": "persy_memory_invalid_scope"}
+        return self._review_pending_owner(access, scope, limit=limit, after=after)
+
+    def _review_history_on_capture(
+        self, access: DatasetAccessContext, scope: str, owner_id: str
+    ) -> dict[str, Any]:
+        # Bounded opportunistic review only during an already-authorized write.
+        # Rotate through unreviewable items; the explicit cursor API can resume
+        # independently after a process restart.
+        with self._lock:
+            after = self._review_cursors.get(owner_id, "")
+        result = self._review_pending_owner(access, scope, limit=5, after=after)
+        with self._lock:
+            self._review_cursors[owner_id] = str(result.get("next_cursor") or "")
+            self._review_cursors.move_to_end(owner_id)
+            while len(self._review_cursors) > 512:
+                self._review_cursors.popitem(last=False)
+        return {key: result.get(key) for key in ("examined", "activated", "next_cursor")}
+
     def _capture_for_owner(
         self,
         *,
@@ -183,12 +353,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "no",
         }:
             return {"success": True, "created_count": 0, "candidates": []}
-        auto_review = (os.environ.get("XCAGI_MEMORY_AUTO_REVIEW") or "1").strip().lower() not in {
-            "0",
-            "false",
-            "off",
-            "no",
-        }
+        auto_review = self._auto_review_enabled()
         if not message or _SENSITIVE_PATTERN.search(message) or redact_text(message) != message:
             return {"success": True, "created_count": 0, "candidates": []}
         candidates = None
@@ -215,8 +380,17 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             candidates = extract_explicit_memories(message)
         if normalized_scope == "global_preference":
             candidates = [candidate for candidate in candidates if _personal_preference(candidate)]
+        history_review = {}
+        if auto_review:
+            try:
+                history_review = self._review_history_on_capture(access, normalized_scope, owner_id)
+            except RECOVERABLE_ERRORS:
+                logger.warning("Historical memory review deferred", exc_info=True)
+                history_review = {"status": "retry_required"}
         if not candidates:
-            return {"success": True, "created_count": 0, "candidates": []}
+            return {
+                "success": True, "created_count": 0, "candidates": [], "history_review": history_review
+            }
 
         captured: list[dict[str, Any]] = []
         failures: list[str] = []
@@ -259,6 +433,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "success": not failures,
             "created_count": created_count,
             "candidate_count": len(captured),
+            "history_review": history_review,
             "candidates": captured,
             "errors": failures,
         }

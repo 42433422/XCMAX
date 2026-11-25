@@ -278,6 +278,116 @@ class CandidateMemory:
         self.access.save_memory(user_id, memory)
         return {"success": True, "memory": dict(updated)}
 
+    @project_after_commit
+    @memory_transaction
+    def auto_review_pending(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        expected_revision: int,
+        proof: JsonObject,
+    ) -> dict[str, Any]:
+        """Review one unchanged candidate against an independently read chat receipt."""
+        from app.application.dataset_rag_app_service import DatasetAccessContext
+        from app.application.persy_memory_utils import _memory_owner_id, review_explicit_capture
+
+        def pending(reason: str) -> dict[str, Any]:
+            return {"success": True, "review_status": "pending", "reason": reason}
+
+        scope = str(proof.get("scope") or "")
+        if scope not in {"user", "tenant", "global_preference"}:
+            return pending("invalid_scope")
+        access = DatasetAccessContext(
+            actor_id=str(proof.get("actor_id") or ""),
+            tenant_id=str(proof.get("tenant_id") or ""),
+            mod_id=str(proof.get("mod_id") or ""),
+        )
+        if not access.actor_id or not access.tenant_id or _memory_owner_id(access, scope) != user_id:
+            return pending("scope_mismatch")
+        if not proof.get("message_id") or not proof.get("conversation_key"):
+            return pending("source_receipt_missing")
+        memory = self.access.get_memory(user_id)
+        if memory is None:
+            return pending("not_found")
+        idx, record = self.ports.find_record(memory, memory_id)
+        if record is None or record.get("status") != "pending":
+            return pending("not_pending")
+        if (
+            int(record.get("revision") or 1) != expected_revision
+            or record.get("history")
+            or record.get("correction_count")
+        ):
+            return pending("revision_changed")
+        if record.get("source") != "chat_trace" or record.get("source_policy") != "observed_pending":
+            return pending("unsupported_source")
+        if not any(
+            isinstance(item, dict)
+            and item.get("kind") == "conversation_turn"
+            and all(
+                str(item.get(key) or "") == str(proof.get(key) or "")
+                for key in ("scope", "tenant_id", "mod_id", "session_id", "user_excerpt")
+            )
+            for item in record.get("evidence") or []
+        ):
+            return pending("source_evidence_changed")
+        reviewed = review_explicit_capture(record, str(proof["user_excerpt"]), scope)
+        if reviewed is None:
+            return pending("review_policy_not_met")
+        fingerprint = self.ports.fingerprint(
+            reviewed["memory_type"], reviewed["key"], reviewed["value"]
+        )
+        for other in memory.memory_v2_records:
+            if other.get("memory_id") == memory_id:
+                continue
+            # Canonicalization must not revive rejected or deleted values,
+            # including historical revisions of a different memory ID.
+            if other.get("fingerprint") == fingerprint and other.get("status") in {
+                "active", "deleted", "rejected"
+            }:
+                return pending("duplicate_or_revoked")
+            if any(
+                (entry.get("previous") or {}).get("fingerprint") == fingerprint
+                for entry in other.get("history") or []
+                if entry.get("action") in {"correct", "confirm"}
+            ):
+                return pending("superseded")
+            if other.get("status") == "active" and other.get("key") == reviewed["key"]:
+                return pending("conflicting_active_key")
+        updated = {**record, **reviewed, "fingerprint": fingerprint}
+        invalid = validate_relation_value(updated["value"])
+        if invalid is not None:
+            return pending("invalid_relation")
+        if relation_write_conflicts(memory.memory_v2_records, updated):
+            return pending("conflicting_relation")
+        now = self.access.now()
+        updated.pop("conflict_review", None)
+        updated.update(
+            status="active",
+            source_policy="personal_auto_saved" if scope == "user" else "capture_auto_reviewed",
+            auto_review_policy="historical_direct_assertion_v1",
+            auto_confirm_allowed=True,
+            requires_user_confirmation=False,
+            eligible_for_planner=True,
+            auto_saved_at=now,
+            confirmed_at=now,
+            updated_at=now,
+            auto_review_receipt={
+                "message_id": str(proof["message_id"]),
+                "conversation_key": str(proof["conversation_key"]),
+                "session_id": str(proof["session_id"]),
+                "actor_id": access.actor_id,
+                "tenant_id": access.tenant_id,
+                "mod_id": access.mod_id,
+                "reviewed_at": now,
+            },
+        )
+        _advance_revision(record, updated, action="confirm", at=now)
+        memory.memory_v2_records[idx] = updated
+        sync_preference_projection(memory, record, updated, now)
+        self.access.save_memory(user_id, memory)
+        return {"success": True, "review_status": "active", "memory": dict(updated)}
+
     def reject(self, user_id: str, memory_id: str, *, reason: str = "") -> dict[str, Any]:
         return self.ports.set_status(user_id, memory_id, "rejected", reason=reason)
 

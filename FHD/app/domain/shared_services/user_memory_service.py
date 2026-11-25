@@ -315,6 +315,13 @@ class UserMemoryService(NeuroEventPublisherMixin):
     ) -> dict[str, Any]:
         return self._candidates.confirm(user_id, memory_id, correction=correction)
 
+    def auto_review_pending_memory(
+        self, user_id: str, memory_id: str, *, expected_revision: int, proof: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._candidates.auto_review_pending(
+            user_id, memory_id, expected_revision=expected_revision, proof=proof
+        )
+
     def reject_memory_candidate(
         self, user_id: str, memory_id: str, *, reason: str = ""
     ) -> dict[str, Any]:

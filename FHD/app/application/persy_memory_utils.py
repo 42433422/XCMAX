@@ -217,6 +217,7 @@ def _public_memory_record(record: dict[str, Any], scope: str) -> dict[str, Any]:
             "requires_user_confirmation",
             "auto_confirm_allowed",
             "auto_review_policy",
+            "auto_review_receipt",
             "auto_saved_at",
             "eligible_for_planner",
             "evidence",

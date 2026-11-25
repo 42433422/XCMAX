@@ -44,6 +44,20 @@ class MemoryReviewRoutes:
 
         self.query_persy_memories = query_persy_memories
 
+        @router.post("/datasets/{dataset_id}/memories/auto-review")
+        def auto_review_persy_memories(
+            dataset_id: str,
+            request: Request,
+            scope: str = FastAPIQuery("user"),
+            limit: int = FastAPIQuery(50, ge=1, le=100),
+            after: str = FastAPIQuery("", max_length=160),
+        ) -> JSONResponse:
+            return memories().auto_review(
+                dataset_id, request, scope=scope, limit=limit, after=after
+            )
+
+        self.auto_review_persy_memories = auto_review_persy_memories
+
         @router.post("/datasets/{dataset_id}/memories/{memory_id}/confirm")
         def confirm_persy_memory(
             dataset_id: str, memory_id: str, req: PersyMemoryMutationRequest, request: Request
