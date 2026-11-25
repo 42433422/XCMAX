@@ -61,14 +61,25 @@
         <tr v-if="loading && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="loading-state">加载中...</td>
         </tr>
-        <tr v-if="hasMore && !loading && !error && localData.length > 0 && isLastPage">
+        <tr v-if="!serverPagination && hasMore && !loading && !error && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="has-more-tip">滚动加载更多</td>
         </tr>
-        <tr v-if="!hasMore && !loading && !error && localData.length > 0 && isLastPage">
+        <tr v-if="!serverPagination && !hasMore && !loading && !error && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="no-more-tip">没有更多数据了</td>
         </tr>
       </tbody>
-      <tfoot v-if="pageCount > 1">
+      <tfoot v-if="serverPagination">
+        <tr>
+          <td :colspan="totalColumns">
+            <nav class="data-table-pages" aria-label="服务端分页">
+              <button type="button" :disabled="loading || serverPagination.page <= 1" @click="requestServerPage(serverPagination.page - 1)">上一页</button>
+              <span aria-live="polite">{{ serverPagination.page }} / {{ serverPageCount }} · 共 {{ serverPagination.total }} 条</span>
+              <button type="button" :disabled="loading || !!error || serverPagination.page >= serverPageCount" @click="requestServerPage(serverPagination.page + 1)">下一页</button>
+            </nav>
+          </td>
+        </tr>
+      </tfoot>
+      <tfoot v-else-if="pageCount > 1">
         <tr>
           <td :colspan="totalColumns">
             <nav class="data-table-pages" aria-label="已加载记录分页">
@@ -133,15 +144,17 @@ const props = defineProps({
   },
   error: { type: String, default: '' },
   remoteSort: { type: Boolean, default: false },
+  // Controlled server page; consumers supply authoritative totals and request the requested page.
+  serverPagination: { type: Object, default: null },
 })
 
-const emit = defineEmits(['update:selectedIds', 'select-change', 'row-click', 'load-more', 'sort-change', 'retry'])
+const emit = defineEmits(['update:selectedIds', 'select-change', 'row-click', 'load-more', 'sort-change', 'retry', 'page-change'])
 
 const tableWrapper = ref(null)
 const slots = useSlots()
 
 const handleScroll = () => {
-  if (!tableWrapper.value || props.loading || props.error || !props.hasMore || !isLastPage.value) return
+  if (!tableWrapper.value || props.serverPagination || props.loading || props.error || !props.hasMore || !isLastPage.value) return
 
   const { scrollTop, scrollHeight, clientHeight } = tableWrapper.value
   const threshold = 100
@@ -199,9 +212,15 @@ const sortedData = computed(() => {
 const PAGE_SIZE = 100
 const page = ref(0)
 const pageCount = computed(() => Math.max(1, Math.ceil(localData.value.length / PAGE_SIZE)))
-const pageStart = computed(() => page.value * PAGE_SIZE)
+const pageStart = computed(() => props.serverPagination ? (props.serverPagination.page - 1) * props.serverPagination.pageSize : page.value * PAGE_SIZE)
 const isLastPage = computed(() => page.value === pageCount.value - 1)
-const visibleData = computed(() => sortedData.value.slice(pageStart.value, pageStart.value + PAGE_SIZE))
+const visibleData = computed(() => props.serverPagination ? sortedData.value : sortedData.value.slice(pageStart.value, pageStart.value + PAGE_SIZE))
+const serverPageCount = computed(() => Math.max(1, Math.ceil((props.serverPagination?.total || 0) / Math.max(1, props.serverPagination?.pageSize || PAGE_SIZE))))
+function requestServerPage(next) {
+  if (!props.serverPagination || props.loading || !Number.isInteger(next) || next < 1 || next > serverPageCount.value || next === props.serverPagination.page) return
+  emit('page-change', next)
+}
+watch(() => props.serverPagination?.page, () => { if (tableWrapper.value) tableWrapper.value.scrollTop = 0 })
 
 function changePage(next) {
   page.value = Math.max(0, Math.min(next, pageCount.value - 1))
@@ -259,7 +278,7 @@ watch(
     const index = sortedData.value.findIndex((row) => String(getRowId(row) ?? '') === id)
     if (index < 0) return
     const targetPage = Math.floor(index / PAGE_SIZE)
-    if (targetPage !== page.value) changePage(targetPage)
+    if (!props.serverPagination && targetPage !== page.value) changePage(targetPage)
     await nextTick()
     const host = tableWrapper.value
     if (!host || String(props.highlightId || '') !== id) return
