@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict, TypeVar
 
@@ -24,6 +24,7 @@ from modstore_server.xiaoc_goal_management import (
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
     cognition_messages,
+    cognition_prompt_bound,
     cognitive_review_facts,
     feedback_facts,
     goal_review_facts,
@@ -351,8 +352,8 @@ class CyclePorts:
                 self.details["world_review_error"] = "invalid_persisted_review"
                 projection = {}
             for metric, item in projection.items():
-                value = {"metric_id": metric, **item}
-                facts.append(_fact("world-review", value, world_forecast=value))
+                forecast = {"metric_id": metric, **item}
+                facts.append(_fact("world-review", forecast, world_forecast=forecast))
         for key in ("customer_value", "assets", "repo", "domains"):
             value = context.get(key)
             if isinstance(value, dict):
@@ -552,7 +553,12 @@ class CyclePorts:
             admission["max_total_tokens"], self.claim["reserved_tokens"]
         )
         try:
-            messages, refs = cognition_messages(self.state, self.domain, state["facts"])
+            messages, refs = cognition_messages(
+                self.state,
+                self.domain,
+                state["facts"],
+                max_prompt_tokens=admission["max_total_tokens"] - 128,
+            )
         except CognitionContextError as exc:
             raise LifeBlocked(str(exc)) from exc
         self.details["attention"] = {
@@ -560,15 +566,7 @@ class CyclePorts:
             "observations_considered": len(state["facts"]),
             "status": "bounded_context_not_authorization",
         }
-        prompt_bound = (
-            len(
-                json.dumps(
-                    messages, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                ).encode()
-            )
-            * 4
-            + 256
-        )
+        prompt_bound = cognition_prompt_bound(messages)
         output_bound = min(
             1600,
             admission["max_output_tokens"],
@@ -1078,7 +1076,7 @@ class CyclePorts:
         self.details["reflection_receipt"] = receipt
         return state
 
-    def finish(self, result: LifeCycle) -> dict[str, Any]:
+    def finish(self, result: Mapping[str, Any]) -> dict[str, Any]:
         if result.get("status") == "awaiting_worker" and self.details.get("awaiting_worker"):
             return dict(
                 _store().defer_cycle(
@@ -1115,7 +1113,7 @@ def build_life_graph(ports: CyclePorts, *, checkpointer: Any | None = None):
                 if name != "reflect":
                     ports.active()
                 _store().record_cycle_phase(ports.claim, name)
-                result = await getattr(ports, name)(state)
+                result: LifeCycle = await getattr(ports, name)(state)
                 if name in {"act", "reflect"}:
                     _store().record_cycle_checkpoint(
                         ports.claim,
@@ -1190,7 +1188,8 @@ async def _continue_at_act(
         ][:32]
     if not _store().admit_cycle_act(ports.claim):
         return None  # The winner owns this cycle; never settle its reservation.
-    return await graph.ainvoke(None, config, durability="sync")
+    result: dict[str, Any] = await graph.ainvoke(None, config, durability="sync")
+    return result
 
 
 def _verified_closeout(claim: dict[str, Any], state: Any) -> dict[str, Any] | None:
@@ -1337,7 +1336,7 @@ async def _closeout_at_act(
         return None
     receipt = marker["receipt"]
     with life_operation("settle"):
-        return _store().finish_cycle(
+        closed: dict[str, Any] = _store().finish_cycle(
             claim,
             status="completed",
             summary="已核对原本地任务的持久回执并关闭原运行，未重新执行任务。",
@@ -1357,6 +1356,7 @@ async def _closeout_at_act(
             },
             expected_closeout=marker,
         )
+        return closed
 
 
 async def recover_native_act() -> dict[str, Any] | None:
@@ -1481,7 +1481,8 @@ async def tick_async() -> dict[str, Any]:
             reconcile_usage()
             reconcile_goals()
         if closed is not None:
-            return _store().read_state()
+            settled: dict[str, Any] = _store().read_state()
+            return settled
         resumed = await _recover_native_act(closing=False)
         if resumed is not None:
             return resumed

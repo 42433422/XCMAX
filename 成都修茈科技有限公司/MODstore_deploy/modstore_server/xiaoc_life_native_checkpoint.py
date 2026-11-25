@@ -71,8 +71,8 @@ async def native_life_checkpointer() -> AsyncIterator[Any]:
 
         db_path = url.database or ":memory:"
         async with aiosqlite.connect(db_path) as conn:
-            saver = AsyncSqliteSaver(conn, serde=serde)
-            await saver.setup()
-            yield saver
+            sqlite_saver = AsyncSqliteSaver(conn, serde=serde)
+            await sqlite_saver.setup()
+            yield sqlite_saver
     else:
         raise RuntimeError("life checkpoint requires PostgreSQL or SQLite")

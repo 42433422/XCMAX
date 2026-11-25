@@ -78,7 +78,7 @@ def _measured_source(
 ) -> bool:
     """Validate the original metric-reader receipt, not a new causal attribution."""
     value = evidence.get("value")
-    if type(value) not in (int, float) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         return False
     source = evidence.get("source")
     if not isinstance(source, str) or not source.strip():
@@ -271,8 +271,8 @@ def forecast(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if len({row["hit"] for row in train}) < 2 or len({row["hit"] for row in holdout}) < 2:
         return {**result, "status": "unknown_insufficient_outcome_variation"}
     try:
-        from scipy.stats import binomtest
-        from sklearn.metrics import brier_score_loss
+        from scipy.stats import binomtest  # type: ignore[import-untyped]
+        from sklearn.metrics import brier_score_loss  # type: ignore[import-untyped]
     except ImportError:
         return {**result, "status": "unknown_statistics_dependency_unavailable"}
     p = mean(row["hit"] for row in train)

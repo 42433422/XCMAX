@@ -56,6 +56,8 @@ def read_fixture_summary(report_raw: bytes, standard_raw: bytes) -> dict[str, An
         if not isinstance(row, dict):
             raise ValueError("independent_fixture_malformed_scenario")
         ident = row.get("id")
+        if not isinstance(ident, str):
+            raise ValueError("independent_fixture_malformed_scenario")
         layers = row.get("layers")
         if (
             ident not in expected

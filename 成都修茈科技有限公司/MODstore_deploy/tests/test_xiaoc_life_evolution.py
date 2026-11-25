@@ -421,6 +421,7 @@ def verified_delivery(factory, request_id):
             }
         )
         session.commit()
+    return contract, verification
 
 
 def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_next_prompt(
@@ -441,7 +442,7 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
         session.commit()
     assert evolution.reconcile() == 1
     assert life.read_state()["goals"][0]["status"] == "evolution_evidence_incomplete"
-    verified_delivery(factory, linked["retort_request_id"])
+    contract, verification = verified_delivery(factory, linked["retort_request_id"])
     assert evolution.reconcile() == 1
     assert evolution.reconcile() == 0
     state = life.read_state()
@@ -467,6 +468,7 @@ def test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_
         from modstore_server.strategic_workspace_receipts import _evidence
 
         original_evidence = _evidence(row)
+        protocol = json.loads(row.protocol_json)
         original_evidence["snapshot"]["verification"]["comparison"]["baseline_sha"] = "f" * 40
         assert evolution._comparison_receipt(row.id, protocol, original_evidence) is None
     assert any(ref.startswith("evolution-outcome:") for ref in refs)

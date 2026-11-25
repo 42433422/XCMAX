@@ -91,7 +91,7 @@ def read_samples(now: datetime) -> dict[str, dict[str, Any]]:
     """Reuse existing source readers, not model output or a second collector."""
     from modstore_server.strategy_bets import capture_metric
 
-    result = {}
+    result: dict[str, dict[str, Any]] = {}
     for metric in METRICS:
         evidence = capture_metric(metric, start=now - HORIZON, end=now)
         sample = _sample(
@@ -167,7 +167,7 @@ def review_projection(previous: dict[str, Any] | None, owner: Any) -> dict[str, 
     if not previous or type(owner) is not int or previous.get("owner_user_id") != owner:
         return {}
     review = WorldReview.model_validate_json(json.dumps(previous, allow_nan=False))
-    projection = {}
+    projection: dict[str, Any] = {}
     for metric, series in review.series.items():
         evaluated = series.evaluations
         row: dict[str, Any] = {

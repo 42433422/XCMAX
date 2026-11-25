@@ -560,6 +560,8 @@ def test_goal_capacity_blocks_proposal_before_creating_orphan_and_preserves_bind
     ]
     original = copy.deepcopy(store.state["goals"])
     store.state["policy"].update(employee_id="approved-employee", portfolio_limits=limits())
+    # The fake store has no strategic ledger for these synthetic decision IDs.
+    monkeypatch.setattr(runtime, "_cycle_reservation", lambda state, domain: 32768)
     monkeypatch.setattr(
         portfolio,
         "create_portfolio_proposal",
@@ -572,11 +574,10 @@ def test_goal_capacity_blocks_proposal_before_creating_orphan_and_preserves_bind
 
 
 def test_automatic_proposal_uses_only_admin_frozen_task_input(ports, monkeypatch):
-    store = ports[0]
+    store, calls, *_ = ports
     store.state["policy"].update(
         employee_id="approved-employee",
         portfolio_limits=limits(),
-        task_input={"approved_record_id": "record-17"},
     )
     from modstore_server import xiaoc_self_model
 
@@ -585,29 +586,31 @@ def test_automatic_proposal_uses_only_admin_frozen_task_input(ports, monkeypatch
         "employee_preflight",
         lambda *_: {"status": "registered_unverified", "reason": "test_registry_fixture"},
     )
-    captured = {}
+    proposals = []
 
     def propose(**kwargs):
-        captured.update(kwargs)
+        proposals.append(kwargs)
         return {"decision": {"decision_id": "new-proposal"}}
 
     monkeypatch.setattr(portfolio, "create_portfolio_proposal", propose)
-    result = asyncio.run(runtime.tick_async())
-    row = captured["opportunities"][0]
-    assert row["input_data"] == {"approved_record_id": "record-17"}
-    assert row["compute_seconds"] == 240
-    assert result["goals"][0]["status"] == "awaiting_approval"
-    assert captured["period"].startswith("xiaoc-life:")
-    first_key = captured["idempotency_key"]
-    store.claimed = False
-    store.claim["cycle_id"] = "next-cycle"
-    asyncio.run(runtime.tick_async())
-    assert captured["idempotency_key"] == first_key
-    store.claimed = False
-    store.claim["cycle_id"] = "changed-template-cycle"
-    store.state["policy"]["task_input"] = {"approved_record_id": "record-18"}
-    asyncio.run(runtime.tick_async())
-    assert captured["idempotency_key"] != first_key
+    for cycle, record_id in enumerate(("record-17", "record-17", "record-18"), start=1):
+        # This fake stores graph and act admission on the store, not per cycle.
+        store.claimed = store.graph_started = store.act_admitted = False
+        store.claim.update(cycle_id=f"cycle-{cycle}", lease_token=f"lease-{cycle}")
+        store.state["policy"]["task_input"] = {"approved_record_id": record_id}
+        result = asyncio.run(runtime.tick_async())
+        assert store.graph_started and store.act_admitted
+        assert len(calls) == len(proposals) == len(store.finished) == cycle
+        captured = proposals[-1]
+        [row] = captured["opportunities"]
+        assert row["input_data"] == {"approved_record_id": record_id}
+        assert row["compute_seconds"] == 240
+        assert result["goals"][0]["status"] == "awaiting_approval"
+        assert captured["period"].startswith("xiaoc-life:")
+
+    first, repeated, changed = [proposal["idempotency_key"] for proposal in proposals]
+    assert first == repeated
+    assert changed != first
 
 
 @pytest.mark.parametrize(
@@ -821,16 +824,33 @@ def test_prior_self_assessment_is_scoped_and_never_a_verified_capability():
 
 
 def test_real_cognition_graph_reads_historical_review_without_new_execution_authority(ports):
-    store, calls, *_ = ports
-    store.state["owner_user_id"] = 17
-    store.state["events"] = [_review_event(_measured_review_record())]
+    store, calls, current, *_ = ports
+    event = _review_event(_measured_review_record())
+    store.state["events"] = [event]
+    [expected] = cognitive_review_facts(store.state)
     result = asyncio.run(runtime.tick_async())
-    assert len(calls) == 1
-    payload = json.loads(calls[0]["messages"][1]["content"])
-    review = next(
-        row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row
+    assert len(calls) == 1, result.get("details")
+    [call] = calls
+    messages = call["messages"]
+    prompt_bound = (
+        len(
+            json.dumps(messages, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        )
+        * 4
+        + 256
     )
-    assert review["verdict_counts"]["miss"] == 1
+    assert 128 <= call["max_tokens"] <= 1600
+    assert prompt_bound + call["max_tokens"] <= store.claim["reserved_tokens"]
+    assert current["admission"]["max_total_tokens"] == store.claim["reserved_tokens"]
+    payload = json.loads(messages[1]["content"])
+    [observation] = [row for row in payload["observations"] if "cognitive_review" in row]
+    assert observation["ref"] == expected["ref"]
+    assert observation["evidence_status"] == "historical_ledger_review_not_prediction"
+    review = observation["cognitive_review"]
+    assert review == expected["cognitive_review"]
+    assert review["source_refs"] == event["evidence_refs"]
+    assert review["verdict_counts"] == {"hit": 0, "miss": 1}
+    assert observation["ref"] in result["evidence_refs"]
     assert result["goals"][0]["status"] == "proposed"
     assert "decision_id" not in result["goals"][0]
 
