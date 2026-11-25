@@ -23,7 +23,9 @@ const activity = computed(() =>
         ? '自主活动已暂停'
         : life.state?.activity?.summary || xiaocStateLabel(life.state?.status ?? ''),
 )
-const compactLabel = computed(() => life.error ? '自治待核实' : life.state ? label.value : '读取自治…')
+const compactLabel = computed(() =>
+  life.error ? '自治待核实' : life.state ? (xiaocLevelLabels[life.state.level] ?? '模式待核实') : '读取自治…',
+)
 const canApply = computed(() => !!life.state && !life.saving && !life.error && selection.value !== life.state.level)
 watch(
   [() => life.state?.level, () => life.state?.revision, () => props.owner],
