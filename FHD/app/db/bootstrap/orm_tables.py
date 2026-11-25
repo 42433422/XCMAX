@@ -171,7 +171,7 @@ class OrmBootstrap:
             return
         try:
             with _serialized_schema_bind(engine) as bind:
-                existing = set(self.inspect(engine).get_table_names() or [])
+                existing = set(self.inspect(bind).get_table_names() or [])
                 missing = [table for table in group.tables if table.name not in existing]
                 if missing:
                     self.logger.info(
