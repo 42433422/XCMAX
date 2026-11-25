@@ -296,6 +296,32 @@ def test_replay_cannot_override_original_invoice_counterparty(db_factory):
             assert db.scalars(select(FinancialTransaction)).all() == []
 
 
+def test_real_host_user_mapping_controls_source_owner(tmp_path, monkeypatch):
+    from app.db.models.user import User
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'crm-owner.sqlite'}")
+    User.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    try:
+        with factory() as db:
+            db.add(User(
+                username="crm-customer-owner", password="test",
+                tenant_id=7, market_user_id=17, is_active=True,
+            ))
+            db.commit()
+        assert archive._crm_market_user_owned(7, 17) is True
+        assert archive._crm_market_user_owned(8, 17) is False
+        assert archive._crm_market_user_owned(7, 18) is False
+        with factory() as db:
+            owner = db.query(User).filter(User.market_user_id == 17).one()
+            owner.is_active = False
+            db.commit()
+        assert archive._crm_market_user_owned(7, 17) is False
+    finally:
+        engine.dispose()
+
+
 def test_invoice_projection_is_document_only(db_factory):
     with tenant_scope(7):
         assert archive.archive_from_crm_invoice(invoice())["archived"] is True
