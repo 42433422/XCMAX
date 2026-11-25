@@ -11,6 +11,15 @@ on:
       - 'FHD/scripts/design/**'
       - 'FHD/scripts/dev/compare_visual_regression.py'
       - '成都修茈科技有限公司/MODstore_deploy/market/**'
+      # The continuity job must rerun when its backend contract changes.
+      - 'FHD/app/application/chat_stream_replay.py'
+      - 'FHD/app/fastapi_routes/mobile_extensions/**'
+      - 'FHD/app/db/models/mobile_notification.py'
+      - 'FHD/app/domain/shared_services/mobile_push.py'
+      - 'FHD/tests/test_application/test_chat_stream_replay.py'
+      - 'FHD/tests/test_routes/test_mobile_native_task_workspace.py'
+      - 'FHD/tests/test_routes/test_mobile_notification_inbox.py'
+      - 'FHD/docs/cross_device_continuity_acceptance.md'
       - '.github/workflows/ui-visual-regression.yml'
 permissions:
   contents: read
