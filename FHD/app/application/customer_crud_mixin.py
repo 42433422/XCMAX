@@ -80,7 +80,20 @@ class CustomerCrudMixin:
     def get_all(
         self, keyword: str | None = None, page: int = 1, per_page: int = 20
     ) -> dict[str, Any]:
-        """获取所有购买单位（分页）"""
+        """获取所有购买单位（分页）；拒绝无界或非法分页参数。"""
+        if (
+            type(page) is not int
+            or type(per_page) is not int
+            or page < 1
+            or not 1 <= per_page <= 100
+        ):
+            return {
+                "success": False,
+                "error_code": "invalid_pagination",
+                "message": "分页参数无效：page 必须为正整数，per_page 必须为 1～100",
+                "data": [],
+                "total": 0,
+            }
         try:
             session = self._get_session()
             try:
@@ -97,7 +110,7 @@ class CustomerCrudMixin:
 
                 total = query.count()
                 units = (
-                    query.order_by(PurchaseUnitModel.unit_name)
+                    query.order_by(PurchaseUnitModel.unit_name, PurchaseUnitModel.id)
                     .offset((page - 1) * per_page)
                     .limit(per_page)
                     .all()
