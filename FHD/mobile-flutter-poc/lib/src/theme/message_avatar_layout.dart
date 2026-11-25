@@ -1,50 +1,52 @@
 import 'package:flutter/material.dart';
 
-class MessageAvatarLayout {
-  static const headerAvatarSize = 44.0;
-  static const headerAvatarCornerRadius = 10.0;
-  static const topBarAvatarSize = 32.0;
+import 'design_tokens.generated.dart';
 
-  static const conversationAvatarSize = 52.0;
-  static const conversationAvatarCornerRadius = 8.0;
-  static const conversationRowHorizontalPadding = 16.0;
-  static const conversationRowVerticalPadding = 11.0;
-  static const conversationAvatarTextGap = 12.0;
-  static const conversationDividerExtraInset = 4.0;
+class MessageAvatarLayout {
+  static const headerAvatarSize = DesignTokens.mobileAvatarLayoutHeaderAvatarSize;
+  static const headerAvatarCornerRadius = DesignTokens.mobileAvatarLayoutHeaderAvatarCornerRadius;
+  static const topBarAvatarSize = DesignTokens.mobileAvatarLayoutTopBarAvatarSize;
+
+  static const conversationAvatarSize = DesignTokens.mobileAvatarLayoutConversationAvatarSize;
+  static const conversationAvatarCornerRadius = DesignTokens.mobileAvatarLayoutConversationAvatarCornerRadius;
+  static const conversationRowHorizontalPadding = DesignTokens.mobileAvatarLayoutConversationRowHorizontalPadding;
+  static const conversationRowVerticalPadding = DesignTokens.mobileAvatarLayoutConversationRowVerticalPadding;
+  static const conversationAvatarTextGap = DesignTokens.mobileAvatarLayoutConversationAvatarTextGap;
+  static const conversationDividerExtraInset = DesignTokens.mobileAvatarLayoutConversationDividerExtraInset;
   static const conversationDividerStart = conversationRowHorizontalPadding +
       conversationAvatarSize +
       conversationAvatarTextGap +
       conversationDividerExtraInset;
 
-  static const unreadBadgeOffsetX = 5.0;
-  static const unreadBadgeOffsetY = -5.0;
-  static const unreadBadgeSize = 21.0;
-  static const unreadBadgeLargeSize = 25.0;
-  static const onlineIndicatorSize = 14.0;
-  static const onlineIndicatorOffsetY = 2.0;
-  static const onlineIndicatorPadding = 2.5;
+  static const unreadBadgeOffsetX = DesignTokens.mobileAvatarLayoutUnreadBadgeOffsetX;
+  static const unreadBadgeOffsetY = DesignTokens.mobileAvatarLayoutUnreadBadgeOffsetY;
+  static const unreadBadgeSize = DesignTokens.mobileAvatarLayoutUnreadBadgeSize;
+  static const unreadBadgeLargeSize = DesignTokens.mobileAvatarLayoutUnreadBadgeLargeSize;
+  static const onlineIndicatorSize = DesignTokens.mobileAvatarLayoutOnlineIndicatorSize;
+  static const onlineIndicatorOffsetY = DesignTokens.mobileAvatarLayoutOnlineIndicatorOffsetY;
+  static const onlineIndicatorPadding = DesignTokens.mobileAvatarLayoutOnlineIndicatorPadding;
 
-  static const bubbleAvatarSize = 40.0;
-  static const bubbleAvatarCornerRadius = 8.0;
-  static const bubbleAvatarGap = 8.0;
-  static const bubbleTopPaddingWithAvatar = 12.0;
-  static const bubbleTopPaddingWithoutAvatar = 4.0;
+  static const bubbleAvatarSize = DesignTokens.mobileAvatarLayoutBubbleAvatarSize;
+  static const bubbleAvatarCornerRadius = DesignTokens.mobileAvatarLayoutBubbleAvatarCornerRadius;
+  static const bubbleAvatarGap = DesignTokens.mobileAvatarLayoutBubbleAvatarGap;
+  static const bubbleTopPaddingWithAvatar = DesignTokens.mobileAvatarLayoutBubbleTopPaddingWithAvatar;
+  static const bubbleTopPaddingWithoutAvatar = DesignTokens.mobileAvatarLayoutBubbleTopPaddingWithoutAvatar;
   static const bubbleAvatarReservedWidth = bubbleAvatarSize + bubbleAvatarGap;
-  static const emptyStateAvatarSize = 72.0;
-  static const emptyStateAvatarCornerRadius = 20.0;
+  static const emptyStateAvatarSize = DesignTokens.mobileAvatarLayoutEmptyStateAvatarSize;
+  static const emptyStateAvatarCornerRadius = DesignTokens.mobileAvatarLayoutEmptyStateAvatarCornerRadius;
 
-  static const employeePickerAvatarSize = 44.0;
-  static const employeePickerAvatarCornerRadius = 4.0;
-  static const employeePickerRowHorizontalPadding = 12.0;
-  static const employeePickerRowVerticalPadding = 10.0;
-  static const employeePickerAvatarTextGap = 12.0;
+  static const employeePickerAvatarSize = DesignTokens.mobileAvatarLayoutEmployeePickerAvatarSize;
+  static const employeePickerAvatarCornerRadius = DesignTokens.mobileAvatarLayoutEmployeePickerAvatarCornerRadius;
+  static const employeePickerRowHorizontalPadding = DesignTokens.mobileAvatarLayoutEmployeePickerRowHorizontalPadding;
+  static const employeePickerRowVerticalPadding = DesignTokens.mobileAvatarLayoutEmployeePickerRowVerticalPadding;
+  static const employeePickerAvatarTextGap = DesignTokens.mobileAvatarLayoutEmployeePickerAvatarTextGap;
   static const employeePickerDividerStart = employeePickerRowHorizontalPadding +
       employeePickerAvatarSize +
       employeePickerAvatarTextGap;
 
-  static const customerServiceBubbleAvatarSize = 36.0;
-  static const customerServiceBubbleIconSize = 24.0;
-  static const customerServiceBubbleAvatarGap = 8.0;
+  static const customerServiceBubbleAvatarSize = DesignTokens.mobileAvatarLayoutCustomerServiceBubbleAvatarSize;
+  static const customerServiceBubbleIconSize = DesignTokens.mobileAvatarLayoutCustomerServiceBubbleIconSize;
+  static const customerServiceBubbleAvatarGap = DesignTokens.mobileAvatarLayoutCustomerServiceBubbleAvatarGap;
 
   static BorderRadius get headerAvatarRadius =>
       BorderRadius.circular(headerAvatarCornerRadius);
