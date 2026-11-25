@@ -106,7 +106,7 @@ def apply_notify_paid(
     验签通过后调用：金额一致则置为 paid，重复通知幂等。
 
     返回 (reason, order_snapshot)；reason 取值：
-    marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch
+    marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch | trade_mismatch
     """
     with _lock:
         data = _load()
@@ -129,6 +129,17 @@ def apply_notify_paid(
                 total_amount,
             )
             return "amount_mismatch", dict(o)
+
+        # A replay may only acknowledge the provider transaction originally
+        # bound to this order. A different signed trade ID is not the same
+        # payment, even when the amount and merchant order number match.
+        saved_trade_no = str(o.get("trade_no") or "").strip()
+        if saved_trade_no and trade_no != saved_trade_no:
+            logger.error(
+                "[model-payment] notify trade identity conflict for out_trade_no=%s",
+                out_trade_no,
+            )
+            return "trade_mismatch", dict(o)
 
         now = _utc_iso()
         if o.get("status") == "paid":
