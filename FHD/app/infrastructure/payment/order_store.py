@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ def _utc_iso() -> str:
 
 
 def _empty_state() -> dict[str, Any]:
-    return {"orders": {}, "entitlements": {}}
+    return {"orders": {}, "entitlements": {}, "unmatched_notifications": {}}
 
 
 def _load() -> dict[str, Any]:
@@ -48,10 +49,16 @@ def _load() -> dict[str, Any]:
             data.setdefault("entitlements", {})
             if not isinstance(data["entitlements"], dict):
                 data["entitlements"] = {}
+            data.setdefault("unmatched_notifications", {})
+            if not isinstance(data["unmatched_notifications"], dict):
+                # Payment evidence must not be silently discarded or overwritten.
+                raise ValueError("unmatched payment evidence has invalid schema")
             return data
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("读取订单文件失败，将使用空表: %s", e)
-        return _empty_state()
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        # An unreadable existing ledger is not an empty payment ledger:
+        # treating it as empty could overwrite valid paid orders or evidence.
+        logger.error("payment order ledger unreadable: %s", e)
+        raise
 
 
 def _atomic_write(p: Path, payload: dict[str, Any]) -> None:
@@ -91,6 +98,12 @@ def record_checkout_pending(
         }
         if local_user_id is not None:
             row["local_user_id"] = int(local_user_id)
+        if out_trade_no in orders or any(
+            item.get("out_trade_no") == out_trade_no
+            for item in data["unmatched_notifications"].values()
+            if isinstance(item, dict)
+        ):
+            raise ValueError("payment_order_requires_manual_identity_reconciliation")
         orders[out_trade_no] = row
         _atomic_write(order_store_path(), data)
     logger.info("[model-payment] order pending out_trade_no=%s plan_id=%s", out_trade_no, plan_id)
@@ -107,14 +120,56 @@ def apply_notify_paid(
 
     返回 (reason, order_snapshot)；reason 取值：
     marked_paid | already_paid | fulfillment_pending | unknown_order | amount_mismatch | trade_mismatch
+    | invalid_notify | reconciliation_required
     """
     with _lock:
         data = _load()
         orders: dict[str, Any] = data["orders"]
+        if not out_trade_no.strip() or not trade_no.strip() or not total_amount.strip():
+            return "invalid_notify", None
         o = orders.get(out_trade_no)
+        unmatched: dict[str, Any] = data.setdefault("unmatched_notifications", {})
         if not o:
-            logger.warning("[model-payment] notify: 未知 out_trade_no=%s", out_trade_no)
+            # Signed unknown payments must leave durable, retry-idempotent
+            # evidence. Never grant an entitlement or acknowledge the provider.
+            digest = hashlib.sha256(
+                json.dumps(
+                    [out_trade_no, trade_no, total_amount], ensure_ascii=False
+                ).encode("utf-8")
+            ).hexdigest()
+            now = _utc_iso()
+            entry = unmatched.get(digest)
+            if not isinstance(entry, dict):
+                entry = {
+                    "out_trade_no": out_trade_no,
+                    "trade_no": trade_no,
+                    "total_amount": total_amount,
+                    "first_seen_at": now,
+                    "retry_count": 0,
+                    "state": "requires_reconciliation",
+                }
+            entry["last_seen_at"] = now
+            entry["retry_count"] = int(entry["retry_count"]) + 1
+            unmatched[digest] = entry
+            _atomic_write(order_store_path(), data)
+            logger.error("[model-payment] verified unmatched notification persisted out_trade_no=%s", out_trade_no)
             return "unknown_order", None
+
+        # A newly located merchant order cannot silently consume a previously
+        # quarantined provider payment. Reconciliation must be explicit.
+        if any(
+            item.get("out_trade_no") == out_trade_no
+            for item in unmatched.values()
+            if isinstance(item, dict)
+        ):
+            return "reconciliation_required", dict(o)
+        # A provider trade identity may not pay two different local orders.
+        if any(
+            str(existing.get("trade_no") or "").strip() == trade_no
+            for key, existing in orders.items()
+            if key != out_trade_no and isinstance(existing, dict)
+        ):
+            return "trade_mismatch", dict(o)
 
         try:
             expected_yuan = f"{int(o['amount_cents']) / 100:.2f}"
@@ -350,3 +405,14 @@ def json_store_has_unmigrated_orders() -> bool:
         data = _load()
     orders = data.get("orders")
     return bool(isinstance(orders, dict) and orders)
+
+
+def list_unmatched_notifications() -> list[dict[str, Any]]:
+    """Read-only durable evidence for manual gateway reconciliation.
+
+    This JSON adapter is single-host legacy; it does not prove PostgreSQL
+    multi-process exactly-once semantics or independently verified settlement.
+    """
+    with _lock:
+        entries = _load().get("unmatched_notifications", {})
+    return [dict(item) for item in entries.values() if isinstance(item, dict)]
