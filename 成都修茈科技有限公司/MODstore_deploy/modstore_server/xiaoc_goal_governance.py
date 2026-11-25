@@ -272,12 +272,17 @@ def governance_gate(
 def project_goal_governance(state: dict[str, Any], *, now: datetime) -> dict[str, Any]:
     """Read-only status surface; all business truth stays in the original ledgers."""
     goals = state.get("goals") or []
+    if not isinstance(goals, list):
+        goals = []
     result: list[dict[str, Any]] = []
     for goal in goals:
         if not isinstance(goal, dict) or goal.get("candidate_origin") != "customer_value_gap/v1":
             continue
         milestones = []
-        for row in goal.get("milestones", []):
+        raw_milestones = goal.get("milestones")
+        for row in raw_milestones[:32] if isinstance(raw_milestones, list) else []:
+            if not isinstance(row, dict):
+                continue
             try:
                 overdue = parse_time(row["due_at"]) < now
             except (KeyError, ValueError, TypeError, AttributeError):
@@ -303,12 +308,12 @@ def project_goal_governance(state: dict[str, Any], *, now: datetime) -> dict[str
                 ),
             }
         )
-    result.sort(
-        key=lambda row: (
-            -(row.get("priority") or {}).get("score", 0),
-            str(row.get("goal_id") or ""),
-        )
-    )
+    def score(row: dict[str, Any]) -> int:
+        priority = row.get("priority")
+        number = priority.get("score") if isinstance(priority, dict) else None
+        return number if type(number) is int and 0 <= number <= 100000 else 0
+
+    result.sort(key=lambda row: (-score(row), str(row.get("goal_id") or "")))
     return {
         "schema": "xiaoc_goal_governance/v1",
         "items": result,
