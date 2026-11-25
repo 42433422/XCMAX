@@ -27,6 +27,8 @@ vi.mock('@/composables/useChatView', () => ({
 
 vi.mock('@/utils/sanitizeHtml', () => ({
   sanitizeChatBubbleHtml: vi.fn((html: string) => html),
+  sanitizeChatBubbleMarkdown: vi.fn((source: string) => source.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')),
+  plainTextFromChatHtml: vi.fn((html: string) => html),
 }))
 
 vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
@@ -283,6 +285,13 @@ describe('FloatingChatAssistant', () => {
     messagesMock.value = [{ role: 'ai', content: '第一段 第二段 第三段', time: '10:01' }]
     await flushPromises()
     expect(element.scrollTop).toBe(800)
+  })
+
+  it('renders assistant Markdown with shared MessageBody instead of a raw HTML bubble', async () => {
+    messagesMock.value = [{ role: 'ai', content: '**核对完成**', time: '10:01' }]
+    const wrapper = await openAssistant()
+    await flushPromises()
+    expect(wrapper.get('.floating-chat-bubble .msg-body strong').text()).toBe('核对完成')
   })
 
   it('shows loading message when isLoading and not streaming', async () => {
