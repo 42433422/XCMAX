@@ -13,11 +13,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tenant_workspace_prefs import (
+    WorkspacePrefsVersionConflict,
     bind_selected_industry_for_user,
     get_workspace_prefs,
     patch_workspace_prefs,
     resolve_workspace_owner_id,
-    WorkspacePrefsVersionConflict,
     workspace_prefs_revision,
 )
 from app.infrastructure.auth.dependencies import (
