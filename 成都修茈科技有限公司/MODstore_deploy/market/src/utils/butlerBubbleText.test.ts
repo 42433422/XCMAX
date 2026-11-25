@@ -59,7 +59,7 @@ describe('renderButlerBubbleHtml', () => {
   })
 
   it('escapes fenced code without linking or executing syntax inside it', () => {
-    const html = renderButlerBubbleHtml('代码：\\n```ts\\nconst text = "<script>"; // https://xiu-ci.com\\n```')
+    const html = renderButlerBubbleHtml('代码：\n```ts\nconst text = "<script>"; // https://xiu-ci.com\n```')
     const doc = new DOMParser().parseFromString(html, 'text/html')
     expect(doc.querySelector('pre code')?.textContent).toContain('<script>')
     expect(doc.querySelector('a, script')).toBeNull()
