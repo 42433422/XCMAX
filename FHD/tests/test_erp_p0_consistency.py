@@ -309,7 +309,19 @@ def test_approval_reviewer_cannot_act_after_tenant_change():
     from app.application.approval_workspace.decisions import _active_decision_actor
 
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(tenant_id=4)
+    reviewer = db.query.return_value.filter.return_value.with_for_update.return_value
+    reviewer.first.return_value = SimpleNamespace(tenant_id=4)
     assert not _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
-    db.query.return_value.filter.return_value.first.return_value = None
+    reviewer.first.return_value = None
     assert not _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
+    db.query.return_value.filter.return_value.with_for_update.assert_called_with(read=True)
+
+
+def test_reviewer_active_row_is_locked_for_entire_decision():
+    from app.application.approval_workspace.decisions import _active_decision_actor
+
+    db = MagicMock()
+    reviewer = db.query.return_value.filter.return_value.with_for_update.return_value
+    reviewer.first.return_value = SimpleNamespace(tenant_id=3)
+    assert _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
+    db.query.return_value.filter.return_value.with_for_update.assert_called_once_with(read=True)
