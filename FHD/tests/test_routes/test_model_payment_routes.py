@@ -487,7 +487,7 @@ class TestAlipayNotify:
             )
             assert r.status_code == 400
 
-    def test_notify_unknown_order_returns_success(self, client_mp):
+    def test_notify_unknown_order_requires_reconciliation_retry(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.is_local_model_payment_sot", return_value=True),
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
@@ -506,8 +506,30 @@ class TestAlipayNotify:
                     "total_amount": "9.90",
                 },
             )
-            assert r.status_code == 200
-            assert r.text == "success"
+            assert r.status_code == 503
+            assert r.text == "fail"
+
+    def test_notify_trade_conflict_is_not_acknowledged(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.is_local_model_payment_sot", return_value=True),
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
+            mock_ali.credentials_ready.return_value = True
+            mock_ali.verify_notify.return_value = True
+            mock_orders.apply_notify_paid.return_value = ("trade_mismatch", None)
+            response = client_mp.post(
+                "/api/model-payment/notify/alipay",
+                data={
+                    "sign": "sig123",
+                    "trade_status": "TRADE_SUCCESS",
+                    "out_trade_no": "mp-conflict",
+                    "trade_no": "T-conflicting",
+                    "total_amount": "9.90",
+                },
+            )
+            assert response.status_code == 400
+            assert response.text == "fail"
 
     def test_notify_verify_raises_infra_transient_returns_500(self, client_mp):
         with (
