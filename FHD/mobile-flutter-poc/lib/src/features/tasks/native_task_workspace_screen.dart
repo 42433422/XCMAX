@@ -31,6 +31,12 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   late final NativeWorkspaceSession _session;
   Timer? _timer;
   bool _foreground = true;
+  int _lifecycleEpoch = 0;
+
+  bool _isCurrent(int epoch) => mounted &&
+      _session.active &&
+      _foreground &&
+      epoch == _lifecycleEpoch;
   int _readFailures = 0;
   Map<String, Object?>? _task;
   String? _error, _message, _answeredContext;
@@ -65,7 +71,10 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    _lifecycleEpoch++;
     _timer?.cancel();
     if (!_foreground) {
       if (mounted) setState(() { _stale = true; });
@@ -79,6 +88,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   }
 
   void _invalidate() {
+    _lifecycleEpoch++;
     _timer?.cancel();
     if (mounted) {
       setState(() {
@@ -100,6 +110,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   Future<Map<String, Object?>?> _load() async {
     if (!mounted || _loading || !_session.active || !_foreground) return null;
     _timer?.cancel();
+    final epoch = _lifecycleEpoch;
     setState(() {
       _loading = true;
     });
@@ -107,7 +118,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final result = await _session.request(_path);
       final task = _map(result['data']);
       if (task['task_id'] != widget.taskId) throw StateError('任务不存在或无权查看');
-      if (!mounted || !_session.active) return null;
+      // A response from before suspension cannot re-enable write controls.
+      if (!_isCurrent(epoch)) return null;
       _readFailures = 0;
       setState(() {
         _task = task;
@@ -116,9 +128,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       });
       if (task['attention_state'] == 'result_unread' && !_reading) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted &&
-              _session.active &&
-              _foreground &&
+          if (_isCurrent(epoch) &&
+              identical(_task, task) &&
               !_stale &&
               ModalRoute.of(context)?.isCurrent == true) {
             unawaited(_markRead());
@@ -127,6 +138,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       }
       return task;
     } catch (error) {
+      if (!_isCurrent(epoch)) return null;
       if (_readFailures < 5) _readFailures++;
       if (mounted && _session.active) {
         // Only transport failures retain a read-only snapshot. Revoked access,
@@ -150,7 +162,13 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         setState(() {
           _loading = false;
         });
-        _startPolling();
+        // A resume may have occurred while the discarded read was in flight.
+        // Reconcile immediately rather than waiting for the next poll interval.
+        if (_foreground && _session.active && epoch != _lifecycleEpoch) {
+          unawaited(_load());
+        } else {
+          _startPolling();
+        }
       }
     }
   }
@@ -159,17 +177,18 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     if (_reading || _stale || !_foreground || !_session.active ||
         _task?['attention_state'] != 'result_unread') return;
     _reading = true;
+    final epoch = _lifecycleEpoch;
     final displayed = _task;
     try {
       await _session.request('$_path/read', method: 'POST', body: {});
-      if (mounted && _session.active && identical(_task, displayed)) {
+      if (_isCurrent(epoch) && identical(_task, displayed)) {
         setState(() {
           _task = {...?_task, 'attention_state': ''};
           if (_message?.startsWith('已读状态未同步') == true) _message = null;
         });
       }
     } catch (error) {
-      if (mounted && _session.active) {
+      if (_isCurrent(epoch)) {
         setState(() {
           _message = '已读状态未同步，请刷新重试：${mobileErrorText(error)}';
         });
@@ -193,6 +212,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     setState(() {
       _busy = true;
     });
+    final epoch = _lifecycleEpoch;
     final answers = <String, String>{};
     try {
       final task = await _load();
@@ -221,7 +241,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final signature = _clarificationContext(task),
           form = GlobalKey<FormState>();
       if (_answeredContext == signature) throw StateError('已提交此问题，请等待任务状态更新');
-      if (!mounted || !_session.active) return;
+      if (!_isCurrent(epoch)) return;
       final parameters = await showDialog<Map<String, Object?>>(
           context: context,
           builder: (context) => AlertDialog(
@@ -277,9 +297,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                       child: const Text('补充信息并继续')),
                 ],
               ));
-      if (parameters == null || !mounted || !_session.active) return;
+      if (parameters == null || !_isCurrent(epoch)) return;
       final current = await _load();
-      if (current == null ||
+      if (!_isCurrent(epoch) || current == null ||
           _clarificationContext(current) != signature ||
           _map(current['capabilities'])['approve'] != true) {
         throw StateError('待回答问题已变化，请重新打开填写');
@@ -313,6 +333,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       _busy = true;
       _message = null;
     });
+    final epoch = _lifecycleEpoch;
     try {
       final task = await _load();
       if (task == null || _map(task['capabilities'])[action] != true) {
@@ -348,7 +369,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         }
         step = matches.single;
       }
-      if (!mounted || !_session.active) return;
+      if (!_isCurrent(epoch)) return;
       if (['cancel', 'retry', 'approve'].contains(action)) {
         final yes = await showDialog<bool>(
           context: context,
@@ -383,16 +404,18 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
             ],
           ),
         );
-        if (yes != true || !mounted || !_session.active) return;
+        if (yes != true || !_isCurrent(epoch)) return;
         final current = await _load();
         final currentRun =
             '${current?['active_run_id'] ?? _map(current?['active_run'])['run_id'] ?? ''}';
-        if (current == null ||
+        if (!_isCurrent(epoch) || current == null ||
             currentRun != runId ||
             _map(current['capabilities'])[action] != true) {
           throw StateError('任务状态已变化，请重新核对并确认');
         }
       }
+      // Do not carry a confirmation across a background/foreground boundary.
+      if (!_isCurrent(epoch)) return;
       if (action == 'approve') {
         // The server binds this exact pre-confirmation grant to run, step and
         // parameters. Never replace a rejected grant using an earlier click.
@@ -440,11 +463,12 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     setState(() {
       _busy = true;
     });
+    final epoch = _lifecycleEpoch;
     try {
       final bytes = await _session.download(
           '$_base/runs/${Uri.encodeComponent(runId)}/artifacts/${Uri.encodeComponent(id)}');
       await shareWorkspaceFile('${file['name'] ?? '任务结果'}', bytes,
-          isCurrent: () => mounted && _session.active);
+          isCurrent: () => _isCurrent(epoch));
     } catch (error) {
       if (mounted && _session.active) {
         setState(() {
