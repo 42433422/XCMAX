@@ -116,6 +116,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 actor_id=access.actor_id,
                 mod_id=access.mod_id,
                 force_refresh=True,
+                verify_only=True,
             )
         except (PermissionError, ValueError, TypeError):
             return {
