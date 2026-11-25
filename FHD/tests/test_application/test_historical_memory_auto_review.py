@@ -64,11 +64,12 @@ def receipt(message, *, tenant="2", mod="crm", actor="7", session="history-sessi
     )
 
 
-def test_verified_history_preserves_id_and_advances_revision(memory, monkeypatch):
-    row = capture(memory, "我喜欢简洁报告")
+@pytest.mark.parametrize("message", ["我喜欢简洁报告", "请记住：我喜欢简洁报告"])
+def test_verified_history_preserves_id_and_advances_revision(memory, monkeypatch, message):
+    row = capture(memory, message)
     assert row["status"] == "pending"
     monkeypatch.setenv("XCAGI_MEMORY_AUTO_REVIEW", "1")
-    reader = MagicMock(return_value=[receipt("我喜欢简洁报告")])
+    reader = MagicMock(return_value=[receipt(message)])
     monkeypatch.setattr(
         "app.domain.shared_services.conversation_service.ConversationService.get_session_messages",
         reader,
@@ -82,6 +83,29 @@ def test_verified_history_preserves_id_and_advances_revision(memory, monkeypatch
     assert updated["status"] == "active"
     assert memory.auto_review_pending(access_context=access())["activated"] == 0
     reader.assert_called_once_with("history-session", limit=1000, user_id="7")
+
+
+def test_global_preference_is_outside_historical_auto_review(memory, monkeypatch):
+    scope = "global_preference"
+    row = memory.capture_conversation_turn(
+        access_context=access(),
+        user_message="我喜欢简洁报告",
+        session_id="history-session",
+        scope=scope,
+    )["candidates"][0]
+    monkeypatch.setenv("XCAGI_MEMORY_AUTO_REVIEW", "1")
+    reader = MagicMock(return_value=[receipt("我喜欢简洁报告")])
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation_service.ConversationService.get_session_messages",
+        reader,
+    )
+    denied = memory.auto_review_pending(access_context=access(write=False), scope=scope)
+    assert denied["error_code"] == "dataset_permission_denied"
+    outcome = memory.auto_review_pending(access_context=access(), scope=scope)
+    assert outcome["success"] and outcome["activated"] == 0
+    reader.assert_not_called()
+    listed = memory.list_memories(access_context=access(), status="pending")["memories"]
+    assert [item["memory_id"] for item in listed] == [row["memory_id"]]
 
 
 @pytest.mark.parametrize("kind", ["wrong_tenant", "wrong_mod", "wrong_message", "no_receipt"])

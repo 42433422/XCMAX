@@ -18,11 +18,25 @@ from app.application.dataset_rag_app_service import (
 PERSY_MEMORY_PENDING = "pending"
 PERSY_MEMORY_ACTIVE = "active"
 _VISIBLE_MEMORY_STATUSES = {PERSY_MEMORY_PENDING, PERSY_MEMORY_ACTIVE}
+AUTO_REVIEW_SCOPES = frozenset({"user", "tenant"})
 _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
+_USER_REMINDER = re.compile(r"请记住[：:]\s*(.+)")
 
 
-def extract_explicit_memories(message: str) -> list[dict[str, Any]]:
+def extract_explicit_memories(
+    message: str, *, allow_user_reminder: bool = False
+) -> list[dict[str, Any]]:
     """Extract explicit, bounded facts for the conversation memory policy."""
+
+    if allow_user_reminder and (sentence := _direct_capture_sentence(message)):
+        if reminder := _USER_REMINDER.fullmatch(sentence):
+            personal = [
+                candidate
+                for candidate in extract_explicit_memories(reminder[1])
+                if _personal_subject(candidate)
+            ]
+            if len(personal) == 1:
+                return personal
 
     if re.search(
         r"[?？]|(?:是否|假如|假设|如果|例如|比如|据说|听说|可能|也许|是谁|是什么)",
@@ -348,39 +362,43 @@ _AUTO_REVIEW_RISK = re.compile(
 )
 
 
-def review_explicit_capture(
-    candidate: dict[str, Any], message: str, scope: str
-) -> dict[str, Any] | None:
-    """Return the canonical independently supported candidate, or require review."""
+def _direct_capture_sentence(message: str) -> str | None:
     raw = str(message or "").strip()
     if not raw or len(raw) > 200 or _AUTO_REVIEW_RISK.search(raw):
         return None
     sentence = raw.rstrip("。！!；;").strip()
-    if re.search(r"[。！？!；;,，]", sentence):
+    return None if re.search(r"[。！？!；;,，]", sentence) else sentence
+
+
+def review_explicit_capture(
+    candidate: dict[str, Any], message: str, scope: str
+) -> dict[str, Any] | None:
+    """Return the canonical independently supported candidate, or require review."""
+    if scope not in AUTO_REVIEW_SCOPES or not (sentence := _direct_capture_sentence(message)):
         return None
-    direct = extract_explicit_memories(sentence)
+    direct = extract_explicit_memories(sentence, allow_user_reminder=scope == "user")
     if len(direct) != 1:
         return None
     reviewed = direct[0]
     value = reviewed["value"]
-    if scope in {"user", "global_preference"}:
+    assertion = sentence
+    if scope == "user":
+        if reminder := _USER_REMINDER.fullmatch(sentence):
+            assertion = reminder[1]
         if (
             not _personal_preference(reviewed)
             or value.get("predicate") not in {"偏好", "习惯"}
             or not re.fullmatch(
                 r"(?:我喜欢|我偏好|我更喜欢|我的偏好是|我习惯|我通常会)\s*[^。！？!；;,，]+",
-                sentence,
+                assertion,
             )
         ):
             return None
-    elif scope == "tenant":
-        if (
-            _personal_subject(reviewed)
-            or value.get("predicate") not in {"行业", "采用", "使用", "沟通时间"}
-            or not sentence.startswith(str(value.get("subject") or ""))
-        ):
-            return None
-    else:
+    elif (
+        _personal_subject(reviewed)
+        or value.get("predicate") not in {"行业", "采用", "使用", "沟通时间"}
+        or not sentence.startswith(str(value.get("subject") or ""))
+    ):
         return None
     proposed = candidate.get("value")
     if not isinstance(proposed, dict) or candidate.get("memory_type") != reviewed["memory_type"]:

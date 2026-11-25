@@ -16,6 +16,12 @@ from app.application.dataset_rag_app_service import (
 )
 from app.application.persy_memory_graph import PersyMemoryGraphMixin
 from app.application.persy_memory_utils import (
+    AUTO_REVIEW_SCOPES,
+    _memory_owner_id,
+    _personal_preference,
+    review_explicit_capture,
+)
+from app.application.persy_memory_utils import (
     PERSY_MEMORY_ACTIVE as PERSY_MEMORY_ACTIVE,
 )
 from app.application.persy_memory_utils import (
@@ -26,11 +32,6 @@ from app.application.persy_memory_utils import (
 )
 from app.application.persy_memory_utils import (
     _lexical_score as _lexical_score,
-)
-from app.application.persy_memory_utils import (
-    _memory_owner_id,
-    _personal_preference,
-    review_explicit_capture,
 )
 from app.application.persy_memory_utils import (
     _memory_owners as _memory_owners,
@@ -253,7 +254,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         owner = _memory_owner_id(access, scope)
         if not owner:
             return _scope_denied()
-        if not self._auto_review_enabled():
+        if scope not in AUTO_REVIEW_SCOPES or not self._auto_review_enabled():
             return {"success": True, "enabled": False, "examined": 0, "activated": 0}
         rows = sorted(
             (
@@ -353,7 +354,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             "no",
         }:
             return {"success": True, "created_count": 0, "candidates": []}
-        auto_review = self._auto_review_enabled()
+        auto_review = normalized_scope in AUTO_REVIEW_SCOPES and self._auto_review_enabled()
         if not message or _SENSITIVE_PATTERN.search(message) or redact_text(message) != message:
             return {"success": True, "created_count": 0, "candidates": []}
         candidates = None
@@ -377,7 +378,9 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             # Model unavailability permits only the bounded offline candidate parser.
             candidates = None
         if candidates is None:
-            candidates = extract_explicit_memories(message)
+            candidates = extract_explicit_memories(
+                message, allow_user_reminder=normalized_scope == "user"
+            )
         if normalized_scope == "global_preference":
             candidates = [candidate for candidate in candidates if _personal_preference(candidate)]
         history_review = {}

@@ -98,8 +98,6 @@ class CandidateMemory:
             if user_id.startswith("personal-memory:v1:")
             else "tenant"
             if user_id.startswith("enterprise-memory:v1:")
-            else "global_preference"
-            if user_id.startswith("global-preference:v1:")
             else ""
         )
         reviewed_capture = (
@@ -114,7 +112,6 @@ class CandidateMemory:
                 and item.get("tenant_id")
                 for item in governance["evidence"]
             )
-            and (expected_scope != "global_preference" or normalized_type == "preference")
         )
         if reviewed_capture:
             from app.application.persy_memory_utils import review_explicit_capture
@@ -290,13 +287,17 @@ class CandidateMemory:
     ) -> dict[str, Any]:
         """Review one unchanged candidate against an independently read chat receipt."""
         from app.application.dataset_rag_app_service import DatasetAccessContext
-        from app.application.persy_memory_utils import _memory_owner_id, review_explicit_capture
+        from app.application.persy_memory_utils import (
+            AUTO_REVIEW_SCOPES,
+            _memory_owner_id,
+            review_explicit_capture,
+        )
 
         def pending(reason: str) -> dict[str, Any]:
             return {"success": True, "review_status": "pending", "reason": reason}
 
         scope = str(proof.get("scope") or "")
-        if scope not in {"user", "tenant", "global_preference"}:
+        if scope not in AUTO_REVIEW_SCOPES:
             return pending("invalid_scope")
         access = DatasetAccessContext(
             actor_id=str(proof.get("actor_id") or ""),

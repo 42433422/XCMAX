@@ -74,17 +74,64 @@ def test_explicit_tenant_review_stays_in_tenant_and_requires_write(memory):
     assert not denied["success"]
 
 
-def test_conflicting_auto_review_is_pending_and_deleted_not_replayed(memory):
-    first = memory.capture_conversation_turn(
-        access_context=access(), user_message="我喜欢简洁报告"
+def test_global_preference_requires_authorized_manual_confirmation(memory):
+    message = "我喜欢简洁报告"
+    denied = memory.capture_conversation_turn(
+        access_context=access(write=False), user_message=message, scope="global_preference"
+    )
+    assert denied["error_code"] == "dataset_permission_denied"
+
+    row = memory.capture_conversation_turn(
+        access_context=access(), user_message=message, scope="global_preference"
     )["candidates"][0]
+    assert row["scope"] == "global_preference"
+    assert row["status"] == "pending"
+    assert row["requires_user_confirmation"]
+    assert not row["eligible_for_planner"]
+    denied = memory.mutate(
+        access_context=access(write=False), memory_id=row["memory_id"], action="confirm"
+    )
+    assert denied["error_code"] == "dataset_permission_denied"
+    confirmed = memory.mutate(access_context=access(), memory_id=row["memory_id"], action="confirm")
+    assert confirmed["memory"]["status"] == "active"
+
+
+@pytest.mark.parametrize("colon", ["：", ":"])
+@pytest.mark.parametrize("scope", ["user", "tenant", "global_preference"])
+def test_offline_remember_prefix_applies_only_to_user_scope(memory, colon, scope):
+    result = memory.capture_conversation_turn(
+        access_context=access(), user_message=f"请记住{colon} 我喜欢简洁报告。", scope=scope
+    )
+    if scope != "user":
+        assert result["candidates"] == []
+        return
+    (row,) = result["candidates"]
+    assert row["scope"] == "user"
+    assert row["status"] == "active"
+    assert row["statement"] == "用户的偏好是简洁报告"
+    assert row["evidence"][0]["user_excerpt"] == f"请记住{colon} 我喜欢简洁报告。"
+
+
+def test_offline_remember_prefix_preserves_sensitive_filter(memory):
+    result = memory.capture_conversation_turn(
+        access_context=access(), user_message="请记住：我习惯定期更改密码"
+    )
+    assert result["candidates"] == []
+
+
+@pytest.mark.parametrize("prefix", ["", "请记住："])
+def test_conflicting_auto_review_is_pending_and_deleted_not_replayed(memory, prefix):
+    first = memory.capture_conversation_turn(
+        access_context=access(), user_message=f"{prefix}我喜欢简洁报告"
+    )["candidates"][0]
+    assert first["status"] == "active"
     second = memory.capture_conversation_turn(
-        access_context=access(), user_message="我喜欢详细报告"
+        access_context=access(), user_message=f"{prefix}我喜欢详细报告"
     )["candidates"][0]
     assert second["status"] == "pending"
     memory.mutate(access_context=access(), memory_id=first["memory_id"], action="delete")
     repeated = memory.capture_conversation_turn(
-        access_context=access(), user_message="我喜欢简洁报告"
+        access_context=access(), user_message=f"{prefix}我喜欢简洁报告"
     )
     assert repeated["created_count"] == 0
 
