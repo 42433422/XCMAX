@@ -796,9 +796,11 @@ class _InventoryProductPickerState extends State<_InventoryProductPicker> {
                 const Expanded(child: Center(child: Text('账号或连接已切换，请重新打开')))
               else
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        sliver: SliverList.list(children: [
                       TextField(
                         controller: _search,
                         textInputAction: TextInputAction.search,
@@ -827,23 +829,37 @@ class _InventoryProductPickerState extends State<_InventoryProductPicker> {
                         ),
                       if (!_loading && _error == null && _rows.isEmpty)
                         const ListTile(title: Text('没有找到产品')),
-                      for (final product in _rows)
-                        ListTile(
-                          title: Text(_productLabel(product)),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            if (widget.session.active) {
-                              Navigator.of(context).pop(product);
-                            }
+                        ]),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList.builder(
+                          itemCount: _rows.length,
+                          itemBuilder: (context, index) {
+                            final product = _rows[index];
+                            return ListTile(
+                              key: ValueKey(product['id'] ?? index),
+                              title: Text(_productLabel(product)),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                if (widget.session.active) Navigator.of(context).pop(product);
+                              },
+                            );
                           },
                         ),
+                      ),
                       if (_total > _pageSize)
-                        _InventoryPagination(
-                          page: _page,
-                          total: _total,
-                          pageSize: _pageSize,
-                          enabled: !_loading && _error == null,
-                          onPage: _load,
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          sliver: SliverToBoxAdapter(
+                            child: _InventoryPagination(
+                              page: _page,
+                              total: _total,
+                              pageSize: _pageSize,
+                              enabled: !_loading && _error == null,
+                              onPage: _load,
+                            ),
+                          ),
                         ),
                     ],
                   ),
