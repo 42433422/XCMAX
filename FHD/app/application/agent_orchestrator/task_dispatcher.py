@@ -285,8 +285,16 @@ class AgentTaskDispatcher:
         xiaox_run = False
         effect_token = _open_effect.set((self._execution_repo, execution.run_id, owner_id))
         try:
-            orchestrator = self._orchestrator_factory(repository)
+            from app.infrastructure.xiaox.binding import has_legacy_runtime_binding
+
             preview = self._run_repo.get(execution.run_id)
+            if preview is not None and has_legacy_runtime_binding(preview):
+                # Never send an old runtime request to the generic step executor.
+                # Preserve its signed output and ledger for explicit reconciliation.
+                xiaox_run = True
+                error_code = "needs_verification"
+                return
+            orchestrator = self._orchestrator_factory(repository)
             if preview is not None and preview.metadata.get("runtime_type") == "xiaox":
                 from app.infrastructure.xiaox.queued_runtime import execute_queued_runtime
 
