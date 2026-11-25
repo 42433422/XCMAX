@@ -43,4 +43,23 @@ describe('ERP product list paging', () => {
     expect(page.value).toBe(1)
     expect(hasMore.value).toBe(false)
   })
+  it('prevents overlapping append and stops at the final page', async () => {
+    const page = ref(1), hasMore = ref(false), requestId = ref(0)
+    let finish!: (value: unknown) => void
+    const fetchProducts = vi.fn()
+      .mockResolvedValueOnce({ success: true, total: 2, data: [{ id: 1 }] })
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const loader = createProductListLoader({ store: { fetchProducts } as never, page, hasMore, requestId, query: () => ({ per_page: 1 }) })
+    await loader()
+    const pending = loader(false)
+    await loader(false)
+    expect(fetchProducts).toHaveBeenCalledTimes(2)
+    finish({ success: true, total: 2, data: [{ id: 2 }] })
+    await pending
+    expect(page.value).toBe(3)
+    expect(hasMore.value).toBe(false)
+    await loader(false)
+    expect(fetchProducts).toHaveBeenCalledTimes(2)
+  })
+
 })
