@@ -257,15 +257,15 @@ body:not(.pro-mode-active) .sidebar .mode-switch {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #0b72d9 0%, #1394df 100%);
-  border-color: rgba(11, 114, 217, 0.9);
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(11, 114, 217, 0.18);
+  background: linear-gradient(135deg, var(--xc-token-desktop-enterprise-xc-color-primary) 0%, var(--xc-token-desktop-enterprise-xc-color-primary-light) 100%);
+  border-color: var(--xc-token-desktop-enterprise-xc-color-primary);
+  color: var(--xc-token-colors-neutral-light-n00);
+  box-shadow: var(--xc-token-desktop-enterprise-xc-shadow-sm);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #0a63bd 0%, #0f82c8 100%);
-  border-color: #0a63bd;
+  background: linear-gradient(135deg, var(--xc-token-desktop-enterprise-xc-color-primary-hover) 0%, var(--xc-token-desktop-enterprise-xc-color-primary) 100%);
+  border-color: var(--xc-token-desktop-enterprise-xc-color-primary-hover);
 }
 
 .btn-secondary {

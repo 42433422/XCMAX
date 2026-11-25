@@ -180,5 +180,27 @@ pair('Market dark wb-text-muted / body',
   () => resolveColor('var(--xc-token-market-dark-wb-text-muted)', [], marketGeneratedCss),
   () => resolveColor('var(--xc-token-market-base-color-bg-body)', [], marketGeneratedCss));
 
+// The global office primary button is separate from ConfirmDialog. Check
+// both endpoints of its two-stop gradient; rendered/cascade checks remain
+// mandatory. Reject unregistered expressions rather than trusting fallbacks.
+const officeButtonCss = readFileSync(new URL('frontend/src/styles/css/office-theme.css', root), 'utf8');
+function officePrimaryRule(state) {
+  return new RegExp('^\\.btn-primary' + state + '\\s*\\{([^}]+)\\}', 'm').exec(officeButtonCss)?.[1];
+}
+function officePrimaryDeclaration(block, property) {
+  return new RegExp('(?:^|;)\\s*' + property + '\\s*:\\s*([^;]+)').exec(block ?? '')?.[1]?.trim();
+}
+const officePrimaryDefault = officePrimaryRule('');
+for (const state of ['', ':hover']) {
+  const block = officePrimaryRule(state);
+  const foreground = officePrimaryDeclaration(block, 'color') ?? officePrimaryDeclaration(officePrimaryDefault, 'color');
+  const background = officePrimaryDeclaration(block, 'background');
+  const stops = /^linear-gradient\(\s*[^,]+,\s*(var\(--[\w-]+\))\s+0%,\s*(var\(--[\w-]+\))\s+100%\s*\)$/.exec(background ?? '');
+  for (const index of [1, 2]) {
+    pair('Desktop office primary ' + (state || ':default') + ' gradient stop ' + index,
+      () => foreground, () => stops?.[index]);
+  }
+}
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;
