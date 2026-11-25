@@ -827,12 +827,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (!doneApplied && canUpdateStream() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
           const unfinished = leftover
-            ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
-            : '处理失败：本轮回复已结束，但没有收到正文。请重试。'
+            ? `${leftover}\n\n[回复未完成] 原任务回执待核对，请勿重复提交。`
+            : '回复已中断，原任务执行结果未知，请到任务工作区核对回执，勿重复提交。'
           applyStreamText(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          observeModelOutcome(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          streamMessage.workflowAction = 'failed'
-          round.setStatus('error')
+          streamMessage.workflowAction = 'unknown'
+          round.setStatus('review')
           delete streamMessage.streamingShell
           delete streamMessage.waitingHint
         }
