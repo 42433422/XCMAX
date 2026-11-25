@@ -1,5 +1,5 @@
 {
-  "lines": 2733209,
+  "lines": 2733544,
   "updated": "2026-11-25",
-  "note": "#3613: SQLite bootstrap plus model-vs-database failure categories with regression evidence, explicit net code growth; no relaxation to benchmark or security thresholds."
+  "note": "#3613: SQLite bootstrap plus model-vs-database failure categories with regression evidence, explicit net code growth; no relaxation to benchmark or security thresholds. Correct full PR net line growth +410 against main 21c7225, including previously uncounted +335."
 }
