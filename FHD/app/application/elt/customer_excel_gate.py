@@ -738,19 +738,45 @@ def release_status(env: dict[str, str] | None = None) -> dict[str, Any]:
             "chain": list(CHAIN),
             "checks": _blank(),
         }
-    baseline = json.loads(Path(oracle).read_text(encoding="utf-8"))
-    evidence_class = str(baseline.get("evidence_class") or "")
-    if evidence_class != "customer_original":
-        report = evaluate_workbook(
-            path,
-            baseline,
-            data_dir=path.parent / ".b31-blocked",
-            evidence_class=evidence_class or "synthetic",
-        )
-        report["status"] = "BLOCKED"
-        report["release_pass"] = False
-        report["reason"] = "基准未声明为客户原件"
-        return report
+    # Source labels in a hand-edited baseline are not proof of a customer run.
+    # Reject unbound files before the isolated gate creates any business rows.
+    def blocked(reason: str, status: str = "BLOCKED") -> dict[str, Any]:
+        return {"id": GATE_ID, "status": status, "release_pass": False,
+                "reason": reason, "chain": list(CHAIN), "checks": _blank()}
+
+    try:
+        baseline = json.loads(Path(oracle).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return blocked("客户人工基准损坏或不可读")
+    if not isinstance(baseline, dict) or baseline.get("evidence_class") != "customer_original":
+        return blocked("基准未声明为客户原件")
+    original_sha = str(baseline.get("sha256") or "").lower()
+    if len(original_sha) != 64 or any(c not in "0123456789abcdef" for c in original_sha):
+        return blocked("缺少真实原件 SHA-256")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != original_sha:
+        return blocked("原件与批准的 SHA-256 不一致", "FAIL")
+    identity = ("version", "task_id", "tenant_id", "customer_id")
+    if any(not str(baseline.get(key) or "").strip() for key in identity):
+        return blocked("客户、租户、任务或版本身份不完整")
+    build_sha = str(environment.get("XCAGI_ELT_GATE_BUILD_SHA") or "").lower()
+    if len(build_sha) != 40 or any(c not in "0123456789abcdef" for c in build_sha):
+        return blocked("缺少实际运行版本的完整 Git SHA")
+    if str(baseline.get("build_sha") or "").lower() != build_sha:
+        return blocked("人工基准与实际运行版本不一致")
+    source_receipt = baseline.get("source_receipt")
+    approval_receipt = baseline.get("approval_receipt")
+    binding = {key: baseline[key] for key in identity}
+    binding["build_sha"] = build_sha
+    if (not isinstance(source_receipt, dict) or not isinstance(approval_receipt, dict)
+            or any(source_receipt.get(key) != value for key, value in binding.items())
+            or any(approval_receipt.get(key) != value for key, value in binding.items())
+            or source_receipt.get("source_sha256") != original_sha
+            or approval_receipt.get("source_sha256") != original_sha
+            or not source_receipt.get("upload_receipt_id") or not source_receipt.get("uploaded_by")
+            or approval_receipt.get("status") != "approved"
+            or not approval_receipt.get("approval_id") or not approval_receipt.get("approved_by")
+            or not approval_receipt.get("plan_sha256") or baseline.get("confirmed") is not True):
+        return blocked("缺少同客户/任务/版本的来源与真实审批回执")
     data_dir = Path(str(environment.get("XCAGI_ELT_GATE_DATA_DIR") or path.parent / ".b31-gate"))
     data_dir.mkdir(parents=True, exist_ok=True)
     return evaluate_workbook(path, baseline, data_dir=data_dir, evidence_class="customer_original")

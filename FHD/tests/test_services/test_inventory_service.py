@@ -635,12 +635,22 @@ class TestInventoryCountUnconfirmed:
         mock_ledger = MagicMock()
         mock_ledger.quantity = Decimal("100")
         mock_ledger.available_quantity = Decimal("90")
+        mock_ledger.reserved_quantity = Decimal("10")
         mock_ledger.id = 1
+        mock_ledger.tenant_id = 1
+        mock_ledger.product_id = 1
+        mock_ledger.warehouse_id = 1
+        mock_ledger.batch_no = None
+        mock_ledger.location_id = None
+        mock_ledger.updated_at = None
 
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_ledger
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [
+            mock_ledger
+        ]
+        mock_db.query.return_value.filter.return_value.scalar.return_value = 0
         mock_get_db.return_value = mock_db
 
         svc = InventoryService()
@@ -662,7 +672,7 @@ class TestInventoryCountUnconfirmed:
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         mock_get_db.return_value = mock_db
 
         svc = InventoryService()
@@ -715,10 +725,15 @@ class TestInventoryCountConfirmed:
 
         svc = InventoryService()
         with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            preview = svc.inventory_count(
+                product_id=prod.id, warehouse_id=wh.id, actual_quantity=120
+            )
+            assert preview["success"] is True
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
                 actual_quantity=120,
+                expected_baseline_version=preview["data"]["baseline_version"],
                 confirmed=True,
                 operator="tester",
                 remark="年末盘点",
@@ -773,10 +788,15 @@ class TestInventoryCountConfirmed:
 
         svc = InventoryService()
         with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            preview = svc.inventory_count(
+                product_id=prod.id, warehouse_id=wh.id, actual_quantity=80
+            )
+            assert preview["success"] is True
             result = svc.inventory_count(
                 product_id=prod.id,
                 warehouse_id=wh.id,
                 actual_quantity=80,
+                expected_baseline_version=preview["data"]["baseline_version"],
                 confirmed=True,
             )
 
@@ -798,6 +818,79 @@ class TestInventoryCountConfirmed:
         )
         assert len(txns) == 1
         assert float(txns[0].quantity) == -20.0
+
+    def test_count_rejects_missing_and_stale_baseline(self, test_session, test_engine):
+        wh, prod, ledger = self._seed(test_session)
+        product_id, warehouse_id, ledger_id = prod.id, wh.id, ledger.id
+        factory = sessionmaker(autoflush=False, bind=test_engine)
+
+        @contextlib.contextmanager
+        def _get_db():
+            with factory() as db:
+                yield db
+                db.commit()
+
+        svc = InventoryService()
+        params = dict(product_id=product_id, warehouse_id=warehouse_id, actual_quantity=110)
+        with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
+            missing = svc.inventory_count(**params, confirmed=True)
+            assert missing["error_code"] == "inventory_count_baseline_required"
+            preview = svc.inventory_count(**params)
+            version = preview["data"]["baseline_version"]
+            different = svc.inventory_count(
+                **{**params, "actual_quantity": 111},
+                confirmed=True,
+                expected_baseline_version=version,
+            )
+            assert different["error_code"] == "inventory_count_stale"
+
+            # Net-zero stock movement: the original quantities are unchanged,
+            # but the original preview must no longer authorize an overwrite.
+            with factory() as writer:
+                row = writer.get(InventoryLedger, ledger_id)
+                writer.add(InventoryTransaction(
+                    tenant_id=row.tenant_id,
+                    ledger_id=ledger_id,
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    transaction_type="in",
+                    quantity=Decimal("1"),
+                    before_quantity=Decimal("100"),
+                    after_quantity=Decimal("101"),
+                    transaction_date=datetime.now(),
+                ))
+                writer.add(InventoryTransaction(
+                    tenant_id=row.tenant_id,
+                    ledger_id=ledger_id,
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    transaction_type="out",
+                    quantity=Decimal("-1"),
+                    before_quantity=Decimal("101"),
+                    after_quantity=Decimal("100"),
+                    transaction_date=datetime.now(),
+                ))
+                writer.commit()
+
+            stale = svc.inventory_count(
+                **params, confirmed=True, expected_baseline_version=version
+            )
+            assert stale["error_code"] == "inventory_count_stale"
+            refreshed = svc.inventory_count(**params)
+            applied = svc.inventory_count(
+                **params, confirmed=True,
+                expected_baseline_version=refreshed["data"]["baseline_version"],
+            )
+            assert applied["success"] is True
+            duplicate = svc.inventory_count(
+                **params, confirmed=True,
+                expected_baseline_version=refreshed["data"]["baseline_version"],
+            )
+            assert duplicate["error_code"] == "inventory_count_stale"
+
+        with factory() as verify:
+            assert verify.get(InventoryLedger, ledger_id).quantity == Decimal("110")
+            assert verify.query(InventoryTransaction).filter_by(transaction_type="count").count() == 1
 
 
 # ---------------------------------------------------------------------------

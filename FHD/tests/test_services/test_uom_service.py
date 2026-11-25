@@ -83,6 +83,21 @@ class TestConvertCore:
         svc = UomService()
         assert svc.convert("7.5", "20", "1") == Decimal("150")
 
+    @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "abc", True, None])
+    def test_invalid_decimal_never_escapes_as_numeric_result(self, bad):
+        svc = UomService()
+        for args in ((bad, 1, 1), (1, bad, 1), (1, 1, bad)):
+            with pytest.raises(UomConversionError):
+                svc.convert(*args)
+
+    def test_currency_rounds_like_purchase_and_rejects_invalid_unit_price(self):
+        svc = UomService()
+        units = {"件": Decimal("1")}
+        assert svc.convert_amount("1", "件", "件", "0.005", units=units)["amount"] == Decimal("0.01")
+        for bad in ("NaN", "-1", "0.00001"):
+            with pytest.raises(UomConversionError):
+                svc.convert_amount(1, "件", "件", bad, units=units)
+
 
 # ---------------------------------------------------------------------------
 # 多单位换算（DB-backed product）
@@ -113,6 +128,27 @@ class TestProductMultiUnit:
         svc = UomService()
         units = {"斤": Decimal("1"), "箱": Decimal("20")}
         assert svc.convert_quantity(3, "箱", "斤", units=units) == Decimal("60")
+
+    def test_product_category_cannot_read_other_tenant_or_dimension(self, db):
+        cats = [
+            UomCategory(code="weight", name="重量", tenant_id=1),
+            UomCategory(code="weight", name="重量", tenant_id=2),
+        ]
+        db.add_all(cats)
+        db.flush()
+        db.add_all([
+            UomUnit(category_id=cats[0].id, tenant_id=1, code="箱", name="箱", factor=20),
+            UomUnit(category_id=cats[1].id, tenant_id=2, code="箱", name="箱", factor=999),
+        ])
+        product = Product(name="商品", tenant_id=1, unit="斤", uom_category="weight")
+        db.add(product)
+        db.commit()
+        svc = UomService(db=db)
+        assert svc.convert_quantity(1, "箱", "斤", product=product) == Decimal("20")
+        with pytest.raises(UomConversionError):
+            svc.get_product_units(product, tenant_id=2)
+        with pytest.raises(UomConversionError):
+            svc.get_product_units(product, category_code="volume")
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import func
@@ -26,6 +26,39 @@ def _to_float(v: Any) -> float | None:
     if isinstance(v, Decimal):
         return float(v)
     return float(v)
+
+
+_FINAL_FINANCE_STATUSES = frozenset({"posted", "completed", "paid", "settled", "reconciled"})
+
+
+def _valid_finance_amount(value: Any) -> Decimal:
+    if isinstance(value, bool):
+        raise ValueError("财务金额必须是大于零的两位小数")
+    try:
+        amount = Decimal(str(value))
+        if (
+            not amount.is_finite() or amount <= 0
+            or amount != amount.quantize(Decimal("0.01"))
+        ):
+            raise ValueError("财务金额必须是大于零的两位小数")
+        return amount
+    except (TypeError, InvalidOperation) as exc:
+        raise ValueError("财务金额必须是大于零的两位小数") from exc
+
+
+def _same_financial_posting(posted: FinancialTransaction, data: dict[str, Any], amount: Decimal) -> bool:
+    return (
+        Decimal(str(posted.amount)) == amount
+        and posted.currency == data.get("currency", "CNY")
+        and (
+            "counterparty_id" not in data
+            or posted.counterparty_id == data.get("counterparty_id")
+        )
+        and (
+            "counterparty_name" not in data
+            or posted.counterparty_name == data.get("counterparty_name")
+        )
+    )
 
 
 def _posted_financial_transaction(db, transaction_type, reference_type, reference_id):
@@ -258,6 +291,10 @@ class FinanceAppService:
             return {"success": True, "data": txn.to_dict()}
 
     def create_transaction(self, data: dict[str, Any]) -> dict[str, Any]:
+        try:
+            amount = _valid_finance_amount(data["amount"])
+        except (KeyError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
         with get_db() as db:
             try:
                 reference_type = data.get("reference_type")
@@ -272,6 +309,12 @@ class FinanceAppService:
                         reference_id,
                     )
                     if posted is not None:
+                        if not _same_financial_posting(posted, data, amount):
+                            return {
+                                "success": False,
+                                "error_code": "finance_reference_conflict",
+                                "message": "该业务单据已有不同金额、币种或交易方的原始流水",
+                            }
                         return {
                             "success": True,
                             "message": "该业务单据已登记，未重复入账",
@@ -279,7 +322,7 @@ class FinanceAppService:
                         }
                 txn = FinancialTransaction(
                     transaction_type=data["transaction_type"],
-                    amount=Decimal(str(data["amount"])),
+                    amount=amount,
                     currency=data.get("currency", "CNY"),
                     reference_type=reference_type,
                     reference_id=reference_id,
@@ -304,6 +347,12 @@ class FinanceAppService:
                     )
                     if raced is None:
                         raise
+                    if not _same_financial_posting(raced, data, amount):
+                        return {
+                            "success": False,
+                            "error_code": "finance_reference_conflict",
+                            "message": "并发写入的原始流水与本请求金额、币种或交易方冲突",
+                        }
                     return {
                         "success": True,
                         "message": "该业务单据已登记，未重复入账",
@@ -330,13 +379,29 @@ class FinanceAppService:
                 return {"success": False, "message": str(e)}
 
     def update_transaction(self, txn_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if data.get("amount") is not None:
+            try:
+                _valid_finance_amount(data["amount"])
+            except ValueError as exc:
+                return {"success": False, "message": str(exc)}
         with get_db() as db:
             try:
                 txn = (
-                    db.query(FinancialTransaction).filter(FinancialTransaction.id == txn_id).first()
+                    db.query(FinancialTransaction)
+                    .filter(FinancialTransaction.id == txn_id)
+                    .with_for_update()
+                    .first()
                 )
                 if not txn:
                     return {"success": False, "message": "凭证不存在"}
+                if txn.journal_entry_id is not None or txn.status in _FINAL_FINANCE_STATUSES:
+                    return {"success": False, "message": "已过账或已关联会计凭证的财务流水不可直接修改，请走冲销"}
+                if txn.reference_type and txn.reference_id is not None and any(
+                    key in data for key in ("amount", "currency", "reference_type", "reference_id")
+                ):
+                    return {"success": False, "message": "业务单据绑定的金额、币种及原单据引用不可改写"}
+                if data.get("status") in _FINAL_FINANCE_STATUSES:
+                    return {"success": False, "message": "财务流水不能直接标记已过账，需原财务记账流程"}
 
                 updatable = {
                     "amount",
@@ -353,7 +418,7 @@ class FinanceAppService:
                 for k, v in data.items():
                     if k in updatable and v is not None:
                         if k == "amount":
-                            v = Decimal(str(v))
+                            v = _valid_finance_amount(v)
                         elif k in ("transaction_date", "due_date"):
                             v = _parse_dt(v)
                         setattr(txn, k, v)
@@ -383,10 +448,19 @@ class FinanceAppService:
         with get_db() as db:
             try:
                 txn = (
-                    db.query(FinancialTransaction).filter(FinancialTransaction.id == txn_id).first()
+                    db.query(FinancialTransaction)
+                    .filter(FinancialTransaction.id == txn_id)
+                    .with_for_update()
+                    .first()
                 )
                 if not txn:
                     return {"success": False, "message": "凭证不存在"}
+                if (
+                    txn.journal_entry_id is not None
+                    or txn.status in _FINAL_FINANCE_STATUSES
+                    or (txn.reference_type and txn.reference_id is not None)
+                ):
+                    return {"success": False, "message": "已过账或有关联单据的流水禁止硬删除，请走原会计冲销"}
                 _txn_id = txn.id
                 _txn_amount = float(txn.amount or 0)
                 _txn_type = txn.transaction_type or ""

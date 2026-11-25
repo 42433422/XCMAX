@@ -28,6 +28,15 @@ def _client(headers=None) -> TestClient:
     return TestClient(app, raise_server_exceptions=True, headers=headers or {})
 
 
+def test_customer_write_routes_expose_authoritative_openapi_contract():
+    app = FastAPI()
+    app.include_router(customer_routes.router)
+    paths = app.openapi()["paths"]
+    for path, method in (("/customers", "post"), ("/customers/{customer_id}", "put")):
+        schema = paths[path][method]["requestBody"]["content"]["application/json"]["schema"]
+        assert schema["$ref"] == "#/components/schemas/CustomerCompatMutation"
+
+
 @pytest.fixture
 def customer_sessions(tmp_path, monkeypatch, trusted_actor):
     # Approvals and owned customer rows share the authenticated test database;

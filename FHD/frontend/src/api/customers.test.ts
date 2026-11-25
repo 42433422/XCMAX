@@ -20,6 +20,7 @@ vi.mock('@/utils/erpDomainPaths', () => ({
 }))
 
 vi.mock('@/composables/useCoreNavLabel', () => ({ useCoreNavLabel: (key: string) => ({ value: key }) }))
+vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/api/orders', () => ({ default: { getShipmentRecordUnits: vi.fn().mockResolvedValue({ success: true, data: [] }) } }))
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates: vi.fn().mockResolvedValue({ success: true, templates: [] }) } }))
 
@@ -101,4 +102,82 @@ describe('customersApi', () => {
     const { api } = await import('./core')
     expect(api.post).toHaveBeenCalledWith('/api/erp/customers/import', formData)
   })
+  it('passes canonical customer alias and optimistic version without inventing tenant ownership', async () => {
+    await customersApi.updateCustomer(42, {
+      customer_name: '合法名称',
+      contact_address: '合法地址',
+      expected_version: 3,
+    })
+    const { api } = await import('./core')
+    expect(api.put).toHaveBeenCalledWith('/api/erp/customers/42', {
+      customer_name: '合法名称',
+      contact_address: '合法地址',
+      expected_version: 3,
+    })
+  })
+
+  it('does not report success or replay when create returns an unknown commit outcome', async () => {
+    const { api } = await import('./core')
+    const { appAlert } = await import('@/utils/appDialog')
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [] })
+    vi.mocked(api.post).mockResolvedValueOnce({
+      success: false, outcome: 'unknown',
+      reconciliation_required: true, retryable: false,
+      message: '提交结果未知',
+    })
+    const wrapper = mount(defineComponent({
+      setup: useCustomers,
+      template: '<input v-model="addForm.customer_name" /><button @click="saveAdd">create</button>',
+    }))
+    await flushPromises()
+    await wrapper.get('input').setValue('客户1')
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(api.post)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(appAlert).mock.calls.map(([message]) => message).join(' ')).toContain('禁止重复提交')
+    expect(vi.mocked(appAlert).mock.calls.map(([message]) => message).join(' ')).not.toContain('创建成功')
+    wrapper.unmount()
+  })
+
+  it('does not show update success for HTTP-200 business failure', async () => {
+    const { api } = await import('./core')
+    const { appAlert } = await import('@/utils/appDialog')
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [] })
+    vi.mocked(api.put).mockResolvedValueOnce({ success: false, error_code: 'version_conflict', message: '客户版本已变化' })
+    const wrapper = mount(defineComponent({
+      setup: useCustomers,
+      template: '<button class="edit" @click="openEditModal({id: 42, customer_name: \'合法名称\', version: 3})">open</button><button class="save" @click="saveEdit">save</button>',
+    }))
+    await flushPromises()
+    await wrapper.get('.edit').trigger('click')
+    await wrapper.get('.save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(api.put)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.put).mock.calls[0]?.[1]).toMatchObject({ expected_version: 3 })
+    const alerts = vi.mocked(appAlert).mock.calls.map(([message]) => String(message)).join(' ')
+    expect(alerts).toContain('客户版本已变化')
+    expect(alerts).not.toContain('保存成功')
+    wrapper.unmount()
+  })
+
+  it('preserves selected customer and does not reload after protected deletion fails', async () => {
+    const { api } = await import('./core')
+    const { appAlert } = await import('@/utils/appDialog')
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [] })
+    vi.mocked(api.delete).mockResolvedValueOnce({ success: false, message: '关联财务或库存，禁止删除' })
+    const wrapper = mount(defineComponent({
+      setup: useCustomers,
+      template: '<button class="select" @click="handleDelete({id: 42})">select</button><button class="delete" @click="confirmDelete">delete</button>',
+    }))
+    await flushPromises()
+    const readsBefore = vi.mocked(api.get).mock.calls.length
+    await wrapper.get('.select').trigger('click')
+    await wrapper.get('.delete').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(api.delete)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.get).mock.calls.length).toBe(readsBefore)
+    expect(vi.mocked(appAlert).mock.calls.map(([message]) => String(message)).join(' ')).toContain('禁止删除')
+    wrapper.unmount()
+  })
+
 })

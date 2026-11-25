@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.db_base import Base
@@ -13,6 +13,16 @@ from app.db.mixins import TenantScopedMixin
 
 class Supplier(TenantScopedMixin, Base):
     __tablename__ = "suppliers"
+    __table_args__ = (
+        Index(
+            "uq_supplier_tenant_live_name",
+            "tenant_id",
+            text("lower(trim(name))"),
+            unique=True,
+            sqlite_where=text("tenant_id IS NOT NULL AND coalesce(status, '') <> 'deleted'"),
+            postgresql_where=text("tenant_id IS NOT NULL AND coalesce(status, '') <> 'deleted'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)

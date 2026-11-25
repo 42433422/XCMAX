@@ -17,6 +17,7 @@ interface CustomerRow {
   contact_person?: string
   contact_phone?: string
   contact_address?: string
+  version?: number
 }
 
 interface CustomerAddForm {
@@ -28,6 +29,7 @@ interface CustomerAddForm {
 
 interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
+  expected_version?: number
 }
 
 interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
@@ -243,10 +245,25 @@ export function useCustomers() {
     showDeleteConfirm.value = true;
   };
 
+  // A 2xx transport status does not prove that the customer mutation committed.
+  // Unknown commit outcomes must be reconciled against the original task ID.
+  function requireCommittedCustomerWrite(result: ApiResponse<unknown>, action: string) {
+    if (result?.success === true) return;
+    const receipt = result as (ApiResponse<unknown> & {
+      outcome?: string;
+      reconciliation_required?: boolean;
+    }) | undefined;
+    if (receipt?.outcome === 'unknown' || receipt?.reconciliation_required === true) {
+      throw new Error(`${action}结果尚未确认，请先核对原任务及数据库回执，禁止重复提交`);
+    }
+    throw new Error(receipt?.message || `${action}失败`);
+  }
+
   const confirmDelete = async () => {
     if (!itemToDelete.value?.id) return;
     try {
-      await customersApi.deleteCustomer(itemToDelete.value.id, true);
+      const outcome = await customersApi.deleteCustomer(itemToDelete.value.id, true);
+      requireCommittedCustomerWrite(outcome, '客户删除');
       await loadCustomers({ reset: true });
     } catch (e) {
       console.error('删除客户失败:', e);
@@ -261,7 +278,8 @@ export function useCustomers() {
 
   const confirmBatchDelete = async () => {
     try {
-      await customersApi.batchDeleteCustomers(selectedIds.value);
+      const outcome = await customersApi.batchDeleteCustomers(selectedIds.value);
+      requireCommittedCustomerWrite(outcome, '批量删除');
       selectedIds.value = [];
       await loadCustomers({ reset: true });
     } catch (e) {
@@ -276,7 +294,9 @@ export function useCustomers() {
       customer_name: customer.customer_name || customer.unit_name || customer.name || '',
       contact_person: customer.contact_person || '',
       contact_phone: customer.contact_phone || '',
-      address: customer.contact_address || ''
+      address: customer.contact_address || '',
+      expected_version: Number.isSafeInteger(customer.version) && Number(customer.version) >= 0
+        ? customer.version : undefined,
     };
     showEditModal.value = true;
   };
@@ -300,12 +320,13 @@ export function useCustomers() {
       return;
     }
     try {
-      await customersApi.createCustomer({
+      const outcome = await customersApi.createCustomer({
         customer_name: addForm.value.customer_name,
         contact_person: addForm.value.contact_person,
         contact_phone: addForm.value.contact_phone,
         contact_address: addForm.value.address,
-      } as unknown as CustomerCreateDTO);
+      } as CustomerCreateDTO);
+      requireCommittedCustomerWrite(outcome, '客户创建');
       await appAlert(`${entityName.value}创建成功`);
       closeAddModal();
       await loadCustomers({ reset: true });
@@ -321,12 +342,14 @@ export function useCustomers() {
       return;
     }
     try {
-      await customersApi.updateCustomer(editForm.value.id, {
+      const outcome = await customersApi.updateCustomer(editForm.value.id, {
         customer_name: editForm.value.customer_name,
         contact_person: editForm.value.contact_person,
         contact_phone: editForm.value.contact_phone,
-        contact_address: editForm.value.address
+        contact_address: editForm.value.address,
+        ...(editForm.value.expected_version !== undefined ? { expected_version: editForm.value.expected_version } : {}),
       } as CustomerUpdateDTO);
+      requireCommittedCustomerWrite(outcome, '客户更新');
       await appAlert('保存成功');
       closeEditModal();
       await loadCustomers({ reset: true });
