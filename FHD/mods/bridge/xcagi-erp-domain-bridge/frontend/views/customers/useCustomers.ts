@@ -17,6 +17,7 @@ interface CustomerRow {
   contact_person?: string
   contact_phone?: string
   contact_address?: string
+  version?: number
 }
 
 interface CustomerAddForm {
@@ -28,6 +29,7 @@ interface CustomerAddForm {
 
 interface CustomerEditForm extends CustomerAddForm {
   id?: number | string | null
+  expected_version?: number
 }
 
 interface CustomersListResponse extends ApiResponse<CustomerRow[]> {
@@ -292,7 +294,9 @@ export function useCustomers() {
       customer_name: customer.customer_name || customer.unit_name || customer.name || '',
       contact_person: customer.contact_person || '',
       contact_phone: customer.contact_phone || '',
-      address: customer.contact_address || ''
+      address: customer.contact_address || '',
+      expected_version: Number.isSafeInteger(customer.version) && Number(customer.version) >= 0
+        ? customer.version : undefined,
     };
     showEditModal.value = true;
   };
@@ -342,7 +346,8 @@ export function useCustomers() {
         customer_name: editForm.value.customer_name,
         contact_person: editForm.value.contact_person,
         contact_phone: editForm.value.contact_phone,
-        contact_address: editForm.value.address
+        contact_address: editForm.value.address,
+        ...(editForm.value.expected_version !== undefined ? { expected_version: editForm.value.expected_version } : {}),
       } as CustomerUpdateDTO);
       requireCommittedCustomerWrite(outcome, '客户更新');
       await appAlert('保存成功');
