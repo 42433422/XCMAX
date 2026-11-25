@@ -1,5 +1,5 @@
 {
-  "lines": 2733522,
+  "lines": 2733641,
   "updated": "2026-11-25",
-  "note": "#3617: web JWT live-session revocation and cross-process PostgreSQL negative control; no security gate changed. Real PG execution and CI evidence pending."
+  "note": "#3617: web JWT live-session revocation and cross-process PostgreSQL negative control; no security gate changed. Real PG execution and CI evidence pending. Dedicated PostgreSQL-16 CI scenario and JUnit evidence gate: +119 tracked lines."
 }
