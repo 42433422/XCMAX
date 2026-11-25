@@ -6,7 +6,9 @@ import json
 import pytest
 
 from app.domain.enterprise_cognition.world_observation import (
+    delivery_scenario,
     historical_observation,
+    public_snapshot,
     read_observations,
     record_observation,
 )
@@ -154,3 +156,37 @@ def test_second_foreign_source_evidence_cannot_hide_behind_valid_evidence():
     stored, _ = record_observation(None, snapshot)
     with pytest.raises(ValueError, match="observation_source_evidence_mismatch"):
         read_observations(json.dumps(stored), _SCOPE)
+
+
+def test_conditional_scenario_never_promotes_hypotheses_to_facts() -> None:
+    instant = "2026-11-25T00:00:00+00:00"
+    snapshot = _snapshot("8", instant)
+    snapshot["state"]["quantity_unit"] = "piece"
+    authority = {key: snapshot[key] for key in ("state", "source_last_changed")}
+    digest = hashlib.sha256(
+        json.dumps(
+            authority, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    ).hexdigest()
+    snapshot["source_version"] = "sha256:" + digest
+    snapshot["evidence"][0]["content_sha256"] = digest
+    snapshot = public_snapshot(snapshot)
+    assert snapshot["knowledge_kind"] == "fact"
+
+    prediction = delivery_scenario(snapshot, "3")
+    assert prediction["knowledge_kind"] == "prediction"
+    assert prediction["value"] == "5"
+    assert prediction["method"] == "conditional_arithmetic"
+    assert prediction["probability"] is None
+    assert prediction["causal_effect_verified"] is False
+    assert prediction["business_data_written"] is False
+    assert all(item["knowledge_kind"] == "hypothesis" for item in prediction["assumptions"])
+
+    for invalid in ("9", "-1", "NaN"):
+        assert delivery_scenario(snapshot, invalid)["knowledge_kind"] == "unknown"
+    stale = public_snapshot({**snapshot, "freshness": "stale"})
+    assert stale["knowledge_kind"] == "unknown"
+    assert delivery_scenario(stale, "3")["knowledge_kind"] == "unknown"
+    missing = public_snapshot({**snapshot, "evidence": []})
+    assert missing["knowledge_kind"] == "unknown"
+    assert delivery_scenario(missing, "3")["knowledge_kind"] == "unknown"
