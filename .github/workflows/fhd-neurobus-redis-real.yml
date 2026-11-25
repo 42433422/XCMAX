@@ -10,6 +10,8 @@ on:
       - "FHD/tests/test_neuro_bus/test_redis_streams*.py"
       - "FHD/tests/test_neuro_bus/test_durable_admission*.py"
       - "FHD/tests/test_neuro_bus/test_delivery_outcomes.py"
+      - "FHD/tests/test_neuro_bus/test_retry_budget_contract.py"
+      - "FHD/tests/test_neuro_bus/test_dead_letter*.py"
       - ".github/workflows/fhd-neurobus-redis-real.yml"
   workflow_dispatch:
 
@@ -63,7 +65,7 @@ jobs:
           print("Redis server version:", version)
           client.close()
           PY
-      - name: Exercise combined Redis/SQLite/metrics contracts (no skips)
+      - name: Exercise combined Redis/SQLite/metrics/retry/DLQ contracts (no skips)
         run: |
           set -euo pipefail
           echo "Tested commit: $(git rev-parse HEAD)"
@@ -74,6 +76,11 @@ jobs:
             tests/test_neuro_bus/test_durable_admission.py \
             tests/test_neuro_bus/test_durable_admission_process_exit.py \
             tests/test_neuro_bus/test_delivery_outcomes.py \
+            tests/test_neuro_bus/test_retry_budget_contract.py \
+            tests/test_neuro_bus/test_dead_letter_durable_storage.py \
+            tests/test_neuro_bus/test_dead_letter_replay_publish_contract.py \
+            tests/test_neuro_bus/test_dead_letter_queue_cov.py \
+            tests/test_neuro_bus/test_dead_letter_queue_coverage.py \
             -q -o addopts= --junitxml=neurobus-redis-results.xml
           python - <<'PY'
           from xml.etree import ElementTree
