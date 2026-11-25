@@ -1,5 +1,5 @@
 {
-  "lines": 2733134,
+  "lines": 2733209,
   "updated": "2026-11-25",
-  "note": "#3578：保留运行时证据校验，修正七条回归的夹具与完整消息预算判定；新增行主要用于回执负例、真实双进程验证和非提权断言。不改变覆盖率或测试门槛。"
+  "note": "#3613: SQLite bootstrap plus model-vs-database failure categories with regression evidence, explicit net code growth; no relaxation to benchmark or security thresholds."
 }
