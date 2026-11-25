@@ -314,4 +314,76 @@ describe('TopQuickNav', () => {
     fetchEmployeeDirectory.mockResolvedValue([])
     wrapper.unmount()
   })
+
+  describe('desktop command entry', () => {
+    it.each([
+      ['Win32', { ctrlKey: true }, 'Control+K'],
+      ['MacIntel', { metaKey: true }, 'Meta+K'],
+    ] as const)('uses the platform modifier on %s, restores focus and detaches on unmount', async (platform, modifier, label) => {
+      const platformSpy = vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform)
+      const desktopDescriptor = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+      Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
+      const origin = document.createElement('button')
+      document.body.append(origin)
+      const wrapper = await mountNav()
+      let unmounted = false
+      try {
+        const input = wrapper.find('input').element as HTMLInputElement
+        vi.spyOn(input, 'getClientRects').mockReturnValue([new DOMRect(0, 0, 420, 32)] as unknown as DOMRectList)
+        origin.focus()
+        const dispatch = (options: KeyboardEventInit = {}) => {
+          const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true, ...modifier, ...options })
+          document.activeElement?.dispatchEvent(event)
+          return event
+        }
+        expect(input.getAttribute('aria-keyshortcuts')).toBe(label)
+        expect(dispatch({ isComposing: true }).defaultPrevented).toBe(false)
+        expect(document.activeElement).toBe(origin)
+        expect(dispatch({ repeat: true }).defaultPrevented).toBe(false)
+        expect(dispatch(platform === 'Win32' ? { ctrlKey: false, metaKey: true } : { ctrlKey: true, metaKey: false }).defaultPrevented).toBe(false)
+        origin.setAttribute('role', 'dialog')
+        expect(dispatch().defaultPrevented).toBe(false)
+        origin.removeAttribute('role')
+        expect(dispatch().defaultPrevented).toBe(true)
+        await wrapper.vm.$nextTick()
+        expect(document.activeElement).toBe(input)
+        expect(input.getAttribute('aria-expanded')).toBe('true')
+        expect(input.getAttribute('aria-activedescendant')).toBe('top-quick-nav-option-0')
+        await wrapper.find('input').trigger('keydown', { key: 'Escape' })
+        expect(document.activeElement).toBe(origin)
+        expect(document.querySelector('.top-quick-nav__list')).toBeNull()
+        wrapper.unmount()
+        unmounted = true
+        expect(dispatch().defaultPrevented).toBe(false)
+      } finally {
+        if (!unmounted) wrapper.unmount()
+        origin.remove()
+        platformSpy.mockRestore()
+        if (desktopDescriptor) Object.defineProperty(window, 'xcagiDesktop', desktopDescriptor)
+        else Reflect.deleteProperty(window, 'xcagiDesktop')
+      }
+    })
+
+    it('ranks recent menu selections without retaining them across account scope changes', async () => {
+      const desktopDescriptor = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+      Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
+      const wrapper = await mountNav()
+      try {
+        const input = wrapper.find('input')
+        await input.setValue('系统设置')
+        await input.trigger('keydown', { key: 'Enter' })
+        expect(wrapper.emitted('select')).toEqual([['settings']])
+        await input.trigger('focus')
+        expect(optionNames()[0]).toBe('系统设置')
+        productReadAccountEpoch.value++
+        await input.trigger('focus')
+        expect(optionNames()[0]).toBe('智能对话')
+      } finally {
+        wrapper.unmount()
+        if (desktopDescriptor) Object.defineProperty(window, 'xcagiDesktop', desktopDescriptor)
+        else Reflect.deleteProperty(window, 'xcagiDesktop')
+      }
+    })
+  })
+
 })
