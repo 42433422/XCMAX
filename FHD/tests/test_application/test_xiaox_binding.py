@@ -492,3 +492,58 @@ def test_unsupported_saved_binding_cannot_be_reissued_or_projected(trusted_actor
         reopened.create(run.run_id)
     assert error.value.code == "runtime_contract_unsupported"
     assert reopened.get(run.run_id).metadata["version"] == version
+
+
+@pytest.mark.parametrize("change", ["revoke", "expire", "scope"])
+def test_delegated_key_revocation_invalidates_both_runtime_audiences(
+    trusted_actor, tmp_path, monkeypatch, change
+):
+    from app.application.aiopen import service
+    from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
+    from app.domain.aiopen.principal import ScreenPrincipal
+
+    actor = trusted_actor()
+    now = [100.0]
+    path = tmp_path / "keys.json"
+
+    def registry():
+        return ApiKeyRegistry(
+            RuntimeState({}), lambda: "", lambda _: "fixture", lambda: now[0], lambda: path
+        )
+
+    issuer = registry()
+    verifier = registry()
+    monkeypatch.setattr(service, "_keys", verifier)
+    issued = issuer.generate(
+        principal=ScreenPrincipal.from_ids(actor.user_id, actor.context.get("tenant_id")),
+        scopes=["capability.customers.list"],
+        expires_at=200.0,
+        execution_context=actor.context,
+    )
+    assert "execution_context" not in issued
+    context = verifier.resolve_execution_context(issued["key"])
+    assert context is not None
+    assert verifier.permits_execution(context, "customers", "list")
+    assert not verifier.permits_execution(context, "customers", "create")
+    store, run, grant = make_binding(actor, **context)
+    assert store.authenticate(grant.mcp_token, "mcp").run_id == run.run_id
+    assert store.authenticate(grant.model_token, "model").run_id == run.run_id
+
+    if change == "revoke":
+        assert issuer.revoke(issued["key"])
+    elif change == "expire":
+        now[0] = 200.0
+    else:
+        entries = json.loads(path.read_text(encoding="utf-8"))
+        entries[issued["key"]]["scopes"] = ["capability.customers.create"]
+        path.write_text(json.dumps(entries), encoding="utf-8")
+
+    assert not verifier.execution_context_current(context)
+    for token, audience in ((grant.mcp_token, "mcp"), (grant.model_token, "model")):
+        with pytest.raises(XiaoxBindingError) as error:
+            store.authenticate(token, audience)
+        assert error.value.code == "owner_changed"
+    store.close(run.run_id, "waiting_user")
+    with pytest.raises(XiaoxBindingError) as error:
+        store.create(run.run_id)
+    assert error.value.code == "owner_changed"

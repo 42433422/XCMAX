@@ -65,7 +65,10 @@ class XiaoxBindingError(ValueError):
 
 def _identity(run: AgentRun) -> str:
     context = run.metadata.get("runtime_context") or {}
-    return canonical_digest({"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}})
+    identity = {"owner": run.user_id, **{k: context.get(k) for k in _IDENTITY_FIELDS}}
+    if "_credential_authorization" in context:
+        identity["_credential_authorization"] = context["_credential_authorization"]
+    return canonical_digest(identity)
 
 
 @dataclass(frozen=True)
@@ -206,6 +209,15 @@ class XiaoxBindingStore:
             metadata.get("identity_digest") and metadata["identity_digest"] != _identity(run)
         ):
             raise XiaoxBindingError("owner_changed", "运行绑定的账号、租户或能力范围已变化")
+        if "_credential_authorization" in context:
+            from app.application.aiopen.service import api_key_execution_context_current
+
+            try:
+                credential_current = api_key_execution_context_current(context)
+            except OSError as exc:
+                raise XiaoxBindingError("owner_changed", "原调用凭据无法核验") from exc
+            if not credential_current:
+                raise XiaoxBindingError("owner_changed", "原调用凭据已撤销、过期或授权范围已变化")
         if context.get("session_id") or context.get("conversation_id"):
             if type(context.get("_conversation_revision")) is not int:
                 raise XiaoxBindingError("conversation_changed", "会话运行缺少可信历史版本")

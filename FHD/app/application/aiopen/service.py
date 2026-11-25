@@ -207,6 +207,7 @@ def generate_api_key(
     expires_at: float | None = None,
     rate_limit_per_min: int | None = None,
     daily_quota: int | None = None,
+    execution_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return _keys.generate(
         label,
@@ -215,6 +216,7 @@ def generate_api_key(
         expires_at=expires_at,
         rate_limit_per_min=rate_limit_per_min,
         daily_quota=daily_quota,
+        execution_context=execution_context,
     )
 
 
@@ -275,6 +277,18 @@ def api_key_usage_recent(limit: int = 100) -> list[dict[str, Any]]:
 
 def resolve_api_key_principal(provided: str | None) -> ScreenPrincipal | None:
     return _keys.resolve_principal(provided)
+
+
+def resolve_api_key_execution_context(provided: str | None) -> dict[str, Any] | None:
+    return _keys.resolve_execution_context(provided)
+
+
+def api_key_execution_context_current(context: dict[str, Any]) -> bool:
+    return _keys.execution_context_current(context)
+
+
+def api_key_permits_execution(context: dict[str, Any], tool_id: str, action: str) -> bool:
+    return _keys.permits_execution(context, tool_id, action)
 
 
 def revoke_api_key(key: str | None) -> bool:

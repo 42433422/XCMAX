@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import suppress
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import wraps
 from hashlib import sha256
@@ -209,6 +210,7 @@ class ApiKeyRegistry:
         daily_quota: int | None = None,
         client_key: bool = False,
         keep_existing: bool = False,
+        execution_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if client_key and (principal is None or not scopes or "*" in scopes or expires_at is None):
             raise ValueError("client keys require an owner, restricted scopes and expiration")
@@ -223,6 +225,25 @@ class ApiKeyRegistry:
         }
         if principal is not None:
             entry.update(principal_id=principal.principal_id, tenant_id=principal.tenant_id)
+        if execution_context:
+            from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+            actor = _bound_actor(execution_context)
+            if principal != ScreenPrincipal.from_user(actor):
+                raise ValueError("API key execution identity does not match its owner")
+            entry["execution_context"] = {
+                name: deepcopy(execution_context[name])
+                for name in (
+                    "user_id",
+                    "actor_id",
+                    "tenant_id",
+                    "mod_id",
+                    "_actor_authorization",
+                    "_mod_authorization",
+                )
+                if name in execution_context
+            }
+            entry["credential_id"] = sha256(key.encode()).hexdigest()
         if scopes:
             entry["scopes"] = [str(item).strip() for item in scopes if str(item).strip()]
         if expires_at is not None:
@@ -255,13 +276,16 @@ class ApiKeyRegistry:
                     del entries[previous]
                 entry["key_preview"] = "客户端 · " + stored[-8:]
             entries[stored] = entry
-            if not self._persist() and client_key:
+            if not self._persist() and (client_key or execution_context):
                 del entries[stored]
                 entries.update(removed)
                 raise OSError("could not persist client key")
             for previous in removed:
                 self._rpm.pop(previous, None)
-        return {"key": key, **entry}
+        return {
+            "key": key,
+            **{name: value for name, value in entry.items() if name != "execution_context"},
+        }
 
     @_shared_keys
     def resolve_principal(self, provided: str | None) -> ScreenPrincipal | None:
@@ -279,11 +303,15 @@ class ApiKeyRegistry:
     def revoke(self, key: str | None) -> bool:
         with self._lock:
             stored = _storage_key((key or "").strip())
-            removed = self._entries().pop(stored, None) is not None
-            if removed:
-                self._rpm.pop(stored, None)
-                self._persist()
-        return removed
+            entries = self._entries()
+            removed = entries.pop(stored, None)
+            if removed is None:
+                return False
+            if not self._persist():
+                entries[stored] = removed
+                raise OSError("could not persist API key revocation")
+            self._rpm.pop(stored, None)
+        return True
 
     @_shared_keys
     def revoke_client_key(self, principal: ScreenPrincipal) -> bool:
@@ -356,6 +384,65 @@ class ApiKeyRegistry:
         return out
 
     # ── 授权与计量 ────────────────────────────────────────────────────
+
+    def _execution_context(self, entry: dict[str, Any]) -> dict[str, Any] | None:
+        from app.infrastructure.auth.agent_mod_scope import _bound_actor
+        from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+        expires = entry.get("expires_at")
+        if expires is not None and self._client_key_expired(entry, self._clock()):
+            return None
+        try:
+            context = deepcopy(entry.get("execution_context"))
+            if not isinstance(context, dict) or not entry.get("credential_id"):
+                return None
+            actor = _bound_actor(context)
+            if ScreenPrincipal.from_user(actor) != ScreenPrincipal.from_ids(
+                entry.get("principal_id"), entry.get("tenant_id")
+            ):
+                return None
+        except RECOVERABLE_ERRORS:
+            return None
+        context["_credential_authorization"] = {
+            "kind": "aiopen",
+            "credential_id": entry["credential_id"],
+            "scopes": list(entry.get("scopes") or ["*"]),
+        }
+        return context
+
+    @_shared_keys
+    def resolve_execution_context(self, provided: str | None) -> dict[str, Any] | None:
+        entry = self._entries().get(_storage_key((provided or "").strip()))
+        return self._execution_context(entry) if isinstance(entry, dict) else None
+
+    def _matching_execution_context(self, context: dict[str, Any]) -> dict[str, Any] | None:
+        """Match the original live authorization under the shared registry lock."""
+        credential = context.get("_credential_authorization")
+        if not isinstance(credential, dict) or credential.get("kind") != "aiopen":
+            return None
+        identifier = str(credential.get("credential_id") or "")
+        for entry in self._entries().values():
+            if not identifier or entry.get("credential_id") != identifier:
+                continue
+            actual = self._execution_context(entry)
+            if actual is None or any(context.get(key) != value for key, value in actual.items()):
+                return None
+            return actual
+        return None
+
+    @_shared_keys
+    def execution_context_current(self, context: dict[str, Any]) -> bool:
+        """Validate a delegated runtime without granting any additional tool scope."""
+        return self._matching_execution_context(context) is not None
+
+    @_shared_keys
+    def permits_execution(self, context: dict[str, Any], tool_id: str, action: str) -> bool:
+        """Recheck revocation, scope and the original actor before every attempt."""
+        actual = self._matching_execution_context(context)
+        if actual is None:
+            return False
+        scopes = actual["_credential_authorization"]["scopes"]
+        return "*" in scopes or f"capability.{tool_id}.{action}" in scopes
 
     @_shared_keys
     def authorize(
