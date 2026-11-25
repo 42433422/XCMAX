@@ -16,7 +16,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from app.db.models.finance import FinancialTransaction
 from app.domain.shared_services import finance_unified_archive as archive
@@ -43,6 +43,10 @@ def pg_archive_db(monkeypatch):
         FinancialTransaction.__table__.create(pg)
         factory = sessionmaker(bind=pg, expire_on_commit=False)
         monkeypatch.setattr("app.db.SessionLocal", factory)
+        monkeypatch.setattr(
+            archive, "_crm_market_user_owned",
+            lambda tenant_id, market_user_id: tenant_id == 7 and market_user_id == 17,
+        )
         monkeypatch.setattr(
             "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id",
             lambda _invoice_id: {
@@ -96,9 +100,9 @@ def test_pg_drift_replay_and_tenant_boundary_fail_closed(pg_archive_db):
         )
     with tenant_scope(8):
         second_tenant = archive.archive_from_crm_invoice(_source_invoice())
-        assert second_tenant["archived"] is True
-        assert second_tenant["transaction_id"] != original["transaction_id"]
+        assert second_tenant == {
+            "archived": False, "reason_code": "invoice_tenant_ownership_conflict",
+        }
     with tenant_scope(7), pg_archive_db() as session:
-        assert session.scalars(
-            select(FinancialTransaction).where(FinancialTransaction.tenant_id == 7)
-        ).all().__len__() == 1
+        rows = session.scalars(select(FinancialTransaction)).all()
+        assert len(rows) == 1 and rows[0].tenant_id == 7
