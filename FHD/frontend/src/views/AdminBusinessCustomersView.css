@@ -148,3 +148,22 @@
 .muted {
   color: #64748b;
 }
+
+.admin-business-customers-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+}
+.admin-business-customers-pagination button {
+  padding: 7px 12px;
+  border: 1px solid #dce3eb;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.admin-business-customers-pagination button:disabled { opacity: .5; cursor: default; }
+.admin-business-customers-pagination button:focus-visible { outline: 2px solid var(--primary-color, #0b72d9); outline-offset: 2px; }
