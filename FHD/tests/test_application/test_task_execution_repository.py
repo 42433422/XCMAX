@@ -6,11 +6,13 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.resume_transaction import unresolved_effects
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_execution_repository import (
     InMemoryTaskExecutionRepository,
     SQLAlchemyTaskExecutionRepository,
 )
+from app.domain.task_lifecycle.control import SessionBook
 from tests.test_application.test_agent_task_admission import (
     admission_sessions as admission_sessions,
 )
@@ -118,6 +120,45 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     assert recovered.claim("second-worker", lease_seconds=30) is None
     assert recovered.finish(run.run_id, "first-worker", "completed") is None
     recovered_engine.dispose()
+
+
+def test_raw_success_without_independent_receipt_never_clears_open_effect(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'unverified-receipt.db'}")
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=sessionmaker(bind=engine))
+    run = AgentRun(user_id="owner", message="write completed before verification")
+    run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    step = AgentStep(
+        node_id="write",
+        tool_id="sales",
+        action="create",
+        status="completed",
+        output={"success": True},
+    )
+    run.steps.append(step)
+    run.tool_calls.append(
+        ToolCall(
+            step_id=step.step_id,
+            node_id=step.node_id,
+            tool_id=step.tool_id,
+            action=step.action,
+            status="completed",
+            output={"success": True},
+            metadata={
+                "verification_contract": {"protocol": "xcagi.result-verification.v1"},
+                "verification": {"status": "pending", "accepted": False},
+            },
+        )
+    )
+    queue.enqueue(run)
+    with queue.transaction() as db:
+        book = SessionBook(db)
+        body = book.get("agent", "tenant-a", run.run_id)
+        body["effects"] = [step.step_id]
+        book.put("agent", "tenant-a", run.run_id, body)
+    with queue.transaction() as db:
+        assert unresolved_effects(db, run, clear_confirmed=True) == [step.step_id]
+        assert SessionBook(db).get("agent", "tenant-a", run.run_id)["effects"] == [step.step_id]
+    engine.dispose()
 
 
 def test_stale_worker_cannot_clear_effects_or_append_lifecycle_history(lifecycle_queue):
