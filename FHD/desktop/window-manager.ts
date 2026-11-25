@@ -413,6 +413,8 @@ export async function createWindow(): Promise<void> {
   const showStartupWindow = () => {
     if (startupWindowShown || mainWindow.isDestroyed()) return
     startupWindowShown = true
+    // Restore native maximized presentation after the first paint, not during construction.
+    if (savedBounds?.maximized === true && typeof mainWindow.maximize === 'function') mainWindow.maximize()
     mainWindow.show()
     mainWindow.focus()
   }
@@ -420,7 +422,10 @@ export async function createWindow(): Promise<void> {
   let stateWriteTimer: NodeJS.Timeout | null = null
   const persistWindowState = () => {
     if (mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return
-    writeWindowState(statePath, mainWindow.getNormalBounds())
+    writeWindowState(statePath, {
+      ...mainWindow.getNormalBounds(),
+      ...(typeof mainWindow.isMaximized === 'function' ? { maximized: mainWindow.isMaximized() } : {}),
+    })
   }
   const scheduleWindowStateWrite = () => {
     if (stateWriteTimer) clearTimeout(stateWriteTimer)
@@ -431,6 +436,8 @@ export async function createWindow(): Promise<void> {
   }
   mainWindow.on('move', scheduleWindowStateWrite)
   mainWindow.on('resize', scheduleWindowStateWrite)
+  mainWindow.on('maximize', scheduleWindowStateWrite)
+  mainWindow.on('unmaximize', scheduleWindowStateWrite)
   mainWindow.on('show', syncDesktopAssistant)
   mainWindow.on('hide', syncDesktopAssistant)
   mainWindow.on('minimize', syncDesktopAssistant)
