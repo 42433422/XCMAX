@@ -34,12 +34,15 @@ def _cost(value: Any) -> int | None:
 
 _FAILURE_ORIGINS = {
     "model": {
-        "model_returned_no_usable_result", "model_usage_unknown",
-        "platform_model_not_configured", "life_cycle_prompt_budget_exhausted",
+        "model_returned_no_usable_result",
+        "model_usage_unknown",
+        "platform_model_not_configured",
+        "life_cycle_prompt_budget_exhausted",
         "platform_quota_unknown_or_exhausted",
     },
     "permission": {
-        "life_policy_changed_or_lease_lost", "LifePolicyError",
+        "life_policy_changed_or_lease_lost",
+        "LifePolicyError",
         "portfolio_task_exceeds_life_cycle_budget",
     },
     "tool": {"research_returned_no_sources", "research_not_configured"},
@@ -51,10 +54,14 @@ def failure_classification(status: str, reason: Any) -> dict[str, str]:
     """Classify ONLY recognized runtime boundary codes, never infer root cause."""
     category = "not_applicable"
     if status in ("failed", "blocked", "interrupted", "unknown", "policy_changed"):
-        category = next(
-            (kind for kind, codes in _FAILURE_ORIGINS.items() if reason in codes),
-            "unknown",
-        ) if isinstance(reason, str) else "unknown"
+        category = (
+            next(
+                (kind for kind, codes in _FAILURE_ORIGINS.items() if reason in codes),
+                "unknown",
+            )
+            if isinstance(reason, str)
+            else "unknown"
+        )
     return {
         "category": category,
         "basis": "runtime_boundary_code_not_verified_root_cause",
