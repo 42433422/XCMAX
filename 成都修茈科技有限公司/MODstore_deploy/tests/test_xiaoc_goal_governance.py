@@ -53,7 +53,8 @@ def test_hierarchy_is_stable_across_same_quarter_and_exposes_derived_anchors(ope
     path = goal["hierarchy"]
     assert [row["level"] for row in path["levels"]] == ["strategy", "quarter", "operating"]
     assert path["levels"][1]["parent_id"] == path["levels"][0]["id"]
-    assert path["levels"][2]["parent_id"] == path["levels"][1]["id"] == goal["id"]
+    assert path["levels"][2]["parent_id"] == path["levels"][1]["id"]
+    assert path["levels"][2]["id"] == goal["id"]
     assert "not_separate_approved_target" in path["levels"][1]["authority"]
     assert path == goal_path(state["identity_id"], state["mission"], goal["id"], now=now)
     assert goal_path(state["identity_id"], "另一个使命", goal["id"], now=now) != path
