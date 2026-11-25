@@ -118,12 +118,15 @@ const defaultHeaders: Record<string, string> = {
 export class ApiError extends Error {
   status: number
   data: unknown
+  /** Correlates the actual attempted HTTP request with server-side diagnostics. */
+  requestId?: string
 
-  constructor(message: string, status: number, data: unknown) {
+  constructor(message: string, status: number, data: unknown, requestId?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.data = data
+    this.requestId = requestId
   }
 }
 
@@ -313,6 +316,7 @@ async function requestOnce<T = unknown>(
   const traceHeaders = config.headers as Record<string, string>
   const hasTrace = Object.keys(traceHeaders).some((key) => key.toLowerCase() === 'x-request-id' && String(traceHeaders[key] || '').trim())
   if (!hasTrace) traceHeaders['X-Request-ID'] = createTraceId()
+  const requestId = Object.entries(traceHeaders).find(([key, value]) => key.toLowerCase() === 'x-request-id' && String(value || '').trim())?.[1]
 
   const assertSameAccount = () => {
     if (accountEpoch !== productReadAccountEpoch.value && !ACCOUNT_SWITCH_EXEMPT_PATH.test(url)) {
@@ -382,11 +386,12 @@ async function requestOnce<T = unknown>(
     return response
   } catch (error: unknown) {
     if (error instanceof ApiError) {
+      error.requestId ??= requestId
       throw error
     }
     const rawMessage = error instanceof Error ? error.message : '网络错误'
     if (callerSignal?.aborted) {
-      throw new ApiError(rawMessage, 0, { success: false, stability: { kind: 'interrupted', message: rawMessage, action: 'check_result', success: false } })
+      throw new ApiError(rawMessage, 0, { success: false, stability: { kind: 'interrupted', message: rawMessage, action: 'check_result', success: false } }, requestId)
     }
     const timedOut = Boolean(timeoutController?.signal.aborted)
     const online = typeof navigator === 'undefined' ? true : navigator.onLine
@@ -400,7 +405,7 @@ async function requestOnce<T = unknown>(
       : stability.message
     // 超时保留失败回执供页面处理，默认不弹全局提示；传输故障按「持续才提示」处理。
     if (!quiet && stability.kind !== 'timeout') noteTransportFailure(message)
-    throw new ApiError(message, 0, { success: false, stability })
+    throw new ApiError(message, 0, { success: false, stability }, requestId)
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
     detachCallerAbort?.()
