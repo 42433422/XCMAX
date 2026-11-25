@@ -295,7 +295,7 @@ def test_real_process_lock_released_after_termination_or_completion(
         assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-run"
         assert not calls, "busy path must never start a second runtime"
         if termination:
-            process.terminate()
+            process.kill()  # A crash cannot execute graceful lock-release handlers.
         else:
             release.write_text("finish", encoding="utf-8")
         _, stderr = process.communicate(timeout=10)
