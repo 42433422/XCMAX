@@ -46,8 +46,8 @@ ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
     {
         "id": STANDARD_PLAN_ID,
         "title": "XCAGI 软件买断",
-        "description": "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
-        "amount_cents": 680000,
+        "description": "3,000 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+        "amount_cents": 300000,
         "quota_cents": 0,
         "license_type": "permanent",
         "account_tier": "normal",

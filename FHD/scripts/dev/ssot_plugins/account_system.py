@@ -179,7 +179,7 @@ def _check_budgets(errors: list[str]) -> None:
     plans_raw = cfg.get("plans") or []
     plans = [p for p in plans_raw if isinstance(p, dict)]
     if {p.get("id") for p in plans} != set(EXPECTED_PUBLIC_PLAN_TITLES):
-        errors.append("公开软件目录只允许免费个人、99 元体验和 6800 元买断")
+        errors.append("公开软件目录只允许免费个人、99 元体验和 3000 元买断")
     for plan_id, expected_title in EXPECTED_PUBLIC_PLAN_TITLES.items():
         plan = _plan_by_id(plans, plan_id)
         if not plan:
@@ -204,7 +204,7 @@ def _check_budgets(errors: list[str]) -> None:
 
     standard = _plan_by_id(plans, "saas-permanent-standard") or {}
     for key, expected in {
-        "amount_cents": 680000,
+        "amount_cents": 300000,
         "quota_cents": 0,
         "license_type": "permanent",
         "account_tier": "normal",
@@ -217,8 +217,8 @@ def _check_budgets(errors: list[str]) -> None:
         if (plan.get("amount_cents"), plan.get("account_tier")) != (amount, tier):
             errors.append(f"历史 SKU {plan_id} 的金额/授权元数据必须保留供旧单履约")
     terms = cfg.get("commercial_terms")
-    if not isinstance(terms, dict) or terms.get("customization_from_cents") != 298000:
-        errors.append("commercial_terms.customization_from_cents 应为 298000")
+    if not isinstance(terms, dict) or terms.get("customization_from_cents") != 99900:
+        errors.append("commercial_terms.customization_from_cents 应为 99900")
     if not isinstance(terms, dict) or terms.get("ai_billing") != "usage":
         errors.append("commercial_terms.ai_billing 必须保持按量收费")
     for mirror in COMMERCE_TERMS_MIRRORS:
