@@ -118,6 +118,29 @@ def record_observation(raw: str | None, snapshot: dict[str, Any]) -> tuple[dict[
             _HISTORY_KEY: history,
             _TRUNCATED_KEY: truncated,
         }, True
+    matching = next(
+        (
+            item
+            for item in history
+            if observation_time(item) == instant
+            and item["source_version"] == entry["source_version"]
+        ),
+        None,
+    )
+    if matching is not None:
+        # An identical event is idempotent. Same version/time but different
+        # provenance must not rewrite the envelope under the old digest.
+        divergent = matching != entry
+        conflicting = any(
+            observation_time(item) == instant
+            and item["source_version"] != entry["source_version"]
+            for item in history
+        )
+        return {
+            **history[-1],
+            _HISTORY_KEY: history,
+            _TRUNCATED_KEY: truncated,
+        }, divergent or conflicting
     conflict = any(
         observation_time(item) >= instant and item["source_version"] != entry["source_version"]
         for item in history
