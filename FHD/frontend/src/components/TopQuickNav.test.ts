@@ -439,6 +439,48 @@ describe('TopQuickNav', () => {
     }
   })
 
+  it.each([
+    ['customer', 'QnavCustomer', '/customers', null],
+    ['product', 'QnavProduct', '/products', null],
+    ['order', 'QnavOrder', '/orders', null],
+    ['employee', 'QnavEmployee', '/', 'employee-workflow'],
+    ['template', 'QnavTemplate', '/', 'template-preview'],
+  ] as const)('dismisses the desktop palette and scrim after choosing a %s record', async (_kind, query, path, navKey) => {
+    const savedDesktop = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
+    searchProducts.mockResolvedValueOnce({ success: true, data: [{ id: 31, model_number: 'QnavProduct' }] } as never)
+    getCustomers.mockResolvedValueOnce({ success: true, data: [{ id: 32, customer_name: 'QnavCustomer' }] } as never)
+    searchOrders.mockResolvedValueOnce({ success: true, data: [{ order_number: 'QnavOrder' }] } as never)
+    fetchEmployeeDirectory.mockResolvedValueOnce([{ pack_id: 'employee-qnav', label: 'QnavEmployee' }] as never)
+    listTemplates.mockResolvedValueOnce({ success: true, templates: [{ id: 33, name: 'QnavTemplate' }] } as never)
+    const wrapper = await mountNav()
+    try {
+      const key = new KeyboardEvent('keydown', { key: 'k', ctrlKey: !/Mac/i.test(navigator.platform),
+        metaKey: /Mac/i.test(navigator.platform), bubbles: true, cancelable: true })
+      document.activeElement?.dispatchEvent(key)
+      await wrapper.vm.$nextTick()
+      expect(document.querySelector('.top-quick-nav--palette')).toBeTruthy()
+      expect(document.querySelector('.top-quick-nav__scrim')).toBeTruthy()
+      await wrapper.find('input').setValue(query)
+      await vi.waitFor(() => expect(optionNames().join()).toContain(query))
+      const record = [...document.querySelectorAll('.top-quick-nav__option')]
+        .find(node => node.textContent?.includes(query))
+      expect(record).toBeTruthy()
+      record?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
+      expect(document.querySelector('.top-quick-nav__scrim')).toBeNull()
+      expect(document.querySelector('.top-quick-nav__list')).toBeNull()
+      expect(activeRouter.currentRoute.value.path).toBe(path)
+      if (navKey) expect(wrapper.emitted('select')).toContainEqual([navKey])
+    } finally {
+      wrapper.unmount()
+      sessionStorage.removeItem('xcagi_template_search_keyword')
+      if (savedDesktop) Object.defineProperty(window, 'xcagiDesktop', savedDesktop)
+      else Reflect.deleteProperty(window, 'xcagiDesktop')
+    }
+  })
+
   it('provides a keyboard focus-trapped command panel, editable shortcuts and safe commands', async () => {
     const savedDesktop = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
     Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
