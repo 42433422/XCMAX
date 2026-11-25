@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app.application.rbac_app_service import RbacAppService
+from app.errors import AppError
 from app.db.models import Permission, Role, User, UserSession, role_permissions
 from app.utils.time import utc_now_naive
 
@@ -34,7 +35,9 @@ def role_host(tmp_path, monkeypatch):
         executor = Permission(code="elt.execute", name="Execute ELT")
         tenant_role = Role(name="tenant:7:worker", is_system=False, permissions=[reader])
         other_role = Role(name="tenant:8:worker", is_system=False, permissions=[reader])
-        db.add_all([tenant_role, other_role, executor])
+        tenant_operator = Role(name="tenant:7:operator", is_system=False, permissions=[reader])
+        platform_admin = Role(name="admin", is_system=True, permissions=[reader])
+        db.add_all([tenant_role, other_role, tenant_operator, platform_admin, executor])
         db.flush()
         alice = User(
             username="atomic-alice",
@@ -123,7 +126,7 @@ def test_role_assignment_and_session_revocation_share_host_transaction(role_host
     event.listen(engine, "before_cursor_execute", fail_session_delete)
     try:
         with pytest.raises(RuntimeError, match="forced session revocation failure"):
-            RbacAppService().assign_user_role(alice_id, "tenant:8:worker", tenant_id=None)
+            RbacAppService().assign_user_role(alice_id, "tenant:7:operator", tenant_id=7)
     finally:
         event.remove(engine, "before_cursor_execute", fail_session_delete)
 
@@ -135,3 +138,15 @@ def test_role_assignment_and_session_revocation_share_host_transaction(role_host
             .count()
             == 1
         )
+
+
+@pytest.mark.parametrize("forbidden_role", ["tenant:8:worker", "admin"])
+def test_platform_scope_cannot_grant_cross_tenant_or_admin_role(
+    role_host, forbidden_role
+):
+    _engine, factory, _role_id, alice_id, _bob_id = role_host
+    with pytest.raises(AppError):
+        RbacAppService().assign_user_role(alice_id, forbidden_role, tenant_id=None)
+    with factory() as db:
+        assert db.query(User).filter(User.id == alice_id).one().role == "tenant:7:worker"
+        assert db.query(UserSession).filter(UserSession.user_id == alice_id).count() == 1
