@@ -331,7 +331,7 @@ async def alipay_trade_notify(request: Request):
             return PlainTextResponse("fail", status_code=503)
         if reason in {"amount_mismatch", "trade_mismatch", "invalid_notify"}:
             return PlainTextResponse("fail", status_code=400)
-        if reason in {"fulfillment_pending", "unknown_order", "reconciliation_required", "order_record_corrupt"}:
+        if reason in {"fulfillment_pending", "unknown_order", "reconciliation_required", "order_record_corrupt", "terminal_order_conflict"}:
             # Unknown orders are unsettled money, not a successful delivery.
             # Never stop provider retries before an operator can reconcile
             # the merchant order ID against the authoritative payment record.
