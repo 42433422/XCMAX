@@ -3,6 +3,7 @@ name: Frontend MOD route child contract
 on:
   pull_request:
     branches:
+      - main
       - integration/frontend-desktop-mobile-20261125
     paths:
       - 'FHD/frontend/src/router/**'
@@ -12,6 +13,7 @@ on:
   push:
     branches:
       - fix/frontend-mod-route-isolation-20261125
+      - integration/frontend-desktop-mobile-20261125
     paths:
       - 'FHD/frontend/src/router/**'
       - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
