@@ -102,6 +102,17 @@ describe('chatSseStream', () => {
     expect(events).toEqual([{ type: 'token', text: '中文进度' }, { type: 'done' }])
   })
 
+  it('suppresses duplicated SSE event IDs but preserves distinct equal-text tokens', async () => {
+    const tokens: string[] = []
+    await readPlannerSseResponse(mockSseResponse([
+      'id: 101\ndata: {"type":"token","text":"同"}\n\n',
+      'id: 101\ndata: {"type":"token","text":"同"}\n\n',
+      'id: 102\ndata: {"type":"token","text":"同"}\n\n',
+      'id: 103\ndata: {"type":"done","result":{"response":"同同"}}\n\n',
+    ]), (event) => { if (event.type === 'token') tokens.push(event.text) })
+    expect(tokens).toEqual(['同', '同'])
+  })
+
   it('ignores malformed JSON payloads', async () => {
     const events: string[] = []
     await readPlannerSseResponse(mockSseResponse(['data: {oops not json}\n\n', 'data: {"type":"done"}\n\n']), (ev) => events.push(ev.type))
