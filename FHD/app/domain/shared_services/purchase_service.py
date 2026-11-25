@@ -627,6 +627,156 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
         elif any_received:
             order.status = "partial"
 
+    def reconcile_purchase_inbound(self, inbound_id: int) -> dict[str, Any]:
+        """Read-only cross-check: source receipt ↔ batch movements ↔ AP journal.
+
+        This is an independent query of the original rows in the same database,
+        NOT independent banking, customer sign-off or supplier settlement.
+        """
+        from collections import defaultdict
+
+        from app.db.models.accounting import JournalEntry
+        from app.db.models.inventory import InventoryTransaction
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+        if tenant_id is None:
+            return {"success": False, "reason_code": "tenant_context_required"}
+        with get_db() as db:
+            receipt = (
+                db.query(PurchaseInbound)
+                .filter(
+                    PurchaseInbound.id == inbound_id,
+                    PurchaseInbound.tenant_id == tenant_id,
+                )
+                .one_or_none()
+            )
+            if receipt is None or receipt.status != "completed":
+                return {
+                    "success": False,
+                    "reason_code": "completed_purchase_receipt_required",
+                }
+
+            issues: list[str] = []
+            expected: dict[tuple[int, int, str | None, int | None], Decimal] = defaultdict(
+                lambda: Decimal("0")
+            )
+            source_total = Decimal("0")
+            if not receipt.items:
+                issues.append("receipt_items_missing")
+            for item in receipt.items:
+                if item.tenant_id != tenant_id or item.product_id is None:
+                    issues.append("receipt_item_tenant_or_identity_conflict")
+                    continue
+                quantity = Decimal(str(item.quantity))
+                if not quantity.is_finite() or quantity <= 0:
+                    issues.append("receipt_item_quantity_invalid")
+                    continue
+                key = (
+                    item.product_id,
+                    receipt.warehouse_id,
+                    item.batch_no,
+                    item.location_id,
+                )
+                expected[key] += quantity
+                source_total += _line_amount(quantity, Decimal(str(item.unit_price or 0)))
+                if Decimal(str(item.amount or 0)) != _line_amount(
+                    quantity, Decimal(str(item.unit_price or 0))
+                ):
+                    issues.append("receipt_item_amount_mismatch")
+
+            postings = (
+                db.query(InventoryTransaction)
+                .filter(
+                    InventoryTransaction.tenant_id == tenant_id,
+                    InventoryTransaction.reference_type == "purchase_inbound",
+                    InventoryTransaction.reference_id == receipt.id,
+                )
+                .all()
+            )
+            actual: dict[tuple[int, int, str | None, int | None], Decimal] = defaultdict(
+                lambda: Decimal("0")
+            )
+            for txn in postings:
+                if txn.transaction_type != "in":
+                    issues.append("unexpected_purchase_stock_movement")
+                    continue
+                actual[
+                    (txn.product_id, txn.warehouse_id, txn.batch_no, txn.location_id)
+                ] += Decimal(str(txn.quantity))
+            if dict(actual) != dict(expected):
+                issues.append("purchase_batch_stock_mismatch")
+
+            total = Decimal(str(receipt.total_amount or 0))
+            if total != source_total:
+                issues.append("purchase_receipt_total_mismatch")
+            entries = (
+                db.query(JournalEntry)
+                .filter(
+                    JournalEntry.tenant_id == tenant_id,
+                    JournalEntry.reference_type == "purchase_inbound",
+                    JournalEntry.reference_id == receipt.id,
+                )
+                .all()
+            )
+            journal_id = entries[0].id if len(entries) == 1 else None
+            if total > 0:
+                if len(entries) != 1:
+                    issues.append("purchase_payable_journal_missing_or_duplicate")
+                else:
+                    entry = entries[0]
+                    debit = sum(
+                        (Decimal(str(line.debit or 0)) for line in entry.lines),
+                        Decimal("0"),
+                    )
+                    credit = sum(
+                        (Decimal(str(line.credit or 0)) for line in entry.lines),
+                        Decimal("0"),
+                    )
+                    asset = sum(
+                        (
+                            Decimal(str(line.debit or 0))
+                            for line in entry.lines
+                            if line.account_code == "1401"
+                        ),
+                        Decimal("0"),
+                    )
+                    payable = sum(
+                        (
+                            Decimal(str(line.credit or 0))
+                            for line in entry.lines
+                            if line.account_code == "2201"
+                        ),
+                        Decimal("0"),
+                    )
+                    if (
+                        entry.status != "posted"
+                        or entry.reversed_at is not None
+                        or debit != total
+                        or credit != total
+                        or asset != total
+                        or payable != total
+                    ):
+                        issues.append("purchase_payable_journal_amount_or_status_mismatch")
+            elif entries:
+                issues.append("unexpected_zero_amount_purchase_journal")
+
+            issues = sorted(set(issues))
+            return {
+                "success": not issues,
+                "posting_consistent": not issues,
+                "issues": issues,
+                "receipt_id": receipt.id,
+                "receipt_no": receipt.inbound_no,
+                "source_amount": str(total),
+                "source_line_count": len(receipt.items),
+                "inventory_posting_count": len(postings),
+                "journal_id": journal_id,
+                "scope": "same_database_cross_table_only",
+                "bank_settlement_verified": False,
+                "customer_signoff_verified": False,
+            }
+
     def get_purchase_inbounds(
         self,
         supplier_id: int | None = None,
