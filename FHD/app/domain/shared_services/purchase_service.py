@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from sqlalchemy import text
@@ -58,6 +58,11 @@ def _line_values(item):
         return quantity, price
     except InvalidOperation as exc:
         raise ValueError("采购数量或单价无效") from exc
+
+
+def _line_amount(quantity: Decimal, price: Decimal) -> Decimal:
+    """Per-line currency amount matches persisted NUMERIC(18, 2) and journal totals."""
+    return (quantity * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def purchase_execution_number(action: str, run_id: str, step_id: str, tenant_id: str) -> str:
@@ -159,7 +164,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity, unit_price = _line_values(item_data)
-                    amount = quantity * unit_price
+                    amount = _line_amount(quantity, unit_price)
                     total_amount += amount
 
                     item = PurchaseOrderItem(
@@ -258,7 +263,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                             .first()
                         )
                         quantity, unit_price = _line_values(item_data)
-                        amount = quantity * unit_price
+                        amount = _line_amount(quantity, unit_price)
                         total_amount += amount
 
                         item = PurchaseOrderItem(
@@ -305,18 +310,22 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
 
                 if order.status != "draft":
                     return {"success": False, "message": "只有草稿状态的订单可以审核"}
-                expected = sum(
-                    (
-                        quantity * price
-                        for quantity, price in (
-                            _line_values({"quantity": item.quantity, "unit_price": item.unit_price})
-                            for item in order.items
-                        )
-                    ),
-                    Decimal(0),
-                ).quantize(Decimal("0.01"))
-                if not order.items or expected != Decimal(str(order.total_amount)):
-                    raise ValueError("采购审批需要有效的原订单明细")
+                lines = [
+                    _line_amount(*_line_values({
+                        "quantity": item.quantity, "unit_price": item.unit_price
+                    }))
+                    for item in order.items
+                ]
+                expected = sum(lines, Decimal("0"))
+                if (
+                    not lines
+                    or expected != Decimal(str(order.total_amount))
+                    or any(
+                        amount != Decimal(str(item.amount or 0))
+                        for amount, item in zip(lines, order.items)
+                    )
+                ):
+                    raise ValueError("采购审批需要金额与数量一致的原订单明细")
                 supplier = (
                     db.query(Supplier)
                     .filter(
@@ -374,8 +383,22 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
-                if order.status in ("completed", "cancelled"):
-                    return {"success": False, "message": "该订单无法取消"}
+                if order.status not in {"draft", "rejected", "approved"}:
+                    return {"success": False, "message": "已履约或终态的采购订单不可取消"}
+                if (
+                    Decimal(str(order.paid_amount or 0)) != 0
+                    or any(
+                        Decimal(str(item.received_quantity or 0)) > 0
+                        or Decimal(str(item.invoiced_quantity or 0)) > 0
+                        for item in order.items
+                    )
+                    or db.query(PurchaseInbound.id).filter(
+                        PurchaseInbound.order_id == order.id,
+                        PurchaseInbound.tenant_id == order.tenant_id,
+                        PurchaseInbound.status == "completed",
+                    ).first() is not None
+                ):
+                    return {"success": False, "message": "采购订单已有入库、开票或付款，须通过原业务冲销，不得直接取消"}
 
                 order.status = "cancelled"
                 order.updated_at = datetime.now()
@@ -427,7 +450,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity, unit_price = _line_values(item_data)
-                    amount = quantity * unit_price
+                    amount = _line_amount(quantity, unit_price)
                     total_amount += amount
 
                     item = PurchaseInboundItem(
@@ -469,6 +492,9 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 inbound.status = "completed"
                 order_id = data.get("order_id")
                 if order_id is not None:
+                    # SessionLocal has autoflush=False: make new inbound items visible
+                    # to the exact-source progress query before posting a payable.
+                    db.flush()
                     self._update_order_received_quantity(db, int(order_id))
 
                 # Inventory, receipt, order progress and payable share one transaction.
@@ -572,21 +598,29 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
         for item in order.items:
             inbound_items = (
                 db.query(PurchaseInboundItem)
-                .filter(PurchaseInboundItem.order_item_id == item.id)
+                .join(PurchaseInbound, PurchaseInbound.id == PurchaseInboundItem.inbound_id)
+                .filter(
+                    PurchaseInboundItem.order_item_id == item.id,
+                    PurchaseInboundItem.tenant_id == order.tenant_id,
+                    PurchaseInbound.order_id == order.id,
+                    PurchaseInbound.tenant_id == order.tenant_id,
+                    PurchaseInbound.status == "completed",
+                )
                 .all()
             )
-            received = sum(float(i.quantity) for i in inbound_items)
+            received = sum((Decimal(str(i.quantity)) for i in inbound_items), Decimal("0"))
             item.received_quantity = received
 
-            if float(item.quantity) <= received:
+            if Decimal(str(item.quantity)) <= received:
                 item.status = "completed"
             elif received > 0:
                 item.status = "partial"
 
         all_completed = all(
-            float(item.quantity) <= float(item.received_quantity) for item in order.items
+            Decimal(str(item.quantity)) <= Decimal(str(item.received_quantity or 0))
+            for item in order.items
         )
-        any_received = any(float(item.received_quantity) > 0 for item in order.items)
+        any_received = any(Decimal(str(item.received_quantity or 0)) > 0 for item in order.items)
 
         if all_completed:
             order.status = "completed"
