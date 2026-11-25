@@ -158,6 +158,31 @@ def test_independent_holdout_failure_overrules_submitted_improvement(cases):
     assert bad["business_evidence"] == good["business_evidence"]
 
 
+@pytest.mark.parametrize("baseline_pass_index", [0, 1])
+def test_holdout_and_development_both_need_real_paired_gain(cases, baseline_pass_index):
+    bundle, tests, verified = _sealed_inputs(cases)
+    verified[0, baseline_pass_index]["pass"] = True
+    verdict = {"improved": True, "verdict": "candidate_for_approval"}
+    result = datasets.seal_business_evidence(bundle, tests, verified, verdict)
+    assert result["improved"] is False
+    assert result["verdict"] == "keep_baseline"
+    assert result["holdout_verified"] is (baseline_pass_index == 0)
+    assert result["development_paired_wins"] == (baseline_pass_index == 1)
+    assert result["holdout_paired_wins"] == (baseline_pass_index == 0)
+
+
+@pytest.mark.parametrize("invalid", ["true", 1, None])
+def test_untyped_independent_verdict_cannot_authorize_candidate(cases, invalid):
+    bundle, tests, verified = _sealed_inputs(cases)
+    verified[1, 1]["pass"] = invalid
+    result = datasets.seal_business_evidence(
+        bundle, tests, verified, {"improved": True, "verdict": "candidate_for_approval"}
+    )
+    assert result["verdict"] == "keep_baseline"
+    assert result["runtime_verified"] is False
+    assert result["holdout_verified"] is False
+
+
 def test_claimed_partitions_cannot_override_original_content_group(cases):
     bundle, tests, verified = _sealed_inputs(cases)
     bundle["case_partitions"].reverse()
