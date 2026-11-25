@@ -108,6 +108,17 @@ def test_unknown_and_unversioned_receipts_are_not_success_or_failure():
     assert result["excluded_unmeasured"] == 1
 
 
+
+def test_conflicting_receipt_does_not_inflate_completion_or_hide_risk():
+    originals = [cycle(str(index), day=index) for index in range(20)]
+    conflict = {**originals[-1], "status": "failed"}
+    result = completion_review(SCOPE, originals + [conflict])
+    assert result["conflicting_cycle_receipts"] == 1
+    assert result["status"] == "review_recommended"
+    assert result["groups"][0]["sample_count"] == 19
+    assert result["groups"][0]["status"] == "insufficient_evidence"
+
+
 def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tmp_path):
     from modstore_server import strategy_bets, strategy_planner
 
