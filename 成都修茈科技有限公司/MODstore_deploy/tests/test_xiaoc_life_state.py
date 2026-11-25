@@ -897,7 +897,6 @@ def test_repeated_lifecycle_command_still_checks_expected_revision(database):
     assert store.read_state()["state_version"] == paused["state_version"]
 
 
-
 def test_graph_act_outbound_and_closeout_have_idempotent_persistent_audit(database):
     configure()
     claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
@@ -983,9 +982,7 @@ def test_lifecycle_phase_transitions_are_append_only_and_concurrent_retries_idem
     assert by_status["decide"]["from"] == "observe"
     assert by_status["act"]["from"] == "decide"
     assert by_status["reflect"]["from"] == "act"
-    assert all(
-        event["kind"] != "life_transition" for event in store.read_state()["events"]
-    )
+    assert all(event["kind"] != "life_transition" for event in store.read_state()["events"])
     assert (
         len(
             [
@@ -1000,7 +997,9 @@ def test_lifecycle_phase_transitions_are_append_only_and_concurrent_retries_idem
     with database() as session:
         assert (
             session.scalar(
-                select(func.count()).select_from(XiaoCLifeEvent).where(
+                select(func.count())
+                .select_from(XiaoCLifeEvent)
+                .where(
                     XiaoCLifeEvent.kind == "life_transition",
                     XiaoCLifeEvent.id.startswith(f"life:phase:{claim['cycle_id']}:"),
                 )
@@ -1010,14 +1009,10 @@ def test_lifecycle_phase_transitions_are_append_only_and_concurrent_retries_idem
 
 
 @pytest.mark.parametrize("reason", ["paused", "stopped", "revoked", "expired"])
-def test_admission_denial_persists_once_and_never_reclaims_on_repeat(
-    database, monkeypatch, reason
-):
+def test_admission_denial_persists_once_and_never_reclaims_on_repeat(database, monkeypatch, reason):
     now = datetime(2026, 11, 23, 4, tzinfo=UTC)
     monkeypatch.setattr(store, "utcnow", lambda: now)
-    state = configure(
-        authorization_expires_at=(now + timedelta(minutes=5)).isoformat()
-    )
+    state = configure(authorization_expires_at=(now + timedelta(minutes=5)).isoformat())
     if reason in ("paused", "stopped"):
         field = "paused" if reason == "paused" else "stopped"
         store.update_settings(
@@ -1075,14 +1070,13 @@ def test_budget_exhaustion_has_immutable_admission_and_settlement_evidence(datab
     assert store.claim_cycle(domain="enterprise", reserve_tokens=0) is None
     assert store.read_state()["state_version"] == after_denial["state_version"]
     with database() as session:
-        assert (
-            session.get(XiaoCLifeEvent, f"life:limit:{claim['cycle_id']}")
-            is not None
-        )
+        assert session.get(XiaoCLifeEvent, f"life:limit:{claim['cycle_id']}") is not None
         assert session.get(XiaoCLifeEvent, f"cycle:{claim['cycle_id']}") is not None
         assert (
             session.scalar(
-                select(func.count()).select_from(XiaoCLifeEvent).where(
+                select(func.count())
+                .select_from(XiaoCLifeEvent)
+                .where(
                     XiaoCLifeEvent.kind == "life_transition",
                     XiaoCLifeEvent.status == "blocked",
                 )
@@ -1104,9 +1098,7 @@ def test_policy_audit_captures_stop_pause_resume_edges_without_duplicate_events(
         actor_user_id=7,
     )
     resumed = store.update_settings(
-        LifeUpdate(
-            expected_revision=stopped["revision"], stopped=False, paused=False
-        ),
+        LifeUpdate(expected_revision=stopped["revision"], stopped=False, paused=False),
         actor_user_id=7,
     )
     assert resumed["status"] != "stopped"
@@ -1118,10 +1110,7 @@ def test_policy_audit_captures_stop_pause_resume_edges_without_duplicate_events(
                 select(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "policy")
             )
         }
-    edges = [
-        history[f"policy:{snapshot['revision']}"]
-        for snapshot in (paused, stopped, resumed)
-    ]
+    edges = [history[f"policy:{snapshot['revision']}"] for snapshot in (paused, stopped, resumed)]
     assert [
         (item["before_paused"], item["paused"], item["before_stopped"], item["stopped"])
         for item in edges
@@ -1137,9 +1126,7 @@ def test_policy_audit_captures_stop_pause_resume_edges_without_duplicate_events(
     assert duplicate["state_version"] == resumed["state_version"]
     with database() as session:
         assert session.scalar(
-            select(func.count()).select_from(XiaoCLifeEvent).where(
-                XiaoCLifeEvent.kind == "policy"
-            )
+            select(func.count()).select_from(XiaoCLifeEvent).where(XiaoCLifeEvent.kind == "policy")
         ) == len(history)
 
 
