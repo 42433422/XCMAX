@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../api/mobile_api.dart' show MobileApiException;
+import '../../api/mobile_session_store.dart' show MobileSessionData;
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../im/im_websocket_client.dart';
@@ -46,7 +48,8 @@ class ImMessengerScreen extends StatefulWidget {
   State<ImMessengerScreen> createState() => _ImMessengerScreenState();
 }
 
-class _ImMessengerScreenState extends State<ImMessengerScreen> {
+class _ImMessengerScreenState extends State<ImMessengerScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   final _peerController = TextEditingController();
   final _draftController = TextEditingController();
@@ -58,6 +61,11 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   var _wsAttached = false;
   StreamSubscription<Map<String, Object?>>? _wsSubscription;
   StreamSubscription<ImWsConnectionState>? _wsStateSubscription;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
+  int _authGeneration = 0;
+  int _requestEpoch = 0;
+  bool _foreground = true;
+  bool _invalidated = false;
 
   @override
   void initState() {
@@ -66,6 +74,11 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
       context,
       explicit: widget.repository,
     );
+    WidgetsBinding.instance.addObserver(this);
+    _authGeneration = _repository.client.authGeneration;
+    _sessionSubscription = _repository.client.sessionChanges.listen((_) {
+      if (_authGeneration != _repository.client.authGeneration) _invalidateSession();
+    });
     _conversationId = widget.initialConversationId ?? 0;
     _messages = widget.initialMessages ?? const <ImMessage>[];
     if (_conversationId > 0) {
@@ -76,8 +89,41 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
     }
   }
 
+  void _invalidateSession() {
+    if (_invalidated) return;
+    _invalidated = true;
+    _requestEpoch++;
+    _repository.disconnectImWebSocket();
+    if (mounted) {
+      setState(() {
+        _messages = const <ImMessage>[];
+        _conversationId = 0;
+        _wsState = ImWsConnectionState.disconnected;
+        _error = '账号已切换，请重新打开会话';
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (foreground == _foreground) return;
+    _foreground = foreground;
+    _requestEpoch++;
+    if (!_foreground) {
+      _repository.disconnectImWebSocket();
+      if (mounted) setState(() => _wsState = ImWsConnectionState.disconnected);
+    } else if (!_invalidated && _conversationId > 0) {
+      unawaited(_attachWebSocket());
+      unawaited(_reloadMessages());
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _requestEpoch++;
+    _sessionSubscription?.cancel();
     _wsSubscription?.cancel();
     _wsStateSubscription?.cancel();
     _repository.disconnectImWebSocket();
@@ -87,15 +133,26 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   }
 
   Future<void> _attachWebSocket() async {
+    if (_invalidated || !_foreground || _conversationId <= 0 ||
+        _authGeneration != _repository.client.authGeneration) return;
+    final epoch = _requestEpoch;
     _wsSubscription?.cancel();
     _wsSubscription = _repository.imWebSocketEvents.listen(_onWebSocketEvent);
     _wsStateSubscription?.cancel();
     _wsStateSubscription = _repository.imWebSocketStates.listen((state) {
-      if (!mounted) return;
+      if (!mounted || _invalidated || !_foreground ||
+          _authGeneration != _repository.client.authGeneration) return;
       setState(() => _wsState = state);
+      // Missed frames and acknowledgements are resolved from server truth.
+      // Never recover by re-sending the last outbound message.
+      if (state == ImWsConnectionState.connected && _conversationId > 0) {
+        unawaited(_reloadMessages());
+      }
     });
     await _repository.connectImWebSocket();
-    if (!mounted) return;
+    if (!mounted || _invalidated || !_foreground ||
+        epoch != _requestEpoch ||
+        _authGeneration != _repository.client.authGeneration) return;
     setState(() {
       _wsAttached = true;
       _wsState = _repository.imWebSocketState;
@@ -104,7 +161,9 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
 
   void _onWebSocketEvent(Map<String, Object?> event) {
     final parsed = ImWebSocketClient.parseMessageEvent(event);
-    if (parsed == null || parsed.conversationId != _conversationId) return;
+    if (parsed == null || parsed.conversationId != _conversationId ||
+        _invalidated || !_foreground ||
+        _authGeneration != _repository.client.authGeneration) return;
     if (_messages.any((message) => message.id == parsed.messageId)) return;
     if (!mounted) return;
     setState(() {
@@ -327,17 +386,31 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   }
 
   Future<void> _reloadMessages() async {
-    if (_conversationId <= 0) return;
+    if (_conversationId <= 0 || _invalidated || !_foreground) return;
+    final conversationId = _conversationId;
+    final epoch = _requestEpoch;
     try {
-      final messages = await _repository.loadImMessages(_conversationId);
-      if (mounted) {
-        setState(() {
-          _messages = messages;
-          _error = '';
-        });
-      }
+      final messages = await _repository.loadImMessages(conversationId);
+      if (!mounted || _invalidated || !_foreground ||
+          conversationId != _conversationId || epoch != _requestEpoch ||
+          _authGeneration != _repository.client.authGeneration) return;
+      setState(() {
+        // Preserve live frames arriving while the HTTP resync was in flight.
+        final merged = <int, ImMessage>{
+          for (final message in messages) message.id: message,
+          for (final message in _messages) message.id: message,
+        };
+        _messages = merged.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+        _error = '';
+      });
     } catch (error) {
-      if (mounted) setState(() => _error = mobileErrorText(error));
+      if (!mounted || _invalidated || epoch != _requestEpoch) return;
+      if (error is MobileApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        _invalidateSession();
+      } else {
+        setState(() => _error = mobileErrorText(error));
+      }
     }
   }
 
