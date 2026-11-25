@@ -1,0 +1,30 @@
+# 小 C 单生命运行时：72 小时 / 30 天验收协议
+
+状态：**NOT RUN**。此协议不是实测证明，不允许缩短真实观察时间或用 mock、快进时钟、历史 CI 代替。
+执行必须由有权限的管理员在隔离预生产租户进行；不启动无人监督的真实公司写操作，不增加已有审批、费用、权限或任务上限。
+
+## 单一权威
+- 原 XiaoCLifeState 行提供 identity_id、数据库 CAS state_version、管理员授权 revision、原活跃 cycle_id、阶段及预算；XiaoCLifeEvent 保存不可变事实。管理端读取同一状态。
+- LangGraph 保留原 observe / decide / act / reflect 图，新增官方 AsyncPostgresSaver / AsyncSqliteSaver 原生持久检查点，采用 `durability="sync"`。原 CAS 行独立保留 act/reflect 回执投影。图在 act 之前静态中断，原 SQL CAS 一次性准入后执行；崩溃时仅从已经完整保存的 decide→act 安全边界恢复，必须独立核对原模型用量。act 一旦准入不可回放；不完整的外部副作用只能按原回执核对，不能因图检查点而重试。异步任务由原 AgentRun / Employee Runtime / 战略账本按原身份推进，未知调用只核对回执。
+- APScheduler 原任务是触发器，不能作为唯一任务权威。停止不销毁身份、不清除历史、不退款未知调用；显式启动不复活旧授权。授权到期、撤权与预算耗尽停止新准入；原回执仍可只读核对。
+
+## 前置条件和证据
+1. 固定源码提交 SHA、镜像 digest、PostgreSQL 版本与迁移版本；先跑原 push_preflight、CI、生命状态/运行时/队列/长任务及原业务测试。保留 JUnit、日志、CI run ID。
+2. 预生产独立数据库、两进程调度和已批准的受限测试任务；明确授权人、额度和到期时间。启用已有日志/指标收集；每分钟采集 UTC 时间、identity_id、state_version、revision、activity.id/phase、budget、进程 RSS/CPU/FD、DB pool、任务与原业务账本计数。禁止记录密钥、租约 token、私有模型正文。
+3. 开始前记录运行基线与预期任务/幂等键；每次重启记录原 cycle/task/receipt 身份和读回，禁止人工补造结果。数据库和工作进程分别重启，双调度争用，网络断开与恢复，模拟 ACK 丢失、暂停、撤权、授权到期和预算耗尽；外部测试副作用需独立对账。
+4. 72 小时实际连续观察：每日至少一次可重复的受限任务，在故障点前后核对同一身份和原记录。观察实际墙钟跨度不少于 72h，记录故障时间、恢复时间和人工干预。
+5. 30 天实际连续观察：独立执行不少于 30×24h，不得拿 72h 数据重复充数。覆盖实际日期滚动、授权续期（必须人工批准）、部署滚动重启、资源回收。每次授权变更明确核验旧调用无法新增动作。
+6. 停止时先关闭新增准入，再保留原回执核对直至真实终态，核对 scheduler/worker/连接池退出与资源释放。禁止通过清空数据库、重置任务 ID 或预算伪造恢复。
+
+## 通过门槛
+- identity_id 唯一且跨进程、部署和重启不变；状态版本不倒退；授权版本独立于状态更新。
+- 同一业务幂等键实际副作用至多一次；无凭空已完成事实；任何未决账本仍保留额度，不能当成免费或重新派发。模型外呼前先 CAS 保存 outbound_attempted，若传输失败且回执缺失，禁止空日志自动按零消费结算。
+- 停止、撤权、过期、预算耗尽后新增自主动作计数为零；原实际消费仍允许回读；手动明确授权的原业务规则不变。
+- 记录 CPU/RSS/FD/连接池与重启前后回收证据；资源持续增长、孤儿进程、未解释预算差异、监控缺失或中途断证即 FAIL 或 BLOCKED，不可标 PASS。
+- 保存时间序列、原始回执、对账清单、故障记录、完整起止 UTC 时间、源码 SHA 与独立验收人。72 小时和 30 天分别登记 PASS/FAIL/BLOCKED/NOT RUN。
+
+## 本提交证据
+- 原生 pytest / PostgreSQL 跨进程 / 真实模型与业务 / 72h / 30 天：NOT RUN，待完整受控检出及执行环境。
+- 新增的节点回执检查点包含原 cycle / owner / revision、阶段、证据引用和报告用量；恢复必须先独立核对原账本。未知结果保持 fail closed，不将节点返回或匹配用量冒充业务验收。
+- 原调度/图/阶段/结算使用 OpenTelemetry API span；Prometheus 默认注册表提供 modstore_xiaoc_life_operations_total、modstore_xiaoc_life_active_operations、modstore_xiaoc_life_operation_duration_seconds。returned 只表示函数返回。仅在部署配置有效 tracer provider 后输出 trace；禁止从本模块覆盖全局 provider。停止后的活动计数必须下降，进程退出后的真实连接和资源释放仍需外部证据。
+- 原生检查点与 pre-act 安全边界恢复已接入代码；act/decide 中途崩溃不做危险的任意节点回放。尚需原生产 PostgreSQL 多进程、跨重启和真实模型端到端验收；不得宣称真实持续运行、全量生产通过或意识。

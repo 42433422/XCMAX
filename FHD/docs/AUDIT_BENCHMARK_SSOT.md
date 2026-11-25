@@ -598,6 +598,25 @@ Jenkins 插件版本与许可证单独锁定；不以 CI 项目数、绿灯数�
 - `ci-release-C2`（参照 GitLab Ultimate）：质量/安全/审批政策覆盖实际变更并有负向用例。
 - `ci-release-C3`（参照 Harness CI/CD）：可复用流水线、部署验证和失败恢复在目标环境验收。
 
+## 小 C 独立能力评估（补充实验）
+
+协议版本：`1.0.0`；初始状态：`NOT RUN`。
+
+补充原锚点的隔离回归证据，不改变五轴、18 域、108 项或评分版本，不代替原样本下限、真实对标或长期运行验收。真实模型、客户业务与生产仅由各自既有独立门禁及原始回执证明，未接入时为 NOT RUN 或 BLOCKED。
+
+| 场景 | 原锚点 | 核验范围 |
+|---|---|---|
+| memory | autonomy-B3 | 持久身份与经验；伪造已验证能力不得采纳 |
+| cognition | autonomy-B3 | 认知引用、事实与假设；拒绝伪造证据 |
+| decision | autonomy-B1 | 决策身份及授权预算；未知额度拒绝 |
+| execution | erp-B3 | 审批、库存账与文件独立核对；错误金额拒绝 |
+| reflection | autonomy-B3 | 反思复用原审批；虚假交付保持未知 |
+| recovery | agent-orchestration-B3 | 原回执恢复；过期租约不重派 |
+| collaboration | agent-orchestration-C3 | 交接续接；模型不可替换原主体 |
+| business | autonomy-C3 | 资源竞争后的继续；不得放大批准资源 |
+
+隔离评估由 `python scripts/dev/xiaoc_independent_eval.py --help` 提供；需由独立审计员在无生产凭据的隔离环境执行。仅运行既有 pytest 正负例，真实模型、真实业务及生产未接通的证据保持未知。
+
 ## 统一实验与审计记录
 
 - 正常业务任务与预期账/文件/状态核对。

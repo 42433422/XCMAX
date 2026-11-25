@@ -8,16 +8,25 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.db.models.accounting import JournalEntry
 from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.customer import Customer
+from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.models.finance import FinancialTransaction
+from app.db.models.inventory import InventoryTransaction
+from app.db.models.mrp import ManufacturingOrder
+from app.db.models.purchase import PurchaseInbound, PurchaseOrder, Supplier
 from app.db.models.sales import SalesOrder
 from app.db.models.user import User
+from app.domain.employee.capability import parse_capabilities
 from app.domain.enterprise_cognition.catalog import EntityDefinition
+from app.domain.task_lifecycle.adapters import LegacyTransitionError, canonicalize
+from app.domain.task_lifecycle.machine import TERMINAL
 from app.infrastructure.auth.enterprise_scope import SourceScope
 
 _T = TypeVar("_T")
@@ -28,6 +37,12 @@ _MODELS: dict[str, Any] = {
     "employee": AiEmployeeProfile,
     "task": AgentTaskRecord,
     "fund": FinancialTransaction,
+    "journal_entry": JournalEntry,
+    "inventory": InventoryTransaction,
+    "production": ManufacturingOrder,
+    "supplier": Supplier,
+    "purchase_order": PurchaseOrder,
+    "purchase_inbound": PurchaseInbound,
 }
 _FIELDS = {
     "order": (
@@ -62,6 +77,66 @@ _FIELDS = {
         "root_run_id",
         "attempt",
         "run_count",
+    ),
+    "inventory": (
+        "id",
+        "ledger_id",
+        "product_id",
+        "warehouse_id",
+        "location_id",
+        "transaction_type",
+        "quantity",
+        "before_quantity",
+        "after_quantity",
+        "transaction_date",
+        "sales_order_id",
+        "sales_order_item_id",
+    ),
+    "production": (
+        "id",
+        "order_no",
+        "bom_id",
+        "product_id",
+        "product_name",
+        "quantity",
+        "warehouse_id",
+        "status",
+    ),
+    "supplier": ("id", "code", "name", "status", "rating", "payment_terms"),
+    "purchase_order": (
+        "id",
+        "order_no",
+        "supplier_id",
+        "warehouse_id",
+        "order_date",
+        "delivery_date",
+        "total_amount",
+        "paid_amount",
+        "status",
+    ),
+    "purchase_inbound": (
+        "id",
+        "inbound_no",
+        "order_id",
+        "supplier_id",
+        "warehouse_id",
+        "inbound_date",
+        "total_amount",
+        "status",
+    ),
+    "journal_entry": (
+        "id",
+        "entry_no",
+        "journal_date",
+        "status",
+        "reference_type",
+        "reference_id",
+        "debit_total",
+        "credit_total",
+        "reversed_of_id",
+        "reversed_at",
+        "credit_note_of_id",
+        "is_credit_note",
     ),
     "fund": (
         "id",
@@ -200,10 +275,13 @@ class AuthorityReader:
     def list_refs(self, db, definition: EntityDefinition, scope: SourceScope, limit: int) -> dict:
         model = _MODELS[definition.entity_type]
         column = getattr(model, definition.id_field)
+        changed_column = (
+            model.transaction_date if definition.entity_type == "inventory" else model.updated_at
+        )
         statement = (
             self._statement(definition, scope)
             .with_only_columns(column)
-            .order_by(model.updated_at.desc(), column)
+            .order_by(changed_column.desc(), column)
             .limit(limit + 1)
         )
         scanned_more = False
@@ -257,9 +335,127 @@ class AuthorityReader:
             }
             if definition.entity_type == "order":
                 self._order_quantities(row, scope, state)
-            return {"state": state, "source_last_changed": json_value(row.updated_at)}
+            elif definition.entity_type == "employee":
+                self._employee_observation(source, row, scope, state)
+            elif definition.entity_type == "journal_entry":
+                fields: tuple[str, ...] = (
+                    "id",
+                    "account_id",
+                    "account_code",
+                    "debit",
+                    "credit",
+                    "partner_id",
+                )
+                lines = sorted(
+                    (line for line in row.lines if line.tenant_id == scope.tenant_id),
+                    key=lambda line: line.id,
+                )
+                state["lines"] = [
+                    {key: json_value(getattr(line, key)) for key in fields} for line in lines[:200]
+                ]
+                state["lines_truncated"] = len(lines) > 200
+                # Raw journal lines are evidence, not a cash or receivables balance.
+            elif definition.entity_type in {"purchase_order", "purchase_inbound"}:
+                fields = (
+                    ("id", "product_id", "quantity", "received_quantity", "unit", "status")
+                    if definition.entity_type == "purchase_order"
+                    else ("id", "product_id", "quantity", "unit", "amount")
+                )
+                items = sorted(
+                    (item for item in row.items if item.tenant_id == scope.tenant_id),
+                    key=lambda item: item.id,
+                )
+                state["items"] = [
+                    {key: json_value(getattr(item, key)) for key in fields} for item in items[:200]
+                ]
+                state["items_truncated"] = len(items) > 200
+                # Read document lines, never manufacture accounts payable or stock balances.
+            elif definition.entity_type == "production":
+                fields = ("id", "product_id", "quantity", "consumed_quantity", "unit")
+                state["lines"] = [
+                    {key: json_value(getattr(line, key)) for key in fields}
+                    for line in sorted(row.lines, key=lambda item: item.id)
+                    if line.tenant_id == scope.tenant_id
+                ]
+            # Movement time is not a revision timestamp; never substitute it.
+            changed_at = None if definition.entity_type == "inventory" else row.updated_at
+            return {"state": state, "source_last_changed": json_value(changed_at)}
 
         return self._in_source(db, definition, load)
+
+    def _employee_observation(self, source, row, scope, state):
+        """Bind observations to the existing profile, never infer execution grants."""
+        identity = source.scalar(
+            select(User).where(User.id == row.user_id, User.tenant_id == scope.tenant_id)
+        )
+        state["role"] = (
+            identity.role if identity is not None and identity.role == "ai_employee" else None
+        )
+        state["identity_active"] = (
+            bool(identity.is_active) if state["role"] == "ai_employee" else None
+        )
+        state["capability_evidence"] = {
+            "status": "unknown",
+            "source": "installed_employee_pack",
+            "declared": [],
+            "independent_verified": False,
+        }
+        state["workload"] = {
+            "status": "unknown",
+            "source": "employee_run_logs",
+            "scope": "current_actor_employee_active_store",
+            "capacity_verified": False,
+        }
+        # A host view of another Mod's employee cannot attribute its local ledger
+        # or registry observations to that Mod.
+        if (row.mod_id or "") != scope.mod_id:
+            return
+        from app.infrastructure.mods.employee_registry import get_employee_registry
+
+        try:
+            packs = [
+                pack
+                for pack in get_employee_registry().list_packs()
+                if pack.get("pack_id") == row.employee_id
+            ]
+            if len(packs) == 1:
+                declared = parse_capabilities({"employee": packs[0].get("employee")})
+                state["capability_evidence"].update(
+                    status="declared",
+                    pack_version=str(packs[0].get("version") or ""),
+                    declared=[item.key for item in declared],
+                )
+        except (OSError, ValueError, TypeError):
+            # Registry unavailable is not evidence of missing capabilities.
+            pass
+
+        try:
+            with self.business_session_factory() as business:
+                grouped = business.execute(
+                    select(EmployeeRunLog.status, func.count(EmployeeRunLog.id))
+                    .where(
+                        EmployeeRunLog.employee_id == row.employee_id,
+                        EmployeeRunLog.tenant_id == scope.tenant_id,
+                        EmployeeRunLog.user_id == int(scope.actor_id),
+                    )
+                    .group_by(EmployeeRunLog.status)
+                ).all()
+        except SQLAlchemyError:
+            return
+        counts: dict[str, int] = {}
+        for status, count in grouped:
+            try:
+                canonical = canonicalize("employee", status)
+            except LegacyTransitionError:
+                canonical = "unknown"
+            counts[canonical] = counts.get(canonical, 0) + int(count)
+        state["workload"].update(
+            status="observed" if counts else "no_history",
+            counts=counts,
+            open_count=sum(count for key, count in counts.items() if key not in TERMINAL),
+            running_count=counts.get("running", 0),
+            unresolved_count=counts.get("unknown", 0),
+        )
 
     @staticmethod
     def _order_quantities(row, scope, state):

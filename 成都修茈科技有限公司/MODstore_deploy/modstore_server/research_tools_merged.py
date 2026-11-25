@@ -111,7 +111,12 @@ async def _searxng_search_at_base(
             content = str(content_raw or "").strip()
         if not url or not url.startswith(("http://", "https://")):
             continue
-        out.append({"title": title or url, "url": url, "content": content})
+        result = {"title": title or url, "url": url, "content": content}
+        for field, limit in (("publishedDate", 128), ("engine", 100)):
+            value = it.get(field)
+            if isinstance(value, str) and value.strip():
+                result[field] = value.strip()[:limit]
+        out.append(result)
         if len(out) >= max(1, min(max_results, 15)):
             break
     return out

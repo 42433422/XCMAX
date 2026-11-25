@@ -206,6 +206,7 @@ def customer_delivery_evidence(
     delivered: dict[tuple[str, str, str | None], dict[tuple[str, str], datetime]] = {}
     targets: set[tuple[str, str, str | None]] = set()
     agreements: dict[tuple[str, str, str | None], str] = {}
+    agreement_digests: dict[tuple[str, str, str | None], str] = {}
     missing = False
     for item in status["opportunities"]:
         agreements.update(
@@ -214,6 +215,12 @@ def customer_delivery_evidence(
                 for row in item.get("customer_goal_bindings") or []
             }
         )
+        for row in item.get("customer_goal_bindings") or []:
+            identity = (row["customer_goal_id"], row["customer_ref"], row["order_no"])
+            prior = agreement_digests.get(identity)
+            if prior is not None and prior != row["goal_evidence_sha256"]:
+                missing = True
+            agreement_digests[identity] = row["goal_evidence_sha256"]
         identities = [
             (row["customer_goal_id"], row["customer_ref"], row["order_no"])
             for row in item.get("customer_goal_bindings") or []
@@ -237,14 +244,26 @@ def customer_delivery_evidence(
     pairs: dict[tuple[str, str, str, str, str], set[str]] = {}
     evidence = []
     with get_session_factory()() as session:
-        goal_evidence = {
-            str(row.receipt_id): _receipt_evidence(row)
-            for row in session.scalars(
-                select(CustomerValueReceipt).where(
-                    CustomerValueReceipt.receipt_id.in_(agreements.values())
-                )
+        goal_evidence = {}
+        verified_agreements = set()
+        for row in session.scalars(
+            select(CustomerValueReceipt).where(
+                CustomerValueReceipt.receipt_id.in_(agreements.values()),
+                CustomerValueReceipt.receipt_kind == "goal",
+                CustomerValueReceipt.verification_status == "verified",
+                CustomerValueReceipt.environment.in_(("production", "prod")),
+                CustomerValueReceipt.occurred_at <= start,
             )
-        }
+        ):
+            identity = (str(row.customer_goal_id), str(row.customer_ref), str(row.order_no))
+            if agreements.get(identity) == str(row.receipt_id) and agreement_digests.get(
+                identity
+            ) == str(row.evidence_digest):
+                verified_agreements.add(identity)
+                goal_evidence[str(row.receipt_id)] = _receipt_evidence(row)
+                evidence.append((str(row.receipt_id), str(row.evidence_digest)))
+        if set(agreements) != verified_agreements:
+            missing = True
         receipts = session.scalars(
             select(CustomerValueReceipt).where(
                 CustomerValueReceipt.verification_status == "verified",
@@ -277,6 +296,8 @@ def customer_delivery_evidence(
             if completed is None or occurred < max(start, completed):
                 continue
             if identity in agreements:
+                if identity not in verified_agreements:
+                    continue
                 if receipt.receipt_kind == "outcome":
                     agreed = goal_evidence.get(agreements[identity], {})
                     fields = ("baseline", "target", "comparison", "unit", "measurement_window")

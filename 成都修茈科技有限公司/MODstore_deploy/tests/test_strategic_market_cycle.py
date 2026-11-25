@@ -382,7 +382,7 @@ def test_customer_acceptance_does_not_claim_an_unmet_original_kpi(database, cust
     binding = strategic_customer_outcomes.load_customer_goal_bindings(
         8, "customer-order-eight", ["customer-csv-goal"]
     )
-    started = datetime.now(UTC) - timedelta(minutes=5)
+    started = datetime.now(UTC)
     artifact = {"artifact_id": "strategy-delivered-business-csv", "artifact_sha256": "b" * 64}
     status = {
         "owner_user_id": 7,
