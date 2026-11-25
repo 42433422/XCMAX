@@ -1,5 +1,5 @@
 {
-  "lines": 2734358,
+  "lines": 2734368,
   "updated": "2026-11-25",
-  "note": "#3617 and #3632 exact integrated main delta, including new in-flight handoff test and shared PostgreSQL CI; source-growth review retained. No CI result or release acceptance claimed."
+  "note": "#3617 and #3632 exact integrated main delta, including new in-flight handoff test and shared PostgreSQL CI; source-growth review retained. No CI result or release acceptance claimed. Parametric mid-flight role revocation and account-disable negatives: +10 net tracked lines."
 }

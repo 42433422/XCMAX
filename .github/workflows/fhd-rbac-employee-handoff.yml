@@ -87,7 +87,8 @@ jobs:
           cases = ET.parse(path).findall(".//testcase")
           for required in (
               "test_postgres_two_processes_observe_same_committed_revocation",
-              "test_inflight_handoff_rechecks_original_session_after_role_revocation",
+              "test_inflight_handoff_rechecks_original_session_after_role_revocation[role_revoke]",
+              "test_inflight_handoff_rechecks_original_session_after_role_revocation[disable_account]",
           ):
               matched = [case for case in cases if case.get("name") == required]
               if len(matched) != 1 or any(

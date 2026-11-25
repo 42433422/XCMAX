@@ -601,8 +601,9 @@ def test_unavailable_handoff_target_cannot_start_a_child(handoff_env, flags, cod
     ) == []
 
 
+@pytest.mark.parametrize("interruption", ["role_revoke", "disable_account"])
 def test_inflight_handoff_rechecks_original_session_after_role_revocation(
-    handoff_env, customers_db, monkeypatch
+    handoff_env, customers_db, monkeypatch, interruption
 ):
     """A revoked role cannot use a tool after an already admitted handoff."""
     import threading
@@ -673,20 +674,27 @@ def test_inflight_handoff_rechecks_original_session_after_role_revocation(
         future = pool.submit(_commit, handoff_env, context=ctx)
         assert entered.wait(20), "handoff never reached the original tool gate"
         try:
-            changed = RbacAppService().update_role(
-                role_id, tenant_id=11, permissions=[]
-            )
-            assert changed["sessions_revoked"] == 1
+            if interruption == "role_revoke":
+                changed = RbacAppService().update_role(
+                    role_id, tenant_id=11, permissions=[]
+                )
+                assert changed["sessions_revoked"] == 1
+            else:
+                with handoff_env.factory.begin() as db:
+                    db.get(User, 11).is_active = False
         finally:
             released.set()
         outcome = future.result(timeout=30)
     assert outcome.get("success") is not True, outcome
     with handoff_env.factory() as db:
-        assert db.query(UserSession).filter_by(
+        remaining = db.query(UserSession).filter_by(
             session_id="handoff-revoke-original"
-        ).count() == 0
+        ).count()
+        assert remaining == (0 if interruption == "role_revoke" else 1)
         role = db.query(Role).filter_by(id=role_id).one()
-        assert role.permissions == []
+        expected = [] if interruption == "role_revoke" else ["customer.view"]
+        assert sorted(permission.code for permission in role.permissions) == expected
+        assert db.get(User, 11).is_active is (interruption != "disable_account")
     with pytest.raises(AgentModAuthorizationError):
         bind_agent_actor_scope(session_id="handoff-revoke-original", user_id="11")
     before = len(
