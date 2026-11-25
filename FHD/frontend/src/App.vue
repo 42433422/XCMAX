@@ -136,24 +136,17 @@ const routeReadinessHandlers = computed(() => {
         <!-- Every shell shares the same error fallback and account-scoped route lifetime. -->
         <RouteFallbackPanel v-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
-        <keep-alive v-else-if="!isAdminConsoleSpa() && !isDesktopShell()" :key="cacheScope" :max="32">
-          <component :is="Component" :key="route.path" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
-        </keep-alive>
         <RouteErrorBoundary v-else :path="route.fullPath">
-          <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="32">
+          <!-- One route outlet. The administrator's live pages are excluded from cache;
+               the existing web/desktop identity and account isolation are retained. -->
+          <keep-alive :key="cacheScope" :max="32" :include="isAdminConsoleSpa() ? [] : undefined">
             <Suspense v-on="routeReadinessHandlers">
-              <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
+              <component :is="Component" :key="!isDesktopShell() && !isAdminConsoleSpa() ? route.path : route.fullPath.split('#')[0]" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
               <template #fallback>
                 <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
               </template>
             </Suspense>
           </keep-alive>
-          <Suspense v-else v-on="routeReadinessHandlers">
-            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" :data-route-scroll-key="route.fullPath" />
-            <template #fallback>
-              <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
-            </template>
-          </Suspense>
         </RouteErrorBoundary>
       </router-view>
     </MainLayout>
@@ -178,7 +171,10 @@ const routeReadinessHandlers = computed(() => {
 .app-shell {
   opacity: 1;
   transition: opacity 320ms ease;
+  /* Only the app shell owns the visible viewport. */
   height: 100vh;
+  height: 100dvh;
+  min-width: 0;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.88), transparent 42%),
@@ -191,8 +187,15 @@ const routeReadinessHandlers = computed(() => {
   }
 }
 
+/* The admin shell retains its visualViewport keyboard contract. */
+.app-shell > .main-container:not(.main-container--admin) {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
 .app-shell.app-shell--bare {
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
