@@ -9,6 +9,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from app.application.user_memory.protocols import MemoryOperation
 from app.domain.user_memory.policy import (
+    is_erp_bound_memory,
     is_recallable_memory,
     is_scoped_memory_owner,
     memory_statement,
@@ -135,7 +136,9 @@ def _write_current_projection(
         "key": record.get("key"),
     }
     status: dict[str, str] = {}
-    active = is_recallable_memory(record)
+    # ERP-bound claims have no trusted actor/source authorization at the
+    # vector/Mem0 indexer. Remove replicas and use Persy's verified read path.
+    active = is_recallable_memory(record) and not is_erp_bound_memory(record)
     for name, provider in (
         ("user_vector", get_user_memory_vector_ingest_app_service),
         ("mem0", get_long_term_memory),
