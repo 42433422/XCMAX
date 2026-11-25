@@ -140,12 +140,22 @@ for (const [label, selector] of [
     () => marketDeclaration(marketBlock(selector), 'color'),
     () => marketDeclaration(marketBlock(selector), 'background'));
 }
-for (const [label, surface] of [
-  ['light', '#FFFFFF'], ['dark', '#12121a'],
-]) {
+// Audit the component's actual focus declaration and the registered Element
+// Plus dialog overlay surface, not a detached copy of the expected colors.
+const marketThemeCss = readFileSync(new URL('../成都修茈科技有限公司/MODstore_deploy/market/src/tokens.css', root), 'utf8');
+if (!marketThemeCss.includes('--el-bg-color-overlay: var(--wb-dialog-bg);')) {
+  throw Error('Market dialog overlay surface alias changed');
+}
+const marketFocusBlock = marketBlock('.app-confirm-dialog__cancel:focus-visible,\n.app-confirm-dialog__confirm:focus-visible');
+const marketFocusColor = /(?:^|;)\s*outline\s*:\s*[\d.]+px\s+solid\s+([^;]+);/.exec(marketFocusBlock)?.[1]?.trim();
+for (const label of ['light', 'dark']) {
+  const surfaceToken = '--xc-token-market-' + label + '-wb-dialog-bg';
+  if (!marketThemeCss.includes('--wb-dialog-bg: var(' + surfaceToken + ');')) {
+    throw Error('Market dialog surface alias missing: ' + label);
+  }
   pair('Market AppConfirmDialog focus ring on ' + label,
-    () => resolveColor('var(--xc-token-market-light-wb-accent-primary)', [], marketGeneratedCss),
-    () => surface, 3);
+    () => resolveColor(marketFocusColor, [], marketGeneratedCss),
+    () => resolveColor('var(' + surfaceToken + ')', [], marketGeneratedCss), 3);
 }
 
 // Market light muted text is rendered in blockquotes, placeholders, sidebar
