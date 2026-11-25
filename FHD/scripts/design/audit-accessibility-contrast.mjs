@@ -7,6 +7,11 @@ const root = new URL('../../', import.meta.url);
 const tokens = JSON.parse(readFileSync(new URL('config/mobile_design_tokens.json', root), 'utf8'));
 const dialog = readFileSync(new URL('frontend/src/components/ConfirmDialog.vue', root), 'utf8');
 const generatedCss = readFileSync(new URL('frontend/src/styles/design-tokens.generated.css', root), 'utf8');
+const marketDialog = readFileSync(new URL('../成都修茈科技有限公司/MODstore_deploy/market/src/components/AppConfirmDialog.vue', root), 'utf8');
+const marketGeneratedCss = readFileSync(new URL('../成都修茈科技有限公司/MODstore_deploy/market/src/design-tokens.generated.css', root), 'utf8');
+for (const fragment of ['<ElDialog', 'data-dialog-initial-focus', ':close-on-press-escape="true"', '@opened="focusCancel"']) {
+  if (!marketDialog.includes(fragment)) throw Error('Market modal focus contract missing: ' + fragment);
+}
 const themeSource = readFileSync(new URL('mobile-flutter-poc/lib/src/theme/app_theme.dart', root), 'utf8');
 for (const [fragment, expected] of [
   ['static const brand = DesignTokens.semanticLightPrimary;', 1],
@@ -20,7 +25,7 @@ for (const [fragment, expected] of [
     throw Error('Theme contract mismatch: ' + fragment);
 }
 
-function resolveColor(value, seen = []) {
+function resolveColor(value, seen = [], sheet = generatedCss) {
   if (value === 'white') return '#FFFFFF';
   if (/^#[0-9a-f]{6}$/i.test(value)) return value;
   const reference = /^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(#[0-9a-f]{6}))?\s*\)$/i.exec(value ?? '');
@@ -28,10 +33,10 @@ function resolveColor(value, seen = []) {
   const key = reference[1];
   if (seen.includes(key)) throw Error('Cyclic CSS reference: ' + key);
   // Never treat a fallback as proof of the actual generated token value.
-  const declaration = generatedCss.split('\n').find(line => line.trim().startsWith(key + ':'));
+  const declaration = sheet.split('\n').find(line => line.trim().startsWith(key + ':'));
   if (!declaration) throw Error('Missing generated CSS token: ' + key);
   const raw = declaration.slice(declaration.indexOf(':') + 1).replace(/;\s*$/, '').trim();
-  return resolveColor(raw, [...seen, key]);
+  return resolveColor(raw, [...seen, key], sheet);
 }
 
 
@@ -109,5 +114,34 @@ for (const name of ['primary', 'secondary', 'danger', 'success']) {
       () => cssValue(block, 'background-color') ?? cssValue(normal, 'background-color'));
   }
 }
+
+function marketBlock(selector) {
+  const start = marketDialog.indexOf(selector + ' {');
+  if (start < 0) throw Error('Market selector missing: ' + selector);
+  const end = marketDialog.indexOf('}', start);
+  if (end < 0) throw Error('Market block unterminated: ' + selector);
+  return marketDialog.slice(start + selector.length + 2, end);
+}
+function marketDeclaration(block, key) {
+  const value = new RegExp('(?:^|;)\\s*' + key + '\\s*:\\s*([^;]+)').exec(block)?.[1]?.trim();
+  if (!value) throw Error('Market style missing: ' + key);
+  return resolveColor(value, [], marketGeneratedCss);
+}
+for (const [label, selector] of [
+  ['primary', '.app-confirm-dialog__confirm:not(.app-confirm-dialog__confirm--danger)'],
+  ['danger', '.app-confirm-dialog__confirm--danger'],
+]) {
+  pair('Market AppConfirmDialog ' + label,
+    () => marketDeclaration(marketBlock(selector), 'color'),
+    () => marketDeclaration(marketBlock(selector), 'background'));
+}
+for (const [label, surface] of [
+  ['light', '#FFFFFF'], ['dark', '#12121a'],
+]) {
+  pair('Market AppConfirmDialog focus ring on ' + label,
+    () => resolveColor('var(--xc-token-market-light-wb-accent-primary)', [], marketGeneratedCss),
+    () => surface, 3);
+}
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;
