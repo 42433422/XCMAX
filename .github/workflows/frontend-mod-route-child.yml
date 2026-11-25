@@ -9,6 +9,7 @@ on:
       - 'FHD/frontend/src/router/**'
       - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
       - 'FHD/frontend/src/main.ts'
+      - 'FHD/frontend/src/stores/mods.ts'
       - '.github/workflows/frontend-mod-route-child.yml'
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - 'FHD/frontend/src/router/**'
       - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
       - 'FHD/frontend/src/main.ts'
+      - 'FHD/frontend/src/stores/mods.ts'
       - '.github/workflows/frontend-mod-route-child.yml'
 
 permissions:
@@ -38,6 +40,10 @@ jobs:
     steps:
       - name: Check out exact tested source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify pinned source identity
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
       - name: Set up pinned Node.js
         uses: actions/setup-node@v7
         with:
