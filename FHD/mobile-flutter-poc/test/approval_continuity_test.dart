@@ -16,6 +16,7 @@ class _ApprovalRepository extends MobileRepository {
   int writes = 0;
   bool pending = true;
   bool loseWriteReceipt = false;
+  bool unknownApprovalOutcome = false;
 
   ApprovalDetail get detail => ApprovalDetail(
         id: 42,
@@ -34,6 +35,25 @@ class _ApprovalRepository extends MobileRepository {
     reads++;
     expect(id, 42);
     return detail;
+  }
+
+  @override
+  Future<bool> markUnknownApprovalOutcome(int id) async {
+    expect(id, 42);
+    unknownApprovalOutcome = true;
+    return true;
+  }
+
+  @override
+  Future<bool> hasUnknownApprovalOutcome(int id) async {
+    expect(id, 42);
+    return unknownApprovalOutcome;
+  }
+
+  @override
+  Future<void> clearUnknownApprovalOutcome(int id) async {
+    expect(id, 42);
+    unknownApprovalOutcome = false;
   }
 
   @override
@@ -111,6 +131,17 @@ void main() {
     final submit = tester.widget<WeBlockButton>(
         find.widgetWithText(WeBlockButton, '通过'));
     expect(submit.enabled, isFalse);
+    expect(repo.unknownApprovalOutcome, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    // A new screen after app process restart must NOT make this POST again.
+    await tester.pumpWidget(MaterialApp(
+      home: ApprovalDetailScreen(id: 42, repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('原审批回执仍待核对'), findsOneWidget);
+    expect(tester.widget<WeBlockButton>(
+      find.widgetWithText(WeBlockButton, '通过')).enabled, isFalse);
+    expect(repo.writes, 1);
     await tester.pumpWidget(const SizedBox());
   });
 }

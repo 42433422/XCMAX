@@ -384,8 +384,18 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       throw StateError('账号已切换，请重新打开审批');
     }
     final detail = await _repository.loadApprovalDetail(widget.id);
+    final unresolved = await _repository.hasUnknownApprovalOutcome(widget.id);
     if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
+    }
+    if (unresolved && detail.canAct) {
+      _needsReconciliation = true;
+      _status = '原审批回执仍待核对，禁止重复提交。';
+    } else if (unresolved && !detail.canAct) {
+      // Only a terminal server snapshot can release a previously uncertain
+      // local decision, including after force-stop or process restart.
+      await _repository.clearUnknownApprovalOutcome(widget.id);
+      _needsReconciliation = false;
     }
     return detail;
   }
@@ -410,6 +420,14 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       if (!before.canAct || before.id != widget.id) {
         throw StateError('原审批已变更或无权操作，请刷新');
       }
+      if (_needsReconciliation) {
+        throw StateError('原审批回执待核对，请勿重复提交');
+      }
+      // Persist BEFORE sending the POST. If the app crashes or times out,
+      // its next instance can only query server state, not repeat the write.
+      if (!await _repository.markUnknownApprovalOutcome(widget.id)) {
+        throw StateError('本机核验账本不可用，已阻止审批提交');
+      }
       final opinion = _opinionController.text.trim();
       _needsReconciliation = true;
       if (approve) {
@@ -418,6 +436,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
         await _repository.rejectApproval(widget.id, opinion);
       }
       if (!mounted || _repository.client.authGeneration != _generation) return;
+      await _repository.clearUnknownApprovalOutcome(widget.id);
       _needsReconciliation = false;
       setState(() => _status = approve ? '审批已通过' : '审批已驳回');
       Navigator.of(context).maybePop();

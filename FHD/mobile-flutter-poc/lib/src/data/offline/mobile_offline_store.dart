@@ -268,6 +268,39 @@ class MobileOfflineStore {
     );
   }
 
+  // Unknown approval outcomes survive process restarts and credential
+  // refresh. Never expire them by elapsed time: only the authenticated
+  // server's terminal approval state can release a blocked decision.
+  String _approvalOutcomeKey(int approvalId) => 'approval-outcome:$approvalId';
+
+  Future<void> markUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) throw ArgumentError.value(approvalId, 'approvalId');
+    await _db.customUpdate(
+      'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+      variables: [
+        Variable<String>(_approvalOutcomeKey(approvalId)),
+        const Variable<String>('unknown'),
+      ],
+    );
+  }
+
+  Future<bool> hasUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) return true;
+    final rows = await _db.customSelect(
+      'SELECT value FROM meta WHERE key = ?',
+      variables: [Variable<String>(_approvalOutcomeKey(approvalId))],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  Future<void> clearUnknownApprovalOutcome(int approvalId) async {
+    if (approvalId <= 0) return;
+    await _db.customUpdate(
+      'DELETE FROM meta WHERE key = ?',
+      variables: [Variable<String>(_approvalOutcomeKey(approvalId))],
+    );
+  }
+
   // ── 进行中的中继任务 ────────────────────────────────────────
 
   Future<void> saveTurnDispatch(String conversationId, String turnId,

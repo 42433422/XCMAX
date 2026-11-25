@@ -57,6 +57,17 @@ void main() {
     }
   });
 
+  test('uncertain approvals persist until original server terminal is reconciled',
+      () async {
+    expect(await store.hasUnknownApprovalOutcome(42), isFalse);
+    await store.markUnknownApprovalOutcome(42);
+    expect(await store.hasUnknownApprovalOutcome(42), isTrue);
+    // Merely reading or reopening the screen must not release the guard.
+    expect(await store.hasUnknownApprovalOutcome(42), isTrue);
+    await store.clearUnknownApprovalOutcome(42);
+    expect(await store.hasUnknownApprovalOutcome(42), isFalse);
+  });
+
   test('composer drafts recover text but no authorization or upload credentials',
       () async {
     await store.saveChatDraft('chat/a', '库存检查',
