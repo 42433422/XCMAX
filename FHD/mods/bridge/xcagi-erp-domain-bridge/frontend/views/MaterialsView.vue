@@ -19,12 +19,12 @@
       <div v-if="activeTab === 'materials'" class="card">
         <div class="search-box">
           <input v-model="searchQuery" type="text" placeholder="搜索..." @input="scheduleMaterialsSearch">
-          <select v-model="selectedCategory" @change="loadMaterials">
+          <select v-model="selectedCategory" @change="loadMaterials()">
             <option value="">全部分类</option>
             <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
           </select>
         </div>
-        <DataTable :columns="materialColumns" :data="materials" :loading="listLoading.materials" :error="listErrors.materials" :has-more="false" @retry="loadMaterials">
+        <DataTable :columns="materialColumns" :data="materials" :loading="listLoading.materials" :error="listErrors.materials" :server-pagination="materialPagination" :has-more="false" @page-change="loadMaterials" @retry="loadMaterials(materialPagination.page)">
           <template #cell-quantity="{ row }: any">
             <span :class="{ 'text-red': row.quantity < (row.min_stock || 0) }">{{ row.quantity }} {{ row.unit || '' }}</span>
           </template>
@@ -63,13 +63,13 @@
 
       <div v-if="activeTab === 'inout'" class="card">
         <div class="page-header" style="padding:0;border:none;">
-          <h4>出入库记录（本次最多 100 条）</h4>
+          <h4>出入库记录</h4>
           <div>
             <button class="btn btn-sm btn-primary" @click="showInModal">入库</button>
             <button class="btn btn-sm btn-warning" @click="showOutModal" style="margin-left:5px;">出库</button>
           </div>
         </div>
-        <DataTable :columns="transactionColumns" :data="transactions" :loading="listLoading.transactions" :error="listErrors.transactions" :has-more="false" empty-text="暂无记录" @retry="loadTransactions">
+        <DataTable :columns="transactionColumns" :data="transactions" :loading="listLoading.transactions" :error="listErrors.transactions" :server-pagination="transactionPagination" :has-more="false" empty-text="暂无记录" @page-change="loadTransactions" @retry="loadTransactions(transactionPagination.page)">
           <template #cell-transaction_type="{ value }">
             <span :class="value === 'in' ? 'text-green' : 'text-red'">{{ value === 'in' ? '入库' : value === 'out' ? '出库' : value }}</span>
           </template>
@@ -253,7 +253,7 @@ const {
   showInModalFlag, showOutModalFlag, inoutForm,
   showSupplierModalFlag, isEditSupplier, supplierForm,
   loadMaterials, scheduleMaterialsSearch, loadWarehouses, loadLocations, loadTransactions, loadSuppliers,
-  listLoading, listErrors, saving, showAddModal, editMaterial, saveMaterial, deleteMaterial,
+  listLoading, listErrors, materialPagination, transactionPagination, saving, showAddModal, editMaterial, saveMaterial, deleteMaterial,
   showWarehouseModal, editWarehouse, saveWarehouse, manageLocations,
   showLocationModal, editLocation, saveLocation,
   showInModal, showOutModal, doIn, doOut,
