@@ -217,7 +217,9 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
         if not hmac.compare_digest(hmac.new(trusted_key, raw, hashlib.sha256).hexdigest(), signature):
             raise ValueError("untrusted or tampered independent audit manifest")
         manifest = _json(raw)
-        if (manifest.get("schema_version") != 1 or manifest.get("source_sha") != source_sha
+        if (manifest.get("schema_version") != 2 or manifest.get("source_sha") != source_sha
+                or not _digest(manifest.get("release_artifact_sha256"))
+                or not _digest(manifest.get("deployment_receipt_sha256"))
                 or manifest.get("auditor_source_sha") == source_sha
                 or not SHA40.fullmatch(str(manifest.get("auditor_source_sha", "")))
                 or manifest.get("auditor_id") in (None, "", "agent", "xiaoc")
@@ -243,11 +245,16 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
             if hashlib.sha256(content).hexdigest() != item["sha256"]:
                 raise ValueError(f"{kind}: raw artifact checksum mismatch")
             data = _json(content)
-            if data.get("source_sha") != source_sha or data.get("environment") != "production":
-                raise ValueError(f"{kind}: not exact-source production evidence")
+            if (data.get("source_sha") != source_sha or data.get("environment") != "production"
+                    or data.get("release_artifact_sha256") != manifest["release_artifact_sha256"]
+                    or data.get("deployment_receipt_sha256") != manifest["deployment_receipt_sha256"]):
+                raise ValueError(f"{kind}: not exact-source, deployed-artifact production evidence")
             payloads[kind] = data
         checks["L01"] = "PASS"
-        provenance = {"run_id": manifest["run_id"], "auditor_id": manifest["auditor_id"], "auditor_source_sha": manifest["auditor_source_sha"], "manifest_sha256": hashlib.sha256(raw).hexdigest(), "artifacts": artifacts}
+        provenance = {"run_id": manifest["run_id"], "auditor_id": manifest["auditor_id"], "auditor_source_sha": manifest["auditor_source_sha"], "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+                      "release_artifact_sha256": manifest["release_artifact_sha256"],
+                      "deployment_receipt_sha256": manifest["deployment_receipt_sha256"],
+                      "artifacts": artifacts}
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         reasons["L01"] = str(exc)
         return _report(source_sha, checks, reasons, provenance)
