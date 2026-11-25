@@ -18,9 +18,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await composer.fill('请核对订单差异')
       await composer.focus()
       await expect(composer).toBeFocused()
+      // Check the keyboard focus indicator, not merely the active element.
+      await composer.evaluate(element => (element as HTMLElement).blur())
+      const unfocused = await composer.evaluate(element => {
+        const style = getComputedStyle(element)
+        return style.outline + '|' + style.boxShadow
+      })
+      await composer.focus()
+      const focused = await composer.evaluate(element => {
+        const style = getComputedStyle(element)
+        return style.outline + '|' + style.boxShadow
+      })
+      expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
       await capture(page, 'a11y-composer-focused-' + colorScheme + '-' + width)
       await page.keyboard.press('Tab')
       expect(await page.evaluate(() => !!document.activeElement && document.activeElement !== document.body)).toBe(true)
+      expect(await page.evaluate(() => document.activeElement?.matches(':focus-visible'))).toBe(true)
       await capture(page, 'a11y-composer-tab-' + colorScheme + '-' + width)
     })
   }
