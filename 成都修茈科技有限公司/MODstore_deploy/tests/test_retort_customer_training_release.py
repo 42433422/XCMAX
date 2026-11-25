@@ -148,11 +148,19 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
         effects = json_loads(row.effects_json, {})
         assert effects["training_regression_recheck"]["reason"] == "workflow_execution_stop_loss"
         assert effects["experiment"]["traffic"] == "candidate"
-    assert run["advance"](reject=True)["status"] in ("awaiting_rollout_readback", "measured")
-    assert run["advance"](reject=True)["decision"] == "rollback"
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    assert first["experiment"]["status"] in ("awaiting_rollout_readback", "measured")
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "experiment_regression"
+    assert second["experiment"]["decision"] == "rollback"
     with get_session_factory()() as db:
         effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
         assert effects["experiment"]["traffic"] == "control"
+        assert effects["experiment"]["decision"] == "rollback"
+    assert run["choose"]() == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
