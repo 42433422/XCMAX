@@ -89,13 +89,27 @@ export function readWorkspaceCommandPreferences(
     if (!raw || raw.length > 8000) return defaults
     const data = JSON.parse(raw) as Record<string, unknown>
     if (!data || typeof data !== 'object' || Array.isArray(data)) return defaults
-    const shortcuts = { ...defaults.shortcuts }
     const candidates = data.shortcuts && typeof data.shortcuts === 'object' && !Array.isArray(data.shortcuts)
       ? data.shortcuts as Record<string, unknown> : {}
+    const requested: Partial<WorkspaceShortcutMap> = {}
     for (const { id } of WORKSPACE_COMMANDS) {
       const chord = candidates[id]
-      if (typeof chord === 'string' && !validateWorkspaceShortcut(shortcuts, id, chord)) shortcuts[id] = chord
+      if (typeof chord === 'string' &&
+        WORKSPACE_SHORTCUT_CHOICES.includes(chord as (typeof WORKSPACE_SHORTCUT_CHOICES)[number]) &&
+        !RESERVED_CHORDS.has(chord)) requested[id] = chord
     }
+    // Validate the final assignment, not each override against still-unmoved defaults.
+    // This preserves intentional two-key swaps after a restart.
+    let shortcuts: WorkspaceShortcutMap = { ...defaults.shortcuts, ...requested }
+    for (const { id } of WORKSPACE_COMMANDS) {
+      const chord = shortcuts[id]
+      const duplicate = WORKSPACE_COMMANDS.filter((other) => shortcuts[other.id] === chord)
+      if (duplicate.length <= 1) continue
+      for (const item of duplicate) {
+        if (requested[item.id] !== undefined) shortcuts[item.id] = defaults.shortcuts[item.id]
+      }
+    }
+    if (new Set(Object.values(shortcuts)).size !== WORKSPACE_COMMANDS.length) shortcuts = defaults.shortcuts
     return {
       shortcuts,
       recent: normalizedKeys(data.recent, 12),
