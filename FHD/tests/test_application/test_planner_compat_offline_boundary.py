@@ -205,6 +205,7 @@ async def test_online_json_and_stream_share_the_langgraph_mainline():
     assert [call[0] for call in mainline_calls] == ["查询今天的考勤"] * 2
     business.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_offline_batch_never_invokes_legacy_mutation_handlers():
     """The batch adapter must use the same guarded offline path as JSON/SSE."""
