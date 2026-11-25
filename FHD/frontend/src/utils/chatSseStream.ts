@@ -57,12 +57,24 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   const decoder = new TextDecoder()
   let terminalError = false
   let completed = false
+  const seenEventIds = new Set<string>()
   const parser = createParser({
-    onEvent: ({ data }) => {
+    onEvent: ({ data, id }) => {
       if (terminalError || !data.trim()) return
       let ev: PlannerSseEvent
       try { ev = JSON.parse(data) as PlannerSseEvent } catch { return }
       if (!ev || typeof ev.type !== 'string') return
+      // Deduplicate only explicit SSE event IDs. Equal token text can be valid.
+      // Retain a bounded window instead of accumulating an unbounded session log.
+      const eventId = typeof id === 'string' ? id.trim() : ''
+      if (eventId) {
+        if (seenEventIds.has(eventId)) return
+        seenEventIds.add(eventId)
+        if (seenEventIds.size > 2048) {
+          const oldest = seenEventIds.values().next().value
+          if (oldest) seenEventIds.delete(oldest)
+        }
+      }
       terminalError = ev.type === 'error'
       // The backend may end with an explicit authorization pause. Progress
       // after either receipt still requires a new terminal event before EOF.
