@@ -6,6 +6,7 @@ to a desktop user's private memory or granted execution authority.
 
 from __future__ import annotations
 
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import select
@@ -33,6 +34,7 @@ def experience_scope(candidate: dict[str, Any]) -> dict[str, Any] | None:
         or not metric
         or direction not in ("max", "min")
         or type(target) not in (int, float)
+        or (type(target) is float and not isfinite(target))
         or start is None
         or end is None
         or end <= start
@@ -60,7 +62,9 @@ def experience_scope_matches(
         and scope.get("metric_id") == hypothesis.get("metric_id")
         and scope.get("direction") == hypothesis.get("direction")
         and type(scope.get("threshold")) in (int, float)
+        and (type(scope["threshold"]) is int or isfinite(scope["threshold"]))
         and type(hypothesis.get("threshold")) in (int, float)
+        and (type(hypothesis["threshold"]) is int or isfinite(hypothesis["threshold"]))
         and scope["threshold"] == hypothesis["threshold"]
         and type(scope.get("window_days")) is int
         and type(hypothesis.get("window_days")) is int
