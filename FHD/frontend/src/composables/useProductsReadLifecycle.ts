@@ -41,19 +41,26 @@ export function createProductListLoader(options: {
   hasMore: Ref<boolean>
   requestId: Ref<number>
 }) {
+  let inFlight: number | null = null
   return async (reset = true): Promise<void> => {
+    if (!reset && (inFlight !== null || !options.hasMore.value)) return
     const id = ++options.requestId.value
-    if (reset) { options.page.value = 1; options.hasMore.value = false }
-    const query = options.query()
-    const requestedPage = options.page.value
-    const result = await options.store.fetchProducts({ ...query, page: requestedPage }, { append: !reset })
-    if (id !== options.requestId.value) return
-    if (result?.success) {
-      const batchSize = Array.isArray(result.data) ? result.data.length : 0
-      const pageSize = Math.max(1, Number(query.per_page) || 100)
-      const total = Number(result.total) || 0
-      options.hasMore.value = total > 0 ? requestedPage * pageSize < total : batchSize >= pageSize
-      options.page.value = requestedPage + 1
+    inFlight = id
+    try {
+      if (reset) { options.page.value = 1; options.hasMore.value = false }
+      const query = options.query()
+      const requestedPage = options.page.value
+      const result = await options.store.fetchProducts({ ...query, page: requestedPage }, { append: !reset })
+      if (id !== options.requestId.value) return
+      if (result?.success) {
+        const batchSize = Array.isArray(result.data) ? result.data.length : 0
+        const pageSize = Math.max(1, Number(query.per_page) || 100)
+        const total = Number(result.total) || 0
+        options.hasMore.value = total > 0 ? requestedPage * pageSize < total : batchSize >= pageSize
+        options.page.value = requestedPage + 1
+      }
+    } finally {
+      if (inFlight === id) inFlight = null
     }
   }
 }
