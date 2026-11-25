@@ -46,7 +46,7 @@ export class IncompletePlannerSseError extends Error {
 }
 
 /** 读取 ``fetch`` 得到的 SSE（``text/event-stream``）响应体并逐条回调事件 */
-export async function readPlannerSseResponse(response: Response, onEvent: (ev: PlannerSseEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function readPlannerSseResponse(response: Response, onEvent: (ev: PlannerSseEvent) => void, signal?: AbortSignal, replay?: { after?: string; onCursor?: (id: string) => void }): Promise<void> {
   if (!response.body) {
     throw new Error('响应体不可读（可能被代理缓冲或未返回流）')
   }
@@ -58,6 +58,7 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   let terminalError = false
   let completed = false
   const seenEventIds = new Set<string>()
+  if (replay?.after) seenEventIds.add(replay.after)
   const parser = createParser({
     onEvent: ({ data, id }) => {
       if (terminalError || !data.trim()) return
@@ -80,6 +81,7 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
       // after either receipt still requires a new terminal event before EOF.
       completed = ev.type === 'done' || ev.type === 'requires_token'
       onEvent(ev)
+      replay?.onCursor?.(eventId)
     },
   })
   try {
