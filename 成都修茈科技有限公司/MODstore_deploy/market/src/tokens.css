@@ -270,6 +270,25 @@ html:not([data-workbench-theme]) {
   --el-text-color-primary: var(--wb-text-primary);
   --el-text-color-regular: var(--wb-text-secondary);
   --el-border-color: var(--wb-border-default);
+  --el-border-color-light: var(--wb-border-muted);
+  --el-bg-color-page: var(--color-bg-body);
+  --el-fill-color: var(--wb-surface-sunken);
+  --el-fill-color-blank: var(--wb-surface-elevated);
+  --el-text-color-placeholder: var(--wb-text-muted);
+  --el-text-color-disabled: var(--wb-text-muted);
+  --el-disabled-bg-color: var(--wb-surface-sunken);
+  --el-disabled-text-color: var(--wb-text-muted);
+  --el-color-success: var(--wb-status-success);
+  --el-color-warning: var(--wb-status-warning);
+  --el-color-danger: var(--wb-status-danger);
+  --el-color-info: var(--wb-text-secondary);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--wb-accent-primary) 80%, var(--wb-text-primary));
+  --el-color-primary-light-3: color-mix(in srgb, var(--wb-accent-primary) 70%, var(--wb-surface-elevated));
+  --el-color-primary-light-5: color-mix(in srgb, var(--wb-accent-primary) 50%, var(--wb-surface-elevated));
+  --el-color-primary-light-7: color-mix(in srgb, var(--wb-accent-primary) 30%, var(--wb-surface-elevated));
+  --el-color-primary-light-8: color-mix(in srgb, var(--wb-accent-primary) 20%, var(--wb-surface-elevated));
+  --el-color-primary-light-9: var(--wb-accent-soft);
+
 }
 
 @media (prefers-reduced-motion: reduce) {
