@@ -73,6 +73,8 @@ function registerRuntimeRoutes(
       if (!current()) throw new Error('auth session changed during route registration')
       remove.push(router.addRoute(route))
     }
+    // A session can change synchronously inside a router hook or registration.
+    if (!current()) throw new Error('auth session changed during route registration')
     registrations.set(entry.mod_id, { revision, names, routes, current, remove })
     return 'ok'
   } catch {
