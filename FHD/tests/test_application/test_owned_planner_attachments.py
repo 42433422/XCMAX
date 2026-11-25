@@ -414,3 +414,35 @@ def test_exact_path_cannot_override_same_name_conversation_binding(duplicate_wor
         ):
             pytest.fail("a conflicting exact path must not replace the bound attachment")
     assert _read_snapshot(context, second["upload_id"], second) == 999
+
+@pytest.mark.parametrize("foreign_field", ["owner_user_id", "tenant_id"])
+@pytest.mark.parametrize("reference", ["owned-file", "price.csv", "7a9193dba432-price.csv"])
+def test_foreign_account_or_tenant_cannot_resolve_id_or_name(owned, foreign_field, reference):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.db.session import get_db
+
+    context, _ = owned
+    # The absence of a conversation binding must not broaden account or tenant scope.
+    unbound = {key: value for key, value in context.items() if key != "attachment_upload_ids"}
+    with tenant_scope(int(context["tenant_id"])):
+        with get_db() as db:
+            row = db.query(EltUpload).filter(EltUpload.id == "owned-file").one()
+            setattr(row, foreign_field, int(getattr(row, foreign_field)) + 1000)
+        with pytest.raises(PermissionError, match="文件不属于"):
+            with workflow_file_snapshot(reference, unbound):
+                pytest.fail("a foreign upload must never be adopted by ID or filename")
+
+
+def test_expired_unbound_filename_does_not_resolve(owned):
+    from app.application.tools.workflow_spreadsheet_scope import workflow_file_snapshot
+    from app.db.session import get_db
+
+    context, _ = owned
+    unbound = {key: value for key, value in context.items() if key != "attachment_upload_ids"}
+    with tenant_scope(int(context["tenant_id"])):
+        with get_db() as db:
+            row = db.query(EltUpload).filter(EltUpload.id == "owned-file").one()
+            row.expires_at = datetime(2000, 1, 1)
+        with pytest.raises(PermissionError, match="文件不属于"):
+            with workflow_file_snapshot("price.csv", unbound):
+                pytest.fail("an expired upload must never match a bare filename")
