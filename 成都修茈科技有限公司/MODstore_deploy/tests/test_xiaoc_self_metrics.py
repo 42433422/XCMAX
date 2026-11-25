@@ -167,3 +167,34 @@ def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tm
     catalog["domains"][0]["anchor_60"].append(catalog["domains"][1]["anchor_60"][0])
     persist()
     assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+
+
+def test_conflicting_cost_journal_is_never_selected_by_order():
+    original = cycle("conflict", calls=["r1"])
+    conflicting = cycle("conflict", calls=["r2"])
+    valid = cycle("valid", calls=["r3"])
+    for rows in ([original, conflicting, valid], [conflicting, original, valid]):
+        read_keys = []
+
+        def read(key):
+            read_keys.append(key[3])
+            return settled(cents=9)
+
+        result = accrual_projection(SCOPE, rows, read)
+        assert result["cost_cents"] is None
+        assert result["known_accrued_cents"] == 9
+        assert result["conflicting_cycle_count"] == 1
+        assert result["unknown_cycle_count"] == 1
+        assert result["supplier_cost_cents"] is None
+        assert result["supplier_cost_status"] == "unknown_no_supplier_invoice"
+        assert read_keys == ["r3"]
+
+
+def test_conflicting_cross_scope_cycle_cannot_contribute_to_current_cost():
+    original = cycle("conflict", calls=["r1"])
+    conflicting = cycle("conflict", calls=["r1"], scope="previous-scope")
+    for rows in ([original, conflicting], [conflicting, original]):
+        result = accrual_projection(SCOPE, rows, lambda _: settled())
+        assert result["cost_cents"] is None
+        assert result["conflicting_cycle_count"] == 1
+        assert result["unknown_cycle_refs"] == ["cycle:conflict"]

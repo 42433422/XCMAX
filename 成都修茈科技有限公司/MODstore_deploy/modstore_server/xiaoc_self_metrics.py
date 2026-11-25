@@ -14,9 +14,9 @@ from typing import Any, Callable
 from modstore_server.xiaoc_life_policy import parse_time
 
 
-def consistent_cycle_receipts(
+def _partition_cycle_receipts(
     events: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], set[str]]:
     """Quarantine conflicting originals instead of picking a convenient duplicate."""
     originals: dict[str, dict[str, Any]] = {}
     conflicts: set[str] = set()
@@ -29,7 +29,14 @@ def consistent_cycle_receipts(
         previous = originals.setdefault(key, event)
         if previous != event:
             conflicts.add(key)
-    return [row for key, row in originals.items() if key not in conflicts], len(conflicts)
+    return [row for key, row in originals.items() if key not in conflicts], conflicts
+
+
+def consistent_cycle_receipts(
+    events: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    rows, conflicts = _partition_cycle_receipts(events)
+    return rows, len(conflicts)
 
 
 def completion_review(scope: str | None, events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -130,10 +137,22 @@ def accrual_projection(
     """
     cycles: dict[str, tuple[list[tuple[int, str, str, str]], int] | None] = {}
     owners: dict[tuple[int, str, str, str], set[str]] = defaultdict(set)
+    consistent, conflicts = _partition_cycle_receipts(events)
     # Check ownership collisions even in historical or incomplete journals.
     for event in events:
+        if not isinstance(event, dict):
+            continue
         cycle_id = event.get("id")
         details = event.get("details") or {}
+        if not isinstance(details, dict):
+            continue
+        if (
+            scope
+            and isinstance(cycle_id, str)
+            and cycle_id in conflicts
+            and details.get("execution_scope") == scope
+        ):
+            cycles[cycle_id] = None
         owner = details.get("owner_user_id")
         if (
             not isinstance(cycle_id, str)
@@ -148,7 +167,7 @@ def accrual_projection(
                 call_key = _call_key(step, owner)
                 if call_key is not None:
                     owners[call_key].add(cycle_id)
-    for event in events:
+    for event in consistent:
         key = event.get("id")
         if not isinstance(key, str) or not key.startswith("cycle:") or key in cycles:
             continue
@@ -225,6 +244,8 @@ def accrual_projection(
         "known_cycle_refs": list(known),
         "unknown_cycle_refs": unknown,
         "supplier_cost_cents": None,
+        "supplier_cost_status": "unknown_no_supplier_invoice",
+        "conflicting_cycle_count": sum(key in conflicts for key in cycles),
         "status": "partial" if known and unknown else "measured" if known else "unknown",
     }
 
