@@ -282,6 +282,81 @@ def test_rollout_new_graph_keeps_provenance_without_new_experimental_samples(cus
     assert observations(env["run"]) == before
 
 
+
+def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
+    customer_workflow,
+):
+    """The genuine customer/file path supplies effects, but never A/B samples."""
+    from modstore_server.models import WorkflowEdge, WorkflowNode
+
+    env = customer_workflow
+    assert env["execute"]().status_code == 200
+    business_receipts(env)
+    original = mature(env)
+    Clock.value += timedelta(hours=1)
+    assert env["run"]["advance"]()["status"] == "awaiting_experiment_stop"
+    assert env["run"]["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        workflow_id = env["run"]["workflows"][env["customer_id"]]
+        db.query(WorkflowEdge).filter_by(workflow_id=workflow_id).delete()
+        db.query(WorkflowNode).filter_by(workflow_id=workflow_id).delete()
+        db.commit()
+    generated = asyncio.run(env["run"]["generate"](env["customer_id"]))
+    assert generated["ok"] and generated["sandbox_ok"]
+    source = env["workspace"] / "inputs/orders.json"
+    actual = json.loads(source.read_text())
+    actual["rows"][0]["quantity"] = 4
+    source.write_text(json.dumps(actual))
+    assert env["execute"]().status_code == 200
+    assert env["binding"]["rollout_admitted"] is True
+    assert env["binding"]["metric_admitted"] is False
+    business_receipts(env)
+    Clock.value = parse_datetime(env["binding"]["customer_outcome_due_at"]) + timedelta(
+        seconds=1
+    )
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, env["run"]["id"])
+        row.status = "completed"
+        db.commit()
+    with get_session_factory()() as db:
+        result = feedback.reconcile_postpromotion_customer_outcomes(
+            env["run"]["id"], session=db
+        )
+        assert result == {"observed": 1, "pending": 0}
+        db.commit()
+    with get_session_factory()() as db:
+        rows = list(
+            db.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.aggregate_id == env["run"]["id"],
+                    OutboxEvent.event_name == "experiment.postpromotion_observed",
+                )
+            )
+        )
+        assert len(rows) == 1
+        item = json_loads(rows[0].payload_json, {})
+        assert item["execution_id"] == env["execution_id"]
+        assert item["assignment_stage"] == "approved_rollout"
+        assert item["customer_outcome_evidence_sha256"]
+        assert item["success"] is True
+        from modstore_server.retort_training_candidates import postpromotion_effect_snapshot
+
+        effects = json_loads(db.get(RetortEvolutionRun, env["run"]["id"]).effects_json, {})
+        snapshot = postpromotion_effect_snapshot(
+            db, db.get(RetortEvolutionRun, env["run"]["id"]),
+            env["run"]["spec"], effects, observed_at=Clock.value,
+        )
+        assert snapshot["status"] == "observational_only"
+        assert snapshot["successes"] == 1
+        assert snapshot["independently_verified_lift"] is False
+    assert feedback.reconcile_customer_executions(env["run"]["id"])["observed"] == 0
+    assert observations(env["run"]) == original
+    with get_session_factory()() as db:
+        assert feedback.reconcile_postpromotion_customer_outcomes(
+            env["run"]["id"], session=db
+        ) == {"observed": 0, "pending": 0}
+
+
 def test_repeated_customer_executions_remain_one_account_for_failure_guard(customer_workflow):
     env = customer_workflow
     assert env["execute"]().status_code == 200
