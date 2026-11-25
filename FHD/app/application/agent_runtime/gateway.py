@@ -479,7 +479,17 @@ async def run_runtime_task_async(
             seed["owner"] = owner
             if _task_id is not None:
                 seed["task_id"] = _task_id
-            resolved_id = "run_xiaox_" + canonical_digest(seed)[:48]
+            # The request ID is a persistence and billing protocol, not a brand.
+            # Prefer the original namespace for all new requests. A record made
+            # by the intermediate Xiaox build must keep its original ID.
+            suffix = canonical_digest(seed)[:48]
+            legacy_id, renamed_id = "run_codex_" + suffix, "run_xiaox_" + suffix
+            legacy, renamed = repository.get(legacy_id), repository.get(renamed_id)
+            if legacy is not None and renamed is not None:
+                raise XiaoxBindingError(
+                    "runtime_identity_conflict", "同一请求存在两套任务记录，须核对原始回执，禁止重复执行"
+                )
+            resolved_id = renamed_id if renamed is not None else legacy_id
             if ancestor is not None:
                 parent_context = ancestor.metadata.get("task_context") or {}
                 context["parent_task_id"] = parent_context.get("task_id") or ancestor.run_id
@@ -490,6 +500,12 @@ async def run_runtime_task_async(
             parent = repository.get(resolved_id)
             if parent is not None:
                 _same_owner(parent, context, owner)
+                # Until the complete legacy receipt/approval protocol is migrated,
+                # fail closed instead of starting a replacement task.
+                if parent.intent != "xiaox.runtime" or parent.metadata.get("runtime_type") != "xiaox":
+                    raise XiaoxBindingError(
+                        "runtime_migration_required", "原请求已存在，须恢复原任务及回执，禁止重新执行"
+                    )
         digest = canonical_digest(requested)
         if parent is not None:
             request = (parent.metadata.get("runtime_requests") or {}).get(request_key)
@@ -603,6 +619,10 @@ async def run_runtime_task_async(
                 raise XiaoxBindingError("conversation_changed", error)
             parent, created = _insert_parent(repository, parent, queue=queue)
             _same_owner(parent, context, owner)
+            if parent.intent != "xiaox.runtime" or parent.metadata.get("runtime_type") != "xiaox":
+                raise XiaoxBindingError(
+                    "runtime_migration_required", "原请求已存在，须恢复原任务及回执，禁止重新执行"
+                )
             if created:
                 admitted = True
         assert parent is not None
