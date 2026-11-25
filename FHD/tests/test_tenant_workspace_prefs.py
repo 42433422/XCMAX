@@ -473,3 +473,49 @@ def test_workspace_revision_competing_postgresql_processes():
     finally:
         UserPreference.__table__.drop(database, checkfirst=True)
         database.dispose()
+
+
+def test_workspace_preferences_use_host_db_even_with_an_active_mod(monkeypatch):
+    import pytest
+
+    from app.application.tenant_workspace_prefs import WorkspacePrefsVersionConflict
+    from app.request_active_mod_ctx import (
+        get_request_active_mod_id,
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
+
+    store = {}
+
+    class FakeService:
+        def get_preference(self, owner, key):
+            assert get_request_active_mod_id() == ""
+            return store.get((owner, key))
+
+        def mutate_preference(self, owner, key, transform):
+            assert get_request_active_mod_id() == ""
+            value = transform(store.get((owner, key)))
+            store[(owner, key)] = value
+            return value
+
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
+        lambda: FakeService(),
+    )
+    token = set_request_active_mod_id("customer-mod-a")
+    try:
+        first = patch_workspace_prefs(
+            "tenant:42", {"host_pack_acknowledged": True}, expected_revision=0
+        )
+        assert first["_revision"] == 1
+        assert get_request_active_mod_id() == "customer-mod-a"
+        assert get_workspace_prefs("tenant:42") == first
+        assert get_request_active_mod_id() == "customer-mod-a"
+        with pytest.raises(WorkspacePrefsVersionConflict):
+            patch_workspace_prefs(
+                "tenant:42", {"host_pack_acknowledged": False}, expected_revision=0
+            )
+        # Exception paths must also restore the original business Mod.
+        assert get_request_active_mod_id() == "customer-mod-a"
+    finally:
+        reset_request_active_mod_id(token)
