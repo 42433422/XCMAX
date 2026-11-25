@@ -1,5 +1,5 @@
 {
-  "lines": 2732993,
+  "lines": 2732996,
   "updated": "2026-11-25",
-  "note": "PR #3558: ensure the receipt fixture data directory exists."
+  "note": "PR #3558: print the failing receipt tool traceback."
 }

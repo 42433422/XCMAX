@@ -354,6 +354,9 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
         try:
             return executor.execute(step, runtime_context=runtime_context)
         except BOUNDARY_ERRORS as exc:
+            import traceback
+
+            print(traceback.format_exc()[:4000])
             print(
                 f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc} "
                 f"cwd={os.getcwd()} db_url={os.environ.get('DATABASE_URL')} "
