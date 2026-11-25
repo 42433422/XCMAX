@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import (
     InventoryLedger, InventoryTransaction, PurchaseInbound, PurchaseInboundItem,
-    PurchaseOrder, PurchaseReturn, PurchaseReturnItem,
+    PurchaseReturn, PurchaseReturnItem, Supplier, Warehouse,
 )
 from app.db.models.approval import ApprovalAction, ApprovalRecord, ApprovalRequest, ApprovalStatus
 from app.db.session import get_db
@@ -73,6 +73,7 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
     Replayed return identities return their original receipt, never post twice.
     """
     from app.db.models.accounting import JournalEntry
+    from app.db.models.user import User
     from app.domain.shared_services.accounting_services import create_journal_entry
     from app.domain.shared_services.purchase_service import _line_amount, _write_lock
 
@@ -121,6 +122,20 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                 ).first() is None
             ):
                 raise PurchaseReturnRefused("原退货审批缺失、无独立批准人或无审计回执")
+            # This decision remains valid only while its approving identity is
+            # still active and belongs to the same source enterprise.
+            live_reviewer = (
+                db.query(User)
+                .filter(
+                    User.id == approval.approved_by,
+                    User.is_active.is_(True),
+                    User.tenant_id == tenant_id,
+                )
+                .with_for_update(read=True)
+                .one_or_none()
+            )
+            if live_reviewer is None:
+                raise PurchaseReturnRefused("原审批人已被撤权或转出企业，需重新审批")
             try:
                 approved = json.loads(approval.business_data or "{}")
                 approved_items = _items_by_source(approved.get("items"))
@@ -166,6 +181,18 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
             )
             if receipt is None:
                 raise PurchaseReturnRefused("原入库单不存在或并非完成状态")
+            supplier = db.query(Supplier).filter(
+                Supplier.id == receipt.supplier_id,
+                Supplier.tenant_id == tenant_id,
+                Supplier.status == "active",
+            ).one_or_none()
+            warehouse = db.query(Warehouse).filter(
+                Warehouse.id == receipt.warehouse_id,
+                Warehouse.tenant_id == tenant_id,
+                Warehouse.status == "active",
+            ).one_or_none()
+            if supplier is None or warehouse is None:
+                raise PurchaseReturnRefused("原供应商或原仓库不存在、已停用或跨租户")
             inbound_lines = {
                 row.id: row for row in db.query(PurchaseInboundItem)
                 .filter(
@@ -220,6 +247,14 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                 JournalEntry.reference_id == receipt.id,
             ).all()
             original_total = Decimal(str(receipt.total_amount or 0))
+            computed_original = sum(
+                (
+                    Decimal(str(line.quantity)) * Decimal(str(line.unit_price or 0))
+                ).quantize(Decimal("0.01"))
+                for line in receipt.items
+            )
+            if original_total != computed_original:
+                raise PurchaseReturnRefused("原入库合计金额与原明细不一致")
             if original_total > 0:
                 if len(source_journals) != 1:
                     raise PurchaseReturnRefused("原入库应付凭证缺失或重复")
@@ -229,6 +264,14 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                     or original_journal.reversed_at is not None
                     or Decimal(str(original_journal.debit_total or 0)) != original_total
                     or Decimal(str(original_journal.credit_total or 0)) != original_total
+                    or sum(
+                        (Decimal(str(line.debit or 0)) for line in original_journal.lines
+                         if line.account_code == "1401"), Decimal("0")
+                    ) != original_total
+                    or sum(
+                        (Decimal(str(line.credit or 0)) for line in original_journal.lines
+                         if line.account_code == "2201"), Decimal("0")
+                    ) != original_total
                 ):
                     raise PurchaseReturnRefused("原入库应付凭证未过账或金额不匹配")
             elif source_journals:
