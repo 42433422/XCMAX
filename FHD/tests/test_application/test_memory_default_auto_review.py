@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import runpy
-import shutil
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -198,15 +196,13 @@ def test_authority_does_not_trust_review_flag_without_matching_evidence(memory):
 
 def test_flattened_release_provisioner_with_explicit_output(tmp_path, monkeypatch):
     source = Path(__file__).resolve().parents[2] / "scripts/dev/provision_memory_model.py"
-    build = tmp_path / "build"
-    build.mkdir()
-    script = build / source.name
-    shutil.copyfile(source, script)
-    output = build / "memory-model"
+    script = "/build/provision_memory_model.py"
+    output = tmp_path / "memory-model"
 
-    # Model provisioning itself belongs to the real container acceptance gate.
-    # Exercise the actual copied CLI without a download or a mocked import.
-    namespace = runpy.run_path(str(script))
+    # Reproduce the exact shallow Docker path without writing into /build.
+    # The original script raised IndexError at import, before CLI parsing.
+    namespace = {"__file__": script, "__name__": "release_provisioner_regression"}
+    exec(compile(source.read_bytes(), script, "exec"), namespace)
     entry = namespace["main"]
     seen = []
 
@@ -215,6 +211,6 @@ def test_flattened_release_provisioner_with_explicit_output(tmp_path, monkeypatc
         return {"model": "test-only"}
 
     monkeypatch.setitem(entry.__globals__, "provision", provision)
-    monkeypatch.setattr(sys, "argv", [str(script), "--output", str(output)])
+    monkeypatch.setattr(sys, "argv", [script, "--output", str(output)])
     assert entry() == 0
     assert seen == [output.resolve()]
