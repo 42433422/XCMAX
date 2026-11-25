@@ -59,6 +59,7 @@ BLOCKED_SUMMARIES = {
     "research_returned_no_sources": "本轮研究没有返回可用来源，未据此生成新结论。",
     "no_observed_context": "本轮没有可用的企业观察来源，未调用模型。",
     "model_returned_no_usable_result": "模型未返回可用结果，已保存实际调用用量。",
+    "experience_reuse_scope_unverified": "历史经验的指标、阈值、方向或观察窗与当前提案不同，禁止把经验作为新方案依据。",
 }
 
 
@@ -604,6 +605,38 @@ class CyclePorts:
             level=self.state["level"],
             domain=self.domain,
         )
+        # Reusing a human-confirmed case is a scoped citation in a NEW proposal,
+        # not a task approval, a causal result or an executable strategy.
+        if decision.goal is not None:
+            from modstore_server.xiaoc_life_experience_review import experience_scope_matches
+
+            cited = set(decision.goal.evidence_refs)
+            prior_cases = [
+                row for row in state["facts"]
+                if row.get("ref") in cited
+                and isinstance(row.get("reviewed_experience"), dict)
+                and isinstance(row.get("learning_assessment"), dict)
+            ]
+            if prior_cases:
+                hypothesis = decision.hypothesis.model_dump() if decision.hypothesis else {}
+                if not hypothesis or any(
+                    not experience_scope_matches(
+                        row["learning_assessment"].get("scope") or {},
+                        hypothesis,
+                        self.claim["owner_user_id"],
+                    )
+                    for row in prior_cases
+                ):
+                    raise LifeBlocked("experience_reuse_scope_unverified")
+                self.details["experience_reuse"] = {
+                    "status": "advisory_citation_in_unapproved_proposal",
+                    "review_refs": sorted(row["ref"] for row in prior_cases),
+                    "original_candidate_refs": sorted(
+                        row["candidate_ref"] for row in prior_cases
+                    ),
+                    "measurement": hypothesis,
+                    "effect": "unknown_requires_independent_outcome_comparison",
+                }
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
