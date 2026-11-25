@@ -6,7 +6,12 @@ import threading
 from typing import Any
 
 from app.application.agent_task_context import authenticated_task_owner
-from app.infrastructure.codex.policy import RuntimePolicyError
+from app.application.agent_runtime.configuration import RuntimePolicyError
+from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
+
+# RuntimePolicyError is supplied by the configured fixed runtime package.
+# After #3606 migration the same surface advertises Xiaox, not a retired Codex label.
+_RUNTIME_KIND = 'xiaox' if RuntimePolicyError.__module__.startswith('app.infrastructure.xiaox.') else 'codex'
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。根据当前用户请求工作。先发现当前账号可用能力，再按工具契约调用。"
@@ -18,12 +23,11 @@ _INSTRUCTIONS = (
 
 
 def stream_runtime_event(event: dict[str, Any]) -> None:
-    from app.infrastructure.chat_stream_lifetime import publish_stream_delta, publish_stream_note
+    from app.infrastructure.chat_stream_lifetime import publish_stream_note
 
     method, payload = event.get("method"), event.get("payload") or {}
-    if method == "item/agentMessage/delta" and event.get("runtime_goal_mode") == "reply":
-        publish_stream_delta(str(payload.get("delta") or ""))
-    elif method == "item/started" and (payload.get("item") or {}).get("type") == "mcpToolCall":
+    # Candidate text must not be emitted before the server classifies the result.
+    if method == "item/started" and (payload.get("item") or {}).get("type") == "mcpToolCall":
         publish_stream_note("正在通过授权工具处理任务…")
 
 
@@ -59,7 +63,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "success": bool(result.get("ok")),
         "response": text,
         "message": text,
-        "runtime": "codex",
+        "runtime": _RUNTIME_KIND,
         "run_id": result.get("run_id"),
         "agent_run_id": result.get("run_id"),
         "execution_state": state,
@@ -77,7 +81,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "data": {
             "action": "approval_pending" if card else "runtime_reply",
             "text": text,
-            "runtime": "codex",
+            "runtime": _RUNTIME_KIND,
             "run_id": result.get("run_id"),
             "execution_state": state,
             "business_completed": result.get("business_completed") is True,
@@ -122,7 +126,7 @@ def run_runtime_chat(
         if not busy:
             _ACTIVE_SLOTS.add(owner)
     if busy:
-        # Two Codex runtimes for one account used to fail as an unexplained
+        # Two fixed runtimes for one account used to fail as an unexplained
         # `unknown` state; report an explicit, retryable admission result instead.
         run_id = str(context.get("agent_runtime_run_id") or "") or None
         return runtime_chat_payload(
@@ -156,7 +160,7 @@ def _run_runtime_chat(
     context: dict[str, Any],
     file_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run every general chat through the authenticated Codex task gateway."""
+    """Run every general chat through the authenticated fixed task gateway."""
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
@@ -204,8 +208,6 @@ def _run_runtime_chat(
             result.update(run_id=run_id, resume_required=True, execution_state="blocked")
         return runtime_chat_payload(result, conversation_id=session)
     except RuntimePolicyError as exc:
-        from app.application.agent_runtime.configuration import public_runtime_failure
-
         failure = public_runtime_failure(exc)
         return runtime_chat_payload(
             {
