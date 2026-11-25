@@ -685,6 +685,17 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
     assert movement["knowledge_kind"] == "fact"
     assert Decimal(movement["state"]["after_quantity"]) == 4
     assert movement["source_last_changed"] is None
+    # Same source row edited within the TTL: an old memory reference cannot win.
+    from app.application.enterprise_cognition.service import verify_source_reference
+
+    with sessions.begin() as db:
+        db.get(InventoryTransaction, 504).after_quantity = Decimal(6)
+    clock[0] += 1
+    changed_movement = get(service, "inventory", "504", force_refresh=True)
+    assert changed_movement["source_version"] != movement["source_version"]
+    assert verify_source_reference(
+        changed_movement, movement["source_version"]
+    )["status"] == "superseded"
     assert get(service, "production", "505")["state"]["status"] == "confirmed"
     with sessions.begin() as db:
         db.get(ManufacturingOrderLine, 506).consumed_quantity = Decimal(1)
@@ -942,3 +953,33 @@ def test_journal_entry_authority_is_scoped_without_invented_account_balances(wor
     permissions.remove("tool.finance.ledger_query")
     with pytest.raises(PermissionError):
         get(service, "journal_entry", "620")
+
+
+@pytest.mark.parametrize(
+    "entity_type,entity_id,model,field,replacement",
+    [
+        ("customer", "201", Customer, "customer_name", "Customer A corrected"),
+        ("fund", "301", FinancialTransaction, "amount", Decimal(95)),
+    ],
+)
+def test_customer_and_finance_remembered_facts_are_superseded_by_erp(
+    world, entity_type, entity_id, model, field, replacement
+):
+    from app.application.enterprise_cognition.service import verify_source_reference
+
+    service, sessions, clock, _ = world
+    before = get(service, entity_type, entity_id)
+    assert before["knowledge_kind"] == "fact"
+    with sessions.begin() as db:
+        setattr(db.get(model, int(entity_id)), field, replacement)
+    clock[0] += 1  # preserve observation ordering, but stay within the 30s TTL
+    after = get(service, entity_type, entity_id, force_refresh=True)
+    assert after["retrieved_from"] == "authority"
+    assert after["source_version"] != before["source_version"]
+    superseded = verify_source_reference(after, before["source_version"])
+    assert superseded["status"] == "superseded"
+    assert superseded["memory_reuse_allowed"] is False
+    assert superseded["requires_reconciliation"] is True
+    assert verify_source_reference(
+        after, after["source_version"]
+    )["status"] == "current"
