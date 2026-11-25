@@ -1,5 +1,5 @@
 {
-  "lines": 2733700,
+  "lines": 2733775,
   "updated": "2026-11-25",
-  "note": "#3613 unique SQLite bootstrap implementation plus stacked #3614 independent process writer/seed regression. Combined net lines tracked; real model 13x3 and CI remain BLOCKED until verified."
+  "note": "#3613 unique SQLite DDL/admin/RBAC bootstrap plus independent #3614 two-process contention regression. Source net growth +641 against fixed main 21c7225, no duplicate seeding or lowered gates; 13x3 real model receipts still required."
 }
