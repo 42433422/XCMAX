@@ -212,7 +212,7 @@ def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
     other_rows = service.list_memories(access_context=other_tenant)["memories"]
 
     assert {(row["scope"], row["status"]) for row in alice_rows} == {
-        ("user", "pending"),
+        ("user", "active"),
         ("tenant", "pending"),
     }
     assert [row["scope"] for row in bob_rows] == ["tenant"]

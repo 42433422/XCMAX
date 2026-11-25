@@ -12,7 +12,7 @@ from app.domain.shared_services.user_memory_service import UserMemoryService, Us
 
 
 @pytest.fixture
-def memory(monkeypatch):
+def memory(monkeypatch, tmp_path):
     monkeypatch.delenv("XCAGI_MEMORY_AUTO_REVIEW", raising=False)
     monkeypatch.delenv("XCAGI_MEMORY_CAPTURE", raising=False)
     monkeypatch.setattr(UserMemoryStore, "_instance", None)
@@ -23,7 +23,19 @@ def memory(monkeypatch):
     monkeypatch.setattr(
         "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
     )
-    return PersyMemoryApplicationService(UserMemoryService(storage_type="memory"))
+    from app.application.user_memory_vector_app_service import (
+        UserMemoryVectorIngestApplicationService,
+    )
+    from app.infrastructure.persistence.user_memory_vector_store import SQLiteUserMemoryVectorStore
+
+    service = UserMemoryService(storage_type="memory")
+    store = SQLiteUserMemoryVectorStore(str(tmp_path / "memory.sqlite"))
+    ingest = UserMemoryVectorIngestApplicationService(vector_store=store)
+    monkeypatch.setattr(
+        "app.application.user_memory_vector_app_service.get_user_memory_vector_ingest_app_service",
+        lambda: ingest,
+    )
+    return PersyMemoryApplicationService(service)
 
 
 def access(actor="7", tenant="2", write=True):
@@ -107,3 +119,26 @@ def test_working_memory_default_and_explicit_override():
         assert get_working_memory("s", "u")._enable_long_term
     finally:
         reset_working_memory()
+
+def test_authority_does_not_trust_review_flag_without_matching_evidence(memory):
+    from app.application.persy_memory_utils import _memory_owner_id
+
+    candidate = extract_explicit_memories("我喜欢咖啡")[0]
+    result = memory.memory_service.propose_memory_candidate(
+        _memory_owner_id(access()),
+        candidate["memory_type"],
+        candidate["key"],
+        candidate["value"],
+        source="chat_trace",
+        confidence=candidate["confidence"],
+        evidence=[
+            {
+                "kind": "conversation_turn",
+                "scope": "user",
+                "tenant_id": "2",
+                "user_excerpt": "我喜欢茶",
+            }
+        ],
+        auto_review_capture=True,
+    )
+    assert result["candidate"]["status"] == "pending"

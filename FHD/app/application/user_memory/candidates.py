@@ -94,9 +94,13 @@ class CandidateMemory:
             and bool(governance["evidence"])
         )
         expected_scope = (
-            "user" if user_id.startswith("personal-memory:v1:") else
-            "tenant" if user_id.startswith("enterprise-memory:v1:") else
-            "global_preference" if user_id.startswith("global-preference:v1:") else ""
+            "user"
+            if user_id.startswith("personal-memory:v1:")
+            else "tenant"
+            if user_id.startswith("enterprise-memory:v1:")
+            else "global_preference"
+            if user_id.startswith("global-preference:v1:")
+            else ""
         )
         reviewed_capture = (
             auto_review_capture
@@ -112,6 +116,26 @@ class CandidateMemory:
             )
             and (expected_scope != "global_preference" or normalized_type == "preference")
         )
+        if reviewed_capture:
+            from app.application.persy_memory_utils import review_explicit_capture
+
+            # Recheck the actual canonical value at the authority boundary;
+            # the caller's review flag alone is not sufficient to activate it.
+            proposed = {
+                "memory_type": normalized_type,
+                "key": normalized_key,
+                "value": value,
+            }
+            reviewed_capture = any(
+                review_explicit_capture(
+                    proposed, str(item.get("user_excerpt") or ""), expected_scope
+                )
+                == {**proposed, "confidence": governance["confidence"]}
+                for item in governance["evidence"]
+                if item.get("kind") == "conversation_turn"
+                and item.get("scope") == expected_scope
+                and item.get("tenant_id")
+            )
         activate = (activate_personal_capture and personal_capture) or reviewed_capture
         memory = self.access.get_memory(user_id) or self.access.new_memory(user_id)
         fingerprint = self.ports.fingerprint(normalized_type, normalized_key, value)

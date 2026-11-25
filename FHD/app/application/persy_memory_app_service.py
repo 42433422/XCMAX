@@ -177,11 +177,17 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
     ) -> dict[str, Any]:
         message = str(user_message or "").strip()
         if (os.environ.get("XCAGI_MEMORY_CAPTURE") or "1").strip().lower() in {
-            "0", "false", "off", "no",
+            "0",
+            "false",
+            "off",
+            "no",
         }:
             return {"success": True, "created_count": 0, "candidates": []}
         auto_review = (os.environ.get("XCAGI_MEMORY_AUTO_REVIEW") or "1").strip().lower() not in {
-            "0", "false", "off", "no",
+            "0",
+            "false",
+            "off",
+            "no",
         }
         if not message or _SENSITIVE_PATTERN.search(message) or redact_text(message) != message:
             return {"success": True, "created_count": 0, "candidates": []}
