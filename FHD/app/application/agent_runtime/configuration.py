@@ -435,11 +435,23 @@ def _account_runtime_inputs(
         ) from exc
     host_key = hashlib.sha256(json.dumps(host, sort_keys=True).encode()).hexdigest()
     try:
-        root = (
-            Path(get_desktop_state_dir(create=False)).expanduser().resolve()
-            / "xiaox-runtime"
-            / scope
-        )
+        state = Path(get_desktop_state_dir(create=False)).expanduser().resolve()
+        # Keep the legacy on-disk namespace for new and upgraded accounts.
+        # Existing Xiaox-only state must also remain in place: moving it would
+        # invalidate absolute evidence references and risk duplicate paid calls.
+        legacy, renamed = (state / name / scope for name in ("codex-runtime", "xiaox-runtime"))
+        for candidate in (legacy, renamed):
+            for directory in (candidate.parent, candidate):
+                if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+                    raise RuntimeSetupError(
+                        "runtime_storage_invalid", "运行状态目录无效，请检查本机数据目录。"
+                    )
+        if legacy.exists() and renamed.exists():
+            raise RuntimeSetupError(
+                "runtime_storage_invalid",
+                "同一账号存在两套运行状态，请先核对任务与计费回执；不会自动合并或重新执行。",
+            )
+        root = renamed if renamed.exists() else legacy
     except OSError as exc:
         raise RuntimeSetupError(
             "runtime_storage_invalid", "本机运行状态目录无法读取，请检查数据目录权限。"
