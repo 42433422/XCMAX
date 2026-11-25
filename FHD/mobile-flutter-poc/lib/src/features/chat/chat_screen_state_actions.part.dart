@@ -330,6 +330,7 @@ abstract class _ChatStateActions extends _ChatAttachmentActions {
         reply == null &&
         _attachments.isEmpty &&
         _failedAttachments.isEmpty &&
+        _recoveredAttachmentNames.isEmpty &&
         !_uploading) {
       return null;
     }
