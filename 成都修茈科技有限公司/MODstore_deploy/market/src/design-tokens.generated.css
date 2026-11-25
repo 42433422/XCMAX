@@ -37,7 +37,7 @@
   --xc-token-colors-neutral-dark-surface-variant: #2E2E2E;
   --xc-token-colors-neutral-dark-border: #383838;
   --xc-token-colors-neutral-dark-text-primary: #E5E5E5;
-  --xc-token-colors-neutral-dark-text-secondary: #888888;
+  --xc-token-colors-neutral-dark-text-secondary: #8C8C8C;
   --xc-token-colors-neutral-dark-text-tertiary: #5C5C5C;
   --xc-token-spacing-xs: 4px;
   --xc-token-spacing-sm: 8px;
@@ -361,7 +361,7 @@
   --xc-token-market-global-warning-alpha-08: rgba(217, 119, 6, 0.08);
   --xc-token-market-global-warning-alpha-30: rgba(217, 119, 6, 0.3);
   --xc-token-market-global-indigo-alpha-06: rgba(99, 102, 241, 0.06);
-  --xc-token-market-global-brand-indigo: var(--xc-token-colors-brand-primary);
+  --xc-token-market-global-brand-indigo: #6366F1;
   --xc-token-market-global-indigo-alpha-08: rgba(99, 102, 241, 0.08);
   --xc-token-market-global-brand-indigo-dark: var(--xc-token-colors-brand-primary-dark);
   --xc-token-market-global-indigo-alpha-14: rgba(99, 102, 241, 0.14);
