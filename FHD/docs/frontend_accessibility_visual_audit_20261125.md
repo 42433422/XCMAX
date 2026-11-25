@@ -1,3 +1,35 @@
+# 2026-11-25 无障碍专项增量结论（覆盖下方初始快照）
+
+**当前仍 BLOCKED，不构成 WCAG 2.2 AA 合规认证。** 初始快照中的 15 色对失败、27 个截图计划和未修复状态，均为历史取证口径；以下采用最新修复后口径。后续请以每次 PR 最新 HEAD 的真实 CI 和 artifact 复核，不能继承任何旧结果。
+
+## 本轮已执行源码核验
+- 已将 Desktop `ConfirmDialog.vue` 4 类操作按钮正常/hover 色改用既有 enterprise 设计 Token，增加双态可见键盘焦点、44px 操作目标、窄屏滚动、减少动画；办公壳 `base.css` 补充深浅环境均可辨识的双色焦点环。
+- Market `AppConfirmDialog.vue` 保持既有 Element Plus 焦点陷阱、Escape、返回焦点逻辑，主操作按钮使用 `--xc-token-market-light-wb-accent-primary`，危险按钮使用 `--xc-token-market-light-wb-status-danger`；焦点环与两种背景也纳入检查。
+- Flutter 修复浅色品牌主色与三级文字、深色三级文字、按钮/错误/成功前景色；加入审批 Semantics、状态播报、输入永久标签与安全区；既有 SSOT 同步生成 Desktop CSS、Flutter Dart、Market CSS。
+- 增加 `test/theme_accessibility_contrast_test.dart` 和 `test/approval_accessibility_test.dart`；扩充原有三端截图用例，使用合成数据，不执行真实审批写入。
+- 独立重新执行最新源码对应的 `audit-accessibility-contrast.mjs` 静态算法（JS 运行环境，注入同 HEAD 的 GitHub 真实源码读取）**25/25 明确色对通过，exitCode=0**；`generate-design-tokens.mjs` 实际渲染结果与仓库 Desktop CSS / Flutter Dart / Market CSS **3/3 字节一致**。这不等于本地 Node/Flutter CLI 或产品画面验收。
+
+## 视觉计划数纠错（尚不是已生成截图）
+| 表面 | 现有截图调用推导 | comparator 严格预期数 |
+|---|---|---:|
+| Desktop | shell（2 视口 × 4）+ a11y（2 主题 × 2 视口 × 2） | 16 |
+| Market | workbench（3 + 2）+ a11y（2×2×2）+ autonomy（2视口×3） | 19 |
+| Flutter | chat（2主题×2宽度×4）+ employee（2主题×2）+ approval list/error（2主题×3尺寸×2）+ detail/confirm（2主题×2）+ task/error（2主题×2） | 40 |
+| **合计** | 真实画面必须由可用 Runner 生成 | **75** |
+
+原比较器 `EXPECTED={desktop:6, market:5, flutter:16}` 与当时已经存在的截图调用数不符，会产生假失败；已改为 `16/19/40` 的显式覆盖门禁，且在报告记录 expected/baseline/candidate 实际张数。截图收集仍从当前 PR base SHA 和候选 SHA 分别执行同版测试；保留 base、candidate、diff、report 和原空审批清单，不自动接受差异。新 a11y 测试选用真实 DPR2 的 `scale:'device'` 截图。
+
+## 实际未闭环及通过条件
+1. 真实 CI：最新目标提交的 `design-token-contract`、`ci-mobile-flutter`、桌面与 Market 构建/测试、三端 `UI visual regression` 必须实际 completed/success，并记录 workflow run、job、完整输出；不能用本地静态算法代替。2026-11-25 20:23 左右观察到高频并行写入导致视觉和 Flutter 旧候选反复 cancelled，最新 queued/pending；已经发布 [冻结非阻断提交协调](https://github.com/42433422/XCMAX/pull/3605#issuecomment-7162214046)。
+2. 截图证据：真实三端至少 16/19/40 张 base/candidate，各有差异审查与书面批准/拒绝。**当前未获取任何该候选实际图像 artifact，不存在可声明通过的截图**。
+3. 手动可访问性：全量 Tab 顺序、键盘陷阱、模态堆叠/返回焦点、ARIA 名称和动态播报、NVDA/VoiceOver/TalkBack；组件自动化不能替代读屏实测。
+4. 移动真机：Android/iOS 200% 字体缩放、屏幕方向、系统安全区、触控尺寸、平板、DPR2、减少动画；未获得机型/OS版本/实录，不得标记 PASS。
+5. 广泛 UI 对比度：25/25 仅为已明确绑定的静态色对；其它透明背景、hover/focus/disabled、Market dark/light 覆盖等仍需截图和实际 DOM computed style 测试，不得将 25/25 扩大表述为全站无障碍合格。
+
+本节为最新阶段口径；以下为此前诊断与修复过程快照，不能作为当前 PASS 状态。
+
+---
+
 # 三端无障碍和视觉质量专项检查报告
 
 日期：2026-11-25；集成入口 [#3605](https://github.com/42433422/XCMAX/pull/3605)。
