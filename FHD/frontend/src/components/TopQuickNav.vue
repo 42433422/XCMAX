@@ -300,7 +300,9 @@ function clearRecordSearch() {
 watch(recordScope, () => {
   clearRecordSearch()
   cancelBlur()
-  preferences.value = { ...readWorkspaceCommandPreferences(storageKey.value), recent: [] }
+  const nextKey = workspaceCommandStorageKey()
+  storageKey.value = nextKey
+  preferences.value = { ...readWorkspaceCommandPreferences(nextKey), recent: [] }
   restoreTarget = null
   paletteOpen.value = false
   shortcutsVisible.value = false
@@ -773,7 +775,7 @@ function onKeydown(event) {
 }
 
 @media (max-width: 1023px) {
-  .top-quick-nav {
+  .top-quick-nav:not(.top-quick-nav--palette) {
     display: none;
   }
 }
