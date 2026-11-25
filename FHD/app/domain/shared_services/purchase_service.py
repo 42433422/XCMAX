@@ -20,6 +20,8 @@ from app.db.models import (
     PurchaseInboundItem,
     PurchaseOrder,
     PurchaseOrderItem,
+    PurchaseReturn,
+    PurchaseReturnItem,
     Supplier,
 )
 from app.db.session import get_db
@@ -608,13 +610,40 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 .all()
             )
-            received = sum((Decimal(str(i.quantity)) for i in inbound_items), Decimal("0"))
+            gross_received = sum(
+                (Decimal(str(i.quantity)) for i in inbound_items), Decimal("0")
+            )
+            # Posted returns are subtracted by the original receipt-line ID.
+            return_items = (
+                db.query(PurchaseReturnItem)
+                .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.return_id)
+                .join(
+                    PurchaseInboundItem,
+                    PurchaseInboundItem.id == PurchaseReturnItem.inbound_item_id,
+                )
+                .filter(
+                    PurchaseReturn.tenant_id == order.tenant_id,
+                    PurchaseReturnItem.tenant_id == order.tenant_id,
+                    PurchaseInboundItem.tenant_id == order.tenant_id,
+                    PurchaseReturn.status == "posted",
+                    PurchaseInboundItem.order_item_id == item.id,
+                )
+                .all()
+            )
+            returned = sum(
+                (Decimal(str(i.quantity)) for i in return_items), Decimal("0")
+            )
+            received = gross_received - returned
+            if received < 0:
+                raise ValueError("采购退货超过原入库数量，原账本需先独立核对")
             item.received_quantity = received
 
             if Decimal(str(item.quantity)) <= received:
                 item.status = "completed"
             elif received > 0:
                 item.status = "partial"
+            else:
+                item.status = "approved"
 
         all_completed = all(
             Decimal(str(item.quantity)) <= Decimal(str(item.received_quantity or 0))
@@ -626,6 +655,14 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             order.status = "completed"
         elif any_received:
             order.status = "partial"
+        elif order.status in {"partial", "completed"}:
+            order.status = "approved"
+
+    def post_purchase_return(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Post only source receipt quantities frozen by an approved request."""
+        from app.domain.shared_services.purchase_return_posting import post_purchase_return
+
+        return post_purchase_return(data)
 
     def reconcile_purchase_inbound(self, inbound_id: int) -> dict[str, Any]:
         """Read-only cross-check: source receipt ↔ batch movements ↔ AP journal.
