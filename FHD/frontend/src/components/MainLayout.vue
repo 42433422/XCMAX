@@ -111,6 +111,7 @@ import {
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
 import { isAdminConsoleSpa as detectAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { isDesktopShell } from '@/utils/desktopShell'
 import { ADMIN_OPERATOR_BRAND_SUBTITLE } from '@/constants/adminOperatorNav'
 import { appAlert } from '@/utils/appDialog'
 import { useResizablePane } from '@/composables/useResizablePane'
@@ -301,6 +302,9 @@ watch([() => route.fullPath, routeChunkErrorPath], () => {
 watch(currentRouteName, () => {
   syncPendingSidebarWithRoute()
   syncAppNavIntentWithRoute()
+  if (isDesktopShell()) window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', {
+    detail: { key: currentRouteName.value },
+  }))
 })
 watch(() => route.fullPath, () => { mobileSidebarOpen.value = false })
 
@@ -489,7 +493,7 @@ const scheduleSidebarAutoCollapse = () => {
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
-    if (isAnyTutorialActive.value) return
+    if (document.documentElement.classList.contains('xcagi-electron') || isAnyTutorialActive.value) return
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
@@ -564,6 +568,9 @@ function syncMobileViewport() {
 
 onMounted(() => {
   window.addEventListener('storage', onWorkspacePreferenceStorage)
+  if (isDesktopShell()) void nextTick(() => {
+    window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', { detail: { key: currentRouteName.value } }))
+  })
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
