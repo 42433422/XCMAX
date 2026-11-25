@@ -247,6 +247,7 @@ class MobileOfflineStore {
     required String body,
     required int authGeneration,
     String idempotencyKey = '',
+    bool requiresReconciliation = false,
   }) async {
     final text = body.trim();
     if (text.isEmpty) return 0;
@@ -257,14 +258,22 @@ class MobileOfflineStore {
       variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
     ).get();
     if (existing.isNotEmpty) {
-      return _asInt(existing.first.data['id']);
+      final id = _asInt(existing.first.data['id']);
+      if (requiresReconciliation) {
+        // The request might have executed before its response was lost.
+        await _db.customUpdate(
+          "UPDATE outbox_messages SET status = 'unknown' WHERE id = ? AND status = 'pending'",
+          variables: [Variable<int>(id)],
+        );
+      }
+      return id;
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     return _db.customInsert(
       'INSERT INTO outbox_messages '
       '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
       'last_error, created_at, updated_at) '
-      "VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, '', ?, ?)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?)",
       variables: [
         Variable<String>(conversationId),
         Variable<String>(conversationType.name),
@@ -274,6 +283,7 @@ class MobileOfflineStore {
         Variable<String>(idempotencyKey.trim().isEmpty
             ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
             : idempotencyKey.trim()),
+        Variable<String>(requiresReconciliation ? 'unknown' : 'pending'),
         Variable<int>(now),
         Variable<int>(now),
       ],
