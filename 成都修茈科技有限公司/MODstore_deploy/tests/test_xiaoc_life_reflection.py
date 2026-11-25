@@ -348,3 +348,114 @@ def test_original_owner_review_and_revocation_are_idempotent(
             )
         )
     assert sorted(row.status for row in reviews) == ["confirmed", "revoked"]
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "expected"),
+    [
+        ("failed", "model_returned_no_usable_result", "model"),
+        ("blocked", "life_policy_changed_or_lease_lost", "permission"),
+        ("blocked", "research_returned_no_sources", "tool"),
+        ("failed", "OperationalError", "environment"),
+        ("failed", "UnexpectedError", "unknown"),
+        ("interrupted", "cycle_cancelled", "unknown"),
+        ("completed", "model_returned_no_usable_result", "not_applicable"),
+    ],
+)
+def test_life_failure_classification_is_code_based_not_inferred(status, reason, expected):
+    from modstore_server.xiaoc_life_reflection import failure_classification
+
+    result = failure_classification(status, reason)
+    assert result["category"] == expected
+    assert result["basis"] == "runtime_boundary_code_not_verified_root_cause"
+
+
+def test_experience_scope_is_exact_and_advisory_only():
+    from modstore_server.xiaoc_life_experience_review import (
+        experience_scope,
+        experience_scope_matches,
+    )
+
+    _, candidates = review_experiences(record())
+    scope = experience_scope(candidates[0])
+    assert scope is not None
+    assert scope["category"] == "approved_task_with_observed_metric"
+    hypothesis = {
+        "metric_id": candidates[0]["metric_id"],
+        "direction": candidates[0]["direction"],
+        "threshold": candidates[0]["target"],
+        "window_days": scope["window_days"],
+    }
+    assert experience_scope_matches(scope, hypothesis, candidates[0]["owner_user_id"])
+    assert not experience_scope_matches(scope, hypothesis, candidates[0]["owner_user_id"] + 1)
+    for change in (
+        {"metric_id": "other"},
+        {"direction": "min" if hypothesis["direction"] == "max" else "max"},
+        {"threshold": hypothesis["threshold"] + 0.1},
+        {"window_days": hypothesis["window_days"] + 1},
+    ):
+        assert not experience_scope_matches(
+            scope, {**hypothesis, **change}, candidates[0]["owner_user_id"]
+        )
+    assert not experience_scope_matches(scope, {**hypothesis, "window_days": True}, 7)
+
+
+def test_conflicting_or_incomplete_experience_history_never_reaches_cognition(monkeypatch):
+    from types import SimpleNamespace
+
+    from modstore_server import xiaoc_life_experience_review as module
+    from modstore_server import xiaoc_life_store
+
+    _, successes = review_experiences(record())
+    _, failures = review_experiences(record(failed=True))
+    first, second = successes[0], failures[0]
+    assert first["outcome"] == "success" and second["outcome"] == "failure"
+    candidate_events = [
+        {
+            "id": candidate_id(candidate),
+            "details": {"candidate": candidate},
+        }
+        for candidate in (first, second)
+    ]
+    monkeypatch.setattr(xiaoc_life_store, "_active_principal", lambda session, owner: True)
+    monkeypatch.setattr(xiaoc_life_store, "_event_dict", lambda row: row.event)
+    monkeypatch.setattr(
+        module, "_validated",
+        lambda state, event: (
+            event["details"]["candidate"],
+            {"experience_candidate": {"outcome": event["details"]["candidate"]["outcome"]}},
+        ),
+    )
+    monkeypatch.setattr(module, "_review_status", lambda session, event: "confirmed")
+    monkeypatch.setattr(module, "_current_candidate", lambda session, candidate: True)
+
+    class Session:
+        def __init__(self, events):
+            self.events = events
+
+        def scalars(self, statement):
+            return [SimpleNamespace(event=item) for item in self.events]
+
+    state = {"owner_user_id": first["owner_user_id"]}
+    conflicted = module.review_facts(Session(candidate_events), state)
+    assert len(conflicted) == 2
+    assert all("reviewed_experience" not in fact for fact in conflicted)
+    assert all(
+        fact["learning_assessment"]["reuse_blocker"] == "conflicting_measured_outcomes"
+        for fact in conflicted
+    )
+
+    # A 21st row means the 20-row history cannot prove the absence of old conflicts.
+    overflow = module.review_facts(Session([candidate_events[0]] * 21), state)
+    assert len(overflow) == 2
+    assert all("reviewed_experience" not in fact for fact in overflow)
+    assert all(
+        fact["learning_assessment"]["reuse_blocker"]
+        == "unverified_or_truncated_review_history"
+        for fact in overflow
+    )
+
+    eligible = module.review_facts(Session([candidate_events[0]]), state)
+    assert len(eligible) == 1
+    assert "reviewed_experience" in eligible[0]
+    assert eligible[0]["learning_assessment"]["causal_effect"] == "not_established"
