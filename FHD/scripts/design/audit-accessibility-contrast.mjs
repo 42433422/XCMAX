@@ -7,6 +7,18 @@ const root = new URL('../../', import.meta.url);
 const tokens = JSON.parse(readFileSync(new URL('config/mobile_design_tokens.json', root), 'utf8'));
 const dialog = readFileSync(new URL('frontend/src/components/ConfirmDialog.vue', root), 'utf8');
 const generatedCss = readFileSync(new URL('frontend/src/styles/design-tokens.generated.css', root), 'utf8');
+const themeSource = readFileSync(new URL('mobile-flutter-poc/lib/src/theme/app_theme.dart', root), 'utf8');
+for (const [fragment, expected] of [
+  ['static const brand = DesignTokens.semanticLightPrimary;', 1],
+  ['static const textTertiary = DesignTokens.colorsNeutralLightN500;', 1],
+  ['onPrimary: surface,', 1],
+  ['onPrimary: DesignTokens.colorsNeutralLightN900,', 1],
+  ['onSecondary: DesignTokens.colorsNeutralLightN900,', 2],
+  ['onError: DesignTokens.colorsNeutralLightN900,', 2],
+]) {
+  if (themeSource.split(fragment).length - 1 !== expected)
+    throw Error('Theme contract mismatch: ' + fragment);
+}
 
 function resolveColor(value, seen = []) {
   if (value === 'white') return '#FFFFFF';
@@ -70,10 +82,15 @@ function t(label, fg, bg) {
 }
 
 t('Flutter light onPrimary', lightSurface, lightPrimary);
-t('Flutter light onSecondary', lightSurface, 'colors.status.success');
-t('Flutter light onError', lightSurface, 'colors.status.danger');
-t('Flutter light tertiary text on surface', 'colors.neutral_light.n400', lightSurface);
+t('Flutter light onSecondary', 'colors.neutral_light.n900', 'colors.status.success');
+t('Flutter light onError', 'colors.neutral_light.n900', 'colors.status.danger');
+t('Flutter light tertiary text on surface', 'colors.neutral_light.n500', lightSurface);
 t('Flutter dark tertiary text on high surface', mobile + 'dark_text_tertiary', mobile + 'dark_surface_high');
+t('Flutter dark onPrimary', 'colors.neutral_light.n900', 'colors.brand.primary_light');
+t('Flutter dark onSecondary', 'colors.neutral_light.n900', 'colors.status.success');
+t('Flutter dark onError', 'colors.neutral_light.n900', 'colors.status.danger');
+t('Flutter light user bubble', lightSurface, lightPrimary);
+t('Flutter dark user bubble', 'colors.chat.user_text_dark', 'colors.brand.primary_dark');
 t('Flutter light approval status', mobile + 'light_on_brand_container', 'colors.brand.primary_container');
 t('Flutter dark approval status', mobile + 'dark_on_brand_container', mobile + 'dark_brand_container');
 
