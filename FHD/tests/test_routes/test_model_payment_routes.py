@@ -723,7 +723,7 @@ class TestRefund:
             assert r.status_code == 200
             assert r.json()["success"] is False
 
-    def test_refund_write_failure_still_returns_success(self, client_mp):
+    def test_refund_receipt_write_failure_requires_manual_reconciliation(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
@@ -734,8 +734,9 @@ class TestRefund:
                 "/api/model-payment/refund",
                 json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
             )
-            assert r.status_code == 200
-            assert r.json()["success"] is True
+            assert r.status_code == 503
+            assert r.json()["success"] is False
+            assert r.json()["requires_reconciliation"] is True
 
 
 # ========================= POST /api/model-payment/close =================
