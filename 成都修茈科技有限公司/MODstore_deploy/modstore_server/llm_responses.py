@@ -255,7 +255,9 @@ async def run_billed_responses(
         if outcome == "replay":
             return _replay(row)
         if outcome != "run":
-            raise _error("CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome)
+            raise _error(
+                "CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome
+            )
         dispatch = True
     finally:
         if not dispatch:
