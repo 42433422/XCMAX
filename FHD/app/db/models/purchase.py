@@ -165,6 +165,7 @@ class PurchaseReturn(TenantScopedMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     return_no: Mapped[str] = mapped_column(String(50), nullable=False)
     approval_request_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("approval_requests.id"), nullable=False
@@ -194,6 +195,7 @@ class PurchaseReturnItem(TenantScopedMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     return_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("purchase_returns.id"), nullable=False
     )
