@@ -455,7 +455,7 @@ class MobileOfflineStore {
       "${scoped ? 'AND auth_generation = ? ' : ''}"
       "ORDER BY updated_at ASC, id ASC LIMIT ?",
       variables: [
-        if (scoped) Variable<int>(authGeneration),
+        if (authGeneration != null) Variable<int>(authGeneration),
         Variable<int>(limit),
       ],
     ).get();
