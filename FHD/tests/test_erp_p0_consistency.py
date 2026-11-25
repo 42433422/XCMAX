@@ -131,3 +131,98 @@ def test_purchase_cancel_rejects_prior_liability(monkeypatch, paid, received, in
     assert result["success"] is False
     assert order.status == "approved"
     db.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("debit,credit", [
+    ("1.00", "0.99"), ("1.000", "1.000"), ("NaN", "0"),
+    ("-1.00", "1.00"), ("1.00", "1.00"),
+])
+def test_journal_cannot_post_invalid_or_imbalanced_amounts(debit, credit):
+    from app.domain.shared_services.accounting_services import _create_journal_entry
+
+    ledger = {
+        "lines": [
+            {"debit": debit, "credit": "0"},
+            {"debit": "0", "credit": credit},
+        ]
+    }
+    result = _create_journal_entry(ledger, MagicMock())
+    assert result["success"] is False
+
+
+def test_journal_reverse_once_creates_exact_opposite_entry(tmp_path, monkeypatch):
+    from app.db.models.accounting import ChartOfAccount, JournalEntry, JournalEntryLine
+    from app.domain.shared_services import accounting_services
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'journal.sqlite'}")
+    for model in (ChartOfAccount, JournalEntry, JournalEntryLine):
+        model.__table__.create(engine)
+
+    with Session(engine) as db:
+        created = accounting_services.create_journal_entry(
+            {"entry_no": "TEST-POST-001", "lines": [
+                {"account_code": "1001", "debit": Decimal("5.25"), "credit": 0},
+                {"account_code": "2201", "debit": 0, "credit": Decimal("5.25")},
+            ]},
+            db=db,
+        )
+        assert created["success"] is True
+        db.commit()
+        original_id = created["data"]["id"]
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            try:
+                yield db
+                db.commit()
+            except BaseException:
+                db.rollback()
+                raise
+
+    monkeypatch.setattr(accounting_services, "get_db", session)
+    first = accounting_services.journal_entry_reverse(original_id)
+    second = accounting_services.journal_entry_reverse(original_id)
+    assert first["success"] is True
+    assert second["success"] is False
+    with Session(engine) as db:
+        source = db.get(JournalEntry, original_id)
+        reversal = db.query(JournalEntry).filter(
+            JournalEntry.reversed_of_id == original_id
+        ).one()
+        assert source.reversed_at is not None
+        assert reversal.debit_total == reversal.credit_total == Decimal("5.25")
+        assert [(line.debit, line.credit) for line in reversal.lines] == [
+            (Decimal("0"), Decimal("5.25")),
+            (Decimal("5.25"), Decimal("0")),
+        ]
+    engine.dispose()
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-1", "0", "1.234", True])
+def test_manual_finance_requires_positive_exact_cents(value):
+    from app.application.finance_app_service import _valid_finance_amount
+
+    with pytest.raises(ValueError):
+        _valid_finance_amount(value)
+
+
+def test_financial_reference_replay_does_not_accept_new_amount():
+    from app.application.finance_app_service import _same_financial_posting
+
+    posted = SimpleNamespace(
+        amount=Decimal("100.00"), currency="CNY",
+        counterparty_id=3, counterparty_name="A",
+    )
+    assert _same_financial_posting(
+        posted, {"amount": "100.00", "currency": "CNY", "counterparty_id": 3},
+        Decimal("100.00")
+    )
+    assert not _same_financial_posting(
+        posted, {"amount": "100.01", "currency": "CNY", "counterparty_id": 3},
+        Decimal("100.01")
+    )
+    assert not _same_financial_posting(
+        posted, {"amount": "100.00", "currency": "USD", "counterparty_id": 3},
+        Decimal("100.00")
+    )
