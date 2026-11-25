@@ -106,6 +106,20 @@ describe('WorkflowEmployeeInspector', () => {
     expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(2)
   })
 
+  it.each([1000, 10000])('bounds mounted employee rows for %i records', async (count) => {
+    const desks = Array.from({ length: count }, (_, i) => makeRow({
+      empId: `id-${i}`, shortName: `员工 ${i}`, panelTitle: `任务 ${i}`,
+    }))
+    const wrapper = mountInspector({ desks })
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(60)
+    await wrapper.get('.wfe-inspector-pagination button:last-child').trigger('click')
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(60)
+    expect(wrapper.find('.wfe-inspector-short').text()).toBe('员工 60')
+    await wrapper.get('.wfe-inspector-search').setValue('员工 9999')
+    expect(wrapper.findAll('.wfe-inspector-row')).toHaveLength(count === 10000 ? 1 : 0)
+    wrapper.unmount()
+  })
+
   it('renders short name in row', () => {
     const wrapper = mountInspector({ desks: [makeRow({ shortName: '测试员工' })] })
     expect(wrapper.find('.wfe-inspector-short').text()).toBe('测试员工')
