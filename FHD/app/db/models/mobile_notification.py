@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,3 +29,17 @@ class MobileNotificationOutbox(Base):
     delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Delivery is transport state; reading is an independent account action.
+    recipient_scope: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+def notification_recipient_scope(user: Any) -> str:
+    if user is None or type(getattr(user, "id", None)) is not int or user.id <= 0:
+        return ""
+    if not hasattr(user, "tenant_id"):
+        return ""
+    tenant = user.tenant_id
+    if tenant is None:
+        return "local"
+    return f"tenant:{tenant}" if type(tenant) is int and tenant > 0 else ""
