@@ -597,12 +597,12 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         return None
     start = start.astimezone(UTC)
     now = observed_at.astimezone(UTC)
-    source_digests, subjects, unique_executions = [], set(), set()
+    source_digests, subjects, failed_subjects, unique_executions = [], set(), set(), set()
     successes = failures = 0
     unverified = False
     query = (
         db.query(OutboxEvent)
-        .filter_by(aggregate_id=row.id, event_name="experiment.observed")
+        .filter_by(aggregate_id=row.id, event_name="experiment.postpromotion_observed")
         .order_by(OutboxEvent.id)
         .limit(10001)
     )
@@ -668,6 +668,8 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         subjects.add(str(item["subject_id"]))
         successes += int(item["success"])
         failures += int(not item["success"])
+        if not item["success"]:
+            failed_subjects.add(str(item["subject_id"]))
         source_digests.append(hashlib.sha256(event.payload_json.encode()).hexdigest())
     sample_count = successes + failures
     return {
@@ -690,6 +692,7 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         "successes": successes,
         "failures": failures,
         "unique_subjects": len(subjects),
+        "failed_subjects": len(failed_subjects),
         "source_events_sha256": hashlib.sha256(
             json_dumps(sorted(source_digests)).encode()
         ).hexdigest(),
