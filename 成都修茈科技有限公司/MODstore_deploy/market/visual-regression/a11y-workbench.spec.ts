@@ -30,9 +30,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await input.fill('请核对订单差异')
       await input.focus()
       await expect(input).toBeFocused()
+      // Check the keyboard focus indicator, not merely the active element.
+      await input.evaluate(element => (element as HTMLElement).blur())
+      const unfocused = await input.evaluate(element => {
+        const style = getComputedStyle(element)
+        return style.outline + '|' + style.boxShadow
+      })
+      await input.focus()
+      const focused = await input.evaluate(element => {
+        const style = getComputedStyle(element)
+        return style.outline + '|' + style.boxShadow
+      })
+      expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
       await capture(page, 'a11y-workbench-focused-' + colorScheme + '-' + width)
       await page.keyboard.press('Tab')
       expect(await page.evaluate(() => !!document.activeElement && document.activeElement !== document.body)).toBe(true)
+      expect(await page.evaluate(() => document.activeElement?.matches(':focus-visible'))).toBe(true)
       await capture(page, 'a11y-workbench-tab-' + colorScheme + '-' + width)
     })
   }
