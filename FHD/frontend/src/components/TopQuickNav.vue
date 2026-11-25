@@ -150,7 +150,7 @@ const inputRef = ref(null)
 const records = ref([])
 const commandOptions = computed(() => desktopEnabled ? WORKSPACE_COMMANDS
   .filter((item) => item.id !== 'palette')
-  .filter((item) => !['chat', 'new-chat', 'sessions'].includes(item.id) || visibleNavItems.value.some((nav) => nav.key === 'chat'))
+  .filter((item) => !['chat', 'new-chat', 'new-task', 'sessions'].includes(item.id) || visibleNavItems.value.some((nav) => nav.key === 'chat'))
   .map((item) => ({ kind: 'command', id: item.id, name: item.label })) : [])
 const listStyle = ref({ position: 'fixed', top: '0px', left: '0px', width: '420px', zIndex: 4000 })
 let recordTimer = null
@@ -475,7 +475,7 @@ function onNativeWorkspaceCommand(command) {
   if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]') &&
     !paletteRootRef.value?.contains(active)) return
   if (command === 'palette') { openCommandPalette(); return }
-  if (['chat', 'new-chat', 'sessions', 'tasks'].includes(command)) {
+  if (['chat', 'new-chat', 'new-task', 'sessions', 'tasks'].includes(command)) {
     closeAndRestore()
     emit('command', command)
   }
