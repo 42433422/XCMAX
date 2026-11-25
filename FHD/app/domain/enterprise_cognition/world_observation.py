@@ -58,12 +58,13 @@ def read_observations(
         digest = hashlib.sha256(canonical.encode()).hexdigest()
         if item["source_version"] != "sha256:" + digest:
             raise ValueError("observation_digest_mismatch")
-        if not isinstance(item["evidence"], list) or not any(
-            isinstance(proof, dict)
-            and proof.get("source") == expected_scope.get("source")
-            and proof.get("content_sha256") == digest
-            and all(
-                proof.get(proof_key) in (None, str(expected_scope.get(scope_key)))
+        proofs = item["evidence"]
+        if not isinstance(proofs, list) or not proofs or any(
+            not isinstance(proof, dict)
+            or proof.get("source") != expected_scope.get("source")
+            or proof.get("content_sha256") != digest
+            or any(
+                proof.get(proof_key) not in (None, str(expected_scope.get(scope_key)))
                 for proof_key, scope_key in (
                     ("tenant_id", "tenant_id"),
                     ("actor_id", "actor_id"),
@@ -71,7 +72,7 @@ def read_observations(
                     ("row_id", "entity_id"),
                 )
             )
-            for proof in item["evidence"]
+            for proof in proofs
         ):
             raise ValueError("observation_source_evidence_mismatch")
         observation_time(item)
