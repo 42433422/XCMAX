@@ -409,6 +409,13 @@ class AuthorityReader:
             "scope": "current_actor_employee_active_store",
             "capacity_verified": False,
         }
+        state["performance"] = {
+            "status": "unknown",
+            "source": "employee_run_logs",
+            "scope": "current_actor_employee_active_store",
+            "independent_business_verified": False,
+            "cost_attribution": "unknown",
+        }
         # A host view of another Mod's employee cannot attribute its local ledger
         # or registry observations to that Mod.
         if (row.mod_id or "") != scope.mod_id:
@@ -435,23 +442,52 @@ class AuthorityReader:
         try:
             with self.business_session_factory() as business:
                 grouped = business.execute(
-                    select(EmployeeRunLog.status, func.count(EmployeeRunLog.id))
+                    select(
+                        EmployeeRunLog.status,
+                        EmployeeRunLog.verified,
+                        EmployeeRunLog.finished_at.is_not(None),
+                        func.count(EmployeeRunLog.id),
+                    )
                     .where(
                         EmployeeRunLog.employee_id == row.employee_id,
                         EmployeeRunLog.tenant_id == scope.tenant_id,
                         EmployeeRunLog.user_id == int(scope.actor_id),
                     )
-                    .group_by(EmployeeRunLog.status)
+                    .group_by(
+                        EmployeeRunLog.status,
+                        EmployeeRunLog.verified,
+                        EmployeeRunLog.finished_at.is_not(None),
+                    )
                 ).all()
         except SQLAlchemyError:
             return
         counts: dict[str, int] = {}
-        for status, count in grouped:
+        finished_counts: dict[str, int] = {}
+        contract_verified_successes = incomplete_terminal = 0
+        for status, verified, finished, count in grouped:
             try:
                 canonical = canonicalize("employee", status)
             except LegacyTransitionError:
                 canonical = "unknown"
             counts[canonical] = counts.get(canonical, 0) + int(count)
+            if canonical in TERMINAL:
+                if not finished:
+                    incomplete_terminal += int(count)
+                    continue
+                finished_counts[canonical] = finished_counts.get(canonical, 0) + int(count)
+                if canonical == "succeeded" and verified == 1:
+                    contract_verified_successes += int(count)
+        # The audit verifier checks execution envelopes, not independent business
+        # outcomes. Never promote a legacy success string into business success.
+        state["performance"].update(
+            status="observed" if counts else "no_history",
+            recorded_runs=sum(counts.values()),
+            finished_terminal_counts=finished_counts,
+            contract_verified_success_count=contract_verified_successes,
+            unverified_success_count=finished_counts.get("succeeded", 0)
+            - contract_verified_successes,
+            incomplete_terminal_count=incomplete_terminal,
+        )
         state["workload"].update(
             status="observed" if counts else "no_history",
             counts=counts,
