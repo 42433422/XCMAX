@@ -138,3 +138,19 @@ def test_history_is_not_authoritative_after_business_revocation() -> None:
     assert historical["current_state_verified"] is False
     # A historical observation is evidence of what was seen, not proof of a
     # currently active/authorized ERP row or an irreversible business action.
+
+
+def test_second_foreign_source_evidence_cannot_hide_behind_valid_evidence():
+    instant = "2026-11-25T00:00:00+00:00"
+    snapshot = _snapshot("8", instant)
+    snapshot["evidence"].append(
+        {
+            "source": snapshot["source"],
+            "content_sha256": snapshot["evidence"][0]["content_sha256"],
+            "tenant_id": "another-tenant",
+            "row_id": snapshot["entity_id"],
+        }
+    )
+    stored, _ = record_observation(None, snapshot)
+    with pytest.raises(ValueError, match="observation_source_evidence_mismatch"):
+        read_observations(json.dumps(stored), _SCOPE)
