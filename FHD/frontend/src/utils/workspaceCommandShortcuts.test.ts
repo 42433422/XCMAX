@@ -37,11 +37,11 @@ describe('desktop workspace keyboard and preference contract', () => {
     const d = defaultWorkspaceShortcuts()
     expect(validateWorkspaceShortcut(d, 'chat', d.palette)).toContain('已分配')
     expect(validateWorkspaceShortcut(d, 'chat', 'Mod+W')).not.toBe('')
-    expect(validateWorkspaceShortcut(d, 'chat', 'Mod+Alt+G')).toBe('')
+    expect(validateWorkspaceShortcut(d, 'chat', 'Mod+Alt+Y')).toBe('')
   })
   it('persists per-account preferences, favorites, recents and layout', () => {
     const m = memory(), prefs = defaultWorkspaceCommandPreferences()
-    prefs.shortcuts.chat = 'Mod+Alt+G'
+    prefs.shortcuts.chat = 'Mod+Alt+Y'
     prefs.recent = ['chat', 'settings']
     prefs.favorites = ['settings']
     prefs.sidebarCollapsed = true
