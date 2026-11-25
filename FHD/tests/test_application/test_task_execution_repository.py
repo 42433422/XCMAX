@@ -68,6 +68,58 @@ def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle
     assert repo.claim("another-worker", lease_seconds=30) is None
 
 
+@pytest.mark.parametrize(
+    "interrupted_state",
+    ["timed_out", "cancelled", "paused", "waiting_input", "waiting_auth", "waiting_approval"],
+)
+def test_unconfirmed_write_remains_unknown_on_every_interruption(lifecycle_queue, interrupted_state):
+    repo = lifecycle_queue
+    run = AgentRun(user_id="owner", message="external write with missing receipt", status="queued")
+    repo.enqueue(run)
+    assert repo.claim("original-worker", lease_seconds=30) is not None
+    assert repo.mark_open_effect(run.run_id, "external-write", owner_id="original-worker")
+
+    interrupted = repo.finish(
+        run.run_id, "original-worker", interrupted_state, error_code="timeout"
+    )
+    assert interrupted is not None
+    assert (interrupted.state, interrupted.last_error_code) == ("unknown", "needs_verification")
+    assert not interrupted.lease_owner and not interrupted.finished_at
+    assert repo.lifecycle(run.run_id)["effects"] == ["external-write"]
+    assert repo.enqueue(run).state == "unknown"
+    assert repo.claim("replacement-worker", lease_seconds=30) is None
+    assert repo.finish(run.run_id, "original-worker", "completed") is None
+    assert repo.transition(run.run_id, "completed") is None
+
+
+def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path):
+    db_path = tmp_path / "unconfirmed-effect.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    original = SQLAlchemyTaskExecutionRepository(session_factory=sessionmaker(bind=engine))
+    run = AgentRun(user_id="owner", message="external write", status="queued")
+    run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    original.enqueue(run, idempotency_key="request-1", fingerprint="same-body")
+    assert original.claim("first-worker", lease_seconds=30) is not None
+    assert original.mark_open_effect(run.run_id, "business-write", owner_id="first-worker")
+    assert original.finish(run.run_id, "first-worker", "timed_out").state == "unknown"
+    engine.dispose()
+
+    recovered_engine = create_engine(f"sqlite:///{db_path}")
+    recovered = SQLAlchemyTaskExecutionRepository(
+        session_factory=sessionmaker(bind=recovered_engine)
+    )
+    duplicate = AgentRun(user_id="owner", message="external write", status="queued")
+    duplicate.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    result = recovered.enqueue(
+        duplicate, idempotency_key="request-1", fingerprint="same-body"
+    )
+    assert (result.run_id, result.state) == (run.run_id, "unknown")
+    assert recovered.lifecycle(run.run_id)["effects"] == ["business-write"]
+    assert recovered.claim("second-worker", lease_seconds=30) is None
+    assert recovered.finish(run.run_id, "first-worker", "completed") is None
+    recovered_engine.dispose()
+
+
 def test_stale_worker_cannot_clear_effects_or_append_lifecycle_history(lifecycle_queue):
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="late receipt", status="queued")
