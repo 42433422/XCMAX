@@ -59,6 +59,13 @@ def read_observations(
         if item["source_version"] != "sha256:" + digest:
             raise ValueError("observation_digest_mismatch")
         observation_time(item)
+    # Stored history is ordered by record_observation; a reordered valid-digest
+    # list must not make historical_observation return an older value as fact.
+    if any(
+        observation_time(older) > observation_time(newer)
+        for older, newer in zip(history, history[1:])
+    ):
+        raise ValueError("observation_history_out_of_order")
     # A valid history cannot authorize an altered current cache envelope.
     # This detects stale/tampered current state, provenance, source version and scope.
     if decoded.get("freshness") == "fresh" and public_snapshot(decoded) not in history:
