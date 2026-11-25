@@ -1,6 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fetchModRoutesPayloadShared } from './modRoutesSharedFetch'
 
+const session = vi.hoisted(() => ({ epoch: 0 }))
+vi.mock('@/utils/authSessionCache', () => ({
+  captureAuthSession: () => {
+    const epoch = session.epoch
+    return () => session.epoch === epoch
+  },
+}))
+
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn(),
 }))
@@ -40,4 +48,22 @@ describe('modRoutesSharedFetch', () => {
     expect(b).toEqual([])
     expect(apiFetch).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('never shares or publishes a previous account route response', async () => {
+  vi.mocked(apiFetch).mockReset()
+  let resolveOld!: (value: Response) => void
+  let resolveNew!: (value: Response) => void
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+    .mockImplementationOnce(() => new Promise(resolve => { resolveNew = resolve }))
+  const old = fetchModRoutesPayloadShared()
+  session.epoch++
+  const next = fetchModRoutesPayloadShared()
+  resolveOld({ ok: true, json: async () => ({ success: true, data: [{ mod_id: 'old', routes_path: '' }] }) } as Response)
+  await expect(old).resolves.toBeNull()
+  expect(fetchModRoutesPayloadShared()).toBe(next)
+  resolveNew({ ok: true, json: async () => ({ success: true, data: [{ mod_id: 'new', routes_path: '' }] }) } as Response)
+  await expect(next).resolves.toEqual([{ mod_id: 'new', routes_path: '' }])
+  expect(apiFetch).toHaveBeenCalledTimes(2)
 })
