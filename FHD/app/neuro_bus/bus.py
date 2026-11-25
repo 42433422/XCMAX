@@ -178,7 +178,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     redis_client = redis.from_url(
                         url, decode_responses=False, socket_timeout=3, socket_connect_timeout=3
                     )
-                    self._redis_bridge = RedisStreamsBridge(bus=self, redis_client=redis_client, owns_client=True)
+                    self._redis_bridge = RedisStreamsBridge(
+                        bus=self, redis_client=redis_client, owns_client=True
+                    )
                     logger.info("NeuroBus transport: redis_streams")
                 except RECOVERABLE_ERRORS as exc:
                     logger.error("NeuroBus Redis Streams init failed: %s", exc)
@@ -194,6 +196,8 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
     @property
     def is_running(self) -> bool:
+        if isinstance(self._redis_bridge, RedisStreamsBridge):
+            return self._running and self._redis_bridge.get_stats()["running"]
         return self._running
 
     async def start(self):
@@ -201,6 +205,8 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if self._stopping:
             raise RuntimeError("NeuroBus is stopping")
         if self._running:
+            if isinstance(self._redis_bridge, RedisStreamsBridge):
+                self._redis_bridge.start()
             return
 
         if (
