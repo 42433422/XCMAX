@@ -249,9 +249,13 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
             original_total = Decimal(str(receipt.total_amount or 0))
             computed_original = sum(
                 (
-                    Decimal(str(line.quantity)) * Decimal(str(line.unit_price or 0))
-                ).quantize(Decimal("0.01"))
-                for line in receipt.items
+                    _line_amount(
+                        Decimal(str(line.quantity)),
+                        Decimal(str(line.unit_price or 0)),
+                    )
+                    for line in receipt.items
+                ),
+                Decimal("0"),
             )
             if original_total != computed_original:
                 raise PurchaseReturnRefused("原入库合计金额与原明细不一致")
