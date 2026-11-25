@@ -137,6 +137,62 @@ void main() {
     expect(await store.pendingMessageCount(), 0);
   });
 
+  test('ambiguous transport outcome remains reconciliation-only across restarts', () async {
+    final id = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行库存写入',
+      authGeneration: 1,
+      idempotencyKey: 'stable-turn',
+      requiresReconciliation: true,
+    );
+    final queued = await store.pendingMessages();
+    expect(queued.single.id, id);
+    expect(queued.single.idempotencyKey, 'stable-turn');
+    expect(queued.single.requiresReconciliation, isTrue);
+
+    // A later enqueue attempt must not downgrade 'unknown' to sendable.
+    final duplicate = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行库存写入',
+      authGeneration: 1,
+      idempotencyKey: 'stable-turn',
+    );
+    expect(duplicate, id);
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+
+    await store.markSending(id);
+    // Sending interrupted by process exit must also require GET-only resume.
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+  });
+
+  test('already queued unsent draft becomes reconciliation-only on ambiguity',
+      () async {
+    final id = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行任务',
+      authGeneration: 1,
+      idempotencyKey: 'turn-2',
+    );
+    expect((await store.pendingMessages()).single.requiresReconciliation, isFalse);
+    final duplicate = await store.enqueueMessage(
+      conversationId: 'c1',
+      conversationType: ConversationType.pinnedAssistant,
+      title: '小C',
+      body: '执行任务',
+      authGeneration: 1,
+      idempotencyKey: 'turn-2',
+      requiresReconciliation: true,
+    );
+    expect(duplicate, id);
+    expect((await store.pendingMessages()).single.requiresReconciliation, isTrue);
+  });
+
   test('重试达到上限后标记为 failed，不再进入待发送列表', () async {
     final id = await store.enqueueMessage(
       conversationId: 'c1',
