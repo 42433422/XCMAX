@@ -167,6 +167,7 @@ class DeadLetterQueue:
         self._storage_path = storage_path
         self._lock = threading.RLock()
         self._storage = SQLiteOwner(self._lock)
+        self._closed = False
         self._state = DeadLetterState()
         self._entries = self._state.entries
         self._stats = self._state.stats
@@ -513,7 +514,10 @@ class DeadLetterQueue:
 
     def close(self) -> None:
         """Release the owned SQLite connection; subsequent SQLite operations fail."""
-        self._storage.close()
+        with self._lock:
+            if not self._closed:
+                self._storage.close()
+                self._closed = True
 
 
 class EventPublisher(Protocol):
@@ -605,8 +609,15 @@ def get_dead_letter_queue(storage_path: str | None = None) -> DeadLetterQueue:
             storage_path = str(Path(storage_path).expanduser().resolve())
         if _dlq_instance is None:
             _dlq_instance = DeadLetterQueue(storage_path=storage_path or _default_dlq_path())
-        elif storage_path is not None and _dlq_instance._storage_path != storage_path:
-            raise ValueError("Global NeuroBus DLQ already uses a different storage path")
+        else:
+            if storage_path is not None and _dlq_instance._storage_path != storage_path:
+                raise ValueError("Global NeuroBus DLQ already uses a different storage path")
+            with _dlq_instance._lock:
+                if _dlq_instance._closed:
+                    previous_path = _dlq_instance._storage_path
+                    if previous_path is None:
+                        raise ValueError("Global NeuroBus DLQ requires persistent storage")
+                    _dlq_instance = DeadLetterQueue(storage_path=previous_path)
         return _dlq_instance
 
 
