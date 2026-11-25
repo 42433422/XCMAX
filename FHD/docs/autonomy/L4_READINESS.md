@@ -34,7 +34,7 @@ bash FHD/scripts/deploy/check-staging-health.sh --ssh    # + CVM 本机 :5101
 
 ## WG12：独立自治经营验收（L01–L10）
 
-验收命令（从 FHD/ 执行）：python scripts/dev/autonomy_operating_gate.py --evidence-dir EVIDENCE_DIR --source-sha FULL_SHA --report REPORT_PATH。
+验收命令（从 FHD/ 执行）：python scripts/dev/autonomy_operating_gate.py --evidence-dir EVIDENCE_DIR --source-sha FULL_SHA --target-level L1|L2|L3|L4|L5|L6 --report REPORT_PATH。
 
 未在独立验收执行环境中提供 XCAGI_INDEPENDENT_AUDIT_HMAC_KEY 时，所有等级必须 BLOCKED。此密钥由独立验收方通过受保护的 CI 环境提供，不能存储在仓库、生产 Agent、模型提示或证据目录内。测试夹具的密钥不具有生产授权效力。
 
