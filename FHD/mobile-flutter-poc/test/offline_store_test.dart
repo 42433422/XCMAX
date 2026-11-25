@@ -57,6 +57,19 @@ void main() {
     }
   });
 
+  test('composer drafts recover text but no authorization or upload credentials',
+      () async {
+    await store.saveChatDraft('chat/a', '库存检查',
+        attachmentNames: ['report.xlsx', 'invoice.pdf']);
+    final restored = await store.readChatDraft('chat/a');
+    expect(restored['text'], '库存检查');
+    expect(restored['attachment_names'], ['report.xlsx', 'invoice.pdf']);
+    expect(restored.containsKey('upload_id'), isFalse);
+    expect(await store.readChatDraft('chat/b'), isEmpty);
+    await store.saveChatDraft('chat/a', '');
+    expect(await store.readChatDraft('chat/a'), isEmpty);
+  });
+
   test('消息按时间顺序读取并返回旧缓存结构', () async {
     await store.appendMessage('c1', message(2, '第二条'));
     await store.appendMessage('c1', message(1, '第一条'));
