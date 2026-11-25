@@ -7,10 +7,11 @@ import { xiaocLevelLabels, xiaocStateLabel } from '../../application/xiaocLifeAp
 import { useXiaoCLife } from '../../composables/useXiaoCLife'
 
 const props = defineProps<{ owner: number; light?: boolean; compact?: boolean }>()
-defineEmits<{ (e: 'open-life'): void }>()
+const emit = defineEmits<{ (e: 'open-life'): void }>()
 const life = useXiaoCLife(() => props.owner)
 const selection = ref(1)
 const expanded = ref(false)
+let compactSession = 0
 const triggerRef = ref<HTMLButtonElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
 const marks = { 1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4', 5: 'L5', 6: 'L6' }
@@ -54,12 +55,15 @@ watch(
   ([level]) => { selection.value = level ?? 1 },
   { immediate: true },
 )
+function isLevel(value: number | number[]): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6
+}
 function selectLevel(value: number | number[]) {
-  if (typeof value === 'number') selection.value = value
+  if (isLevel(value)) selection.value = value
 }
 
 async function changeLevel(value: number | number[]) {
-  if (typeof value !== 'number' || !life.state) return
+  if (!isLevel(value) || !life.state) return
   if (props.compact) {
     selection.value = value
     return
@@ -70,44 +74,61 @@ async function changeLevel(value: number | number[]) {
 }
 
 function closeCompact(restoreFocus = false) {
+  if (expanded.value) compactSession += 1
   expanded.value = false
   selection.value = life.state?.level ?? 1
-  if (restoreFocus) triggerRef.value?.focus()
+  if (restoreFocus) triggerRef.value?.focus({ preventScroll: true })
 }
 function toggleCompact() {
   if (expanded.value) closeCompact()
   else {
+    compactSession += 1
     selection.value = life.state?.level ?? 1
     expanded.value = true
   }
 }
+function insideCompact(event: Event) {
+  const path = event.composedPath()
+  return [triggerRef.value, contentRef.value].some(element => element !== null && path.includes(element))
+}
 function onOutside(event: Event) {
-  if (!expanded.value || !(event.target instanceof Node)) return
-  if (triggerRef.value?.contains(event.target) || contentRef.value?.contains(event.target)) return
+  if (!expanded.value || insideCompact(event)) return
+  // The panel is non-modal: do not steal focus from the next target.
   closeCompact()
 }
 function onEscape(event: KeyboardEvent) {
-  if (!expanded.value || event.key !== 'Escape') return
+  if (!expanded.value || event.key !== 'Escape' || event.defaultPrevented || !insideCompact(event)) return
   event.stopPropagation()
   event.preventDefault()
   closeCompact(true)
+}
+function openLife() {
+  // The composer may be hidden while the activity view is shown. Close its teleported surface first.
+  closeCompact()
+  emit('open-life')
 }
 function focusContent() {
   if (expanded.value) contentRef.value?.focus({ preventScroll: true })
 }
 onMounted(() => {
   document.addEventListener('pointerdown', onOutside, true)
+  document.addEventListener('focusin', onOutside, true)
   document.addEventListener('keydown', onEscape, true)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onOutside, true)
+  document.removeEventListener('focusin', onOutside, true)
   document.removeEventListener('keydown', onEscape, true)
 })
 watch(() => props.owner, () => closeCompact())
+watch(() => props.compact, (compact) => { if (!compact) closeCompact() })
 async function applyLevel() {
   const state = life.state
   if (!state || !canApply.value) return
+  const session = compactSession
+  const owner = props.owner
   const saved = await life.save({ level: selection.value }, state.revision)
+  if (session !== compactSession || owner !== props.owner) return
   selection.value = life.state?.level ?? 1
   if (saved && expanded.value) closeCompact(true)
 }
@@ -185,7 +206,7 @@ async function applyLevel() {
     />
     <div class="xiaoc-life-control__foot">
       <span role="status">{{ life.state ? activity : '尚未读取运行状态' }}</span>
-      <button type="button" @click="$emit('open-life')">目标与预算</button>
+      <button type="button" @click="openLife">目标与预算</button>
     </div>
     <div v-if="compact" class="xiaoc-life-control__actions">
     <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
@@ -460,7 +481,7 @@ async function applyLevel() {
 .xiaoc-life-control__confirm button:disabled { background: var(--life-track); color: var(--life-muted); opacity: 0.7; }
 @media (pointer: coarse) {
   .xiaoc-life-disclosure__trigger { min-height: 44px; }
-  .xiaoc-life-control--compact button { min-height: 40px; }
+  .xiaoc-life-control--compact button { min-height: 44px; min-width: 44px; }
   .xiaoc-life-control--compact :deep(.el-slider) { min-height: 44px; }
   .xiaoc-life-control--compact :deep(.el-slider__button-wrapper) { width: 44px; height: 44px; top: -20px; }
 }
