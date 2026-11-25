@@ -433,8 +433,9 @@ abstract class _RepoChatBase extends _RepoRelayBase {
           sent++;
         } catch (error) {
           await store.markFailed(item.id, error.toString(),
-              requiresReconciliation: item.requiresReconciliation || item.conversationType.superTool != null ||
-                  (error is! SocketException && error is! TimeoutException),
+              // Once dispatch was attempted, a socket error or timeout cannot
+              // establish that the server did not commit the original turn.
+              requiresReconciliation: true,
               terminal: error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_TERMINAL');
         }
       }
