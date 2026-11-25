@@ -40,6 +40,80 @@ logger = logging.getLogger(__name__)
 LABEL_FAILED = "acceptance-failed"
 LABEL_ACCEPTED = "customer-accepted"
 
+LABEL_BUSINESS_REQUIRED = "business-acceptance-required"
+
+
+def _valid_digest(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        char in "0123456789abcdef" for char in value.lower()
+    )
+
+
+def _business_receipts_complete(
+    issue: dict[str, Any], acceptance: dict[str, Any], version: str, build_sha: str
+) -> bool:
+    """Release installation receipts never substitute for business acceptance.
+
+    This verifies the identity/completeness of a trusted market-side readback;
+    raw SQL, workbook and customer signoff must be independently checked by
+    the producing services, not invented by this closeout script.
+    """
+    if LABEL_BUSINESS_REQUIRED not in _label_names(issue):
+        return True
+    receipts = acceptance.get("business_receipts")
+    record = receipts.get(str(issue["number"])) if isinstance(receipts, dict) else None
+    if not isinstance(record, dict) or record.get("status") != "accepted":
+        return False
+    identity = {
+        "version": version, "build_sha": build_sha,
+        "tenant_id": record.get("tenant_id"), "customer_id": record.get("customer_id"),
+        "task_id": record.get("task_id"), "run_id": record.get("run_id"),
+    }
+    if any(not str(value or "").strip() for value in identity.values()):
+        return False
+    if not _valid_digest(record.get("source_sha256")) or not _valid_digest(
+        record.get("artifact_sha256")
+    ):
+        return False
+    stages = record.get("stages")
+    required = (
+        "source", "approval", "execution", "database", "artifact",
+        "independent_reconciliation", "customer_confirmation",
+    )
+    if not isinstance(stages, dict):
+        return False
+    for name in required:
+        stage = stages.get(name)
+        if not isinstance(stage, dict) or not stage.get("receipt_id"):
+            return False
+        if any(stage.get(key) != value for key, value in identity.items()):
+            return False
+        if stage.get("source_sha256") != record["source_sha256"]:
+            return False
+        expected = "accepted" if name == "customer_confirmation" else "verified"
+        if stage.get("status") != expected:
+            return False
+    if (
+        not _valid_digest(stages["approval"].get("approved_action_sha256"))
+        or stages["approval"].get("approved_action_sha256")
+        != stages["execution"].get("approved_action_sha256")
+        or stages["artifact"].get("artifact_sha256") != record["artifact_sha256"]
+        or stages["customer_confirmation"].get("artifact_sha256") != record["artifact_sha256"]
+        or not stages["customer_confirmation"].get("confirmed_by")
+        or not stages["customer_confirmation"].get("confirmed_at")
+    ):
+        return False
+    oracle = stages["independent_reconciliation"]
+    return (
+        bool(oracle.get("verifier_id"))
+        and oracle["verifier_id"] != stages["execution"].get("executed_by")
+        and oracle.get("original_to_database") is True
+        and oracle.get("database_to_artifact") is True
+        and oracle.get("inventory_and_accounting") is True
+        and oracle.get("approval_scope") is True
+    )
+
+
 
 def _fetch_published_release(market_base: str) -> dict[str, Any]:
     """The published pointer carries linked_issues; the source catalog does not."""
@@ -304,6 +378,14 @@ def run(args: argparse.Namespace) -> int:
             continue
         if "pull_request" in issue:
             logger.error("linked work order #%d is a pull request, not an issue", number)
+            failures += 1
+            continue
+        # Install receipts prove the client started, not that any customer
+        # workbook, approval, stock or financial result was accepted.
+        if verdict == "accepted" and not _business_receipts_complete(
+            issue, acceptance, version, build_sha
+        ):
+            logger.error("business issue #%d lacks bound independent customer evidence", number)
             failures += 1
             continue
         # CI runner disk is ephemeral. Never report an issue closed if the
