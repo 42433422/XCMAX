@@ -39,9 +39,19 @@ def _components(business):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("business_result", [None, {"success": True, "response": "本地查询结果"}])
+@pytest.mark.parametrize(
+    ("message", "business_result", "expected_code", "business_calls"),
+    [
+        ("查询今天的考勤", None, None, 2),
+        ("查询今天的考勤", {"success": True, "response": "本地查询结果"}, None, 2),
+        ("普通问答", None, None, 0),
+        ("登记明天事假半天", None, "runtime_offline_mutation_blocked", 0),
+        ("导出今天考勤", None, "runtime_offline_mutation_blocked", 0),
+        ("打印今天考勤", None, "runtime_offline_mutation_blocked", 0),
+    ],
+)
 async def test_offline_stream_and_json_match_without_calling_online_paths(
-    business_result,
+    message, business_result, expected_code, business_calls
 ):
     business = Mock(return_value=business_result)
     admission, paths = _components(business)
@@ -68,12 +78,20 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
         AsyncMock(),
         logging.getLogger(__name__),
     )
-    body = XcagiCompatChatBody(message="测试离线查询", mode="offline")
+    body = XcagiCompatChatBody(message=message, mode="offline")
     response = await app.single(Mock(), body)
     events = [json.loads(chunk) async for chunk in stream.run(Mock(), body)]
     assert events[-1]["result"] == response
-    assert business.call_count == 2
-    if business_result is None:
+    assert business.call_count == business_calls
+    executor.execute.assert_not_called()
+    stream.backend.assert_not_called()
+    paths.kitten.assert_not_awaited()
+    if expected_code:
+        assert response["success"] is False
+        assert response["execution_state"] == "blocked"
+        assert response["error_code"] == expected_code
+        assert response["data"]["model_called"] is False
+    elif business_result is None:
         assert response["success"] is False
         assert response["data"]["model_called"] is False
     else:
