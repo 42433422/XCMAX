@@ -229,6 +229,8 @@ export class SseConnectionRegistry {
   readonly maxReconnects = 12
 
   open(id: string): void {
+    // Duplicate registration must not inflate the live count or replenish the retry budget.
+    if (this.attempts.has(id)) return
     this.live += 1
     this.opened += 1
     this.attempts.set(id, 0)
@@ -242,14 +244,15 @@ export class SseConnectionRegistry {
   }
 
   allowReconnect(id: string): boolean {
-    const used = this.attempts.get(id) ?? 0
-    if (used >= this.maxReconnects) return false
+    const used = this.attempts.get(id)
+    if (used === undefined || used >= this.maxReconnects) return false
     this.attempts.set(id, used + 1)
     return true
   }
 
   noteConnected(id: string): void {
-    this.attempts.set(id, 0)
+    // A delayed callback after unregistering cannot revive a closed connection.
+    if (this.attempts.has(id)) this.attempts.set(id, 0)
   }
 }
 
