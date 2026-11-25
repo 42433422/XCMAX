@@ -50,6 +50,7 @@ class ReplayLedger:
         self._lock = lock or threading.RLock()
         self._ttl_seconds = ttl_seconds
         self._memory_log: dict[str, tuple[str, float]] = {}
+        self._pending_entries: set[str] = set()
         if conn is not None:
             self._init_sqlite_table(conn)
 
@@ -63,6 +64,38 @@ class ReplayLedger:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_dlq_replay_expires ON neuro_dlq_replay_log(expires_at)"
         ).close()
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS neuro_dlq_replay_pending (
+                   entry_id TEXT PRIMARY KEY, retry_count INTEGER NOT NULL,
+                   started_at TEXT NOT NULL)"""
+        ).close()
+
+    def begin_delivery(self, entry_id: str, replay_count: int) -> bool:
+        """Persist intent before callbacks; unknown outcomes never auto-expire."""
+        with self._lock:
+            if self._conn is not None:
+                with closing(
+                    self._conn.execute(
+                        """INSERT OR IGNORE INTO neuro_dlq_replay_pending
+                           (entry_id, retry_count, started_at) VALUES (?, ?, ?)""",
+                        (entry_id, replay_count, self._runtime.clock().now().isoformat()),
+                    )
+                ) as cursor:
+                    return cursor.rowcount == 1
+            if entry_id in self._pending_entries:
+                return False
+            self._pending_entries.add(entry_id)
+            return True
+
+    def clear_delivery_pending(self, entry_id: str) -> None:
+        """Only clear after proven rejection or recorded callback acceptance."""
+        with self._lock:
+            if self._conn is not None:
+                self._conn.execute(
+                    "DELETE FROM neuro_dlq_replay_pending WHERE entry_id = ?", (entry_id,)
+                ).close()
+            else:
+                self._pending_entries.discard(entry_id)
 
     @staticmethod
     def fingerprint(entry_id: str, replay_count: int) -> str:
