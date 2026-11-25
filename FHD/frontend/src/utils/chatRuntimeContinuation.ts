@@ -3,6 +3,15 @@ import type { ChatPlannerPayload } from '@/types/chat'
 import { asRecord, asString } from '@/utils/typeGuards'
 
 const WAITING = new Set(['waiting_user', 'waiting_approval'])
+const RUNTIMES = new Set(['codex', 'xiaox'])
+
+function isRuntimePayload(payload: ChatPlannerPayload): boolean {
+  const outer = asString(payload.runtime).trim()
+  const inner = asString(asRecord(payload.data).runtime).trim()
+  // Both labels refer to the same runtime contract during migration. A
+  // conflicting non-runtime label must not authorize a continuation hint.
+  return Boolean(outer || inner) && (!outer || RUNTIMES.has(outer)) && (!inner || RUNTIMES.has(inner))
+}
 
 export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuation | undefined {
   const value = asRecord(raw)
@@ -15,8 +24,7 @@ export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuatio
 }
 
 export function runtimeContinuationFromPayload(payload: ChatPlannerPayload): ChatRuntimeContinuation | undefined {
-  const envelope = asRecord(payload.data)
-  if (payload.runtime !== 'codex' && envelope.runtime !== 'codex') return undefined
+  if (!isRuntimePayload(payload)) return undefined
   const update = asRecord(payload.runtime_context_update)
   return restoreRuntimeContinuation({
     runId: update.agent_runtime_run_id,
@@ -30,9 +38,7 @@ export function runtimeExecutionState(payload: ChatPlannerPayload): string {
 }
 
 export function isRuntimeWaiting(payload: ChatPlannerPayload): boolean {
-  const envelope = asRecord(payload.data)
-  return (payload.runtime === 'codex' || envelope.runtime === 'codex')
-    && WAITING.has(runtimeExecutionState(payload))
+  return isRuntimePayload(payload) && WAITING.has(runtimeExecutionState(payload))
 }
 
 /** Only the latest actual assistant reply can ask to continue its parent. */
