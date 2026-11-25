@@ -10,7 +10,7 @@ void main() {
     }
     expect(deliveries, isEmpty);
     await tester.pump();
-    expect(deliveries, ['assistant-1:NaN']);
+    expect(deliveries, ['assistant-1:${List.filled(100, '字').join()}']);
     batcher.dispose();
   });
 
