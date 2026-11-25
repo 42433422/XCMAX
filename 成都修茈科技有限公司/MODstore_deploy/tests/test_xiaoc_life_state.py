@@ -113,6 +113,50 @@ def test_identity_survives_new_sessions_and_global_mode_is_shared(database):
         assert session.scalar(select(func.count()).select_from(XiaoCLifeState)) == 1
 
 
+def test_life_settlement_records_reflection_without_adopting_failed_learning(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    state = store.finish_cycle(
+        claim,
+        status="blocked",
+        summary="Model returned no result",
+        evidence_refs=["source:one"],
+        actual_tokens=50,
+        goals=[{"id": "unverified-goal", "title": "not approved"}],
+        interests=[{"topic": "unverified interest"}],
+        self_model={"evidence_refs": ["source:one"], "title": "unverified"},
+        details={"reason": "model_returned_no_usable_result"},
+    )
+    assert state["budget"]["used_tokens"] == 50
+    assert state["goals"] == []
+    assert state["interests"] == []
+    with database() as session:
+        saved = session.get(XiaoCLifeEvent, "cycle:" + claim["cycle_id"])
+        assert saved is not None and saved.status == "blocked"
+        details = json.loads(saved.details_json)
+    assert details["learning_applied"] is False
+    assert details["failure_classification"]["category"] == "model"
+    assert details["reflection_receipt"]["status"] == "unmeasured"
+    again = store.finish_cycle(
+        claim, status="blocked", summary="duplicate", evidence_refs=[], actual_tokens=50
+    )
+    assert again["budget"]["used_tokens"] == 50
+
+
+def test_life_completed_cycle_receives_uncertainty_aware_reflection(database):
+    configure()
+    claim = store.claim_cycle(domain="enterprise", reserve_tokens=200)
+    assert claim is not None
+    finish(claim)
+    with database() as session:
+        saved = session.get(XiaoCLifeEvent, "cycle:" + claim["cycle_id"])
+        assert saved is not None
+        details = json.loads(saved.details_json)
+    assert details["reflection_receipt"]["status"] == "unmeasured"
+    assert details["failure_classification"]["category"] == "not_applicable"
+
+
 def test_two_windows_cannot_overwrite_each_others_control_revision(database):
     revision = store.read_state()["revision"]
 
