@@ -14,6 +14,11 @@
         </span>
       </div>
     </div>
+    <PersyMemoryTemporalReview
+      v-if="datasetId === PERSY_KNOWLEDGE_DATASET_ID"
+      :dataset-id="datasetId"
+      :refresh-key="memories"
+    />
     <div v-if="loading" class="view-loading" role="status">
       <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
       正在读取记忆
@@ -74,7 +79,8 @@
 </template>
 
 <script setup lang="ts">
-import type { PersyMemoryRecord } from '@/api/knowledgeBase'
+import { PERSY_KNOWLEDGE_DATASET_ID, type PersyMemoryRecord } from '@/api/knowledgeBase'
+import PersyMemoryTemporalReview from './PersyMemoryTemporalReview.vue'
 import {
   formatDate,
   memoryIcon,
@@ -85,6 +91,7 @@ import {
 } from '@/composables/persyKnowledgeFormatters'
 
 defineProps<{
+  datasetId?: string
   memories: PersyMemoryRecord[]
   loading: boolean
   activeCount: number

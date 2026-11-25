@@ -18,9 +18,17 @@ from modstore_server import xiaoc_life_store as life
 from modstore_server.strategic_customer_outcomes import VERIFIED_DELIVERY_ATTRIBUTION
 from modstore_server.xiaoc_life_cognition import (
     SYSTEM_PROMPT,
+    CognitionContextError,
     cognition_messages,
+    cognitive_review_facts,
     feedback_facts,
+    goal_review_facts,
+    goal_review_projection,
+    parse_decision,
     portfolio_feedback,
+    prior_self_assessment,
+    reflection_facts,
+    reflection_receipt,
 )
 from modstore_server.xiaoc_life_policy import LifeUpdate
 from tests.test_strategic_portfolio import database as database  # noqa: PLC0414
@@ -194,7 +202,13 @@ def test_prompt_deduplicates_sources_before_limit_without_rewriting_receipts():
     )
     original = copy.deepcopy(facts)
     messages, refs = cognition_messages({"identity_id": "xiaoc", "level": 5}, "enterprise", facts)
-    assert json.loads(messages[1]["content"])["observations"] == [facts[0], facts[-1]]
+    observed = json.loads(messages[1]["content"])["observations"]
+    assert [{k: v for k, v in row.items() if k != "evidence_status"} for row in observed] == [
+        facts[0],
+        facts[-1],
+    ]
+    assert observed[0]["evidence_status"] == "observed_source_not_verified_claim"
+    assert observed[1]["evidence_status"] == "measurement_pending"
     assert refs == {"receipt:old", "receipt:new"}
     assert facts == original
 
@@ -410,6 +424,49 @@ def test_original_business_review_updates_goal_during_pause_without_replaying(
         if completed_artifact
         else "unverified"
     )
+    reflected = reflection_facts(after)
+    reviewed = cognitive_review_facts(after)
+    if completed_artifact:
+        assert len(reflected) == len(reviewed) == 1
+        assert reflected[0]["ref"] == "reflection:execution:" + goal["execution_receipt"]
+        assert reviewed[0]["cognitive_review"]["latest_goal_review"]["recommendation"] == (
+            "respect_recorded_stop"
+        )
+        assert not cognitive_review_facts({**after, "owner_user_id": 8})
+        stale = copy.deepcopy(after)
+        stale["goals"][0]["execution_receipt"] = "newer-receipt"
+        assert not reflection_facts(stale)
+        assert life.read_state()["budget"] == after["budget"]
+        advisory = goal_review_facts(after)
+        assert advisory[0]["goal_review"]["recommendation"] == "respect_recorded_stop"
+        assert not goal_review_facts({**after, "owner_user_id": 8})
+        assert goal["status"] == "stopped"
+    else:
+        assert not reflected and not reviewed
+
+
+def test_goal_reconciliation_does_not_overwrite_concurrent_newer_receipt(
+    approved_life_portfolio, monkeypatch
+):
+    original_mutate = reconciliation._mutate
+
+    def interleave(callback):
+        def newer(data, _session):
+            data["goals"][0].update(
+                status="stopped", execution_receipt="newer-receipt", outcome_ref="newer-outcome"
+            )
+
+        original_mutate(newer)
+        return original_mutate(callback)
+
+    monkeypatch.setattr(reconciliation, "_mutate", interleave)
+    assert reconciliation.reconcile_goals() == {"observed": 0}
+    goal = life.read_state()["goals"][0]
+    assert goal["decision_id"] == approved_life_portfolio
+    assert goal["status"] == "stopped"
+    assert goal["execution_receipt"] == "newer-receipt"
+    assert goal["outcome_ref"] == "newer-outcome"
+    assert not any(row["id"].startswith("execution:") for row in life.read_state()["events"])
 
 
 @pytest.mark.parametrize("raced_worker", [False, True])
@@ -521,6 +578,13 @@ def test_automatic_proposal_uses_only_admin_frozen_task_input(ports, monkeypatch
         portfolio_limits=limits(),
         task_input={"approved_record_id": "record-17"},
     )
+    from modstore_server import xiaoc_self_model
+
+    monkeypatch.setattr(
+        xiaoc_self_model,
+        "employee_preflight",
+        lambda *_: {"status": "registered_unverified", "reason": "test_registry_fixture"},
+    )
     captured = {}
 
     def propose(**kwargs):
@@ -566,3 +630,295 @@ def test_blocked_reason_is_actionable_without_exposing_arbitrary_text(
     result = asyncio.run(runtime.tick_async())
     assert expected in result["summary"]
     assert result["details"]["reason"] == reason
+
+
+def test_cognition_deduplicates_and_bounds_attention():
+    state = {"identity_id": "test", "level": 6}
+    facts = [{"ref": "observed:1", "text": "original"}] * 15
+    facts.append({"ref": "observed:2", "text": "second"})
+    messages, refs = cognition_messages(state, "enterprise", facts)
+    payload = json.loads(messages[1]["content"])
+    assert refs == {"observed:1", "observed:2"}
+    assert len(payload["observations"]) == 2
+    assert payload["observations"][0]["evidence_status"] == "observed_source_not_verified_claim"
+    assert len(messages[1]["content"].encode()) <= 4200
+    with pytest.raises(CognitionContextError, match="no_observed_context"):
+        cognition_messages(state, "enterprise", [])
+    with pytest.raises(CognitionContextError, match="life_cycle_prompt_budget_exhausted"):
+        cognition_messages(
+            state,
+            "enterprise",
+            [{"ref": "observed:1", "text": "x", "metadata": "x" * 5000}],
+        )
+
+
+def test_alternatives_remain_distinct_cited_review_suggestions():
+    body = {
+        "action": "propose",
+        "summary": "review",
+        "evidence_refs": ["observed:1"],
+        "goal": {"title": "original", "description": "review", "evidence_refs": ["observed:1"]},
+        "alternatives": [
+            {"title": "other", "tradeoff": "uncertain", "evidence_refs": ["observed:1"]}
+        ],
+    }
+
+    def parse():
+        return parse_decision(json.dumps(body), refs={"observed:1"}, level=6, domain="enterprise")
+
+    assert parse().alternatives[0].title == "other"
+    body["alternatives"][0]["evidence_refs"] = ["invented:source"]
+    with pytest.raises(ValueError, match="unobserved"):
+        parse()
+    body["alternatives"][0]["evidence_refs"] = ["observed:1"]
+    body["alternatives"][0]["title"] = " ORIGINAL "
+    with pytest.raises(ValueError, match="distinct"):
+        parse()
+    body["alternatives"][0]["title"] = "other"
+    body["alternatives"][0]["approved"] = True
+    with pytest.raises(ValueError):
+        parse()
+
+
+@pytest.mark.parametrize(
+    "status,tokens,complete,expected",
+    [
+        ("completed", 50, True, "measurement_verified"),
+        ("completed", None, True, "measurement_pending"),
+        ("completed", 50, False, "measurement_pending"),
+        ("awaiting_worker", 50, True, "measurement_pending"),
+    ],
+)
+def test_reflection_keeps_measurement_and_completion_distinct(status, tokens, complete, expected):
+    feedback = portfolio_feedback(reviewed_record(observation_complete=complete))
+    refs = [feedback["evidence_ref"]]
+    receipt = reflection_receipt(feedback, evidence_refs=refs, status=status, actual_tokens=tokens)
+    assert receipt["status"] == expected
+    if expected == "measurement_verified":
+        assert receipt["hypothesis_verdicts"]["miss"] == 1
+    assert "success" not in receipt
+
+
+def test_reflection_recall_uses_same_owner_original_receipt_only():
+    feedback = portfolio_feedback(reviewed_record())
+    refs = [feedback["evidence_ref"]]
+    event = {
+        "id": "cycle:" + "a" * 32,
+        "status": "completed",
+        "actual_tokens": 50,
+        "evidence_refs": refs,
+        "summary": "private text",
+        "details": {
+            "owner_user_id": 7,
+            "learning_applied": True,
+            "outcome_feedback": feedback,
+            "reflection_receipt": reflection_receipt(
+                feedback, evidence_refs=refs, status="completed", actual_tokens=50
+            ),
+        },
+    }
+    state = {"owner_user_id": 7, "events": [event]}
+    facts = reflection_facts(state)
+    assert len(facts) == 1 and "private text" not in facts[0]["text"]
+    assert json.loads(facts[0]["text"])["hypothesis_verdicts"]["miss"] == 1
+    state["owner_user_id"] = 8
+    assert reflection_facts(state) == []
+    state["owner_user_id"] = 7
+    event["details"]["learning_applied"] = False
+    assert reflection_facts(state) == []
+    event["details"]["learning_applied"] = True
+    event["details"]["reflection_receipt"]["hypothesis_verdicts"]["miss"] = 0
+    assert reflection_facts(state) == []
+
+
+def _review_event(record, *, cycle="a", owner=17):
+    feedback = portfolio_feedback(record)
+    refs = [feedback["evidence_ref"]]
+    return {
+        "id": "cycle:" + cycle * 32,
+        "status": "completed",
+        "actual_tokens": 50,
+        "evidence_refs": refs,
+        "details": {
+            "owner_user_id": owner,
+            "learning_applied": True,
+            "outcome_feedback": feedback,
+            "reflection_receipt": reflection_receipt(
+                feedback, evidence_refs=refs, status="completed", actual_tokens=50
+            ),
+        },
+    }
+
+
+def _measured_review_record():
+    record = reviewed_record()
+    hypothesis = record["reviews"][0]["hypotheses"][0]
+    hypothesis.update(
+        window_start="2026-11-20T10:00:00+00:00",
+        window_end="2026-11-21T10:00:00+00:00",
+        reviewed_at="2026-11-21T10:00:00+00:00",
+    )
+    return record
+
+
+def test_cognitive_review_deduplicates_measurements_and_respects_original_stop():
+    event = _review_event(_measured_review_record())
+    ref = event["evidence_refs"][0]
+    state = {
+        "identity_id": "test",
+        "level": 6,
+        "owner_user_id": 17,
+        "goals": [{"id": "g", "status": "stopped", "outcome_ref": ref}],
+        "events": [event, _review_event(_measured_review_record(), cycle="b")],
+    }
+    facts = cognitive_review_facts(state)
+    review = facts[0]["cognitive_review"]
+    assert review["sample_count"] == 1
+    assert review["verdict_counts"] == {"hit": 0, "miss": 1}
+    assert review["latest_goal_review"]["recommendation"] == "respect_recorded_stop"
+    assert review["source_refs"] == [ref]
+    assert state["goals"][0]["status"] == "stopped"
+    messages, refs = cognition_messages(state, "reflection", facts)
+    assert facts[0]["ref"] in refs
+    assert json.loads(messages[1]["content"])["observations"][0]["evidence_status"] == (
+        "historical_ledger_review_not_prediction"
+    )
+
+
+@pytest.mark.parametrize(
+    "change", ["wrong_owner", "forged_fingerprint", "wrong_verdict", "open_window"]
+)
+def test_cognitive_review_rejects_unverified_calibration(change):
+    record = _measured_review_record()
+    target = record["reviews"][0]["hypotheses"][0]
+    if change == "wrong_verdict":
+        target["verdict"] = "hit"
+    if change == "open_window":
+        target["window_end"] = "2026-11-22T10:00:00+00:00"
+    event = _review_event(record, owner=8 if change == "wrong_owner" else 17)
+    if change == "forged_fingerprint":
+        event["details"]["outcome_feedback"]["metrics"]["revenue_cents"] = 999
+    state = {"owner_user_id": 17, "events": [event]}
+    assert cognitive_review_facts(state) == []
+    if change in ("wrong_owner", "forged_fingerprint"):
+        assert reflection_facts(state) == []
+
+
+def test_prior_self_assessment_is_scoped_and_never_a_verified_capability():
+    state = {
+        "owner_user_id": 17,
+        "self_model": {"owner_user_id": 17, "description": "hypothesis", "status": "verified"},
+    }
+    assert prior_self_assessment(state) == {
+        "title": "",
+        "description": "hypothesis",
+        "status": "hypothesis",
+    }
+    state["owner_user_id"] = 8
+    assert prior_self_assessment(state) == {"status": "unbound_or_previous_owner_hypothesis"}
+    del state["self_model"]["owner_user_id"]
+    assert prior_self_assessment(state) == {"status": "unbound_or_previous_owner_hypothesis"}
+
+
+def test_real_cognition_graph_reads_historical_review_without_new_execution_authority(ports):
+    store, calls, *_ = ports
+    store.state["owner_user_id"] = 17
+    store.state["events"] = [_review_event(_measured_review_record())]
+    result = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    review = next(
+        row["cognitive_review"] for row in payload["observations"] if "cognitive_review" in row
+    )
+    assert review["verdict_counts"]["miss"] == 1
+    assert result["goals"][0]["status"] == "proposed"
+    assert "decision_id" not in result["goals"][0]
+
+
+def test_real_cognition_graph_excludes_experiences_pending_human_review(ports):
+    store, calls, *_ = ports
+    store.state["owner_user_id"] = 17
+    store.state["revision"] = store.claim["policy_revision"]
+    pending = {
+        "ref": "experience:" + "a" * 64,
+        "text": "Pending review",
+        "experience_candidate": {"outcome": "success", "metric_id": "revenue_monthly"},
+    }
+    reviewed = {
+        "ref": "experience-review:" + "b" * 64,
+        "text": "Human-confirmed historical task comparison; not causal proof.",
+        "reviewed_experience": {"outcome": "failure", "metric_id": "revenue_monthly"},
+        "candidate_ref": "experience:" + "c" * 64,
+    }
+    store.state["experience_review_facts"] = [pending, reviewed]
+    result = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    refs = {row["ref"] for row in payload["observations"]}
+    assert pending["ref"] not in refs
+    assert reviewed["ref"] in refs
+    assert result["goals"][0]["status"] == "proposed"
+    assert "decision_id" not in result["goals"][0]
+
+
+def test_goal_review_evolves_with_original_receipts_without_changing_approval():
+    record = _measured_review_record()
+    record["halted"] = False
+    record["reviews"][0]["decision"] = "reallocate_within_approval"
+    record["reviews"][0]["stop_reason"] = ""
+    decision_id = record["decision_id"]
+
+    def project(original, status="execution_verified"):
+        return goal_review_projection(
+            owner=7,
+            goal_id="g1",
+            decision_id=decision_id,
+            status=status,
+            feedback=portfolio_feedback(original),
+        )
+
+    pending = copy.deepcopy(record)
+    pending["reviews"][0]["observation_complete"] = False
+    assert project(pending)["recommendation"] == "await_original_evidence"
+    assert project(record)["recommendation"] == "consider_revision_in_separate_approval"
+    stopped = copy.deepcopy(record)
+    stopped["halted"] = True
+    assert project(stopped)["recommendation"] == "respect_recorded_stop"
+    feedback = portfolio_feedback(record)
+    goal = {
+        "id": "g1",
+        "status": "execution_verified",
+        "decision_id": decision_id,
+        "outcome_ref": feedback["evidence_ref"],
+        "outcome_feedback": feedback["metrics"],
+        "outcome_status": feedback["outcome_status"],
+        "goal_review": project(record),
+    }
+    state = {"owner_user_id": 7, "goals": [goal]}
+    before = copy.deepcopy(state)
+    assert len(goal_review_facts(state)) == 1
+    assert state == before
+    goal["outcome_ref"] = "forged"
+    assert not goal_review_facts(state)
+
+
+@pytest.mark.parametrize("status", ["unavailable", "unknown"])
+def test_self_capability_preflight_blocks_new_proposal(ports, monkeypatch, status):
+    from modstore_server import xiaoc_self_model
+
+    store = ports[0]
+    store.state["policy"].update(employee_id="missing-employee", portfolio_limits=limits())
+    monkeypatch.setattr(
+        xiaoc_self_model,
+        "employee_preflight",
+        lambda *_: {"status": status, "reason": "test_missing_capability"},
+    )
+    monkeypatch.setattr(
+        portfolio,
+        "create_portfolio_proposal",
+        lambda **_: pytest.fail("unavailable capability cannot create an execution proposal"),
+    )
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "blocked"
+    assert result["goals"][0]["blocked_reason"] == "test_missing_capability"
+    assert "decision_id" not in result["goals"][0]

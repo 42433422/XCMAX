@@ -1784,5 +1784,88 @@
       ],
       "scope_note": "Jenkins 插件版本与许可证单独锁定；不以 CI 项目数、绿灯数量或历史覆盖率作为当前质量。"
     }
-  ]
+  ],
+  "digital_life_evaluation": {
+    "protocol_version": "1.0.0",
+    "status": "NOT RUN",
+    "layers": [
+      "unit",
+      "integration",
+      "real_model",
+      "real_business",
+      "production"
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "scenarios": [
+      {
+        "id": "memory",
+        "anchor": "autonomy-B3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_state.py::test_identity_survives_new_sessions_and_global_mode_is_shared",
+        "negative": "tests/test_xiaoc_life_state.py::test_experiences_accumulate_and_hypotheses_never_become_verified_capability",
+        "description": "持久身份与经验；伪造已验证能力不得采纳"
+      },
+      {
+        "id": "cognition",
+        "anchor": "autonomy-B3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_runtime.py::test_real_graph_proposes_without_claiming_goal_completed_or_self_approval",
+        "negative": "tests/test_xiaoc_life_runtime.py::test_model_cannot_forge_fact_refs_goal_status_or_executor_binding",
+        "description": "认知引用、事实与假设；拒绝伪造证据"
+      },
+      {
+        "id": "decision",
+        "anchor": "autonomy-B1",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_runtime.py::test_same_goal_across_cycles_preserves_execution_identity",
+        "negative": "tests/test_xiaoc_life_runtime.py::test_unknown_platform_quota_blocks_before_call",
+        "description": "决策身份及授权预算；未知额度拒绝"
+      },
+      {
+        "id": "execution",
+        "anchor": "erp-B3",
+        "workspace": "FHD",
+        "positive": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[False]",
+        "negative": "tests/test_application/test_business_full_chain_acceptance.py::test_approved_worker_delivers_once_and_rejects_wrong_money_in_valid_workbook[True]",
+        "description": "审批、库存账与文件独立核对；错误金额拒绝"
+      },
+      {
+        "id": "reflection",
+        "anchor": "autonomy-B3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_evolution.py::test_reflection_reuses_original_retort_and_keeps_private_context_out_of_public_plan",
+        "negative": "tests/test_xiaoc_life_evolution.py::test_false_completed_retort_stays_unknown_then_verified_delivery_returns_to_next_prompt",
+        "description": "反思复用原审批；虚假交付保持未知"
+      },
+      {
+        "id": "recovery",
+        "anchor": "agent-orchestration-B3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_state.py::test_crash_reconciliation_uses_original_model_receipt_without_replaying[False]",
+        "negative": "tests/test_xiaoc_life_state.py::test_expired_worker_lease_is_not_replayed",
+        "description": "原回执恢复；过期租约不重派"
+      },
+      {
+        "id": "collaboration",
+        "anchor": "agent-orchestration-C3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_handoff.py::test_persisted_handoff_rechecks_level_and_preserves_original_owner",
+        "negative": "tests/test_xiaoc_life_handoff.py::test_model_payload_cannot_replace_or_create_a_management_mandate",
+        "description": "交接续接；模型不可替换原主体"
+      },
+      {
+        "id": "business",
+        "anchor": "autonomy-C3",
+        "workspace": "成都修茈科技有限公司/MODstore_deploy",
+        "positive": "tests/test_xiaoc_life_company_planning.py::test_company_deferral_then_release_resumes_original_ready_task_once[False]",
+        "negative": "tests/test_xiaoc_life_company_planning.py::test_daily_life_cap_can_run_smaller_global_candidate_without_enlarging_it",
+        "description": "资源竞争后的继续；不得放大批准资源"
+      }
+    ],
+    "rule": "补充原锚点的隔离回归证据，不改变五轴、18 域、108 项或评分版本，不代替原样本下限、真实对标或长期运行验收。真实模型、客户业务与生产仅由各自既有独立门禁及原始回执证明，未接入时为 NOT RUN 或 BLOCKED。"
+  }
 }

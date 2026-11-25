@@ -219,14 +219,14 @@
     },
     "FHD/app/application/employee_runtime/task_continuity.py": {
       "base_file": "FHD/app/application/employee_runtime/task_continuity.py",
-      "base_blob": "b4787acae24b645f709ecc208e4efdc95b863e05",
-      "head_blob": "4e8864fc8ebe5a60857d5e7f3eb6e9c3b69c593d",
-      "before_lines": 2114,
-      "after_lines": 2203,
-      "reason": "本记录是评审请求，不是审批证据。identity 已按当前 main@d5184dad4897a30ec6b010264ad4cd1269c00a8a 与本集成 head 的精确 blob 重算。仅描述已纳入来源在本文件上的独特合并结果；不把任一来源评审请求或本记录视为已批准，也不合成新的批准记录。 Review request only: Release ledger locks while tools execute, preserve durable execution ownership, and prevent late results overwriting pause or replaying unknown effects.",
-      "boundary": "Continuity lifecycle retains tool dispatch; the composed request context/helper handles unlocked-wait snapshot isolation, claim reconciliation and subprocess supervision. No mixin split, new cancel protocol or arbitrary short ELT timeout.",
-      "validation": "52 focused backend tests passed with full conftest, covering same-instance/cross-process read-pause, independent tenants, claim tamper, duplicate effects, process-group termination and expired-budget not-started recovery. 17 additional handoff tests passed; 2 subprocess tests blocked by missing langgraph in their overridden environment. Full new-head CI remains outstanding. Follow-up after CI: typed request frames pass mypy for both files; all 52 focused tests pass with full conftest. No type-ignore or cast was added.",
-      "follow_up": "identity 已按 main@d5184dad4897a30ec6b010264ad4cd1269c00a8a 与当前 head 精确重算。 @42433422: review the +99-line lifecycle change and confirm pause stops subsequent steps rather than withdrawing started effects. Unbudgeted ELT remains a long task; unknown effects require reconciliation, not automatic retry.",
+      "base_blob": "4e8864fc8ebe5a60857d5e7f3eb6e9c3b69c593d",
+      "head_blob": "375d35f587b1f8191284808620e9b17f949c037b",
+      "before_lines": 2203,
+      "after_lines": 2331,
+      "reason": "本记录仅请求架构评审，不表示批准。相对实际main@1a5e1d194f1b361ea488bf9bd781a788f767419f，原TaskContinuityRuntime由2203到2331行，净增128行：作者#3543任务拆分、责任绑定及父任务收尾108行，原格式器3行，真实客户委托回归修复17行。",
+      "boundary": "复用原连续任务账本、授权上下文、子任务归属和注册handoff路径。需真实身份的handoff子任务仅保留冻结参数明确请求且原父任务已允许的具体tool.action范围，不复制通配授权；原身份授权、低风险及幂等校验仍在原注册交接执行入口核对。原拆分摘要协议、角色绑定、未知结果处理及原验收门槛不变。",
+      "validation": "本轮原普通业务与纯图回归95/95通过、0跳过：值对象模块80、编排模块9、真实SQLite客户run_tools/child_return/chain三场景及作者原图三场景。原两个后继CI失败先按原断言复现2红；原handoff授权模块和完整multitask测试文件逐字节未改，continuity仅_split方法有业务修复。原Ruff检查通过；完整最新head CI、其它新增合同和独立生产验收仍待取证。",
+      "follow_up": "请@42433422复核精确blob 4e8864fc8ebe5a60857d5e7f3eb6e9c3b69c593d 到 375d35f587b1f8191284808620e9b17f949c037b 的+128行，尤其是冻结拆分请求、原父任务具体委托范围与当前身份的交集。集成其它同文件变更时重算实际base/head并运行原合同；本登记不代替人工架构审批。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/enterprise_cs_automation.py": {
@@ -495,14 +495,14 @@
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
       "base_file": "FHD/frontend/src/views/PersyKnowledgeView.vue",
-      "base_blob": "d8029632bcfa07439dd3a4c60c5d575615e3bc00",
-      "head_blob": "32b37f4b665221cc35211fe0b565901b5ae6ecc9",
-      "before_lines": 1007,
-      "after_lines": 1010,
-      "reason": "整合PR #3293，在既有知识库视图中增加内容区包裹层，使图谱和资料内容占剩余高度，提问框作为独立底行而不再覆盖图谱。",
-      "boundary": "仅模板结构新增3行，数据加载、权限、知识问答和所有现有视图不变；尺寸规则保留在现有persy-knowledge.css中，不新建组件模块。",
-      "validation": "知识页、图谱和布局3文件31项测试通过，完整vue-tsc和目标ESLint通过；本地Chromium因socket权限未完成几何验收，CI现有浏览器测试待运行。",
-      "follow_up": "@42433422 复核内容区与输入区的窗口尺寸适配；本次只是既有页面结构修复，无需仅为行数拆分组件，后续布局变更继续在独立CSS中维护。",
+      "base_blob": "bfc06e308e744a76bdaee4f1851d19f72cb37023",
+      "head_blob": "8e54e85693dc0ab179b5a9be46f392e2054000e6",
+      "before_lines": 993,
+      "after_lines": 1024,
+      "reason": "PR #3528 在现有 Persy 知识库视图接入关系与修订时间复核入口，原视图从 993 行增至 1024 行；此次补齐与实际主线和作者文件完全对应的增长评审请求。",
+      "boundary": "保留作者原 31 行视图增量，复用既有知识库、MemoryV2、PersyMemoryTemporalReview 和治理 composable；不添加第二套数据权威或扩大读写权限，修复工作未改动该 Vue 文件。",
+      "validation": "原增长检查确认 base/head blob 与 993→1024 行完全匹配；原记忆正常生命周期及读回合同 8 项通过、原断言未改。前端交互和全量 CI 尚待原正式门禁验证，这条记录不表示已完成前端或生产验收。",
+      "follow_up": "@42433422 继续复核现有知识库视图的组件边界与关系、历史复核入口，并以该 PR 最新提交的前端检查和真实场景证据确认；本项为架构评审请求，不是批准。",
       "review_owner": "@42433422"
     },
     "FHD/mobile-flutter-poc/lib/src/data/local_workspace.dart": {
@@ -867,14 +867,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py",
-      "base_blob": "1b24deb08a2c99b279b5e375ba4c59d41fc1ee2b",
-      "head_blob": "aad7112aa56ce5e289aebf55e67f019e1e81b3f1",
-      "before_lines": 899,
-      "after_lines": 901,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。保留原组合执行预算与调度身份，接入集成分支的调度恢复交点。",
-      "boundary": "原组合授权、额度占用和候选依赖仍由现有事务控制；未知消费不换池。",
-      "validation": "战略组合调度、恢复、预算和客户目标专项已运行；最终平台CI验证。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "aad7112aa56ce5e289aebf55e67f019e1e81b3f1",
+      "head_blob": "9e086fa6d3b04949c77cde14e22b07b8ebfa3802",
+      "before_lines": 901,
+      "after_lines": 1076,
+      "reason": "#3558 架构评审请求：在原战略组合账本内读回生命周期收尾所需的原执行与结果回执，区别已完成的动作与尚无可靠结果的动作。",
+      "boundary": "收尾只用现有组合记录验证身份与回执，不重新执行动作，不另建账本；原组合授权、额度及调度责任仍在既有路径内。",
+      "validation": "五文件生命周期工作流覆盖真实 PostgreSQL 上的已提交动作恢复、原回执校验、并发恢复与收尾再中断；正式 CI 与人工评审仍需完成。",
+      "follow_up": "请 @42433422 按本条精确 blob 与行数复核只读回执的身份绑定和拒绝条件；本记录不是审批。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_usage.py": {
@@ -889,16 +889,40 @@
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_cognition.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_cognition.py",
+      "base_blob": "001d82730d0397eed1be33b982baef94c74c98de",
+      "head_blob": "0cc1ca4ddbdc7c05cc3d00596cb80b936857ef13",
+      "before_lines": 368,
+      "after_lines": 919,
+      "reason": "#3558 架构评审请求：为原认知上下文补齐备选方案资源约束、可追溯观察、测量回执、反思和目标复核事实。",
+      "boundary": "在既有认知层投影原状态与已结算证据；不把待核实观察作为已验证结果，不由认知投影执行战略动作。",
+      "validation": "生命周期运行与集成回归覆盖原动作结果读回及反思；认知证据契约仍需独立正式 CI 验证。",
+      "follow_up": "请 @42433422 复核可核实观察与反思事实的边界，并评估后续将只读投影移至现有评审模块；本记录不是审批。",
+      "review_owner": "@42433422"
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py",
-      "base_blob": "aa809eaf8d732bf2e26ecdfac844a8592994d0e7",
-      "head_blob": "d355e7791a5fbfcd5c6aa90a80ed98edb6629891",
-      "before_lines": 882,
-      "after_lines": 892,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。自治规划从原owner账号解析平台默认模型，接入既有预算准入，避免使用脱离账号的bench默认模型。 本轮复用原模型前置边界：探索的本轮来源优先进入观察，专用上下文错误映射既有阻断原因。",
-      "boundary": "只允许平台模型配置并保持原生命周期授权与预算；未配置模型保持阻断。 研究仍仅调用一次，原组合业务反馈与原回执保留；只捕获专用CognitionContextError，不扩大恢复异常集合、不截断结构化回执。",
-      "validation": "当前树原生命周期SQL、LangGraph运行与业务反馈三模块105项通过且零跳过；新增边界先复现10项认知失败及6项迟到授权失败。最终提交的正式平台CI仍须复验，此请求不是人工批准或生产验收。",
-      "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
+      "base_blob": "d355e7791a5fbfcd5c6aa90a80ed98edb6629891",
+      "head_blob": "a58ea1f14f8bc56437031d2d8efbc66b021ef3e4",
+      "before_lines": 892,
+      "after_lines": 1517,
+      "reason": "#3558 架构评审请求：让原生命周期图使用原生检查点，在动作提交后进程中断时只读回已验证的结果并完成图，避免重派已执行动作。",
+      "boundary": "复用原图、原组合回执和持久化锁；仅在活动周期、检查点及原回执均匹配时继续收尾；未知效果不得自动重放。",
+      "validation": "五文件生命周期工作流覆盖 SQLite、真实 PostgreSQL 跨进程恢复、活动锁排斥、单一收尾者与收尾中断后重启；正式 CI 与人工评审仍需完成。",
+      "follow_up": "请 @42433422 复核原生图恢复边界、并发锁和不重放条件，后续评估将编排与收尾适配职责分离；本记录不是审批。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py",
+      "base_blob": "ef5cb34e5e3a75be5c04a8e42ea747a75cacdde0",
+      "head_blob": "1d15a467f6c5c3fda194918de309cce1b64c2fae",
+      "before_lines": 782,
+      "after_lines": 1182,
+      "reason": "#3558 架构评审请求：在原 SQL 生命周期状态中持久化周期身份、图阶段、检查点及收尾准入，并用周期锁协调主执行者和恢复者。",
+      "boundary": "在既有 SQL 状态与事务内比较原 claim，不新增独立状态权威；收尾仍须经原动作回执验证，不放宽新动作准入。",
+      "validation": "五文件生命周期工作流覆盖原状态准入、SQLite 状态、真实 PostgreSQL 跨进程锁与检查点恢复；正式 CI 与人工评审仍需完成。",
+      "follow_up": "请 @42433422 复核原 claim 的比较条件、锁范围和中断后状态转换，后续评估状态存取与恢复职责边界；本记录不是审批。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/dataset_rag/document_lifecycle.py": {
@@ -1019,6 +1043,18 @@
       "boundary": "模型来源解析、方法查找、参数转换、返回拆包与文本处理均保持在新增捕获外；不改授权、模型来源、CUDA配置或公共恢复异常集合。",
       "validation": "原Voice SDK失败与来源解析未知错误传播纳入25项定向回归且通过；具名tuple仅替代等价展开式，完整mypy与最终原CI仍须核验。",
       "follow_up": "随原语音服务验证真实平台SDK故障；源码规模评审由原责任人完成，不增加替代路由或宽泛fallback。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py",
+      "base_blob": "606a0109cbdba0ed13ac99b415d95af017c502d8",
+      "head_blob": "d4ad4f3012ff957f9c90b2eaa0c492d4054c09f4",
+      "before_lines": 1220,
+      "after_lines": 1225,
+      "reason": "本记录为架构评审请求，非批准。#3534 复用现有 SearXNG 结果标准化路径，保留上游已返回的 publishedDate 和 engine，供公开信息记录来源与未核实状态。",
+      "boundary": "仅保留非空字符串 publishedDate（最多 128 字符）及 engine（最多 100 字符）；原 URL 检查、结果数量上限、检索器和业务权限不变，不把公开声明当作已核实事实。",
+      "validation": "本轮仅修复 CI 格式及变更记录，六处 Python 格式修改前后 AST 完全一致；原 Ruff、Black、完整计数及发布前检查结果随 PR 披露，新增业务回归、完整 CI 和生产验收仍待完成。",
+      "follow_up": "请 @42433422 根据精确 main/head blob 审阅这处 1220 到 1225 行的薄适配；本登记不代替架构批准。既有检索模块的后续拆分应单独评审，不在格式修复中改写作者语义。",
       "review_owner": "@42433422"
     }
   }

@@ -99,6 +99,103 @@ def _assert_memory_run(
     }
 
 
+@pytest.mark.parametrize("omit_conflict", [False, True])
+def test_memory_v2_proposal_readback_preserves_pending_relation_conflict(
+    tmp_path, monkeypatch, authenticated_memory_client, omit_conflict, request
+) -> None:
+    import app.domain.shared_services.user_memory_service as memory_mod
+
+    # Assert the conflict round-trip in-process; worker transport is covered by
+    # tests/test_application/test_tool_process.py and is not this regression.
+    request.getfixturevalue("local_tools")
+
+    def relation(person):
+        return {
+            "statement": f"Northwind contact {person}",
+            "subject": "Northwind",
+            "predicate": "contact",
+            "object": person,
+            "relation_cardinality": "one",
+            "entities": [
+                {
+                    "name": "Northwind",
+                    "type": "organization",
+                    "role": "subject",
+                    "entity_id": "customer:17",
+                },
+                {"name": person, "type": "person", "role": "object"},
+            ],
+        }
+
+    repo = InMemoryAgentRunRepository()
+    _configure_runtime(monkeypatch, tmp_path)
+    try:
+        with _patch_agent_repo(repo):
+            client = ApprovedCapabilityClient(_client(), repo, authenticated_memory_client)
+            payload = {
+                "user_id": "7",
+                "memory_type": "entity",
+                "key": "contact",
+                "source": "user_explicit",
+                "evidence": [{"source": "reviewed_business_record"}],
+            }
+            first = client.post(
+                "/memory/v2/candidates", json={**payload, "value": relation("Alice")}
+            )
+            assert first.status_code == 200, first.json()
+            first_id = first.json()["candidate"]["memory_id"]
+            confirmed = client.post(f"/memory/v2/{first_id}/confirm", json={"user_id": "7"})
+            if confirmed.status_code != 200:
+                body = confirmed.json()
+                output = body.get("output") if isinstance(body.get("output"), dict) else {}
+                pytest.fail(
+                    "worker status="
+                    f"{confirmed.status_code} code={body.get('error_code')} "
+                    f"exc={body.get('exception_type') or output.get('exception_type')}"
+                )
+            active = confirmed.json()["memory"]
+            if omit_conflict:
+                service = memory_mod.get_user_memory_service()
+                propose = service.propose_memory_candidate
+                path = tmp_path / "memory" / "memory_store.json"
+
+                def omit_persisted_conflict(*args, **kwargs):
+                    output = propose(*args, **kwargs)
+                    record = {**output["candidate"]}
+                    assert record.pop("conflict_review")
+                    persisted = json.loads(path.read_text())
+                    rows = next(iter(persisted.values()))["memory_v2_records"]
+                    index = next(
+                        i for i, row in enumerate(rows) if row["memory_id"] == record["memory_id"]
+                    )
+                    rows[index] = record
+                    path.write_text(json.dumps(persisted))
+                    return {**output, "candidate": record}
+
+                writer = Mock(side_effect=omit_persisted_conflict)
+                monkeypatch.setattr(service, "propose_memory_candidate", writer)
+            second = client.post(
+                "/memory/v2/candidates", json={**payload, "value": relation("Bob")}
+            )
+            if omit_conflict:
+                writer.assert_called_once()
+                assert second.status_code == 202, second.json()
+                call = repo.get(second.json()["run_id"]).tool_calls[0]
+                assert call.output["success"] is True
+                assert "conflict_review" not in call.output["candidate"]
+                report = call.metadata["verification"]
+                assert report["code"] == "result_memory_effect_mismatch", report
+                return
+            assert second.status_code == 200, second.json()
+            candidate = second.json()["candidate"]
+            assert candidate["status"] == "pending"
+            assert candidate["conflict_review"] == [
+                {"memory_id": first_id, "revision": active["revision"]}
+            ]
+    finally:
+        memory_mod.reset_user_memory_service()
+
+
 @pytest.mark.parametrize("account_tier", ["normal", "personal"])
 def test_memory_v2_lifecycle_routes_execute_through_agent(
     tmp_path,
@@ -414,21 +511,24 @@ def test_memory_readback_requires_original_durable_proof(memory_case, missing):
     assert memory_case.path.read_bytes() == original
 
 
-def test_memory_readback_rejects_fabricated_output(memory_case):
+@pytest.mark.parametrize("field", ["value", "recorded_at_utc"])
+def test_memory_readback_rejects_fabricated_output(memory_case, field):
     output = deepcopy(memory_case.run.tool_calls[0].output)
-    output["candidate"]["value"] = "forged"
+    output["candidate"][field] = "forged"
     report = _memory_readback(memory_case.run, output=output)
     assert report["status"] == "failed"
     assert report["code"] == "result_memory_receipt_mismatch"
 
 
-@pytest.mark.parametrize("tamper", ["value", "revision", "owner", "missing", "symlink", "store"])
+@pytest.mark.parametrize(
+    "tamper", ["value", "revision", "recorded_at_utc", "owner", "missing", "symlink", "store"]
+)
 def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch, tmp_path, tamper):
     import app.domain.shared_services.user_memory_service as memory_mod
 
     payload = json.loads(memory_case.path.read_text())
     owner = next(iter(payload))
-    if tamper in {"value", "revision"}:
+    if tamper in {"value", "revision", "recorded_at_utc"}:
         payload[owner]["memory_v2_records"][0][tamper] = "changed"
         memory_case.path.write_text(json.dumps(payload))
     elif tamper == "owner":
@@ -453,6 +553,7 @@ def test_memory_readback_rejects_changed_original_store(memory_case, monkeypatch
         == {
             "value": "result_memory_state_mismatch",
             "revision": "result_memory_state_mismatch",
+            "recorded_at_utc": "result_memory_state_mismatch",
             "owner": "result_memory_owner_unavailable",
             "missing": "result_memory_owner_unavailable",
             "symlink": "result_evidence_mismatch",
@@ -717,6 +818,7 @@ def test_memory_rejection_verifies_original_history_and_preserves_terminal_recor
         "revision",
         "eligible",
         "rejected_at",
+        "recorded_at_utc",
         "history_action",
         "history_previous",
         "history_prefix",
@@ -739,6 +841,8 @@ def test_memory_rejection_readback_requires_the_frozen_transition(
             record["eligible_for_planner"] = True
         elif tamper == "rejected_at":
             record["rejected_at"] = "unrelated rejection time"
+        elif tamper == "recorded_at_utc":
+            record["recorded_at_utc"] = "2026-11-24T00:00:00"
         elif tamper == "history_action":
             record["history"][-1]["action"] = "deleted"
         elif tamper == "history_previous":

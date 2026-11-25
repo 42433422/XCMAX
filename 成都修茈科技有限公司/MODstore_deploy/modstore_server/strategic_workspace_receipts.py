@@ -56,11 +56,11 @@ def _terminal(request: dict[str, Any], evidence: dict[str, Any]) -> dict[str, An
             raise PortfolioError(
                 "original benchmark, acceptance and delivery receipts are incomplete"
             )
-    if (
-        status == "customer_impact_rejected"
-        and state.get("recovery", {}).get("status") != "rollback_verified"
-    ):
-        return None
+    if status == "customer_impact_rejected":
+        from modstore_server.retort_feedback_recovery import verify_persisted_recovery
+
+        if not verify_persisted_recovery(request["original_request_id"], state, effects):
+            return None
     completed = status == "completed"
     return {
         "ok": completed,

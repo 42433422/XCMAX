@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -343,6 +344,54 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
     from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
 
     setup = bridge_setup
+    # This regression asserts persisted receipt recovery, not process isolation:
+    # run the real tool in-process so host-specific worker spawn cannot fail setup.
+    executor = setup.bridge.orchestrator._tool_executor
+
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    def execute_in_process(step, *, runtime_context, deadline_monotonic):
+        try:
+            return executor.execute(step, runtime_context=runtime_context)
+        except BOUNDARY_ERRORS as exc:
+            import traceback
+
+            print(traceback.format_exc()[:4000])
+            print(
+                f"RECEIPT_TOOL_FAILURE {type(exc).__name__}: {exc} "
+                f"cwd={os.getcwd()} db_url={os.environ.get('DATABASE_URL')} "
+                f"data_dir={os.environ.get('XCAGI_DATA_DIR')} "
+                f"tool={step.tool_id}.{step.action}"
+            )
+            raise
+
+    executor.execute_with_deadline = execute_in_process
+    import weakref
+    from pathlib import Path
+
+    from app.application.agent_orchestrator import task_execution_repository
+
+    # A prior test's open queue repository may point at a cleaned temp database.
+    monkeypatch.setattr(task_execution_repository, "_OPEN_REPOSITORIES", weakref.WeakSet())
+    monkeypatch.setattr(task_execution_repository, "_task_execution_repository", None)
+    monkeypatch.delenv("XCAGI_OWNED_SOURCE_PROFILE", raising=False)
+    data_dir = Path(os.environ.get("XCAGI_DATA_DIR") or tmp_path / "app-data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    owner_engine = setup.actor.factory.kw["bind"]
+    owner_path = Path(str(owner_engine.url.database))
+    owner_path.parent.mkdir(parents=True, exist_ok=True)
+    owner_path.touch(exist_ok=True)
+    from app.db.db_base import Base
+
+    Base.metadata.create_all(owner_engine, checkfirst=True)
+    for target in (
+        "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+        "app.application.customer_app_service.get_customers_session",
+        "app.application.customer_crud_mixin.get_customers_session",
+        "app.application.customer_relationship_mixin.get_customers_session",
+        "app.application.customer_transfer_mixin.get_customers_session",
+    ):
+        monkeypatch.setattr(target, setup.actor.factory, raising=False)
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "original-claims.sqlite"))
     monkeypatch.setattr(
         "app.application.customer_app_service.get_customers_session", setup.actor.factory
@@ -386,7 +435,13 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
                 rate_limiter._rate_limiters, endpoint, rate_limiter._InMemoryRateLimiter(120)
             )
         else:
-            assert receipt["success"] is True and receipt["verified"] is True, receipt
+            assert receipt["success"] is True and receipt["verified"] is True, (
+                receipt.get("status"),
+                receipt.get("error_code"),
+                receipt.get("error_type"),
+                receipt.get("error"),
+                receipt.get("execution"),
+            )
     return setup
 
 

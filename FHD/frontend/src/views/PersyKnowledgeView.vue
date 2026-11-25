@@ -188,6 +188,7 @@
 
         <PersyMemoryList
           v-else-if="viewMode === 'memories'"
+          :dataset-id="activeDatasetId"
           :memories="orderedMemories"
           :loading="loadingMemories"
           :active-count="activeMemoryCount"
@@ -387,6 +388,34 @@
                 <label>
                   <span>内容</span>
                   <textarea v-model.trim="memoryDraftObject" rows="3" maxlength="160" required></textarea>
+                </label>
+                <label>
+                  <span>主体类型</span>
+                  <select v-model="memoryDraftSubjectType">
+                    <option v-for="kind in memoryEntityTypes" :key="kind.value" :value="kind.value">{{ kind.label }}</option>
+                  </select>
+                </label>
+                <label>
+                  <span>对象类型</span>
+                  <select v-model="memoryDraftObjectType">
+                    <option v-for="kind in memoryEntityTypes" :key="kind.value" :value="kind.value">{{ kind.label }}</option>
+                  </select>
+                </label>
+                <label>
+                  <span>关系取值约束</span>
+                  <select v-model="memoryDraftCardinality">
+                    <option value="">未声明</option>
+                    <option value="one">单值（冲突需审核）</option>
+                    <option value="many">多值</option>
+                  </select>
+                </label>
+                <label>
+                  <span>业务生效时间（可选，含时区）</span>
+                  <input v-model.trim="memoryDraftEffectiveFrom" type="text" maxlength="64" placeholder="2026-01-01T00:00:00+08:00" />
+                </label>
+                <label>
+                  <span>业务失效时间（可选，不含该时刻）</span>
+                  <input v-model.trim="memoryDraftEffectiveUntil" type="text" maxlength="64" placeholder="2027-01-01T00:00:00+08:00" />
                 </label>
                 <div class="memory-editor__actions">
                   <button type="button" class="secondary-button" @click="cancelMemoryEdit">取消</button>
@@ -956,6 +985,8 @@ const governance = usePersyMemoryGovernance({
 })
 const {
   mutatingMemory, memoryEditing, memoryMessage, memoryDraftSubject, memoryDraftPredicate, memoryDraftObject,
+  memoryEntityTypes, memoryDraftSubjectType, memoryDraftObjectType, memoryDraftCardinality,
+  memoryDraftEffectiveFrom, memoryDraftEffectiveUntil,
   selectedMemory, orderedMemories, pendingMemoryCount, activeMemoryCount,
   startMemoryEdit, cancelMemoryEdit, confirmMemory, rejectMemory, saveMemoryEdit, deleteMemory,
 } = governance
