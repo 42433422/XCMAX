@@ -250,7 +250,12 @@ export function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
 type DesktopWorkspaceMenuCommand = 'palette' | 'chat' | 'new-chat' | 'new-task' | 'sessions' | 'tasks'
 /** Menu commands remain UI-only. Use the main renderer's existing account guards and routes. */
 export function dispatchWorkspaceMenuCommand(command: DesktopWorkspaceMenuCommand): boolean {
-  const win = desktopRuntime.mainWindow
+  const focused = BrowserWindow.getFocusedWindow()
+  const primary = desktopRuntime.mainWindow
+  // Route only to windows owned by this shell. Splash/assistant/external surfaces
+  // must not receive the workspace command channel.
+  const win = focused && (focused === primary || desktopRuntime.auxiliaryWindows.has(focused))
+    ? focused : primary
   if (!win || win.isDestroyed()) return false
   if (win.isMinimized()) win.restore()
   win.show()
