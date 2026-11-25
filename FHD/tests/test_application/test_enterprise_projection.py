@@ -1058,3 +1058,67 @@ def test_verify_only_first_read_does_not_create_derived_cursor(world):
                 EnterpriseStateProjection.entity_type == "customer"
             )
         ).all()
+
+
+def test_cancelled_erp_order_invalidates_fact_reference_without_delivered_event(world):
+    """The committed sales row, not memory deletion or bus notification, is authority."""
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
+
+    service, sessions, clock, _ = world
+    before = get(service, verify_only=True)
+    token = make_fact_reference(before)
+    assert token is not None
+    with tenant_scope(11), sessions.begin() as db:
+        db.get(SalesOrder, 101).state = "cancel"
+    clock[0] += 1
+    current = get(service, verify_only=True)
+    assert current["retrieved_from"] == "authority"
+    assert current["state"]["state"] == "cancel"
+    assert current["source_version"] != before["source_version"]
+    old = verify_source_reference(
+        current, token["source_version"], token["fact_token"]
+    )
+    assert old["status"] == "superseded"
+    assert old["memory_reuse_allowed"] is False
+    assert old["requires_reconciliation"] is True
+    with tenant_scope(11), sessions() as db:
+        assert db.get(SalesOrder, 101).state == "cancel"
+
+
+def test_separate_source_commits_never_restore_an_old_fact_token(world):
+    """Two independent committed changes must both invalidate a stale memory token.
+
+    These are separate SQLAlchemy sessions; a PostgreSQL simultaneous-write
+    CAS test is still required before claiming multi-process ERP protection.
+    """
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
+
+    service, sessions, clock, _ = world
+    baseline = get(service, verify_only=True)
+    reference = make_fact_reference(baseline)
+    assert reference is not None
+    with tenant_scope(11):
+        with sessions() as first, sessions() as second:
+            first_order = first.get(SalesOrder, 101)
+            second_order = second.get(SalesOrder, 101)
+            first_order.state = "sent"
+            first.commit()
+            second_order.payment_state = "partial"
+            second.commit()
+    clock[0] += 2
+    updated = get(service, verify_only=True)
+    assert updated["state"]["state"] == "sent"
+    assert updated["state"]["payment_state"] == "partial"
+    assert verify_source_reference(
+        updated, reference["source_version"], reference["fact_token"]
+    )["status"] == "superseded"
+    with tenant_scope(11), sessions() as db:
+        order = db.get(SalesOrder, 101)
+        assert order.state == "sent"
+        assert order.payment_state == "partial"
