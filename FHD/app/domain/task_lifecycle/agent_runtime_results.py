@@ -59,7 +59,9 @@ def receipt_verified(row: dict[str, Any]) -> bool:
     if not isinstance(receipt, dict):
         return False
     try:
-        fingerprint = canonical_digest({key: row.get(key) for key in ("tool_id", "action", "params")})
+        fingerprint = canonical_digest(
+            {key: row.get(key) for key in ("tool_id", "action", "params")}
+        )
     except (TypeError, ValueError):
         return False
     return (
