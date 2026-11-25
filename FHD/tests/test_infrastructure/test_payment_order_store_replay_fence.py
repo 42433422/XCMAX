@@ -156,3 +156,87 @@ def test_delayed_verified_paid_notify_cannot_reopen_terminal_order(paid_store, s
     assert reason == "terminal_order_conflict"
     assert receipt["status"] == status
     assert paid_store.read_bytes() == previous
+
+
+def test_refund_claim_must_precede_provider_and_confirm_exact_replay(paid_store):
+    first, snap = order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=500,
+    )
+    assert first == "refund_reserved"
+    assert snap["state"] == "pending_provider_confirmation"
+    assert order_store.get_order("merchant-1")["status"] == "refund_pending_reconciliation"
+    assert order_store.observe_refund_provider_result(
+        out_trade_no="merchant-1", out_request_no="refund-r1",
+        provider_reported_success=True,
+    )
+    assert order_store.get_order("merchant-1")["status"] == "refund_pending_reconciliation"
+    reason, _ = order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r2", amount_cents=490,
+    )
+    assert reason == "refund_order_not_settled"
+    reason, _ = order_store.confirm_refund_from_provider_query(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=501,
+    )
+    assert reason == "refund_amount_mismatch"
+    assert "refunded_amount_cents" not in order_store.get_order("merchant-1")
+    reason, _ = order_store.confirm_refund_from_provider_query(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=500,
+    )
+    assert reason == "refund_confirmed"
+    assert order_store.get_order("merchant-1")["status"] == "partially_refunded"
+    assert order_store.get_order("merchant-1")["refunded_amount_cents"] == 500
+    assert order_store.confirm_refund_from_provider_query(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=500,
+    )[0] == "already_confirmed"
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=500,
+    )[0] == "refund_request_replay"
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r2", amount_cents=491,
+    )[0] == "refund_amount_exceeds_original"
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r2", amount_cents=490,
+    )[0] == "refund_reserved"
+    assert order_store.confirm_refund_from_provider_query(
+        out_trade_no="merchant-1", out_request_no="refund-r2", amount_cents=490,
+    )[0] == "refund_confirmed"
+    assert order_store.get_order("merchant-1")["status"] == "refunded"
+    assert order_store.get_order("merchant-1")["refunded_amount_cents"] == 990
+
+
+def test_refund_pending_claim_survives_disk_reload_and_blocks_new_gateway_call(paid_store):
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=100,
+    )[0] == "refund_reserved"
+    original = paid_store.read_bytes()
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r1", amount_cents=100,
+    )[0] == "refund_order_not_settled"
+    assert order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-r2", amount_cents=100,
+    )[0] == "refund_order_not_settled"
+    assert paid_store.read_bytes() == original
+
+
+@pytest.mark.parametrize("amount", [0, -1, True, 991])
+def test_refund_amount_fence(paid_store, amount):
+    reason, _ = order_store.reserve_refund_attempt(
+        out_trade_no="merchant-1", out_request_no="refund-1", amount_cents=amount,
+    )
+    assert reason == (
+        "refund_amount_exceeds_original" if amount == 991 else "refund_request_invalid"
+    )
+
+
+def test_concurrent_refund_claim_admits_only_one_gateway_dispatch(paid_store):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def reserve(i):
+        return order_store.reserve_refund_attempt(
+            out_trade_no="merchant-1", out_request_no=f"attempt-{i}", amount_cents=990,
+        )[0]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(reserve, range(8)))
+    assert results.count("refund_reserved") == 1
+    assert len(order_store.get_order("merchant-1")["refund_attempts"]) == 1
