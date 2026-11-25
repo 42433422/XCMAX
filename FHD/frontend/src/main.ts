@@ -25,6 +25,7 @@ import { ensureGlobModRoutes, registerModRoutes } from './router/registerModRout
 
 bindTutorialRouter(router)
 import { fetchModRoutesPayloadShared } from './utils/modRoutesSharedFetch'
+import { captureAuthSession } from '@/utils/authSessionCache'
 import { CLIENT_MODS_UI_OFF_KEY } from '@/stores/mods'
 import { applySidebarThemeFromStorage } from './utils/sidebarTheme'
 import { installClientConsoleBridge } from './utils/clientDebugLog'
@@ -244,11 +245,12 @@ async function bootstrap() {
   void (async () => {
     if (readVanillaNoModUi()) return
     try {
+      const sessionCurrent = captureAuthSession()
       const entries = await fetchModRoutesPayloadShared()
-      if (entries) {
-        // An authoritative empty response revokes previously installed runtime routes.
-        // A network error returns null and must not be interpreted as revocation.
-        await registerModRoutes(router, entries, { reconcileRuntime: true })
+      if (entries && sessionCurrent()) {
+        // An authoritative empty response revokes previous runtime routes, but
+        // an older account's late response must never revoke the new account.
+        await registerModRoutes(router, entries, { reconcileRuntime: true, sessionCurrent })
         scheduleRouterAddressSync('api')
       }
     } catch (e) {
