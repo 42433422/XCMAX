@@ -153,7 +153,8 @@ def test_workspace_prefs_atomic_sqlite_writers(tmp_path, monkeypatch):
             rows = session.scalars(select(UserPreference)).all()
             assert len(rows) == 1
             assert json.loads(rows[0].preference_value) == {
-                "workflow_ai_employees": {"a": True, "b": True}
+                "workflow_ai_employees": {"a": True, "b": True},
+                "_revision": 2,
             }
 
         # A corrupt persisted value must not be silently replaced.
