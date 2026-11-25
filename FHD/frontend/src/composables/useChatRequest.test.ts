@@ -412,3 +412,36 @@ describe('useChatRequest page cache', () => {
     wrapper.unmount()
   })
 })
+
+describe('useChatRequest bounded lifecycle', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('clears waiting ticker and queued debounce on unmount without late dispatch', async () => {
+    vi.useFakeTimers()
+    const flushed = vi.fn()
+    let scoped!: ReturnType<typeof useChatRequest>
+    const wrapper = mount(defineComponent({
+      setup() {
+        scoped = useChatRequest(makeDeps())
+        return () => h('div')
+      },
+    }))
+    scoped.startWaitProgressTimer('pending')
+    scoped.enqueueChatBatchMessage('unsent', 2000, flushed, 'pending')
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(flushed).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('does not accumulate progress state for unlimited old sessions', () => {
+    const deps = makeDeps()
+    const scoped = useChatRequest(deps)
+    for (let i = 0; i < 100; i++) scoped.setLoadingProgress('progress ' + i, 'task-' + i)
+    deps.sessionId.value = 'task-0'
+    expect(scoped.loadingProgressText.value).toBe('处理中...')
+    deps.sessionId.value = 'task-99'
+    expect(scoped.loadingProgressText.value).toBe('progress 99')
+  })
+})
