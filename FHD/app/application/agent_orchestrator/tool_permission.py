@@ -47,6 +47,7 @@ _SERVER_FIELDS = frozenset(
         "_bulk_preview_scopes",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "_tool_approval_scope",
         "task_id",
@@ -71,6 +72,7 @@ _UNTRUSTED_CONTROL = frozenset(
         "employee_tool_allowlist",
         "node_outputs",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "_tool_approval_scope",
         "_approval_agent_run_required",
@@ -89,6 +91,7 @@ _FINGERPRINT_SKIP = frozenset(
         "mod_id",
         "active_mod_id",
         "_actor_authorization",
+        "_credential_authorization",
         "_mod_authorization",
         "local_user_id",
         "authenticated_local_user_id",
@@ -218,6 +221,22 @@ def actor_tool_denial(
 ) -> dict[str, Any] | None:
     """Deny when a sealed actor, tenant owner, or employee allowlist does not grant this tool."""
     ctx = dict(context or {})
+    if "_credential_authorization" in ctx:
+        from app.application.aiopen.service import api_key_permits_execution
+
+        try:
+            permitted = api_key_permits_execution(ctx, tool_id, action)
+        except OSError:
+            permitted = False
+        if not permitted:
+            return _denial(
+                "tool_permission_denied",
+                "调用凭据已撤销、过期或未授权此能力",
+                context=ctx,
+                tool_id=tool_id,
+                action=action,
+                reason="credential_scope_denied",
+            )
     receipt = ctx.get("_tool_approval_scope")
     if isinstance(receipt, dict) and (
         receipt.get("tool_id"),
@@ -1292,7 +1311,12 @@ def handoff_runtime_context(
         "parent_run_id": parent_run_id,
         **{
             key: parent[key]
-            for key in ("workspace_id", "workspace_path", "root_run_id")
+            for key in (
+                "workspace_id",
+                "workspace_path",
+                "root_run_id",
+                "_credential_authorization",
+            )
             if key in parent
         },
         "_actor_authorization": parent.get("_actor_authorization"),

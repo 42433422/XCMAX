@@ -34,6 +34,7 @@ def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict
         *CONVERSATION_CONTEXT_FIELDS,
         "_mod_authorization",
         "_actor_authorization",
+        "_credential_authorization",
         "_tool_approval_scope",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",

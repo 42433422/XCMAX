@@ -80,6 +80,7 @@ _CONTEXT_COMPARISON = (
     "mod_id",
     "active_mod_id",
     "_actor_authorization",
+    "_credential_authorization",
     "_mod_authorization",
     "session_id",
     "conversation_id",
@@ -234,6 +235,15 @@ def _same_owner(
             raise XiaoxBindingError("owner_changed", "原任务的身份、会话或员工范围已变化")
     merge_runtime_context(run, {key: incoming[key] for key in fields if key in incoming})
     _bound_actor(original)
+    if "_credential_authorization" in original:
+        from app.application.aiopen.service import api_key_execution_context_current
+
+        try:
+            credential_current = api_key_execution_context_current(original)
+        except OSError as exc:
+            raise XiaoxBindingError("owner_changed", "原调用凭据无法核验") from exc
+        if not credential_current:
+            raise XiaoxBindingError("owner_changed", "原调用凭据已撤销、过期或授权范围已变化")
     if error := continuation_conversation_error(run, original):
         raise XiaoxBindingError("conversation_changed", error)
 

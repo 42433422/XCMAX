@@ -146,6 +146,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
         "authenticated_local_user_id",
         "_mod_authorization",
         "_actor_authorization",
+        "_credential_authorization",
         "_tool_approval_scope",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
@@ -212,6 +213,7 @@ def redact_internal_errors(value: Any) -> Any:
                 else redact_internal_errors(child)
             )
             for key, child in value.items()
+            if key != "_credential_authorization"
         }
     if isinstance(value, list):
         return [redact_internal_errors(item) for item in value]
