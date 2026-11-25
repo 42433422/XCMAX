@@ -39,9 +39,19 @@ def _components(business):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("business_result", [None, {"success": True, "response": "本地查询结果"}])
+@pytest.mark.parametrize(
+    ("message", "business_result", "expected_code", "business_calls"),
+    [
+        ("查询今天的考勤", None, None, 2),
+        ("查询今天的考勤", {"success": True, "response": "本地查询结果"}, None, 2),
+        ("普通问答", None, None, 0),
+        ("登记明天事假半天", None, "runtime_offline_mutation_blocked", 0),
+        ("导出今天考勤", None, "runtime_offline_mutation_blocked", 0),
+        ("打印今天考勤", None, "runtime_offline_mutation_blocked", 0),
+    ],
+)
 async def test_offline_stream_and_json_match_without_calling_online_paths(
-    business_result,
+    message, business_result, expected_code, business_calls
 ):
     business = Mock(return_value=business_result)
     admission, paths = _components(business)
@@ -68,12 +78,20 @@ async def test_offline_stream_and_json_match_without_calling_online_paths(
         AsyncMock(),
         logging.getLogger(__name__),
     )
-    body = XcagiCompatChatBody(message="测试离线查询", mode="offline")
+    body = XcagiCompatChatBody(message=message, mode="offline")
     response = await app.single(Mock(), body)
     events = [json.loads(chunk) async for chunk in stream.run(Mock(), body)]
     assert events[-1]["result"] == response
-    assert business.call_count == 2
-    if business_result is None:
+    assert business.call_count == business_calls
+    executor.execute.assert_not_called()
+    stream.backend.assert_not_called()
+    paths.kitten.assert_not_awaited()
+    if expected_code:
+        assert response["success"] is False
+        assert response["execution_state"] == "blocked"
+        assert response["error_code"] == expected_code
+        assert response["data"]["model_called"] is False
+    elif business_result is None:
         assert response["success"] is False
         assert response["data"]["model_called"] is False
     else:
@@ -223,3 +241,69 @@ async def test_online_json_and_stream_share_the_langgraph_mainline():
     assert events[-1]["result"] == json_result == receipt
     assert [call[0] for call in mainline_calls] == ["查询今天的考勤"] * 2
     business.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_offline_batch_never_invokes_legacy_mutation_handlers():
+    """The batch adapter must use the same guarded offline path as JSON/SSE."""
+    from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBatchBody
+
+    business = Mock(side_effect=AssertionError("legacy business executor must not run"))
+    admission, paths = _components(business)
+    executor = Mock()
+    executor.trace.attach.side_effect = lambda payload, *_args, **_kwargs: payload
+    app = CompatChatApplication(
+        admission,
+        executor,
+        paths,
+        Mock(),
+        Mock(),
+        lambda _request: "standard",
+        lambda: 5,
+        lambda request, body: app.single(request, body),
+    )
+    body = XcagiCompatChatBatchBody(
+        messages=["登记明天事假半天", "导出今天考勤", "打印今天考勤"],
+        mode="offline",
+    )
+    result = await app.batch(Mock(), body)
+    assert result["count"] == result["processed_count"] == 3
+    assert all(
+        item["data"]["error_code"] == "runtime_offline_mutation_blocked"
+        and item["execution_state"] == "blocked"
+        for item in result["results"]
+    )
+    business.assert_not_called()
+    executor.execute.assert_not_called()
+
+
+def test_no_unreviewed_direct_legacy_business_or_offline_dispatch_callers():
+    """Catch new direct call sites bypassing the one guarded offline boundary.
+
+    This audits Python calls in FHD/app only; it is not a claim about external
+    plugins, packaged clients or the not-yet-integrated Xiaox migration.
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "app"
+    allowed = {
+        "try_handle_business_chat_action": {"application/planner_compat_service.py"},
+        "offline_turn": {
+            "application/planner_compat/application.py",
+            "application/planner_compat/streaming.py",
+        },
+    }
+    callers = {name: set() for name in allowed}
+    for path in root.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if not any(name in source for name in allowed):
+            continue
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            name = node.func.id
+            if name in callers:
+                callers[name].add(path.relative_to(root).as_posix())
+    assert callers == allowed, f"Review/migrate legacy direct dispatch callers: {callers}"
