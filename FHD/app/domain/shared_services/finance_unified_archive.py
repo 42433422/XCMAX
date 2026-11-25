@@ -188,6 +188,19 @@ def _invoice_archive_existing(
     return {"archived": True, "transaction_id": row.id, "idempotent": True}
 
 
+def _crm_market_user_owned(tenant_id: int, market_user_id: int) -> bool:
+    """Original invoice must map to an active host account in this tenant."""
+    from app.db import HostSessionLocal
+    from app.db.models.user import User
+
+    with HostSessionLocal() as db:
+        return db.query(User.id).filter(
+            User.tenant_id == tenant_id,
+            User.market_user_id == market_user_id,
+            User.is_active.is_(True),
+        ).first() is not None
+
+
 def archive_from_crm_invoice(
     inv: dict[str, Any], *, market_user_id: int | None = None
 ) -> dict[str, Any]:
@@ -248,6 +261,17 @@ def archive_from_crm_invoice(
         for field in identity_fields
     ):
         return {"archived": False, "reason_code": "invoice_source_conflict"}
+    # A globally readable CRM invoice ID is not itself tenant authorization.
+    # Only the live host identity mapping can justify a tenant's archive row.
+    if type(uid) is not int or uid <= 0:
+        return {"archived": False, "reason_code": "invoice_counterparty_invalid"}
+    try:
+        source_owned = _crm_market_user_owned(tenant_id, uid)
+    except RECOVERABLE_ERRORS:
+        logger.warning("CRM owner lookup failed; refusing archive", exc_info=True)
+        return {"archived": False, "reason_code": "invoice_source_ownership_unavailable"}
+    if not source_owned:
+        return {"archived": False, "reason_code": "invoice_tenant_ownership_conflict"}
 
     amount = Decimal(amount_cents) / 100
     status = str(entry.get("status") or "issued")
