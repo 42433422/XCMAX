@@ -147,10 +147,12 @@ def render_markdown(report: dict) -> str:
     for row in report["measurements"]:
         target = row["target_ms"]
         success = row["candidate_meets_target"]
-        lines.append(f"| {row['metric']} | {row['baseline_ms']:.2f} "
-                     f"| {row['candidate_ms']:.2f} | "
-                     f"{row['delta_pct'] if row['delta_pct'] is not None else 'N/A'} | "
-                     f"{target:.2f} " + (f"| {'yes' if success else 'no'} |" if target is not None else "| N/A |"))
+        target_label = f"{target:.2f}" if target is not None else "N/A"
+        state_label = "yes" if success is True else "no" if success is False else "N/A"
+        delta_label = str(row["delta_pct"]) if row["delta_pct"] is not None else "N/A"
+        lines.append(f"| {row['metric']} | {row['baseline_ms']:.2f} | "
+                     f"{row['candidate_ms']:.2f} | {delta_label} | "
+                     f"{target_label} | {state_label} |")
     lines += ["", f"Navigation target met: **{report['all_navigation_targets_met']}**",
               "", "Data is read from immutable per-test sample JSON, not estimated.",
               "A failed/queued/cancelled CI run is not a performance pass."]
@@ -192,6 +194,7 @@ def self_test() -> None:
         report = compare(root, "a" * 40, "b" * 40)
         assert report["all_navigation_targets_met"]
         assert len(report["measurements"]) == 5
+        assert "| N/A | N/A |" in render_markdown(report)
         bad = root / "candidate" / "results" / "route" / "measurements.json"
         raw = json.loads(bad.read_text(encoding="utf-8"))
         raw["settings_click"]["p95_ms"] = -1
