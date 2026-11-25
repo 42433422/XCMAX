@@ -106,15 +106,26 @@ def test_approval_card_targets_frozen_child_not_coordinator():
     assert "data" not in chat.runtime_chat_payload(result)["data"]
 
 
-def test_unverified_business_narration_is_not_streamed(monkeypatch):
-    delta = Mock()
+@pytest.mark.parametrize("mode", ["auto", "business", "reply"])
+def test_unverified_candidate_is_not_streamed_but_progress_is(monkeypatch, mode):
+    delta, note = Mock(), Mock()
     monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_delta", delta)
-    event = {"method": "item/agentMessage/delta", "payload": {"delta": "已全部完成"}}
-    chat.stream_runtime_event({**event, "runtime_goal_mode": "business"})
-    chat.stream_runtime_event(event)
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", note)
+    chat.stream_runtime_event(
+        {
+            "method": "item/agentMessage/delta",
+            "runtime_goal_mode": mode,
+            "payload": {"delta": "private-candidate"},
+        }
+    )
     delta.assert_not_called()
-    chat.stream_runtime_event({**event, "runtime_goal_mode": "reply"})
-    delta.assert_called_once_with("已全部完成")
+    chat.stream_runtime_event(
+        {
+            "method": "item/started",
+            "payload": {"item": {"type": "mcpToolCall"}},
+        }
+    )
+    note.assert_called_once()
 
 
 def test_unknown_work_retains_original_task_pointer():

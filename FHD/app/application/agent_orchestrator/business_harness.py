@@ -13,6 +13,7 @@ import uuid
 from typing import Any
 
 from app.application.agent_orchestrator.public_step_errors import public_run_error
+from app.domain.task_lifecycle.agent_runtime_results import withhold_runtime_output
 
 BUSINESS_HARNESS_PROTOCOL = "xcagi.business-harness.v1"
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -467,14 +468,15 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         return {}
     final_output = getattr(run, "final_output", {})
     final_output = dict(final_output) if isinstance(final_output, dict) else {}
-    runtime_result = next(
+    runtime_key = next(
         (
-            value
+            key
             for key in ("codex_result", "chat_payload")
             if isinstance(value := final_output.get(key), dict) and value.get("runtime") == "codex"
         ),
-        None,
+        "",
     )
+    runtime_result = final_output.get(runtime_key) if runtime_key else None
     reply_only = runtime_result is not None and runtime_result.get("business_completed") is not True
     terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
     if terminal_catalog:
@@ -508,6 +510,12 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     ) or str(getattr(run, "error", "") or "") == UNEXECUTED_ORDER_ERROR
     if unexecuted:
         status = "failed"
+    if runtime_result is not None and runtime_result.get("ok") is True and status != "completed":
+        runtime_result = dict(runtime_result)
+        withhold_runtime_output(
+            runtime_result, status=status, error=public_run_error(run) or "业务结果未通过核验"
+        )
+        final_output[runtime_key] = runtime_result
     result_status = (
         "pending_approval" if pending else "pending" if admissions and not unexecuted else status
     )

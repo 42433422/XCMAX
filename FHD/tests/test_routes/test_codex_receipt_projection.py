@@ -195,8 +195,11 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
             state.resume_count += 1
             return thread_id
 
-        async def stream_turn(self, text):
-            assert "创建客户" in text or "原目标仍有一项条件待核对" in text
+        async def stream_turn(self, text, *, goal_feedback=None):
+            if goal_feedback is None:
+                assert "创建客户" in text
+            else:
+                assert text is None and "原目标仍有一项条件待核对" in goal_feedback
             for event in completed("原客户已创建并核验"):
                 yield {**event, "thread_id": "original-thread"}
 
@@ -366,7 +369,18 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     assert before["rounds"] == 3 and before["failure_stage"] == "goal_verification"
     assert not blocked.metadata["codex_runtime"].get("goal_format_retry_used")
     assert "条件待核对" in before["failure_reason"]
-    assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
+    assert before["goal_response"] == "原客户已创建并核验"
+    detail = state.client.get(f"/api/agent/runs/{state.parent_id}")
+    assert detail.status_code == 200
+    public = json.dumps(detail.json(), ensure_ascii=False)
+    assert "条件待核对" not in public
+    assert "原客户已创建并核验" not in public
+    assert '"goal_response"' not in public
+    events = state.client.get(f"/api/agent/runs/{state.parent_id}/events")
+    assert events.status_code == 200
+    replay = json.dumps(events.json(), ensure_ascii=False)
+    assert "runtime.goal.verified" in replay
+    assert "条件待核对" not in replay and "原客户已创建并核验" not in replay
     refreshed = state.repository.get(state.parent_id)
     assert refreshed.status == "blocked"
     for field in (
@@ -400,6 +414,31 @@ def test_exhausted_goal_keeps_diagnostics_and_only_explicit_request_resumes_same
     assert completed.metadata["codex_runtime"]["active_seconds"] >= before["active_seconds"]
     assert state.resume_count == 2 and state.effect_count() == 1
     assert completed.final_output["codex_result"]["failure_kind"] == ""
+
+
+def test_repository_rejection_keeps_candidate_out_of_durable_public_result(receipt_task):
+    from app.application.agent_orchestrator.business_harness import UNEXECUTED_ORDER_ERROR
+
+    state = receipt_task
+    parent = AgentRun(user_id=str(state.actor.user_id), message="创建销售订单", status="completed")
+    parent.metadata["runtime_type"] = "codex"
+    candidate = "候选正文：销售订单已经创建。"
+    parent.final_output["codex_result"] = {
+        **base_runtime_result(parent.run_id),
+        "ok": True,
+        "business_completed": True,
+        "output": candidate,
+        "goal_response": candidate,
+        "session_messages": [{"role": "assistant", "content": candidate}],
+    }
+    state.repository.save(parent)
+    stored = state.repository.get(parent.run_id)
+    result = stored.final_output["codex_result"]
+    assert stored.status == "failed" and stored.error == UNEXECUTED_ORDER_ERROR
+    assert result["ok"] is False and result["business_completed"] is False
+    assert result["goal_response"] == candidate and result["session_messages"] == []
+    public = gateway.public_runtime_result(stored.to_dict())
+    assert candidate not in json.dumps(public, ensure_ascii=False)
 
 
 @pytest.mark.parametrize(

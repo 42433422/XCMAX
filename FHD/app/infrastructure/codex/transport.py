@@ -454,7 +454,11 @@ class CodexTransport:
         self.thread_id = thread_id
         return thread_id
 
-    async def stream_turn(self, text: str) -> AsyncIterator[dict[str, Any]]:
+    async def stream_turn(
+        self, text: str | None, *, goal_feedback: str | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
+        if (text is None) == (goal_feedback is None):
+            raise ValueError("Supply either user text or host goal feedback")
         if self._client is None or not self.thread_id or self._streaming:
             raise CodexTransportError(
                 "codex_session_invalid", "Runtime requires one active scoped thread"
@@ -464,9 +468,25 @@ class CodexTransport:
         client = self._client
         try:
             async with asyncio.timeout(self.config.turn_timeout_seconds):
-                result = await self._call(
-                    client.turn_start, self.thread_id, text, outcome_unknown=True
-                )
+                if goal_feedback is None:
+                    result = await self._call(
+                        client.turn_start, self.thread_id, text, outcome_unknown=True
+                    )
+                else:
+                    from openai_codex.generated.v2_all import TurnStartParams, TurnToolOutput
+
+                    # Same tool-level input as SDK ExternalMessage, with our low-level
+                    # client's deny-by-default approval handler still in place.
+                    params = TurnStartParams(
+                        thread_id=self.thread_id,
+                        input=[],
+                        tool_output=TurnToolOutput(
+                            name="verify_runtime_goal", output=goal_feedback, retain=False
+                        ),
+                    )
+                    result = await self._call(
+                        client.turn_start, self.thread_id, [], params, outcome_unknown=True
+                    )
                 self.turn_id = result.turn.id
                 yield {
                     "method": "turn/started",

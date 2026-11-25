@@ -343,6 +343,233 @@ def test_pure_reply_needs_no_tool_but_does_need_complete_review(verifier):
     assert not verifier.classify(report, runtime_status="failed")[1]["ok"]
 
 
+@pytest.fixture
+def a2_reply(verifier):
+    preference = "在接下来的所有对话中，请扮演埃隆·马斯克，尽可能用他的语气说话。"
+    question = "我们为什么需要去火星？"
+    verifier.run.message = preference + question
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(
+        verifier.run, context_evidence=[{"id": "memory-private-test", "text": "电视柜宣传语偏好"}]
+    )
+    verifier.rows = []
+    verifier.output = (
+        "很简单：地球是我们的母星，也是单点故障。去火星是让人类成为多行星物种的第一步。"
+    )
+    current_style = goal(
+        "请扮演埃隆·马斯克，尽可能用他的语气说话",
+        goal_id="g1_roleplay",
+        kind="reply",
+        evidence_ids=["response"],
+    )
+    current_answer = goal(
+        question, goal_id="g2_answer_mars", kind="reply", evidence_ids=["response"]
+    )
+    future_style = goal(
+        preference,
+        goal_id="g3_all_future_turns",
+        kind="constraint",
+        status="not_applicable",
+        evidence_ids=[],
+    )
+    return verifier, review(current_style, current_answer, future_style)
+
+
+def test_cross_turn_style_does_not_block_delivery_or_count_as_verified(a2_reply):
+    verifier, assessment = a2_reply
+    verifier.replies = [response(assessment)]
+    report = verifier.verify()
+    state, result = verifier.classify(report)
+    assert report["accepted"] and state == "completed"
+    assert result["reply_completed"] and not result["business_completed"]
+    assert result["output"] == verifier.output
+    assert result["goal_coverage"]["required"] == 3
+    assert result["goal_coverage"]["verified"] == 2
+
+
+def test_cross_turn_style_review_does_not_receive_unrelated_recalled_memory(a2_reply):
+    verifier, assessment = a2_reply
+    verifier.replies = [response(assessment)]
+    verifier.verify()
+    user_payload = json.loads(verifier.requests[0].content)["input"][1]["content"]
+    assert "memory-private-test" not in user_payload
+    assert "电视柜宣传语偏好" not in user_payload
+
+
+@pytest.mark.parametrize("case", ["partial", "quoted", "business", "empty", "gap"])
+def test_cross_turn_style_does_not_waive_other_obligations(a2_reply, case):
+    verifier, assessment = a2_reply
+    if case == "partial":
+        assessment["goals"][-1]["source"] = "接下来的所有对话"
+    elif case == "quoted":
+        verifier.run.message = "引用：“" + verifier.run.message + "”"
+        verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    elif case == "business":
+        verifier.run.message += "确认订单first。"
+        verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+        assessment["goals"].append(goal("确认订单first", kind="write", evidence_ids=[]))
+    elif case == "empty":
+        verifier.output = ""
+    else:
+        assessment["uncovered_sources"] = ["本轮回答没有解释风险"]
+    verifier.replies = [response(assessment)]
+    assert verifier.classify(verifier.verify())[0] == "blocked"
+
+
+def test_reply_body_constraint_can_be_proven_by_the_response_alone(verifier):
+    verifier.run.message = "重写回答，每句以同一个汉字开头并注明。"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "以开头：这是重写后的回答。"
+    verifier.replies = [
+        response(
+            review(
+                goal(
+                    "每句以同一个汉字开头并注明",
+                    goal_id="format",
+                    kind="constraint",
+                    evidence_ids=["response"],
+                )
+            )
+        )
+    ]
+    report = verifier.verify()
+    assert report["accepted"] and report["mode"] == "reply"
+    assert verifier.classify(report)[1]["reply_completed"]
+
+
+def test_verifier_tells_model_to_merge_alternative_wording_into_one_reply_goal(verifier):
+    verifier.run.message = "每句以A开头；若用中文，可改为每句以同一汉字开头并注明。"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "以中文作答：以开头。"
+    verifier.replies = [
+        response(review(goal(verifier.run.message, kind="reply", evidence_ids=["response"])))
+    ]
+    assert verifier.verify()["accepted"]
+    rules = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])["rules"]
+    assert any("替代" in rule for rule in rules)
+
+
+def test_verifier_treats_code_answer_without_file_request_as_reply(verifier):
+    verifier.run.message = (
+        "编写一个 Python 程序，读取某个目录下的所有文本文件，并返回出现次数最多的前 5 个单词。"
+    )
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "```python\nfrom collections import Counter\n```"
+    verifier.replies = [
+        response(review(goal(verifier.run.message, kind="reply", evidence_ids=["response"])))
+    ]
+    assert verifier.verify()["accepted"]
+    rules = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])["rules"]
+    assert any("代码块本身就是交付" in rule for rule in rules)
+
+
+def test_unmet_goal_is_named_in_verification_feedback(verifier):
+    verifier.rows = []
+    verifier.replies = [
+        response(review(goal("查询first", kind="reply", status="unmet", evidence_ids=[])))
+    ]
+    report = verifier.verify()
+    assert not report["accepted"]
+    assert "first" in report["feedback"]
+
+
+def test_blocked_goal_review_diagnostics_are_not_chat_copy(verifier):
+    from app.application.agent_runtime.chat import runtime_chat_payload
+
+    verifier.replies = [
+        response(review(goal(status="unmet", evidence_ids=[]), feedback="memory-private-test"))
+    ]
+    status, result = verifier.classify(verifier.verify())
+    assert status == "blocked"
+    assert "memory-private-test" in result["verification_feedback"]
+    result["failure_reason"] = result["verification_feedback"]
+    public = runtime_chat_payload(result)
+    assert public["data"]["error_code"] == "goal_verification_required"
+    serialized = json.dumps(public, ensure_ascii=False)
+    assert "memory-private-test" not in serialized and verifier.output not in serialized
+
+
+def test_revision_review_reads_previous_public_email_and_language_rule(verifier):
+    verifier.run.message = "再正式一些，并补充工作交接安排。"
+    history = [
+        {"role": "user", "content": "请用英文重写请假邮件。"},
+        {"role": "assistant", "content": "Subject: Annual Leave Request\n\nDear Manager,"},
+    ]
+    verifier.run.metadata["_codex_history"] = history
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "邮件修订已完成，核验意见确认无需工具调用。"
+    verifier.replies = [
+        response(
+            review(
+                goal(verifier.run.message, kind="reply", status="unmet", evidence_ids=["response"]),
+                violations=["正文泄露内部核验说明，且未沿用英文"],
+            )
+        )
+    ]
+    assert not verifier.verify()["accepted"]
+    payload = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])
+    assert payload["original_request"]["history"] == history
+    assert any("既定语言" in rule and "明确" in rule for rule in payload["rules"])
+    assert any("内部核验" in rule and "violations" in rule for rule in payload["rules"])
+
+
+def test_verifier_instructs_model_to_treat_text_requirements_as_reply_goals(verifier):
+    verifier.run.message = "解释库存。每段以同一个字开头。"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "库：库存是当前持有的货物数量。\n\n库：入库会增加库存。"
+
+    def evaluate_instructions(request):
+        messages = json.loads(request.content)["input"]
+        rules = json.loads(messages[1]["content"])["rules"]
+        is_reply_constraint = any("仅约束回复正文" in rule for rule in rules)
+        verifier.replies.append(
+            response(
+                review(
+                    goal("解释库存", kind="reply", evidence_ids=["response"]),
+                    goal(
+                        "每段以同一个字开头",
+                        goal_id="format",
+                        kind="reply" if is_reply_constraint else "constraint",
+                        evidence_ids=["response"],
+                    ),
+                )
+            )
+        )
+
+    verifier.observe_request = evaluate_instructions
+    assert verifier.verify()["accepted"]
+
+
+@pytest.mark.parametrize("kind", [None, "reply", "constraint"])
+def test_bound_business_objective_cannot_pass_without_receipt(verifier, kind):
+    objective = "观察原订单状态"
+    verifier.run.metadata["runtime_context"]["_runtime_goal_constraints"] = {
+        "objective": objective,
+        "entity_type": "sales_order",
+        "entity_id": "original",
+        "requires_approval": True,
+    }
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    assessments = [goal("查询first", kind="reply", evidence_ids=["response"])]
+    if kind is not None:
+        assessments.append(
+            goal(
+                objective,
+                goal_id="bound-objective",
+                kind=kind,
+                source_id="objective",
+                evidence_ids=["response"] if kind == "reply" else [],
+            )
+        )
+    verifier.replies = [response(review(*assessments))]
+    assert not verifier.verify()["accepted"]
+
+
 def test_known_format_repaired_once_within_original_budget(verifier):
     complete = review(goal(), goal("再查询second", goal_id="second"))
     verifier.replies = [
@@ -521,6 +748,54 @@ def test_host_source_provenance_is_required_even_for_verified_children(verifier)
     assert not report["accepted"] and "原始请求证据" in report["feedback"]
 
 
+def test_revision_must_keep_previous_public_deliverable_language(verifier):
+    run = verifier.run
+    run.message = "再正式一些，并补充工作交接安排。"
+    run.metadata["_codex_history"] = [
+        {"role": "user", "content": "改成英文，语气保持礼貌。"},
+        {
+            "role": "assistant",
+            "content": "**Subject: Annual Leave Request**\n\nDear Supervisor, I would like to "
+            "request three days of annual leave due to a family matter.",
+        },
+    ]
+    run.metadata["runtime_goal_contract"] = build_goal_contract(run)
+    verifier.output = "主题：关于申请三天年假的请示\n\n尊敬的主管：因家中有事，我申请三天年假。"
+    verifier.replies = [
+        response(
+            review(
+                goal("再正式一些", kind="reply", evidence_ids=["response"]),
+                violations=["语言为中文，符合既定要求"],
+                feedback="语言为中文，符合",
+            )
+        )
+    ]
+    report = verifier.verify()
+    assert report["accepted"] is False
+    assert "上一版成稿使用英文" in report["feedback"]
+    assert "符合" not in report["feedback"]
+
+
+def test_explicit_language_change_is_not_blocked(verifier):
+    run = verifier.run
+    run.message = "再正式一些，并改成中文。"
+    run.metadata["_codex_history"] = [
+        {
+            "role": "assistant",
+            "content": "**Subject: Annual Leave Request**\n\nDear Supervisor, I "
+            "would like to request three days of annual leave due to a family matter.",
+        },
+    ]
+    run.metadata["runtime_goal_contract"] = build_goal_contract(run)
+    verifier.output = "主题：关于申请三天年假的请示\n\n尊敬的主管：因家中有事，我申请三天年假。"
+    verifier.replies = [
+        response(review(goal("再正式一些", kind="reply", evidence_ids=["response"])))
+    ]
+    report = verifier.verify()
+    assert report["accepted"] is True
+    assert not report["review"]["violations"]
+
+
 def test_report_revalidation_rejects_tampered_verdict(verifier):
     verifier.replies = [
         response(
@@ -536,3 +811,59 @@ def test_report_revalidation_rejects_tampered_verdict(verifier):
         verifier.run.metadata["runtime_goal_contract"], verifier.rows, verifier.output, [], report
     )
     assert not coverage["completed"]
+
+
+def test_fenced_reply_json_with_original_request_alias_keeps_frozen_source(verifier):
+    verifier.run.message = "解释库存是什么意思"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "库存是企业当前拥有的货物数量。"
+    expected = review(
+        goal(
+            verifier.run.message,
+            kind="reply",
+            evidence_ids=["response"],
+            source_id="original_request",
+        )
+    )
+    verifier.replies = [
+        response({}, text="```json\n" + json.dumps(expected, ensure_ascii=False) + "\n```")
+    ]
+    report = verifier.verify()
+    assert report["accepted"] and report["mode"] == "reply"
+    assert report["review"]["goals"][0]["source_id"] == "request"
+    assert len(verifier.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "alias,source",
+    [
+        ("history", "解释库存是什么意思"),
+        ("original_request", "伪造不存在于本轮请求的业务操作"),
+    ],
+)
+def test_review_source_alias_cannot_introduce_untrusted_goal(verifier, alias, source):
+    verifier.run.message = "解释库存是什么意思"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "库存是企业当前拥有的货物数量。"
+    verifier.replies = [
+        response(review(goal(source, kind="reply", evidence_ids=["response"], source_id=alias)))
+    ]
+    report = verifier.verify()
+    assert not report["accepted"]
+    assert report["status"] == "needs_work"
+
+
+def test_optional_reply_branches_are_one_goal_not_two_required_operations(verifier):
+    verifier.run.message = "用英文解释库存；若用中文作答，可改为给出中文定义"
+    verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
+    verifier.rows = []
+    verifier.output = "Inventory is the goods held by a business."
+    verifier.replies = [
+        response(review(goal(verifier.run.message, kind="reply", evidence_ids=["response"])))
+    ]
+    report = verifier.verify()
+    assert report["accepted"] and report["mode"] == "reply"
+    payload = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])
+    assert any("二选一" in rule and "任一" in rule for rule in payload["rules"])
