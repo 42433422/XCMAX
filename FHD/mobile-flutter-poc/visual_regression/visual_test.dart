@@ -4,12 +4,51 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/features/chat/chat_screen.dart';
+import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
+import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
+import 'package:xcagi_flutter_poc/src/features/approval/approval_screens.dart';
+import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/workspace/employee_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
 import '../test/employee_workspace_screen_test.dart' as fixture;
 
 const root = ValueKey('visual-root');
+
+class VisualBusinessRepository extends fixture.Repository {
+  VisualBusinessRepository(super.api, {this.fail = false});
+  final bool fail;
+
+  @override
+  Future<List<ApprovalRequest>> loadApprovals() async {
+    if (fail) throw const MobileRepositoryException('审批列表加载失败');
+    return const [
+      ApprovalRequest(id: 1, title: '示例审批', subtitle: '订单复核',
+        status: '待审核', applicantName: '示例员工'),
+    ];
+  }
+
+  @override
+  Future<List<MobileTaskSummary>> loadTasks({int limit = 50}) async {
+    if (fail) throw const MobileRepositoryException('任务列表加载失败');
+    return [
+      MobileTaskSummary.fromJson({
+        'task_id': 'visual-task-1',
+        'title': '整理考勤',
+        'status': 'completed',
+      }),
+    ];
+  }
+
+  @override
+  Future<List<MobileDesktopDevice>> loadDesktopDevices() async => [];
+}
+
+const approval = ApprovalDetail(
+  id: 1, requestNo: 'A001', title: '示例审批', status: '待审核',
+  applicantName: '示例员工', flowName: '', currentNodeName: '',
+  submittedAt: '', description: '',
+);
 
 Future<void> show(WidgetTester tester, Widget screen, Size size,
     bool dark, double textScale) async {
@@ -84,6 +123,65 @@ void main() {
         await capture(tester, 'chat-tools-$name');
       });
     }
+    for (final size in [const Size(320, 900), const Size(844, 390),
+        const Size(768, 1024)]) {
+      final name = '$themeName-${size.width.toInt()}x${size.height.toInt()}';
+      final scale = size.width == 320 ? 2.0 : 1.0;
+      testWidgets('approval list and business error $name', (tester) async {
+        final api = fixture.Api();
+        final repo = VisualBusinessRepository(api);
+        final failed = VisualBusinessRepository(api, fail: true);
+        addTearDown(repo.dispose);
+        addTearDown(failed.dispose);
+        addTearDown(api.dispose);
+        await show(tester, ApprovalListScreen(repository: repo),
+            size, dark, scale);
+        expect(find.text('示例审批'), findsOneWidget);
+        await capture(tester, 'approval-list-$name');
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, ApprovalListScreen(repository: failed),
+            size, dark, scale);
+        expect(find.text('重试'), findsOneWidget);
+        await capture(tester, 'approval-error-$name');
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+    testWidgets('approval detail and confirmation $themeName', (tester) async {
+      final api = fixture.Api();
+      final repo = VisualBusinessRepository(api);
+      addTearDown(repo.dispose);
+      addTearDown(api.dispose);
+      await show(tester, ApprovalDetailScreen(id: approval.id,
+          initialDetail: approval, repository: repo),
+          const Size(430, 932), dark, 1);
+      expect(find.text('待审核'), findsOneWidget);
+      await capture(tester, 'approval-detail-$themeName');
+      await tester.ensureVisible(find.text('通过'));
+      await tester.tap(find.text('通过'));
+      await tester.pumpAndSettle();
+      expect(find.text('确认通过'), findsOneWidget);
+      await capture(tester, 'approval-confirm-$themeName');
+      await tester.pumpWidget(const SizedBox());
+    });
+    testWidgets('task states $themeName', (tester) async {
+      final api = fixture.Api();
+      final repo = VisualBusinessRepository(api);
+      final failed = VisualBusinessRepository(api, fail: true);
+      addTearDown(repo.dispose);
+      addTearDown(failed.dispose);
+      addTearDown(api.dispose);
+      await show(tester, TaskListScreen(repository: repo),
+          const Size(430, 932), dark, 1);
+      expect(find.text('整理考勤'), findsOneWidget);
+      await capture(tester, 'task-list-$themeName');
+      await tester.pumpWidget(const SizedBox());
+      await show(tester, TaskListScreen(repository: failed),
+          const Size(430, 932), dark, 1);
+      expect(find.text('整理考勤'), findsNothing);
+      expect(find.text('暂无任务'), findsNothing);
+      await capture(tester, 'task-error-$themeName');
+      await tester.pumpWidget(const SizedBox());
+    });
     testWidgets('employee workspace $themeName', (tester) async {
       final api = fixture.Api();
       final repo = fixture.Repository(api);
