@@ -89,7 +89,9 @@ async def test_native_workspace_forwards_optional_revision_token(monkeypatch):
     routes, req = endpoints(), request()
     result = await routes["PATCH"](
         MobileWorkspacePrefsPatch(
-            workflow_ai_employees={"alpha": True}, expected_revision=8
+            workflow_ai_employees={"alpha": True},
+            expected_revision=8,
+            expected_owner_id="tenant:42",
         ),
         req,
         user=object(),
@@ -100,6 +102,7 @@ async def test_native_workspace_forwards_optional_revision_token(monkeypatch):
     assert body.model_dump(exclude_none=True) == {
         "workflow_ai_employees": {"alpha": True},
         "expected_revision": 8,
+        "expected_owner_id": "tenant:42",
     }
     with pytest.raises(ValidationError):
         MobileWorkspacePrefsPatch.model_validate(
