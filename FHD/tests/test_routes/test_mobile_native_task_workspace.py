@@ -63,7 +63,7 @@ def test_mobile_reads_the_original_desktop_task_and_later_execution_receipt(nati
 
 def test_mobile_summary_projects_original_attempt_and_run_identity():
     original = AgentTask(
-        task_id="task-1", user_id="owner", tenant_id="tenant",
+        task_id="task-1", user_id="owner", tenant_id="tenant", title="同一任务",
         conversation_id="conversation-1", active_run_id="run-2", attempt=2,
     )
     summary = task_summary(original)
