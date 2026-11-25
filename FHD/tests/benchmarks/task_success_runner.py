@@ -277,7 +277,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     )
     from app.application.agent_runtime.gateway import run_runtime_task
     from app.db import engine
-    from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
+    from app.db.models.permission import Role
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
@@ -293,11 +293,11 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     factory = sessionmaker(bind=engine)
     sid = uuid4().hex
     with factory.begin() as db:
-        role = Role(name="admin")
-        role.permissions = [
-            Permission(code=item["code"], name=item["name"]) for item in DEFAULT_PERMISSIONS
-        ]
-        db.add(role)
+        # Reuse the real bootstrap grants: never manufacture a second copy of
+        # every Permission while runtime startup may also be seeding RBAC.
+        role = db.query(Role).filter(Role.name == "admin").one_or_none()
+        if role is None or not role.is_system:
+            raise RuntimeError("task benchmark requires seeded system admin RBAC")
         actor = User(
             username="task-benchmark-" + sid,
             password=generate_password_hash(uuid4().hex),
@@ -468,6 +468,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     import app.db.models
     from app.db import engine
     from app.db.db_base import Base
+    from app.db.init_db import ensure_sqlite_rbac_bootstrap
     from app.infrastructure.tenant_scope import tenant_scope
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
@@ -490,6 +491,9 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         engine.dispose()
         Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine, checkfirst=True)
+        # Each task starts from the production RBAC seed, on the isolated trial
+        # database, before the runtime imports can attempt lazy initialization.
+        ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
         for task in tasks:
