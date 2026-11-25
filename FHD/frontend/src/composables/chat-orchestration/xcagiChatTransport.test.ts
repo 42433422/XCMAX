@@ -5,10 +5,10 @@ import { stepsFromAiParts, type AgentStepView } from '@/utils/agentStepChain'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { createXcagiChatTransport } from './xcagiChatTransport'
 
-const { sendChatStream } = vi.hoisted(() => ({ sendChatStream: vi.fn() }))
+const { sendChatStream, resumeChatStream } = vi.hoisted(() => ({ sendChatStream: vi.fn(), resumeChatStream: vi.fn() }))
 
 vi.mock('@/api/chat', () => ({
-  default: { sendChatStream },
+  default: { sendChatStream, resumeChatStream },
   parseChatStreamErrorResponse: vi.fn(async () => '流式请求失败'),
 }))
 
@@ -84,6 +84,23 @@ describe('xcagiChatTransport trace event', () => {
 
 
 describe('native AI SDK tool stream', () => {
+  it('resumes at the original opaque SSE cursor and keeps the consumed text only once', async () => {
+    const response = (rows: [string, PlannerSseEvent][]) => new Response(rows.map(([id, event]) => `id: ${id}\ndata: ${JSON.stringify(event)}\n\n`).join(''))
+    sendChatStream.mockResolvedValueOnce(response([['1700000000000-1', { type: 'token', text: '甲' }]]))
+    resumeChatStream.mockResolvedValueOnce(response([
+      ['1700000000000-1', { type: 'token', text: '甲' }],
+      ['1700000000000-2', { type: 'token', text: '甲' }],
+      ['1700000000000-3', { type: 'done', result: { success: true } }],
+    ]))
+    const round = useAiSdkChatRound({})
+    const first = await round.send({ context: { turn_id: 'original-turn' } })
+    expect(first.text).toBe('甲')
+    expect(first.error).not.toBeNull()
+    const result = await round.resume('original-turn')
+    expect(resumeChatStream).toHaveBeenLastCalledWith('original-turn', undefined, '1700000000000-1')
+    expect(result).toMatchObject({ text: '甲甲', error: null })
+  })
+
   it('renders both tools and updates an earlier parallel tool before the result arrives', async () => {
     let writer!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(controller) { writer = controller } })
