@@ -24,6 +24,7 @@ export interface WorkspacePrefsResponse {
 let syncTimer: ReturnType<typeof setTimeout> | null = null
 let pendingPatch: WorkspacePrefs = {}
 let pendingScope: string | null = null
+let observedSnapshot: { scope: string; owner: string; revision: number } | null = null
 
 export class WorkspacePrefsConflictError extends Error {
   constructor() {
@@ -73,7 +74,14 @@ export async function patchWorkspacePrefs(
   // client-side version source may authorize a write after another device acts.
   const before = await fetchWorkspacePrefs()
   if (!before.owner_id) throw new Error('workspace_prefs_owner_missing')
-  const expected_revision = readRevision(before)
+  const serverRevision = readRevision(before)
+  const observed = observedSnapshot?.scope === scope ? observedSnapshot : null
+  if (observed && (observed.owner !== before.owner_id || observed.revision !== serverRevision)) {
+    // Do not quietly fetch a newer revision to overwrite another device's edit.
+    // The caller must explicitly reconcile and hydrate the new snapshot.
+    throw new WorkspacePrefsConflictError()
+  }
+  const expected_revision = observed?.revision ?? serverRevision
   assertScopeUnchanged(scope)
   const { _revision: _ignored, ...fields } = partial
   const r = await apiFetch('/api/workspace/prefs', {
@@ -89,6 +97,7 @@ export async function patchWorkspacePrefs(
     throw new Error('workspace_prefs_write_receipt_mismatch')
   }
   assertScopeUnchanged(scope)
+  observedSnapshot = { scope, owner: before.owner_id, revision: expected_revision + 1 }
   return after
 }
 
@@ -140,6 +149,12 @@ export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent:
     const resp = await fetchWorkspacePrefs()
     const prefs = resp.data || {}
     if (resp.owner_id && isCurrent()) {
+      const revision = readRevision(resp)
+      observedSnapshot = {
+        scope: scope || resolveTenantStorageScopeFromRuntime(true),
+        owner: resp.owner_id,
+        revision,
+      }
       applyWorkspacePrefsToLocalCache(prefs, scope)
     }
     return prefs
