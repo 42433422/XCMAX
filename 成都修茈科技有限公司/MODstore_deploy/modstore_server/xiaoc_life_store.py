@@ -224,9 +224,7 @@ def _event_dict(row: XiaoCLifeEvent) -> dict[str, Any]:
     }
 
 
-def _audit_admission_denial(
-    data: dict[str, Any], session: Session, reasons: list[str]
-) -> None:
+def _audit_admission_denial(data: dict[str, Any], session: Session, reasons: list[str]) -> None:
     """Journal the first observed denial; identical retries do not churn CAS."""
     snapshot = {
         "revision": data["revision"],
@@ -604,9 +602,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         )
         reserved = min(reserve_tokens, max(0, lane_cap - lane_used))
         if reserve_tokens and reserved <= 0:
-            _audit_admission_denial(
-                data, session, ["domain_token_allocation_exhausted"]
-            )
+            _audit_admission_denial(data, session, ["domain_token_allocation_exhausted"])
             return None
         from modstore_server.xiaoc_self_model import execution_scope
 
