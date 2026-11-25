@@ -14,6 +14,7 @@ from app.application.user_memory.protocols import (
 )
 from app.application.user_memory.relation_retrieval import select_effective_records
 from app.domain.user_memory.analysis import memory_summary
+from app.domain.user_memory.policy import is_erp_bound_memory
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,8 @@ class MemoryQueries:
         active, _, _ = select_effective_records(
             self.ports.list_memories(user_id, status="active", memory_type=memory_type)
         )
+        # Owner-scoped planner formatting lacks live ERP actor/Mod authorization.
+        active = [record for record in active if not is_erp_bound_memory(record)]
         if not active:
             return "【MemoryV2】无已确认记忆。"
         type_order = {"preference": 0, "entity": 1, "episodic": 2}
