@@ -22,7 +22,7 @@ describe.each([true, false])('PanelComposer corpMode=%s', (corpMode) => {
       expect(wrapper.findAll('.panel-send')).toHaveLength(1)
       expect(wrapper.find('.panel-composer-layout--corp').exists()).toBe(corpMode)
       expect(wrapper.find('[data-testid="autonomy-slot"]').exists()).toBe(!corpMode)
-      expect(wrapper.get('textarea').attributes('value')).toBe('保存草稿')
+      expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('保存草稿')
     } finally {
       wrapper.unmount()
     }
