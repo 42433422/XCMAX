@@ -82,17 +82,20 @@ jobs:
 
       - name: Resolve release version
         id: version
+        env:
+          REQUESTED_MARKETING_VERSION: ${{ inputs.version }}
+          REQUESTED_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
           set -euo pipefail
-          marketing_version="${{ inputs.version }}"
+          marketing_version="$REQUESTED_MARKETING_VERSION"
           catalog_version="$(python3 -c 'import json; from pathlib import Path; print(json.loads(Path("../config/download_release.json").read_text())["version_lock"])')"
           if [[ ! "$catalog_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ || "$marketing_version" != "${catalog_version%.*}" ]]; then
             echo "::error::iOS marketing version must match the selected source product catalog"
             exit 2
           fi
-          build_number="${{ inputs.build_number }}"
+          build_number="$REQUESTED_BUILD_NUMBER"
           if [[ -z "${build_number}" ]]; then
-            build_number="${{ github.run_number }}"
+            build_number="$GITHUB_RUN_NUMBER"
           fi
           if [[ ! "${marketing_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::version must use x.y.z format"
