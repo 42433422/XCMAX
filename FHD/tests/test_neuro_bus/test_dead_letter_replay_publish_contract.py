@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from app.neuro_bus.dead_letter_queue import (
@@ -61,3 +65,50 @@ def test_legacy_callback_none_still_means_callback_completed() -> None:
     )
     assert dlq.replay(entry_id) == (True, "")
     assert observed == ["test.legacy"]
+
+
+def test_process_death_after_publish_does_not_republish_unknown_outcome(tmp_path):
+    path = tmp_path / "dead-letter.sqlite3"
+    receipt = tmp_path / "external-receipt.txt"
+    dlq = DeadLetterQueue(storage_path=str(path))
+    event = NeuroEvent(event_type="test.crash", payload={})
+    event_id = event.metadata.event_id
+    entry_id = dlq.enqueue(event, DeadLetterReason.TIMEOUT, "first failure", 0)
+    dlq.close()
+
+    script = """
+import os
+import sys
+from pathlib import Path
+from app.neuro_bus.dead_letter_queue import DeadLetterQueue
+
+queue = DeadLetterQueue(storage_path=sys.argv[1])
+
+def publish(event):
+    Path(sys.argv[3]).write_text(event.metadata.event_id, encoding="utf-8")
+    os._exit(17)
+
+queue.on_replay(publish)
+queue.replay(sys.argv[2])
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(path), entry_id, str(receipt)],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 17, result.stderr
+    assert receipt.read_text(encoding="utf-8") == event_id
+
+    reopened = DeadLetterQueue(storage_path=str(path))
+    seen: list[str] = []
+    try:
+        reopened.on_replay(lambda incoming: seen.append(incoming.metadata.event_id))
+        assert reopened.replay(entry_id) == (False, "replay_outcome_unknown")
+        assert reopened.dequeue(entry_id) is not None
+        assert reopened.get_stats()["replayed"] == 0
+        assert seen == []
+    finally:
+        reopened.close()
