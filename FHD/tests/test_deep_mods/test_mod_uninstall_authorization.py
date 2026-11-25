@@ -460,7 +460,6 @@ def test_anonymous_upload_keeps_signed_global_install_unowned(
     "session_id,signed,reason",
     [
         (None, True, "requires an owner"),
-        ("mod-session-3", True, "requires an owner"),
         ("mod-session-1", False, "签名验证失败"),
     ],
 )
@@ -483,6 +482,64 @@ def test_account_upload_without_active_owner_or_required_signature_does_not_inst
     assert response.status_code == 200
     assert response.json()["success"] is False
     assert reason in response.json()["message"]
+    assert not (signed_runtime_mod.root / manifest["id"]).exists()
+    assert not (
+        signed_runtime_mod.root / ".install-receipts" / manifest["id"] / "receipt.json"
+    ).exists()
+
+
+@pytest.mark.parametrize(
+    "session_id,expected_status",
+    [("mod-session-3", (401, 403)), ("mod-session-4", (401,)), ("revoked-session", (401,))],
+)
+def test_invalid_credentials_cannot_fall_back_to_anonymous_global_upload(
+    uninstall_client, signed_runtime_mod, upload_manager, tmp_path, session_id, expected_status
+):
+    source = tmp_path / "invalid-session-global-source"
+    source.mkdir()
+    manifest = {"id": "invalid-session-global-fixture", "name": "Global Mod", "version": "1.0.0"}
+    (source / "manifest.json").write_text(json.dumps(manifest))
+    package, _, _ = signed_runtime_mod.build_package(source=source)
+    headers = _authenticated(uninstall_client, session_id)
+    with Path(package).open("rb") as stream:
+        response = uninstall_client.post(
+            "/api/mod-store/upload",
+            params={"activate": "false"},
+            files={"file": ("fixture.zip", stream, "application/zip")},
+            headers=headers,
+        )
+    assert response.status_code in expected_status
+    assert not (signed_runtime_mod.root / manifest["id"]).exists()
+    assert not (
+        signed_runtime_mod.root / ".install-receipts" / manifest["id"] / "receipt.json"
+    ).exists()
+
+
+def test_upload_rechecks_session_after_normalization_before_install(
+    uninstall_client, signed_runtime_mod, upload_manager, mod_accounts, monkeypatch
+):
+    from app.db.models.user import Session
+    from app.fastapi_routes import mod_store_routes
+
+    package, _, manifest = signed_runtime_mod.build_package()
+    original_normalize = mod_store_routes.normalize_package_zip_path
+
+    def revoke_during_upload(path):
+        normalized = original_normalize(path)
+        with mod_accounts.sessions.begin() as db:
+            assert db.query(Session).filter_by(session_id="mod-session-1").delete() == 1
+        return normalized
+
+    monkeypatch.setattr(mod_store_routes, "normalize_package_zip_path", revoke_during_upload)
+    headers = _authenticated(uninstall_client, "mod-session-1")
+    with Path(package).open("rb") as stream:
+        response = uninstall_client.post(
+            "/api/mod-store/upload",
+            params={"activate": "false"},
+            files={"file": ("fixture.zip", stream, "application/zip")},
+            headers=headers,
+        )
+    assert response.status_code == 401
     assert not (signed_runtime_mod.root / manifest["id"]).exists()
     assert not (
         signed_runtime_mod.root / ".install-receipts" / manifest["id"] / "receipt.json"

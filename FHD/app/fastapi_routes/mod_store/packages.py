@@ -177,7 +177,12 @@ class PackageInstaller:
             )
 
     async def upload(
-        self, file: UploadFile, activate: bool, *, owner_scope: str = ""
+        self,
+        file: UploadFile,
+        activate: bool,
+        *,
+        owner_scope: str = "",
+        owner_scope_check: Callable[[], str] | None = None,
     ) -> ModStoreInstallResult:
         closed = False
         try:
@@ -201,6 +206,8 @@ class PackageInstaller:
                 finally:
                     closed = True
                 files.normalized = self._normalize_upload(files.source)
+                if owner_scope_check is not None and owner_scope_check() != owner_scope:
+                    raise HTTPException(status_code=403, detail="上传期间工作区归属已变更")
                 return self._install(
                     files.normalized,
                     verify_signature=True,

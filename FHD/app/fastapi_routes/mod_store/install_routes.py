@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 
 from .commands import LocalCommands
 from .packages import PackageInstaller
@@ -39,13 +39,28 @@ class InstallRoutes:
             from app.application.tenant_workspace_prefs import (
                 resolve_workspace_owner_id,
             )
-            from app.infrastructure.auth.dependencies import resolve_session_user
+            from app.infrastructure.auth.dependencies import (
+                get_logged_in_user,
+                session_id_from_request,
+            )
 
-            user = resolve_session_user(request)
-            owner_scope = ""
-            if user is not None and getattr(user, "is_active", True):
-                owner_scope = resolve_workspace_owner_id(request, user) or ""
-            return await packages().upload(file, activate, owner_scope=owner_scope)
+            def resolve_owner_scope() -> str:
+                if not session_id_from_request(request):
+                    return ""
+                user = get_logged_in_user(request)
+                owner = resolve_workspace_owner_id(request, user)
+                if not owner:
+                    raise HTTPException(status_code=403, detail="无法确认工作区归属")
+                return owner
+
+            try:
+                owner_scope = resolve_owner_scope()
+            except HTTPException:
+                await file.close()
+                raise
+            return await packages().upload(
+                file, activate, owner_scope=owner_scope, owner_scope_check=resolve_owner_scope
+            )
 
         self.mod_store_upload = mod_store_upload
 
