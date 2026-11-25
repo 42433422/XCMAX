@@ -44,7 +44,7 @@ execution_experiment = delivery_tests.execution_experiment
 customer_workflow = delivery_tests.customer_workflow
 
 
-def business_receipts(env, *, measured=1.0, occurred_at=None):
+def business_receipts(env, *, measured=1.0, occurred_at=None, acceptance_id=None):
     artifact = env["artifact"]
     event_time = {"occurred_at": occurred_at.isoformat()} if occurred_at else {}
     env["actor"][0] = env["admin"]
@@ -64,7 +64,10 @@ def business_receipts(env, *, measured=1.0, occurred_at=None):
     assert outcome.status_code == 200, outcome.text
     env["actor"][0] = env["actors"][env["customer_id"]]
     accepted = delivery_tests._accept(
-        env, idempotency_key="workflow-accepted-" + uuid4().hex, **event_time
+        env,
+        idempotency_key="workflow-accepted-" + uuid4().hex,
+        **({"acceptance_id": acceptance_id} if acceptance_id else {}),
+        **event_time,
     )
     assert accepted.status_code == 200, accepted.text
     return outcome.json(), accepted.json()
@@ -310,7 +313,7 @@ def test_actual_promoted_customer_delivery_enters_separate_postpromotion_ledger(
     assert env["execute"]().status_code == 200
     assert env["binding"]["rollout_admitted"] is True
     assert env["binding"]["metric_admitted"] is False
-    business_receipts(env)
+    business_receipts(env, acceptance_id="approved-followup-" + uuid4().hex)
     Clock.value = parse_datetime(env["binding"]["customer_outcome_due_at"]) + timedelta(
         seconds=1
     )
