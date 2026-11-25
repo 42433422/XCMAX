@@ -27,6 +27,40 @@ def native():
     set_agent_run_repository_for_tests(None)
 
 
+def test_mobile_reads_the_original_desktop_task_and_later_execution_receipt(native):
+    client, repo = native
+    original = AgentTask(
+        task_id="shared-task",
+        user_id="owner",
+        tenant_id="tenant",
+        title="跨端库存任务",
+        conversation_id="shared-conversation",
+        status="waiting_user",
+        attention_state="approval_required",
+    )
+    repo.save_task(original)
+    waiting = client.get("/api/mobile/v1/workspace/agent/tasks/shared-task")
+    assert waiting.status_code == 200
+    before = waiting.json()["data"]
+    assert before["task_id"] == "shared-task"
+    assert before["conversation_id"] == "shared-conversation"
+    assert before["status"] == "waiting_user"
+    assert before["approval_required"] is True
+
+    # The original runtime changes state, then both client surfaces read the
+    # same persisted identity and result. No mobile task mirror is created.
+    original.status = "completed"
+    original.attention_state = "result_unread"
+    repo.save_task(original)
+    completed = client.get("/api/mobile/v1/workspace/agent/tasks/shared-task")
+    assert completed.status_code == 200
+    after = completed.json()["data"]
+    assert after["task_id"] == before["task_id"]
+    assert after["conversation_id"] == before["conversation_id"]
+    assert after["status"] == "completed"
+    assert after["attention_state"] == "result_unread"
+
+
 @pytest.mark.parametrize("suffix", ["", "/read", "/archive"])
 def test_native_task_preserves_desktop_tenant_boundary(native, suffix):
     client, repo = native
