@@ -72,8 +72,10 @@ jobs:
           python -m pytest -q --tb=short \
             tests/test_application/test_rbac_atomic_revocation.py \
             tests/test_security/test_web_jwt_revocation.py \
-            tests/test_application/test_employee_handoff_durability.py::test_inflight_handoff_rechecks_original_session_after_role_revocation \
-            tests/test_application/test_employee_handoff_durability.py::test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked \
+            tests/test_application/test_employee_handoff_durability.py \
+            tests/test_application/test_ai_group_chat_dispatch_reassign.py \
+            tests/application/test_employee_runtime_tool_scope.py \
+            tests/application/test_employee_runtime_workspace_guard.py \
             tests/test_application/test_employee_projection_identity_binding.py \
             tests/test_application/test_group_chat_organization_dispatch_guards.py \
             tests/test_application/test_enterprise_projection.py::test_foreign_tenant_owner_and_rbac_cannot_reuse_cache \
@@ -97,6 +99,20 @@ jobs:
               "test_postgres_two_processes_observe_same_committed_revocation",
               "test_inflight_handoff_rechecks_original_session_after_role_revocation[role_revoke]",
               "test_inflight_handoff_rechecks_original_session_after_role_revocation[disable_account]",
+              "test_child_attachment_requires_same_owner_tenant_and_mod",
+              "test_parent_public_view_refreshes_bound_child_without_writing_or_replaying",
+              "test_parent_child_and_receipt_survive_repository_and_claim_memory_reentry",
+              "test_same_operation_cannot_change_arguments_target_or_delegated_scope",
+              "test_completed_handoff_becomes_the_next_employees_real_parent",
+              "test_inflight_duplicate_never_dispatches_a_second_child",
+              "test_sealed_actor_mod_scope_is_preserved_and_revocation_rechecked",
+              "test_process_exit_recovers_only_persisted_receipts_without_reexecution",
+              "test_new_operation_cannot_move_the_same_task_to_another_workspace",
+              "test_unavailable_handoff_target_cannot_start_a_child",
+              "test_unknown_original_dispatch_cannot_start_replacement",
+              "test_uncertain_relay_create_never_falls_back",
+              "test_runtime_workspace_override_cannot_widen_pack_policy",
+              "test_pack_action_restriction_is_preserved_for_admin_actor",
           ):
               matched = [case for case in cases if case.get("name") == required]
               if len(matched) != 1 or any(
