@@ -95,7 +95,7 @@ def purchase(tmp_path, monkeypatch):
     engine.dispose()
 
 
-def notify(client, order_id, amount="6800.00", sign="verified"):
+def notify(client, order_id, amount="3000.00", sign="verified"):
     return client.post(
         "/api/model-payment/notify/alipay",
         data={
@@ -117,7 +117,7 @@ def test_quote_checkout_callback_keeps_software_and_ai_balance_separate(purchase
         "saas-trial-30",
         STANDARD,
     ]
-    assert quote["data"]["commercial_terms"]["customization_from_cents"] == 298_000
+    assert quote["data"]["commercial_terms"]["customization_from_cents"] == 99_900
     response = client.post(
         "/api/model-payment/checkout",
         json={
@@ -131,8 +131,8 @@ def test_quote_checkout_callback_keeps_software_and_ai_balance_separate(purchase
     )
     assert response.status_code == 200, response.text
     order = response.json()["data"]
-    assert order["amount_cents"] == 680_000
-    assert provider.call_args.kwargs["total_amount"] == "6800.00"
+    assert order["amount_cents"] == 300_000
+    assert provider.call_args.kwargs["total_amount"] == "3000.00"
     order_id = order["order_id"]
     assert notify(client, order_id, sign="forged").status_code == 400
     assert notify(client, order_id, amount="0.01").status_code == 400
@@ -323,7 +323,7 @@ async def test_repurchase_after_revocation_cannot_restore_tenant_account_tier(
         response = client.post("/api/model-payment/checkout", json={"plan_id": plan_id})
         assert response.status_code == 200, response.text
         order_id = response.json()["data"]["order_id"]
-        amount = "6800.00" if plan_id == STANDARD else "99.00"
+        amount = "3000.00" if plan_id == STANDARD else "99.00"
         assert notify(client, order_id, amount).text == "success"
         assert notify(client, order_id, amount).text == "success"
         assert order_store.get_entitlement(plan_id)["purchase_count"] == 1
@@ -499,7 +499,7 @@ def test_fulfillment_failure_is_visible_and_original_order_retries(
                 lambda _: order_store.apply_notify_paid(
                     out_trade_no=order_id,
                     trade_no="provider-" + order_id,
-                    total_amount="6800.00",
+                    total_amount="3000.00",
                 )[0],
                 range(3),
             )

@@ -21,6 +21,15 @@ class PublicPricingTest(unittest.TestCase):
         self.assertEqual([p["id"] for p in pricing["homepage_plans"]], ["saas-permanent-standard"])
         self.assertEqual(pricing["commercial_terms"]["customization_from_cents"], config["commercial_terms"]["customization_from_cents"])
 
+    def test_launch_campaign_is_disabled_until_fulfilment_is_verified(self):
+        pricing = build_pricing(self.config)
+        self.assertEqual(
+            pricing["commercial_terms"]["launch_campaign"],
+            {"enabled": False, "starts_at": None, "ends_at": None, "benefits": []},
+        )
+        self.assertEqual(pricing["homepage_plans"][0]["amount_cents"], 300000)
+        self.assertEqual(pricing["commercial_terms"]["customization_from_cents"], 99900)
+
     def test_published_prices_and_purchase_links_match_the_source(self):
         published = json.loads((SITE_ROOT / "site/data/public-site.json").read_text())
         self.assertEqual(published["pricing"], build_pricing(self.config))
