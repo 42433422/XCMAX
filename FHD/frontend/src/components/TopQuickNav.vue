@@ -409,11 +409,18 @@ function closeAndRestore() {
   shortcutsVisible.value = false
   open.value = false
   query.value = ''
+  clearRecordSearch()
   inputRef.value?.blur?.()
   cancelBlur()
   if (target instanceof HTMLElement && target.isConnected && !target.closest('[inert]')) {
     void nextTick(() => target.focus({ preventScroll: true }))
   }
+}
+
+// Navigation owns its next focus target; do not refocus the page we just left.
+function closeAfterNavigation() {
+  restoreTarget = null
+  closeAndRestore()
 }
 
 function openCommandPalette() {
@@ -520,15 +527,16 @@ function choose(item) {
   if (item?.kind === 'action') {
     if (!authorizedActionLinks.some((action) => action.key === item.key) ||
       !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
-    closeAndRestore()
+    closeAfterNavigation()
     emit('select', item.key)
     return
   }
   if (item?.kind === 'task') {
+    if (taskStore?.stale === true) return
     const live = taskStore?.tasks.find((task) => task.task_id === item.id && !task.archived_at)
     if (!live) return
     const conversation = String(live.conversation_id || live.workspace_id || live.task_id)
-    closeAndRestore()
+    closeAfterNavigation()
     void router.push({ name: 'task-workspace', params: { taskId: live.task_id }, query: { conversation } })
     return
   }
@@ -544,10 +552,7 @@ function choose(item) {
       new CustomEvent('xcagi:template-search', { detail: { keyword: item.keyword || query.value.trim() } }),
     )
     emit('select', TEMPLATE_NAV_KEY)
-    query.value = ''
-    records.value = []
-    open.value = false
-    inputRef.value?.blur?.()
+    closeAfterNavigation()
     return
   }
   if (item?.kind === 'product' || item?.kind === 'customer' || item?.kind === 'order') {
@@ -564,10 +569,7 @@ function choose(item) {
           : {}),
       },
     })
-    query.value = ''
-    records.value = []
-    open.value = false
-    inputRef.value?.blur?.()
+    closeAfterNavigation()
     return
   }
   if (item?.kind === 'employee') {
@@ -575,22 +577,15 @@ function choose(item) {
     const navKey = item.navKey || 'employee-workflow'
     if (!canNavigateToBusinessKey(navKey)) return
     emit('select', navKey)
-    query.value = ''
-    records.value = []
-    open.value = false
-    inputRef.value?.blur?.()
+    closeAfterNavigation()
     return
   }
   if (!item?.key || !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
   // Selection is only an existing sidebar navigation intent, not business execution.
   preferences.value = { ...preferences.value, recent: nextRecentNavKeys(recentKeys.value, item.key) }
   persistCommands()
-  restoreTarget = null
-  paletteOpen.value = false
+  closeAfterNavigation()
   emit('select', item.key)
-  query.value = ''
-  open.value = false
-  inputRef.value?.blur?.()
 }
 
 function onKeydown(event) {
