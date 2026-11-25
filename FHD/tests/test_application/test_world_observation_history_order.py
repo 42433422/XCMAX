@@ -71,3 +71,64 @@ def test_same_time_conflicting_versions_remain_review_only() -> None:
     history = historical_observation(json.dumps(stored), instant, _SCOPE)
     assert history["knowledge_kind"] == "unknown"
     assert history["reason_code"] == "conflicting_observations"
+
+
+def test_replayed_older_observation_does_not_replace_current_fact() -> None:
+    first_at = "2026-11-25T00:00:00+00:00"
+    second_at = "2026-11-25T00:01:00+00:00"
+    stored, _ = record_observation(None, _snapshot("8", first_at))
+    stored, _ = record_observation(json.dumps(stored), _snapshot("5", second_at))
+    original = json.dumps(stored, sort_keys=True)
+
+    replayed, rejected = record_observation(
+        json.dumps(stored), _snapshot("8", first_at)
+    )
+    assert rejected is True
+    assert json.dumps(replayed, sort_keys=True) == original
+    history, _ = read_observations(json.dumps(replayed), _SCOPE)
+    assert len(history) == 2
+    assert replayed["state"]["remaining_quantity"] == "5"
+
+
+def test_current_envelope_cannot_replay_older_valid_history_item() -> None:
+    first = "2026-11-25T00:00:00+00:00"
+    second = "2026-11-25T00:01:00+00:00"
+    stored, _ = record_observation(None, _snapshot("8", first))
+    stored, _ = record_observation(json.dumps(stored), _snapshot("5", second))
+    swapped = {
+        **stored["_observation_history"][0],
+        "_observation_history": stored["_observation_history"],
+    }
+    with pytest.raises(ValueError, match="current_observation_history_mismatch"):
+        read_observations(json.dumps(swapped), _SCOPE)
+
+
+def test_duplicate_event_and_forged_provenance_fail_closed() -> None:
+    instant = "2026-11-25T00:00:00+00:00"
+    stored, _ = record_observation(None, _snapshot("8", instant))
+    repeated, conflict = record_observation(json.dumps(stored), _snapshot("8", instant))
+    assert conflict is False
+    assert repeated["_observation_history"] == stored["_observation_history"]
+
+    duplicated = {**stored, "_observation_history": stored["_observation_history"] * 2}
+    with pytest.raises(ValueError, match="observation_duplicate_history_entry"):
+        read_observations(json.dumps(duplicated), _SCOPE)
+
+    forgery = json.loads(json.dumps(stored))
+    forgery["_observation_history"][0]["evidence"][0]["source"] = "foreign_table"
+    with pytest.raises(ValueError, match="observation_source_evidence_mismatch"):
+        read_observations(json.dumps(forgery), _SCOPE)
+
+    with pytest.raises(ValueError, match="observation_scope_mismatch"):
+        read_observations(json.dumps(stored), {**_SCOPE, "tenant_id": "22"})
+
+
+def test_history_is_not_authoritative_after_business_revocation() -> None:
+    instant = "2026-11-25T00:00:00+00:00"
+    stored, _ = record_observation(None, _snapshot("8", instant))
+    historical = historical_observation(json.dumps(stored), instant, _SCOPE)
+    assert historical["knowledge_kind"] == "fact"
+    assert historical["business_validity_verified"] is False
+    assert historical["current_state_verified"] is False
+    # A historical observation is evidence of what was seen, not proof of a
+    # currently active/authorized ERP row or an irreversible business action.
