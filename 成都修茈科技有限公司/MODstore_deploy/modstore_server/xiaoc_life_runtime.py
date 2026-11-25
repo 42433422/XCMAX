@@ -657,6 +657,7 @@ class CyclePorts:
             self.details["metacognitive_route"] = {
                 "action": route,
                 "status": "model_suggestion_not_authority",
+                "handoff_status": "not_dispatched" if route == "ask_human" else "not_requested",
                 "evidence_refs": decision["evidence_refs"][:8],
             }
             self.details["blocked_reason"] = (

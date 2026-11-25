@@ -304,11 +304,21 @@ def test_metacognitive_safe_route_does_not_create_goals_or_execution(ports, monk
     result = asyncio.run(runtime.tick_async())
     assert result["status"] == "blocked"
     assert result["actual_tokens"] == 42
-    assert result["goals"] == []
-    assert result["details"]["metacognitive_route"]["action"] == action
-    assert result["details"]["metacognitive_route"]["status"] == "model_suggestion_not_authority"
+    # None means no update to the original persistent goal collection.
+    assert result["goals"] is None
+    assert result["interests"] is None
+    assert result["self_model"] is None
+    route = result["details"]["metacognitive_route"]
+    assert route["action"] == action
+    assert route["status"] == "model_suggestion_not_authority"
+    assert route["handoff_status"] == (
+        "not_dispatched" if action == "ask_human" else "not_requested"
+    )
+    assert route["evidence_refs"]
     assert not result["details"].get("created_proposals")
     assert store.finished and len(store.finished) == 1
+    assert store.finished[0]["goals"] is None
+    assert all(step["kind"] != "portfolio" for step in store.claim.get("steps", []))
 
 
 @pytest.mark.parametrize("action", ["ask_human", "refuse"])
