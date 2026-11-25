@@ -14,6 +14,7 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
+| product-definition（产品宪章与领域术语） | [XCAGI 产品宪章 V1.0](../../specs/product-lines-3-plus-2.md) | 产品所有者确认的 P001–P100 目标契约、术语、12 系统、六级语义及迁移边界；不替代运行定价、账号、制品、证据等现行权威源 |
 | 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层；[实机协议](e2e/desktop-real-machine-acceptance-protocol.md)与[验收模板](e2e/templates/desktop-acceptance-template.md)遵循同一原包身份和证据放行要求 |
 | audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
@@ -34,8 +35,8 @@
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | coverage-behavior-gate（行为覆盖率门禁决策） | [adr/0001-coverage-behavior-gate.md](adr/0001-coverage-behavior-gate.md) | ADR-0001 决策记录：覆盖率门禁从全量口径切换为行为口径（排除 coverage_ramp stub）；`fail_under` 保留为全量行 floor SSOT |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；MODstore PAT 派生消费页为 developer README/01/02/05/08 与文档/Token 面板（见注册表）；**定价文档 SSOT** |
-| pricing-enterprise（企业宿主授权价） | [../config/saas_plans.json](../config/saas_plans.json) | 体验 ¥99；永久授权 ¥49,999–¥999,999；收银与 `model-payment` / 企业开户读取 |
-| pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；VIP ¥9.9 – SVIP8 ¥4,999 |
+| pricing-enterprise（企业宿主授权价） | [../config/saas_plans.json](../config/saas_plans.json) | 现行软件价格由配置读取；收银与 `model-payment` / 企业开户读取，不复制金额 |
+| pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；现行会员模板与历史履约，不复制金额 |
 | licensing（许可边界，非定价） | [guides/LICENSING.md](guides/LICENSING.md) | Apache-2.0 vs EULA 触发条件、Mod 分成、Offline 功能差异；**具体金额见上两行 pricing SSOT** |
 | project-state（项目真实状态） | [PROJECT_STATE.md](PROJECT_STATE.md) | 项目健康度/完成度诚实仪表盘，唯一禁止撒谎的状态文档 |
 | mobile-tri-platform（移动统一） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | **Flutter 唯一交付主线**；独立原生 Android/iOS/HarmonyOS 已删除；OpenAPI + FastAPI 契约 |
