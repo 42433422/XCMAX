@@ -112,6 +112,7 @@ import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
 import { isAdminConsoleSpa as detectAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { ADMIN_OPERATOR_BRAND_SUBTITLE } from '@/constants/adminOperatorNav'
 import { appAlert } from '@/utils/appDialog'
 import { useResizablePane } from '@/composables/useResizablePane'
@@ -271,6 +272,18 @@ const currentRouteName = computed(() => {
 const pendingSidebarView = ref('')
 const failedSidebarView = ref('')
 let routeNavGeneration = 0
+let workspaceCommandGeneration = 0
+let workspaceCommandTimer = null
+const workspaceCommandScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
+  accountProfileStore.tenantId, accountProfileStore.localUserId, accountProfileStore.marketUserId,
+  accountProfileStore.impersonatingMarketUserId, accountProfileStore.accountKind, modsStore.activeModId]))
+function invalidateWorkspaceCommand() {
+  workspaceCommandGeneration++
+  if (workspaceCommandTimer !== null) window.clearTimeout(workspaceCommandTimer)
+  workspaceCommandTimer = null
+  return workspaceCommandGeneration
+}
+watch(workspaceCommandScope, invalidateWorkspaceCommand, { flush: 'sync' })
 const displayedActiveView = computed(() => currentRouteName.value)
 
 function syncPendingSidebarWithRoute() {
@@ -366,6 +379,7 @@ const pendingViewStage = computed(() => {
 async function navigateToView(viewKey, source = 'shell') {
   const normalized = String(viewKey || '').trim()
   if (!normalized) return
+  if (source !== 'workspace-shortcut') invalidateWorkspaceCommand()
   // Same target while already pending: ignore duplicate click noise.
   // Same target after failure: allow retry (failedSidebarView is set, pending cleared).
   if (pendingSidebarView.value === normalized && !failedSidebarView.value) return
@@ -405,6 +419,9 @@ const handleViewChange = (viewKey) => {
 }
 
 async function handleWorkspaceCommand(command) {
+  const generation = invalidateWorkspaceCommand()
+  const scope = workspaceCommandScope.value
+  const current = () => layoutActive && generation === workspaceCommandGeneration && scope === workspaceCommandScope.value
   if (!isSidebarFeatureEnabled.value && command === 'sidebar') return
   if (command === 'sidebar') {
     clearSidebarCollapseTimer()
@@ -424,11 +441,13 @@ async function handleWorkspaceCommand(command) {
   }
   if (!['chat', 'new-chat', 'new-task', 'sessions'].includes(command)) return
   await navigateToView('chat', 'workspace-shortcut')
-  if (router.currentRoute.value.name !== 'chat') return
+  if (!current() || router.currentRoute.value.name !== 'chat') return
+  const destination = router.currentRoute.value.fullPath
+  const navGeneration = routeNavGeneration
   // The route resolves before Vue's async component/keep-alive activation may settle.
   await nextTick()
   const dispatch = () => {
-    if (router.currentRoute.value.name !== 'chat') return false
+    if (!current() || navGeneration !== routeNavGeneration || router.currentRoute.value.fullPath !== destination) return false
     const input = document.getElementById('messageInput')
     if (!input || !input.isConnected || input.closest('[inert]')) return false
     if (command === 'new-chat') window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
@@ -437,12 +456,17 @@ async function handleWorkspaceCommand(command) {
     else input.focus({ preventScroll: true })
     return true
   }
-  if (!dispatch()) {
-    window.setTimeout(() => { dispatch() }, 100)
+  if (current() && !dispatch()) {
+    workspaceCommandTimer = window.setTimeout(() => { workspaceCommandTimer = null; dispatch() }, 100)
   }
 }
 
+let restoredSidebarScope = null
 function restoreWorkspaceSidebarPreference() {
+  const scope = workspaceCommandScope.value
+  const changed = restoredSidebarScope !== scope
+  restoredSidebarScope = scope
+  if (changed) sidebarCollapsed.value = false
   if (!isSidebarFeatureEnabled.value) return
   const key = workspaceCommandStorageKey()
   if (!key) return
@@ -455,8 +479,7 @@ function onWorkspacePreferenceStorage(event) {
   restoreWorkspaceSidebarPreference()
 }
 watch(
-  () => [accountProfileStore.tenantId, accountProfileStore.localUserId, accountProfileStore.marketUserId,
-    accountProfileStore.accountKind, accountProfileStore.loaded],
+  () => [workspaceCommandScope.value, accountProfileStore.loaded],
   () => { void nextTick(restoreWorkspaceSidebarPreference) },
   { immediate: true, flush: 'post' },
 )
@@ -617,6 +640,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('storage', onWorkspacePreferenceStorage)
   layoutActive = false
+  invalidateWorkspaceCommand()
   window.visualViewport?.removeEventListener('resize', syncMobileViewport)
   window.visualViewport?.removeEventListener('scroll', syncMobileViewport)
   stopSidebarResize()
