@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.application.customer_creation_receipt import record_customer_creation
 from app.infrastructure.tenant_scope import (
@@ -231,7 +231,8 @@ class CustomerCrudMixin:
             return {"success": False, "message": "创建客户失败"}
 
     def update(self, customer_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        """更新购买单位"""
+        """更新购买单位；提交状态未知时禁止调用方自动重放。"""
+        commit_attempted = False
         try:
             session = self._get_session()
             try:
@@ -307,6 +308,7 @@ class CustomerCrudMixin:
                             "message": "客户版本已变化，本次修改没有写入",
                         }
                     rename_children()
+                    commit_attempted = True
                     session.commit()
                     unit = (
                         _scoped_units(session.query(PurchaseUnitModel), PurchaseUnitModel)
@@ -326,6 +328,7 @@ class CustomerCrudMixin:
                     if isinstance(current_version, int) and not isinstance(current_version, bool):
                         unit.version = current_version + 1
                     rename_children()
+                    commit_attempted = True
                     session.commit()
                     session.refresh(unit)
 
@@ -356,8 +359,17 @@ class CustomerCrudMixin:
             finally:
                 session.close()
 
-        except RECOVERABLE_ERRORS:
+        except (SQLAlchemyError, OSError):
             logger.exception("更新客户失败")
+            if commit_attempted:
+                return {
+                    "success": False,
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                    "error_code": "customer_update_commit_unknown",
+                    "message": "客户更新结果待核验，请勿重复提交",
+                }
             return {"success": False, "message": "更新客户失败"}
 
     def _check_shipment_associations(self, unit_name: str) -> dict[str, Any]:
