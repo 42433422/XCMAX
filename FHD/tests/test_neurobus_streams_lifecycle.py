@@ -280,3 +280,29 @@ def test_rolling_worker_takeover_fences_old_ack_before_trim(redis_client, monkey
     assert redis_client.xrange(streams.STREAM_KEY)[0][0].decode() == msg_id
     assert replacement.ack(msg_id)
     assert redis_client.xpending(streams.STREAM_KEY, streams.CONSUMER_GROUP)["pending"] == 0
+
+
+@pytest.mark.asyncio
+async def test_duplicate_remote_ingress_does_not_remint_pending_event_id(redis_client):
+    """A stream retry must retain its original event identity on queue conflict."""
+    bus, _ = _bus(redis_client)
+    original = _event()
+    already_queued = NeuroEvent.from_dict(
+        original.to_dict(), preserve_queue_identity=True
+    )
+    bus._running = True
+    bus._shutdown = False
+    assert bus._event_queue.put(already_queued)
+    loop = asyncio.get_running_loop()
+    receipt = loop.create_future()
+    bus._stream_waiters[id(original)] = receipt
+    stable_id = original.metadata.event_id
+    try:
+        assert not bus.ingest_remote_event(original)
+        assert original.metadata.event_id == stable_id
+        assert already_queued.metadata.event_id == stable_id
+        assert bus._event_queue.size() == 1
+        assert await asyncio.wait_for(receipt, timeout=1) == "retry"
+    finally:
+        bus._stream_waiters.clear()
+        bus._running = False
