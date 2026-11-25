@@ -147,6 +147,7 @@ class MobileOfflineStore {
       await _trimMessages(conversationId);
     });
   }
+
   Future<void> _trimMessages(String conversationId) async {
     await _db.customUpdate(
       'DELETE FROM chat_messages WHERE conversation_id = ? '
@@ -160,6 +161,7 @@ class MobileOfflineStore {
       ],
     );
   }
+
   Future<void> removeMessageByTimestamp(
     String conversationId,
     int timestampMs,
@@ -520,16 +522,6 @@ class MobileOfflineStore {
     if (turnId.isEmpty) return;
     await _db.customUpdate('DELETE FROM outbox_messages WHERE conversation_id = ? AND idempotency_key = ?',
         variables: [Variable<String>(conversationId), Variable<String>(turnId)]);
-  }
-
-  Future<void> _updateOutbox(int id, String assignment) async {
-    await _db.customUpdate(
-      'UPDATE outbox_messages SET $assignment, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable<int>(DateTime.now().millisecondsSinceEpoch),
-        Variable<int>(id)
-      ],
-    );
   }
 
   // ── 映射与类型转换 ──────────────────────────────────────────
