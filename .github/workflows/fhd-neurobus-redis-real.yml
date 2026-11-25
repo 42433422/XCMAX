@@ -8,6 +8,8 @@ on:
       - "FHD/app/neuro_bus/**"
       - "FHD/tests/test_neurobus_streams_lifecycle.py"
       - "FHD/tests/test_neuro_bus/test_redis_streams*.py"
+      - "FHD/tests/test_neuro_bus/test_durable_admission*.py"
+      - "FHD/tests/test_neuro_bus/test_delivery_outcomes.py"
       - ".github/workflows/fhd-neurobus-redis-real.yml"
   workflow_dispatch:
 
@@ -61,10 +63,18 @@ jobs:
           print("Redis server version:", version)
           client.close()
           PY
-      - name: Execute real Redis lifecycle and safe-trim tests without skips
+      - name: Exercise combined Redis/SQLite/metrics contracts (no skips)
         run: |
           set -euo pipefail
-          python -m pytest tests/test_neurobus_streams_lifecycle.py -q -o addopts= --junitxml=neurobus-redis-results.xml
+          echo "Tested commit: $(git rev-parse HEAD)"
+          python -m pytest \
+            tests/test_neurobus_streams_lifecycle.py \
+            tests/test_neuro_bus/test_redis_streams.py \
+            tests/test_neuro_bus/test_redis_streams_multiprocess.py \
+            tests/test_neuro_bus/test_durable_admission.py \
+            tests/test_neuro_bus/test_durable_admission_process_exit.py \
+            tests/test_neuro_bus/test_delivery_outcomes.py \
+            -q -o addopts= --junitxml=neurobus-redis-results.xml
           python - <<'PY'
           from xml.etree import ElementTree
           root = ElementTree.parse("neurobus-redis-results.xml").getroot()
@@ -73,7 +83,7 @@ jobs:
           skipped = sum(int(s.get("skipped", "0")) for s in suites)
           failures = sum(int(s.get("failures", "0")) for s in suites)
           errors = sum(int(s.get("errors", "0")) for s in suites)
-          assert total >= 7, f"Redis tests did not collect: {total}"
+          assert total >= 25, f"Combined tests did not collect: {total}"
           assert not (skipped or failures or errors), (skipped, failures, errors)
           print(f"Real Redis tests: {total}; skipped=0")
           PY
