@@ -226,6 +226,23 @@ describe('session refresh and sse accounting', () => {
     expect(refresh).toHaveBeenCalledTimes(2)
   })
 
+  it('does not duplicate registration or revive a closed connection from late callbacks', () => {
+    const registry = new SseConnectionRegistry()
+    expect(registry.allowReconnect('unregistered')).toBe(false)
+    registry.open('c1')
+    for (let i = 0; i < registry.maxReconnects; i++) expect(registry.allowReconnect('c1')).toBe(true)
+    registry.open('c1')
+    expect(registry.opened).toBe(1)
+    expect(registry.live).toBe(1)
+    expect(registry.allowReconnect('c1')).toBe(false)
+    registry.close('c1')
+    registry.noteConnected('c1')
+    expect(registry.allowReconnect('c1')).toBe(false)
+    registry.close('c1')
+    expect(registry.closed).toBe(1)
+    expect(registry.live).toBe(0)
+  })
+
   it('stops reconnecting at the cap and releases the connection', () => {
     const registry = new SseConnectionRegistry()
     registry.open('c1')
