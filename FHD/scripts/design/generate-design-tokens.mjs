@@ -57,4 +57,11 @@ for(const [,name,value] of marketTokenSource.matchAll(/^[ \t]*(--[\w-]+):\s*([^;
 }
 const marketDeclarations=marketStyleSource.replace(/\/\*[\s\S]*?\*\//g,'').match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g);
 if(marketDeclarations)throw Error('Unregistered Market global color: '+marketDeclarations[0]);
+
+const elementMappings = [["--el-color-primary","--xc-color-primary","--wb-accent-primary"],["--el-color-success","--xc-color-success","--wb-status-success"],["--el-color-warning","--xc-color-warning","--wb-status-warning"],["--el-color-danger","--xc-color-danger","--wb-status-danger"],["--el-text-color-primary","--xc-color-text","--wb-text-primary"],["--el-bg-color","--xc-color-surface","--wb-surface-elevated"],["--el-color-primary-light-9","--xc-color-primary-soft","--wb-accent-soft"]];
+const desktopElements = read('frontend/src/styles/tokens.css');
+for(const [elementName,desktopRef,marketRef] of elementMappings){
+ if(!desktopElements.includes(elementName+': var('+desktopRef+')'))throw Error('Desktop Element Plus mapping missing: '+elementName);
+ if(!marketTokenSource.includes(elementName+': var('+marketRef+')'))throw Error('Market Element Plus mapping missing: '+elementName);
+}
 console.log('All three generated design-token outputs and desktop/Market aliases verified');
