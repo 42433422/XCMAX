@@ -1,0 +1,42 @@
+name: FHD ERP memory authority
+"on":
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "FHD/app/application/enterprise_cognition/**"
+      - "FHD/app/application/persy_memory_*.py"
+      - "FHD/app/application/user_memory/**"
+      - "FHD/app/domain/user_memory/policy.py"
+      - "FHD/tests/test_application/test_enterprise_projection.py"
+      - "FHD/tests/test_application/test_erp_memory_legacy_recall_fence.py"
+      - "FHD/tests/test_application/test_persy_memory_app_service.py"
+      - ".github/workflows/fhd-erp-memory-authority.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scoped-source-regressions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD
+    env:
+      DATABASE_URL: sqlite:////tmp/xcmax_erp_authority_regression.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install backend test runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt -e ".[server-api]"
+      - name: Test scoped authority and negative controls
+        run: |
+          python -m pytest -q \
+            tests/test_application/test_enterprise_projection.py \
+            tests/test_application/test_erp_memory_legacy_recall_fence.py \
+            tests/test_application/test_persy_memory_app_service.py \
+            tests/test_application/test_enterprise_cognition_api.py
