@@ -44,9 +44,17 @@ export function createProductListLoader(options: {
   return async (reset = true): Promise<void> => {
     const id = ++options.requestId.value
     if (reset) { options.page.value = 1; options.hasMore.value = false }
-    const result = await options.store.fetchProducts({ ...options.query(), page: options.page.value }, { append: !reset })
+    const query = options.query()
+    const requestedPage = options.page.value
+    const result = await options.store.fetchProducts({ ...query, page: requestedPage }, { append: !reset })
     if (id !== options.requestId.value) return
-    if (result?.success) { options.hasMore.value = false; options.page.value++ }
+    if (result?.success) {
+      const batchSize = Array.isArray(result.data) ? result.data.length : 0
+      const pageSize = Math.max(1, Number(query.per_page) || 100)
+      const total = Number(result.total) || 0
+      options.hasMore.value = total > 0 ? requestedPage * pageSize < total : batchSize >= pageSize
+      options.page.value = requestedPage + 1
+    }
   }
 }
 
