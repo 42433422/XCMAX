@@ -136,12 +136,16 @@ class MessageBubble extends StatelessWidget {
                   onReply: onReply,
                   onDelete: onDelete,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
+                    constraints: BoxConstraints(
+                      maxWidth: min(
+                        isUser ? 420.0 : 620.0,
+                        MediaQuery.sizeOf(context).width * (isUser ? 0.84 : 0.92),
+                      ),
+                    ),
                     child: Material(
                       key: ValueKey('chat_bubble_${message.id}'),
                       color: bubbleColor,
-                      elevation: 1,
-                      shadowColor: Colors.black.withValues(alpha: 0.08),
+                      elevation: 0,
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(isUser ? 12 : 4),
                         topRight: Radius.circular(isUser ? 4 : 12),
@@ -230,30 +234,31 @@ class MessageBubble extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if ([ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(message.status)) ...[
-                          Text(
-                            message.status == ChatDeliveryStatus.pending ? '结果待核对' : '发送失败',
-                            style: TextStyle(
-                              color: colors.danger,
-                              fontSize: 11,
-                              height: 1.27,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0,
+                          Semantics(
+                            liveRegion: true,
+                            label: '原任务回执未核实，请先核对真实状态，不要重复提交',
+                            child: Text(
+                              message.status == ChatDeliveryStatus.pending ? '结果待核对' : '结果未确认',
+                              style: TextStyle(
+                                color: colors.danger,
+                                fontSize: 12,
+                                height: 1.27,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0,
+                              ),
                             ),
                           ),
                           if (onResend != null) ...[
                             const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: onResend,
-                              child: Text(
-                                '核对结果',
-                                style: TextStyle(
-                                  color: colors.brand,
-                                  fontSize: 11,
-                                  height: 1.27,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                ),
+                            TextButton(
+                              onPressed: onResend,
+                              style: TextButton.styleFrom(
+                                foregroundColor: colors.brand,
+                                minimumSize: const Size(48, 44),
+                                tapTargetSize: MaterialTapTargetSize.padded,
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
                               ),
+                              child: const Text('核对结果'),
                             ),
                           ],
                         ] else
