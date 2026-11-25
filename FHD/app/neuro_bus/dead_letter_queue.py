@@ -412,9 +412,11 @@ class DeadLetterQueue:
         """Restore the same event identity; this never dispatches the event."""
         return self._repository.restore_archived(entry_id, restored_by)
 
-    def get_audit_history(self, entry_id: str) -> list[dict[str, Any]]:
-        """Return durable lifecycle history without copying the original payload."""
-        return self._repository.audit_history(entry_id)
+    def get_audit_history(
+        self, entry_id: str, *, after_audit_id: int = 0, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        """Read one durable audit page; resume using the last row's audit_id."""
+        return self._repository.audit_history(entry_id, after_audit_id=after_audit_id, limit=limit)
 
     def get_all_entries(self) -> list[DeadLetterEntry]:
         """获取所有条目"""
