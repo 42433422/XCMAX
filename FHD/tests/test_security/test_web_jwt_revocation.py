@@ -82,8 +82,6 @@ def _worker(url, schema, token, observed, proceed):
         if proceed.get(timeout=60) != "check":
             return
         observed.put(("after", web_jwt.resolve_user_from_web_jwt(token) is not None))
-    except Exception as exc:
-        observed.put(("error", type(exc).__name__))
     finally:
         engine.dispose()
 
