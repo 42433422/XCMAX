@@ -146,13 +146,14 @@ describe('customersApi', () => {
     vi.mocked(api.put).mockResolvedValueOnce({ success: false, error_code: 'version_conflict', message: '客户版本已变化' })
     const wrapper = mount(defineComponent({
       setup: useCustomers,
-      template: '<button class="edit" @click="openEditModal({id: 42, customer_name: \'合法名称\'})">open</button><button class="save" @click="saveEdit">save</button>',
+      template: '<button class="edit" @click="openEditModal({id: 42, customer_name: \'合法名称\', version: 3})">open</button><button class="save" @click="saveEdit">save</button>',
     }))
     await flushPromises()
     await wrapper.get('.edit').trigger('click')
     await wrapper.get('.save').trigger('click')
     await flushPromises()
     expect(vi.mocked(api.put)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.put).mock.calls[0]?.[1]).toMatchObject({ expected_version: 3 })
     const alerts = vi.mocked(appAlert).mock.calls.map(([message]) => String(message)).join(' ')
     expect(alerts).toContain('客户版本已变化')
     expect(alerts).not.toContain('保存成功')
