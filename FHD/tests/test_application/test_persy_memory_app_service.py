@@ -640,14 +640,28 @@ def test_erp_memory_private_candidate_revalidates_source_before_recall(monkeypat
     assert stale["chunks"] == []
     assert stale["erp_revalidation_dropped"] == 1
     assert stale["coverage_complete"] is False
+    # Public list and graph also must not replay old customer data.
+    stale_list = service.list_memories(access_context=_access())
+    assert stale_list["memories"][0]["value"] is None
+    assert stale_list["memories"][0]["evidence"] == []
+    assert stale_list["memories"][0]["history"] == []
+    assert stale_list["memories"][0]["eligible_for_planner"] is False
+    assert "Customer A" not in str(stale_list["memories"][0])
+    assert "Customer A" not in str(service.graph(access_context=_access()))
     # Failed source read is unknown; it may not revive an expired claim.
     source.denied = True
     denied = service.query(access_context=_access(), query="ERP customer")
     assert denied["chunks"] == []
     assert denied["erp_revalidation_dropped"] == 1
+    denied_list = service.list_memories(access_context=_access())
+    assert denied_list["memories"][0]["erp_requires_reconciliation"] is True
+    assert "Customer A" not in str(denied_list["memories"][0])
+    assert "Customer A" not in str(service.graph(access_context=_access()))
     source.denied = False
     source.snapshot = original
     assert service.query(access_context=_access(), query="ERP customer")["chunks"]
+    restored = service.list_memories(access_context=_access())
+    assert "Customer A" in restored["memories"][0]["statement"]
 
     assert service.mutate(
         access_context=_access(), memory_id=candidate["memory_id"], action="delete"
