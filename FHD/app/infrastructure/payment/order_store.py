@@ -67,7 +67,15 @@ def _atomic_write(p: Path, payload: dict[str, Any]) -> None:
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, p)
+    if os.name == "posix":
+        directory_fd = os.open(str(p.parent), os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
 
 def record_checkout_pending(
