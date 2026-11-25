@@ -37,7 +37,9 @@ def base_runtime_result(run_id: str) -> dict[str, Any]:
 
 
 def receipt_state(row: dict[str, Any]) -> str:
-    receipt = row.get("receipt") or {}
+    receipt = row.get("receipt")
+    if not isinstance(receipt, dict) or not receipt:
+        return "unknown"
     if execution_result_outcome_unknown(receipt, include_execution=True) or row.get("state") in {
         "claimed",
         "unknown",
@@ -108,7 +110,8 @@ def classify_runtime_result(
             "task_id": row.get("child_task_id"),
             "success": receipt_state(row) == "completed"
             and (row.get("receipt") or {}).get("success") is True,
-            "verified": (row.get("receipt") or {}).get("verified") is True,
+            "verified": isinstance(row.get("receipt"), dict)
+            and row["receipt"].get("verified") is True,
             "execution_state": receipt_state(row),
         }
         for row in rows
