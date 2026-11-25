@@ -667,6 +667,51 @@ class TestQueryTrade:
             assert body["success"] is True
             assert body["data"]["trade"]["trade_status"] == "TRADE_SUCCESS"
 
+    def test_query_trade_identity_conflict_returns_409(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as provider,
+            patch(
+                "app.fastapi_routes.model_payment.owned_payment_order",
+                return_value={
+                    "out_trade_no": "mp-123", "trade_no": "T123",
+                    "amount_cents": 990, "status": "paid",
+                },
+            ),
+        ):
+            provider.query_order.return_value = {
+                "success": True,
+                "raw": {
+                    "out_trade_no": "mp-123", "trade_no": "T999",
+                    "trade_status": "TRADE_SUCCESS", "total_amount": "9.90",
+                },
+            }
+            response = client_mp.get("/api/model-payment/query/mp-123")
+            assert response.status_code == 409
+            assert response.json()["requires_reconciliation"] is True
+
+    def test_query_trade_same_identity_and_amount_certifies_only_gateway(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as provider,
+            patch(
+                "app.fastapi_routes.model_payment.owned_payment_order",
+                return_value={
+                    "out_trade_no": "mp-123", "trade_no": "T123",
+                    "amount_cents": 990, "status": "paid",
+                },
+            ),
+        ):
+            provider.query_order.return_value = {
+                "success": True,
+                "raw": {
+                    "out_trade_no": "mp-123", "trade_no": "T123",
+                    "trade_status": "TRADE_SUCCESS", "total_amount": "9.90",
+                },
+            }
+            response = client_mp.get("/api/model-payment/query/mp-123")
+            assert response.status_code == 200
+            assert response.json()["gateway_payment_reconciled"] is True
+            assert response.json()["bank_settlement_verified"] is False
+
     def test_query_trade_failure(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
@@ -800,7 +845,7 @@ class TestClose:
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
         ):
             mock_ali.close_order.return_value = {"success": True, "raw": {}}
-            mock_orders.update_order_status.return_value = None
+            mock_orders.update_order_status.return_value = {"status": "closed"}
             r = client_mp.post("/api/model-payment/close", json={"out_trade_no": "mp-123"})
             assert r.status_code == 200
             assert r.json()["success"] is True
@@ -820,7 +865,7 @@ class TestClose:
             assert r.status_code == 200
             assert r.json()["success"] is False
 
-    def test_close_write_failure_still_returns_success(self, client_mp):
+    def test_close_write_failure_requires_reconciliation(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
@@ -828,8 +873,9 @@ class TestClose:
             mock_ali.close_order.return_value = {"success": True, "raw": {}}
             mock_orders.update_order_status.side_effect = OSError("disk full")
             r = client_mp.post("/api/model-payment/close", json={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is True
+            assert r.status_code == 503
+            assert r.json()["success"] is False
+            assert r.json()["requires_reconciliation"] is True
 
 
 # ========================= GET /api/model-payment/refund/query ===========
