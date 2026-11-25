@@ -370,7 +370,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         _replaceMessage(
           assistantId,
           body: queuedId > 0
-              ? '网络不可用，消息已加入待发送队列，恢复连接后会自动发送。'
+              ? '网络不可用，原任务结果尚未确认。恢复连接后仅核对原回执，不会自动重复发送。'
               : mobileProductErrorMessage(
                   mobileErrorText(error),
                   '当前离线同步不可用，请连接电脑或稍后重试。',
