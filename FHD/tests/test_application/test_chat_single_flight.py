@@ -207,6 +207,7 @@ def test_busy_continuation_keeps_original_parent_pointer(monkeypatch, tmp_path):
     assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-parent"
     assert busy["retryable"] is True
 
+
 @pytest.mark.parametrize("termination", [False, True], ids=["completed", "process-lost"])
 def test_real_process_lock_released_after_termination_or_completion(
     monkeypatch, tmp_path, termination
