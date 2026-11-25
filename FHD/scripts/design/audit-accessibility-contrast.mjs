@@ -202,5 +202,18 @@ for (const state of ['', ':hover']) {
   }
 }
 
+// Office success uses registered foreground/background in both states.
+// Hover changes elevation, not text contrast.
+const officeSuccessDefault = /^\.btn-success\s*\{([^}]+)\}/m.exec(officeButtonCss)?.[1];
+const officeSuccessHover = /^\.btn-success:hover\s*\{([^}]+)\}/m.exec(officeButtonCss)?.[1];
+for (const [state, block] of [['default', officeSuccessDefault], ['hover', officeSuccessHover]]) {
+  if (!block) throw Error('Missing office success state: ' + state);
+  const fg = officePrimaryDeclaration(block, 'color') ?? officePrimaryDeclaration(officeSuccessDefault, 'color');
+  const bg = officePrimaryDeclaration(block, 'background') ?? officePrimaryDeclaration(officeSuccessDefault, 'background');
+  if (!fg?.startsWith('var(--xc-token-') || !bg?.startsWith('var(--xc-token-'))
+    throw Error('Office success colors must use generated tokens');
+  pair('Desktop office success ' + state, () => fg, () => bg);
+}
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

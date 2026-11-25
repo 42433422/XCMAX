@@ -280,14 +280,13 @@ body:not(.pro-mode-active) .sidebar .mode-switch {
 }
 
 .btn-success {
-  background: linear-gradient(135deg, #128a3a, #16a34a);
-  border-color: #128a3a;
-  color: #fff;
+  background: var(--xc-token-desktop-enterprise-xc-color-success);
+  border-color: var(--xc-token-desktop-enterprise-xc-color-success);
+  color: var(--xc-token-colors-neutral-light-n00);
 }
 
 .btn-success:hover {
-  background: #0b6a0b;
-  border-color: #0b6a0b;
+  box-shadow: var(--xc-token-desktop-enterprise-xc-shadow-md);
 }
 
 .btn-danger {
