@@ -67,3 +67,36 @@ jobs:
         run: alembic -c alembic.ini upgrade head
       - name: alembic check
         run: alembic -c alembic.ini check
+
+  ssot-parity-postgresql:
+    needs: classify
+    if: needs.classify.outputs.backend != 'false'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD
+    services:
+      postgres:
+        # Reuse the existing pgvector PostgreSQL 16 deployment image.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: xcagi_test
+          POSTGRES_PASSWORD: migration-test-only
+          POSTGRES_DB: xcagi_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U xcagi_test -d xcagi_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://xcagi_test:migration-test-only@127.0.0.1:5432/xcagi_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install FHD runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt -e ".[server-api]"
+      - name: alembic upgrade head
+        run: alembic -c alembic.ini upgrade head
+      - name: alembic check
+        run: alembic -c alembic.ini check
