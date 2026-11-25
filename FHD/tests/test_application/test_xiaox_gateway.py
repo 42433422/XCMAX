@@ -660,9 +660,10 @@ def test_dual_request_namespaces_are_not_merged_or_executed(setup_gateway, monke
     unavailable = Mock(side_effect=AssertionError("split request must not qualify"))
     monkeypatch.setattr(gateway, "runtime_settings", unavailable)
     monkeypatch.setattr(gateway, "get_account_runtime_settings", unavailable)
-    result = asyncio.run(state.invoke(settings=None, **options))
-    assert result["error_code"] == "runtime_identity_conflict"
-    assert result["retryable"] is False
+    for run_id in (None, old_id):
+        result = asyncio.run(state.invoke(settings=None, run_id=run_id, **options))
+        assert result["error_code"] == "runtime_identity_conflict"
+        assert result["retryable"] is False
     assert all(state.repository.get(rid).to_dict() == saved for rid, saved in snapshots.items())
     unavailable.assert_not_called()
     assert state.calls == [] and state.servers == []
