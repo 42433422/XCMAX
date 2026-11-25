@@ -10,6 +10,7 @@ from typing import Any
 from app.application.group_chat.constants import _SUPER_EMPLOYEE_IDS, EmployeeExecutorFn
 from app.application.group_chat.evidence import ExecutionResultPolicy
 from app.application.group_chat.protocols import InvokeSuperTask
+from app.domain.task_lifecycle.results import execution_result_outcome_unknown
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -91,40 +92,16 @@ class EmployeeExecution:
                 success = False
             if missing_evidence:
                 success = False
-            reassigned_from = ""
-            if (
-                not success
-                and employee_id in _SUPER_EMPLOYEE_IDS
-                and (employee_id != "claude-super-employee")
-                and (not self.has_custom_executor())
-                and ExecutionResultPolicy.summary_indicates_unfinished(summary)
-            ):
-                claude_raw = await asyncio.to_thread(
-                    self.invoke_super,
-                    employee_id="claude-super-employee",
-                    task=assigned_task,
-                    input_data={**input_data, "reassigned_from": employee_id},
-                    user_id=int(user_id),
-                )
-                claude_result = claude_raw if isinstance(claude_raw, dict) else {"success": False}
-                claude_summary = ExecutionResultPolicy.execution_summary(claude_result)
-                claude_missing_evidence = (
-                    ExecutionResultPolicy.completed_report_lacks_required_evidence(
-                        assigned_task or task, claude_summary, claude_result
-                    )
-                )
-                claude_ok = (
-                    bool(claude_result.get("success"))
-                    and (not ExecutionResultPolicy.summary_indicates_unfinished(claude_summary))
-                    and (not claude_missing_evidence)
-                )
-                if claude_ok:
-                    reassigned_from = employee_id
-                    result, success, summary = (claude_result, True, claude_summary)
-                    employee_id, employee_name = ("claude-super-employee", "Claude 超级员工")
-                    missing_evidence = False
+            # A model's refusal text cannot prove that the original task did
+            # not run. Cross-employee replacement requires durable handoff
+            # authorization and reconciliation, not a second group invocation.
+            uncertain = execution_result_outcome_unknown(result, include_execution=True)
+            if uncertain:
+                success = False
             status = str(result.get("status") or "").strip().lower()
-            if not status or (status in {"completed", "done"} and (not success)):
+            if uncertain:
+                status = "unknown"
+            elif not status or (status in {"completed", "done"} and (not success)):
                 status = (
                     "done"
                     if success
@@ -148,8 +125,9 @@ class EmployeeExecution:
                 else ExecutionResultPolicy.execution_risk(result, success),
                 "raw": ExecutionResultPolicy.compact_result(result),
             }
-            if reassigned_from:
-                report["reassigned_from"] = reassigned_from
+            if uncertain:
+                report["reconciliation_required"] = True
+                report["risk"] = "原执行效果待核对，不允许直接改派或重放。"
             return report
         except RECOVERABLE_ERRORS as exc:
             return {

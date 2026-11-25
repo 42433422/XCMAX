@@ -125,3 +125,29 @@ def test_employee_performance_is_scoped_persisted_and_not_business_acceptance(wo
     other = get(service, "employee", "employee-a", force_refresh=True)["state"]["performance"]
     assert other["status"] == "unknown"
     assert "recorded_runs" not in other
+
+
+def test_employee_im_refresh_preserves_persisted_stop(world):
+    from app.application.im_app_service import ImApplicationService
+
+    service, sessions, _clock, _permissions = world
+    with sessions() as db:
+        db.add(
+            User(
+                id=10,
+                username="ai-employee:employee-a",
+                password="hash",
+                tenant_id=11,
+                role="ai_employee",
+                is_active=False,
+            )
+        )
+        db.commit()
+    with sessions() as db:
+        assert ImApplicationService(db).ensure_employee_user(
+            "employee-a", display_name="Updated employee"
+        ) == 10
+    with sessions() as db:
+        assert db.get(User, 10).is_active is False
+    state = get(service, "employee", "employee-a", force_refresh=True)["state"]
+    assert state["identity_active"] is False
