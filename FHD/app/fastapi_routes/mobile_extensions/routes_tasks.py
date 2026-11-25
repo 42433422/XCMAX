@@ -76,6 +76,8 @@ def task_summary(task: Any) -> dict[str, Any]:
         "employee_assignments": employee_assignments,
         "outcome_uncertain": metadata.get("reconciliation_required") is True or payload.get("status") == "unknown",
         "task_id": str(payload.get("task_id") or ""),
+        "active_run_id": str(payload.get("active_run_id") or ""),
+        "attempt": payload.get("attempt"),
         "title": str(payload.get("title") or ""),
         "status": str(payload.get("status") or ""),
         "attention_state": str(payload.get("attention_state") or ""),
