@@ -6,7 +6,7 @@
  * 归属失效、非流式回退与批量分支。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
 import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ChatRequestScope } from '../useChatRequest'
@@ -1605,5 +1605,33 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
 
     expect(deps.addMessage).toHaveBeenCalledTimes(1)
     expect(deps.attachAgentRunTraceToLastAiMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('SSE rendering work bounds', () => {
+  it('coalesces 160 token updates without rebuilding tool steps or progress per token', async () => {
+    const { round, messages, deps } = setup({ tts: false })
+    const changes = vi.fn()
+    const stop = watch(() => messages.value[0]?.liveSteps, changes, { flush: 'sync' })
+    const chunks = Array.from({ length: 160 }, () => ({ type: 'token' as const, text: '字' }))
+    feed([
+      { type: 'tool_call', phase: 'started', node_id: 'lookup', tool_id: 'crm', action: 'query' },
+      ...chunks,
+      { type: 'tool_call', phase: 'finished', node_id: 'lookup', tool_id: 'crm', action: 'query', success: true },
+      { type: 'done', result: { success: true, response: '字'.repeat(160) } },
+    ])
+    try {
+      await round.executeRemoteChatRound(['查询客户'], undefined, scope())
+      expect(messages.value[0].liveSteps).toHaveLength(1)
+      expect(messages.value[0].liveSteps?.[0]).toMatchObject({ id: 'lookup', state: 'success' })
+      expect(changes.mock.calls.length).toBeGreaterThanOrEqual(1)
+      expect(changes.mock.calls.length).toBeLessThanOrEqual(2)
+      const textUpdates = deps.chatRequest.setLoadingProgress.mock.calls
+        .filter(([text]: [string]) => text === '正在生成回复…')
+      expect(textUpdates).toHaveLength(1)
+      expect(messages.value[0].content).toBe('字'.repeat(160))
+    } finally {
+      stop()
+    }
   })
 })
