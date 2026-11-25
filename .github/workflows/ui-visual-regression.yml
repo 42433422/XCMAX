@@ -84,6 +84,7 @@ jobs:
           if [[ "$SURFACE" == desktop ]]; then
             cp "candidate/$app/e2e/startup-readiness-fixture.ts" "baseline/$app/e2e/"
           fi
+          status=0
           for side in baseline candidate; do
             (
               cd "$side/$app"
@@ -108,8 +109,9 @@ jobs:
                 fi
               fi
               VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" npx playwright test --config playwright.visual.config.ts
-            )
+            ) || status=1
           done
+          exit "$status"
       - name: Read candidate Flutter SDK pin
         if: matrix.surface == 'flutter'
         id: flutter_sdk
@@ -130,6 +132,7 @@ jobs:
           cp "candidate/$app/test/employee_workspace_fixture.dart" "baseline/$app/test/"
           export VISUAL_FONT_PATH=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
           test -s "$VISUAL_FONT_PATH"
+          status=0
           for side in baseline candidate; do
             (
               cd "$side/$app"
@@ -147,9 +150,11 @@ jobs:
               # Ephemeral capture only; no automatic baseline commits.
               flutter test --no-pub --update-goldens visual_regression/visual_test.dart
               cp visual_regression/goldens/*.png "$RUNNER_TEMP/visual/$side/"
-            )
+            ) || status=1
           done
+          exit "$status"
       - name: Compare exact pixels against the checked-out base
+        if: always()
         run: |
           python candidate/FHD/scripts/dev/compare_visual_regression.py \
             --root "$RUNNER_TEMP/visual" --surface "$SURFACE" \
