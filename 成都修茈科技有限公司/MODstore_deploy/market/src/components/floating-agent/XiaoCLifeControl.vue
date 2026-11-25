@@ -26,9 +26,6 @@ const activity = computed(() =>
         ? '自主活动已暂停'
         : life.state?.activity?.summary || xiaocStateLabel(life.state?.status ?? ''),
 )
-const compactLabel = computed(() =>
-  life.error ? '自治待核实' : life.state ? (xiaocLevelLabels[life.state.level] ?? '模式待核实') : '读取自治…',
-)
 const canApply = computed(() => !!life.state && !life.saving && !life.error && selection.value !== life.state.level)
 const modeDescriptions: Readonly<Record<number, string>> = {
   1: '专注对话、理解与建议。',
@@ -131,10 +128,10 @@ async function applyLevel() {
         data-xiaoc-autonomy-trigger
         aria-haspopup="dialog"
         :aria-expanded="expanded"
-        :title="'全企业自治设置：' + compactLabel"
+        :title="life.error ? '自主任务设置：状态待同步' : '自主任务设置（全企业）'"
         @click="toggleCompact"
       >
-        <span>{{ compactLabel }}</span>
+        <span>自主任务</span>
         <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
           <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.4" />
         </svg>
@@ -151,11 +148,10 @@ async function applyLevel() {
   >
     <div class="xiaoc-life-control__head">
       <div class="xiaoc-life-control__heading">
-        <span v-if="compact" class="xiaoc-life-control__eyebrow">自治模式</span>
-        <strong>{{ label }}</strong>
+        <strong>{{ compact ? '自主任务' : label }}</strong>
       </div>
       <span>全企业生效</span>
-      <div class="xiaoc-life-control__actions">
+      <div v-if="!compact" class="xiaoc-life-control__actions">
       <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
         启动自主活动
       </button>
@@ -167,7 +163,13 @@ async function applyLevel() {
       </template>
       </div>
     </div>
+    <div v-if="compact" class="xiaoc-life-control__preview" aria-live="polite" aria-atomic="true">
+      <strong>{{ life.state ? (selection === life.state.level ? previewLabel : '预选 ' + previewLabel) : label }}</strong>
+      <span v-if="life.state">{{ modeDescriptions[selection] }}</span>
+      <span v-if="life.state" class="xiaoc-life-control__applied">{{ selection === life.state.level ? '已应用' : '当前已应用 ' + label }}</span>
+    </div>
     <ElSlider
+      :data-autonomy-preview="compact ? selection : undefined"
       :model-value="selection"
       :min="1"
       :max="6"
@@ -181,13 +183,20 @@ async function applyLevel() {
       @update:model-value="selectLevel"
       @change="changeLevel"
     />
-    <div v-if="compact && life.state" class="xiaoc-life-control__preview" aria-live="polite">
-      <strong v-if="selection !== life.state.level">预选 {{ previewLabel }}</strong>
-      <span>{{ modeDescriptions[selection] }}</span>
-    </div>
     <div class="xiaoc-life-control__foot">
       <span role="status">{{ life.state ? activity : '尚未读取运行状态' }}</span>
       <button type="button" @click="$emit('open-life')">目标与预算</button>
+    </div>
+    <div v-if="compact" class="xiaoc-life-control__actions">
+    <button v-if="life.state?.stopped" type="button" :disabled="life.saving" @click="life.save({ stopped: false, paused: false })">
+      启动自主活动
+    </button>
+    <template v-else-if="life.state">
+      <button type="button" :disabled="life.saving" @click="life.save({ paused: !life.state.paused })">
+        {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
+      </button>
+      <button type="button" :disabled="life.saving" @click="life.save({ stopped: true })">停止自主活动</button>
+    </template>
     </div>
     <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
       <span :title="life.state.identity_id">状态版本 {{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</span>
@@ -217,7 +226,7 @@ async function applyLevel() {
   justify-content: center;
   flex: 0 0 auto;
   gap: 5px;
-  min-height: 28px;
+  min-height: 32px;
   margin: 3px 1px 3px 0;
   padding: 5px 8px;
   border: 0;
@@ -228,13 +237,14 @@ async function applyLevel() {
   font-size: 0.75rem;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(.2,.8,.2,1);
 }
 .xiaoc-life-disclosure__trigger:hover,
 .xiaoc-life-disclosure__trigger--open { background: #ffffff0d; color: #f2efe8; }
 .xiaoc-life-disclosure__trigger--light { color: #716d65; }
 .xiaoc-life-disclosure__trigger--light:hover,
 .xiaoc-life-disclosure__trigger--light.xiaoc-life-disclosure__trigger--open { background: #24201808; color: #302e29; }
+.xiaoc-life-disclosure__trigger:active { transform: scale(.97); }
 .xiaoc-life-disclosure__trigger:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .xiaoc-life-disclosure__trigger svg { opacity: 0.72; transition: transform 180ms cubic-bezier(.2,.8,.2,1); }
 .xiaoc-life-disclosure__trigger--open svg { transform: rotate(180deg); }
@@ -326,12 +336,13 @@ async function applyLevel() {
   --life-button-fg: #29231d;
   box-sizing: border-box;
   width: 100%;
-  max-height: min(440px, 70vh);
+  max-height: min(480px, 72vh);
+  max-height: min(480px, 72dvh);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 15px 16px 13px;
+  gap: 9px;
+  padding: 16px;
   border: 1px solid var(--life-border);
   border-radius: 14px;
   background: var(--life-surface);
@@ -356,11 +367,10 @@ async function applyLevel() {
 .xiaoc-life-control--compact .xiaoc-life-control__head { justify-content: space-between; gap: 6px; }
 .xiaoc-life-control__heading { min-width: 0; }
 .xiaoc-life-control--compact .xiaoc-life-control__heading strong { display: block; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
-.xiaoc-life-control__eyebrow { display: block; color: var(--life-muted); font-size: 0.68rem; margin-bottom: 2px; }
-.xiaoc-life-control--compact .xiaoc-life-control__actions { display: flex; flex-basis: 100%; }
+.xiaoc-life-control--compact .xiaoc-life-control__actions { display: flex; gap: 4px; flex-basis: 100%; }
 .xiaoc-life-control--compact .xiaoc-life-control__actions button { margin: 0; color: var(--life-muted); }
 .xiaoc-life-control--compact :deep(.el-slider) {
-  --el-slider-height: 3px;
+  --el-slider-height: 4px;
   --el-slider-button-size: 14px;
   --el-slider-main-bg-color: var(--life-accent);
   --el-slider-runway-bg-color: var(--life-track);
@@ -368,18 +378,58 @@ async function applyLevel() {
   --el-slider-border-radius: 999px;
   box-sizing: border-box;
   width: auto;
-  margin: 2px 7px 12px;
+  min-height: 36px;
+  margin: 0 10px 16px;
+  touch-action: pan-y;
 }
 .xiaoc-life-control--compact :deep(.el-slider__button) {
-  background: var(--life-surface);
-  border: 2px solid var(--life-accent);
-  box-shadow: 0 1px 4px #0002;
-  transition: transform 140ms ease, box-shadow 140ms ease;
+  background: var(--life-accent);
+  border: 2px solid var(--life-surface);
+  box-shadow: 0 0 0 1px var(--life-accent), 0 2px 5px #0002;
+  transition: transform 170ms cubic-bezier(.2,.9,.3,1), box-shadow 170ms ease;
+}
+.xiaoc-life-control--compact :deep(.el-slider:not(.is-disabled) .el-slider__button-wrapper:hover .el-slider__button) {
+  transform: scale(1.10);
+}
+.xiaoc-life-control--compact :deep(.el-slider:not(.is-disabled) .el-slider__button-wrapper.dragging .el-slider__button) {
+  transform: scale(1.16);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--life-accent) 18%, transparent);
 }
 .xiaoc-life-control--compact :deep(.el-slider__button-wrapper:focus-visible) { outline: 2px solid var(--life-accent); outline-offset: 1px; border-radius: 50%; }
-.xiaoc-life-control--compact :deep(.el-slider__marks-text) { color: var(--life-muted); font-size: 0.67rem; }
-.xiaoc-life-control__preview { display: grid; min-height: 22px; gap: 2px; color: var(--life-muted); }
-.xiaoc-life-control__preview strong { color: var(--life-fg); font-weight: 500; }
+.xiaoc-life-control--compact :deep(.el-slider__stop) { width: 4px; height: 4px; background: var(--life-muted); opacity: .6; }
+.xiaoc-life-control--compact :deep(.el-slider__marks-text) {
+  color: var(--life-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  transition: color 150ms ease;
+}
+.xiaoc-life-control--compact :deep([data-autonomy-preview="1"] .el-slider__marks-text:nth-child(1)),
+.xiaoc-life-control--compact :deep([data-autonomy-preview="2"] .el-slider__marks-text:nth-child(2)),
+.xiaoc-life-control--compact :deep([data-autonomy-preview="3"] .el-slider__marks-text:nth-child(3)),
+.xiaoc-life-control--compact :deep([data-autonomy-preview="4"] .el-slider__marks-text:nth-child(4)),
+.xiaoc-life-control--compact :deep([data-autonomy-preview="5"] .el-slider__marks-text:nth-child(5)),
+.xiaoc-life-control--compact :deep([data-autonomy-preview="6"] .el-slider__marks-text:nth-child(6)) {
+  color: var(--life-fg);
+  font-weight: 600;
+}
+@supports selector(:has(*)) {
+  /* Follow the pointer directly; ease only discrete clicks and keyboard changes. */
+  .xiaoc-life-control--compact :deep(.el-slider:not(:has(.el-slider__button-wrapper.dragging)) .el-slider__button-wrapper) {
+    transition: left 170ms cubic-bezier(.2,.8,.2,1);
+  }
+  .xiaoc-life-control--compact :deep(.el-slider:not(:has(.el-slider__button-wrapper.dragging)) .el-slider__bar) {
+    transition: width 170ms cubic-bezier(.2,.8,.2,1);
+  }
+}
+.xiaoc-life-control__preview {
+  display: grid;
+  grid-template-rows: auto minmax(2.8em, auto) auto;
+  gap: 3px;
+  min-width: 0;
+  color: var(--life-muted);
+}
+.xiaoc-life-control__preview strong { color: var(--life-fg); font-size: .98rem; font-weight: 600; letter-spacing: -.015em; }
+.xiaoc-life-control__applied { color: var(--life-muted); font-size: .68rem; }
 .xiaoc-life-control--compact .xiaoc-life-control__foot { gap: 8px; font-size: 0.72rem; }
 .xiaoc-life-control--compact .xiaoc-life-control__foot > span { white-space: normal; overflow-wrap: anywhere; }
 .xiaoc-life-control--compact button {
@@ -408,10 +458,22 @@ async function applyLevel() {
 }
 .xiaoc-life-control__confirm button:hover:not(:disabled) { background: var(--life-accent); opacity: 0.88; }
 .xiaoc-life-control__confirm button:disabled { background: var(--life-track); color: var(--life-muted); opacity: 0.7; }
+@media (pointer: coarse) {
+  .xiaoc-life-disclosure__trigger { min-height: 44px; }
+  .xiaoc-life-control--compact button { min-height: 40px; }
+  .xiaoc-life-control--compact :deep(.el-slider) { min-height: 44px; }
+  .xiaoc-life-control--compact :deep(.el-slider__button-wrapper) { width: 44px; height: 44px; top: -20px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .xiaoc-life-disclosure__trigger, .xiaoc-life-disclosure__trigger svg,
   .xiaoc-life-control--compact, .xiaoc-life-control--compact button,
-  .xiaoc-life-control--compact :deep(.el-slider__button) { transition: none !important; }
+  .xiaoc-life-control--compact :deep(.el-slider__button),
+  .xiaoc-life-control--compact :deep(.el-slider__button-wrapper),
+  .xiaoc-life-control--compact :deep(.el-slider__bar),
+  .xiaoc-life-control--compact :deep(.el-slider__marks-text) { transition: none !important; }
+  .xiaoc-life-disclosure__trigger:active,
+  .xiaoc-life-control--compact :deep(.el-slider .el-slider__button-wrapper:hover .el-slider__button),
+  .xiaoc-life-control--compact :deep(.el-slider .el-slider__button-wrapper.dragging .el-slider__button) { transform: none !important; }
   :global(.xiaoc-autonomy-motion-enter-active),
   :global(.xiaoc-autonomy-motion-leave-active),
   :global(.xiaoc-autonomy-motion-enter-active .xiaoc-life-control--compact),
