@@ -668,10 +668,12 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             event, preserve_identity=id(event) in self._stream_waiters
         )
         if success:
-            record_event_outcome(self._enable_metrics, "accepted")
             if id(event) not in self._stream_waiters:
+                # Stream source already recorded admission at XADD. Do not
+                # record a second admission while dispatching its local copy.
                 self._published_count += 1
                 record_delivery_metric(self._enable_metrics, "published")
+                record_event_outcome(self._enable_metrics, "accepted")
             self._wake_processor()
         else:
             self._discard_event(event, "enqueue_rejected")
