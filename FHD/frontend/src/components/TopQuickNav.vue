@@ -184,15 +184,19 @@ function recordName(row, keys) {
   return keys.map((key) => String(row?.[key] || '').trim()).filter(Boolean).join(' · ')
 }
 
+function canNavigateToBusinessKey(key) {
+  return (visibleNavItems.value || []).some((nav) => nav.key === key || nav.parentKey === key)
+}
+
 async function lookupRecords(keyword) {
   const generation = ++recordGeneration
   const scope = recordScope.value
   const [products, customers, orders, templates, employees] = await Promise.all([
-    productsApi.searchProducts(keyword).catch(() => null),
-    customersApi.getCustomers({ keyword, page: 1, per_page: 8 }).catch(() => null),
-    ordersApi.searchOrders(keyword).catch(() => null),
-    templatePreviewApi.listTemplates().catch(() => null),
-    fetchEmployeeDirectory().catch(() => []),
+    canNavigateToBusinessKey('products') ? productsApi.searchProducts(keyword).catch(() => null) : null,
+    canNavigateToBusinessKey('customers') ? customersApi.getCustomers({ keyword, page: 1, per_page: 8 }).catch(() => null) : null,
+    canNavigateToBusinessKey('orders') ? ordersApi.searchOrders(keyword).catch(() => null) : null,
+    canNavigateToBusinessKey('template-preview') ? templatePreviewApi.listTemplates().catch(() => null) : null,
+    canNavigateToBusinessKey('employee-workflow') ? fetchEmployeeDirectory().catch(() => []) : [],
   ])
   if (generation !== recordGeneration || scope !== recordScope.value) return
   const productRows = Array.isArray(products?.data) ? products.data : []
@@ -529,6 +533,7 @@ function choose(item) {
     return
   }
   if (item?.kind === 'template') {
+    if (!records.value.includes(item) || !canNavigateToBusinessKey(TEMPLATE_NAV_KEY)) return
     try {
       sessionStorage.setItem(TEMPLATE_SEARCH_STORAGE_KEY, item.keyword || query.value.trim())
     } catch {
@@ -547,6 +552,8 @@ function choose(item) {
   }
   if (item?.kind === 'product' || item?.kind === 'customer' || item?.kind === 'order') {
     if (!records.value.includes(item)) return
+    const requiredKey = { product: 'products', customer: 'customers', order: 'orders' }[item.kind]
+    if (!canNavigateToBusinessKey(requiredKey)) return
     const pathByKind = { product: '/products', customer: '/customers', order: '/orders' }
     pushErpPage(router, {
       path: pathByKind[item.kind],
@@ -566,7 +573,7 @@ function choose(item) {
   if (item?.kind === 'employee') {
     if (!records.value.includes(item)) return
     const navKey = item.navKey || 'employee-workflow'
-    if (!(visibleNavItems.value || []).some((nav) => nav.key === navKey || nav.parentKey === navKey)) return
+    if (!canNavigateToBusinessKey(navKey)) return
     emit('select', navKey)
     query.value = ''
     records.value = []
