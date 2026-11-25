@@ -422,7 +422,7 @@ async function handleWorkspaceCommand(command) {
     void workspaceTaskCenter.refresh()
     return
   }
-  if (!['chat', 'new-chat', 'sessions'].includes(command)) return
+  if (!['chat', 'new-chat', 'new-task', 'sessions'].includes(command)) return
   await navigateToView('chat', 'workspace-shortcut')
   if (router.currentRoute.value.name !== 'chat') return
   // The route resolves before Vue's async component/keep-alive activation may settle.
@@ -432,6 +432,7 @@ async function handleWorkspaceCommand(command) {
     const input = document.getElementById('messageInput')
     if (!input || !input.isConnected || input.closest('[inert]')) return false
     if (command === 'new-chat') window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    else if (command === 'new-task') window.dispatchEvent(new Event('xcagi:workspace-new-task'))
     else if (command === 'sessions') window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
     else input.focus({ preventScroll: true })
     return true
