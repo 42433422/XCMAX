@@ -95,7 +95,12 @@ def test_revoked_owner_with_settled_history_can_be_replaced_without_transferring
     assert portfolio.portfolio_status(decision_id, owner_user_id=7) == original
     with pytest.raises(portfolio.PortfolioError, match="owner"):
         portfolio.portfolio_status(decision_id, owner_user_id=8)
-    assert updated["events"][0]["details"] == {"previous_owner_user_id": 7, "owner_user_id": 8}
+    assert updated["events"][0]["details"] == {
+        "previous_owner_user_id": 7,
+        "owner_user_id": 8,
+        "paused": False,
+        "stopped": False,
+    }
     assert (
         xiaoc_life_runtime._domain_order(
             {**updated, "level": 5, "interests": [{"topic": "public research"}], "events": []}

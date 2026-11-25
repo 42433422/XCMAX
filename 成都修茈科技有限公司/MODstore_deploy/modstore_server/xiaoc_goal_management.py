@@ -28,7 +28,8 @@ STAGES = (
     "enterprise_subject",
 )
 LABELS = dict(zip(STAGES, ("付款", "安装", "首次使用", "产出", "验收", "复用", "顺序", "企业主体")))
-EXECUTION_STEPS = ("inspect", "plan")
+ExecutionStep = Literal["inspect", "plan"]
+EXECUTION_STEPS: tuple[ExecutionStep, ...] = ("inspect", "plan")
 
 
 def _digest(value: Any) -> str:
@@ -315,7 +316,9 @@ def build_goal_opportunities(
     cohort = [row.customer_goal_id for row in plan.customer_goal_bindings]
     if len(cohort) != len(set(cohort)):
         raise LifePolicyError("固定客户验收目标不能重复")
-    ids = {step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS}
+    ids: dict[str, str] = {
+        step: "life-step-" + _digest([goal["id"], step])[:32] for step in EXECUTION_STEPS
+    }
     descriptions = {
         "inspect": "核对原客户价值链缺口及同口径原记录；提交来源与缺失证据。",
         "plan": "依据原核对任务结果提交处理建议及成本风险；不执行业务变更。",
@@ -391,6 +394,8 @@ def operating_dependency_handoff(
     result = []
     for key in opportunity.get("depends_on", []):
         task = tasks.get(key)
+        if not isinstance(task, dict):
+            raise PortfolioError("operating dependency has no verified terminal receipt")
         if (receipt := _terminal_task_receipt(task)) is None:
             raise PortfolioError("operating dependency has no verified terminal receipt")
         inner = receipt.get("result")

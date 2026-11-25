@@ -6,6 +6,8 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from queue import Empty
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -959,9 +961,11 @@ def _process_claim_life(db_url, start, output, connect_args):
         engine.dispose()
 
 
-def _spawn_claims(database, connect_args):
+def _spawn_claims(database, connect_args, monkeypatch):
     import multiprocessing
 
+    # Spawn resolves the target module afresh; FHD also has a tests package.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
     output = ctx.Queue()
@@ -974,10 +978,18 @@ def _spawn_claims(database, connect_args):
         for worker in workers:
             worker.start()
         start.set()
-        results = [output.get(timeout=45) for _ in workers]
+        results = []
+        for _ in workers:
+            try:
+                results.append(output.get(timeout=45))
+            except Empty:
+                exits = ", ".join(f"{worker.name}={worker.exitcode}" for worker in workers)
+                pytest.fail(
+                    f"Received {len(results)}/{len(workers)} claim results; exit codes: {exits}"
+                )
         for worker in workers:
             worker.join(10)
-            assert worker.exitcode == 0
+            assert worker.exitcode == 0, f"{worker.name} exit code: {worker.exitcode}"
         return results
     finally:
         for worker in workers:
@@ -998,9 +1010,15 @@ def _assert_one_claim(results, state):
     return claims[0]
 
 
-def test_spawned_processes_share_persistent_identity_and_one_claim(database):
+@pytest.mark.parametrize("preceding_test_root", [None, "FHD"])
+def test_spawned_processes_share_persistent_identity_and_one_claim(
+    database, monkeypatch, preceding_test_root
+):
+    if preceding_test_root:
+        modstore_root = Path(__file__).resolve().parents[1]
+        monkeypatch.syspath_prepend(str(modstore_root.parents[1] / preceding_test_root))
     state = configure()
-    claim = _assert_one_claim(_spawn_claims(database, {"timeout": 10}), state)
+    claim = _assert_one_claim(_spawn_claims(database, {"timeout": 10}, monkeypatch), state)
     assert finish(claim)["budget"]["used_tokens"] == 50
 
 
@@ -1100,7 +1118,7 @@ def test_native_postgres_process_claim_checkpoint_and_pool_release(monkeypatch):
         engine = create_engine(url, connect_args=options, pool_pre_ping=True)
         factory = _prepare_database(engine, monkeypatch)
         initial = configure()
-        claim = _assert_one_claim(_spawn_claims(factory, options), initial)
+        claim = _assert_one_claim(_spawn_claims(factory, options, monkeypatch), initial)
         _checkpoint_act(claim, 63)
         with factory() as session:
             session.add(
