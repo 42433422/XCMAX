@@ -98,6 +98,48 @@ void main() {
     expect(rows.first['has_employee_profile'], isFalse);
   });
 
+  test('expired display cache preserves unresolved execution identities', () async {
+    var now = DateTime.utc(2026, 11, 25, 12);
+    final cache = MobileOfflineStore.forExecutor(NativeDatabase.memory(),
+        clock: () => now);
+    try {
+      await cache.ensureReady();
+      await cache.appendMessage('c1', message(1, 'old confirmed'));
+      await cache.appendMessage('c1', {
+        ...message(2, 'unresolved', role: 'assistant'),
+        'status': 'pending',
+        'turn_id': 'original-turn',
+      });
+      await cache.saveConversationState('c1', preview: 'old preview', timestampMs: 2);
+      await cache.setInflightTaskId('c1', 'original-task');
+      await cache.enqueueMessage(
+        conversationId: 'c1',
+        conversationType: ConversationType.pinnedAssistant,
+        title: '小C',
+        body: 'unresolved write',
+        authGeneration: 1,
+        idempotencyKey: 'original-turn',
+        requiresReconciliation: true,
+      );
+      expect(await cache.cachedMessages('c1'), hasLength(2));
+      expect((await cache.latestMessagePreviews())['c1']?['body'], 'unresolved');
+      expect(await cache.conversationState('c1'), isNotNull);
+      now = now.add(MobileOfflineStore.displayCacheLifetime);
+      expect((await cache.cachedMessages('c1')).single['turn_id'], 'original-turn');
+      expect(await cache.latestMessagePreviews(), isEmpty);
+      expect(await cache.conversationState('c1'), isNull);
+      expect(await cache.inflightTaskId('c1'), 'original-task');
+      expect((await cache.pendingMessages()).single.requiresReconciliation, isTrue);
+      await cache.appendMessage('c1', message(1, 'refetched history'));
+      expect((await cache.cachedMessages('c1')).first['body'], 'refetched history');
+      expect((await cache.latestMessagePreviews())['c1']?['body'], 'refetched history');
+      await cache.saveConversationState('c1', preview: 'new preview', timestampMs: 1);
+      expect((await cache.conversationState('c1'))?['preview'], 'new preview');
+    } finally {
+      await cache.close();
+    }
+  });
+
   test('每个会话只保留最近 80 条消息', () async {
     for (var i = 0; i < 85; i++) {
       await store.appendMessage('c1', message(i, 'm$i'));

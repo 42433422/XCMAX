@@ -180,4 +180,57 @@ void main() {
     expect(client.receiptReads, 3);
     expect(await store.pendingMessageCount(), 0);
   });
+
+  test('credential generation mismatch does not discard unknown work', () async {
+    final id = await store.enqueueMessage(
+      conversationId: conversation.id,
+      conversationType: conversation.type,
+      title: conversation.title,
+      body: '原工单不得丢失',
+      authGeneration: client.authGeneration + 1,
+      idempotencyKey: 'stable-original-turn',
+      requiresReconciliation: true,
+    );
+    expect(await repository.flushPendingMessages(), 0);
+    final pending = (await store.pendingMessages()).single;
+    expect(pending.id, id);
+    expect(pending.idempotencyKey, 'stable-original-turn');
+    expect(pending.requiresReconciliation, isTrue);
+    expect(client.attemptedPosts, 0);
+    expect(client.receiptReads, 0);
+  });
+
+  test('weak reconnection retries only GET receipts with the same turn', () async {
+    client.receiptKnown = false;
+    await expectLater(
+      repository.streamMessage(
+        conversation: conversation,
+        body: '写入企业库存',
+        idempotencyKey: 'stable-original-turn',
+      ),
+      throwsA(isA<MobileApiException>()
+          .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')),
+    );
+    final id = await store.enqueueMessage(
+      conversationId: conversation.id,
+      conversationType: conversation.type,
+      title: conversation.title,
+      body: '写入企业库存',
+      authGeneration: client.authGeneration,
+      idempotencyKey: 'stable-original-turn',
+    );
+    for (var attempt = 0; attempt < 3; attempt++) {
+      expect(await repository.flushPendingMessages(), 0);
+      final pending = (await store.pendingMessages()).single;
+      expect(pending.id, id);
+      expect(pending.idempotencyKey, 'stable-original-turn');
+      expect(pending.requiresReconciliation, isTrue);
+      expect(client.attemptedPosts, 1);
+    }
+    client.receiptKnown = true;
+    expect(await repository.flushPendingMessages(), 1);
+    expect(client.receiptReads, 5);
+    expect(client.attemptedPosts, 1);
+    expect(await store.pendingMessageCount(), 0);
+  });
 }

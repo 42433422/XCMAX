@@ -414,10 +414,12 @@ abstract class _RepoChatBase extends _RepoRelayBase {
       for (final item in pending) {
         if (scope != await _offlineScope()) break;
         if (item.authGeneration != _client.authGeneration) {
-          await store.markSent(item.id);
+          // Credentials changed; retain the unknown original outcome until
+          // the owner can reconcile it against the original authorized scope.
           continue;
         }
-        await store.markSending(item.id);
+        // Do not promote an unknown result to another write attempt.
+        await store.markReconciliationRequired(item.id);
         if (scope != await _offlineScope()) break;
         try {
           await streamMessage(
