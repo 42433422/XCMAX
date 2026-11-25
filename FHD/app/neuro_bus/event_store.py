@@ -197,6 +197,10 @@ class EventStore:
                 raise RuntimeError("reliable admission cannot use an in-memory database")
             if int(fetch_rows(connection, "PRAGMA synchronous")[0][0]) < 2:
                 raise RuntimeError("reliable admission requires synchronous=FULL or stronger")
+            # FULL alone is insufficient when rollback/WAL journaling is disabled.
+            journal_mode = str(fetch_rows(connection, "PRAGMA journal_mode")[0][0]).lower()
+            if journal_mode not in {"wal", "delete", "truncate", "persist"}:
+                raise RuntimeError("reliable admission requires durable WAL or rollback journal")
             rows = fetch_rows(
                 connection,
                 "SELECT event_data, event_sha256, admitted_at FROM neuro_admissions WHERE event_id = ?",
