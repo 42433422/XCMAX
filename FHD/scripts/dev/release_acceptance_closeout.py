@@ -65,6 +65,10 @@ def _business_receipts_complete(
     record = receipts.get(str(issue["number"])) if isinstance(receipts, dict) else None
     if not isinstance(record, dict) or record.get("status") != "accepted":
         return False
+    # The market receipt must identify the exact published release itself;
+    # checking only its nested stages permits a stale top-level verdict.
+    if record.get("version") != version or record.get("build_sha") != build_sha:
+        return False
     identity = {
         "version": version, "build_sha": build_sha,
         "tenant_id": record.get("tenant_id"), "customer_id": record.get("customer_id"),
@@ -83,10 +87,15 @@ def _business_receipts_complete(
     )
     if not isinstance(stages, dict):
         return False
+    receipt_ids = set()
     for name in required:
         stage = stages.get(name)
-        if not isinstance(stage, dict) or not stage.get("receipt_id"):
+        if not isinstance(stage, dict):
             return False
+        receipt_id = stage.get("receipt_id")
+        if not isinstance(receipt_id, str) or not receipt_id.strip() or receipt_id in receipt_ids:
+            return False
+        receipt_ids.add(receipt_id)
         if any(stage.get(key) != value for key, value in identity.items()):
             return False
         if stage.get("source_sha256") != record["source_sha256"]:
@@ -119,8 +128,11 @@ def _business_receipts_complete(
     if (
         source.get("source_kind") != "authorized_customer_original"
         or source.get("synthetic") is not False
-        or not approval.get("approved_by")
-        or approval["approved_by"] == execution.get("executed_by")
+        or not isinstance(approval.get("approved_by"), str)
+        or not approval["approved_by"].strip()
+        or not isinstance(execution.get("executed_by"), str)
+        or not execution["executed_by"].strip()
+        or approval["approved_by"] == execution["executed_by"]
         or database.get("inventory_committed") is not True
         or database.get("finance_committed") is not True
         or database.get("readback_verified") is not True
