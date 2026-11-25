@@ -67,7 +67,9 @@ def test_legacy_and_vector_recall_exclude_erp_fact_without_actor_rbac(monkeypatc
     assert "secret" not in str(hits)
 
     # Direct compatibility reads also cannot bypass the source permission fence.
-    store = SimpleNamespace(get_memory=lambda owner: SimpleNamespace(memory_v2_records=[erp, plain]))
+    store = SimpleNamespace(
+        get_memory=lambda owner: SimpleNamespace(memory_v2_records=[erp, plain])
+    )
     assert retrieve.search("secret", scope="user", owner_id=OWNER, store=store) == []
     context = retrieve.build_memory_context("secret", scope="user", owner_id=OWNER, store=store)
     assert "secret" not in context
@@ -78,7 +80,8 @@ def test_legacy_and_vector_recall_exclude_erp_fact_without_actor_rbac(monkeypatc
         lambda: authority,
     )
     assert retrieve.recall_authoritative_memories(OWNER, "secret") == []
-    assert "secret" not in str(retrieve.relation_recall_hits(OWNER, "secret", memory_service=authority))
+    related = retrieve.relation_recall_hits(OWNER, "secret", memory_service=authority)
+    assert "secret" not in str(related)
 
     # The Agent's direct MemoryV2 formatter is another original recall path.
     formatter = MemoryQueries(
