@@ -1106,7 +1106,15 @@ def test_terminal_evidence_reads_real_xlsx_and_rejects_corrupt_original(
     assert step.output["success"] is True
     call.output = copy.deepcopy(step.output)
     bind_execution_receipt(call)
-    verified = verify_step_result(run=run, step=step, call=call, context=actor.context)
+    readback_context = {
+        **actor.context,
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+    }
+    verified = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
     assert verified["accepted"] is True
     assert any(item["source"] in {"run_artifact", "report_data", "report_export", "report_sql"}
                for item in verified["checks"])
@@ -1116,7 +1124,9 @@ def test_terminal_evidence_reads_real_xlsx_and_rejects_corrupt_original(
     with path.open("ab") as output:
         output.write(b"tampered-after-export")
 
-    rejected = verify_step_result(run=run, step=step, call=call, context=actor.context)
+    rejected = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
     assert rejected["accepted"] is False
     assert rejected["status"] in {"failed", "inconclusive"}
     assert summarize_verification(run)["accepted"] is False
