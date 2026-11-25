@@ -5,6 +5,7 @@ export const WORKSPACE_COMMANDS = [
   { id: 'palette', label: '搜索命令', defaultChord: 'Mod+K' },
   { id: 'chat', label: '打开智能对话', defaultChord: 'Mod+Alt+J' },
   { id: 'new-chat', label: '新建对话', defaultChord: 'Mod+Alt+N' },
+  { id: 'new-task', label: '新建任务草稿', defaultChord: 'Mod+Alt+G' },
   { id: 'sessions', label: '切换历史会话', defaultChord: 'Mod+Alt+H' },
   { id: 'tasks', label: '查看任务工作区', defaultChord: 'Mod+Alt+T' },
   { id: 'sidebar', label: '展开或折叠侧栏', defaultChord: 'Mod+Alt+B' },
