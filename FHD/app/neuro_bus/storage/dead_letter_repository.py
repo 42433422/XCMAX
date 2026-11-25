@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -207,15 +208,28 @@ class DeadLetterRepository:
         self, reason: DeadLetterReason | None = None, event_type: str | None = None
     ) -> list[DeadLetterEntry]:
         if self.storage.connection is not None:
-            sql = "SELECT * FROM neuro_dead_letters WHERE is_resolved = 0"
+            sql = (
+                "SELECT entry_id, event_data, reason, error_message, error_stack, retry_count, "
+                "first_failure_time, last_failure_time, handler_name, metadata "
+                "FROM neuro_dead_letters WHERE is_resolved = 0"
+            )
             params: list[object] = []
             if reason is not None:
                 sql += " AND reason = ?"
                 params.append(reason.value)
-            elif event_type is not None:
+            if event_type is not None:
                 sql += " AND event_type = ?"
                 params.append(event_type)
-            return [self.from_row(row) for row in self.storage.rows(sql, params)]
+            # Preserve the legacy all-active-entries contract. Decode bounded
+            # batches from one SQLite snapshot instead of materializing all raw rows.
+            entries: list[DeadLetterEntry] = []
+            with self.storage.lock:
+                connection = self.storage.connection
+                assert connection is not None
+                with closing(connection.execute(sql, params)) as cursor:
+                    for batch in iter(lambda: cursor.fetchmany(256), []):
+                        entries.extend(self.from_row(row) for row in batch)
+            return entries
         with self.storage.lock:
             return [
                 entry
@@ -284,14 +298,20 @@ class DeadLetterRepository:
                 record_audit(connection, entry_id, "restored", restored_by)
             return restored
 
-    def audit_history(self, entry_id: str) -> list[dict[str, Any]]:
+    def audit_history(
+        self, entry_id: str, *, after_audit_id: int = 0, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 1000 or after_audit_id < 0:
+            raise ValueError("audit limit must be 1..1000 and cursor must be nonnegative")
         if self.storage.connection is None:
             return []
         return [
             dict(row)
             for row in self.storage.rows(
-                "SELECT * FROM neuro_dlq_audit WHERE entry_id = ? ORDER BY audit_id",
-                (entry_id,),
+                "SELECT audit_id, entry_id, action, recorded_at, event_type, reason, "
+                "retry_count, details FROM neuro_dlq_audit "
+                "WHERE entry_id = ? AND audit_id > ? ORDER BY audit_id LIMIT ?",
+                (entry_id, after_audit_id, limit),
             )
         ]
 
