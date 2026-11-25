@@ -471,3 +471,24 @@ def test_unmigrated_binding_cannot_be_recreated_or_closed(trusted_actor, mixed):
             operation()
         assert error.value.code == "runtime_migration_required"
         assert store.repository.get(run.run_id).to_dict() == before
+
+
+@pytest.mark.parametrize("version", [2, True, "1", None])
+def test_unsupported_saved_binding_cannot_be_reissued_or_projected(trusted_actor, version):
+    actor = trusted_actor()
+    store, run, grant = make_binding(actor)
+    store.update(run.run_id, lambda _run, metadata: metadata.update(version=version))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=actor.factory))
+    for check in (
+        lambda: reopened.authenticate(grant.mcp_token),
+        lambda: reopened.receipt_snapshot(run.run_id),
+    ):
+        with pytest.raises(XiaoxBindingError) as error:
+            check()
+        assert error.value.code == "runtime_contract_unsupported"
+    # Stopping and reading original history remain available across upgrades.
+    reopened.close(run.run_id, "interrupted")
+    with pytest.raises(XiaoxBindingError) as error:
+        reopened.create(run.run_id)
+    assert error.value.code == "runtime_contract_unsupported"
+    assert reopened.get(run.run_id).metadata["version"] == version

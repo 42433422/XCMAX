@@ -152,6 +152,34 @@ class XiaoxBindingStore:
     def _validate_goal(run: AgentRun, metadata: dict[str, Any]) -> str:
         from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
+        legacy_unstarted = (
+            "version" not in metadata
+            and type(metadata.get("generation")) is int
+            and metadata["generation"] == 0
+            and metadata.get("runtime_status") == "not_started"
+            and metadata.get("coordinator_active") is False
+            and metadata.get("revoked") is True
+            and not any(
+                metadata.get(key)
+                for key in (
+                    "calls",
+                    "token_hashes",
+                    "thread_id",
+                    "model_requests",
+                    "active_started_at",
+                    "active_seconds",
+                    "model_reconciliation_required",
+                )
+            )
+        )
+        if (
+            metadata
+            and not legacy_unstarted
+            and (type(metadata.get("version")) is not int or metadata["version"] != 1)
+        ):
+            raise XiaoxBindingError(
+                "runtime_contract_unsupported", "原运行绑定版本不受支持，请保留原件并核对兼容性"
+            )
         if not run.metadata.get("runtime_goal_contract"):
             if metadata.get("calls") or run.metadata.get("runtime_goal_digest"):
                 raise XiaoxBindingError("goal_changed", "原任务目标合同已丢失")
