@@ -558,6 +558,126 @@ def read_training_impact(request_id, state):
     }
 
 
+def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
+    """Observe actual approved-rollout outbox receipts, not a synthetic uplift.
+
+    The original GrowthBook trial owns the randomized causal decision. Once
+    the temporary rollout starts there is no concurrent control arm, so the
+    post-rollout stream may only establish absolute observed outcomes.
+    """
+    from datetime import UTC
+
+    from modstore_server.customer_value_classification import parse_datetime
+    from modstore_server.models import OutboxEvent
+    from modstore_server.retort_experiment_surfaces import (
+        RAG_MEASUREMENT,
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+    )
+
+    progress = effects.get("experiment") or {}
+    life = policy.get("lifecycle") or {}
+    start = parse_datetime(progress.get("closed_at"))
+    if (
+        start is None
+        or start.utcoffset() is None
+        or observed_at.tzinfo is None
+        or start > observed_at
+        or progress.get("traffic") != "candidate"
+        or progress.get("decision") != "promote"
+        or progress.get("rollout_verified") is not True
+    ):
+        return None
+    start = start.astimezone(UTC)
+    now = observed_at.astimezone(UTC)
+    source_digests, subjects, unique_executions = [], set(), set()
+    successes = failures = 0
+    unverified = False
+    query = (
+        db.query(OutboxEvent)
+        .filter_by(aggregate_id=row.id, event_name="experiment.observed")
+        .order_by(OutboxEvent.id)
+        .limit(10001)
+    )
+    records = list(query)
+    if len(records) > 10000:
+        return {
+            "status": "blocked_source_budget",
+            "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+            "window_start": start.isoformat(),
+            "observed_through": now.isoformat(),
+        }
+    for event in records:
+        item = json_loads(event.payload_json, {})
+        if not isinstance(item, dict) or item.get("assignment_stage") != "approved_rollout":
+            continue
+        completed = parse_datetime(item.get("completed_at"))
+        if completed is None or completed.utcoffset() is None:
+            unverified = True
+            continue
+        completed = completed.astimezone(UTC)
+        if not start <= completed <= now:
+            continue
+        if (
+            item.get("request_id") != row.id
+            or item.get("experiment_id") != progress.get("experiment_id")
+            or item.get("release_sha") != progress.get("release_sha")
+            or item.get("policy_digest") != progress.get("policy_digest")
+            or item.get("measurement_scope") != life.get("measurement_scope")
+            or item.get("variation_id") != "1"
+            or type(item.get("success")) is not bool
+            or not item.get("observation_id")
+            or not item.get("subject_id")
+        ):
+            unverified = True
+            continue
+        scope = life.get("measurement_scope")
+        if scope == WORKFLOW_CUSTOMER_MEASUREMENT:
+            original = item.get("customer_outcome_evidence_sha256")
+            if not isinstance(original, str) or not re.fullmatch(r"[0-9a-f]{64}", original):
+                unverified = True
+                continue
+        elif scope == RAG_MEASUREMENT:
+            original = item.get("rag_evidence_sha256")
+            if not isinstance(original, str) or not re.fullmatch(r"[0-9a-f]{64}", original):
+                unverified = True
+                continue
+        else:
+            # Other surfaces have no approved-rollout terminal evidence contract.
+            unverified = True
+            continue
+        execution = item.get("execution_id") or item["observation_id"]
+        key = (str(item["subject_id"]), str(execution))
+        if key in unique_executions:
+            unverified = True
+            continue
+        unique_executions.add(key)
+        subjects.add(str(item["subject_id"]))
+        successes += int(item["success"])
+        failures += int(not item["success"])
+        source_digests.append(hashlib.sha256(event.payload_json.encode()).hexdigest())
+    sample_count = successes + failures
+    return {
+        "status": (
+            "source_unverified" if unverified else "observational_only" if sample_count else "unknown"
+        ),
+        "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+        "reason": "invalid_original_receipts" if unverified else "no_control_arm_after_rollout",
+        "source": "original_experiment_outbox",
+        "experiment_id": progress.get("experiment_id"),
+        "release_sha": progress.get("release_sha"),
+        "window_start": start.isoformat(),
+        "observed_through": now.isoformat(),
+        "observations": sample_count,
+        "successes": successes,
+        "failures": failures,
+        "unique_subjects": len(subjects),
+        "source_events_sha256": hashlib.sha256(
+            json_dumps(sorted(source_digests)).encode()
+        ).hexdigest(),
+        "independently_verified_lift": False,
+    }
+
+
 def request_postpromotion_regression_rechecks():
     """Reopen the original Retort impact/recovery tail after a late live stop-loss.
 
