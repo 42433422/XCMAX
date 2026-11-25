@@ -4,7 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric,
+    String, Text, UniqueConstraint, text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.db_base import Base
@@ -146,6 +149,68 @@ class PurchaseInboundItem(TenantScopedMixin, Base):
     product: Mapped[Optional[Product]] = relationship("Product")
     order_item: Mapped[Optional[PurchaseOrderItem]] = relationship("PurchaseOrderItem")
     location: Mapped[Optional[StorageLocation]] = relationship("StorageLocation")
+
+
+class PurchaseReturn(TenantScopedMixin, Base):
+    """A posted supplier return tied to one original purchase receipt."""
+
+    __tablename__ = "purchase_returns"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "return_no", name="uq_purchase_returns_tenant_no"),
+        UniqueConstraint(
+            "tenant_id", "approval_request_id",
+            name="uq_purchase_returns_approved_request",
+        ),
+        CheckConstraint("total_amount >= 0", name="ck_purchase_return_amount_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    return_no: Mapped[str] = mapped_column(String(50), nullable=False)
+    approval_request_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("approval_requests.id"), nullable=False
+    )
+    inbound_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_inbounds.id"), nullable=False
+    )
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="posted")
+    journal_entry_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("journal_entries.id")
+    )
+    posted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    items: Mapped[list[PurchaseReturnItem]] = relationship(
+        "PurchaseReturnItem", back_populates="purchase_return",
+        cascade="all, delete-orphan",
+    )
+
+
+class PurchaseReturnItem(TenantScopedMixin, Base):
+    __tablename__ = "purchase_return_items"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_purchase_return_item_qty_positive"),
+        CheckConstraint("amount >= 0", name="ck_purchase_return_item_amount_nonnegative"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    return_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_returns.id"), nullable=False
+    )
+    inbound_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_inbound_items.id"), nullable=False
+    )
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    batch_no: Mapped[Optional[str]] = mapped_column(String(50))
+    location_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("storage_locations.id")
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    purchase_return: Mapped[PurchaseReturn] = relationship(
+        "PurchaseReturn", back_populates="items"
+    )
 
 
 from app.db.models.inventory import StorageLocation, Warehouse
