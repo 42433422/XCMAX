@@ -262,7 +262,7 @@ export const useModsStore = defineStore('mods', () => {
     const data = await fetchModRoutesPayloadShared()
     if (!current() || data === null) {
       // Retain no previous account's route listing if a new account is offline.
-      if (loadedAccountEpoch.value !== productReadAccountEpoch.value) modRoutes.value = []
+      if (loadedAccountEpoch.value >= 0 && loadedAccountEpoch.value !== productReadAccountEpoch.value) modRoutes.value = []
       return null
     }
     modRoutes.value = data
