@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -97,7 +98,9 @@ class RedisStreamsBridge:
     def _report_exit(task: asyncio.Task[None]) -> None:
         if not task.cancelled() and task.exception() is not None:
             exc = task.exception()
-            logger.error("Redis Streams worker terminated", exc_info=(type(exc), exc, exc.__traceback__))
+            logger.error(
+                "Redis Streams worker terminated", exc_info=(type(exc), exc, exc.__traceback__)
+            )
 
     async def stop(self) -> None:
         task = self._task
@@ -156,6 +159,8 @@ class RedisStreamsBridge:
 
     def consume(self, count: int = 100, block_ms: int = 5000) -> list[dict[str, Any]]:
         """Manual compatibility API. Valid messages are never auto-ACKed."""
+        if self._redis is None:
+            return []
         self._ensure_group()
         result = self._redis.xreadgroup(
             CONSUMER_GROUP, self._consumer_id, {STREAM_KEY: ">"}, count=count, block=block_ms
@@ -174,6 +179,8 @@ class RedisStreamsBridge:
         return self._decode(result[1])
 
     def ack(self, msg_id: str) -> bool:
+        if self._redis is None:
+            return False
         return bool(self._redis.eval(
             _ACK, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id
         ))
@@ -184,6 +191,8 @@ class RedisStreamsBridge:
         ))
 
     def send_to_dlq(self, event_dict: dict[str, Any], original_msg_id: str) -> bool:
+        if self._redis is None:
+            return False
         return bool(self._redis.eval(
             _DEAD_LETTER, 2, STREAM_KEY, DLQ_KEY, CONSUMER_GROUP,
             original_msg_id, self._consumer_id, json.dumps(event_dict, ensure_ascii=False),
@@ -223,17 +232,33 @@ class RedisStreamsBridge:
         msg_id = message["_msg_id"]
         data = {key: value for key, value in message.items() if key != "_msg_id"}
         try:
-            if not isinstance(data.get("event_type"), str) or not isinstance(data.get("payload"), dict):
+            if (
+                not isinstance(data.get("event_type"), str)
+                or not data["event_type"]
+                or not isinstance(data.get("payload"), dict)
+            ):
                 raise ValueError("invalid event type or payload")
-            if not isinstance(data.get("metadata"), dict) or not isinstance(
-                data["metadata"].get("event_id"), str
-            ) or not data["metadata"]["event_id"]:
+            if (
+                not isinstance(data.get("metadata"), dict)
+                or not isinstance(data["metadata"].get("event_id"), str)
+                or not data["metadata"]["event_id"]
+            ):
                 raise ValueError("missing stable event identity")
             event = NeuroEvent.from_dict(data, preserve_queue_identity=True)
-            # Also validate timestamp/timeout types before entering the queue.
+            # Poison data must not terminate the dispatcher after admission.
+            meta = event.metadata
+            if (
+                not isinstance(meta.domain, str)
+                or (meta.dedup_key is not None and not isinstance(meta.dedup_key, str))
+                or not math.isfinite(meta.timestamp)
+                or not math.isfinite(meta.timeout_ms)
+            ):
+                raise ValueError("invalid event metadata")
             expired = event.is_expired()
-        except (KeyError, TypeError, ValueError, AttributeError):
-            await asyncio.to_thread(self.send_to_dlq, {"reason": "invalid_event", "event": data}, msg_id)
+        except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+            await asyncio.to_thread(
+                self.send_to_dlq, {"reason": "invalid_event", "event": data}, msg_id
+            )
             return
         if expired:
             await asyncio.to_thread(self.send_to_dlq, {"reason": "expired", "event": data}, msg_id)
@@ -264,7 +289,9 @@ class RedisStreamsBridge:
             elif outcome == "retry":
                 if await asyncio.to_thread(self._delivery_count, msg_id) >= MAX_DELIVERIES:
                     await asyncio.to_thread(
-                        self.send_to_dlq, {"reason": "admission_retry_exhausted", "event": data}, msg_id
+                        self.send_to_dlq,
+                        {"reason": "admission_retry_exhausted", "event": data},
+                        msg_id,
                     )
             else:
                 # Handler failure can have partial side effects. Preserve it for
