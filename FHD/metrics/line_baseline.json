@@ -1,5 +1,5 @@
 {
-  "lines": 2732996,
+  "lines": 2733002,
   "updated": "2026-11-25",
-  "note": "PR #3558: print the failing receipt tool traceback."
+  "note": "PR #3558: drop stale queue repositories before asserting receipt recovery."
 }

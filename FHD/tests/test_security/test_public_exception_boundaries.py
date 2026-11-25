@@ -366,8 +366,14 @@ def recovered_bound_receipts(bridge_setup, monkeypatch, tmp_path):
             raise
 
     executor.execute_with_deadline = execute_in_process
+    import weakref
     from pathlib import Path
 
+    from app.application.agent_orchestrator import task_execution_repository
+
+    # A prior test's open queue repository may point at a cleaned temp database.
+    monkeypatch.setattr(task_execution_repository, "_OPEN_REPOSITORIES", weakref.WeakSet())
+    monkeypatch.setattr(task_execution_repository, "_task_execution_repository", None)
     monkeypatch.delenv("XCAGI_OWNED_SOURCE_PROFILE", raising=False)
     data_dir = Path(os.environ.get("XCAGI_DATA_DIR") or tmp_path / "app-data")
     data_dir.mkdir(parents=True, exist_ok=True)
