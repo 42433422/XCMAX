@@ -220,6 +220,11 @@ def archive_from_crm_invoice(
     if raw_uid is not None and (type(raw_uid) is not int or raw_uid <= 0):
         return {"archived": False, "reason_code": "invoice_counterparty_invalid"}
     uid = raw_uid
+    # The request may restrict the subject but must not replace a different
+    # original CRM invoice counterparty when replaying an existing source ID.
+    source_uid = inv.get("market_user_id")
+    if market_user_id is not None and source_uid is not None and source_uid != market_user_id:
+        return {"archived": False, "reason_code": "invoice_counterparty_conflict"}
     amount = Decimal(amount_cents) / 100
     status = str(entry.get("status") or "issued")
     try:
@@ -351,6 +356,28 @@ def rebuild_ledger_archive(*, market_user_id: int | None = None) -> dict[str, An
             rows.append(inv)
         pages_read += 1
         offset += len(page_rows)
+
+    # Offset pagination is not a transactional snapshot: the underlying
+    # CRM SQLite store may change between SELECTs. Confirm the entire ordered
+    # source twice before any financial archive write; a mismatch is UNKNOWN,
+    # not a successful partial rebuild.
+    verify_offset = 0
+    while verify_offset < len(rows):
+        data = list_crm_invoices(
+            market_user_id=market_user_id, limit=page_size, offset=verify_offset
+        )
+        page_rows = data.get("items") if isinstance(data, dict) else None
+        page_total = data.get("total") if isinstance(data, dict) else None
+        expected_rows = rows[verify_offset : verify_offset + page_size]
+        if (
+            type(page_total) is not int
+            or page_total != total
+            or not isinstance(page_rows, list)
+            or page_rows != expected_rows
+            or ("offset" in data and data["offset"] != verify_offset)
+        ):
+            return incomplete("invoice_source_changed_during_pagination")
+        verify_offset += len(expected_rows)
 
     rebuilt = rejected = already_archived = 0
     for inv in rows:
