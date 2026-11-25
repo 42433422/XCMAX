@@ -43,6 +43,36 @@ export async function unregisterStaleServiceWorkers(): Promise<void> {
   }
 }
 
+/** Activate only the candidate worker, and reload only after it owns the page. */
+export function activateWaitingWorker(
+  container: Pick<ServiceWorkerContainer, 'controller' | 'addEventListener' | 'removeEventListener'>,
+  candidate: ServiceWorker,
+  timeoutMs = 10_000,
+): Promise<boolean> {
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let finished = false
+    const finish = (activated: boolean) => {
+      if (finished) return
+      finished = true
+      if (timer !== undefined) clearTimeout(timer)
+      container.removeEventListener('controllerchange', changed)
+      resolve(activated)
+    }
+    const changed = () => {
+      if (container.controller === candidate) finish(true)
+    }
+    container.addEventListener('controllerchange', changed)
+    timer = setTimeout(() => finish(false), timeoutMs)
+    // The candidate may already have activated between reading registration.waiting
+    // and installing this listener. Do not send activation to the old controller.
+    changed()
+    if (finished) return
+    try { candidate.postMessage({ type: 'SKIP_WAITING' }) }
+    catch { finish(false) }
+  })
+}
+
 class ServiceWorkerManager {
   private _registration: ServiceWorkerRegistration | null = null
   private _status: SWStatus = {
@@ -88,7 +118,7 @@ class ServiceWorkerManager {
       console.log('[SW Manager] Registering Service Worker...')
       this._registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/',
-        updateViaCache: 'all',
+        updateViaCache: 'none',
       })
 
       this._status.registered = true
@@ -138,18 +168,11 @@ class ServiceWorkerManager {
    * 激活新的Service Worker（需要刷新页面）
    */
   async activateUpdate(): Promise<void> {
-    const controller = navigator.serviceWorker?.controller
-    if (!this._status.controller || !controller) return
+    const container = navigator.serviceWorker
+    const candidate = this._registration?.waiting
+    if (!container || !candidate) return
 
-    // 发送消息让SW跳过等待
-    controller.postMessage({ type: 'SKIP_WAITING' })
-
-    // 监听controllerchange事件
-    await new Promise<void>((resolve) => {
-      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
-    })
-
-    window.location.reload()
+    if (await activateWaitingWorker(container, candidate)) window.location.reload()
   }
 
   /**
