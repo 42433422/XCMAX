@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 
 export type WindowBounds = { x: number; y: number; width: number; height: number }
+export type PersistedWindowState = WindowBounds & { maximized?: boolean }
 
 export const DESKTOP_MIN_WIDTH = 800
 export const DESKTOP_MIN_HEIGHT = 640
@@ -17,16 +18,16 @@ function finiteInteger(value: unknown): number | null {
   return Number.isFinite(parsed) ? Math.round(parsed) : null
 }
 
-export function readWindowState(filePath: string): WindowBounds | null {
+export function readWindowState(filePath: string): PersistedWindowState | null {
   try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<WindowBounds>
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<PersistedWindowState>
     const x = finiteInteger(raw.x)
     const y = finiteInteger(raw.y)
     const width = finiteInteger(raw.width)
     const height = finiteInteger(raw.height)
     if (x === null || y === null || width === null || height === null) return null
     if (width < 320 || height < 240) return null
-    return { x, y, width, height }
+    return { x, y, width, height, ...(typeof raw.maximized === 'boolean' ? { maximized: raw.maximized } : {}) }
   } catch {
     return null
   }
@@ -47,7 +48,7 @@ export function clampWindowBounds(
   return { x, y, width, height }
 }
 
-export function writeWindowState(filePath: string, bounds: WindowBounds): void {
+export function writeWindowState(filePath: string, bounds: PersistedWindowState): void {
   const tempPath = `${filePath}.tmp`
   try {
     fs.writeFileSync(tempPath, `${JSON.stringify(bounds)}\n`, 'utf8')
