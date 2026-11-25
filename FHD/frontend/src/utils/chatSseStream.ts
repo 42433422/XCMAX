@@ -63,8 +63,14 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
     onEvent: ({ data, id }) => {
       if (terminalError || !data.trim()) return
       let ev: PlannerSseEvent
-      try { ev = JSON.parse(data) as PlannerSseEvent } catch { return }
-      if (!ev || typeof ev.type !== 'string') return
+      try { ev = JSON.parse(data) as PlannerSseEvent } catch {
+        if (id) throw new IncompletePlannerSseError()
+        return
+      }
+      if (!ev || typeof ev.type !== 'string') {
+        if (id) throw new IncompletePlannerSseError()
+        return
+      }
       // Deduplicate only explicit SSE event IDs. Equal token text can be valid.
       // Retain a bounded window instead of accumulating an unbounded session log.
       const eventId = typeof id === 'string' ? id.trim() : ''
