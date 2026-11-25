@@ -148,5 +148,19 @@ for (const [label, surface] of [
     () => surface, 3);
 }
 
+// Market light muted text is rendered in blockquotes, placeholders, sidebar
+// and dialog text. Keep these semantic roles readable on registered surfaces.
+for (const [role, backgrounds] of [
+  ['wb-text-muted', ['color-bg-body', 'color-bg-page', 'color-bg-card']],
+  ['wb-sidebar-text-muted', ['color-bg-body', 'color-bg-page']],
+  ['wb-dialog-text-muted', ['wb-dialog-bg']],
+]) {
+  for (const background of backgrounds) {
+    pair('Market light ' + role + ' / ' + background,
+      () => resolveColor('var(--xc-token-market-light-' + role + ')', [], marketGeneratedCss),
+      () => resolveColor('var(--xc-token-market-light-' + background + ')', [], marketGeneratedCss));
+  }
+}
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

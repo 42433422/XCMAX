@@ -252,7 +252,7 @@
   --xc-token-market-light-color-bg-card: #f8fafc;
   --xc-token-market-light-wb-text-primary: #1d1d1f;
   --xc-token-market-light-wb-text-secondary: rgba(29, 29, 31, 0.72);
-  --xc-token-market-light-wb-text-muted: #86868b;
+  --xc-token-market-light-wb-text-muted: var(--xc-token-colors-neutral-light-n500);
   --xc-token-market-light-wb-border-default: rgba(0, 0, 0, 0.08);
   --xc-token-market-light-wb-border-muted: rgba(0, 0, 0, 0.04);
   --xc-token-market-light-wb-surface-elevated: var(--xc-token-colors-neutral-light-n00);
@@ -273,12 +273,12 @@
   --xc-token-market-light-wb-sidebar-item-hover: rgba(0, 0, 0, 0.04);
   --xc-token-market-light-wb-sidebar-item-active: rgba(0, 0, 0, 0.06);
   --xc-token-market-light-wb-sidebar-text: #1d1d1f;
-  --xc-token-market-light-wb-sidebar-text-muted: #86868b;
+  --xc-token-market-light-wb-sidebar-text-muted: var(--xc-token-colors-neutral-light-n500);
   --xc-token-market-light-wb-sidebar-divider: rgba(0, 0, 0, 0.06);
   --xc-token-market-light-wb-dialog-bg: var(--xc-token-colors-neutral-light-n00);
   --xc-token-market-light-wb-dialog-border: rgba(0, 0, 0, 0.08);
   --xc-token-market-light-wb-dialog-text: #1d1d1f;
-  --xc-token-market-light-wb-dialog-text-muted: #86868b;
+  --xc-token-market-light-wb-dialog-text-muted: var(--xc-token-colors-neutral-light-n500);
   --xc-token-market-light-wb-dialog-input-bg: rgba(0, 0, 0, 0.03);
   --xc-token-market-light-wb-dialog-input-border: rgba(0, 0, 0, 0.08);
   --xc-token-market-light-wb-main-max-width: 768px;
