@@ -1,10 +1,14 @@
 import { shallowMount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PanelComposer from './PanelComposer.vue'
 
-vi.mock('../../../stores/agent', () => ({
-  useAgentStore: () => ({ isLoading: false }),
-}))
+const { store } = vi.hoisted(() => ({ store: { isLoading: false, stopRequest: vi.fn() } }))
+vi.mock('../../../stores/agent', () => ({ useAgentStore: () => store }))
+
+beforeEach(() => {
+  store.isLoading = false
+  store.stopRequest.mockClear()
+})
 
 describe.each([true, false])('PanelComposer corpMode=%s', (corpMode) => {
   it('has a single voice, attachment, input and send control in either layout', async () => {
@@ -25,6 +29,25 @@ describe.each([true, false])('PanelComposer corpMode=%s', (corpMode) => {
       expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('保存草稿')
     } finally {
       wrapper.unmount()
+    }
+  })
+
+  it('stops the existing request without sending a second turn', async () => {
+    store.isLoading = true
+    const wrapper = shallowMount(PanelComposer, {
+      props: {
+        corpMode, isLightTheme: true, draft: '尚未发送的草稿', hasPendingImage: false,
+        imagePicking: false, voiceState: 'idle', isSupported: false, error: '',
+      },
+    })
+    try {
+      expect(wrapper.findAll('.panel-send')).toHaveLength(1)
+      await wrapper.get('button[aria-label="停止回复"]').trigger('click')
+      expect(store.stopRequest).toHaveBeenCalledOnce()
+      expect(wrapper.emitted('send')).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+      store.isLoading = false
     }
   })
 
