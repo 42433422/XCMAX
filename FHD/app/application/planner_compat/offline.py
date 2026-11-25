@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from fastapi import Request
 
-from .admission import ChatAdmission
+from .admission import AdmissionResult, ChatAdmission
 from .protocols import ChatTurn, Payload
 
 
@@ -24,9 +24,11 @@ def offline_turn(
     turn: ChatTurn,
     admission: ChatAdmission,
     business: Callable[..., Payload | None],
+    *,
+    admitted: AdmissionResult | None = None,
 ) -> Payload:
     """Allow only explicitly classified local reads; never fall back to a legacy writer."""
-    admitted = admission.check(request, turn)
+    admitted = admitted if admitted is not None else admission.check(request, turn)
     if admitted.payload is not None:
         return admitted.payload
 
