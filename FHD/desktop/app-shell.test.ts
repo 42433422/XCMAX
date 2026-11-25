@@ -43,7 +43,7 @@ vi.mock('./updater', () => ({ readLocalProductVersion: vi.fn(() => '1.0.0.1'), r
 vi.mock('./desktop-navigation', () => ({ parseDesktopDeepLink: vi.fn(() => null) }))
 
 import { execFile } from 'node:child_process'
-import { clipboard, Menu } from 'electron'
+import { BrowserWindow, clipboard, Menu } from 'electron'
 import { openKellaiDesktop, captureFullScreenScreenshot, createMenu, createTray, dispatchWorkspaceMenuCommand } from './app-shell'
 import { desktopRuntime } from './runtime-state'
 import { showMainWindow } from './window-manager'
@@ -92,6 +92,35 @@ it('routes native workspace commands only to the live main window, including min
     expect(win.webContents.send).toHaveBeenCalledTimes(2)
   } finally {
     desktopRuntime.mainWindow = original
+  }
+})
+
+it('targets the focused auxiliary shell window but never an unowned surface', () => {
+  const main = {
+    isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => false),
+    show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() },
+  }
+  const auxiliary = {
+    isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => false),
+    show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() },
+  }
+  const original = desktopRuntime.mainWindow
+  try {
+    desktopRuntime.mainWindow = main as unknown as typeof desktopRuntime.mainWindow
+    const aux = auxiliary as unknown as Electron.BrowserWindow
+    desktopRuntime.auxiliaryWindows.add(aux)
+    vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(aux)
+    expect(dispatchWorkspaceMenuCommand('sessions')).toBe(true)
+    expect(auxiliary.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'sessions')
+    expect(main.webContents.send).not.toHaveBeenCalled()
+    desktopRuntime.auxiliaryWindows.delete(aux)
+    expect(dispatchWorkspaceMenuCommand('tasks')).toBe(true)
+    expect(main.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'tasks')
+    expect(auxiliary.webContents.send).toHaveBeenCalledTimes(1)
+  } finally {
+    desktopRuntime.auxiliaryWindows.clear()
+    desktopRuntime.mainWindow = original
+    vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(null)
   }
 })
 
