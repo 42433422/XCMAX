@@ -247,6 +247,18 @@ export function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
   })
 }
 
+type DesktopWorkspaceMenuCommand = 'palette' | 'chat' | 'new-chat' | 'sessions' | 'tasks'
+/** Menu commands remain UI-only. Use the main renderer's existing account guards and routes. */
+export function dispatchWorkspaceMenuCommand(command: DesktopWorkspaceMenuCommand): boolean {
+  const win = desktopRuntime.mainWindow
+  if (!win || win.isDestroyed()) return false
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  win.webContents.send('xcagi:workspace-command', command)
+  return true
+}
+
 export function createMenu(): void {
   const appSubmenu: Electron.MenuItemConstructorOptions[] = [
     { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
@@ -278,6 +290,16 @@ export function createMenu(): void {
       submenu: appSubmenu
     },
     { role: 'editMenu', label: '编辑' },
+    {
+      label: '工作空间',
+      submenu: [
+        { label: '打开命令面板', click: () => dispatchWorkspaceMenuCommand('palette') },
+        { label: '智能对话', click: () => dispatchWorkspaceMenuCommand('chat') },
+        { label: '新建对话', click: () => dispatchWorkspaceMenuCommand('new-chat') },
+        { label: '历史会话', click: () => dispatchWorkspaceMenuCommand('sessions') },
+        { label: '任务中心', click: () => dispatchWorkspaceMenuCommand('tasks') },
+      ],
+    },
     { role: 'viewMenu', label: '视图' },
     { role: 'windowMenu', label: '窗口' }
   ]
