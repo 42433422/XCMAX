@@ -14,6 +14,20 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 WORKSPACE_PREFS_KEY = "workspace_prefs"
+WORKSPACE_PREFS_REVISION_KEY = "_revision"
+
+
+class WorkspacePrefsVersionConflict(ValueError):
+    """The client edited a stale workspace snapshot; reload before retrying."""
+
+
+def workspace_prefs_revision(value: dict[str, Any]) -> int:
+    """Unversioned legacy preferences begin at revision zero."""
+    revision = value.get(WORKSPACE_PREFS_REVISION_KEY, 0)
+    if type(revision) is not int or revision < 0:
+        raise ValueError("Invalid persisted workspace preferences revision")
+    return revision
+
 
 ALLOWED_TOP_LEVEL_KEYS = frozenset(
     {
@@ -139,8 +153,17 @@ def _industry_mod_id_for_workspace(industry_id: str, explicit_mod_id: str = "") 
         return ""
 
 
-def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, Any]:
-    """浅合并顶层字段；workflow_ai_employees 做 dict 合并。"""
+def patch_workspace_prefs(
+    owner_id: str,
+    partial: dict[str, Any],
+    *,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Merge fields atomically; optional revision token fences stale clients."""
+    if expected_revision is not None and (
+        type(expected_revision) is not int or expected_revision < 0
+    ):
+        raise ValueError("Invalid expected workspace preferences revision")
     owner = str(owner_id or "").strip()
     if not owner:
         return {}
@@ -150,6 +173,12 @@ def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, A
         current = json.loads(raw) if raw is not None else {}
         if not isinstance(current, dict):
             raise ValueError("Workspace preferences must contain a JSON object")
+        revision = workspace_prefs_revision(current)
+        if expected_revision is not None and expected_revision != revision:
+            raise WorkspacePrefsVersionConflict(
+                f"workspace_prefs_version_conflict expected={expected_revision} "
+                f"actual={revision}"
+            )
         merged = dict(current)
 
         for key, value in (partial or {}).items():
@@ -165,6 +194,7 @@ def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, A
             else:
                 merged[key] = value
 
+        merged[WORKSPACE_PREFS_REVISION_KEY] = revision + 1
         return json.dumps(merged, ensure_ascii=False)
 
     saved = get_user_preference_service().mutate_preference(owner, WORKSPACE_PREFS_KEY, merge)
@@ -280,6 +310,9 @@ def save_selected_industry(
 
 __all__ = [
     "WORKSPACE_PREFS_KEY",
+    "WORKSPACE_PREFS_REVISION_KEY",
+    "WorkspacePrefsVersionConflict",
+    "workspace_prefs_revision",
     "bind_selected_industry_for_user",
     "bind_selected_industry_for_username",
     "get_selected_industry_id",
