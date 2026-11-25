@@ -42,11 +42,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
         return style.outline + '|' + style.boxShadow
       })
       expect(focused, 'focused input must visibly differ from its idle state').not.toBe(unfocused)
-      await capture(page, 'a11y-workbench-focused-' + colorScheme + '-' + width)
+      await capture(page, 'a11y-workbench-focused-' + colorScheme + '-' + width, 'device')
       await page.keyboard.press('Tab')
       expect(await page.evaluate(() => !!document.activeElement && document.activeElement !== document.body)).toBe(true)
       expect(await page.evaluate(() => document.activeElement?.matches(':focus-visible'))).toBe(true)
-      await capture(page, 'a11y-workbench-tab-' + colorScheme + '-' + width)
+      await capture(page, 'a11y-workbench-tab-' + colorScheme + '-' + width, 'device')
     })
   }
 }
