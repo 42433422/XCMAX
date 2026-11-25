@@ -187,3 +187,33 @@ def test_replay_fingerprint_cleanup_preserves_audit(tmp_path):
         assert queue.get_audit_history(entry_id)[-1]["action"] == "replay_recorded"
     finally:
         queue.close()
+
+def test_audit_cursor_returns_complete_history_without_cross_entry_rows(tmp_path):
+    path = str(tmp_path / "audit-pages.sqlite3")
+    queue = DeadLetterQueue(storage_path=path, max_size=1)
+    try:
+        first = _enqueue(queue)
+        second = _enqueue(queue)
+        assert queue.resolve_manually(second, "verified", "operator")
+        assert queue.restore_archived(first, "operator")
+        assert queue.schedule_retry(first) is not None
+        rows = []
+        cursor = 0
+        for expected_action in ("enqueued", "archived_capacity", "restored", "retry_scheduled"):
+            page = queue.get_audit_history(first, after_audit_id=cursor, limit=1)
+            assert len(page) == 1
+            row = page[0]
+            assert row["entry_id"] == first
+            assert row["action"] == expected_action
+            assert row["audit_id"] > cursor
+            cursor = row["audit_id"]
+            rows.append(row)
+        assert queue.get_audit_history(first, after_audit_id=cursor, limit=1) == []
+        assert rows == queue.get_audit_history(first)
+        for invalid in (0, 1001):
+            with pytest.raises(ValueError, match="audit limit"):
+                queue.get_audit_history(first, limit=invalid)
+        with pytest.raises(ValueError, match="cursor"):
+            queue.get_audit_history(first, after_audit_id=-1)
+    finally:
+        queue.close()
