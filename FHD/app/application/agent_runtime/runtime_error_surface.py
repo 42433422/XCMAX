@@ -7,17 +7,13 @@ from typing import Any
 
 def public_runtime_failure(error: Exception) -> dict[str, Any]:
     """Publish a stable error code, not a private model/token/host exception."""
-    from app.application.agent_runtime.configuration import (
-        QUALIFICATION_CHECKS,
-        RuntimePolicyError,
-        _QUALIFICATION_ERRORS,
-    )
+    from app.application.agent_runtime import configuration
 
     # No unknown exception is exposed by this helper.
-    if not isinstance(error, RuntimePolicyError):
+    if not isinstance(error, configuration.RuntimePolicyError):
         raise TypeError("runtime policy error required")
     messages = {
-        **_QUALIFICATION_ERRORS,
+        **configuration._QUALIFICATION_ERRORS,
         "runtime_not_qualified": "运行配置尚未通过核验，请检查模型设置或联系部署管理员。",
         "runtime_configuration_required": "请核对模型设置",
         "runtime_login_required": "当前账号登录已失效，请重新登录后继续原任务。",
@@ -36,7 +32,7 @@ def public_runtime_failure(error: Exception) -> dict[str, Any]:
         "message": messages[code],
         "checks": {
             name: checks[name]
-            for name in QUALIFICATION_CHECKS
+            for name in configuration.QUALIFICATION_CHECKS
             if isinstance(checks, dict) and checks.get(name) in ("PASS", "FAIL")
         },
     }

@@ -17,7 +17,6 @@ from typing import Any
 import httpx
 from filelock import FileLock, Timeout
 
-from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route

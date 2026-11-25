@@ -5,13 +5,15 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from app.application.agent_task_context import authenticated_task_owner
 from app.application.agent_runtime.configuration import RuntimePolicyError
 from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
+from app.application.agent_task_context import authenticated_task_owner
 
 # RuntimePolicyError is supplied by the configured fixed runtime package.
 # After #3606 migration the same surface advertises Xiaox, not a retired Codex label.
-_RUNTIME_KIND = 'xiaox' if RuntimePolicyError.__module__.startswith('app.infrastructure.xiaox.') else 'codex'
+_RUNTIME_KIND = (
+    "xiaox" if RuntimePolicyError.__module__.startswith("app.infrastructure.xiaox.") else "codex"
+)
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。根据当前用户请求工作。先发现当前账号可用能力，再按工具契约调用。"
