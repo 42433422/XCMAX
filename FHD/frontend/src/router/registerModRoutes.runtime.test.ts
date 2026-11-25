@@ -115,3 +115,44 @@ it('restores the last valid revision if a new addRoute throws mid-registration',
   expect(router.hasRoute('runtime-unknown-ui-0')).toBe(true)
   expect(router.hasRoute('runtime-unknown-ui-1')).toBe(false)
 })
+
+
+it("refuses a stale account's empty list without revoking newer account routes", async () => {
+  const router = await setup()
+  const oldEpoch = session.epoch
+  const oldSession = () => session.epoch === oldEpoch
+  session.epoch++
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: data() }], {
+    reconcileRuntime: true,
+  })
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(true)
+  await registerModRoutes(router, [], {
+    reconcileRuntime: true, sessionCurrent: oldSession,
+  })
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(true)
+})
+
+it('rejects late route lists from an earlier account', async () => {
+  const router = await setup()
+  const oldEpoch = session.epoch
+  const oldSession = () => session.epoch === oldEpoch
+  session.epoch++
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: data() }], {
+    reconcileRuntime: true, sessionCurrent: oldSession,
+  })
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(false)
+  expect(router.hasRoute('chat')).toBe(true)
+})
+
+it('rolls back route insertion when the account changes inside addRoute', async () => {
+  const router = await setup()
+  const originalAddRoute = router.addRoute.bind(router)
+  router.addRoute = ((route: RouteRecordRaw) => {
+    const undo = originalAddRoute(route)
+    session.epoch++
+    return undo
+  }) as Router['addRoute']
+  await registerModRoutes(router, [{ mod_id: 'unknown-ui', routes_path: '', runtime: data() }])
+  expect(router.hasRoute('runtime-unknown-ui-0')).toBe(false)
+  expect(router.hasRoute('chat')).toBe(true)
+})
