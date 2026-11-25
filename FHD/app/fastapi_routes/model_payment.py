@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
@@ -438,57 +439,100 @@ def query_trade(request: Request, out_trade_no: str):
 
 @router.post("/refund")
 def refund_trade(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
-    """alipay.trade.refund：发起退款。body: out_trade_no, refund_amount, out_request_no?, refund_reason?"""
+    """Reserve an idempotent refund before the external call.
+
+    API acceptance or timeout is never proof of settlement. A separate
+    authenticated gateway query must confirm its original refund identity.
+    """
     out_trade_no = str(body.get("out_trade_no") or "").strip()
     refund_amount = str(body.get("refund_amount") or "").strip()
-    out_request_no = str(body.get("out_request_no") or "").strip() or None
+    refund_id = str(body.get("out_request_no") or "").strip() or out_trade_no
     refund_reason = str(body.get("refund_reason") or "").strip() or None
-
-    if not out_trade_no:
-        return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
-    if not refund_amount:
+    if not out_trade_no or not refund_amount:
         return JSONResponse(
-            {"success": False, "message": "refund_amount 必填（元）"}, status_code=400
+            {"success": False, "message": "out_trade_no 和 refund_amount 均为必填项"},
+            status_code=400,
         )
-
-    owned_payment_order(request, out_trade_no, permission="model_payment.refund")
-    res = mp_ali.refund_order(
-        out_trade_no=out_trade_no,
-        refund_amount=refund_amount,
-        out_request_no=out_request_no,
-        refund_reason=refund_reason,
-    )
-    if not res["success"]:
-        logger.warning(
-            "[model-payment] refund failed out_trade_no=%s message=%s",
-            out_trade_no,
-            res.get("message"),
-        )
-        return JSONResponse({"success": False, "message": res.get("message") or "退款失败"})
-
     try:
-        mp_orders.update_order_status(
-            out_trade_no=out_trade_no,
-            status="refunded",
-            extra={
-                "refund_amount": refund_amount,
-                "refund_request_no": out_request_no or out_trade_no,
-                "refund_reason": refund_reason,
-            },
+        amount = Decimal(refund_amount)
+        if not amount.is_finite() or amount <= 0 or amount != amount.quantize(Decimal("0.01")):
+            raise ValueError("refund precision or range invalid")
+        cents = int(amount * 100)
+    except (InvalidOperation, ValueError):
+        return JSONResponse(
+            {"success": False, "message": "退款金额必须为正数且最多两位小数"},
+            status_code=400,
         )
-    except (OSError, ValueError) as e:
-        logger.exception("[model-payment] 写入退款本地记录失败: %s", e)
+    # Resolve real owner and live refund privilege before writing the original
+    # order record or dispatching anything to the payment provider.
+    owned_payment_order(request, out_trade_no, permission="model_payment.refund")
+    try:
+        reason, attempt = mp_orders.reserve_refund_attempt(
+            out_trade_no=out_trade_no, out_request_no=refund_id, amount_cents=cents,
+        )
+    except (OSError, ValueError):
+        logger.exception("[model-payment] refund claim persistence failed")
+        return JSONResponse(
+            {"success": False, "requires_reconciliation": True},
+            status_code=503,
+        )
+    if reason != "refund_reserved":
         return JSONResponse(
             {
                 "success": False,
-                "message": "支付渠道可能已退款，但本地对账回执落库失败，必须查询原退款单后人工对账，禁止自动重试",
+                "reason_code": reason,
+                "requires_reconciliation": reason in {
+                    "refund_request_replay", "refund_requires_reconciliation",
+                    "refund_order_not_settled", "refund_history_corrupt",
+                },
+                "message": "原退款状态无法安全重复提交，请先查询渠道退款记录",
+            },
+            status_code=409,
+        )
+    # From here on: external side effects may exist even after an exception.
+    # Keep the original pending claim; never retry with a fresh request ID.
+    try:
+        response = mp_ali.refund_order(
+            out_trade_no=out_trade_no,
+            refund_amount=f"{amount:.2f}",
+            out_request_no=refund_id,
+            refund_reason=refund_reason,
+        )
+    except INFRA_TRANSIENT:
+        logger.exception("[model-payment] refund provider outcome unknown")
+        response = {"success": False, "message": "渠道状态未知"}
+    try:
+        persisted = mp_orders.observe_refund_provider_result(
+            out_trade_no=out_trade_no,
+            out_request_no=refund_id,
+            provider_reported_success=response.get("success") is True,
+        )
+    except (OSError, ValueError):
+        persisted = False
+        logger.exception("[model-payment] refund provider response persistence failed")
+    if not persisted:
+        return JSONResponse(
+            {
+                "success": False,
                 "requires_reconciliation": True,
+                "message": "渠道已调用但原退款回执无法持久核验，禁止重复提交",
             },
             status_code=503,
         )
-
-    logger.info("[model-payment] refund ok out_trade_no=%s amount=%s", out_trade_no, refund_amount)
-    return JSONResponse({"success": True, "data": res.get("raw")})
+    return JSONResponse(
+        {
+            "success": False,
+            "accepted": response.get("success") is True,
+            "requires_reconciliation": True,
+            "refund_request_no": refund_id,
+            "message": (
+                "渠道受理回执已记录，须再次查询原退款单核验后才记为已退款"
+                if response.get("success") is True
+                else "渠道结果未知或拒绝，保留原请求待独立查询，禁止重新发起"
+            ),
+        },
+        status_code=202 if response.get("success") is True else 503,
+    )
 
 
 @router.post("/close")
@@ -521,11 +565,66 @@ def close_trade(request: Request, body: dict[str, Any] = Body(default_factory=di
 
 @router.get("/refund/query")
 def refund_query(request: Request, out_trade_no: str, out_request_no: str | None = None):
-    """alipay.trade.fastpay.refund.query：退款查询。不传 out_request_no 则默认等于 out_trade_no。"""
+    """Read the original gateway refund and settle only exact confirmed identity."""
     if not out_trade_no:
         return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
     owned_payment_order(request, out_trade_no)
-    res = mp_ali.query_refund(out_trade_no=out_trade_no, out_request_no=out_request_no)
-    if not res["success"]:
-        return JSONResponse({"success": False, "message": res.get("message") or "退款查询失败"})
-    return JSONResponse({"success": True, "data": res.get("raw")})
+    request_no = (out_request_no or "").strip() or out_trade_no
+    provider = mp_ali.query_refund(out_trade_no=out_trade_no, out_request_no=request_no)
+    raw = provider.get("raw") if isinstance(provider, dict) else None
+    if not provider.get("success") or not isinstance(raw, dict):
+        return JSONResponse(
+            {
+                "success": False,
+                "requires_reconciliation": True,
+                "message": "退款渠道核对暂不可用，原订单仍待核验",
+            },
+            status_code=503,
+        )
+    # Never treat an API HTTP 200 or provider code=10000 alone as a refund.
+    if (
+        str(raw.get("refund_status") or "") != "REFUND_SUCCESS"
+        or (raw.get("out_trade_no") and str(raw["out_trade_no"]) != out_trade_no)
+        or (raw.get("out_request_no") and str(raw["out_request_no"]) != request_no)
+    ):
+        return JSONResponse(
+            {"success": False, "requires_reconciliation": True, "message": "渠道尚未确认原退款"},
+            status_code=409,
+        )
+    try:
+        paid_back = Decimal(str(raw.get("refund_amount")))
+        if (
+            not paid_back.is_finite()
+            or paid_back <= 0
+            or paid_back != paid_back.quantize(Decimal("0.01"))
+        ):
+            raise ValueError("invalid provider amount")
+        paid_back_cents = int(paid_back * 100)
+        reason, receipt = mp_orders.confirm_refund_from_provider_query(
+            out_trade_no=out_trade_no,
+            out_request_no=request_no,
+            amount_cents=paid_back_cents,
+        )
+    except (OSError, InvalidOperation, ValueError, TypeError):
+        logger.exception("[model-payment] refund provider confirmation persistence failed")
+        return JSONResponse(
+            {"success": False, "requires_reconciliation": True},
+            status_code=503,
+        )
+    if reason not in {"refund_confirmed", "already_confirmed"}:
+        return JSONResponse(
+            {
+                "success": False, "reason_code": reason, "requires_reconciliation": True,
+                "message": "渠道退款金额与原有请求不一致，禁止自动入账",
+            },
+            status_code=409,
+        )
+    return JSONResponse(
+        {
+            "success": True,
+            "gateway_refund_confirmed": True,
+            "bank_settlement_verified": False,
+            "refund_request_no": request_no,
+            "receipt": receipt,
+        }
+    )
