@@ -258,3 +258,40 @@ def test_perception_http_reads_real_authorized_order_without_claiming_kpis(
             headers=actor.headers,
         )
         assert forged.status_code == 422
+
+
+@pytest.mark.parametrize("failure", ["authority_response", "connection", "timeout"])
+def test_authority_disconnect_after_first_read_discards_source_sample(failure):
+    class DisconnectingProjection(ProjectionStub):
+        def get(self, entity_type, entity_id, *, force_refresh, **scope):
+            if entity_type == "journal_entry" and entity_id == "621":
+                if failure == "connection":
+                    raise ConnectionError("authority disconnected")
+                if failure == "timeout":
+                    raise TimeoutError("authority timed out")
+                return _snapshot(
+                    entity_id="621",
+                    freshness="unknown",
+                    knowledge_kind="unknown",
+                    reason_code="authority_or_projection_unavailable",
+                    evidence=[],
+                )
+            return super().get(entity_type, entity_id, force_refresh=force_refresh, **scope)
+
+    reader = DisconnectingProjection(
+        {"journal_entry": [_snapshot(), _snapshot(entity_id="621")]}
+    )
+    result = _observe(reader)
+    journal = result["domains"]["B01"]["sources"][1]
+    assert journal["status"] == "unavailable"
+    assert journal["samples"] == []
+    assert result["observed_fact_count"] == 0
+    assert result["anomaly_candidates"] == []
+    assert result["domains"]["B09"]["candidate_delivery_verified"] is False
+
+
+def test_on_demand_candidate_has_no_delivery_receipt():
+    result = _observe(ProjectionStub({"journal_entry": [_snapshot()]}))
+    (candidate,) = result["anomaly_candidates"]
+    assert candidate["delivery_status"] == "not_attempted"
+    assert result["domains"]["B09"]["candidate_delivery_verified"] is False

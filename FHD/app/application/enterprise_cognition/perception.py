@@ -119,6 +119,7 @@ def _journal_anomaly(snapshot: dict) -> dict | None:
         "evidence": snapshot["evidence"],
         "requires_human_review": True,
         "execution_authorized": False,
+        "delivery_status": "not_attempted",
     }
 
 
@@ -166,6 +167,17 @@ def observe_enterprise(
                 sources.append({"source": name, "status": "permission_denied", "samples": []})
                 source_statuses[name] = "permission_denied"
                 continue
+            except (ConnectionError, TimeoutError):
+                sources.append(
+                    {
+                        "source": name,
+                        "status": "unavailable",
+                        "samples": [],
+                        "reason_code": "authority_unavailable",
+                    }
+                )
+                source_statuses[name] = "unavailable"
+                continue
             if (
                 not isinstance(refs, dict)
                 or refs.get("freshness") != "fresh"
@@ -203,7 +215,10 @@ def observe_enterprise(
                     )
                 except PermissionError:
                     samples.append({"status": "permission_denied"})
-                    continue
+                    break
+                except (ConnectionError, TimeoutError):
+                    samples.append({"status": "unavailable"})
+                    break
                 if (
                     not isinstance(snapshot, dict)
                     or snapshot.get("entity_id") != entity_id
@@ -211,6 +226,12 @@ def observe_enterprise(
                 ):
                     samples.append({"status": "unknown", "reason_code": "source_identity_mismatch"})
                     continue
+                if snapshot.get("reason_code") in {
+                    "authority_unavailable",
+                    "authority_or_projection_unavailable",
+                }:
+                    samples.append({"status": "unavailable"})
+                    break
                 health = _snapshot_health(
                     snapshot, scope, datetime.now(UTC) if live_clock else now
                 )
@@ -233,21 +254,22 @@ def observe_enterprise(
             if "permission_denied" in flags:
                 status = "permission_denied"
                 samples = []  # Never return partial records after a permission reversal.
+            elif "unavailable" in flags:
+                status = "unavailable"
+                samples = []  # Discard an incomplete authority read.
             else:
                 observed += source_observed
                 alerts.extend(source_alerts)
-            if "permission_denied" not in flags and "unknown" in flags:
-                status = "unknown"
-            elif "permission_denied" not in flags and "stale" in flags:
-                status = "stale"
-            elif "permission_denied" not in flags and not samples:
-                status = "no_visible_records"
-            elif "permission_denied" not in flags and (
-                refs["has_more"] or len(refs["refs"]) > limit_per_source
-            ):
-                status = "partial_sample"
-            elif "permission_denied" not in flags:
-                status = "fresh_sample"
+                if "unknown" in flags:
+                    status = "unknown"
+                elif "stale" in flags:
+                    status = "stale"
+                elif not samples:
+                    status = "no_visible_records"
+                elif refs["has_more"] or len(refs["refs"]) > limit_per_source:
+                    status = "partial_sample"
+                else:
+                    status = "fresh_sample"
             sources.append({
                 "source": name,
                 "status": status,
@@ -271,6 +293,7 @@ def observe_enterprise(
         "status": "on_demand_only",
         "anomaly_candidates": alerts,
         "proactive_detection_verified": False,
+        "candidate_delivery_verified": False,
         "business_outcome_verified": False,
     }
     domains["B10"] = {
