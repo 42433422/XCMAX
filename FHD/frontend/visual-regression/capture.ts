@@ -2,12 +2,12 @@ import { expect, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-export async function capture(page: Page, name: string) {
+export async function capture(page: Page, name: string, scale: 'css' | 'device' = 'css') {
   const dir = process.env.VISUAL_CAPTURE_DIR
   if (!dir) throw new Error('VISUAL_CAPTURE_DIR required; do not overwrite product evidence')
   mkdirSync(dir, { recursive: true })
   await page.evaluate(() => document.fonts.ready)
-  const options = { animations: 'disabled', caret: 'hide', scale: 'css' } as const
+  const options = { animations: 'disabled', caret: 'hide', scale } as const
   const first = await page.screenshot(options)
   const second = await page.screenshot({ ...options, path: join(dir, name + '.png') })
   expect(first.equals(second), 'unstable screenshot: ' + name).toBe(true)
