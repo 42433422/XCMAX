@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -275,14 +276,29 @@ def _record_verdict_local(
     acceptance: dict,
 ) -> bool:
     """Persist the verdict on the shared market host, never on an ephemeral CI runner."""
+    # Persist an immutable fingerprint of the *same* business receipt used
+    # for the decision. Do not copy customer names, amounts or source bytes to
+    # GitHub comments or to the public-facing release ledger.
+    business_receipts = acceptance.get("business_receipts")
+    business = (
+        business_receipts.get(str(issue_number))
+        if isinstance(business_receipts, dict) else None
+    )
+    evidence = {
+        "build_sha": acceptance.get("build_sha") or acceptance.get("git_sha"),
+        "per_platform": acceptance.get("per_platform") or {},
+    }
+    if isinstance(business, dict):
+        evidence["business_receipt_sha256"] = hashlib.sha256(
+            json.dumps(
+                business, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
     payload = {
         "issue_number": int(issue_number),
         "release_version": version,
         "verdict": verdict,
-        "evidence": {
-            "build_sha": acceptance.get("build_sha") or acceptance.get("git_sha"),
-            "per_platform": acceptance.get("per_platform") or {},
-        },
+        "evidence": evidence,
     }
     result = _http(
         "POST", f"{market_base.rstrip('/')}/api/work-orders/acceptance",
