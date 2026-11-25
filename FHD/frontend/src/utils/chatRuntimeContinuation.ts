@@ -20,9 +20,14 @@ export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuatio
   return { runId: keepsRunId(status) ? runId as string | null : null, status, sessionId }
 }
 
-export function runtimeContinuationFromPayload(payload: ChatPlannerPayload): ChatRuntimeContinuation | undefined {
+/** Historical wire labels identify the same runtime, not another executor. */
+export function isFixedRuntimePayload(payload: ChatPlannerPayload): boolean {
   const envelope = asRecord(payload.data)
-  if (payload.runtime !== 'xiaox' && envelope.runtime !== 'xiaox') return undefined
+  return [payload.runtime, envelope.runtime].some(label => label === 'codex' || label === 'xiaox')
+}
+
+export function runtimeContinuationFromPayload(payload: ChatPlannerPayload): ChatRuntimeContinuation | undefined {
+  if (!isFixedRuntimePayload(payload)) return undefined
   const update = asRecord(payload.runtime_context_update)
   return restoreRuntimeContinuation({
     runId: update.agent_runtime_run_id,
@@ -36,15 +41,13 @@ export function runtimeExecutionState(payload: ChatPlannerPayload): string {
 }
 
 export function isRuntimeWaiting(payload: ChatPlannerPayload): boolean {
-  const envelope = asRecord(payload.data)
-  return (payload.runtime === 'xiaox' || envelope.runtime === 'xiaox')
+  return isFixedRuntimePayload(payload)
     && WAITING.has(runtimeExecutionState(payload))
 }
 
 /** The durable queue accepted the turn; follow the run instead of finalizing. */
 export function isRuntimeQueued(payload: ChatPlannerPayload): boolean {
-  const envelope = asRecord(payload.data)
-  return (payload.runtime === 'xiaox' || envelope.runtime === 'xiaox')
+  return isFixedRuntimePayload(payload)
     && runtimeExecutionState(payload) === 'queued'
 }
 
