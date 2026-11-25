@@ -35,13 +35,13 @@ from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trac
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
 from app.neuro_bus.delivery_metrics import record_delivery_metric
 from app.neuro_bus.events.events_base import NeuroEvent
+from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.neuro_bus.transports.redis_pubsub import RedisPubSubBridge
-    from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
 
 class NeuroBus(NeuroBusSubscriptionsMixin):
@@ -83,6 +83,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._inflight: set[asyncio.Task] = set()
         self._active_partitions: set = set()
         self._sync_futures: set[Future] = set()
+        self._stream_waiters: dict[int, asyncio.Future[str]] = {}
         self._handler_timeout_count = 0
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -168,15 +169,16 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._redis_bridge: RedisStreamsBridge | RedisPubSubBridge | None = None
         if os.environ.get("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "").strip().lower() == "streams":
             from app.neuro_bus.transports.redis_pubsub import _resolve_redis_url
-            from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
             url = _resolve_redis_url()
             if url:
                 try:
                     import redis
 
-                    redis_client = redis.from_url(url, decode_responses=False)
-                    self._redis_bridge = RedisStreamsBridge(bus=self, redis_client=redis_client)
+                    redis_client = redis.from_url(
+                        url, decode_responses=False, socket_timeout=3, socket_connect_timeout=3
+                    )
+                    self._redis_bridge = RedisStreamsBridge(bus=self, redis_client=redis_client, owns_client=True)
                     logger.info("NeuroBus transport: redis_streams")
                 except RECOVERABLE_ERRORS as exc:
                     logger.error("NeuroBus Redis Streams init failed: %s", exc)
@@ -200,6 +202,12 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             raise RuntimeError("NeuroBus is stopping")
         if self._running:
             return
+
+        if (
+            os.environ.get("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "").strip().lower() == "streams"
+            and self._redis_bridge is None
+        ):
+            raise RuntimeError("NeuroBus Redis Streams configured but unavailable")
 
         # 重启安全：一次 stop() 会 shutdown 线程池；若在修复后重新 start()，
         # 需重建执行器，否则事件处理（run_in_executor）会在已关闭的池上抛错。
@@ -240,7 +248,10 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         try:
             if self._redis_bridge is not None:
                 try:
-                    self._redis_bridge.stop()
+                    if isinstance(self._redis_bridge, RedisStreamsBridge):
+                        await self._redis_bridge.stop()
+                    else:
+                        self._redis_bridge.stop()
                 except BOUNDARY_ERRORS:
                     logger.exception("Error stopping NeuroBus transport")
             if self._processing_task:
@@ -294,9 +305,12 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         stats = super().get_stats()
         stats["dropped_recent"] = self.dropped_recent()
         stats["dropped_reasons"] = dict(self._drop_reason_counts)
+        if isinstance(self._redis_bridge, RedisStreamsBridge):
+            stats["redis_streams"] = self._redis_bridge.get_stats()
         return stats
 
     def _discard_event(self, event: NeuroEvent, reason: str = "unknown") -> None:
+        self._resolve_stream_delivery(event, "expired" if reason == "expired" else "retry")
         self._record_drop(reason)
         if reason != "shutdown" and self._drop_log_due():
             logger.warning(
@@ -317,12 +331,15 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
     async def _process_partition_event(self, event: NeuroEvent) -> None:
         key = event_partition_key(event)
+        outcome = "retry"
         try:
-            await self._dispatch_event(event)
+            outcome = await self._dispatch_event(event)
         except BOUNDARY_ERRORS:
+            outcome = "handler_failed"
             self._error_count += 1
             logger.exception("Error dispatching %s", event)
         finally:
+            self._resolve_stream_delivery(event, outcome)
             self._active_partitions.discard(key)
             self._wake_processor()
 
@@ -355,7 +372,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 logger.exception("Error in processing loop")
                 self._error_count += 1
 
-    async def _dispatch_event(self, event: NeuroEvent):
+    async def _dispatch_event(self, event: NeuroEvent) -> str:
         """分发事件到处理器"""
         handlers_called = 0
         any_failed = False
@@ -385,6 +402,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             logger.debug("No handlers for event: %s", event)
 
         self._processed_count += 1
+        if any_failed:
+            return "handler_failed"
+        return "handled" if handlers_called else "unhandled"
 
     def _finish_event(self, event: NeuroEvent, *, failed: bool) -> None:
         if self._rel_dedup is not None:
@@ -498,6 +518,19 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             record_delivery_metric(self._enable_metrics, "lost")
             return False
 
+        # A stream group is a work queue, not a broadcast to a second local copy.
+        # Only the consumer enters the existing partition queue for these events.
+        if (
+            isinstance(self._redis_bridge, RedisStreamsBridge)
+            and event.payload.get("local_only") is not True
+            and not event.payload.get("_neuro_remote_ingest")
+        ):
+            accepted = self._redis_bridge.publish_remote(event) is not None
+            if accepted:
+                self._published_count += 1
+                record_delivery_metric(self._enable_metrics, "published")
+            return accepted
+
         if not self._preflight_publish(event):
             record_delivery_metric(self._enable_metrics, "lost")
             return False
@@ -540,6 +573,29 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
         return success
 
+    def _resolve_stream_delivery(self, event: NeuroEvent, outcome: str) -> None:
+        waiter = self._stream_waiters.get(id(event))
+        if waiter is None:
+            return
+
+        def resolve() -> None:
+            if not waiter.done():
+                waiter.set_result(outcome)
+
+        # Queue eviction may originate in a synchronous publisher thread.
+        waiter.get_loop().call_soon_threadsafe(resolve)
+
+    async def deliver_stream_event(self, event: NeuroEvent) -> str:
+        """Wait for the existing partition worker, not merely queue admission."""
+        waiter = asyncio.get_running_loop().create_future()
+        self._stream_waiters[id(event)] = waiter
+        try:
+            if not self.ingest_remote_event(event):
+                return "retry"
+            return await waiter
+        finally:
+            self._stream_waiters.pop(id(event), None)
+
     def ingest_remote_event(self, event: NeuroEvent) -> bool:
         """跨进程 Redis 订阅 ingest — 不再向外广播。"""
         if not self._running or self._shutdown:
@@ -550,8 +606,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             return False
         success = self._event_queue.put(event)
         if success:
-            self._published_count += 1
-            record_delivery_metric(self._enable_metrics, "published")
+            if id(event) not in self._stream_waiters:
+                self._published_count += 1
+                record_delivery_metric(self._enable_metrics, "published")
             self._wake_processor()
         else:
             self._discard_event(event, "enqueue_rejected")
