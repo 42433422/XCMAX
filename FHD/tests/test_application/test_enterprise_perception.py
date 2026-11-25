@@ -96,7 +96,10 @@ def test_empty_authoritative_reads_never_fabricate_zero_business_metrics():
     assert result["business_metrics_verified"] is False
     assert result["domains"]["B01"]["required_metrics"]["cash_flow"]["knowledge_kind"] == "unknown"
     assert result["domains"]["B02"]["required_metrics"]["churn_risk"]["knowledge_kind"] == "unknown"
-    assert result["domains"]["B03"]["required_metrics"]["conversion_rate"]["knowledge_kind"] == "unknown"
+    assert (
+        result["domains"]["B03"]["required_metrics"]["conversion_rate"]["knowledge_kind"]
+        == "unknown"
+    )
     assert result["domains"]["B04"]["status"] == "not_connected"
     assert result["domains"]["B05"]["status"] == "not_connected"
     assert result["domains"]["B06"]["status"] == "not_connected"
@@ -186,7 +189,10 @@ def test_bounded_sampling_cannot_be_claimed_as_full_enterprise_coverage():
     result = _observe(reader, limit_per_source=1)
     assert result["domains"]["B03"]["sources"][0]["status"] == "partial_sample"
     assert result["enterprise_wide_verified"] is False
-    assert result["domains"]["B03"]["required_metrics"]["conversion_rate"]["knowledge_kind"] == "unknown"
+    assert (
+        result["domains"]["B03"]["required_metrics"]["conversion_rate"]["knowledge_kind"]
+        == "unknown"
+    )
 
 
 def test_diagnostic_contract_rejects_client_identity_and_unbounded_scan():
