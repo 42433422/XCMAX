@@ -11,7 +11,7 @@ import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/workspace/employee_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
-import '../test/employee_workspace_screen_test.dart' as fixture;
+import '../test/employee_workspace_fixture.dart' as fixture;
 
 const root = ValueKey('visual-root');
 

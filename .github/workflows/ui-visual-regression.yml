@@ -97,7 +97,7 @@ jobs:
           app=FHD/mobile-flutter-poc
           mkdir -p "baseline/$app/visual_regression"
           cp -R "candidate/$app/visual_regression/." "baseline/$app/visual_regression/"
-          cp "candidate/$app/test/employee_workspace_screen_test.dart" "baseline/$app/test/"
+          cp "candidate/$app/test/employee_workspace_fixture.dart" "baseline/$app/test/"
           export VISUAL_FONT_PATH=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
           test -s "$VISUAL_FONT_PATH"
           for side in baseline candidate; do
