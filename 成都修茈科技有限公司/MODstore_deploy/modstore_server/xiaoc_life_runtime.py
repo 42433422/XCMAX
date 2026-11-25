@@ -18,6 +18,7 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.xiaoc_goal_management import (
     candidate_gate,
     discover_goal_candidate,
+    resumable_operating_candidate,
     portfolio_goal_closed,
     project_goal_steps,
 )
@@ -321,9 +322,14 @@ class CyclePorts:
 
         context = await self.write_in_thread(collect_context)
         if self.domain == "enterprise":
-            candidate = discover_goal_candidate(
-                context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
+            now = datetime.now(UTC)
+            candidate = resumable_operating_candidate(
+                context, self.state, self.claim["owner_user_id"], now=now
             )
+            if candidate is None:
+                candidate = discover_goal_candidate(
+                    context, self.state, self.claim["owner_user_id"], now=now
+                )
             if candidate is not None:
                 goal, fact = candidate
                 self.evidence = [fact["ref"]]
