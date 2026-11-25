@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../../api/mobile_session_store.dart' show MobileSessionData;
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
@@ -205,6 +207,8 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
   var _needsReconciliation = false;
   var _status = '';
   late final int _generation;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
+  bool _revoked = false;
 
   @override
   void initState() {
@@ -214,11 +218,19 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       explicit: widget.repository,
     );
     _generation = _repository.client.authGeneration;
+    _sessionSubscription = _repository.client.sessionChanges.listen((_) {
+      if (_generation != _repository.client.authGeneration && !_revoked) {
+        _revoked = true;
+        _needsReconciliation = true;
+        if (mounted) setState(() => _status = '账号已切换，请重新打开审批');
+      }
+    });
     _future = _load();
   }
 
   @override
   void dispose() {
+    unawaited(_sessionSubscription?.cancel());
     _opinionController.dispose();
     super.dispose();
   }
@@ -228,7 +240,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     return FutureBuilder<ApprovalDetail>(
       future: _future,
       builder: (context, snapshot) {
-        final detail = snapshot.data ?? widget.initialDetail;
+        final revoked = _revoked || _repository.client.authGeneration != _generation;
+        // Never display an earlier tenant's approval title after revocation.
+        final detail = revoked || snapshot.hasError ? null : snapshot.data ?? widget.initialDetail;
         final colors = AppTheme.colors(context);
         return Scaffold(
           backgroundColor: colors.page,
@@ -241,7 +255,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                   onBack: () => Navigator.of(context).maybePop(),
                 ),
                 Expanded(
-                  child: snapshot.hasError
+                  child: revoked
+                       ? const Center(child: Text('账号已切换，请重新打开审批'))
+                       : snapshot.hasError
                       ? Center(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
@@ -341,6 +357,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                   text: '通过',
                                   onPressed: () => _confirm(true),
                                   enabled: detail.canAct && !_working && !_needsReconciliation &&
+                                       !revoked &&
                                       !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                                 const SizedBox(height: 8),
@@ -348,6 +365,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                   text: '驳回',
                                   onPressed: () => _confirm(false),
                                   enabled: detail.canAct && !_working && !_needsReconciliation &&
+                                       !revoked &&
                                       !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                               ],
@@ -362,11 +380,11 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
   }
 
   Future<ApprovalDetail> _load() async {
-    if (_repository.client.authGeneration != _generation) {
+    if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
     }
     final detail = await _repository.loadApprovalDetail(widget.id);
-    if (_repository.client.authGeneration != _generation) {
+    if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
     }
     return detail;
