@@ -413,6 +413,18 @@ def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
     )
 
 
+def _same_amount_in_cents(amount: Any, expected_cents: int) -> bool:
+    try:
+        candidate = Decimal(str(amount)) * 100
+        return (
+            candidate.is_finite()
+            and candidate == candidate.to_integral_value()
+            and int(candidate) == expected_cents
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+
+
 @router.get("/query/{out_trade_no}")
 def query_trade(request: Request, out_trade_no: str):
     """alipay.trade.query：查询交易状态。同时返回本地订单快照。"""
@@ -426,13 +438,50 @@ def query_trade(request: Request, out_trade_no: str):
                 "data": {"local": local},
             }
         )
+    trade = res.get("raw")
+    verified = False
+    if isinstance(trade, dict):
+        try:
+            cents = Decimal(str(trade["total_amount"])) * 100
+            verified = (
+                cents.is_finite()
+                and cents == cents.to_integral_value()
+                and type(local.get("amount_cents")) is int
+                and int(cents) == local["amount_cents"]
+                and trade.get("out_trade_no") == out_trade_no
+                and str(trade.get("trade_no") or "") == str(local.get("trade_no") or "")
+                and trade.get("trade_status") in {"TRADE_SUCCESS", "TRADE_FINISHED"}
+                and local.get("status") in {
+                    "paid", "partially_refunded", "refunded", "refund_pending_reconciliation"
+                }
+            )
+        except (InvalidOperation, ValueError, TypeError, KeyError):
+            verified = False
+    if isinstance(trade, dict) and (
+        (trade.get("out_trade_no") and trade["out_trade_no"] != out_trade_no)
+        or (
+            trade.get("trade_no") and local.get("trade_no")
+            and trade["trade_no"] != local["trade_no"]
+        )
+        or (
+            trade.get("total_amount") is not None and type(local.get("amount_cents")) is int
+            and not _same_amount_in_cents(trade["total_amount"], local["amount_cents"])
+        )
+    ):
+        return JSONResponse(
+            {
+                "success": False, "requires_reconciliation": True,
+                "message": "支付渠道回查与原订单身份或金额冲突，禁止自动结算",
+                "data": {"local": local},
+            },
+            status_code=409,
+        )
     return JSONResponse(
         {
             "success": True,
-            "data": {
-                "trade": res.get("raw"),
-                "local": local,
-            },
+            "gateway_payment_reconciled": bool(verified),
+            "bank_settlement_verified": False,
+            "data": {"trade": trade, "local": local},
         }
     )
 
@@ -553,13 +602,22 @@ def close_trade(request: Request, body: dict[str, Any] = Body(default_factory=di
     if not res["success"]:
         return JSONResponse({"success": False, "message": res.get("message") or "关闭交易失败"})
 
-    if out_trade_no:
-        try:
-            mp_orders.update_order_status(out_trade_no=out_trade_no, status="closed")
-        except OSError as e:
-            logger.exception("[model-payment] 写入关闭本地记录失败: %s", e)
-
-    logger.info("[model-payment] close ok out_trade_no=%s trade_no=%s", out_trade_no, trade_no)
+    try:
+        closed = mp_orders.update_order_status(
+            out_trade_no=out_trade_no, status="closed"
+        )
+    except (OSError, ValueError):
+        closed = None
+        logger.exception("[model-payment] 渠道关闭成功但本地回执丢失")
+    if not isinstance(closed, dict) or closed.get("status") != "closed":
+        return JSONResponse(
+            {
+                "success": False, "requires_reconciliation": True,
+                "message": "渠道可能已关闭原交易但本地回执尚未持久核对，禁止重复关闭",
+            },
+            status_code=503,
+        )
+    logger.info("[model-payment] close verified locally out_trade_no=%s", out_trade_no)
     return JSONResponse({"success": True, "data": res.get("raw")})
 
 
