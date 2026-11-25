@@ -201,7 +201,8 @@ def apply_notify_paid(
         # A delayed paid callback cannot undo a closed/refunded state or
         # override an unresolved refund. Hold the identity for reconciliation.
         if o.get("status") in {
-            "closed", "refunded", "refund_requested", "refund_pending_reconciliation"
+            "closed", "refunded", "partially_refunded", "refund_requested",
+            "refund_pending_reconciliation",
         }:
             return "terminal_order_conflict", dict(o)
 
@@ -425,3 +426,126 @@ def list_unmatched_notifications() -> list[dict[str, Any]]:
     with _lock:
         entries = _load().get("unmatched_notifications", {})
     return [dict(item) for item in entries.values() if isinstance(item, dict)]
+
+
+def reserve_refund_attempt(
+    *, out_trade_no: str, out_request_no: str, amount_cents: int
+) -> tuple[str, dict[str, Any] | None]:
+    """Atomically reserve one distinct refund request in the original ledger.
+
+    No provider request may be made unless this durable claim is committed.
+    Pending or unknown provider outcomes cannot be auto-replayed. This is a
+    single-process JSON legacy safeguard, not PostgreSQL multi-process safety.
+    """
+    if (
+        not out_trade_no
+        or not out_request_no
+        or len(out_request_no) > 64
+        or type(amount_cents) is not int
+        or amount_cents <= 0
+    ):
+        return "refund_request_invalid", None
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        if not isinstance(order, dict):
+            return "refund_order_missing", None
+        if order.get("status") not in {"paid", "partially_refunded"}:
+            return "refund_order_not_settled", dict(order)
+        if type(order.get("amount_cents")) is not int or order["amount_cents"] <= 0:
+            return "refund_order_amount_missing", dict(order)
+        attempts = order.setdefault("refund_attempts", {})
+        if not isinstance(attempts, dict):
+            return "refund_history_corrupt", dict(order)
+        if out_request_no in attempts:
+            existing = attempts[out_request_no]
+            return "refund_request_replay", dict(existing) if isinstance(existing, dict) else None
+        confirmed = 0
+        for prior in attempts.values():
+            if not isinstance(prior, dict):
+                return "refund_history_corrupt", None
+            if prior.get("state") != "confirmed":
+                return "refund_requires_reconciliation", dict(order)
+            if type(prior.get("amount_cents")) is not int or prior["amount_cents"] < 0:
+                return "refund_history_corrupt", None
+            confirmed += prior["amount_cents"]
+        if confirmed + amount_cents > order["amount_cents"]:
+            return "refund_amount_exceeds_original", dict(order)
+        attempts[out_request_no] = {
+            "out_request_no": out_request_no,
+            "amount_cents": amount_cents,
+            "state": "pending_provider_confirmation",
+            "created_at": _utc_iso(),
+        }
+        order["status"] = "refund_pending_reconciliation"
+        _atomic_write(order_store_path(), state)
+        return "refund_reserved", dict(attempts[out_request_no])
+
+
+def observe_refund_provider_result(
+    *, out_trade_no: str, out_request_no: str, provider_reported_success: bool
+) -> bool:
+    """Persist an observation, never confuse provider response with settlement."""
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        attempt = (
+            (order.get("refund_attempts") or {}).get(out_request_no)
+            if isinstance(order, dict)
+            else None
+        )
+        if not isinstance(attempt, dict) or attempt.get("state") not in {
+            "pending_provider_confirmation", "provider_reported_success",
+            "provider_response_unknown",
+        }:
+            return False
+        attempt["state"] = (
+            "provider_reported_success" if provider_reported_success
+            else "provider_response_unknown"
+        )
+        attempt["last_provider_response_at"] = _utc_iso()
+        _atomic_write(order_store_path(), state)
+        return True
+
+
+def confirm_refund_from_provider_query(
+    *, out_trade_no: str, out_request_no: str, amount_cents: int
+) -> tuple[str, dict[str, Any] | None]:
+    """Confirm only the same original refund after a separate gateway query.
+
+    This verifies the provider query identity and requested amount. It does NOT
+    certify bank settlement or financial profit; independent external evidence
+    is still required for those claims.
+    """
+    with _lock:
+        state = _load()
+        order = state["orders"].get(out_trade_no)
+        attempt = (
+            (order.get("refund_attempts") or {}).get(out_request_no)
+            if isinstance(order, dict)
+            else None
+        )
+        if not isinstance(order, dict) or not isinstance(attempt, dict):
+            return "refund_request_missing", None
+        if type(amount_cents) is not int or attempt.get("amount_cents") != amount_cents:
+            return "refund_amount_mismatch", dict(attempt)
+        if attempt.get("state") == "confirmed":
+            return "already_confirmed", dict(attempt)
+        if attempt.get("state") not in {
+            "pending_provider_confirmation", "provider_reported_success",
+            "provider_response_unknown",
+        }:
+            return "refund_request_invalid_state", dict(attempt)
+        attempts = order["refund_attempts"]
+        total = sum(
+            x["amount_cents"] for x in attempts.values()
+            if isinstance(x, dict) and (x.get("state") == "confirmed" or x is attempt)
+        )
+        if type(order.get("amount_cents")) is not int or total > order["amount_cents"]:
+            return "refund_amount_exceeds_original", dict(attempt)
+        attempt["state"] = "confirmed"
+        attempt["confirmed_at"] = _utc_iso()
+        order["refunded_amount_cents"] = total
+        order["status"] = "refunded" if total == order["amount_cents"] else "partially_refunded"
+        _atomic_write(order_store_path(), state)
+        return "refund_confirmed", dict(attempt)
