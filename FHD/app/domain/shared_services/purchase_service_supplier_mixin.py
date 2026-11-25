@@ -201,13 +201,15 @@ class PurchaseSupplierMixin:
             return {"success": False, "message": str(exc)}
         with _get_db() as db:
             try:
+                if "name" in data:
+                    # SQLite must take its write lock before the first SELECT.
+                    _supplier_name_lock(db, tid, str(data["name"]).strip())
                 supplier = db.query(Supplier).filter(
                     Supplier.id == supplier_id, Supplier.tenant_id == tid
                 ).with_for_update().first()
                 if supplier is None:
                     return {"success": False, "message": "供应商不存在"}
                 name = str(data.get("name") or supplier.name).strip()
-                _supplier_name_lock(db, tid, name)
                 if _supplier_name_taken(db, tid, name, exclude_id=supplier.id):
                     return {"success": False, "message": "当前企业已有同名有效供应商"}
                 for key, value in data.items():
