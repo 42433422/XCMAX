@@ -1113,6 +1113,17 @@ class CyclePorts:
         return state
 
     def finish(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        # Preserve the actual lineage from original reviewed evidence to a NEW
+        # pending goal/decision. A citation is not a proven causal improvement.
+        reuse = self.details.get("experience_reuse")
+        if isinstance(reuse, dict):
+            cited = set(reuse.get("review_refs", []))
+            for goal in result.get("goals") or []:
+                if isinstance(goal, dict) and cited.intersection(goal.get("evidence_refs", [])):
+                    reuse["new_goal_id"] = goal.get("id")
+                    reuse["new_decision_id"] = goal.get("decision_id")
+                    reuse["new_goal_status"] = goal.get("status")
+                    break
         if result.get("status") == "awaiting_worker" and self.details.get("awaiting_worker"):
             return dict(
                 _store().defer_cycle(
