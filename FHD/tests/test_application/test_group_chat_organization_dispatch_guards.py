@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.group_chat.dispatch_targeting import DispatchTargeting
 from app.application.group_chat.discussion_router import GroupDiscussion
+from app.application.group_chat.dispatch_targeting import DispatchTargeting
 from app.application.group_chat.work_dispatch import WorkDispatch
 
 
