@@ -325,3 +325,98 @@ def test_reviewer_active_row_is_locked_for_entire_decision():
     reviewer.first.return_value = SimpleNamespace(tenant_id=3)
     assert _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
     db.query.return_value.filter.return_value.with_for_update.assert_called_once_with(read=True)
+
+
+def test_purchase_cross_table_reconciliation_checks_batch_and_payable(tmp_path, monkeypatch):
+    """Real isolated SQLite rows: receipt, batch stock movement and AP journal."""
+    from datetime import date
+
+    from app.db.db_base import Base
+    from app.db.models.accounting import JournalEntry, JournalEntryLine
+    from app.db.models.inventory import InventoryTransaction, Warehouse
+    from app.db.models.product import Product
+    from app.db.models.purchase import PurchaseInbound, PurchaseInboundItem, Supplier
+    from app.domain.shared_services import purchase_service
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'purchase-reconcile.sqlite'}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        supplier = Supplier(tenant_id=3, code="TEST-S1", name="test supplier")
+        warehouse = Warehouse(tenant_id=3, code="TEST-W1", name="test warehouse")
+        product = Product(tenant_id=3, name="test product")
+        db.add_all([supplier, warehouse, product])
+        db.flush()
+        receipt = PurchaseInbound(
+            tenant_id=3, inbound_no="IN-TEST-1", supplier_id=supplier.id,
+            warehouse_id=warehouse.id, inbound_date=date(2026, 11, 25),
+            total_amount=Decimal("10.00"), status="completed",
+        )
+        db.add(receipt)
+        db.flush()
+        db.add(
+            PurchaseInboundItem(
+                tenant_id=3, inbound_id=receipt.id, product_id=product.id,
+                batch_no="batch-A", quantity=Decimal("2.0000"),
+                unit_price=Decimal("5.0000"), amount=Decimal("10.00"),
+            )
+        )
+        db.add(
+            InventoryTransaction(
+                tenant_id=3, product_id=product.id, warehouse_id=warehouse.id,
+                transaction_type="in", batch_no="batch-A",
+                quantity=Decimal("2.0000"), reference_type="purchase_inbound",
+                reference_id=receipt.id, transaction_date=datetime(2026, 11, 25),
+            )
+        )
+        journal = JournalEntry(
+            tenant_id=3, entry_no="TEST-AP-1", status="posted",
+            reference_type="purchase_inbound", reference_id=receipt.id,
+            debit_total=Decimal("10.00"), credit_total=Decimal("10.00"),
+        )
+        db.add(journal)
+        db.flush()
+        db.add_all(
+            [
+                JournalEntryLine(
+                    tenant_id=3, entry_id=journal.id, account_code="1401",
+                    debit=Decimal("10.00"), credit=Decimal("0"),
+                ),
+                JournalEntryLine(
+                    tenant_id=3, entry_id=journal.id, account_code="2201",
+                    debit=Decimal("0"), credit=Decimal("10.00"),
+                ),
+            ]
+        )
+        receipt_id = receipt.id
+        db.commit()
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    monkeypatch.setattr(purchase_service, "get_db", session)
+    try:
+        with tenant_scope(3):
+            verified = PurchaseService().reconcile_purchase_inbound(receipt_id)
+            assert verified["posting_consistent"] is True
+            assert verified["bank_settlement_verified"] is False
+            assert verified["inventory_posting_count"] == 1
+
+        with Session(engine) as db:
+            posting = db.query(InventoryTransaction).filter(
+                InventoryTransaction.reference_id == receipt_id
+            ).one()
+            posting.batch_no = "batch-forged"
+            db.commit()
+        with tenant_scope(3):
+            broken = PurchaseService().reconcile_purchase_inbound(receipt_id)
+            assert broken["posting_consistent"] is False
+            assert "purchase_batch_stock_mismatch" in broken["issues"]
+
+        with tenant_scope(4):
+            denied = PurchaseService().reconcile_purchase_inbound(receipt_id)
+            assert denied["reason_code"] == "completed_purchase_receipt_required"
+    finally:
+        engine.dispose()
