@@ -152,7 +152,7 @@ def _sealed_inputs(cases):
                         "source_evidence_sha256",
                     )
                 },
-                "output_sha256": {"final.xlsx": "e" * 64} if arm else {},
+                "output_sha256": {"final.xlsx": "e" * 64},
             },
         }
         for arm in (0, 1)
