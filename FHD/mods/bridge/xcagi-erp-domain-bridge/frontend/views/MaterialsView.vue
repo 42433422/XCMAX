@@ -18,42 +18,22 @@
 
       <div v-if="activeTab === 'materials'" class="card">
         <div class="search-box">
-          <input v-model="searchQuery" type="text" placeholder="搜索..." @input="loadMaterials">
-          <select v-model="selectedCategory">
+          <input v-model="searchQuery" type="text" placeholder="搜索..." @input="scheduleMaterialsSearch">
+          <select v-model="selectedCategory" @change="loadMaterials">
             <option value="">全部分类</option>
             <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
           </select>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>编码</th>
-              <th>名称</th>
-              <th>分类</th>
-              <th>库存</th>
-              <th>单价</th>
-              <th>供应商</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in materials" :key="item.id">
-              <td>{{ item.code || '-' }}</td>
-              <td>{{ item.name }}</td>
-              <td>{{ item.category || '-' }}</td>
-              <td :class="{'text-red': item.quantity < (item.min_stock || 0)}">{{ item.quantity }} {{ item.unit || '' }}</td>
-              <td>{{ item.price ? '¥' + item.price.toFixed(2) : '-' }}</td>
-              <td>{{ item.supplier || '-' }}</td>
-              <td>
-                <button class="btn btn-sm btn-secondary" @click="editMaterial(item)">编辑</button>
-                <button class="btn btn-sm btn-danger" @click="deleteMaterial(item)">删除</button>
-              </td>
-            </tr>
-            <tr v-if="materials.length === 0">
-              <td colspan="7" class="text-center">暂无数据</td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable :columns="materialColumns" :data="materials" :loading="listLoading.materials" :error="listErrors.materials" :has-more="false" @retry="loadMaterials">
+          <template #cell-quantity="{ row }: any">
+            <span :class="{ 'text-red': row.quantity < (row.min_stock || 0) }">{{ row.quantity }} {{ row.unit || '' }}</span>
+          </template>
+          <template #cell-price="{ value }">{{ value == null ? '-' : '¥' + Number(value).toFixed(2) }}</template>
+          <template #actions="{ row }: any">
+            <button class="btn btn-sm btn-secondary" :disabled="saving || listLoading.materials || !!listErrors.materials" @click="editMaterial(row)">编辑</button>
+            <button class="btn btn-sm btn-danger" :disabled="saving || listLoading.materials || !!listErrors.materials" @click="deleteMaterial(row)">删除</button>
+          </template>
+        </DataTable>
       </div>
 
       <div v-if="activeTab === 'warehouse'" class="card">
@@ -61,107 +41,39 @@
           <h4>仓库列表</h4>
           <button class="btn btn-primary btn-sm" @click="showWarehouseModal">+ 添加仓库</button>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>编码</th>
-              <th>名称</th>
-              <th>类型</th>
-              <th>地址</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="w in warehouses" :key="w.id">
-              <td>{{ w.code }}</td>
-              <td>{{ w.name }}</td>
-              <td>{{ w.type || '-' }}</td>
-              <td>{{ w.address || '-' }}</td>
-              <td>{{ w.status === 'active' ? '正常' : '禁用' }}</td>
-              <td>
-                <button class="btn btn-sm btn-secondary" @click="editWarehouse(w)">编辑</button>
-                <button class="btn btn-sm btn-secondary" @click="manageLocations(w)">库位</button>
-              </td>
-            </tr>
-            <tr v-if="warehouses.length === 0">
-              <td colspan="6" class="text-center">暂无仓库</td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable :columns="warehouseColumns" :data="warehouses" :loading="listLoading.warehouses" :error="listErrors.warehouses" :has-more="false" empty-text="暂无仓库" @retry="loadWarehouses">
+          <template #cell-status="{ value }">{{ value === 'active' ? '正常' : '禁用' }}</template>
+          <template #actions="{ row }: any">
+            <button class="btn btn-sm btn-secondary" :disabled="saving || listLoading.warehouses || !!listErrors.warehouses" @click="editWarehouse(row)">编辑</button>
+            <button class="btn btn-sm btn-secondary" :disabled="saving || listLoading.warehouses || !!listErrors.warehouses" @click="manageLocations(row)">库位</button>
+          </template>
+        </DataTable>
 
         <div v-if="selectedWarehouse" style="margin-top:30px;">
           <h4>库位管理 - {{ selectedWarehouse.name }}</h4>
           <button class="btn btn-sm btn-primary" @click="showLocationModal" style="margin-bottom:10px;">+ 添加库位</button>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>编码</th>
-                <th>名称</th>
-                <th>容量</th>
-                <th>当前用量</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="loc in locations" :key="loc.id">
-                <td>{{ loc.code }}</td>
-                <td>{{ loc.name }}</td>
-                <td>{{ loc.max_capacity || '-' }}</td>
-                <td>{{ loc.current_capacity || 0 }}</td>
-                <td>{{ loc.status === 'active' ? '正常' : '禁用' }}</td>
-                <td>
-                  <button class="btn btn-sm btn-secondary" @click="editLocation(loc)">编辑</button>
-                </td>
-              </tr>
-              <tr v-if="locations.length === 0">
-                <td colspan="6" class="text-center">暂无库位</td>
-              </tr>
-            </tbody>
-          </table>
+          <DataTable :columns="locationColumns" :data="locations" :loading="listLoading.locations" :error="listErrors.locations" :has-more="false" empty-text="暂无库位" @retry="selectedWarehouse && loadLocations(selectedWarehouse.id)">
+            <template #cell-status="{ value }">{{ value === 'active' ? '正常' : '禁用' }}</template>
+            <template #actions="{ row }: any">
+              <button class="btn btn-sm btn-secondary" :disabled="saving || listLoading.locations || !!listErrors.locations" @click="editLocation(row)">编辑</button>
+            </template>
+          </DataTable>
         </div>
       </div>
 
       <div v-if="activeTab === 'inout'" class="card">
         <div class="page-header" style="padding:0;border:none;">
-          <h4>出入库记录</h4>
+          <h4>出入库记录（本次最多 100 条）</h4>
           <div>
             <button class="btn btn-sm btn-primary" @click="showInModal">入库</button>
             <button class="btn btn-sm btn-warning" @click="showOutModal" style="margin-left:5px;">出库</button>
           </div>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>类型</th>
-              <th>产品</th>
-              <th>仓库</th>
-              <th>数量</th>
-              <th>操作人</th>
-              <th>备注</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in transactions" :key="t.id">
-              <td>{{ t.transaction_date }}</td>
-              <td>
-                <span :class="t.transaction_type === 'in' ? 'text-green' : 'text-red'">
-                  {{ t.transaction_type === 'in' ? '入库' : '出库' }}
-                </span>
-              </td>
-              <td>{{ t.product_name || '-' }}</td>
-              <td>{{ t.warehouse_name || '-' }}</td>
-              <td>{{ t.quantity }}</td>
-              <td>{{ t.operator || '-' }}</td>
-              <td>{{ t.remark || '-' }}</td>
-            </tr>
-            <tr v-if="transactions.length === 0">
-              <td colspan="7" class="text-center">暂无记录</td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable :columns="transactionColumns" :data="transactions" :loading="listLoading.transactions" :error="listErrors.transactions" :has-more="false" empty-text="暂无记录" @retry="loadTransactions">
+          <template #cell-transaction_type="{ value }">
+            <span :class="value === 'in' ? 'text-green' : 'text-red'">{{ value === 'in' ? '入库' : value === 'out' ? '出库' : value }}</span>
+          </template>
+        </DataTable>
       </div>
 
       <div v-if="activeTab === 'supplier'" class="card">
@@ -169,33 +81,12 @@
           <h4>供应商列表</h4>
           <button class="btn btn-primary btn-sm" @click="showSupplierModal">+ 添加供应商</button>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>编码</th>
-              <th>名称</th>
-              <th>联系人</th>
-              <th>电话</th>
-              <th>评级</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in suppliers" :key="s.id">
-              <td>{{ s.code }}</td>
-              <td>{{ s.name }}</td>
-              <td>{{ s.contact_person || '-' }}</td>
-              <td>{{ s.contact_phone || '-' }}</td>
-              <td>{{ '★'.repeat(s.rating || 3) }}</td>
-              <td>
-                <button class="btn btn-sm btn-secondary" @click="editSupplier(s)">编辑</button>
-              </td>
-            </tr>
-            <tr v-if="suppliers.length === 0">
-              <td colspan="6" class="text-center">暂无供应商</td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable :columns="supplierColumns" :data="suppliers" :loading="listLoading.suppliers" :error="listErrors.suppliers" :has-more="false" empty-text="暂无供应商" @retry="loadSuppliers">
+          <template #cell-rating="{ value }">{{ '★'.repeat(Math.max(0, Math.min(5, Number(value) || 0))) }}</template>
+          <template #actions="{ row }: any">
+            <button class="btn btn-sm btn-secondary" :disabled="saving || listLoading.suppliers || !!listErrors.suppliers" @click="editSupplier(row)">编辑</button>
+          </template>
+        </DataTable>
       </div>
     </div>
 
@@ -214,7 +105,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showMaterialModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveMaterial">保存</button>
+          <button class="btn btn-primary" :disabled="saving" @click="saveMaterial">保存</button>
         </div>
       </div>
     </div>
@@ -239,7 +130,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showWarehouseModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveWarehouse">保存</button>
+          <button class="btn btn-primary" :disabled="saving" @click="saveWarehouse">保存</button>
         </div>
       </div>
     </div>
@@ -254,7 +145,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showLocationModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveLocation">保存</button>
+          <button class="btn btn-primary" :disabled="saving" @click="saveLocation">保存</button>
         </div>
       </div>
     </div>
@@ -281,7 +172,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showInModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="doIn">确认入库</button>
+          <button class="btn btn-primary" :disabled="saving" @click="doIn">确认入库</button>
         </div>
       </div>
     </div>
@@ -307,7 +198,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showOutModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="doOut">确认出库</button>
+          <button class="btn btn-primary" :disabled="saving" @click="doOut">确认出库</button>
         </div>
       </div>
     </div>
@@ -332,7 +223,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showSupplierModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveSupplier">保存</button>
+          <button class="btn btn-primary" :disabled="saving" @click="saveSupplier">保存</button>
         </div>
       </div>
     </div>
@@ -343,6 +234,14 @@
 // 原超大 SFC 已拆分至 ./materials/（composable + 独立 CSS）；
 // 入口保持对外路径/默认导出不变，仅做组装。
 import { useMaterials } from './materials/useMaterials'
+import DataTable from '@/components/DataTable.vue'
+
+const col = (key: string, label: string, minWidth = 100) => ({ key, label, minWidth, sortable: true })
+const materialColumns = [col('code', '编码'), col('name', '名称', 150), col('category', '分类'), col('quantity', '库存'), col('price', '单价'), col('supplier', '供应商', 130)]
+const warehouseColumns = [col('code', '编码'), col('name', '名称', 150), col('type', '类型'), col('address', '地址', 160), col('status', '状态')]
+const locationColumns = [col('code', '编码'), col('name', '名称', 150), col('max_capacity', '容量'), col('current_capacity', '当前用量'), col('status', '状态')]
+const transactionColumns = [col('transaction_date', '时间', 160), col('transaction_type', '类型'), col('product_name', '产品', 150), col('warehouse_name', '仓库'), col('quantity', '数量'), col('operator', '操作人'), col('remark', '备注', 150)]
+const supplierColumns = [col('code', '编码'), col('name', '名称', 150), col('contact_person', '联系人'), col('contact_phone', '电话', 130), col('rating', '评级')]
 
 const {
   materialsPageTitle, resourceTabLabel, warehouseTabLabel, inoutTabLabel, supplierTabLabel,
@@ -353,7 +252,8 @@ const {
   showLocationModalFlag, isEditLocation, locationForm,
   showInModalFlag, showOutModalFlag, inoutForm,
   showSupplierModalFlag, isEditSupplier, supplierForm,
-  loadMaterials, loadSuppliers, showAddModal, editMaterial, saveMaterial, deleteMaterial,
+  loadMaterials, scheduleMaterialsSearch, loadWarehouses, loadLocations, loadTransactions, loadSuppliers,
+  listLoading, listErrors, saving, showAddModal, editMaterial, saveMaterial, deleteMaterial,
   showWarehouseModal, editWarehouse, saveWarehouse, manageLocations,
   showLocationModal, editLocation, saveLocation,
   showInModal, showOutModal, doIn, doOut,
