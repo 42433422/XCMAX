@@ -165,7 +165,7 @@ const filtered = computed(() => {
   const actionLinks = desktopEnabled ? authorizedActionLinks
     .filter((action) => (visibleNavItems.value || []).some((nav) => nav.key === action.key))
     .map((action) => ({ ...action, kind: 'action' })) : []
-  const taskItems = desktopEnabled && taskStore
+  const taskItems = desktopEnabled && taskStore && taskStore.stale !== true
     ? taskStore.tasks.filter((task) => !task.archived_at)
       .filter((task) => !keyword || `${task.title} ${task.task_id} ${task.status}`.toLowerCase().includes(keyword))
       .slice(0, 12).map((task) => ({ kind: 'task', id: task.task_id, name: task.title || task.task_id, task })) : []
@@ -347,6 +347,11 @@ function loadCommands() {
 
 function onWorkspaceNavVisited(event) {
   if (!desktopEnabled) return
+  const currentKey = workspaceCommandStorageKey()
+  if (currentKey !== storageKey.value) {
+    storageKey.value = currentKey
+    preferences.value = readWorkspaceCommandPreferences(currentKey)
+  }
   const key = String(event?.detail?.key || '')
   if (!(visibleNavItems.value || []).some((nav) => nav.key === key)) return
   const recent = nextRecentNavKeys(preferences.value.recent, key)
@@ -560,7 +565,9 @@ function choose(item) {
   }
   if (item?.kind === 'employee') {
     if (!records.value.includes(item)) return
-    emit('select', item.navKey || 'employee-workflow')
+    const navKey = item.navKey || 'employee-workflow'
+    if (!(visibleNavItems.value || []).some((nav) => nav.key === navKey || nav.parentKey === navKey)) return
+    emit('select', navKey)
     query.value = ''
     records.value = []
     open.value = false
