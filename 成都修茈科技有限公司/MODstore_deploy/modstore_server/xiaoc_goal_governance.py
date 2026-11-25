@@ -143,14 +143,20 @@ def goal_conflicts(
             result.append({"goal_id": str(key), "reason": "explicit_mutual_exclusion"})
             continue
         left, right = goal.get("acceptance"), other.get("acceptance")
-        if not isinstance(left, dict) or not isinstance(right, dict):
+        left_scope, right_scope = goal.get("observation"), other.get("observation")
+        if (
+            not isinstance(left, dict)
+            or not isinstance(right, dict)
+            or not isinstance(left_scope, dict)
+            or not isinstance(right_scope, dict)
+        ):
+            result.append({"goal_id": str(key), "reason": "invalid_metric_scope"})
             continue
         if (
             not left.get("metric")
             or left.get("metric") != right.get("metric")
             or left.get("stage") != right.get("stage")
-            or goal.get("observation", {}).get("source_owner")
-            != other.get("observation", {}).get("source_owner")
+            or left_scope.get("source_owner") != right_scope.get("source_owner")
         ):
             continue
         directions = {left.get("direction"), right.get("direction")}
@@ -171,7 +177,9 @@ def goal_conflicts(
 
 def goal_dependency_gate(goal: dict[str, Any], others: list[dict[str, Any]]) -> dict[str, Any]:
     """A completed task alone cannot satisfy a dependency without acceptance proof."""
-    dependencies = goal.get("depends_on_goal_ids") or []
+    dependencies = goal.get("depends_on_goal_ids")
+    if dependencies is None:
+        dependencies = []
     if (
         not isinstance(dependencies, list)
         or len(dependencies) > 32
@@ -196,12 +204,52 @@ def goal_dependency_gate(goal: dict[str, Any], others: list[dict[str, Any]]) -> 
     return {"status": "waiting" if pending else "ready", "pending": pending}
 
 
+def candidate_contract_valid(goal: dict[str, Any], *, now: datetime) -> bool:
+    """An editable projection cannot change an original verified observation."""
+    if goal.get("candidate_origin") != "customer_value_gap/v1":
+        return True
+    try:
+        observation = goal["observation"]
+        acceptance = goal["acceptance"]
+        stage = goal["issue_key"]
+        if not isinstance(observation, dict) or not isinstance(acceptance, dict):
+            return False
+        if (
+            stage not in STAGE_SEVERITY
+            or observation.get("stage") != stage
+            or observation.get("source_owner")
+            not in {"python_payment_orders", "java_postgresql_internal_api"}
+            or observation.get("window_days") != 90
+            or type(observation.get("gap_count")) is not int
+            or observation["gap_count"] <= 0
+            or type(goal.get("candidate_owner_user_id")) is not int
+            or goal["candidate_owner_user_id"] <= 0
+            or acceptance.get("metric") != "customer_value_lifecycle_gap_count"
+            or acceptance.get("stage") != stage
+            or acceptance.get("direction", "min") != "min"
+            or acceptance.get("baseline") != observation["gap_count"]
+            or type(acceptance.get("target")) is not int
+            or acceptance["target"] != 0
+            or goal.get("evidence_refs") != ["customer-value-gap:" + _hash(observation)]
+        ):
+            return False
+        return parse_time(observation["observed_at"]) <= now < parse_time(
+            goal["review_deadline"]
+        )
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+        return False
+
+
 def governance_gate(
     goal: dict[str, Any], others: list[dict[str, Any]], *, now: datetime
 ) -> dict[str, Any]:
     conflicts = goal_conflicts(goal, others, now=now)
     dependencies = goal_dependency_gate(goal, others)
-    if conflicts:
+    if not candidate_contract_valid(goal, now=now):
+        status = "blocked_invalid_candidate"
+    elif goal.get("status") not in ACTIVE_STATUSES:
+        status = "terminal"
+    elif conflicts:
         status = "blocked_conflict"
     elif dependencies["status"] != "ready":
         status = "blocked_dependency"
