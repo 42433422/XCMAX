@@ -79,4 +79,14 @@ describe('products store', () => {
     expect(result.success).toBe(true)
     expect(mockGetProducts).toHaveBeenCalled()
   })
+  it('refreshes the first server page after a write even when the last read appended a later page', async () => {
+    mockGetProducts.mockResolvedValue({ success: true, data: [], total: 0 })
+    mockCreateProduct.mockResolvedValue({ success: true })
+    const store = useProductsStore()
+    await store.fetchProducts({ page: 1, per_page: 50, keyword: 'SKU' })
+    await store.fetchProducts({ page: 2, per_page: 50, keyword: 'SKU' }, { append: true })
+    await store.createProduct({ name: 'N' } as never)
+    expect(mockGetProducts).toHaveBeenLastCalledWith({ page: 1, per_page: 50, keyword: 'SKU' })
+  })
+
 })
