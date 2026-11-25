@@ -5,6 +5,7 @@ on:
     paths:
       - 'FHD/frontend/**'
       - '.github/workflows/frontend-interaction-performance.yml'
+      - 'FHD/scripts/dev/compare_frontend_interaction_perf.py'
 permissions:
   contents: read
 concurrency:
@@ -55,6 +56,9 @@ jobs:
           lscpu > "$RUNNER_TEMP/ui-perf/runner-cpu.txt"
           uname -a > "$RUNNER_TEMP/ui-perf/runner-os.txt"
           node --version > "$RUNNER_TEMP/ui-perf/node-version.txt"
+      - name: Validate comparison logic with negative controls
+        shell: bash
+        run: python3 candidate/FHD/scripts/dev/compare_frontend_interaction_perf.py --self-test
       - name: Measure both production builds on the same runner
         shell: bash
         run: |
@@ -91,6 +95,15 @@ jobs:
             cat "$RUNNER_TEMP/ui-perf/$side/long-list.log"
           done
           exit "$status"
+      - name: Compare SHA-bound browser measurements
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 candidate/FHD/scripts/dev/compare_frontend_interaction_perf.py \
+            --root "$RUNNER_TEMP/ui-perf" \
+            --baseline-sha "$BASELINE_SHA" \
+            --candidate-sha "$CANDIDATE_SHA"
       - name: Upload raw measurements and execution logs
         if: always()
         uses: actions/upload-artifact@v4
