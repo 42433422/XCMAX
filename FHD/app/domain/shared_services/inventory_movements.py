@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import logging
 import math
+from decimal import Decimal
 from contextlib import nullcontext
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,42 @@ def _posted_stock_out(db, model, product_id, reference_type, reference_id):
     return query.first()
 
 
+def _debit_available(db: Any, ledger: Any, quantity: Decimal, now: datetime) -> bool:
+    """One guarded SQL debit, shared by dispatch and warehouse transfer.
+
+    READ COMMITTED and SQLite writers compete on the original quantities:
+    no stale ORM read may overwrite an intervening reservation or movement.
+    """
+    model = _facade().InventoryLedger
+    physical = Decimal(str(ledger.quantity or 0))
+    available = Decimal(str(ledger.available_quantity or 0))
+    reserved = Decimal(str(ledger.reserved_quantity or 0))
+    if (
+        physical < 0 or available < quantity or reserved < 0
+        or physical != available + reserved
+    ):
+        return False
+    changed = db.query(model).filter(
+        model.id == ledger.id,
+        model.tenant_id == ledger.tenant_id,
+        model.quantity == physical,
+        model.available_quantity == available,
+        model.reserved_quantity == reserved,
+        model.available_quantity >= quantity,
+    ).update(
+        {
+            model.quantity: model.quantity - quantity,
+            model.available_quantity: model.available_quantity - quantity,
+            model.updated_at: now,
+        },
+        synchronize_session=False,
+    )
+    if changed != 1:
+        return False
+    db.refresh(ledger)
+    return True
+
+
 def _positive_movement_quantity(value: Any) -> float:
     if isinstance(value, bool):
         raise ValueError("库存变动数量必须是有效正数")
@@ -37,7 +74,10 @@ def _positive_movement_quantity(value: Any) -> float:
         quantity = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("库存变动数量必须是有效正数") from exc
-    if not math.isfinite(quantity) or quantity <= 0:
+    if (
+        not math.isfinite(quantity) or quantity <= 0
+        or Decimal(str(quantity)).as_tuple().exponent < -4
+    ):
         raise ValueError("库存变动数量必须是有效正数")
     return quantity
 
@@ -243,11 +283,27 @@ class InventoryMovementsMixin:
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 stock_model = _facade().InventoryTransaction
+                resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
+                    db, warehouse_id
+                )
+                if resolved_warehouse_id is None:
+                    return {"success": False, "error_code": error_code, "message": problem}
                 if reference_type and reference_id not in (None, ""):
                     posted = _posted_stock_out(
                         db, stock_model, resolved_product_id, str(reference_type), reference_id
                     )
                     if posted is not None:
+                        if (
+                            Decimal(str(-posted.quantity)) != Decimal(str(quantity))
+                            or posted.warehouse_id != resolved_warehouse_id
+                            or posted.batch_no != batch_no
+                            or posted.location_id != location_id
+                        ):
+                            return {
+                                "success": False,
+                                "error_code": "inventory_replay_conflict",
+                                "message": "原出库单据身份已使用，数量或库存归属不一致",
+                            }
                         return {
                             "success": True,
                             "message": "该业务单据已出库，未重复扣减",
@@ -257,15 +313,6 @@ class InventoryMovementsMixin:
                                 "quantity": quantity,
                             },
                         }
-                resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
-                    db, warehouse_id
-                )
-                if resolved_warehouse_id is None:
-                    return {
-                        "success": False,
-                        "error_code": error_code,
-                        "message": problem,
-                    }
                 query = db.query(_facade().InventoryLedger).filter(
                     _facade().InventoryLedger.product_id == resolved_product_id,
                     _facade().InventoryLedger.warehouse_id == resolved_warehouse_id,
@@ -283,9 +330,12 @@ class InventoryMovementsMixin:
                         "message": "库存不足或库存记录不存在",
                     }
                 now = datetime.now()
-                ledger.quantity = float(ledger.quantity) - quantity
-                ledger.available_quantity = float(ledger.available_quantity) - quantity
-                ledger.updated_at = now
+                if not _debit_available(db, ledger, Decimal(str(quantity)), now):
+                    return {
+                        "success": False,
+                        "error_code": "inventory_concurrent_change",
+                        "message": "可用库存不足、账实不一致或被并发变更，未扣减",
+                    }
                 transaction = stock_model(
                     ledger_id=ledger.id,
                     transaction_type="out",
@@ -314,6 +364,17 @@ class InventoryMovementsMixin:
                     )
                     if raced is None:
                         raise
+                    if (
+                        Decimal(str(-raced.quantity)) != Decimal(str(quantity))
+                        or raced.warehouse_id != resolved_warehouse_id
+                        or raced.batch_no != batch_no
+                        or raced.location_id != location_id
+                    ):
+                        return {
+                            "success": False,
+                            "error_code": "inventory_replay_conflict",
+                            "message": "并发出库身份冲突，原请求的参数不一致",
+                        }
                     return {
                         "success": True,
                         "message": "该业务单据已出库，未重复扣减",
