@@ -247,6 +247,8 @@ def test_installer_pass_does_not_close_business_work_order(monkeypatch):
     "database_readback_missing", "inventory_readback_missing",
     "finance_readback_missing", "not_xlsx", "download_unverified",
     "self_confirmed", "reconciliation_digest_missing",
+    "wrong_release_header", "wrong_sha_header", "duplicate_receipt",
+    "nonstring_receipt", "missing_executor",
 ])
 def test_business_receipts_fail_closed_on_missing_or_mismatched_stage(drift):
     m = load()
@@ -286,6 +288,16 @@ def test_business_receipts_fail_closed_on_missing_or_mismatched_stage(drift):
         record["stages"]["customer_confirmation"]["confirmed_by"] = "worker1"
     elif drift == "reconciliation_digest_missing":
         record["stages"]["independent_reconciliation"].pop("reconciliation_sha256")
+    elif drift == "wrong_release_header":
+        record["version"] = "1.0.0.6"
+    elif drift == "wrong_sha_header":
+        record["build_sha"] = "c" * 40
+    elif drift == "duplicate_receipt":
+        record["stages"]["execution"]["receipt_id"] = record["stages"]["approval"]["receipt_id"]
+    elif drift == "nonstring_receipt":
+        record["stages"]["execution"]["receipt_id"] = 12345
+    elif drift == "missing_executor":
+        record["stages"]["execution"].pop("executed_by")
     else:
         record["stages"].pop(drift)
     assert not m._business_receipts_complete(
