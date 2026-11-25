@@ -84,20 +84,20 @@ function dismiss(done: () => void) {
   transition: background-color var(--xc-token-motion-feedback-ms) ease;
 }
 .app-confirm-dialog__confirm:not(.app-confirm-dialog__confirm--danger) {
-  background: var(--el-color-primary);
-  color: var(--el-color-white);
-  border-color: var(--el-color-primary);
+  background: var(--xc-token-market-light-wb-accent-primary, #0071e3);
+  color: white;
+  border-color: var(--xc-token-market-light-wb-accent-primary, #0071e3);
 }
 .app-confirm-dialog__confirm--danger {
-  background: var(--el-color-danger);
-  color: var(--el-color-white);
-  border-color: var(--el-color-danger);
+  background: var(--xc-token-market-light-wb-status-danger, #d70015);
+  color: white;
+  border-color: var(--xc-token-market-light-wb-status-danger, #d70015);
 }
 .app-confirm-dialog__cancel:hover { background: var(--el-fill-color); }
 .app-confirm-dialog__confirm:hover { filter: brightness(0.96); }
 .app-confirm-dialog__cancel:focus-visible,
 .app-confirm-dialog__confirm:focus-visible {
-  outline: 2px solid var(--el-color-primary);
+  outline: 3px solid var(--xc-token-market-light-wb-accent-primary, #0071e3);
   outline-offset: 2px;
 }
 @media (pointer: coarse) {
