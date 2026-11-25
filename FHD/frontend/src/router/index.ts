@@ -31,6 +31,7 @@ import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@
 import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { resolveInitialRoutes } from './initialRouteSelection'
+import { retireStaleRuntimeRoutes } from './registerModRoutes'
 import { CORE_ROUTES } from './routes/core'
 import { BUSINESS_ROUTES } from './routes/business'
 import { SHELL_ROUTES } from './routes/shell'
@@ -67,6 +68,14 @@ const router = createRouter({
   routes,
 })
 router.beforeEach(async (to, _from, finish) => {
+  // Route matching may have started with a previous account's Mod record.
+  // Retire it before permission decisions; never follow a removed route.
+  retireStaleRuntimeRoutes(router)
+  if (to.matched.some(record => record.meta.mod && String(record.name || '').startsWith('runtime-'))
+    && to.name && !router.hasRoute(String(to.name))) {
+    finish({ name: 'settings', replace: true })
+    return
+  }
   const generation = getSidebarNavigationGeneration()
   const next = (target?: RouteLocationRaw | boolean | Error) => {
     if (generation !== getSidebarNavigationGeneration()) finish(false)

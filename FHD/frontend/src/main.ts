@@ -245,8 +245,10 @@ async function bootstrap() {
     if (readVanillaNoModUi()) return
     try {
       const entries = await fetchModRoutesPayloadShared()
-      if (entries?.length) {
-        await registerModRoutes(router, entries)
+      if (entries) {
+        // An authoritative empty response revokes previously installed runtime routes.
+        // A network error returns null and must not be interpreted as revocation.
+        await registerModRoutes(router, entries, { reconcileRuntime: true })
         scheduleRouterAddressSync('api')
       }
     } catch (e) {

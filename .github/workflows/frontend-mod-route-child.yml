@@ -1,0 +1,50 @@
+name: Frontend MOD route child contract
+
+on:
+  pull_request:
+    branches:
+      - integration/frontend-desktop-mobile-20261125
+    paths:
+      - 'FHD/frontend/src/router/**'
+      - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
+      - 'FHD/frontend/src/main.ts'
+      - '.github/workflows/frontend-mod-route-child.yml'
+  push:
+    branches:
+      - fix/frontend-mod-route-isolation-20261125
+    paths:
+      - 'FHD/frontend/src/router/**'
+      - 'FHD/frontend/src/utils/modRoutesSharedFetch*'
+      - 'FHD/frontend/src/main.ts'
+      - '.github/workflows/frontend-mod-route-child.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-mod-route-child-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mod-route-contract:
+    name: MOD route session isolation and collision regression
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: FHD/frontend
+    steps:
+      - name: Check out exact tested source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.2'
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Type-check Vue source
+        run: npm run type-check
+      - name: Test MOD routing and auth-session fencing
+        run: npm test -- src/router/registerModRoutes.runtime.test.ts src/utils/modRoutesSharedFetch.test.ts
