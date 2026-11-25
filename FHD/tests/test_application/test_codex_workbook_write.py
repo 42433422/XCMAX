@@ -219,6 +219,20 @@ def test_chat_upload_id_flows_through_reader_writer_and_independent_qc(workbook_
     ]
     artifact = receipt["artifacts"][0]
     content = read_verified_run_file(child.run_id, artifact)
+    # Exercise the authenticated HTTP download, not only the private file reader.
+    from app.fastapi_routes.domains.agent.artifact_routes import router as artifact_router
+
+    download_app = FastAPI()
+    download_app.include_router(artifact_router)
+    with TestClient(download_app, headers=state.actor.headers) as client:
+        downloaded = client.get(artifact["uri"])
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.headers["cache-control"] == "private, no-store"
+    assert downloaded.content == content
+    assert downloaded.content != state.original
+    with TestClient(download_app) as anonymous:
+        denied = anonymous.get(artifact["uri"])
+    assert denied.status_code in (401, 403)
     with io.BytesIO(content) as stream:
         book = load_workbook(stream, data_only=False)
         assert book["Data"]["A2"].value == "observed-name"
