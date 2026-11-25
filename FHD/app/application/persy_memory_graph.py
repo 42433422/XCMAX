@@ -59,7 +59,10 @@ class PersyMemoryGraphMixin:
         denied = _permission_denied(access, DATASET_READ_PERMISSION)
         if denied is not None:
             return {**denied, "nodes": [], "edges": [], "stats": {}}
-        listed = self.list_memories(access_context=access, limit=1000)
+        bounded = max(1, min(int(limit or 80), 160))
+        # List and graph use the same active/strength ordering. Do not
+        # revalidate 1,000 ERP source rows just to display 80 graph nodes.
+        listed = self.list_memories(access_context=access, limit=bounded)
         records = [
             row
             for row in listed.get("memories", [])
@@ -71,7 +74,6 @@ class PersyMemoryGraphMixin:
                 -float(item.get("strength") or 0.0),
             )
         )
-        bounded = max(1, min(int(limit or 80), 160))
         records = records[:bounded]
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
