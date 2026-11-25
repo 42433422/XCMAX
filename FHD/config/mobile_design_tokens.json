@@ -67,7 +67,7 @@
       "surface_variant": "#2E2E2E",
       "border": "#383838",
       "text_primary": "#E5E5E5",
-      "text_secondary": "#888888",
+      "text_secondary": "#8C8C8C",
       "text_tertiary": "#5C5C5C"
     }
   },
@@ -723,7 +723,7 @@
           "warning-alpha-08": "rgba(217, 119, 6, 0.08)",
           "warning-alpha-30": "rgba(217, 119, 6, 0.3)",
           "indigo-alpha-06": "rgba(99, 102, 241, 0.06)",
-          "brand-indigo": "{colors.brand.primary}",
+          "brand-indigo": "#6366F1",
           "indigo-alpha-08": "rgba(99, 102, 241, 0.08)",
           "brand-indigo-dark": "{colors.brand.primary_dark}",
           "indigo-alpha-14": "rgba(99, 102, 241, 0.14)",
