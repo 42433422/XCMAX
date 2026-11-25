@@ -860,3 +860,43 @@ def test_pending_erp_fact_cannot_be_confirmed_after_unobserved_source_change(mon
         action="confirm",
     )["success"] is True
     assert service.list_memories(access_context=_access(tenant="3"))["memories"] == []
+
+
+def test_revoked_erp_memory_view_never_reveals_unrecognized_legacy_metadata():
+    from app.application.enterprise_cognition.memory_reference import (
+        sanitize_erp_memory_view,
+    )
+
+    confidential = "FORBIDDEN_ERP_SOURCE_VALUE_901"
+    legacy_record = {
+        "memory_id": "memory-901",
+        "scope": "user",
+        "status": "active",
+        "memory_type": "entity",
+        "revision": 4,
+        "source": "erp_authority",
+        "key": f"customer.{confidential}",
+        "statement": confidential,
+        "value": {"statement": confidential},
+        "summary": confidential,
+        "raw_metadata": {"customer_name": confidential},
+        "evidence": [{"kind": "erp_fact_reference_v1", "value": confidential}],
+        "history": [{"statement": confidential}],
+        "relation_path": [confidential],
+        "metadata": {"nested": [confidential]},
+    }
+    redacted = sanitize_erp_memory_view(legacy_record, _access())
+    assert redacted["memory_id"] == "memory-901"
+    assert redacted["revision"] == 4
+    assert redacted["status"] == "active"
+    assert redacted["erp_requires_reconciliation"] is True
+    assert redacted["erp_fact_verification"]["memory_reuse_allowed"] is False
+    assert confidential not in repr(redacted)
+    assert not (set(legacy_record) - {
+        "memory_id",
+        "scope",
+        "status",
+        "memory_type",
+        "revision",
+        "source",
+    }) & set(redacted)
