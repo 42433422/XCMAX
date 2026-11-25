@@ -164,7 +164,12 @@ def make_fact_reference(snapshot: dict[str, Any]) -> dict[str, str] | None:
     ):
         return None
     version = snapshot["source_version"]
-    if not isinstance(version, str) or not version.startswith("sha256:"):
+    if (
+        not isinstance(version, str)
+        or len(version) != 71
+        or not version.startswith("sha256:")
+        or any(char not in "0123456789abcdef" for char in version[7:])
+    ):
         return None
     values = [str(snapshot[key]) for key in fields]
     return {
