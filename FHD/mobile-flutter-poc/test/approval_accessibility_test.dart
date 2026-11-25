@@ -6,12 +6,18 @@ import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/approval/approval_screens.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
 
-import 'employee_workspace_screen_test.dart' as fixture;
+import 'employee_workspace_fixture.dart' as fixture;
 
 class ApprovalRepository extends fixture.Repository {
   ApprovalRepository(super.api);
 
   final pending = Completer<List<ApprovalRequest>>();
+
+  @override
+  Future<ApprovalDetail> loadApprovalDetail(int id) async => detail;
+
+  @override
+  Future<bool> hasUnknownApprovalOutcome(int id) async => false;
 
   @override
   Future<List<ApprovalRequest>> loadApprovals() => pending.future;
@@ -42,7 +48,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       addTearDown(semantics.dispose);
       final api = fixture.Api();
-      final repo = fixture.Repository(api);
+      final repo = ApprovalRepository(api);
       addTearDown(repo.dispose);
       addTearDown(api.dispose);
       tester.view.physicalSize = const Size(320, 900);
