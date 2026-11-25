@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 # work fine on Python 3.11 (the project's required version).
 # ---------------------------------------------------------------------------
 import app.fastapi_routes.ai_open as _aiopen_mod
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -153,26 +154,26 @@ def client():
 # ===========================================================================
 
 
-def test_trace_control_result_early_return_run_id():
+def test_trace_control_result_early_return_run_id(trusted_actor):
     """If payload from generate_api_key already has run_id, tracing is skipped."""
     with _all_mocks(
         generate_api_key={"key": "k", "label": "", "run_id": "existing-run"},
     ):
         c = _make_client()
-        resp = c.post("/api/aiopen/keys", json={"label": "test"})
+        resp = c.post("/api/aiopen/keys", json={"label": "test"}, headers=trusted_actor().headers)
     assert resp.status_code == 200
     body = resp.json()
     # Payload returned unchanged – still has the pre-existing run_id.
     assert body.get("run_id") == "existing-run"
 
 
-def test_trace_control_result_early_return_agent_run_id():
+def test_trace_control_result_early_return_agent_run_id(trusted_actor):
     """If payload already has agent_run_id, _trace_aiopen_control_result returns early."""
     with _all_mocks(
         generate_api_key={"key": "k", "label": "", "agent_run_id": "agent-42"},
     ):
         c = _make_client()
-        resp = c.post("/api/aiopen/keys", json={"label": "x"})
+        resp = c.post("/api/aiopen/keys", json={"label": "x"}, headers=trusted_actor().headers)
     assert resp.status_code == 200
     assert resp.json().get("agent_run_id") == "agent-42"
 

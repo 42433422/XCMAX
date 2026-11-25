@@ -557,6 +557,7 @@ def aiopen_keys_list(_admin: Any = Depends(require_admin_user)):
 
 @router.post("/api/aiopen/keys")
 def aiopen_keys_create(
+    request: Request,
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
@@ -569,6 +570,8 @@ def aiopen_keys_create(
         scopes = None
     expires_in_days = _positive_int(body.get("expires_in_days"))
     expires_at = time.time() + expires_in_days * 86400 if expires_in_days else None
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
     created = generate_api_key(
         str(body.get("label") or ""),
         principal=ScreenPrincipal.from_user(_admin),
@@ -576,6 +579,7 @@ def aiopen_keys_create(
         expires_at=expires_at,
         rate_limit_per_min=_positive_int(body.get("rate_limit_per_min")),
         daily_quota=_positive_int(body.get("daily_quota")),
+        execution_context=request_runtime_context(request),
     )
     return _trace_aiopen_control_result(
         {"success": True, **created},
@@ -616,7 +620,22 @@ def aiopen_keys_revoke(
     key = str(body.get("key") or "").strip()
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
-    ok = revoke_api_key(key)
+    try:
+        ok = revoke_api_key(key)
+    except OSError:
+        result = _trace_aiopen_control_result(
+            {
+                "success": False,
+                "revoked": False,
+                "error_code": "key_revocation_unavailable",
+                "message": "密钥撤销尚未保存，请重试并核对撤销结果",
+            },
+            route="/api/aiopen/keys",
+            action="keys_revoke",
+            body=body,
+            user_id=str(getattr(_admin, "id", "") or ""),
+        )
+        return JSONResponse(result, status_code=503)
     return _trace_aiopen_control_result(
         {"success": ok, "revoked": ok},
         route="/api/aiopen/keys",

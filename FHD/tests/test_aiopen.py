@@ -21,6 +21,7 @@ from app.fastapi_routes.ai_open import router as ai_open_router
 from app.fastapi_routes.ai_qclaw import _QCLOW_RUNTIME_STATE
 from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
 from app.infrastructure.auth.dependencies import require_admin_user
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
@@ -60,7 +61,12 @@ def _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def admin_actor(trusted_actor):
+    return trusted_actor(user_id=73, role="admin", tier="admin", tenant_id=None)
+
+
+@pytest.fixture()
+def client(monkeypatch, admin_actor):
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
     app.include_router(ai_open_router)
@@ -70,7 +76,7 @@ def client(monkeypatch):
         tier="admin",
         role="admin",
     )
-    return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
+    return TestClient(app, headers={**admin_actor.headers, "X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
 @pytest.fixture(autouse=True)
@@ -668,3 +674,71 @@ def test_direct_aiopen_and_legacy_qclaw_tools_require_key(monkeypatch):
             "/api/ai/qclaw/openclaw/chat",
         ):
             assert unauthenticated.post(path, json={"message": "test"}).status_code == 401
+
+
+def test_issued_delegated_key_binds_request_scope_and_revocation(trusted_actor, tmp_path, monkeypatch):
+    from fastapi import Depends
+
+    from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
+    from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    admin = trusted_actor(user_id=73, role="admin", tier="admin", tenant_id=7)
+    other = trusted_actor(user_id=74, tenant_id=8)
+    registry = ApiKeyRegistry(
+        RuntimeState({}), lambda: "", lambda _: "fixture", lambda: 100.0,
+        lambda: tmp_path / "delegated-keys.json",
+    )
+    monkeypatch.setattr(aiopen_service, "_keys", registry)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73, tenant_id=7, role="admin", tier="admin", is_active=True
+    )
+
+    @app.get("/scope", dependencies=[Depends(bind_aiopen_principal)])
+    def scope():
+        context = current_execution_context()
+        return {
+            "user_id": context.get("user_id"),
+            "request_id": context.get("idempotency_key"),
+            "delegated": "_credential_authorization" in context,
+        }
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/aiopen/keys",
+            headers=admin.headers,
+            json={"label": "delegated", "scopes": ["capability.customers.list"], "user_id": "74"},
+        )
+        assert created.status_code == 200, created.text
+        key = created.json()["key"]
+        original = registry.resolve_execution_context(key)
+        assert original is not None
+        assert original["user_id"] == "73"
+        assert registry.permits_execution(original, "customers", "list")
+        assert not registry.permits_execution(original, "customers", "create")
+        headers = {**other.headers, "X-AIOPEN-Key": key, "Idempotency-Key": "stable-request"}
+        assert client.get("/scope", headers=headers).json() == {
+            "user_id": "73", "request_id": "stable-request", "delegated": True
+        }
+        assert current_execution_context() == {}
+        assert client.get("/scope", headers=other.headers).json()["user_id"] == "74"
+        revoked = client.request("DELETE", "/api/aiopen/keys", headers=admin.headers, json={"key": key})
+        assert revoked.status_code == 200 and revoked.json()["revoked"] is True
+        assert not registry.execution_context_current(original)
+        assert client.get("/scope", headers=headers).json() == {
+            "user_id": None, "request_id": None, "delegated": False
+        }
+
+
+def test_key_revocation_failure_is_not_reported_as_revoked(client, monkeypatch):
+    def fail(_key):
+        raise OSError("private persistence details")
+
+    monkeypatch.setattr("app.fastapi_routes.ai_open.revoke_api_key", fail)
+    response = client.request("DELETE", "/api/aiopen/keys", json={"key": "original-key"})
+    assert response.status_code == 503
+    assert response.json()["success"] is False and response.json()["revoked"] is False
+    assert response.json()["error_code"] == "key_revocation_unavailable"
+    assert "private" not in response.text and "original-key" not in response.text
