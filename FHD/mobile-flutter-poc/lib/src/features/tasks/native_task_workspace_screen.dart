@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -29,6 +30,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     with WidgetsBindingObserver {
   late final NativeWorkspaceSession _session;
   Timer? _timer;
+  bool _foreground = true;
+  int _readFailures = 0;
   Map<String, Object?>? _task;
   String? _error, _message, _answeredContext;
   bool _loading = false, _busy = false, _stale = true, _reading = false;
@@ -43,27 +46,40 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         activeModId: widget.activeModId)
       ..addListener(_invalidate);
     unawaited(_load());
-    _startPolling();
   }
 
   void _startPolling() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!_busy && !_loading && _session.active) unawaited(_load());
+    if (!mounted || !_foreground || !_session.active) return;
+    const delays = [5, 10, 20, 40, 60];
+    final seconds = _readFailures == 0 ? 15 : delays[_readFailures - 1];
+    _timer = Timer(Duration(seconds: seconds), () {
+      if (!mounted || !_foreground || !_session.active) return;
+      if (!_busy && !_loading && ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_load());
+      } else {
+        _startPolling();
+      }
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    _foreground = state == AppLifecycleState.resumed;
+    _timer?.cancel();
+    if (!_foreground) {
+      if (mounted) setState(() { _stale = true; });
+      return;
+    }
+    if (!_busy && !_loading) {
       unawaited(_load());
-      _startPolling();
     } else {
-      _timer?.cancel();
+      _startPolling();
     }
   }
 
   void _invalidate() {
+    _timer?.cancel();
     if (mounted) {
       setState(() {
         _task = null;
@@ -82,7 +98,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   }
 
   Future<Map<String, Object?>?> _load() async {
-    if (_loading || !_session.active) return null;
+    if (!mounted || _loading || !_session.active || !_foreground) return null;
+    _timer?.cancel();
     setState(() {
       _loading = true;
     });
@@ -91,15 +108,18 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final task = _map(result['data']);
       if (task['task_id'] != widget.taskId) throw StateError('任务不存在或无权查看');
       if (!mounted || !_session.active) return null;
+      _readFailures = 0;
       setState(() {
         _task = task;
-        _stale = false;
+        _stale = !_foreground;
         _error = null;
       });
       if (task['attention_state'] == 'result_unread' && !_reading) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
               _session.active &&
+              _foreground &&
+              !_stale &&
               ModalRoute.of(context)?.isCurrent == true) {
             unawaited(_markRead());
           }
@@ -107,9 +127,20 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       }
       return task;
     } catch (error) {
+      if (_readFailures < 5) _readFailures++;
       if (mounted && _session.active) {
+        // Only transport failures retain a read-only snapshot. Revoked access,
+        // missing tasks and unknown server responses must not expose old data.
+        final transient = error is SocketException ||
+            error is TimeoutException ||
+            error is HttpException ||
+            (error is MobileApiException &&
+                (error.statusCode == 429 || error.statusCode >= 500));
         setState(() {
-          _error = mobileErrorText(error);
+          if (!transient) _task = null;
+          _error = transient && _task != null
+              ? '连接中断，显示上次同步结果。恢复连接后自动核对。'
+              : mobileErrorText(error);
           _stale = true;
         });
       }
@@ -119,12 +150,14 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         setState(() {
           _loading = false;
         });
+        _startPolling();
       }
     }
   }
 
   Future<void> _markRead() async {
-    if (_reading || _task?['attention_state'] != 'result_unread') return;
+    if (_reading || _stale || !_foreground || !_session.active ||
+        _task?['attention_state'] != 'result_unread') return;
     _reading = true;
     final displayed = _task;
     try {
@@ -156,7 +189,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       ]);
 
   Future<void> _clarify() async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     setState(() {
       _busy = true;
     });
@@ -275,7 +308,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   }
 
   Future<void> _action(String action) async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     setState(() {
       _busy = true;
       _message = null;
@@ -401,7 +434,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
 
   Future<void> _download(
       Map<String, Object?> run, Map<String, Object?> file) async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     final runId = '${run['run_id'] ?? ''}', id = '${file['artifact_id'] ?? ''}';
     if (runId.isEmpty || id.isEmpty) return;
     setState(() {
@@ -469,6 +502,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 12),
                           Text('状态：${_status(task['status'])}'),
+                          if (_stale)
+                            const Text('状态待同步，暂不可执行任务操作'),
                           if (percent != null)
                             Padding(
                                 padding:
@@ -544,7 +579,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                   ? IconButton(
                       tooltip: '保存或分享文件',
                       onPressed:
-                          _busy || _stale ? null : () => _download(run, file),
+                          _busy || _loading || _stale
+                              ? null
+                              : () => _download(run, file),
                       icon: const Icon(Icons.download_outlined))
                   : null),
         if (_maps(run['events']).isNotEmpty)

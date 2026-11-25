@@ -3,12 +3,19 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const toggleMock = vi.fn()
+const refreshMock = vi.fn()
+const confirmed: Record<string, boolean> = {}
 const statusLineMock = vi.fn((row: { enabled: boolean; snapshot?: { progressPct?: number } }) => (row.enabled ? '运行中' : '已停止'))
 const isBusyMock = vi.fn((row: { snapshot?: { busy?: boolean } }) => Boolean(row.snapshot?.busy))
 
 vi.mock('@/stores/workflowAiEmployees', () => ({
   useWorkflowAiEmployeesStore: () => ({
-    toggle: toggleMock,
+    setEmployeeEnabledConfirmed: toggleMock,
+    refreshConfirmedPreferences: refreshMock,
+    get confirmedEnabled() { return confirmed },
+    prefsReady: true,
+    prefsSaving: '',
+    prefsError: '',
   }),
 }))
 
@@ -41,6 +48,7 @@ function makeRow(overrides: Partial<DeskRow> = {}): DeskRow {
 }
 
 function mountInspector(props: Record<string, unknown> = {}) {
+  for (const row of (props.desks as DeskRow[] | undefined) || []) confirmed[row.empId] = row.enabled
   return mount(WorkflowEmployeeInspector, {
     props: {
       desks: [],
@@ -152,7 +160,7 @@ describe('WorkflowEmployeeInspector', () => {
   it('calls wfEmp.toggle when toggle button is clicked', async () => {
     const wrapper = mountInspector({ desks: [makeRow({ empId: 'e1' })] })
     await wrapper.find('.wfe-inspector-toggle').trigger('click')
-    expect(toggleMock).toHaveBeenCalledWith('e1')
+    expect(toggleMock).toHaveBeenCalledWith('e1', true)
   })
 
   it('marks toggle as on when row.enabled is true', () => {

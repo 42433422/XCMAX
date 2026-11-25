@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
+import 'package:xcagi_flutter_poc/src/theme/design_tokens.generated.dart';
 import 'package:xcagi_flutter_poc/src/theme/message_avatar_layout.dart';
 
 int _argb(String value) => int.parse('FF${value.substring(1)}', radix: 16);
@@ -48,6 +49,20 @@ void main() {
       'large': XcagiShapeTokens.large,
       'extra_large': XcagiShapeTokens.extraLarge,
     });
+  });
+
+  test('typography, motion and dark overrides use the shared contract', () {
+    final body = (tokens['typography'] as Map)['body_medium'] as Map;
+    final mobile = (tokens['platform_overrides'] as Map)['mobile'] as Map;
+    final dark = mobile['colors'] as Map;
+    expect(AppTheme.light().textTheme.bodyMedium!.fontSize, body['size']);
+    expect(AppTheme.light().textTheme.bodyMedium!.height, body['line_height'] / body['size']);
+    expect(AppTheme.dark().scaffoldBackgroundColor.toARGB32(), _argb(dark['dark_page'] as String));
+    expect(XcagiThemeColors.dark.surface.toARGB32(), _argb(dark['dark_surface'] as String));
+    expect(DesignTokens.motionStandardMs, (tokens['motion'] as Map)['standard_ms']);
+    expect(DesignTokens.motionReducedMs, 0);
+    expect(AppTheme.light().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
+    expect(AppTheme.dark().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
   });
 
   test('message avatar layout keeps stable Flutter geometry', () {

@@ -209,6 +209,26 @@
   gap: 6px;
 }
 
+.panel-input-shell { display: contents; }
+.panel-input-shell--autonomy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-end;
+  padding-right: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+}
+.panel-input-shell--autonomy:focus-within { border-color: rgba(148, 163, 184, 0.38); }
+.panel-input-shell--autonomy { border-radius: 12px; transition: border-color 160ms ease, background-color 160ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .panel-input-shell--autonomy { transition: none; }
+}
+.panel-input-shell--autonomy .panel-input { min-width: 0; border: 0; background: transparent; }
+.panel-input-shell--autonomy .panel-input:focus { border: 0; }
+.butler-panel--light .panel-input-shell--autonomy { background: #fff; border-color: #d9e0eb; }
+
 .panel-input {
   flex: 1;
   background: rgba(255, 255, 255, 0.04);

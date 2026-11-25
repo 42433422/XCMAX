@@ -85,16 +85,21 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
   const registryLoaded = ref(false)
   let registryLoadGeneration = 0
   let registryOwner = ''
+  const confirmedEnabled = ref<Record<string, boolean>>({})
+  const prefsReady = ref(false)
+  const prefsSaving = ref('')
+  const prefsError = ref('')
+  let prefsVersion = 0
 
   const registeredIds = computed(() => new Set(registryEntries.value.map((e) => e.id)))
 
-  function persistAndNotify() {
+  function persistAndNotify(sync = true) {
     try {
       localStorage.setItem(workflowAiEmployeesStorageKey(), JSON.stringify(enabled.value))
     } catch {
       /* quota / private mode */
     }
-    void import('@/utils/workspacePrefsApi')
+    if (sync) void import('@/utils/workspacePrefsApi')
       .then(({ queueWorkspacePrefsSync }) => {
         queueWorkspacePrefsSync({ workflow_ai_employees: { ...enabled.value } })
       })
@@ -104,6 +109,59 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
         detail: { enabled: { ...enabled.value } },
       }),
     )
+  }
+
+  function prefsScope() { return `${productReadScopeKey('')}:${ensureActiveTenantScope()}` }
+
+  function acceptConfirmedPreferences(values: Record<string, boolean>) {
+    confirmedEnabled.value = { ...values }
+    enabled.value = { ...Object.fromEntries(registryEntries.value.map(entry => [entry.id, false])), ...values }
+    prefsReady.value = true
+    prefsError.value = ''
+    persistAndNotify(false)
+  }
+
+  async function refreshConfirmedPreferences() {
+    if (prefsSaving.value) return
+    const version = ++prefsVersion
+    const scope = prefsScope()
+    try {
+      const { fetchWorkspacePrefs, flushWorkspacePrefsSync } = await import('@/utils/workspacePrefsApi')
+      await flushWorkspacePrefsSync()
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      const response = await fetchWorkspacePrefs()
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      if (response.success !== true || !response.owner_id) throw new Error('无法确认工作区归属')
+      acceptConfirmedPreferences(response.data?.workflow_ai_employees || {})
+    } catch (reason) {
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      prefsReady.value = false
+      prefsError.value = reason instanceof Error ? reason.message : '托管状态暂未核实'
+    }
+  }
+
+  async function setEmployeeEnabledConfirmed(id: string, value: boolean) {
+    if (!prefsReady.value || prefsSaving.value || !registeredIds.value.has(id)) return
+    const scope = prefsScope()
+    const version = ++prefsVersion
+    prefsSaving.value = id
+    prefsError.value = ''
+    try {
+      const { patchWorkspacePrefs, flushWorkspacePrefsSync } = await import('@/utils/workspacePrefsApi')
+      await flushWorkspacePrefsSync()
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      const response = await patchWorkspacePrefs({ workflow_ai_employees: { [id]: value } })
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      const values = response.data?.workflow_ai_employees
+      if (response.success !== true || !response.owner_id || !values || values[id] !== value) throw new Error('服务器未确认托管状态，请重新同步')
+      acceptConfirmedPreferences(values)
+    } catch (reason) {
+      if (version !== prefsVersion || scope !== prefsScope()) return
+      prefsReady.value = false
+      prefsError.value = reason instanceof Error ? reason.message : '托管操作未确认，请重新同步'
+    } finally {
+      if (version === prefsVersion && scope === prefsScope()) prefsSaving.value = ''
+    }
   }
 
   async function loadRegistry(mods?: ModWithWorkflowEmployees[], isCurrent: () => boolean = () => true) {
@@ -130,7 +188,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     }
     if (!(entry.id in enabled.value)) {
       enabled.value = { ...enabled.value, [entry.id]: false }
-      persistAndNotify()
+      persistAndNotify(false)
     }
   }
 
@@ -143,7 +201,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     delete next[id]
     if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
       enabled.value = next
-      persistAndNotify()
+      persistAndNotify(false)
     }
   }
 
@@ -158,7 +216,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     }
     if (changed) {
       enabled.value = next
-      persistAndNotify()
+      persistAndNotify(false)
     }
   }
 
@@ -204,6 +262,11 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     const owner = `${productReadScopeKey('')}:${activeTenantScope}`
     if (owner !== registryOwner) {
       registryOwner = owner
+      prefsVersion++
+      confirmedEnabled.value = {}
+      prefsReady.value = false
+      prefsSaving.value = ''
+      prefsError.value = ''
       registryLoadGeneration++
       registryEntries.value = []
       registryLoaded.value = false
@@ -287,6 +350,12 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     registryEntries,
     registryLoaded,
     registeredIds,
+    confirmedEnabled,
+    prefsReady,
+    prefsSaving,
+    prefsError,
+    refreshConfirmedPreferences,
+    setEmployeeEnabledConfirmed,
     loadRegistry,
     registerEmployee,
     unregisterEmployee,

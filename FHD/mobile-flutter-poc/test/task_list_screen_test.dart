@@ -26,6 +26,8 @@ class TaskApi extends MobileApiClient {
       : super(sessionStore: MemoryMobileSessionStore(MobileSessionData.empty));
   final requested = <String>[];
   bool denied = false;
+  bool offline = false;
+  String status = 'completed';
   @override
   Future<Map<String, Object?>> workspaceRequest(
     String path, {
@@ -37,6 +39,7 @@ class TaskApi extends MobileApiClient {
     String activeModId = '',
   }) async {
     requested.add(path);
+    if (offline) throw TimeoutException('network timeout');
     if (denied) {
       throw const MobileApiException(
           statusCode: 403, message: '没有权限', body: {});
@@ -46,8 +49,8 @@ class TaskApi extends MobileApiClient {
       'data': {
         'task_id': 'task/a',
         'title': '整理考勤',
-        'status': 'completed',
-        'capabilities': <String, bool>{}
+        'status': status,
+        'capabilities': <String, bool>{'pause': status == 'running'}
       }
     };
   }
@@ -104,6 +107,96 @@ void main() {
     expect(repo.loads, 2);
     expect(find.text('暂无任务'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await repo.dispose();
+    repo.api.dispose();
+  });
+
+  testWidgets('task list recovers by read-only polling after timeout', (
+    tester,
+  ) async {
+    final api = TaskApi();
+    final repo = Tasks(api)..load = () async => [task()];
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(home: TaskListScreen(repository: repo)));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 1);
+    expect(find.text('整理考勤'), findsOneWidget);
+
+    repo.load = () async => throw TimeoutException('network timeout');
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 2);
+    expect(find.text('整理考勤'), findsNothing);
+    expect(find.text('暂无任务'), findsNothing);
+
+    // First failure waits five seconds, without another parallel request.
+    await tester.pump(const Duration(seconds: 4));
+    expect(repo.loads, 2);
+    repo.load = () async => [task()];
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 3);
+    expect(find.text('整理考勤'), findsOneWidget);
+    expect(api.requested, isEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 60));
+    expect(repo.loads, 3);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(repo.loads, 4);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('workspace reconciles original task and hides revoked snapshot', (
+    tester,
+  ) async {
+    final api = TaskApi()..status = 'running';
+    final repo = Tasks(api);
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: NativeTaskWorkspaceScreen(taskId: 'task/a', repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('状态：正在处理'), findsOneWidget);
+    expect(api.requested.length, 1);
+
+    api.offline = true;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsOneWidget);
+    final pause = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '暂停'),
+    );
+    expect(pause.onPressed, isNull);
+    expect(api.requested.length, 2);
+
+    api.offline = false;
+    api.status = 'completed';
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('状态：已完成'), findsOneWidget);
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsNothing);
+    expect(api.requested.length, 3);
+
+    api.denied = true;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.text('整理考勤'), findsNothing);
+    expect(find.textContaining('权限'), findsOneWidget);
+    expect(api.requested.length, 4);
+    expect(
+      api.requested.toSet(),
+      {'api/mobile/v1/workspace/agent/tasks/task%2Fa'},
+    );
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(

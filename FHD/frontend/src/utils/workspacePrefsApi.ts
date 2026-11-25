@@ -1,4 +1,5 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
 import { workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
 import { resolveTenantStorageScopeFromRuntime, writeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
@@ -21,6 +22,8 @@ export interface WorkspacePrefsResponse {
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null
 let pendingPatch: WorkspacePrefs = {}
+let pendingScope = ''
+let writeChain: Promise<void> = Promise.resolve()
 
 export async function fetchWorkspacePrefs(): Promise<WorkspacePrefsResponse> {
   const r = await apiFetch('/api/workspace/prefs', {
@@ -97,16 +100,28 @@ export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent:
   }
 }
 
-/** 防抖写回服务器（离线时静默失败） */
+/** Serialize queued legacy writes; never send an old account's pending patch. */
+export function flushWorkspacePrefsSync(): Promise<void> {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = null
+  const payload = pendingPatch
+  const scope = pendingScope
+  pendingPatch = {}
+  pendingScope = ''
+  if (!Object.keys(payload).length) return writeChain.catch(() => {})
+  writeChain = writeChain.catch(() => {}).then(async () => {
+    if (scope !== productReadScopeKey('')) return
+    const response = await patchWorkspacePrefs(payload)
+    if (response.success === false) throw new Error('工作区配置同步失败')
+  })
+  return writeChain
+}
+
 export function queueWorkspacePrefsSync(partial: WorkspacePrefs, delayMs = 400): void {
+  const scope = productReadScopeKey('')
+  if (pendingScope !== scope) pendingPatch = {}
+  pendingScope = scope
   pendingPatch = { ...pendingPatch, ...partial }
   if (syncTimer) clearTimeout(syncTimer)
-  syncTimer = setTimeout(() => {
-    const payload = { ...pendingPatch }
-    pendingPatch = {}
-    syncTimer = null
-    void patchWorkspacePrefs(payload).catch(() => {
-      /* 未登录或离线 */
-    })
-  }, delayMs)
+  syncTimer = setTimeout(() => { void flushWorkspacePrefsSync().catch(() => {}) }, delayMs)
 }

@@ -1,0 +1,43 @@
+// Dependency-free design token generator. Run from any directory.
+import { readFileSync, writeFileSync } from 'node:fs';
+function render(c) {
+ const keb=s=>s.replace(/[._]/g,"-"),camel=s=>s.split(/[._-]/).map((x,i)=>i?x[0].toUpperCase()+x.slice(1):x).join("");
+ const ref=/^\{([a-z0-9_.]+)\}$/;
+ const groups=["colors","spacing","radius","elevation","typography","motion","font_weights","focus"];
+ function lookup(p,seen=[]){if(seen.includes(p))throw Error("Cyclic token "+p);let v=c;for(const k of p.split(".")){if(!v||!Object.hasOwn(v,k))throw Error("Unknown token "+p);v=v[k];}let m=typeof v==="string"&&ref.exec(v);return m?lookup(m[1],[...seen,p]):v;}
+ function flatten(o,p){if(!o||typeof o!=="object")throw Error("Missing group "+p);return Object.entries(o).flatMap(([k,v])=>v&&typeof v==="object"?flatten(v,p+"."+k):[[p+"."+k,v]]);}
+ function css(p,v){const resolved=lookup(p);if(typeof v==="string"&&ref.test(v)){const target=ref.exec(v)[1];if(!groups.includes(target.split(".")[0]))throw Error("Non-shared reference "+p);return `var(--xc-token-${keb(target)})`;}if(typeof resolved==="string"){if(p.endsWith(".weight")){if(!c.font_weights[resolved])throw Error("Invalid weight "+p);return String(c.font_weights[resolved]);}if(/[;{}]/.test(resolved)||!resolved.trim())throw Error("Invalid CSS "+p);return resolved;}if(typeof resolved!=="number"||!Number.isFinite(resolved))throw Error("Invalid token "+p);return String(resolved)+(p.startsWith("motion.")?"ms":/^(spacing|radius|typography)\./.test(p)||p==="focus.ring_width"?"px":"");}
+ function dart(p){let v=lookup(p);if(typeof v==="string"){if(/^#[0-9a-f]{6}$/i.test(v))return ["Color",`Color(0xFF${v.slice(1).toUpperCase()})`];if(p.endsWith(".weight")&&c.font_weights[v])return ["FontWeight",`FontWeight.w${c.font_weights[v]}`];throw Error("Invalid Dart token "+p);}if(typeof v!=="number"||!Number.isFinite(v))throw Error("Invalid token "+p);if(/^(motion|font_weights)\./.test(p)){if(!Number.isInteger(v))throw Error("Expected integer "+p);return ["int",String(v)];}return ["double",Number.isInteger(v)?v+".0":String(v)];}
+ const common=groups.flatMap(g=>flatten(c[g],g));
+ for(const [p] of common){let v=lookup(p);if(p.startsWith("colors.")&&!/^#[0-9a-f]{6}$/i.test(v))throw Error("Invalid color "+p);if(/^(spacing|radius|motion)\./.test(p)&&(typeof v!=="number"||v<0))throw Error("Invalid scale "+p);}
+ const cssLines=["/* Generated from FHD/config/mobile_design_tokens.json. DO NOT EDIT. */",":root {"];
+ for(const [p,v] of common)cssLines.push(`  --xc-token-${keb(p)}: ${css(p,v)};`);
+ for(const [profile,obj] of Object.entries(c.platform_overrides.desktop.profiles))for(const [k,v] of Object.entries(obj))cssLines.push(`  --xc-token-desktop-${keb(profile)}-${k}: ${css("platform_overrides.desktop.profiles."+profile+"."+k,v)};`);
+ cssLines.push("}","");
+ const dartLines=["// Generated from FHD/config/mobile_design_tokens.json. DO NOT EDIT.","import 'package:flutter/material.dart';","","abstract final class DesignTokens {"],names=new Set();
+ for(const [p] of [...common,...flatten(c.platform_overrides.mobile,"platform_overrides.mobile")]){let [type,v]=dart(p),name=camel(p.replace(/^platform_overrides\.mobile\./,"mobile."));if(names.has(name))throw Error("Duplicate Dart token "+name);names.add(name);dartLines.push(`  static const ${type} ${name} = ${v};`);}
+ dartLines.push("}","");return {css:cssLines.join("\n"),dart:dartLines.join("\n")};
+}
+const root = new URL('../../', import.meta.url);
+const read = p => readFileSync(new URL(p, root), 'utf8');
+const contract = JSON.parse(read('config/mobile_design_tokens.json'));
+const result = render(contract);
+const args = process.argv.slice(2);
+if (args.length > 1 || (args.length && args[0] !== '--check')) throw Error('Usage: node generate-design-tokens.mjs [--check]');
+for (const [path,content] of Object.entries({'frontend/src/styles/design-tokens.generated.css':result.css,'mobile-flutter-poc/lib/src/theme/design_tokens.generated.dart':result.dart})) {
+  if (args[0] === '--check') {
+    if (read(path) !== content) throw Error('Design token drift: '+path);
+  } else writeFileSync(new URL(path,root),content,'utf8');
+}
+const sources = {enterprise:'frontend/src/styles/tokens.css',office_base:'frontend/src/styles/css/base.css',office:'frontend/src/styles/css/office-theme.css',professional:'frontend/src/styles/variables.css'};
+for(const [profile,path] of Object.entries(sources)){
+ const s=read(path);
+ for(const key of Object.keys(contract.platform_overrides.desktop.profiles[profile])){
+  const name='--xc-token-desktop-'+profile.replaceAll('_','-')+'-'+key;
+  if(!s.includes('var('+name+')'))throw Error('Unused desktop token: '+name);
+ }
+ for(const [,name,value] of s.matchAll(/^[ \t]*(--[\w-]+):\s*([^;{}]+);/gm)){
+  if(!value.includes('var('))throw Error('Unregistered theme literal: '+path+': '+name);
+ }
+}
+console.log('Both generated design-token outputs and desktop aliases verified');

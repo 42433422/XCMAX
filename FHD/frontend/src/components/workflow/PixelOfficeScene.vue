@@ -19,10 +19,13 @@ const active = ref(true)
 const viewportWidth = ref(800)
 const filteredZones = computed(() => selectedZone.value ? props.zones.filter(zone => zone.id === selectedZone.value) : props.zones)
 const model = computed(() => buildOfficeLayout(filteredZones.value, props.desks))
-const pixelZoom = computed(() => Math.max(1, Math.floor(Math.min(2.5, viewportWidth.value / (model.value.layout.cols * TILE_SIZE)) * ratio.value * zoom.value)))
+const displayScale = computed(() => Math.max(1 / ratio.value, Math.min(2.5, viewportWidth.value / (model.value.layout.cols * TILE_SIZE))) * zoom.value)
+const pixelZoom = computed(() => Math.max(1, Math.ceil(displayScale.value * ratio.value)))
 const canvasWidth = computed(() => model.value.layout.cols * TILE_SIZE * pixelZoom.value)
 const canvasHeight = computed(() => model.value.layout.rows * TILE_SIZE * pixelZoom.value)
-const cssUnit = computed(() => TILE_SIZE * pixelZoom.value / ratio.value)
+const cssUnit = computed(() => TILE_SIZE * displayScale.value)
+const displayWidth = computed(() => model.value.layout.cols * cssUnit.value)
+const displayHeight = computed(() => model.value.layout.rows * cssUnit.value)
 const rowById = computed(() => new Map(props.desks.map(row => [row.empId, row])))
 const stateOf = (id: string) => rowById.value.get(id)?.snapshot?.officeState || 'offline'
 const statusOf = (id: string) => {
@@ -147,8 +150,8 @@ onBeforeUnmount(() => {
     <div v-if="error" class="pixel-office-error" role="alert">{{ error }} <button type="button" @click="initialize">重新加载画面</button></div>
     <div ref="viewport" class="pixel-office-viewport" tabindex="0" aria-label="办公室地图，可滚动查看各部门">
       <p v-if="!ready && !error" class="pixel-office-loading" role="status">正在布置办公室…</p>
-      <div v-if="ready && zones.length" class="pixel-office-world" :style="{ width: canvasWidth / ratio + 'px', height: canvasHeight / ratio + 'px' }">
-        <canvas ref="canvas" :width="canvasWidth" :height="canvasHeight" :style="{ width: canvasWidth / ratio + 'px', height: canvasHeight / ratio + 'px' }" aria-hidden="true" />
+      <div v-if="ready && zones.length" class="pixel-office-world" :style="{ width: displayWidth + 'px', height: displayHeight + 'px' }">
+        <canvas ref="canvas" :width="canvasWidth" :height="canvasHeight" :style="{ width: displayWidth + 'px', height: displayHeight + 'px' }" aria-hidden="true" />
         <div v-for="room in model.rooms" :key="room.id" class="pixel-office-room" :style="{ left: (room.col + 1) * cssUnit + 'px', top: (room.row + 1.25) * cssUnit + 'px', width: (room.width - 3) * cssUnit + 'px', borderColor: room.color }">
           <strong>{{ room.label }}</strong><span>{{ room.count }} 位员工</span>
           <small v-if="room.detail" :title="room.detail">{{ room.detail }}</small>

@@ -45,6 +45,12 @@ describe('employee office uses the organization and task SSOT', () => {
     const { wrapper } = await mountScene(); expect(wrapper.get('[role="status"]').text()).toBe('状态待核实'); expect(wrapper.get('[role="alert"]').text()).toContain('网络断开')
     expect(wrapper.getComponent({ name: 'PixelOfficeScene' }).props('desks')).toEqual([]); expect(wrapper.text()).toContain('当前企业暂无已安装员工'); wrapper.unmount()
   })
+  it('does not hide a secondary blocked task behind a running task', async () => {
+    desks.value = [{ empId: 'emp-0', shortName: '员工', enabled: true, snapshot: { officeState: 'working', visuallyBusy: true }, tasks: [{ task_id: 'running', status: 'running', metadata: { employee_id: 'emp-0' } }, { task_id: 'blocked', status: 'blocked', metadata: { employee_id: 'emp-0' } }] }]
+    const { wrapper } = await mountScene()
+    expect(wrapper.findAll('.ews-stats > div').find(item => item.text().includes('需要关注'))?.get('strong').text()).toBe('1')
+    wrapper.unmount()
+  })
   it('excludes unconfirmed receipts and counts a shared completed task once', async () => {
     const metadata = { employee_assignments: ['emp-0', 'emp-1'].map(employee_id => ({ employee_id, status: 'completed', step_id: employee_id })) }
     const confirmed = { task_id: 'confirmed', status: 'completed', metadata }

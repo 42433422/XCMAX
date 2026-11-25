@@ -57,7 +57,24 @@ def task_summary(task: Any) -> dict[str, Any]:
         percent = int(progress.get("percent") or 0)
     except (TypeError, ValueError):
         percent = 0
+    assignments = metadata.get("employee_assignments")
+    assignments = assignments if isinstance(assignments, list) else []
+    employee_assignments = [
+        {"employee_id": str(row["employee_id"]), "status": str(row.get("status") or "unknown")}
+        for row in assignments
+        if isinstance(row, dict) and isinstance(row.get("employee_id"), str) and row["employee_id"]
+    ]
+    employee_ids = list(dict.fromkeys(row["employee_id"] for row in employee_assignments))
+    if not employee_ids:
+        raw_ids = metadata.get("employee_ids")
+        if isinstance(raw_ids, list):
+            employee_ids = list(dict.fromkeys(value for value in raw_ids if isinstance(value, str) and value))
+    if not employee_ids and isinstance(metadata.get("employee_id"), str) and metadata["employee_id"]:
+        employee_ids = [metadata["employee_id"]]
     return {
+        "employee_ids": employee_ids,
+        "employee_assignments": employee_assignments,
+        "outcome_uncertain": metadata.get("reconciliation_required") is True or payload.get("status") == "unknown",
         "task_id": str(payload.get("task_id") or ""),
         "title": str(payload.get("title") or ""),
         "status": str(payload.get("status") or ""),
