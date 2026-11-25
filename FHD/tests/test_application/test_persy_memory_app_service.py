@@ -555,3 +555,175 @@ def test_lexical_recall_revalidates_revision_without_graph_path(monkeypatch) -> 
     assert result["chunks"] == []
     assert result["revalidation_dropped"] == 1
     assert result["coverage_complete"] is False
+
+
+def test_erp_memory_private_candidate_revalidates_source_before_recall(monkeypatch):
+    service = _service()
+    original = {
+        "tenant_id": "2",
+        "actor_id": "7",
+        "mod_id": "",
+        "source": "customers",
+        "entity_type": "customer",
+        "entity_id": "201",
+        "source_version": "sha256:" + "a" * 64,
+        "observed_at": "2026-11-25T12:00:00+00:00",
+        "freshness": "fresh",
+        "knowledge_kind": "fact",
+        "retrieved_from": "authority",
+        "state": {"customer_name": "Customer A"},
+        "evidence": [{"source": "customers", "row_id": "201"}],
+    }
+
+    class Source:
+        def __init__(self, snapshot):
+            self.snapshot = snapshot
+            self.denied = False
+            self.reads = 0
+
+        def get(self, entity_type, entity_id, **scope):
+            self.reads += 1
+            assert (entity_type, entity_id) == ("customer", "201")
+            assert scope == {
+                "tenant_id": "2",
+                "actor_id": "7",
+                "mod_id": "",
+                "force_refresh": True,
+            }
+            if self.denied:
+                raise PermissionError("customer.view revoked")
+            return self.snapshot
+
+    source = Source(original)
+    monkeypatch.setattr(
+        "app.application.enterprise_cognition.projection.get_projection_service",
+        lambda: source,
+    )
+    captured = service.capture_erp_field(
+        access_context=_access(), entity_type="customer", entity_id="201", field="customer_name"
+    )
+    assert captured["success"] is True
+    assert captured["created"] is True
+    assert captured["confirmation_required"] is True
+    assert captured["business_data_written"] is False
+    candidate = captured["candidate"]
+    assert candidate["status"] == "pending"
+    assert candidate["evidence"][0]["kind"] == "erp_fact_reference_v1"
+    assert candidate["evidence"][0]["source_version"] == original["source_version"]
+    assert not service.query(
+        access_context=_access(), query="ERP customer"
+    )["chunks"]
+
+    confirmed = service.mutate(
+        access_context=_access(), memory_id=candidate["memory_id"], action="confirm"
+    )
+    assert confirmed["success"] is True
+    current = service.query(access_context=_access(), query="ERP customer")
+    assert current["success"] is True
+    assert len(current["chunks"]) == 1
+    assert "Customer A" in current["chunks"][0]["text"]
+    assert current["chunks"][0]["metadata"]["erp_fact_verification"]["status"] == "current"
+    assert current["erp_revalidation_dropped"] == 0
+    assert current["coverage_complete"] is True
+    assert source.reads >= 2
+    assert service.list_memories(access_context=_access(actor="8"))["memories"] == []
+
+    source.snapshot = {
+        **original,
+        "source_version": "sha256:" + "b" * 64,
+        "state": {"customer_name": "Customer B"},
+    }
+    stale = service.query(access_context=_access(), query="ERP customer")
+    assert stale["success"] is True  # Query ran; no unverified fact was returned.
+    assert stale["memories"] == []
+    assert stale["chunks"] == []
+    assert stale["erp_revalidation_dropped"] == 1
+    assert stale["coverage_complete"] is False
+    # Failed source read is unknown; it may not revive an expired claim.
+    source.denied = True
+    denied = service.query(access_context=_access(), query="ERP customer")
+    assert denied["chunks"] == []
+    assert denied["erp_revalidation_dropped"] == 1
+    source.denied = False
+    source.snapshot = original
+    assert service.query(access_context=_access(), query="ERP customer")["chunks"]
+
+    assert service.mutate(
+        access_context=_access(), memory_id=candidate["memory_id"], action="delete"
+    )["success"]
+    assert service.query(access_context=_access(), query="ERP customer")["chunks"] == []
+    repeated = service.capture_erp_field(
+        access_context=_access(), entity_type="customer", entity_id="201", field="customer_name"
+    )
+    assert repeated["created"] is False
+    assert repeated["candidate"] is None
+
+
+def test_erp_memory_requires_live_source_dataset_write_and_typed_field(monkeypatch):
+    from app.application.enterprise_cognition.memory_reference import (
+        build_erp_field_claim,
+        revalidate_erp_memory,
+    )
+
+    service = _service()
+    snapshot = {
+        "tenant_id": "2",
+        "mod_id": "",
+        "source": "financial_transactions",
+        "entity_type": "fund",
+        "entity_id": "301",
+        "source_version": "sha256:" + "a" * 64,
+        "observed_at": "2026-11-25T12:00:00+00:00",
+        "freshness": "fresh",
+        "knowledge_kind": "fact",
+        "retrieved_from": "authority",
+        "state": {"amount": "123.00"},
+        "evidence": [{"source": "financial_transactions", "row_id": "301"}],
+    }
+
+    class Source:
+        def get(self, *args, **kwargs):
+            raise PermissionError("tool.finance.ledger_query")
+
+    source = Source()
+    monkeypatch.setattr(
+        "app.application.enterprise_cognition.projection.get_projection_service",
+        lambda: source,
+    )
+    assert service.capture_erp_field(
+        access_context=_access(), entity_type="fund", entity_id="301", field="amount"
+    )["error_code"] == "persy_erp_fact_source_denied"
+    readonly = DatasetAccessContext(
+        actor_id="7", tenant_id="2", permissions=frozenset({"dataset.read"})
+    )
+    assert service.capture_erp_field(
+        access_context=readonly, entity_type="fund", entity_id="301", field="amount"
+    )["error_code"] == "dataset_permission_denied"
+    assert build_erp_field_claim({**snapshot, "retrieved_from": "projection"}, "amount") is None
+    assert build_erp_field_claim(snapshot, "lines") is None
+    assert build_erp_field_claim(snapshot, "amount.__class__") is None
+
+    claim = build_erp_field_claim(snapshot, "amount")
+    assert claim is not None
+    memory = {
+        "source": "erp_authority",
+        "value": claim["value"],
+        "evidence": [claim["evidence"]],
+    }
+    assert revalidate_erp_memory(memory, _access(), projections=source) == (None, True)
+    missing_binding = {**memory, "evidence": []}
+    assert revalidate_erp_memory(missing_binding, _access())[0] is None
+    invalid_value = {
+        **memory,
+        "value": {**claim["value"], "erp_value": "456.00"},
+    }
+    class Readable:
+        def get(self, *args, **kwargs):
+            return snapshot
+    assert revalidate_erp_memory(
+        invalid_value, _access(), projections=Readable()
+    )[0] is None
+    foreign = _access(actor="7", tenant="3")
+    assert revalidate_erp_memory(
+        memory, foreign, projections=Readable()
+    )[0] is None
