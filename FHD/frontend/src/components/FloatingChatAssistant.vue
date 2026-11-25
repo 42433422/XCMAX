@@ -193,12 +193,12 @@
         </details>
       </div>
 
-      <div v-else ref="messageListRef" class="floating-chat-messages">
+      <div v-else ref="messageListRef" class="floating-chat-messages" @scroll.passive="onMessageScroll">
         <div v-for="(msg, idx) in visibleMessages" :key="`${idx}-${msg.time}`" class="floating-chat-message" :class="msg.role">
           <div class="floating-chat-bubble" v-html="sanitizeChatBubbleHtml(msg.content)"></div>
           <div class="floating-chat-time">{{ msg.time }}</div>
         </div>
-        <div v-if="activeIsLoading && !isStreamingReply" class="floating-chat-message ai">
+        <div v-if="activeIsLoading && !isStreamingReply" class="floating-chat-message ai" role="status" aria-live="polite">
           <div class="floating-chat-bubble">{{ loadingProgressText }}</div>
         </div>
       </div>
@@ -266,6 +266,7 @@ const isOpen = ref(false)
 const externallyHidden = ref(false)
 const draft = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
+const followingLatest = ref(true)
 const rootRef = ref<HTMLElement | null>(null)
 const rootLeft = ref(0)
 const rootTop = ref(0)
@@ -440,10 +441,16 @@ const handleComposerEnter = (event: KeyboardEvent) => {
   void submitMessage()
 }
 
-const scrollToBottom = async () => {
+const onMessageScroll = () => {
+  const el = messageListRef.value
+  if (el) followingLatest.value = el.scrollHeight - el.scrollTop - el.clientHeight <= 48
+}
+
+const scrollToBottom = async (force = false) => {
+  if (force) followingLatest.value = true
   await nextTick()
   const el = messageListRef.value
-  if (!el) return
+  if (!el || !followingLatest.value) return
   el.scrollTop = el.scrollHeight
 }
 
@@ -467,7 +474,7 @@ const toggleOpen = async () => {
   if (callOpen.value && isOpen.value) return
   isOpen.value = !isOpen.value
   if (isOpen.value) {
-    await scrollToBottom()
+    await scrollToBottom(true)
     keepRootInViewport()
   }
 }
@@ -534,16 +541,18 @@ const submitMessage = async () => {
   const text = draft.value.trim()
   if (!text || activeIsLoading.value) return
   draft.value = ''
+  followingLatest.value = true
   await sendVoiceMessage(text)
   await scrollToBottom()
 }
 
 watch(
-  () => activeMessages.value.length,
+  [() => activeMessages.value.length, () => activeMessages.value.at(-1)?.content, loadingProgressText, activeIsLoading, isStreamingReply],
   () => {
     if (isOpen.value) void scrollToBottom()
   },
 )
+watch(messageListRef, () => { if (isOpen.value) void scrollToBottom() })
 
 watch(
   () => props.visible,

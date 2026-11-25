@@ -4,6 +4,9 @@
   line-height: 1.6;
   font-size: 0.95rem;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .msg-body :deep(.md-p) {
@@ -72,6 +75,8 @@
 }
 
 .msg-body :deep(.md-code) {
+  min-width: 0;
+  max-width: 100%;
   margin: 0.5rem 0;
   border-radius: 0.6rem;
   background: rgba(2, 6, 23, 0.7);
@@ -122,6 +127,8 @@
 }
 
 .msg-body :deep(.md-table-wrap) {
+  min-width: 0;
+  max-width: 100%;
   margin: 0.55rem 0;
   overflow-x: auto;
   border-radius: 0.55rem;

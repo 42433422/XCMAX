@@ -262,6 +262,29 @@ describe('FloatingChatAssistant', () => {
     expect(msgs[1].classes()).toContain('ai')
   })
 
+  it('follows streamed text only while the reader remains near the latest message', async () => {
+    messagesMock.value = [{ role: 'ai', content: '第一段', time: '10:01' }]
+    const wrapper = await openAssistant()
+    await flushPromises()
+    const host = wrapper.get('.floating-chat-messages')
+    const element = host.element as HTMLElement
+    let height = 600
+    Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => height })
+    Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => 200 })
+    element.scrollTop = 80
+    await host.trigger('scroll')
+    height = 700
+    messagesMock.value = [{ role: 'ai', content: '第一段 第二段', time: '10:01' }]
+    await flushPromises()
+    expect(element.scrollTop).toBe(80)
+    element.scrollTop = 500
+    await host.trigger('scroll')
+    height = 800
+    messagesMock.value = [{ role: 'ai', content: '第一段 第二段 第三段', time: '10:01' }]
+    await flushPromises()
+    expect(element.scrollTop).toBe(800)
+  })
+
   it('shows loading message when isLoading and not streaming', async () => {
     isLoadingMock.value = true
     isStreamingReplyMock.value = false
