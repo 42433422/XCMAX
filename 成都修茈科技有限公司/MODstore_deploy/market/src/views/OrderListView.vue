@@ -25,7 +25,7 @@
         </button>
       </div>
 
-      <div v-if="!orders.length" class="empty">暂无订单</div>
+      <div v-if="!err && !orders.length" class="empty">暂无订单</div>
       <div v-else-if="!err" class="order-list">
         <div v-for="order in orders" :key="order.out_trade_no" class="order-card" role="link" tabindex="0" :aria-label="`查看订单 ${order.out_trade_no}`" @click="goDetail(order)" @keydown.enter.self="goDetail(order)" @keydown.space.self.prevent="goDetail(order)">
           <div class="order-header">
@@ -155,8 +155,9 @@ async function cancelOrder(order: OrderRow) {
     await api.paymentCancelOrder(order.out_trade_no)
     await load()
   } catch (e) {
-    err.value = `取消状态需要核对：${(e as Error)?.message || String(e)}`
+    const warning = `取消状态需要核对：${(e as Error)?.message || String(e)}`
     await load()
+    err.value = warning
   } finally {
     cancellingOrder.value = ''
   }
