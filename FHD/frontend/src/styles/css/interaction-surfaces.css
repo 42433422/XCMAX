@@ -10,8 +10,8 @@
 
 .el-popper:is(.el-popover, .el-tooltip__popper, .el-dropdown__popper, .el-select__popper) {
   box-sizing: border-box;
-  max-width: calc(100vw - 24px);
-  max-width: calc(100dvw - 24px);
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
 }
 .el-popper:is(.el-popover, .el-dropdown__popper, .el-select__popper) {
   border-radius: var(--xc-token-radius-medium);
@@ -25,14 +25,14 @@
 }
 .el-popper :is(button, [role='menuitem'], [role='option']):focus-visible,
 .el-overlay :is(button, input, textarea, select):focus-visible {
-  outline: 2px solid var(--xc-color-primary);
-  outline-offset: 2px;
+  outline: var(--xc-token-focus-ring-width) solid var(--xc-color-primary);
+  outline-offset: calc(var(--xc-token-spacing-xs) / 2);
 }
 .el-overlay .el-dialog {
   box-sizing: border-box;
-  max-width: calc(100vw - 24px);
-  max-width: calc(100dvw - 24px);
-  max-height: calc(100dvh - 24px);
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
+  max-height: calc(100dvh - var(--xc-token-spacing-xxl));
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: var(--xc-token-radius-large);
@@ -54,8 +54,8 @@
 .modal.visible > .modal-content {
   box-sizing: border-box;
   width: min(100%, 500px);
-  max-width: calc(100dvw - 24px);
-  max-height: calc(100dvh - 24px);
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
+  max-height: calc(100dvh - var(--xc-token-spacing-xxl));
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: var(--xc-token-radius-large);
