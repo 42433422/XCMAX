@@ -67,3 +67,30 @@ it('never shares or publishes a previous account route response', async () => {
   await expect(next).resolves.toEqual([{ mod_id: 'new', routes_path: '' }])
   expect(apiFetch).toHaveBeenCalledTimes(2)
 })
+
+
+it('discards a response when the account changes while decoding JSON', async () => {
+  vi.mocked(apiFetch).mockReset()
+  let finishJson!: (value: unknown) => void
+  vi.mocked(apiFetch).mockResolvedValue({
+    ok: true,
+    json: () => new Promise(resolve => { finishJson = resolve }),
+  } as unknown as Response)
+  const pending = fetchModRoutesPayloadShared()
+  await Promise.resolve()
+  session.epoch++
+  finishJson({ success: true, data: [{ mod_id: 'old-account', routes_path: '' }] })
+  await expect(pending).resolves.toBeNull()
+})
+
+it('permits recovery after a failed route request without reusing its failure', async () => {
+  vi.mocked(apiFetch).mockReset()
+  vi.mocked(apiFetch).mockRejectedValueOnce(new Error('temporary network failure'))
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [{ mod_id: 'fresh', routes_path: '' }] }),
+    } as Response)
+  await expect(fetchModRoutesPayloadShared()).resolves.toBeNull()
+  await expect(fetchModRoutesPayloadShared()).resolves.toEqual([{ mod_id: 'fresh', routes_path: '' }])
+  expect(apiFetch).toHaveBeenCalledTimes(2)
+})
