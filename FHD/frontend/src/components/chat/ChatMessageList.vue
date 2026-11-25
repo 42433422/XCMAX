@@ -30,6 +30,10 @@
             v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)"
             class="message-html"
           >{{ receiptSummary(msg) }}</div>
+          <div
+            v-else-if="shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
+            class="message-html message-html--streaming-long"
+          >{{ aiMarkdownSourceFromContent(msg.content) }}</div>
           <div v-else class="message-html" v-html="messageHtml(msg)"></div>
         </MessageFold>
         <template v-else>
@@ -122,7 +126,11 @@
             </TraceLine>
           </Trace>
           <div
-            v-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
+            v-if="(msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)) && shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
+            class="message-html message-html--streaming-long"
+          >{{ aiMarkdownSourceFromContent(msg.content) }}</div>
+          <div
+            v-else-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
             class="message-html"
             v-html="messageHtml(msg)"
           ></div>
@@ -268,6 +276,7 @@ import { approvalCardId } from '@/utils/chatApprovalCard'
 import { formatBusinessResultSummary } from '@/utils/businessResultSummary'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
+import { shouldDeferMarkdownWhileStreaming } from '@/utils/chatMarkdownStreaming'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
@@ -517,6 +526,9 @@ function messageHtml(message: ChatMessage): string {
     ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content)) : sanitizeChatBubbleHtml(message.content)
 }
 function messageCanSpeak(message: ChatMessage): boolean {
+  // Speech preparation parses the full Markdown document. Do it after the
+  // terminal receipt, not once per streamed token/frame.
+  if (isMessageStreaming(message)) return false
   return presentation(message).canSpeak ??= props.canSpeakMessage(message)
 }
 function canCollapseMessageOf(message: ChatMessage): boolean {

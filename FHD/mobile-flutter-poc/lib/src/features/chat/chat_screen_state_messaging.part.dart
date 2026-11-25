@@ -197,6 +197,11 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   Future<void> _send([String? overrideText]) async {
+    // A tap on Send while the platform IME has an active candidate must not
+    // send a stale pre-composition draft or clear the user's input.
+    if (overrideText == null &&
+        _controller.value.composing.isValid &&
+        !_controller.value.composing.isCollapsed) return;
     final text = (overrideText ?? _controller.text).trim();
     if (_chatInvalidated || !_chatForeground ||
         _repository?.client.authGeneration != _chatGeneration) return;

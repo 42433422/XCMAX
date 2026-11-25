@@ -35,6 +35,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('does not send while the mobile IME is composing a candidate', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const ChatScreen(
+        conversation: ConversationItem(
+            id: 'pinned:assistant',
+            type: ConversationType.pinnedAssistant,
+            title: '小C', subtitle: '', timestampText: ''),
+        initialMessages: [],
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final field = find.byType(TextField);
+    await tester.enterText(field, '候选词');
+    tester.testTextInput.updateEditingValue(const TextEditingValue(
+      text: '候选词',
+      selection: TextSelection.collapsed(offset: 3),
+      composing: TextRange(start: 0, end: 3),
+    ));
+    await tester.pump();
+    final existingCount = find.byType(MessageBubble).evaluate().length;
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+    expect(find.byType(MessageBubble).evaluate().length, existingCount);
+    expect(tester.widget<TextField>(field).controller?.text, '候选词');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('chat tools fit a 320px screen at double text size',
       (tester) async {
     tester.view.devicePixelRatio = 1;

@@ -9,6 +9,13 @@
   max-width: 100%;
 }
 
+/* While a very long response is live, show escaped text to avoid repeated
+   full-document Markdown/Mermaid DOM rebuilds. Its final receipt re-renders Markdown. */
+.msg-body--streaming-plain {
+  white-space: pre-wrap;
+  tab-size: 4;
+}
+
 .msg-body :deep(.md-p) {
   margin: 0.4rem 0;
 }

@@ -149,6 +149,14 @@
   overflow-wrap: anywhere;
 }
 
+/* Long live responses remain selectable without parsing/sanitizing the entire
+   growing Markdown document on every animation frame. Full Markdown returns on completion. */
+.message-html--streaming-long {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
 .message-html > :first-child {
   margin-top: 0;
 }

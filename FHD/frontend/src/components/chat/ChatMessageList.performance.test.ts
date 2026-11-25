@@ -64,6 +64,26 @@ describe('bounded chat history and derived content', () => {
     expect(sanitize.mock.calls.length).toBeGreaterThan(80)
   })
 
+  it('does not reparse huge Markdown during streaming and formats after the terminal receipt', async () => {
+    const f = fixture()
+    await nextTick()
+    const message = f.messages.value[499]
+    message.streamStatus = 'streaming'
+    message.content = '# 报告\\n' + '长消息正文\\n'.repeat(3500) + '<img src=x onerror=bad()>'
+    const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+    await nextTick()
+    const body = f.wrapper.get('[data-message-index="499"] .message-html')
+    expect(body.classes()).toContain('message-html--streaming-long')
+    expect(body.text()).toContain('<img src=x onerror=bad()>')
+    expect(body.find('img').exists()).toBe(false)
+    expect(sanitize).not.toHaveBeenCalled()
+    message.streamStatus = undefined
+    await nextTick()
+    expect(f.wrapper.get('[data-message-index="499"] .message-html').classes()).not.toContain('message-html--streaming-long')
+    expect(sanitize).toHaveBeenCalled()
+    expect(f.wrapper.get('[data-message-index="499"] .message-html').find('[onerror]').exists()).toBe(false)
+  })
+
   it('can traverse every old and new message while never mounting more than 80 rows', async () => {
     const f = fixture()
     const visited = new Set(f.indexes())

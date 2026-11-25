@@ -86,7 +86,9 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   /** 该消息是否允许折叠（超长正文才允许）。 */
   const canCollapseMessage = (msg: ChatMessage) => {
     if (msg?.role !== 'ai') return false
-    if (msg.streamingShell) return false
+    // Both the legacy shell and the AI SDK stream status represent live text.
+    // Folding requires sanitizing the entire document, so only compute after EOF.
+    if (msg.streamingShell || msg.streamStatus === 'submitted' || msg.streamStatus === 'streaming') return false
     const content = String(msg?.content || '')
     let entry = foldableCache.get(msg)
     if (!entry || entry.content !== content) {

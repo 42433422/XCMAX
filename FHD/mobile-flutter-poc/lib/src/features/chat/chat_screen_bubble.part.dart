@@ -267,7 +267,21 @@ class MessageBubble extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                             ],
-                            _ChatRichBody(
+                            // Parsing fenced blocks on each new frame scales with
+                            // the full reply length. Defer rich formatting for huge
+                            // in-flight replies, then restore it on the final status.
+                            if (message.status == ChatDeliveryStatus.sending &&
+                                message.body.length > 16384)
+                              Text(
+                                visibleBody,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 15,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              )
+                            else _ChatRichBody(
                               text: visibleBody,
                               codeBackground: colors.surfaceHigh,
                               style: TextStyle(

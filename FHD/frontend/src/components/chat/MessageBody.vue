@@ -1,11 +1,13 @@
 <template>
-  <div ref="hostRef" class="msg-body" v-html="rendered" @click="onBodyClick" />
+  <div v-if="deferMarkdown" ref="hostRef" class="msg-body msg-body--streaming-plain" @click="onBodyClick">{{ content }}<span class="msg-body__cursor" aria-hidden="true">▍</span></div>
+  <div v-else ref="hostRef" class="msg-body" v-html="rendered" @click="onBodyClick" />
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
+import { shouldDeferMarkdownWhileStreaming } from '@/utils/chatMarkdownStreaming'
 
 const props = defineProps<{
   content: string
@@ -14,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const hostRef = ref<HTMLDivElement | null>(null)
+const deferMarkdown = computed(() => shouldDeferMarkdownWhileStreaming(props.content || '', Boolean(props.streaming)))
 let disposed = false
 const feedbackTimers = new Set<number>()
 

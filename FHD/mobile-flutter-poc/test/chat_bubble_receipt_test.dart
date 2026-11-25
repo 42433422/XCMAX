@@ -61,6 +61,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('long streamed code is plain text until final status', (tester) async {
+    final body = '前言\\n' * 4500 + '```dart\\nconst answer = 42;\\n```';
+    await tester.pumpWidget(_bubble(ChatDeliveryStatus.sending, () {}, body: body));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectableText), findsNothing);
+    await tester.pumpWidget(_bubble(ChatDeliveryStatus.sent, () {}, body: body));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectableText), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('unconfirmed turns expose a minimum 44px receipt action',
       (tester) async {
     tester.view.devicePixelRatio = 1;
