@@ -224,6 +224,29 @@ def _event_dict(row: XiaoCLifeEvent) -> dict[str, Any]:
     }
 
 
+def _audit_admission_denial(
+    data: dict[str, Any], session: Session, reasons: list[str]
+) -> None:
+    """Journal the first observed denial; identical retries do not churn CAS."""
+    snapshot = {
+        "revision": data["revision"],
+        "budget_date": _day(),
+        "reasons": sorted(set(reasons)),
+    }
+    if data.get("admission_denial") == snapshot:
+        return
+    data["admission_denial"] = snapshot
+    _event(
+        session,
+        f"life:denied:{uuid.uuid4().hex}",
+        kind="life_transition",
+        status="blocked",
+        summary="当前生命周期准入条件不足，未发起新的自主执行。",
+        evidence_refs=[f"policy:{data['revision']}"],
+        details={"from": "admission", "to": "blocked", **snapshot},
+    )
+
+
 def read_state() -> dict[str, Any]:
     _ensure()
     with get_session_factory()() as session:
@@ -274,13 +297,30 @@ def read_state() -> dict[str, Any]:
                 .limit(20)
             )
         ]
+        # Keep execution telemetry out of the cognition/experience event feed.
+        # The immutable transitions remain independently queryable by SQL and API.
         data["events"] = [
             _event_dict(event)
             for event in session.scalars(
                 select(XiaoCLifeEvent)
-                .where(XiaoCLifeEvent.identity_id == IDENTITY_ID)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind != "life_transition",
+                )
                 .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
                 .limit(20)
+            )
+        ]
+        data["lifecycle_events"] = [
+            _event_dict(event)
+            for event in session.scalars(
+                select(XiaoCLifeEvent)
+                .where(
+                    XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                    XiaoCLifeEvent.kind == "life_transition",
+                )
+                .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+                .limit(40)
             )
         ]
         from modstore_server.xiaoc_life_experience_review import review_facts
@@ -499,6 +539,8 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
             details={
                 "previous_owner_user_id": previous_owner,
                 "owner_user_id": data["owner_user_id"],
+                "before_stopped": was_stopped,
+                "before_paused": was_paused,
                 "stopped": data.get("stopped", False),
                 "paused": data["paused"],
             },
@@ -530,14 +572,24 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
                 data["unknown_usage"] = True
                 data["last_status"] = "blocked"
             return None
-        if data["paused"] or data["level"] < MINIMUM_LEVEL[domain] or _blockers(data, session):
+        reasons = []
+        if data.get("stopped"):
+            reasons.append("stopped")
+        if data["paused"]:
+            reasons.append("paused")
+        if data["level"] < MINIMUM_LEVEL[domain]:
+            reasons.append("insufficient_level")
+        reasons.extend(_blockers(data, session))
+        if reasons:
+            _audit_admission_denial(data, session, reasons)
             return None
         if data.get("next_wake_at") and parse_time(data["next_wake_at"]) > now:
             return None
         if data["budget"]["date"] != _day():
             data["budget"] = _budget()
         budget, policy = data["budget"], data["policy"]
-        if _admission_blockers(data):
+        if reasons := _admission_blockers(data):
+            _audit_admission_denial(data, session, reasons)
             return None
         exploring = domain == "exploration"
         share = policy["daily_token_limit"] * policy["exploration_percent"] // 100
@@ -552,6 +604,9 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         )
         reserved = min(reserve_tokens, max(0, lane_cap - lane_used))
         if reserve_tokens and reserved <= 0:
+            _audit_admission_denial(
+                data, session, ["domain_token_allocation_exhausted"]
+            )
             return None
         from modstore_server.xiaoc_self_model import execution_scope
 
@@ -580,6 +635,39 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
         data["next_wake_at"] = (
             now + timedelta(seconds=policy["wake_interval_seconds"])
         ).isoformat()
+        data.pop("admission_denial", None)
+        _event(
+            session,
+            f"life:phase:{cycle['cycle_id']}:claimed",
+            kind="life_transition",
+            status="claimed",
+            summary="原自主周期已持久认领与预留额度。",
+            evidence_refs=[f"policy:{data['revision']}"],
+            details={
+                "from": "idle",
+                "to": "claimed",
+                "cycle_id": cycle["cycle_id"],
+                "owner_user_id": cycle["owner_user_id"],
+                "policy_revision": cycle["policy_revision"],
+                "domain": domain,
+                "reserved_tokens": reserved,
+            },
+        )
+        if limits := _admission_blockers(data):
+            _event(
+                session,
+                f"life:limit:{cycle['cycle_id']}",
+                kind="life_transition",
+                status="budget_exhausted",
+                summary="本次认领达到当日额度边界，仅禁止新增周期。",
+                evidence_refs=[f"life:phase:{cycle['cycle_id']}:claimed"],
+                details={
+                    "cycle_id": cycle["cycle_id"],
+                    "policy_revision": cycle["policy_revision"],
+                    "budget_date": budget["date"],
+                    "reasons": limits,
+                },
+            )
         return {**cycle, "state": {**copy.deepcopy(data), "self_authority_active": True}}
 
     return _mutate(claim)
@@ -798,6 +886,8 @@ def finish_cycle(
                 "owner_user_id": claim["owner_user_id"],
                 "steps": active.get("steps", []),
                 "last_phase": active.get("phase", "claimed"),
+                "to_phase": "settled",
+                "terminal_status": final_status,
                 "graph_checkpoints": active.get("graph_checkpoints", {}),
                 "outbound_journal_version": active.get("outbound_journal_version"),
                 "outbound_attempted": bool(active.get("outbound_attempted")),
@@ -1018,6 +1108,22 @@ def record_cycle_phase(claim: dict[str, Any], phase: str) -> None:
             raise LifePolicyError("生命节点进度不可跳过或倒退")
         active["phase"] = phase
         active["phase_started_at"] = utcnow().isoformat()
+        _event(
+            session,
+            f"life:phase:{claim['cycle_id']}:{phase}",
+            kind="life_transition",
+            status=phase,
+            summary="原自主周期节点阶段已持久更新。",
+            evidence_refs=[f"life:phase:{claim['cycle_id']}:claimed"],
+            details={
+                "from": previous,
+                "to": phase,
+                "cycle_id": claim["cycle_id"],
+                "owner_user_id": claim["owner_user_id"],
+                "policy_revision": claim["policy_revision"],
+                "domain": claim["domain"],
+            },
+        )
 
     _mutate(record)
 
