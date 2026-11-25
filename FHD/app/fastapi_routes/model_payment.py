@@ -323,16 +323,19 @@ async def alipay_trade_notify(request: Request):
             trade_no=trade_no,
             total_amount=total_amount,
         )
-        if reason == "amount_mismatch":
+        if reason in {"amount_mismatch", "trade_mismatch"}:
             return PlainTextResponse("fail", status_code=400)
-        if reason == "fulfillment_pending":
+        if reason in {"fulfillment_pending", "unknown_order"}:
+            # Unknown orders are unsettled money, not a successful delivery.
+            # Never stop provider retries before an operator can reconcile
+            # the merchant order ID against the authoritative payment record.
+            if reason == "unknown_order":
+                logger.error(
+                    "[model-payment] unmatched verified payment notification requires reconciliation: out_trade_no=%s",
+                    out_trade_no,
+                )
             return PlainTextResponse("fail", status_code=503)
-        if reason == "unknown_order":
-            logger.warning(
-                "[model-payment] notify: 无本地订单仍返回 success，避免支付宝无限重试 out_trade_no=%s",
-                out_trade_no,
-            )
-        elif reason == "marked_paid" and snap:
+        if reason == "marked_paid" and snap:
             ent = snap.get("entitlement") if isinstance(snap, dict) else None
             logger.info(
                 "[model-payment] 权益已发放 plan_id=%s amount_cents=%s purchase_count=%s",
