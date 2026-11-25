@@ -15,6 +15,7 @@
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
         :data-message-index="idx"
+        :data-message-key="presentation(msg).key"
         role="listitem"
         :aria-posinset="idx + 1"
         :aria-setsize="messages.length"
@@ -534,9 +535,16 @@ watch(
   },
   { flush: 'sync' },
 )
-watch(visibleMessages, (rows) => {
+watch(visibleMessages, (rows, previousRows) => {
   const visible = new Set(rows.map(({ msg }) => msg))
   for (const message of copyLabels.value.keys()) if (!visible.has(message)) copyLabels.value.delete(message)
+  // Message objects are retained by history even when offscreen. WeakMap alone
+  // therefore does not bound the derived HTML or computed trace cache.
+  for (const { msg } of previousRows || []) {
+    if (visible.has(msg)) continue
+    presentations.delete(msg)
+    stepChainCache.delete(msg)
+  }
 })
 function visibleBodyText(root: HTMLElement): string {
   const blocks = new Set(['P', 'DIV', 'LI', 'PRE', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TR'])
