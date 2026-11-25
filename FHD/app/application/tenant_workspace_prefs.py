@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi import Request
@@ -15,6 +16,26 @@ logger = logging.getLogger(__name__)
 
 WORKSPACE_PREFS_KEY = "workspace_prefs"
 WORKSPACE_PREFS_REVISION_KEY = "_revision"
+
+
+@contextmanager
+def _workspace_base_db_scope():
+    """Preferences are host-owned even when a mobile or Mod route is active.
+
+    Only the preference DB operation is routed to the host. Restore the Mod
+    context immediately so downstream enterprise business reads keep their
+    original scope and authorization decisions.
+    """
+    from app.request_active_mod_ctx import (
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
+
+    token = set_request_active_mod_id("")
+    try:
+        yield
+    finally:
+        reset_request_active_mod_id(token)
 
 
 class WorkspacePrefsVersionConflict(ValueError):
@@ -92,7 +113,8 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
     try:
         from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-        raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
+        with _workspace_base_db_scope():
+            raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
         if not raw:
             return {}
         data = json.loads(raw)
@@ -109,7 +131,8 @@ def get_owner_preferences(owner_id: str) -> dict[str, str]:
     """设置页等零散键值偏好，与工作区偏好同库、按工作区归属隔离。"""
     from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    rows = get_user_preference_service().get_all_preferences(owner_id)
+    with _workspace_base_db_scope():
+        rows = get_user_preference_service().get_all_preferences(owner_id)
     n = len(_OWNER_PREF_PREFIX)
     return {k[n:]: v for k, v in rows.items() if k.startswith(_OWNER_PREF_PREFIX)}
 
@@ -117,7 +140,8 @@ def get_owner_preferences(owner_id: str) -> dict[str, str]:
 def set_owner_preference(owner_id: str, key: str, value: str) -> None:
     from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
+    with _workspace_base_db_scope():
+        get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
 
 
 def workspace_owner_id_from_user(user: Any) -> str | None:
@@ -197,7 +221,10 @@ def patch_workspace_prefs(
         merged[WORKSPACE_PREFS_REVISION_KEY] = revision + 1
         return json.dumps(merged, ensure_ascii=False)
 
-    saved = get_user_preference_service().mutate_preference(owner, WORKSPACE_PREFS_KEY, merge)
+    with _workspace_base_db_scope():
+        saved = get_user_preference_service().mutate_preference(
+            owner, WORKSPACE_PREFS_KEY, merge
+        )
     return json.loads(saved)
 
 
