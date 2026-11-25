@@ -1,5 +1,5 @@
 {
-  "lines": 2733234,
+  "lines": 2733265,
   "updated": "2026-11-25",
-  "note": "后端分层基础收敛：复用 SQLAlchemy 原有事务边界，客户 Mod 数据源失败关闭，FastAPI/Pydantic 客户写入契约与回归测试；净增 100 行（无新增框架，须由正式 preflight 实测复核）"
+  "note": "后端安全收敛：SQLAlchemy 共用事务边界、Mod 数据源失败关闭、Pydantic/OpenAPI 写入契约，异常装饰器传播编程错误并保留安全调用栈；相对主线净增 131 行，需正式 preflight 与 CI 实测确认"
 }
