@@ -89,7 +89,9 @@ def test_no_tenant_does_not_write_and_tenant_references_do_not_mix(db_factory):
             outcome = archive.archive_from_crm_invoice(invoice())
             assert outcome["archived"]
             with db_factory() as db:
-                rows = db.scalars(select(FinancialTransaction)).all()
+                rows = db.scalars(
+                    select(FinancialTransaction).where(FinancialTransaction.tenant_id == tenant)
+                ).all()
                 assert len(rows) == 1 and rows[0].tenant_id == tenant
 
 
@@ -112,21 +114,130 @@ def test_invalid_original_rejected_without_booked_row(db_factory, payload, reaso
             assert db.scalars(select(FinancialTransaction)).all() == []
 
 
-def test_rebuild_exposes_partial_and_failed_receipts(monkeypatch):
+def test_rebuild_rejects_truncated_source_before_any_write(monkeypatch):
     import app.domain.shared_services.user_cs_crm_store as store
 
-    rows = [invoice(), invoice(id=10)]
     monkeypatch.setattr(store, "list_crm_invoices", lambda **_kw: {
-        "items": rows, "total": 3,
+        "items": [invoice(), invoice(id=10)], "total": 3,
     })
-    monkeypatch.setattr(archive, "archive_from_crm_invoice", lambda item, **_kw: {
-        "archived": item["id"] == 9,
-    })
+    called = []
+    monkeypatch.setattr(
+        archive, "archive_from_crm_invoice", lambda item, **_kw: called.append(item)
+    )
+    result = archive.rebuild_ledger_archive()
+    assert result["rebuilt"] == result["rejected"] == 0
+    assert result["complete"] is False
+    assert result["reason_code"] == "invoice_source_truncated"
+    assert called == []
+
+
+def test_rebuild_fetches_every_page_before_archiving(monkeypatch):
+    import app.domain.shared_services.user_cs_crm_store as store
+
+    originals = [invoice(id=i) for i in range(1, 502)]
+    requested = []
+
+    def list_page(**kw):
+        requested.append(kw["offset"])
+        start = kw["offset"]
+        return {
+            "items": originals[start : start + kw["limit"]],
+            "total": len(originals),
+            "offset": start,
+        }
+
+    monkeypatch.setattr(store, "list_crm_invoices", list_page)
+    archived = []
+
+    def archive_invoice(item, **_kw):
+        archived.append(item["id"])
+        return {"archived": True, "idempotent": False}
+
+    monkeypatch.setattr(archive, "archive_from_crm_invoice", archive_invoice)
+    outcome = archive.rebuild_ledger_archive()
+    assert outcome["complete"] is True
+    assert outcome["rebuilt"] == 501
+    assert outcome["pages_read"] == 2
+    assert requested == [0, 500]
+    assert archived == list(range(1, 502))
+
+
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("empty", "invoice_source_truncated"),
+        ("duplicate", "invoice_source_duplicate"),
+        ("different_total", "invoice_source_changed_during_pagination"),
+        ("wrong_offset", "invoice_source_wrong_page"),
+    ],
+)
+def test_rebuild_rejects_broken_second_page_without_writes(monkeypatch, broken, reason):
+    import app.domain.shared_services.user_cs_crm_store as store
+
+    first_page = [invoice(id=i) for i in range(1, 501)]
+
+    def list_page(**kw):
+        if kw["offset"] == 0:
+            return {"items": first_page, "total": 501, "offset": 0}
+        result = {"items": [invoice(id=501)], "total": 501, "offset": 500}
+        if broken == "empty":
+            result["items"] = []
+        elif broken == "duplicate":
+            result["items"] = [invoice(id=1)]
+        elif broken == "different_total":
+            result["total"] = 502
+        elif broken == "wrong_offset":
+            result["offset"] = 1
+        return result
+
+    monkeypatch.setattr(store, "list_crm_invoices", list_page)
+    called = []
+    monkeypatch.setattr(
+        archive, "archive_from_crm_invoice", lambda item, **_kw: called.append(item)
+    )
+    result = archive.rebuild_ledger_archive()
+    assert result["complete"] is False
+    assert result["reason_code"] == reason
+    assert result["rebuilt"] == 0
+    assert called == []
+
+
+def test_rebuild_exposes_per_invoice_archival_failures(monkeypatch):
+    import app.domain.shared_services.user_cs_crm_store as store
+
+    monkeypatch.setattr(
+        store, "list_crm_invoices",
+        lambda **_kw: {"items": [invoice(), invoice(id=10)], "total": 2},
+    )
+    monkeypatch.setattr(
+        archive, "archive_from_crm_invoice",
+        lambda item, **_kw: {"archived": item["id"] == 9},
+    )
     result = archive.rebuild_ledger_archive()
     assert result["rebuilt"] == 1
     assert result["rejected"] == 1
     assert result["complete"] is False
-    assert result["reason_code"] == "invoice_source_truncated"
+    assert result["reason_code"] == "invoice_archive_rejected"
+
+
+def test_insert_must_be_independently_read_back(db_factory, monkeypatch):
+    # Simulate an independent read returning no matching source identity.
+    with tenant_scope(7):
+        monkeypatch.setattr(archive, "_invoice_archive_existing", lambda *_a, **_kw: None)
+        result = archive.archive_from_crm_invoice(invoice())
+    assert result == {
+        "archived": False,
+        "reason_code": "invoice_archive_readback_failed",
+    }
+
+
+def test_invoice_projection_is_document_only(db_factory):
+    with tenant_scope(7):
+        assert archive.archive_from_crm_invoice(invoice())["archived"] is True
+        entry = archive.list_ledger(track="contract")[0]
+    assert entry["document_only"] is True
+    assert entry["settlement_verified"] is False
+    assert entry["amount_cents"] == 729
 
 
 def test_api_does_not_return_success_on_incomplete_rebuild(monkeypatch):
