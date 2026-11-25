@@ -184,6 +184,21 @@ def _business_evidence():
             "independent_reconciliation", "customer_confirmation",
         )
     }
+    # Schema-only fixture. Production validation requires authorized original
+    # bytes, committed DB readbacks and human customer confirmation.
+    stages["source"].update(
+        source_kind="authorized_customer_original", synthetic=False
+    )
+    stages["approval"]["approved_by"] = "approver1"
+    stages["database"].update(
+        inventory_committed=True,
+        finance_committed=True,
+        readback_verified=True,
+        inventory_readback_sha256="4" * 64,
+        finance_readback_sha256="5" * 64,
+    )
+    stages["artifact"].update(format="xlsx", download_hash_verified=True)
+    stages["independent_reconciliation"]["reconciliation_sha256"] = "6" * 64
     stages["approval"]["approved_action_sha256"] = "2" * 64
     stages["execution"].update(approved_action_sha256="2" * 64, executed_by="worker1")
     stages["artifact"]["artifact_sha256"] = "1" * 64
@@ -227,6 +242,11 @@ def test_installer_pass_does_not_close_business_work_order(monkeypatch):
     "source", "approval", "execution", "database", "artifact",
     "independent_reconciliation", "customer_confirmation", "foreign_tenant",
     "other_artifact", "self_verified", "wrong_amounts",
+    "synthetic_source", "missing_source_kind", "missing_approver",
+    "self_approved", "inventory_not_committed", "finance_not_committed",
+    "database_readback_missing", "inventory_readback_missing",
+    "finance_readback_missing", "not_xlsx", "download_unverified",
+    "self_confirmed", "reconciliation_digest_missing",
 ])
 def test_business_receipts_fail_closed_on_missing_or_mismatched_stage(drift):
     m = load()
@@ -240,6 +260,32 @@ def test_business_receipts_fail_closed_on_missing_or_mismatched_stage(drift):
         record["stages"]["independent_reconciliation"]["verifier_id"] = "worker1"
     elif drift == "wrong_amounts":
         record["stages"]["independent_reconciliation"]["inventory_and_accounting"] = False
+    elif drift == "synthetic_source":
+        record["stages"]["source"]["synthetic"] = True
+    elif drift == "missing_source_kind":
+        record["stages"]["source"].pop("source_kind")
+    elif drift == "missing_approver":
+        record["stages"]["approval"].pop("approved_by")
+    elif drift == "self_approved":
+        record["stages"]["approval"]["approved_by"] = "worker1"
+    elif drift == "inventory_not_committed":
+        record["stages"]["database"]["inventory_committed"] = False
+    elif drift == "finance_not_committed":
+        record["stages"]["database"]["finance_committed"] = False
+    elif drift == "database_readback_missing":
+        record["stages"]["database"]["readback_verified"] = False
+    elif drift == "inventory_readback_missing":
+        record["stages"]["database"].pop("inventory_readback_sha256")
+    elif drift == "finance_readback_missing":
+        record["stages"]["database"].pop("finance_readback_sha256")
+    elif drift == "not_xlsx":
+        record["stages"]["artifact"]["format"] = "csv"
+    elif drift == "download_unverified":
+        record["stages"]["artifact"]["download_hash_verified"] = False
+    elif drift == "self_confirmed":
+        record["stages"]["customer_confirmation"]["confirmed_by"] = "worker1"
+    elif drift == "reconciliation_digest_missing":
+        record["stages"]["independent_reconciliation"].pop("reconciliation_sha256")
     else:
         record["stages"].pop(drift)
     assert not m._business_receipts_complete(
