@@ -22,7 +22,8 @@ def test_streams_bridge_publish_calls_xadd(monkeypatch):
     args, kwargs = mock_redis.xadd.call_args
     assert args[0] == "neurobus:events"
     assert "payload" in kwargs["fields"]
-    assert kwargs["maxlen"] == 100000
+    assert "maxlen" not in kwargs
+    assert "approximate" not in kwargs
 
 
 def test_streams_bridge_consume_calls_xreadgroup(monkeypatch):
@@ -64,4 +65,31 @@ def test_streams_bridge_send_to_dlq():
     mock_redis.xadd.assert_called_once()
     args, kwargs = mock_redis.xadd.call_args
     assert args[0] == "neurobus:dlq"
+    assert "maxlen" not in kwargs
+    assert "approximate" not in kwargs
     mock_redis.xack.assert_called_once()
+
+
+def test_trim_only_after_ack_and_never_falls_back():
+    from redis.exceptions import ResponseError
+
+    from app.neuro_bus.transports.redis_streams import (
+        MAXLEN,
+        STREAM_KEY,
+        TRIM_BATCH,
+        RedisStreamsBridge,
+        _SAFE_TRIM,
+    )
+
+    mock_redis = MagicMock()
+    bridge = RedisStreamsBridge(bus=MagicMock(), redis_client=mock_redis)
+    mock_redis.xack.return_value = 0
+    bridge.ack("1-0")
+    mock_redis.eval.assert_not_called()
+
+    mock_redis.xack.return_value = 1
+    mock_redis.eval.side_effect = ResponseError("NOPERM")
+    bridge.ack("1-0")
+    mock_redis.eval.assert_called_once_with(_SAFE_TRIM, 1, STREAM_KEY, MAXLEN, TRIM_BATCH)
+    mock_redis.xtrim.assert_not_called()
+    mock_redis.xdel.assert_not_called()
