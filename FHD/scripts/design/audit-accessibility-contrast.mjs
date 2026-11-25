@@ -162,5 +162,23 @@ for (const [role, backgrounds] of [
   }
 }
 
+// Market dark muted ordinary text is consumed by Element Plus placeholders
+// and legacy workbench aliases. Cover the registered opaque surfaces;
+// alpha-composited / overlay states still require rendered inspection.
+for (const [role, backgrounds] of [
+  ['wb-text-muted', ['color-bg-page', 'color-bg-card', 'wb-surface-elevated', 'wb-input-bg']],
+  ['wb-sidebar-text-muted', ['wb-sidebar-bg', 'wb-sidebar-item-active']],
+  ['wb-dialog-text-muted', ['wb-dialog-bg']],
+]) {
+  for (const background of backgrounds) {
+    pair('Market dark ' + role + ' / ' + background,
+      () => resolveColor('var(--xc-token-market-dark-' + role + ')', [], marketGeneratedCss),
+      () => resolveColor('var(--xc-token-market-dark-' + background + ')', [], marketGeneratedCss));
+  }
+}
+pair('Market dark wb-text-muted / body',
+  () => resolveColor('var(--xc-token-market-dark-wb-text-muted)', [], marketGeneratedCss),
+  () => resolveColor('var(--xc-token-market-base-color-bg-body)', [], marketGeneratedCss));
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

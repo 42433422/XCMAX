@@ -170,7 +170,7 @@
   --xc-token-market-reduced-motion-motion-duration-nav: 0.01ms;
   --xc-token-market-dark-wb-text-primary: #f0f0f5;
   --xc-token-market-dark-wb-text-secondary: rgba(240, 240, 245, 0.68);
-  --xc-token-market-dark-wb-text-muted: rgba(240, 240, 245, 0.38);
+  --xc-token-market-dark-wb-text-muted: var(--xc-token-colors-neutral-light-n400);
   --xc-token-market-dark-wb-border-default: rgba(240, 240, 245, 0.09);
   --xc-token-market-dark-wb-border-muted: rgba(240, 240, 245, 0.05);
   --xc-token-market-dark-wb-surface-elevated: #12121a;
@@ -193,12 +193,12 @@
   --xc-token-market-dark-wb-sidebar-item-hover: rgba(129, 140, 248, 0.06);
   --xc-token-market-dark-wb-sidebar-item-active: #212121;
   --xc-token-market-dark-wb-sidebar-text: rgba(240, 240, 245, 0.85);
-  --xc-token-market-dark-wb-sidebar-text-muted: rgba(240, 240, 245, 0.45);
+  --xc-token-market-dark-wb-sidebar-text-muted: var(--xc-token-colors-neutral-light-n400);
   --xc-token-market-dark-wb-sidebar-divider: rgba(240, 240, 245, 0.05);
   --xc-token-market-dark-wb-dialog-bg: #0c0c12;
   --xc-token-market-dark-wb-dialog-border: rgba(240, 240, 245, 0.08);
   --xc-token-market-dark-wb-dialog-text: rgba(240, 240, 245, 0.9);
-  --xc-token-market-dark-wb-dialog-text-muted: rgba(148, 163, 184, 0.5);
+  --xc-token-market-dark-wb-dialog-text-muted: var(--xc-token-colors-neutral-light-n400);
   --xc-token-market-dark-wb-dialog-input-bg: rgba(255, 255, 255, 0.04);
   --xc-token-market-dark-wb-dialog-input-border: rgba(255, 255, 255, 0.08);
   --xc-token-market-dark-wb-main-max-width: 768px;
