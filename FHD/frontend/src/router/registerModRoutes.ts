@@ -4,27 +4,56 @@ import type { RuntimeModMetadata } from '@/utils/runtimeModSdk'
 
 export type ModRouteApiEntry = { mod_id: string; routes_path: string; runtime?: RuntimeModMetadata }
 
-const runtimeRegistrationsByRouter = new WeakMap<Router, Map<string, { revision: string; remove: (() => void)[] }>>()
+type RuntimeRegistration = { revision: string; names: Set<string>; remove: (() => void)[] }
+const runtimeRegistrationsByRouter = new WeakMap<Router, Map<string, RuntimeRegistration>>()
+
+function retireRuntimeRoutes(router: Router, modId: string): void {
+  const registrations = runtimeRegistrationsByRouter.get(router)
+  const previous = registrations?.get(modId)
+  registrations?.delete(modId)
+  previous?.remove.forEach(remove => remove())
+}
 
 function registerRuntimeRoutes(router: Router, entry: ModRouteApiEntry): boolean {
   const metadata = entry.runtime
-  if (!metadata || metadata.mod_id !== entry.mod_id || metadata.sdk_version !== 1) return false
-  const runtimeRegistrations = runtimeRegistrationsByRouter.get(router) ?? new Map<string, { revision: string; remove: (() => void)[] }>()
-  runtimeRegistrationsByRouter.set(router, runtimeRegistrations)
+  if (!metadata || metadata.mod_id !== entry.mod_id || metadata.sdk_version !== 1 ||
+    !/^[a-z0-9][a-z0-9_-]{0,95}$/.test(entry.mod_id) ||
+    !/^[a-f0-9]{64}$/.test(metadata.package_sha256) ||
+    typeof metadata.owner_scope !== 'string' || !metadata.owner_scope.trim() ||
+    typeof metadata.package_version !== 'string' || !metadata.package_version.trim()) return false
+  const registrations = runtimeRegistrationsByRouter.get(router) ?? new Map<string, RuntimeRegistration>()
+  runtimeRegistrationsByRouter.set(router, registrations)
+  const previous = registrations.get(entry.mod_id)
   const prefix = `/mod/${entry.mod_id}`
-  if (!Array.isArray(metadata.routes) || !metadata.routes.length || !metadata.routes.every((route) => /^\/[A-Za-z0-9/_-]+$/.test(route.path) && route.name.startsWith(`runtime-${entry.mod_id}-`) && (route.path === prefix || route.path.startsWith(prefix + '/')))) return false
-  const revision = `${metadata.owner_scope}:${metadata.package_sha256}`
-  if (runtimeRegistrations.get(entry.mod_id)?.revision === revision) return true
-  runtimeRegistrations.get(entry.mod_id)?.remove.forEach((remove) => remove())
-  const remove = metadata.routes.map((route) => router.addRoute({
-    path: route.path,
-    name: route.name,
-    component: () => import('@/views/RuntimeModView.vue'),
-    props: { modId: entry.mod_id },
-    meta: { title: route.title, mod: entry.mod_id },
-  }))
-  runtimeRegistrations.set(entry.mod_id, { revision, remove })
-  return true
+  const names = new Set<string>(), paths = new Set<string>()
+  if (!Array.isArray(metadata.routes) || !metadata.routes.length || !metadata.routes.every(route => {
+    if (!route || typeof route.path !== 'string' || typeof route.name !== 'string' || typeof route.title !== 'string' ||
+      !/^\/[A-Za-z0-9/_-]+$/.test(route.path) || !route.name.startsWith(`runtime-${entry.mod_id}-`) ||
+      !(route.path === prefix || route.path.startsWith(prefix + '/')) ||
+      names.has(route.name) || paths.has(route.path)) return false
+    if (router.getRoutes().some(existing => (existing.name === route.name || existing.path === route.path) &&
+      !(typeof existing.name === 'string' && previous?.names.has(existing.name) && existing.meta.mod === entry.mod_id))) return false
+    names.add(route.name); paths.add(route.path)
+    return true
+  })) return false
+  const revision = JSON.stringify([metadata.owner_scope, metadata.package_sha256, metadata.package_version, metadata.routes])
+  if (previous?.revision === revision) return true
+  retireRuntimeRoutes(router, entry.mod_id)
+  const remove: (() => void)[] = []
+  try {
+    for (const route of metadata.routes) remove.push(router.addRoute({
+      path: route.path,
+      name: route.name,
+      component: () => import('@/views/RuntimeModView.vue'),
+      props: { modId: entry.mod_id },
+      meta: { title: route.title, mod: entry.mod_id },
+    }))
+    registrations.set(entry.mod_id, { revision, names, remove })
+    return true
+  } catch {
+    remove.forEach(undo => undo())
+    return false
+  }
 }
 
 /** 避免 main.ts 首屏失败、initialize 稍后成功时重复 addRoute */
@@ -186,8 +215,10 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
 
   for (const entry of entries) {
     const { mod_id } = entry
-    if (entry.runtime && registerRuntimeRoutes(router, entry)) {
-      shouldRefreshCurrentRoute = true
+    if (entry.runtime !== undefined) {
+      if (registerRuntimeRoutes(router, entry)) shouldRefreshCurrentRoute = true
+      else retireRuntimeRoutes(router, mod_id)
+      // An invalid runtime contract must never fall back to a bundled module.
       continue
     }
     if (!mod_id || registeredModIds.has(mod_id)) continue
