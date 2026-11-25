@@ -87,7 +87,7 @@ def _items_from_db(
                 q = q.filter(FinancialTransaction.counterparty_id == int(market_user_id))
             rows = q.limit(limit).all()
             for row in rows:
-                cents = int(Decimal(row.amount or 0) * 100)
+                cents = int(Decimal(str(row.amount or 0)) * 100)
                 entry = {
                     "source_type": "financial_transaction",
                     "source_id": row.id,
@@ -259,13 +259,21 @@ def rebuild_ledger_archive(*, market_user_id: int | None = None) -> dict[str, An
         }
     rebuilt = rejected = 0
     for inv in rows:
-        outcome = archive_from_crm_invoice(inv, market_user_id=market_user_id) if isinstance(inv, dict) else {"archived": False}
+        outcome = (
+            archive_from_crm_invoice(inv, market_user_id=market_user_id)
+            if isinstance(inv, dict)
+            else {"archived": False}
+        )
         rebuilt += outcome.get("archived") is True
         rejected += outcome.get("archived") is not True
     return {
         "rebuilt": rebuilt,
         "rejected": rejected,
         "complete": total == len(rows) and rejected == 0,
-        "reason_code": "invoice_source_truncated" if total != len(rows) else ("invoice_archive_rejected" if rejected else None),
+        "reason_code": (
+            "invoice_source_truncated"
+            if total != len(rows)
+            else ("invoice_archive_rejected" if rejected else None)
+        ),
         "market_user_id": market_user_id,
     }
