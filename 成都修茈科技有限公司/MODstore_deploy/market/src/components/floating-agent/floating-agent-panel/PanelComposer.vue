@@ -36,6 +36,12 @@ const agentStore = useAgentStore()
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const canSend = computed(() => Boolean(props.draft.trim() || props.hasPendingImage) && !agentStore.isLoading && !props.imagePicking)
 
+function stopReply() {
+  // Cancel the existing request through its original store/runtime.
+  // The store marks unconfirmed tool effects as unknown rather than replaying them.
+  agentStore.stopRequest()
+}
+
 function send() {
   if (canSend.value) emit('send')
 }
@@ -108,8 +114,18 @@ defineExpose({ autoResize })
         />
         <slot v-if="!corpMode" name="autonomy" />
       </div>
-      <button type="button" class="panel-send" :disabled="!canSend" aria-label="发送" @click="send">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <button
+        type="button"
+        class="panel-send"
+        :class="{ 'panel-send--stop': agentStore.isLoading }"
+        :disabled="!agentStore.isLoading && !canSend"
+        :aria-label="agentStore.isLoading ? '停止回复' : '发送'"
+        @click="agentStore.isLoading ? stopReply() : send()"
+      >
+        <svg v-if="agentStore.isLoading" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
