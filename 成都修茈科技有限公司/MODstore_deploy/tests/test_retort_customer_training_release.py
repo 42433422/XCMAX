@@ -217,6 +217,122 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
     ) == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
+def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
+    released_customer_training
+):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        no_evidence = training.postpromotion_effect_snapshot(
+            db, row, run["spec"], effects, observed_at=Clock.value + timedelta(days=1)
+        )
+        assert no_evidence["status"] == "unknown"
+        assert no_evidence["observations"] == 0
+        observation_id = str(uuid4())
+        user_id = run["users"][0]
+        enqueue(
+            db,
+            "experiment.observed",
+            run["id"],
+            {
+                "assignment_stage": "approved_rollout",
+                "request_id": run["id"],
+                "experiment_id": progress["experiment_id"],
+                "policy_digest": progress["policy_digest"],
+                "release_sha": progress["release_sha"],
+                "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                "variation_id": "1",
+                "observation_id": observation_id,
+                "subject_id": str(user_id),
+                "user_id": user_id,
+                "execution_id": str(uuid4()),
+                "success": True,
+                "customer_outcome_evidence_sha256": "b" * 64,
+                "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
+            },
+            event_id="experiment.observed:" + observation_id,
+        )
+        db.commit()
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        saved = json_loads(row.effects_json, {})["training_online_observations"]
+        assert saved["scope"] == "cumulative_absolute_observation_not_causal_lift"
+        assert len(saved["snapshots"]) == 1
+        daily = saved["snapshots"][0]
+        assert daily["status"] == "observational_only"
+        assert daily["observations"] == daily["successes"] == daily["unique_subjects"] == 1
+        assert daily["failures"] == 0
+        assert daily["independently_verified_lift"] is False
+        assert len(daily["source_events_sha256"]) == 64
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert len(json_loads(row.effects_json, {})["training_online_observations"]["snapshots"]) == 1
+
+
+def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
+    released_customer_training
+):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        observation_id = str(uuid4())
+        user_id = run["users"][0]
+        enqueue(
+            db,
+            "experiment.observed",
+            run["id"],
+            {
+                "assignment_stage": "approved_rollout",
+                "request_id": run["id"],
+                "experiment_id": progress["experiment_id"],
+                "policy_digest": progress["policy_digest"],
+                "release_sha": progress["release_sha"],
+                "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                "variation_id": "1",
+                "observation_id": observation_id,
+                "subject_id": str(user_id),
+                "user_id": user_id,
+                "execution_id": str(uuid4()),
+                "success": 1,  # bool required, a producer's 1 is not a verified success.
+                "customer_outcome_evidence_sha256": "b" * 64,
+                "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
+            },
+            event_id="experiment.observed:" + observation_id,
+        )
+        db.flush()
+        snapshot = training.postpromotion_effect_snapshot(
+            db, row, run["spec"], effects, observed_at=Clock.value + timedelta(days=1)
+        )
+        assert snapshot["status"] == "source_unverified"
+        assert snapshot["observations"] == snapshot["successes"] == 0
+        assert snapshot["independently_verified_lift"] is False
+        db.rollback()
+
+
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
 @pytest.mark.parametrize("fault", ["source", "runtime"])
 def test_customer_training_release_drift_blocks_forward_progress(
