@@ -12,7 +12,11 @@ const _conversation = ConversationItem(
   timestampText: '',
 );
 
-Widget _bubble(ChatDeliveryStatus status, VoidCallback onRead, {String body = '任务执行后等待原回执核对'}) =>
+Widget _bubble(
+  ChatDeliveryStatus status,
+  VoidCallback onRead, {
+  String body = '任务执行后等待原回执核对',
+}) =>
     MaterialApp(
       theme: AppTheme.light(),
       home: Scaffold(
