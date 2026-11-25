@@ -41,6 +41,8 @@ class MobileTaskSummary {
     required this.conversationId,
     required this.updatedAt,
     this.activeModId = '',
+    this.activeRunId = '',
+    this.attempt,
     this.employeeIds = const [],
     this.employeeAssignments = const {},
     this.outcomeUncertain = false,
@@ -57,6 +59,8 @@ class MobileTaskSummary {
   final String conversationId;
   final String updatedAt;
   final String activeModId;
+  final String activeRunId;
+  final int? attempt;
   final List<String> employeeIds;
   final Map<String, List<String>> employeeAssignments;
   final bool outcomeUncertain;
@@ -101,6 +105,8 @@ class MobileTaskSummary {
       outcomeUncertain: json['outcome_uncertain'] == true,
       taskId: _readString(json, const ['task_id']),
       activeModId: _readString(json, const ['active_mod_id']),
+      activeRunId: _readString(json, const ['active_run_id']),
+      attempt: json['attempt'] is int ? json['attempt'] as int : null,
       title: _readString(json, const ['title']),
       status: _readString(json, const ['status']),
       attentionState: _readString(json, const ['attention_state']),
