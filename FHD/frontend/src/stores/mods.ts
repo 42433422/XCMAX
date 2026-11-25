@@ -346,8 +346,11 @@ export const useModsStore = defineStore('mods', () => {
         isLoaded.value = false
         resetModFacadeProbes()
       }
+      const sessionCurrent = captureAuthSession()
       const r = await fetchModsWithRetry()
       const authoritativeRoutes = await fetchModRoutes()
+      // Ignore a finished old account initialization after A -> B -> A switches.
+      if (!sessionCurrent()) return
       if (r.modsDisabled) {
         setActiveModId('')
         isLoaded.value = true
@@ -383,9 +386,13 @@ export const useModsStore = defineStore('mods', () => {
         const { registerAllModRoutesFromGlob, registerModRoutes, retireStaleRuntimeRoutes } = await import('@/router/registerModRoutes')
         const router = (await import('@/router')).default
         await registerAllModRoutesFromGlob(router)
+        if (!sessionCurrent()) {
+          retireStaleRuntimeRoutes(router)
+          return
+        }
         if (authoritativeRoutes !== null) {
-          // The server's empty list revokes runtime routes; a failed read does not.
-          await registerModRoutes(router, authoritativeRoutes, { reconcileRuntime: true })
+          // Revocation requires the same account that issued the original GET.
+          await registerModRoutes(router, authoritativeRoutes, { reconcileRuntime: true, sessionCurrent })
         } else {
           retireStaleRuntimeRoutes(router)
         }
