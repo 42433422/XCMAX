@@ -317,6 +317,10 @@ def promote_goal(
             or (not target.get("decision_id") and target.get("status") != "proposed")
         ):
             raise LifePolicyError("原经营候选已改变，提案未绑定")
+        if goal.get("candidate_origin") == ORIGIN and (
+            governance_gate(target, current["goals"], now=utcnow())["status"] != "reviewable"
+        ):
+            raise LifePolicyError("并发状态中的原目标已冲突、过期或来源被更改，禁止绑定")
         if target.get("decision_id") not in (None, "", decision_id):
             raise LifePolicyError("目标已绑定另一个提案")
         if target.get("decision_id") == decision_id:
