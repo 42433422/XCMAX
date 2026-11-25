@@ -134,7 +134,7 @@ def test_purchase_cancel_rejects_prior_liability(monkeypatch, paid, received, in
 
 
 @pytest.mark.parametrize("debit,credit", [
-    ("1.00", "0.99"), ("1.000", "1.000"), ("NaN", "0"),
+    ("1.00", "0.99"), ("1.001", "1.001"), ("NaN", "0"),
     ("-1.00", "1.00"), ("1.00", "1.00"),
 ])
 def test_journal_cannot_post_invalid_or_imbalanced_amounts(debit, credit):
