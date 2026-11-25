@@ -639,6 +639,9 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
     for event in records:
         item = json_loads(event.payload_json, {})
         if not isinstance(item, dict) or item.get("assignment_stage") != "approved_rollout":
+            # This stream is exclusively for approved-rollout terminal receipts.
+            # A malformed or misrouted row is not equivalent to no observation.
+            unverified = True
             continue
         completed = aware(item.get("completed_at"))
         assigned = aware(item.get("assigned_at"))
@@ -648,8 +651,7 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         completed = completed.astimezone(UTC)
         assigned = assigned.astimezone(UTC)
         if not start <= assigned <= completed <= now:
-            if completed > now or assigned < start:
-                unverified = True
+            unverified = True
             continue
         if (
             item.get("request_id") != row.id

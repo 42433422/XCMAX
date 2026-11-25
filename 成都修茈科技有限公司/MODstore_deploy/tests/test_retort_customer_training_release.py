@@ -305,8 +305,9 @@ def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
         assert len(json_loads(row.effects_json, {})["training_online_observations"]["snapshots"]) == 1
 
 
+@pytest.mark.parametrize("fault", ["non_boolean", "wrong_stage", "reverse_time", "malformed_json"])
 def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
-    released_customer_training
+    released_customer_training, fault
 ):
     from modstore_server.eventing.db_outbox import enqueue
 
@@ -323,12 +324,12 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         progress = effects["experiment"]
         observation_id = str(uuid4())
         user_id = run["users"][0]
-        enqueue(
+        event = enqueue(
             db,
             "experiment.postpromotion_observed",
             run["id"],
             {
-                "assignment_stage": "approved_rollout",
+                "assignment_stage": "trial" if fault == "wrong_stage" else "approved_rollout",
                 "request_id": run["id"],
                 "experiment_id": progress["experiment_id"],
                 "policy_digest": progress["policy_digest"],
@@ -339,13 +340,18 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
                 "subject_id": str(user_id),
                 "user_id": user_id,
                 "execution_id": str(uuid4()),
-                "success": 1,  # bool required, a producer's 1 is not a verified success.
+                "success": 1 if fault == "non_boolean" else True,
                 "customer_outcome_evidence_sha256": "b" * 64,
-                "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                "assigned_at": (
+                    Clock.value + timedelta(seconds=3 if fault == "reverse_time" else 1)
+                ).isoformat(),
                 "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
             },
             event_id="experiment.postpromotion_observed:" + observation_id,
         )
+        assert event is not None
+        if fault == "malformed_json":
+            event.payload_json = "{"
         db.flush()
         snapshot = training.postpromotion_effect_snapshot(
             db, row, run["spec"], effects, observed_at=Clock.value + timedelta(days=1)
@@ -353,6 +359,11 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         assert snapshot["status"] == "source_unverified"
         assert snapshot["observations"] == snapshot["successes"] == 0
         assert snapshot["independently_verified_lift"] is False
+        from modstore_server.retort_workflow_metrics import postpromotion_stop_reason
+
+        assert postpromotion_stop_reason(db, row, run["spec"]) == (
+            "workflow_postpromotion_source_unverified"
+        )
         db.rollback()
 
 
