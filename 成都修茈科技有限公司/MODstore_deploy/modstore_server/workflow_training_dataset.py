@@ -191,6 +191,62 @@ def seal_business_evidence(bundle, tests, verified, verdict):
             "holdout_verified": False,
             "reason": "training_business_execution_unverified",
         }
+    # A caller-provided success flag is not proof of a native customer replay.
+    # Bind BOTH arms to the frozen original source manifest and readback hashes,
+    # without accepting a model's self-declared runtime or artifact identity.
+    from modstore_server.workflow_training_replay import validate_replay_manifest
+
+    for index, test in enumerate(tests):
+        replay = (test["vars"].get("generation_context") or {}).get("customer_business_replay")
+        identity = validate_replay_manifest(replay)
+        for arm in (0, 1):
+            evidence = verified[arm, index].get("business_evidence")
+            if not isinstance(evidence, dict):
+                raise ValueError("training_business_evidence_missing")
+            output = evidence.get("output_sha256")
+            source_bound = (
+                all(
+                    evidence.get(key) == identity.get(key)
+                    for key in (
+                        "manifest_sha256",
+                        "source_group_sha256",
+                        "expected_reference_sha256",
+                    )
+                )
+                and all(
+                    evidence.get(key) == replay.get(key)
+                    for key in ("contract_sha256", "source_evidence_sha256")
+                )
+                and all(
+                    isinstance(evidence.get(key), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", evidence[key])
+                    for key in (
+                        "manifest_sha256",
+                        "source_group_sha256",
+                        "expected_reference_sha256",
+                        "contract_sha256",
+                        "source_evidence_sha256",
+                    )
+                )
+                and isinstance(output, dict)
+                and all(
+                    isinstance(path, str)
+                    and bool(path)
+                    and isinstance(sha, str)
+                    and re.fullmatch(r"[0-9a-f]{64}", sha)
+                    for path, sha in output.items()
+                )
+                and (verified[arm, index]["pass"] is False or bool(output))
+            )
+            if not source_bound:
+                return {
+                    **verdict,
+                    "improved": False,
+                    "verdict": "keep_baseline",
+                    "runtime_verified": False,
+                    "holdout_verified": False,
+                    "reason": "training_business_evidence_origin_unverified",
+                }
     development = [index for index, partition in enumerate(partitions) if partition == "development"]
     holdout = [index for index, partition in enumerate(partitions) if partition == "holdout"]
     holdout_passed = bool(holdout) and all(verified[1, index]["pass"] is True for index in holdout)
