@@ -198,6 +198,13 @@ def apply_notify_paid(
             )
             return "trade_mismatch", dict(o)
 
+        # A delayed paid callback cannot undo a closed/refunded state or
+        # override an unresolved refund. Hold the identity for reconciliation.
+        if o.get("status") in {
+            "closed", "refunded", "refund_requested", "refund_pending_reconciliation"
+        }:
+            return "terminal_order_conflict", dict(o)
+
         now = _utc_iso()
         if o.get("status") == "paid":
             o["notify_count"] = int(o.get("notify_count") or 0) + 1
