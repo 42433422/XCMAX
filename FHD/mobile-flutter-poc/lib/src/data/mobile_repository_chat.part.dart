@@ -205,9 +205,22 @@ abstract class _RepoChatBase extends _RepoRelayBase {
             await cache(ChatRole.assistant, reply);
             return reply;
           }
-          // Post-dispatch transport errors are wrapped by the API as unknown.
-          // A raw socket error here occurred while opening the connection.
-          if (sseError is! SocketException) rethrow;
+          // Even a raw socket error cannot prove the server did not accept
+          // the POST. Failing over to relay would create a second execution.
+          // Read the stable original turn on the original LAN backend only.
+          if (sseError is SocketException) {
+            final reply = await _client.readSuperEmployeeTurn(
+              tool: tool,
+              conversationId: conversation.id,
+              idempotencyKey: idempotencyKey,
+              baseUrl: localBaseUrl,
+              expectedConnectionBase: base,
+            );
+            _throwIfCancelled(isCancelled);
+            await cache(ChatRole.assistant, reply);
+            return reply;
+          }
+          rethrow;
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
