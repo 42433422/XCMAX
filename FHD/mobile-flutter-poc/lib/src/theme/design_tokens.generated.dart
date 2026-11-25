@@ -29,7 +29,7 @@ abstract final class DesignTokens {
   static const Color colorsNeutralLightN200 = Color(0xFFDEE0E3);
   static const Color colorsNeutralLightN300 = Color(0xFFC9CDD4);
   static const Color colorsNeutralLightN400 = Color(0xFF8F959E);
-  static const Color colorsNeutralLightN500 = Color(0xFF646A73);
+  static const Color colorsNeutralLightN500 = Color(0xFF626871);
   static const Color colorsNeutralLightN600 = Color(0xFF494E56);
   static const Color colorsNeutralLightN700 = Color(0xFF33363D);
   static const Color colorsNeutralLightN800 = Color(0xFF1F2329);
@@ -118,7 +118,7 @@ abstract final class DesignTokens {
   static const Color semanticLightSurface = Color(0xFFFFFFFF);
   static const Color semanticLightSurfaceHigh = Color(0xFFE8E9EB);
   static const Color semanticLightTextPrimary = Color(0xFF1F2329);
-  static const Color semanticLightTextSecondary = Color(0xFF646A73);
+  static const Color semanticLightTextSecondary = Color(0xFF626871);
   static const Color semanticLightBorder = Color(0xFFDEE0E3);
   static const Color semanticLightPrimary = Color(0xFF5B5DE5);
   static const Color semanticDarkPage = Color(0xFF1A1A1A);
