@@ -9,7 +9,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.domain.task_lifecycle.results import execution_result_error, execution_result_outcome_unknown
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_outcome_unknown,
+)
 
 
 class AgentRuntimeContractError(ValueError):
