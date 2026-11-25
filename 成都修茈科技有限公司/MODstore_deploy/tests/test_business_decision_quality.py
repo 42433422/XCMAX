@@ -198,3 +198,50 @@ def test_owner_scoped_quality_route_uses_authenticated_identity(monkeypatch):
         assert response.status_code == 200
         assert response.json() == {"owner_user_id": 7}
     assert calls == [7]
+
+
+
+def test_due_time_does_not_score_future_business_measurement():
+    proposal, state, as_of = _example()
+    # The original result can be present in a ledger, but it is not a mature
+    # independent measurement until the registered window actually closes.
+    before_due = datetime.fromisoformat(
+        state["hypothesis_outcomes"]["op-1"]["window_end"]
+    ) - timedelta(seconds=1)
+    assert before_due < as_of
+    assert review.evaluate_review(proposal, state, before_due) == {
+        "status": "pending_or_unknown_independent_measurement",
+        "option_id": "op-1",
+    }
+
+
+def test_no_action_remains_feasible_when_every_executable_option_is_ineligible(
+    database, monkeypatch
+):
+    from tests.test_strategic_portfolio import limits, opportunity
+
+    monkeypatch.setattr(review, "get_session_factory", lambda: database)
+    # No execution binding and high risk must not be silently converted into
+    # a permission to execute. The explicit abstention has a zero reservation.
+    primary = opportunity(
+        "risk-blocked", risk="high", execution_binding={}, source_refs=["incident:1"]
+    )
+    decision, selected = review.compare_options(
+        owner=7,
+        primary=primary,
+        limits=limits(max_parallel=1),
+        alternatives=[],
+        context_sha256=digest("frozen-context"),
+        evidence_refs=["incident:1"],
+        request_sha256=digest("request"),
+    )
+    abstain = decision["options"][0]
+    assert abstain["option_id"] == "no_action"
+    assert abstain["feasible"] is True
+    assert abstain["reservation_cap"] == dict.fromkeys(review.RESOURCES, 0)
+    assert abstain["forecast"]["status"] == "unknown_counterfactual_not_observed"
+    assert abstain["forecast"]["direct_new_action_cost_cents"] == 0
+    assert decision["selected_for_approval"] == "no_action"
+    assert decision["selection_basis"] == "no_action_no_feasible_option"
+    assert decision["authority"] == "existing_portfolio_approval_required"
+    assert selected == []
