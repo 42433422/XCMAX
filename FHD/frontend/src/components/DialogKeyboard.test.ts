@@ -42,6 +42,31 @@ describe('dialog keyboard boundaries', () => {
     expect(document.activeElement).toBe(launcher)
   })
 
+  it('keeps focus and Escape in teleported Element Plus menus until they close', async () => {
+    const { launcher } = await openHost(defineComponent({
+      components: { ConfirmDialog }, setup: () => ({ open: ref(false) }),
+      template: '<button data-launch @click="open = true">设置</button><ConfirmDialog v-model="open" title="配置" />',
+    }))
+    const dialog = document.querySelector<HTMLElement>('.confirm-dialog')!
+    const cancel = dialog.querySelector<HTMLButtonElement>('button')!
+    const popper = document.createElement('div')
+    popper.className = 'el-popper'
+    popper.innerHTML = '<button type="button">外层菜单项</button>'
+    document.body.append(popper)
+    const menuButton = popper.querySelector<HTMLButtonElement>('button')!
+    menuButton.focus()
+    expect(document.activeElement).toBe(menuButton)
+    key(menuButton, 'Escape')
+    await flushPromises()
+    expect(document.querySelector('.confirm-dialog')).not.toBeNull()
+    popper.remove()
+    cancel.focus()
+    key(cancel, 'Escape')
+    await flushPromises()
+    expect(document.querySelector('.confirm-dialog')).toBeNull()
+    expect(document.activeElement).toBe(launcher)
+  })
+
   it('keeps nested AppDialogHost keyboard actions inside the top dialog and restores each prior focus', async () => {
     const { launcher } = await openHost(defineComponent({
       components: { Modal, AppDialogHost },
