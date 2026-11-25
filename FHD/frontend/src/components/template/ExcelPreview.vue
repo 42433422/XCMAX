@@ -40,8 +40,8 @@
               class="excel-cell"
               :class="{ 'has-content': getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex) }"
             >
-              <span v-if="getCellContent(rowIndex, colIndex)" class="cell-text">
-                {{ getCellContent(rowIndex, colIndex) }}
+              <span v-if="getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex)" class="cell-text">
+                {{ getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex) }}
               </span>
             </div>
           </div>
