@@ -190,17 +190,17 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
     ? main.getBounds()
     : { x: 40, y: 40, width: 1180, height: 760 }
   const index = liveAuxiliaryWindows().length + 1
+  // Keep the offset on the originating display, even at mixed-DPI or negative coordinates.
+  const workArea = screen.getDisplayMatching(origin).workArea
+  const bounds = clampWindowBounds({ ...origin, x: origin.x + 28 * index, y: origin.y + 28 * index }, workArea)
   const icon = shellIconPath()
   const partition = nextAuxiliaryPartition()
   const isolated = session.fromPartition(partition)
   const win = new BrowserWindow({
     ...(fs.existsSync(icon) ? { icon } : {}),
-    x: origin.x + 28 * index,
-    y: origin.y + 28 * index,
-    width: origin.width,
-    height: origin.height,
-    minWidth: 960,
-    minHeight: 640,
+    ...bounds,
+    minWidth: Math.min(DESKTOP_MIN_WIDTH, workArea.width),
+    minHeight: Math.min(DESKTOP_MIN_HEIGHT, workArea.height),
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
     show: true,
@@ -373,8 +373,8 @@ export async function createWindow(): Promise<void> {
   const initialBounds = clampWindowBounds(savedBounds, display.workArea)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
     ...initialBounds,
-    minWidth: DESKTOP_MIN_WIDTH,
-    minHeight: DESKTOP_MIN_HEIGHT,
+    minWidth: Math.min(DESKTOP_MIN_WIDTH, display.workArea.width),
+    minHeight: Math.min(DESKTOP_MIN_HEIGHT, display.workArea.height),
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
     // Avoid exposing an empty native surface before the local splash has painted.
