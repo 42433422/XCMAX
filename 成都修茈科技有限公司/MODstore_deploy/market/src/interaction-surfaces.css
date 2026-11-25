@@ -14,8 +14,8 @@
 /* Never animate the Popper node's transform: Floating UI / Popper uses it for placement. */
 .el-popper:is(.el-popover, .el-dropdown__popper, .el-select__popper, .el-tooltip__popper) {
   box-sizing: border-box;
-  max-width: calc(100vw - 24px);
-  max-width: calc(100dvw - 24px);
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
 }
 .el-popper:is(.el-popover, .el-dropdown__popper, .el-select__popper) {
   border-radius: var(--xc-token-radius-medium);
@@ -30,14 +30,14 @@
 .el-popper :is(button, [role='menuitem'], [role='option']):focus-visible,
 .el-dialog :is(button, input, textarea, select):focus-visible,
 .el-drawer :is(button, input, textarea, select):focus-visible {
-  outline: 2px solid var(--el-color-primary);
-  outline-offset: 2px;
+  outline: var(--xc-token-focus-ring-width) solid var(--el-color-primary);
+  outline-offset: calc(var(--xc-token-spacing-xs) / 2);
 }
 .el-overlay .el-dialog {
   box-sizing: border-box;
-  max-width: calc(100vw - 24px);
-  max-width: calc(100dvw - 24px);
-  max-height: calc(100dvh - 24px);
+  max-width: calc(100vw - var(--xc-token-spacing-xxl));
+  max-width: calc(100dvw - var(--xc-token-spacing-xxl));
+  max-height: calc(100dvh - var(--xc-token-spacing-xxl));
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: var(--xc-token-radius-large);
@@ -52,16 +52,16 @@
   --el-dialog-bg-color: var(--wb-dialog-bg, var(--color-bg-elevated));
   --el-text-color-primary: var(--wb-dialog-text, var(--color-text-primary));
   --el-text-color-regular: var(--wb-dialog-text-muted, var(--color-text-secondary));
-  width: min(400px, calc(100dvw - 24px)) !important;
+  width: min(400px, calc(100dvw - var(--xc-token-spacing-xxl))) !important;
   padding: var(--xc-token-spacing-lg);
   background: var(--el-dialog-bg-color);
   color: var(--el-text-color-primary);
   border: 1px solid var(--wb-dialog-border, var(--color-border-subtle));
-  box-shadow: 0 8px 24px var(--xc-token-market-global-black-alpha-12);
+  box-shadow: 0 var(--xc-token-spacing-sm) var(--xc-token-spacing-xxl) var(--xc-token-market-global-black-alpha-12);
 }
 .app-confirm-dialog .el-dialog__title {
   color: var(--el-text-color-primary);
-  font-weight: 600;
+  font-weight: var(--xc-token-font-weights-semibold);
 }
 .app-confirm-dialog .app-confirm-dialog__message {
   color: var(--el-text-color-regular);
