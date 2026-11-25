@@ -129,6 +129,24 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('foreground approval polling reflects another terminal without writing',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ApprovalDetailScreen(id: 42, repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.widget<WeBlockButton>(find.widgetWithText(WeBlockButton, '通过')).enabled, isTrue);
+    final reads = repo.reads;
+    repo.pending = false;
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(repo.reads, greaterThan(reads));
+    expect(find.text('approved'), findsOneWidget);
+    expect(tester.widget<WeBlockButton>(find.widgetWithText(WeBlockButton, '通过')).enabled, isFalse);
+    expect(repo.writes, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('lost approval receipt blocks repeated writes',
       (tester) async {
     repo.loseWriteReceipt = true;
