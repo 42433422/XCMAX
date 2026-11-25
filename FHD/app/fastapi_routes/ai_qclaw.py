@@ -9,7 +9,7 @@ Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出；现 Q
 - ``POST /api/ai/qclaw/openclaw/config``
 - ``POST /api/ai/qclaw/whitelist``
 - ``POST /api/ai/qclaw/test-route``
-- ``POST /api/ai/qclaw/openclaw/chat``
+- ``POST /api/ai/qclaw/openclaw/chat``（迁移期间仅返回停用状态，不执行外发）
 
 运行时状态 SSOT 已迁至 :data:`app.application.aiopen.service.AIOPEN_STATE`；
 ``_QCLOW_RUNTIME_STATE`` 保留为其别名，旧 batch2（wechat 相关）导入不受影响。
@@ -24,11 +24,9 @@ from fastapi import APIRouter, Body, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from app.application.agent_orchestrator.chat_trace import (
-    attach_chat_trace_run,
-    create_chat_trace_run,
-)
-from app.application.aiopen.service import AIOPEN_STATE, openclaw_chat_proxy, verify_api_key
+from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+from app.application.aiopen.service import AIOPEN_STATE, verify_api_key
+from app.fastapi_routes.aiopen_route_support import retired_openclaw_chat_response
 from app.infrastructure.auth.dependencies import require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -225,20 +223,4 @@ def ai_qclaw_openclaw_chat(
     message = str(body.get("message") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
-    payload, status = openclaw_chat_proxy(message)
-    payload = attach_chat_trace_run(
-        payload,
-        message=message,
-        runtime_context={
-            "route": "/api/ai/qclaw/openclaw/chat",
-            "source": "qclaw",
-            "external_gateway": "openclaw",
-        },
-        user_id="aiopen-api-key",
-        source="qclaw",
-        channel="qclaw_openclaw",
-        intent="external_openclaw_chat",
-    )
-    if status == 200:
-        return payload
-    return JSONResponse(payload, status_code=status)
+    return retired_openclaw_chat_response()

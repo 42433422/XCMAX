@@ -24,42 +24,6 @@ from app.infrastructure.auth.dependencies import require_admin_user
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
-    client,
-    _shared_literal_0,
-    _shared_literal_1,
-    _shared_literal_2,
-    _shared_literal_3,
-    _shared_literal_4,
-    _shared_literal_5,
-):
-    repo = InMemoryAgentRunRepository()
-    with (
-        patch(_shared_literal_3, return_value=({"success": True, "data": {"answer": "pong"}}, 200)),
-        patch(
-            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
-            return_value=repo,
-        ),
-    ):
-        resp = client.post(
-            _shared_literal_4, json={"message": "hello", "user_id": _shared_literal_5}
-        )
-    assert resp.status_code == 200
-    body = resp.json()
-    run_id = body["run_id"]
-    assert body["agent_run_id"] == run_id
-    assert body["data"]["run_id"] == run_id
-    assert body["data"]["answer"] == "pong"
-    run = repo.get(run_id)
-    assert run is not None
-    assert run.status == "completed"
-    assert run.user_id == "aiopen-api-key"
-    assert run.intent == "external_openclaw_chat"
-    assert run.metadata["channel"] == _shared_literal_0
-    assert run.metadata["source"] == _shared_literal_1
-    assert run.metadata["runtime_context"]["route"] == _shared_literal_2
-
-
 @pytest.fixture()
 def admin_actor(trusted_actor):
     return trusted_actor(user_id=73, role="admin", tier="admin", tenant_id=None)
@@ -553,28 +517,25 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
     AIOPEN_STATE["wechat_open"] = False
 
 
-def test_aiopen_openclaw_chat_attaches_agent_run(client):
-    return _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
-        client,
-        "aiopen_openclaw",
-        "aiopen",
-        "/api/aiopen/openclaw/chat",
-        "app.fastapi_routes.ai_open.openclaw_chat_proxy",
-        "/api/aiopen/openclaw/chat",
-        "aiopen-user",
-    )
+@pytest.mark.parametrize("path", ["/api/aiopen/openclaw/chat", "/api/ai/qclaw/openclaw/chat"])
+def test_legacy_openclaw_chat_does_not_dispatch_or_create_receipt(client, path):
+    with (
+        patch.object(aiopen_service, "openclaw_chat_proxy") as proxy,
+        patch("app.application.agent_orchestrator.chat_trace.get_agent_run_repository") as repo,
+    ):
+        response = client.post(path, json={"message": "send", "user_id": "forged"})
+    assert response.status_code == 410
+    body = response.json()
+    assert body["success"] is False
+    assert body["error_code"] == "openclaw_legacy_route_retired"
+    assert body["execution_state"] == "not_started"
+    assert body["retryable"] is False
+    assert "run_id" not in body and "agent_run_id" not in body
+    proxy.assert_not_called()
+    repo.assert_not_called()
 
 
-def test_qclaw_openclaw_chat_attaches_agent_run(client):
-    return _assert_shared_aiopen_openclaw_chat_attaches_agent_run_0(
-        client,
-        "qclaw_openclaw",
-        "qclaw",
-        "/api/ai/qclaw/openclaw/chat",
-        "app.fastapi_routes.ai_qclaw.openclaw_chat_proxy",
-        "/api/ai/qclaw/openclaw/chat",
-        "qclaw-user",
-    )
+
 
 
 def test_screen_ws_command_roundtrip(client, monkeypatch):

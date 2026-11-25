@@ -36,10 +36,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.application.agent_orchestrator.chat_trace import (
-    attach_chat_trace_run,
-    create_chat_trace_run,
-)
+from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
 from app.application.aiopen.catalog_builder import (
     entity_schema,
     find_operation,
@@ -66,7 +63,6 @@ from app.application.aiopen.service import (
     invoke_tool,
     is_path_whitelisted,
     list_api_keys,
-    openclaw_chat_proxy,
     record_api_key_use,
     required_operation_scope,
     revoke_api_key,
@@ -78,6 +74,7 @@ from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
 from app.fastapi_routes.aiopen_route_support import (
     create_client_router,
     handle_mcp_message,
+    retired_openclaw_chat_response,
     safe_control_payload,
     trace_control_result,
     trace_tool_call,
@@ -769,23 +766,7 @@ def aiopen_openclaw_chat(
     message = str(body.get("message") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
-    payload, status = openclaw_chat_proxy(message)
-    payload = attach_chat_trace_run(
-        payload,
-        message=message,
-        runtime_context={
-            "route": "/api/aiopen/openclaw/chat",
-            "source": "aiopen",
-            "external_gateway": "openclaw",
-        },
-        user_id="aiopen-api-key",
-        source="aiopen",
-        channel="aiopen_openclaw",
-        intent="external_openclaw_chat",
-    )
-    if status == 200:
-        return payload
-    return JSONResponse(payload, status_code=status)
+    return retired_openclaw_chat_response()
 
 
 # ---------------------------------------------------------------------------

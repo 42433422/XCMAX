@@ -82,9 +82,7 @@ def _all_mocks(**extra: Any):
         },
         "build_mcp_install_bundle": {"install_url": ""},
         "format_tool_result_text": "ok",
-        "openclaw_chat_proxy": ({"success": True, "message": "ok"}, 200),
         "create_chat_trace_run": MagicMock(return_value=_MOCK_RUN),
-        "attach_chat_trace_run": {"success": True, "message": "ok"},
         "AIOPEN_STATE": _AIOPEN_STATE_DICT,
         "aiopen_cursor_hub": _HUB_MOCK,
     }
@@ -102,8 +100,6 @@ def _all_mocks(**extra: Any):
         "build_mcp_install_bundle",
         "generate_api_key",
         "format_tool_result_text",
-        "openclaw_chat_proxy",
-        "attach_chat_trace_run",
         "create_chat_trace_run",
     }
 
@@ -570,35 +566,17 @@ def test_openclaw_chat_whitespace_message_returns_400(client):
 
 
 # ===========================================================================
-# 19. aiopen_openclaw_chat – proxy returns status != 200 → JSONResponse
-#     Lines 547-549
+# 19. aiopen_openclaw_chat – retired raw gateway
 # ===========================================================================
 
 
-def test_openclaw_chat_proxy_non_200_returns_json_response():
-    """When openclaw_chat_proxy returns status=503, route must return JSONResponse."""
-    error_payload = {"success": False, "message": "upstream error"}
-    with _all_mocks(
-        openclaw_chat_proxy=(error_payload, 503),
-        attach_chat_trace_run=error_payload,
-    ):
-        c = _make_client()
-        resp = c.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
-    assert resp.status_code == 503
-    assert resp.json()["success"] is False
-
-
-def test_openclaw_chat_proxy_200_returns_dict():
-    """When proxy returns 200, route returns the payload dict directly (not JSONResponse)."""
-    ok_payload = {"success": True, "message": "pong"}
-    with _all_mocks(
-        openclaw_chat_proxy=(ok_payload, 200),
-        attach_chat_trace_run=ok_payload,
-    ):
-        c = _make_client()
-        resp = c.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
+def test_openclaw_chat_retired_without_execution(client):
+    with patch("app.application.aiopen.service.openclaw_chat_proxy") as proxy:
+        resp = client.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
+    assert resp.status_code == 410
+    assert resp.json()["execution_state"] == "not_started"
+    assert resp.json()["retryable"] is False
+    proxy.assert_not_called()
 
 
 # ===========================================================================
