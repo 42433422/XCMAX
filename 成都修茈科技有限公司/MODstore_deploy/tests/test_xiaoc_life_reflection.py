@@ -326,8 +326,24 @@ def test_original_owner_review_and_revocation_are_idempotent(
     with pytest.raises(LifePolicyError):
         review_experience(**{**args, "expected_revision": after["revision"]}, action="reject")
 
-    # A later receipt that cannot reproduce the frozen candidate removes it
-    # from recall even though its historic review remains immutable.
+    # Revoke while the original business source remains valid. A fresh SQL
+    # read must hide the previously confirmed experience without relying on
+    # an unrelated source invalidation; a stale confirm cannot resurrect it.
+    revoked = review_experience(**{**args, "expected_revision": after["revision"]}, action="revoke")
+    assert revoked["status"] == "revoked"
+    assert review_experience(**args, action="revoke") == revoked
+    assert not life.read_state()["experience_review_facts"]
+    with database() as session:
+        from modstore_server.xiaoc_life_experience_review import review_facts
+
+        assert not review_facts(session, life.read_state())
+    with pytest.raises(LifePolicyError):
+        review_experience(
+            **{**args, "expected_revision": revoked["revision"]},
+            action="confirm",
+        )
+
+    # Even after a late source change, replay cannot resurrect revoked facts.
     with database() as session:
         row = session.scalar(
             select(StrategicDecision).where(StrategicDecision.decision_id == decision_id)
@@ -336,10 +352,6 @@ def test_original_owner_review_and_revocation_are_idempotent(
         saved["reviews"][-1]["observation_complete"] = False
         row.execution_result_json = json.dumps(saved)
         session.commit()
-    assert not life.read_state()["experience_review_facts"]
-    revoked = review_experience(**{**args, "expected_revision": after["revision"]}, action="revoke")
-    assert revoked["status"] == "revoked"
-    assert review_experience(**args, action="revoke") == revoked
     assert not life.read_state()["experience_review_facts"]
     with database() as session:
         reviews = list(
