@@ -682,6 +682,7 @@ class CyclePorts:
                 )
             except LifePolicyError as exc:
                 goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
                 return {
                     "goals": [goal],
                     "status": "completed",
@@ -694,6 +695,7 @@ class CyclePorts:
             self.details["operating_employee_preflight"] = preflight
             if preflight["status"] != "registered_unverified":
                 goal["blocked_reason"] = preflight["reason"]
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
                 return {
                     "goals": [goal],
                     "status": "completed",
@@ -711,6 +713,7 @@ class CyclePorts:
                 )
             except PortfolioError as exc:
                 goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
                 return {
                     "goals": [goal],
                     "status": "completed",
@@ -719,6 +722,7 @@ class CyclePorts:
             self.active()
             if not proposal.get("decision"):
                 goal["blocked_reason"] = "awaiting_feasible_review_option"
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
                 return {
                     "goals": [goal],
                     "status": "completed",
