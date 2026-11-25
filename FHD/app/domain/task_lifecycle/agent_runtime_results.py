@@ -5,7 +5,11 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal
 
-from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    canonical_digest,
+    goal_answers,
+    goal_report_coverage,
+)
 from app.domain.task_lifecycle.results import (
     execution_result_error,
     execution_result_outcome_unknown,
@@ -52,8 +56,18 @@ def receipt_state(row: dict[str, Any]) -> str:
 def receipt_verified(row: dict[str, Any]) -> bool:
     """Only host-backed, settled receipts can be presented as verified operations."""
     receipt = row.get("receipt")
+    if not isinstance(receipt, dict):
+        return False
+    try:
+        fingerprint = canonical_digest({key: row.get(key) for key in ("tool_id", "action", "params")})
+    except (TypeError, ValueError):
+        return False
     return (
-        isinstance(receipt, dict)
+        bool(row.get("child_run_id"))
+        and bool(row.get("child_task_id"))
+        and row.get("fingerprint") == fingerprint
+        and receipt.get("run_id") == row["child_run_id"]
+        and receipt.get("task_id") == row["child_task_id"]
         and receipt_state(row) == "completed"
         and receipt.get("success") is True
         and receipt.get("verified") is True
