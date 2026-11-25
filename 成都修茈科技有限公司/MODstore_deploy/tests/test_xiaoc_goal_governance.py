@@ -176,6 +176,83 @@ def test_read_only_governance_projection_does_not_approve_or_mutate(operating):
     assert goal.get("decision_id") is None
 
 
+def test_autonomous_review_compiles_two_safe_original_opportunities(operating):
+    from modstore_server.xiaoc_goal_management import compile_autonomous_review_plan
+
+    now, value, state, goal, _ = operating
+    limits = {
+        "cost_cents": 7, "tokens": 5, "compute_seconds": 5,
+        "expires_at": (now + timedelta(days=1)).isoformat(),
+    }
+    policy = {"employee_id": "existing-employee", "task_input": {}, "portfolio_limits": limits}
+    rows, bindings = compile_autonomous_review_plan(
+        goal, owner=17, policy=policy, goals=state["goals"], current_value=value, now=now
+    )
+    assert [row["opportunity_id"] for row in rows] == [
+        bindings["inspect"], bindings["plan"]
+    ]
+    assert rows[1]["depends_on"] == [rows[0]["opportunity_id"]]
+    assert all(row["input_data"] == {} and row["risk"] == "medium" for row in rows)
+    assert sum(row["tokens"] for row in rows) == 5
+    assert sum(row["cost_cents"] for row in rows) == 7
+    assert sum(row["compute_seconds"] for row in rows) == 5
+    assert all(not row["customer_goal_bindings"] for row in rows)
+    with pytest.raises(LifePolicyError):
+        compile_autonomous_review_plan(
+            goal, owner=17, policy={**policy, "task_input": {"unexpected": "write"}},
+            goals=state["goals"], current_value=value, now=now,
+        )
+    with pytest.raises(LifePolicyError):
+        compile_autonomous_review_plan(
+            goal, owner=17, policy=policy, goals=state["goals"],
+            current_value={**value, "status": "unknown"}, now=now,
+        )
+    with pytest.raises(LifePolicyError):
+        compile_autonomous_review_plan(
+            goal, owner=17,
+            policy={**policy, "portfolio_limits": {**limits, "compute_seconds": 1}},
+            goals=state["goals"], current_value=value, now=now,
+        )
+
+
+def test_autonomous_discovery_still_only_submits_review_proposal(operating, monkeypatch):
+    import asyncio
+
+    from modstore_server.xiaoc_life_runtime import CyclePorts
+    from modstore_server import strategy_business_context, strategic_portfolio, xiaoc_self_model
+
+    now, value, state, goal, _ = operating
+    limits = {
+        "cost_cents": 7, "tokens": 5, "compute_seconds": 5,
+        "expires_at": (now + timedelta(days=1)).isoformat(),
+    }
+    state["policy"] = {
+        "employee_id": "existing-employee", "task_input": {}, "portfolio_limits": limits,
+    }
+    monkeypatch.setattr(strategy_business_context, "customer_value_context", lambda: value)
+    monkeypatch.setattr(
+        xiaoc_self_model, "employee_preflight",
+        lambda employee, owner: {"status": "registered_unverified", "reason": ""},
+    )
+    proposals = []
+
+    def create_proposal(**kwargs):
+        proposals.append(kwargs)
+        return {"decision": {"decision_id": "pending-original-approval"}}
+
+    monkeypatch.setattr(strategic_portfolio, "create_portfolio_proposal", create_proposal)
+    ports = CyclePorts({"domain": "enterprise", "owner_user_id": 17, "state": state})
+    monkeypatch.setattr(ports, "active", lambda: None)
+    result = asyncio.run(ports.act({"discovered_goals": [goal]}))
+    assert result["status"] == "completed"
+    assert result["goals"][0]["status"] == "awaiting_approval"
+    assert result["goals"][0]["decision_id"] == "pending-original-approval"
+    assert len(proposals) == 1
+    assert proposals[0]["owner_user_id"] == 17
+    assert all(row["input_data"] == {} for row in proposals[0]["opportunities"])
+    assert "approved" not in result["summary"]
+
+
 def test_candidate_management_revision_events_and_never_cancels_bound_execution(
     operating, monkeypatch
 ):
