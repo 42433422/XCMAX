@@ -201,13 +201,16 @@ onBeforeUnmount(() => {
   user-select: none;
   -webkit-user-select: none;
   transition:
-    transform 180ms ease,
-    opacity 180ms ease;
+    transform var(--xc-token-motion-standard-ms) ease,
+    opacity var(--xc-token-motion-standard-ms) ease;
 }
 
 .butler-ball:active {
   cursor: grabbing;
 }
+
+/* Pointer coordinates must not lag behind drag events. */
+.butler-ball--dragging { transition: none; }
 
 .butler-ball:hover .butler-ball__logo-wrap {
   transform: translateY(-1px);
@@ -254,8 +257,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease;
+    transform var(--xc-token-motion-standard-ms) ease,
+    box-shadow var(--xc-token-motion-standard-ms) ease;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -412,5 +415,11 @@ onBeforeUnmount(() => {
 
 .butler-ball.butler-ball--corp-anchor:active {
   cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .butler-ball,
+  .butler-ball__logo-wrap { transition: none; }
+  .butler-ball--speaking .butler-ball__logo-wrap { animation: none; }
+  .butler-ball:hover .butler-ball__logo-wrap { transform: none; }
 }
 </style>
