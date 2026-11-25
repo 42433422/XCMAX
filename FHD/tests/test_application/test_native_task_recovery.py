@@ -979,20 +979,30 @@ def test_retry_rejects_unverified_original_state_without_queue_changes(trusted_a
     assert queue.get(run.run_id).to_dict() == execution
 
 
+@pytest.mark.parametrize("verified", [False, True])
 def test_original_write_receipt_settles_open_effect_before_another_worker_takes_lease(
-    trusted_actor,
+    trusted_actor, monkeypatch, verified
 ):
+    from tests.fixtures.verified_effect import attach_fixture_verified_write
+
     actor = trusted_actor(role="admin")
     repository, queue = _repositories(actor)
     run = _run(actor, status="running", completed_write=True)
+    if verified:
+        attach_fixture_verified_write(run, monkeypatch)
     repository.save(run)
     queue.enqueue(run)
     assert queue.claim("dead-worker", lease_seconds=60)
     queue.mark_open_effect(run.run_id, run.steps[0].step_id)
     future = (datetime.now(UTC) + timedelta(seconds=120)).isoformat()
     claimed = queue.claim("replacement", lease_seconds=60, now=future)
-    assert claimed is not None and claimed.lease_owner == "replacement"
-    assert queue.lifecycle(run.run_id)["effects"] == []
+    if verified:
+        assert claimed is not None and claimed.lease_owner == "replacement"
+        assert queue.lifecycle(run.run_id)["effects"] == []
+    else:
+        assert claimed is None
+        assert queue.get(run.run_id).state == "unknown"
+        assert queue.lifecycle(run.run_id)["effects"] == [run.steps[0].step_id]
     assert repository.get(run.run_id).steps[0].output == run.steps[0].output
     assert repository.get(run.run_id).status == "running"
 

@@ -22,10 +22,7 @@ from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTas
 
 def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False) -> list[str]:
     """Only a durable successful step receipt can settle an old open effect."""
-    from app.application.agent_orchestrator.result_verification import (
-        latest_step_call,
-        verified_step_output,
-    )
+    from app.application.agent_orchestrator.result_verification import verified_effect_receipt
     from app.application.agent_orchestrator.task_models import tenant_id_of_run
     from app.domain.task_lifecycle.control import SessionBook
 
@@ -33,12 +30,7 @@ def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False)
     tenant = tenant_id_of_run(run)
     body = book.get("agent", tenant, run.run_id)
     completed = {
-        step.step_id
-        for step in run.steps
-        if step.status == "completed"
-        and (call := latest_step_call(run, step)) is not None
-        and call.metadata.get("verification_contract")
-        and verified_step_output(run, step).get("success") is True
+        step.step_id for step in run.steps if verified_effect_receipt(run, step)
     }
     remaining = sorted(set(body.get("effects") or []) - completed)
     if clear_confirmed and not remaining and body.get("effects"):

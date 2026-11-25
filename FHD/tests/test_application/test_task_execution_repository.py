@@ -122,7 +122,7 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     recovered_engine.dispose()
 
 
-@pytest.mark.parametrize("receipt_variant", ["pending", "legacy", "missing"])
+@pytest.mark.parametrize("receipt_variant", ["pending", "legacy", "missing", "contradictory"])
 def test_raw_success_without_independent_receipt_never_clears_open_effect(
     tmp_path, receipt_variant
 ):
@@ -146,12 +146,12 @@ def test_raw_success_without_independent_receipt_never_clears_open_effect(
                 tool_id=step.tool_id,
                 action=step.action,
                 status="completed",
-                output={"success": True},
+                output={"success": receipt_variant != "contradictory"},
                 metadata={
                     "verification_contract": {"protocol": "xcagi.result-verification.v1"},
                     "verification": {"status": "pending", "accepted": False},
                 }
-                if receipt_variant == "pending"
+                if receipt_variant in {"pending", "contradictory"}
                 else {},
             )
         )
