@@ -7,6 +7,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/data/ai_employee_profile.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
+import 'package:xcagi_flutter_poc/src/data/offline/mobile_offline_store.dart';
 import 'package:xcagi_flutter_poc/src/features/chat/chat_screen.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
@@ -49,6 +50,14 @@ class _Api extends MobileApiClient {
 
 class _Repository extends MobileRepository {
   _Repository(_Api api) : super(client: api);
+
+  // These widget tests exercise tool admission, not the native SQLite
+  // executor. Avoid opening a platform isolate in the fake-async zone.
+  // Persistent draft and account/backend namespaces have their own tests.
+  @override
+  Future<MobileOfflineStore?> openOfflineStore({String? expectedScope}) async =>
+      null;
+
   @override
   Future<MobileMeData> loadMe() async => MobileMeData.adminFallback();
 
@@ -153,7 +162,16 @@ void main() {
         expect(repo.plainBodies, ['帮我安排并完成这个任务：继续旧任务']);
       } else {
         expect(repo.plainBodies, isEmpty);
-        expect(find.text('继续旧任务'), findsOneWidget);
+        if (change == 'account') {
+          // A previous account's draft must not remain visible or executable.
+          expect(find.text('继续旧任务'), findsNothing);
+          expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+              isEmpty);
+          expect(find.text('账号已切换，请返回后重新打开此会话。'),
+              findsOneWidget);
+        } else {
+          expect(find.text('继续旧任务'), findsOneWidget);
+        }
         expect(
             find.text(change == 'error'
                 ? '工具暂时不可用：服务器暂时不可用，请稍后重试'
