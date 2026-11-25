@@ -9,6 +9,8 @@
       role="combobox"
       :aria-expanded="open ? 'true' : 'false'"
       aria-controls="top-quick-nav-list"
+      :aria-activedescendant="open && filtered.length ? `top-quick-nav-option-${highlightIndex}` : undefined"
+      :aria-keyshortcuts="desktopEnabled ? shortcutLabel : undefined"
       aria-label="搜索功能、订单、产品、客户、员工或模板"
       placeholder="搜索功能、订单、产品、客户、员工或模板"
       autocomplete="off"
@@ -29,6 +31,7 @@
         <li
           v-for="(item, idx) in filtered"
           :key="`${item.kind}-${item.key || item.id}-${idx}`"
+          :id="`top-quick-nav-option-${idx}`"
           class="top-quick-nav__option"
           :class="{ highlighted: idx === highlightIndex }"
           role="option"
@@ -55,7 +58,7 @@
  * 顶部中间快捷跳转框：输入功能名即搜全部侧边栏入口（与 Sidebar 同源 useVisibleNavItems），
  * 回车/点击后经 MainLayout 的 navigateToView 跳转（与侧栏点击完全同路径）。
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import customersApi from '@/api/customers'
 import productsApi from '@/api/products'
@@ -66,6 +69,7 @@ import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useModsStore } from '@/stores/mods'
 import { pushErpPage } from '@/utils/erpPagePaths'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
+import { isDesktopShell } from '@/utils/desktopShell'
 
 const emit = defineEmits(['select'])
 const router = useRouter()
@@ -79,6 +83,13 @@ const KIND_ICONS = { product: 'fa-cube', customer: 'fa-user-o', order: 'fa-file-
 const { visibleNavItems } = useVisibleNavItems()
 const modsStore = useModsStore()
 const recordScope = computed(() => productReadScopeKey(String(modsStore.activeModId || '')))
+
+const desktopEnabled = isDesktopShell()
+const macPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '')
+const shortcutLabel = macPlatform ? 'Meta+K' : 'Control+K'
+const recentKeys = ref([])
+let restoreTarget = null
+let blurTimer = null
 
 const query = ref('')
 const open = ref(false)
@@ -96,7 +107,11 @@ const filtered = computed(() => {
   const nav = keyword
     ? items.filter((item) => `${item.name || ''} ${item.key || ''} ${item.routeName || ''}`.toLowerCase().includes(keyword))
     : items
-  return keyword ? [...nav, ...records.value] : nav
+  if (keyword) return [...nav, ...records.value]
+  // Reuse the current permission-filtered menu, never cache business records or hidden destinations.
+  if (!desktopEnabled) return nav
+  const rank = new Map(recentKeys.value.map((key, index) => [key, index]))
+  return [...nav].sort((a, b) => (rank.get(a.key) ?? Infinity) - (rank.get(b.key) ?? Infinity))
 })
 
 function recordName(row, keys) {
@@ -183,7 +198,13 @@ function placeList() {
   }
 }
 
+function cancelBlur() {
+  if (blurTimer !== null) window.clearTimeout(blurTimer)
+  blurTimer = null
+}
+
 function onFocus() {
+  cancelBlur()
   open.value = true
   highlightIndex.value = 0
   keyboardMoved.value = false
@@ -196,8 +217,11 @@ function onViewportChange() {
 
 function onBlur() {
   // 延迟关闭：让选项的 mousedown（已 preventDefault 不夺焦）先完成选择
-  window.setTimeout(() => {
+  cancelBlur()
+  blurTimer = window.setTimeout(() => {
+    blurTimer = null
     open.value = false
+    restoreTarget = null
   }, 180)
 }
 
@@ -210,6 +234,9 @@ function clearRecordSearch() {
 
 watch(recordScope, () => {
   clearRecordSearch()
+  cancelBlur()
+  recentKeys.value = []
+  restoreTarget = null
   query.value = ''
   open.value = false
 }, { flush: 'sync' })
@@ -233,14 +260,46 @@ watch(highlightIndex, () => {
   })
 })
 
-if (typeof window !== 'undefined') {
+function closeAndRestore() {
+  const target = restoreTarget
+  restoreTarget = null
+  open.value = false
+  inputRef.value?.blur?.()
+  cancelBlur()
+  if (target instanceof HTMLElement && target.isConnected && !target.closest('[inert]')) {
+    target.focus({ preventScroll: true })
+  }
+}
+
+function onGlobalKeydown(event) {
+  if (!desktopEnabled || event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return
+  if (event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return
+  if (macPlatform ? (!event.metaKey || event.ctrlKey) : (!event.ctrlKey || event.metaKey)) return
+  const active = document.activeElement
+  const input = inputRef.value
+  if (!input || !input.getClientRects().length || input.closest('[inert]')) return
+  // Preserve active dialogs and their focus traps; never take over their keyboard handling.
+  if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]')) return
+  event.preventDefault()
+  if (active === input && open.value) return
+  restoreTarget = active instanceof HTMLElement && active !== input ? active : null
+  input.focus({ preventScroll: true })
+  onFocus()
+  input.select()
+}
+
+onMounted(() => {
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
-}
+  if (desktopEnabled) window.addEventListener('keydown', onGlobalKeydown)
+})
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
+  window.removeEventListener('keydown', onGlobalKeydown)
+  cancelBlur()
+  restoreTarget = null
   clearRecordSearch()
 })
 
@@ -289,7 +348,10 @@ function choose(item) {
     inputRef.value?.blur?.()
     return
   }
-  if (!item?.key) return
+  if (!item?.key || !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
+  // Selection is only an existing sidebar navigation intent, not business execution.
+  recentKeys.value = [item.key, ...recentKeys.value.filter((key) => key !== item.key)].slice(0, 8)
+  restoreTarget = null
   emit('select', item.key)
   query.value = ''
   open.value = false
@@ -299,8 +361,8 @@ function choose(item) {
 function onKeydown(event) {
   if (event.isComposing || event.keyCode === 229) return
   if (event.key === 'Escape') {
-    open.value = false
-    inputRef.value?.blur?.()
+    event.preventDefault()
+    closeAndRestore()
     return
   }
   if (!open.value) {
