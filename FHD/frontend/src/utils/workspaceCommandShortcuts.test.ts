@@ -76,4 +76,12 @@ describe('desktop workspace keyboard and preference contract', () => {
     setRuntimeTenantStorageScopeInput({ tenantId: 2, marketUserId: 2 })
     expect(workspaceCommandStorageKey()).not.toBe(a)
   })
+  it('keeps valid keyboard shortcut swaps after a restart', () => {
+    const m = memory(), prefs = defaultWorkspaceCommandPreferences()
+    prefs.shortcuts.palette = 'Mod+Alt+J'
+    prefs.shortcuts.chat = 'Mod+K'
+    expect(writeWorkspaceCommandPreferences('swap', prefs, m)).toBe(true)
+    expect(readWorkspaceCommandPreferences('swap', m).shortcuts).toEqual(prefs.shortcuts)
+  })
+
 })
