@@ -232,7 +232,9 @@ def candidate_contract_valid(goal: dict[str, Any], *, now: datetime) -> bool:
             or acceptance.get("baseline") != observation["gap_count"]
             or type(acceptance.get("target")) is not int
             or acceptance["target"] != 0
-            or goal.get("evidence_refs") != ["customer-value-gap:" + _hash(observation)]
+            or not isinstance(goal.get("evidence_refs"), list)
+            or not goal["evidence_refs"]
+            or goal["evidence_refs"][0] != "customer-value-gap:" + _hash(observation)
         ):
             return False
         return parse_time(observation["observed_at"]) <= now < parse_time(
