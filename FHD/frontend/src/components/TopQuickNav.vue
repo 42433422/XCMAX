@@ -113,8 +113,8 @@ const router = useRouter()
 /** 与模板库约定的交接键：跳转前写入关键词，模板库挂载后读取。 */
 const TEMPLATE_SEARCH_STORAGE_KEY = 'xcagi_template_search_keyword'
 const TEMPLATE_NAV_KEY = 'template-preview'
-const KIND_LABELS = { product: '产品', customer: '客户', order: '订单', employee: '员工', template: '模板' }
-const KIND_ICONS = { product: 'fa-cube', customer: 'fa-user-o', order: 'fa-file-text-o', employee: 'fa-id-badge', template: 'fa-file-o' }
+const KIND_LABELS = { product: '产品', customer: '客户', order: '订单', employee: '员工', template: '模板', task: '任务', action: '业务入口', command: '命令' }
+const KIND_ICONS = { product: 'fa-cube', customer: 'fa-user-o', order: 'fa-file-text-o', employee: 'fa-id-badge', template: 'fa-file-o', task: 'fa-tasks', action: 'fa-shield', command: 'fa-keyboard-o' }
 
 const { visibleNavItems } = useVisibleNavItems()
 const modsStore = useModsStore()
@@ -258,7 +258,7 @@ function placeList() {
     top: `${rect.bottom + 6}px`,
     left: `${rect.left}px`,
     width: `${rect.width}px`,
-    zIndex: 4000,
+    zIndex: paletteOpen.value ? 4602 : 4000,
   }
 }
 
@@ -280,6 +280,7 @@ function onViewportChange() {
 }
 
 function onBlur() {
+  if (paletteOpen.value) return
   // 延迟关闭：让选项的 mousedown（已 preventDefault 不夺焦）先完成选择
   cancelBlur()
   blurTimer = window.setTimeout(() => {
@@ -299,8 +300,10 @@ function clearRecordSearch() {
 watch(recordScope, () => {
   clearRecordSearch()
   cancelBlur()
-  recentKeys.value = []
+  preferences.value = { ...readWorkspaceCommandPreferences(storageKey.value), recent: [] }
   restoreTarget = null
+  paletteOpen.value = false
+  shortcutsVisible.value = false
   query.value = ''
   open.value = false
 }, { flush: 'sync' })
@@ -324,43 +327,141 @@ watch(highlightIndex, () => {
   })
 })
 
+function shortcutForDisplay(chord) {
+  return chord.replace('Mod', macPlatform ? '⌘' : 'Ctrl').replace('+Alt', macPlatform ? '+Option' : '+Alt')
+}
+
+function persistCommands() {
+  writeWorkspaceCommandPreferences(storageKey.value, preferences.value)
+}
+
+function loadCommands() {
+  storageKey.value = workspaceCommandStorageKey()
+  preferences.value = readWorkspaceCommandPreferences(storageKey.value)
+  shortcutError.value = ''
+}
+
+function onCommandStorageChange(event) {
+  if (storageKey.value && event.key === storageKey.value && event.storageArea === localStorage) {
+    preferences.value = readWorkspaceCommandPreferences(storageKey.value)
+  }
+}
+
+function setCommandShortcut(id, event) {
+  const chord = String(event?.target?.value || '')
+  const error = validateWorkspaceShortcut(preferences.value.shortcuts, id, chord)
+  if (error) {
+    shortcutError.value = error
+    if (event?.target) event.target.value = preferences.value.shortcuts[id]
+    return
+  }
+  shortcutError.value = ''
+  preferences.value = {
+    ...preferences.value,
+    shortcuts: { ...preferences.value.shortcuts, [id]: chord },
+  }
+  persistCommands()
+}
+
+function resetCommandShortcuts() {
+  preferences.value = { ...preferences.value, shortcuts: defaultWorkspaceShortcuts() }
+  shortcutError.value = ''
+  persistCommands()
+}
+
+function toggleFavoriteHighlighted() {
+  const item = filtered.value[highlightIndex.value]
+  if (item?.kind !== 'nav' || !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
+  const favorites = preferences.value.favorites.includes(item.key)
+    ? preferences.value.favorites.filter((key) => key !== item.key)
+    : [item.key, ...preferences.value.favorites].slice(0, 12)
+  preferences.value = { ...preferences.value, favorites }
+  persistCommands()
+}
+
 function closeAndRestore() {
   const target = restoreTarget
   restoreTarget = null
+  paletteOpen.value = false
+  shortcutsVisible.value = false
   open.value = false
+  query.value = ''
   inputRef.value?.blur?.()
   cancelBlur()
   if (target instanceof HTMLElement && target.isConnected && !target.closest('[inert]')) {
-    target.focus({ preventScroll: true })
+    void nextTick(() => target.focus({ preventScroll: true }))
   }
+}
+
+function openCommandPalette() {
+  if (!desktopEnabled || !inputRef.value || inputRef.value.closest('[inert]')) return
+  if (!paletteOpen.value) {
+    const active = document.activeElement
+    restoreTarget = active instanceof HTMLElement && active !== inputRef.value ? active : null
+  }
+  paletteOpen.value = true
+  open.value = true
+  shortcutsVisible.value = false
+  void nextTick(() => {
+    inputRef.value?.focus({ preventScroll: true })
+    onFocus()
+    inputRef.value?.select()
+  })
+}
+
+function onPaletteKeydown(event) {
+  if (!paletteOpen.value) return
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeAndRestore()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const controls = [...(paletteRootRef.value?.querySelectorAll('input,button:not([disabled]),select,[tabindex="0"]') || [])]
+    .filter((element) => element.getClientRects().length)
+  if (!controls.length) return
+  const current = document.activeElement
+  const first = controls[0], last = controls[controls.length - 1]
+  if (event.shiftKey && current === first) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && current === last) { event.preventDefault(); first.focus() }
 }
 
 function onGlobalKeydown(event) {
   if (!desktopEnabled || event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return
-  if (event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return
-  if (macPlatform ? (!event.metaKey || event.ctrlKey) : (!event.ctrlKey || event.metaKey)) return
+  if (event.getModifierState?.('AltGraph')) return
+  const command = workspaceCommandForKey(event, preferences.value.shortcuts, macPlatform)
+  if (!command) return
   const active = document.activeElement
   const input = inputRef.value
-  if (!input || !input.getClientRects().length || input.closest('[inert]')) return
-  // Preserve active dialogs and their focus traps; never take over their keyboard handling.
-  if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]')) return
+  if (!input || input.closest('[inert]')) return
+  // Never steal shortcuts from modal dialogs or text editors outside our own panel.
+  if (active instanceof Element && active.closest('[role="dialog"], [aria-modal="true"]') && !paletteRootRef.value?.contains(active)) return
+  if (command !== 'palette' && active instanceof Element && !paletteRootRef.value?.contains(active)
+    && active.closest('input, textarea, select, [contenteditable="true"]')) return
   event.preventDefault()
-  if (active === input && open.value) return
-  restoreTarget = active instanceof HTMLElement && active !== input ? active : null
-  input.focus({ preventScroll: true })
-  onFocus()
-  input.select()
+  if (command === 'palette') {
+    if (active === input && open.value && paletteOpen.value) return
+    openCommandPalette()
+    return
+  }
+  closeAndRestore()
+  emit('command', command)
 }
 
 onMounted(() => {
+  loadCommands()
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
+  window.addEventListener('storage', onCommandStorageChange)
   if (desktopEnabled) window.addEventListener('keydown', onGlobalKeydown)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
+  window.removeEventListener('storage', onCommandStorageChange)
   window.removeEventListener('keydown', onGlobalKeydown)
   cancelBlur()
   restoreTarget = null
@@ -368,6 +469,27 @@ onBeforeUnmount(() => {
 })
 
 function choose(item) {
+  if (item?.kind === 'command') {
+    if (!WORKSPACE_COMMANDS.some((command) => command.id === item.id)) return
+    closeAndRestore()
+    emit('command', item.id)
+    return
+  }
+  if (item?.kind === 'action') {
+    if (!authorizedActionLinks.some((action) => action.key === item.key) ||
+      !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
+    closeAndRestore()
+    emit('select', item.key)
+    return
+  }
+  if (item?.kind === 'task') {
+    const live = taskStore?.tasks.find((task) => task.task_id === item.id && !task.archived_at)
+    if (!live) return
+    const conversation = String(live.conversation_id || live.workspace_id || live.task_id)
+    closeAndRestore()
+    void router.push({ name: 'task-workspace', params: { taskId: live.task_id }, query: { conversation } })
+    return
+  }
   if (item?.kind === 'template') {
     try {
       sessionStorage.setItem(TEMPLATE_SEARCH_STORAGE_KEY, item.keyword || query.value.trim())
@@ -414,8 +536,10 @@ function choose(item) {
   }
   if (!item?.key || !(visibleNavItems.value || []).some((nav) => nav.key === item.key)) return
   // Selection is only an existing sidebar navigation intent, not business execution.
-  recentKeys.value = [item.key, ...recentKeys.value.filter((key) => key !== item.key)].slice(0, 8)
+  preferences.value = { ...preferences.value, recent: nextRecentNavKeys(recentKeys.value, item.key) }
+  persistCommands()
   restoreTarget = null
+  paletteOpen.value = false
   emit('select', item.key)
   query.value = ''
   open.value = false
@@ -426,6 +550,7 @@ function onKeydown(event) {
   if (event.isComposing || event.keyCode === 229) return
   if (event.key === 'Escape') {
     event.preventDefault()
+    event.stopPropagation()
     closeAndRestore()
     return
   }
@@ -458,6 +583,81 @@ function onKeydown(event) {
 </script>
 
 <style scoped>
+.top-quick-nav__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 4500;
+  background: rgba(18, 28, 46, 0.34);
+  backdrop-filter: blur(3px);
+}
+.top-quick-nav.top-quick-nav--palette {
+  position: fixed;
+  z-index: 4601;
+  top: min(18vh, 180px);
+  left: 50%;
+  width: min(680px, calc(100vw - 36px));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 12px 12px 0;
+  box-sizing: border-box;
+  border: 1px solid var(--el-border-color-light, #d7dfe8);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay, #fff);
+  box-shadow: 0 28px 70px rgba(13, 21, 39, 0.22);
+}
+.top-quick-nav--palette .top-quick-nav__input {
+  height: 44px;
+  font-size: 15px;
+  padding-left: 38px;
+}
+.top-quick-nav--palette .top-quick-nav__icon { left: 24px; top: 34px; }
+.top-quick-nav__star { color: #b48b24; margin-left: auto; }
+.top-quick-nav__footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--el-border-color-light, #e4e9f1);
+}
+.top-quick-nav__footer button, .top-quick-nav__settings button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--el-fill-color-light, #edf2f7);
+  color: var(--el-text-color-primary, #334155);
+  cursor: pointer;
+}
+.top-quick-nav__footer button:disabled { opacity: .45; cursor: default; }
+.top-quick-nav__footer button:last-child { margin-left: auto; }
+.top-quick-nav__settings {
+  padding: 8px 0 12px;
+  max-height: min(36vh, 300px);
+  overflow: auto;
+  color: var(--el-text-color-primary, #334155);
+}
+.top-quick-nav__settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 7px;
+  font-size: 12px;
+}
+.top-quick-nav__settings select {
+  background: var(--el-fill-color-blank, #fff);
+  color: inherit;
+  border: 1px solid var(--el-border-color, #b8c6d6);
+  border-radius: 7px;
+  min-width: 150px;
+  padding: 5px 7px;
+}
+.top-quick-nav__settings [role="alert"] { color: var(--el-color-danger, #bf2838); }
+.top-quick-nav--palette :focus-visible { outline: 2px solid var(--el-color-primary, #137cdb); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .top-quick-nav__scrim { backdrop-filter: none; }
+}
+
 .top-quick-nav {
   position: absolute;
   left: 50%;
