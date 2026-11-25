@@ -149,11 +149,16 @@ export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent:
     const resp = await fetchWorkspacePrefs()
     const prefs = resp.data || {}
     if (resp.owner_id && isCurrent()) {
-      const revision = readRevision(resp)
-      observedSnapshot = {
-        scope: scope || resolveTenantStorageScopeFromRuntime(true),
-        owner: resp.owner_id,
-        revision,
+      if (typeof resp.revision === 'number' && Number.isSafeInteger(resp.revision) && resp.revision >= 0) {
+        observedSnapshot = {
+          scope: scope || resolveTenantStorageScopeFromRuntime(true),
+          owner: resp.owner_id,
+          revision: resp.revision,
+        }
+      } else {
+        // Read-only legacy server response: display data, but cannot use it
+        // as a write token until a versioned server becomes available.
+        observedSnapshot = null
       }
       applyWorkspacePrefsToLocalCache(prefs, scope)
     }
@@ -188,4 +193,14 @@ export function queueWorkspacePrefsSync(partial: WorkspacePrefs, delayMs = 400):
     }
     void patchWorkspacePrefs(payload, scope).catch(notifyWorkspaceSyncFailed)
   }, delayMs)
+}
+
+
+/** Clear pending work on explicit logout/account teardown; never replay unknown writes. */
+export function resetWorkspacePrefsSyncState(): void {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = null
+  pendingPatch = {}
+  pendingScope = null
+  observedSnapshot = null
 }
