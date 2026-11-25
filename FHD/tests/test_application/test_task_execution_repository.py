@@ -74,7 +74,7 @@ def test_lost_completion_is_unknown_and_cannot_be_approved_or_requeued(lifecycle
     "interrupted_state",
     ["timed_out", "cancelled", "paused", "waiting_input", "waiting_auth", "waiting_approval"],
 )
-def test_unconfirmed_write_remains_unknown_on_every_interruption(lifecycle_queue, interrupted_state):
+def test_unconfirmed_effect_stays_unknown_on_interruption(lifecycle_queue, interrupted_state):
     repo = lifecycle_queue
     run = AgentRun(user_id="owner", message="external write with missing receipt", status="queued")
     repo.enqueue(run)
