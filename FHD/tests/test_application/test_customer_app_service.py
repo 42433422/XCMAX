@@ -288,6 +288,56 @@ class TestUpdate:
             assert "已存在" in result["message"]
 
 
+@pytest.mark.parametrize("failed_step", ["commit", "refresh"])
+def test_customer_update_commit_uncertainty_does_not_invite_retry(failed_step):
+    """A timeout near commit or failed post-commit read must not be called a safe failure."""
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    customer = MagicMock()
+    customer.id = 11
+    customer.unit_name = "Existing"
+    customer.version = 1
+    session.query.return_value.filter.return_value.first.return_value = customer
+    getattr(session, failed_step).side_effect = _db_error("connection lost")
+    with patch.object(svc, "_get_session", return_value=session):
+        out = svc.update(11, {"contact_person": "Updated"})
+    assert out["success"] is False
+    assert out["outcome"] == "unknown"
+    assert out["retryable"] is False
+    assert out["reconciliation_required"] is True
+    assert out["error_code"] == "customer_update_commit_unknown"
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
+
+
+def test_customer_update_programming_fault_propagates_after_commit():
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    customer = MagicMock()
+    customer.id = 11
+    customer.unit_name = "Existing"
+    customer.version = 1
+    session.query.return_value.filter.return_value.first.return_value = customer
+    session.refresh.side_effect = RuntimeError("programming bug")
+    with patch.object(svc, "_get_session", return_value=session):
+        with pytest.raises(RuntimeError, match="programming bug"):
+            svc.update(11, {"contact_person": "Updated"})
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
+
+
+def test_customer_update_precommit_db_error_is_not_a_commit_uncertainty():
+    svc = CustomerApplicationService()
+    session = MagicMock()
+    session.query.side_effect = _db_error("read refused")
+    with patch.object(svc, "_get_session", return_value=session):
+        out = svc.update(11, {"contact_person": "Updated"})
+    assert out["success"] is False
+    assert out.get("outcome") != "unknown"
+    session.commit.assert_not_called()
+    session.close.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # CustomerApplicationService — delete
 # ---------------------------------------------------------------------------
