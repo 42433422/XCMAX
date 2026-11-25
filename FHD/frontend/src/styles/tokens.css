@@ -99,6 +99,26 @@
   --el-text-color-primary: var(--xc-color-text);
   --el-text-color-regular: var(--xc-color-text-secondary);
   --el-border-color: var(--xc-color-border);
+  --el-border-color-light: var(--xc-color-border);
+  --el-bg-color-overlay: var(--xc-color-surface);
+  --el-bg-color-page: var(--xc-color-page-bg);
+  --el-fill-color: var(--xc-color-surface-2);
+  --el-fill-color-blank: var(--xc-color-surface);
+  --el-text-color-placeholder: var(--xc-color-muted);
+  --el-text-color-disabled: var(--xc-color-disabled);
+  --el-disabled-bg-color: var(--xc-color-surface-3);
+  --el-disabled-text-color: var(--xc-color-disabled);
+  --el-color-success: var(--xc-color-success);
+  --el-color-warning: var(--xc-color-warning);
+  --el-color-danger: var(--xc-color-danger);
+  --el-color-info: var(--xc-color-info);
+  --el-color-primary-dark-2: var(--xc-color-primary-hover);
+  --el-color-primary-light-3: color-mix(in srgb, var(--xc-color-primary) 70%, var(--xc-color-surface));
+  --el-color-primary-light-5: color-mix(in srgb, var(--xc-color-primary) 50%, var(--xc-color-surface));
+  --el-color-primary-light-7: color-mix(in srgb, var(--xc-color-primary) 30%, var(--xc-color-surface));
+  --el-color-primary-light-8: color-mix(in srgb, var(--xc-color-primary) 20%, var(--xc-color-surface));
+  --el-color-primary-light-9: var(--xc-color-primary-soft);
+
 }
 
 /* ─── 全局基础 ──────────────────────────────────────────────── */
