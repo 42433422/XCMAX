@@ -90,64 +90,121 @@ def delete_customers(session, ids, *, force=False, runtime_context=None) -> dict
             "deleted_count": 0,
         }
     inspector = inspect(session.connection())
-    plans, affected = [], []
-    for unit in units:
-        products = (
-            session.query(Product).filter(
-                Product.tenant_id == unit.tenant_id, Product.unit == unit.unit_name
-            )
-            if inspector.has_table(Product.__tablename__)
-            else None
-        )
-        shipments = (
-            session.query(ShipmentRecord).filter(
-                ShipmentRecord.tenant_id == unit.tenant_id,
-                or_(
-                    ShipmentRecord.unit_id == unit.id,
-                    and_(
-                        ShipmentRecord.unit_id.is_(None),
-                        ShipmentRecord.purchase_unit == unit.unit_name,
-                    ),
-                ),
-            )
-            if inspector.has_table(ShipmentRecord.__tablename__)
-            else None
-        )
-        if null_owner:
-            # The global ORM guard hides all rows without an enterprise tenant.
-            # Only this authenticated platform-admin branch may read legacy NULL rows;
-            # every statement above retains its explicit tenant IS NULL predicate.
+    has_products = inspector.has_table(Product.__tablename__)
+    has_shipments = inspector.has_table(ShipmentRecord.__tablename__)
+    plans = []
+    if not force:
+        # The old one-COUNT-per-customer preflight scaled as 2*N queries.
+        # These three GROUP BY reads have a constant query budget for any batch.
+        from sqlalchemy import func
+
+        names = [unit.unit_name for unit in units]
+        unit_ids = [unit.id for unit in units]
+        tenants = {unit.tenant_id for unit in units}
+
+        def scoped_counts(query, model):
+            # Only the exceptional, authenticated platform-admin path can
+            # see legacy NULL-owned data, with its explicit IS NULL predicate.
+            if null_owner:
+                return query.filter(model.tenant_id.is_(None)).execution_options(
+                    skip_tenant_filter=True
+                )
+            scopes = [model.tenant_id.in_([tid for tid in tenants if tid is not None])]
+            if None in tenants:
+                scopes.append(model.tenant_id.is_(None))
+            return query.filter(or_(*scopes))
+
+        product_counts = {}
+        if has_products:
+            rows = scoped_counts(
+                session.query(
+                    Product.tenant_id, Product.unit, func.count(Product.id)
+                )
+                .filter(Product.unit.in_(names))
+                .group_by(Product.tenant_id, Product.unit),
+                Product,
+            ).all()
+            product_counts = {(tid, name): int(count) for tid, name, count in rows}
+
+        shipment_by_id = {}
+        shipment_by_name = {}
+        if has_shipments:
+            rows = scoped_counts(
+                session.query(
+                    ShipmentRecord.tenant_id,
+                    ShipmentRecord.unit_id,
+                    func.count(ShipmentRecord.id),
+                )
+                .filter(ShipmentRecord.unit_id.in_(unit_ids))
+                .group_by(ShipmentRecord.tenant_id, ShipmentRecord.unit_id),
+                ShipmentRecord,
+            ).all()
+            shipment_by_id = {(tid, ident): int(count) for tid, ident, count in rows}
+            rows = scoped_counts(
+                session.query(
+                    ShipmentRecord.tenant_id,
+                    ShipmentRecord.purchase_unit,
+                    func.count(ShipmentRecord.id),
+                )
+                .filter(
+                    ShipmentRecord.unit_id.is_(None),
+                    ShipmentRecord.purchase_unit.in_(names),
+                )
+                .group_by(ShipmentRecord.tenant_id, ShipmentRecord.purchase_unit),
+                ShipmentRecord,
+            ).all()
+            shipment_by_name = {(tid, name): int(count) for tid, name, count in rows}
+
+        affected = []
+        for unit in units:
+            product_count = product_counts.get((unit.tenant_id, unit.unit_name), 0)
+            shipment_count = shipment_by_id.get((unit.tenant_id, unit.id), 0)
+            shipment_count += shipment_by_name.get((unit.tenant_id, unit.unit_name), 0)
+            if product_count or shipment_count:
+                affected.append(
+                    {
+                        "id": unit.id,
+                        "unit_name": unit.unit_name,
+                        "product_count": product_count,
+                        "shipment_count": shipment_count,
+                    }
+                )
+        if affected:
+            return {
+                "success": False,
+                "message": "客户存在关联产品或发货记录，未删除客户",
+                "deleted_count": 0,
+                "has_associations": True,
+                "affected_units": affected,
+                "association_details": affected[0],
+            }
+        plans = [(unit, None, None) for unit in units]
+    else:
+        # The destructive branch retains the existing permission checks and
+        # original per-customer deletion queries, without redundant COUNTs.
+        for unit in units:
             products = (
-                products.execution_options(skip_tenant_filter=True)
-                if products is not None
+                session.query(Product).filter(
+                    Product.tenant_id == unit.tenant_id, Product.unit == unit.unit_name
+                )
+                if has_products
                 else None
             )
             shipments = (
-                shipments.execution_options(skip_tenant_filter=True)
-                if shipments is not None
+                session.query(ShipmentRecord).filter(
+                    ShipmentRecord.tenant_id == unit.tenant_id,
+                    or_(
+                        ShipmentRecord.unit_id == unit.id,
+                        and_(
+                            ShipmentRecord.unit_id.is_(None),
+                            ShipmentRecord.purchase_unit == unit.unit_name,
+                        ),
+                    ),
+                )
+                if has_shipments
                 else None
             )
-        product_count = products.count() if products is not None else 0
-        shipment_count = shipments.count() if shipments is not None else 0
-        plans.append((unit, products, shipments))
-        if product_count or shipment_count:
-            affected.append(
-                {
-                    "id": unit.id,
-                    "unit_name": unit.unit_name,
-                    "product_count": product_count,
-                    "shipment_count": shipment_count,
-                }
-            )
-    if affected and not force:
-        return {
-            "success": False,
-            "message": "客户存在关联产品或发货记录，未删除客户",
-            "deleted_count": 0,
-            "has_associations": True,
-            "affected_units": affected,
-            "association_details": affected[0],
-        }
+            plans.append((unit, products, shipments))
     # No writes until all rows and associations have been checked. One caller-owned transaction.
     for unit, products, shipments in plans:
         if force:
