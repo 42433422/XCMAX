@@ -60,8 +60,13 @@ class ImWebSocketClient {
 
   void connect({required String sessionId, required String url}) {
     if (sessionId.trim().isEmpty || url.trim().isEmpty) return;
-    _sessionId = sessionId.trim();
-    _url = url.trim();
+    if (_disposed) return;
+    final nextSessionId = sessionId.trim();
+    final nextUrl = url.trim();
+    if (_sessionId == nextSessionId && _url == nextUrl &&
+        _state != ImWsConnectionState.disconnected) return;
+    _sessionId = nextSessionId;
+    _url = nextUrl;
     _reconnectAttempts = 0;
     _disconnectSocket();
     _cancelReconnect();
@@ -95,10 +100,13 @@ class ImWebSocketClient {
     try {
       final channel = _connector(Uri.parse(_url));
       _channel = channel;
+      // Late frames/errors from an old account/socket must never be delivered
+      // to the replacement connection or schedule its reconnect timer.
+      bool ownsSocket() => generation == _generation && identical(_channel, channel);
       _subscription = channel.stream.listen(
-        _onData,
-        onDone: _onDone,
-        onError: _onError,
+        (data) { if (ownsSocket()) _onData(data); },
+        onDone: () { if (ownsSocket()) _onDone(); },
+        onError: (Object error) { if (ownsSocket()) _onError(error); },
         cancelOnError: true,
       );
       channel.ready.then((_) {
