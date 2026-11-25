@@ -379,6 +379,11 @@ class FinanceAppService:
                 return {"success": False, "message": str(e)}
 
     def update_transaction(self, txn_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if data.get("amount") is not None:
+            try:
+                _valid_finance_amount(data["amount"])
+            except ValueError as exc:
+                return {"success": False, "message": str(exc)}
         with get_db() as db:
             try:
                 txn = (
