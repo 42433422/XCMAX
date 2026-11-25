@@ -3,6 +3,10 @@ import { resolveTenantStorageScopeFromRuntime } from '@/utils/tenantStorageScope
 
 const STORAGE_PREFIX = 'xcagi_market_catalog_v1:'
 const DEFAULT_TTL_MS = 30 * 60 * 1000
+export const MARKET_CACHE_MAX_ENTRIES = 24
+// Limit both memory and persisted serialized payloads without silently
+// truncating a business result. Oversized results are fetched again.
+const MAX_ENTRY_CHARS = 256 * 1024
 
 export interface MarketCatalogCacheEntry {
   items: ModCatalogItemUi[]
@@ -11,6 +15,33 @@ export interface MarketCatalogCacheEntry {
 }
 
 const memory = new Map<string, MarketCatalogCacheEntry>()
+
+function remember(key: string, entry: MarketCatalogCacheEntry): void {
+  memory.delete(key)
+  memory.set(key, entry)
+  while (memory.size > MARKET_CACHE_MAX_ENTRIES) {
+    const oldest = memory.keys().next().value
+    if (oldest === undefined) break
+    memory.delete(oldest)
+  }
+}
+
+function pruneStorage(currentKey: string): void {
+  const entries: { key: string; fetchedAt: number }[] = []
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i)
+    if (!key?.startsWith(STORAGE_PREFIX) || key === currentKey) continue
+    try {
+      const raw = sessionStorage.getItem(key) || ''
+      const parsed = raw.length <= MAX_ENTRY_CHARS ? JSON.parse(raw) : null
+      entries.push({ key, fetchedAt: Number(parsed?.fetchedAt) || 0 })
+    } catch {
+      entries.push({ key, fetchedAt: 0 })
+    }
+  }
+  entries.sort((a, b) => b.fetchedAt - a.fetchedAt)
+  for (const entry of entries.slice(MARKET_CACHE_MAX_ENTRIES - 1)) sessionStorage.removeItem(entry.key)
+}
 
 function storageKey(key: string): string {
   return `${STORAGE_PREFIX}${resolveTenantStorageScopeFromRuntime()}:${key}`
@@ -25,18 +56,23 @@ export function readMarketCatalogCache(key: string, ttlMs = DEFAULT_TTL_MS): Mar
   const scopedKey = storageKey(key)
   const mem = memory.get(scopedKey)
   if (mem && Date.now() - mem.fetchedAt <= ttlMs) {
+    remember(scopedKey, mem)
     return mem
   }
 
   try {
     const raw = sessionStorage.getItem(scopedKey)
     if (!raw) return mem && mem.items.length ? mem : null
+    if (raw.length > MAX_ENTRY_CHARS) {
+      sessionStorage.removeItem(scopedKey)
+      return mem && mem.items.length ? mem : null
+    }
     const parsed = JSON.parse(raw) as MarketCatalogCacheEntry
     if (!parsed || !Array.isArray(parsed.items) || typeof parsed.fetchedAt !== 'number') {
       return mem && mem.items.length ? mem : null
     }
     parsed.tab = key.split(':')[1] || ''
-    memory.set(scopedKey, parsed)
+    remember(scopedKey, parsed)
     if (Date.now() - parsed.fetchedAt > ttlMs) {
       return parsed.items.length ? parsed : null
     }
@@ -73,12 +109,26 @@ export function writeMarketCatalogCache(key: string, tab: string, items: ModCata
     fetchedAt: Date.now(),
     tab,
   }
-  memory.set(scopedKey, entry)
+  // Bound the full in-memory entry as well as the public storage projection.
+  let serialized: string
   try {
-    sessionStorage.setItem(
-      scopedKey,
-      JSON.stringify({ items: persistableItems(items), fetchedAt: entry.fetchedAt }),
-    )
+    if (JSON.stringify(entry).length > MAX_ENTRY_CHARS) {
+      clearMarketCatalogCache(key)
+      return
+    }
+    serialized = JSON.stringify({ items: persistableItems(items), fetchedAt: entry.fetchedAt })
+    if (serialized.length > MAX_ENTRY_CHARS) {
+      clearMarketCatalogCache(key)
+      return
+    }
+  } catch {
+    clearMarketCatalogCache(key)
+    return
+  }
+  remember(scopedKey, entry)
+  try {
+    pruneStorage(scopedKey)
+    sessionStorage.setItem(scopedKey, serialized)
   } catch {
     /* quota or private mode */
   }

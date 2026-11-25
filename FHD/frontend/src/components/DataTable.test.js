@@ -98,6 +98,28 @@ describe('Business data table', () => {
     expect(view.emitted('load-more')).toBeUndefined()
   })
 
+  it.each([1000, 10000])('bounds mounted rows for %i records without truncating selection or actions', async (count) => {
+    const data = Array.from({ length: count }, (_, id) => ({ id, name: `客户 ${id}` }))
+    const action = vi.fn()
+    const view = open({ data, selectable: true }, {
+      actions: ({ row, index }) => h('button', { onClick: () => action(row.id, index) }, '查看'),
+    })
+    expect(view.findAll('tbody tr[data-row-id]')).toHaveLength(100)
+    await view.get('.data-table-pages button:last-child').trigger('click')
+    expect(view.findAll('tbody tr[data-row-id]')).toHaveLength(100)
+    await view.get('tbody button').trigger('click')
+    expect(action).toHaveBeenCalledWith(100, 100)
+    view.vm.selectAll()
+    await nextTick()
+    expect(view.emitted('update:selectedIds').at(-1)[0]).toHaveLength(count)
+    await view.setProps({ highlightId: count - 1 })
+    await nextTick()
+    expect(view.find(`[data-row-id="${count - 1}"]`).exists()).toBe(true)
+    expect(view.findAll('tbody tr[data-row-id]')).toHaveLength(100)
+    await view.setProps({ highlightId: '', data: data.slice(0, 2) })
+    expect(view.findAll('tbody tr[data-row-id]')).toHaveLength(2)
+  })
+
   it('requests the next page only near the bottom of the actual scroll container', async () => {
     const view = open({ data: [{ id: 1, name: 'A' }] })
     const scroll = view.get('.data-table-wrapper')

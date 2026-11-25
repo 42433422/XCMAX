@@ -19,8 +19,8 @@
         </tr>
         <template v-else>
           <tr
-            v-for="(row, index) in localData"
-            :key="getRowKey(row, index)"
+            v-for="(row, index) in visibleData"
+            :key="getRowKey(row, pageStart + index)"
             :data-row-id="String(getRowId(row) ?? '')"
             :class="{ 'is-focused': isFocusedRow(row) }"
           >
@@ -40,21 +40,32 @@
             </td>
             <td v-if="$slots.actions" class="data-table-actions-cell">
               <div class="data-table-actions-inner">
-                <slot name="actions" :row="row" :index="index"></slot>
+                <slot name="actions" :row="row" :index="pageStart + index"></slot>
               </div>
             </td>
           </tr>
         </template>
-        <tr v-if="loading && localData.length > 0">
+        <tr v-if="loading && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="loading-state">加载中...</td>
         </tr>
-        <tr v-if="hasMore && !loading && localData.length > 0">
+        <tr v-if="hasMore && !loading && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="has-more-tip">滚动加载更多</td>
         </tr>
-        <tr v-if="!hasMore && localData.length > 0">
+        <tr v-if="!hasMore && localData.length > 0 && isLastPage">
           <td :colspan="totalColumns" class="no-more-tip">没有更多数据了</td>
         </tr>
       </tbody>
+      <tfoot v-if="pageCount > 1">
+        <tr>
+          <td :colspan="totalColumns">
+            <nav class="data-table-pages" aria-label="已加载记录分页">
+              <button type="button" :disabled="page === 0" @click="changePage(page - 1)">上一页</button>
+              <span aria-live="polite">{{ page + 1 }} / {{ pageCount }} · 已加载 {{ localData.length }} 条</span>
+              <button type="button" :disabled="isLastPage" @click="changePage(page + 1)">下一页</button>
+            </nav>
+          </td>
+        </tr>
+      </tfoot>
     </table>
   </div>
 </template>
@@ -115,7 +126,7 @@ const tableWrapper = ref(null)
 const slots = useSlots()
 
 const handleScroll = () => {
-  if (!tableWrapper.value || props.loading || !props.hasMore) return
+  if (!tableWrapper.value || props.loading || !props.hasMore || !isLastPage.value) return
 
   const { scrollTop, scrollHeight, clientHeight } = tableWrapper.value
   const threshold = 100
@@ -124,12 +135,6 @@ const handleScroll = () => {
     emit('load-more')
   }
 }
-
-watch(
-  () => props.data,
-  () => {},
-  { deep: true },
-)
 
 const localSelectedIds = ref([...props.selectedIds])
 const localSelectAll = ref(false)
@@ -143,6 +148,23 @@ const totalColumns = computed(() => {
 })
 
 const localData = computed(() => props.data)
+// Real table rows support arbitrary heights and custom slot contents.
+// Limit mounted rows independently of the caller's server-side paging.
+const PAGE_SIZE = 100
+const page = ref(0)
+const pageCount = computed(() => Math.max(1, Math.ceil(localData.value.length / PAGE_SIZE)))
+const pageStart = computed(() => page.value * PAGE_SIZE)
+const isLastPage = computed(() => page.value === pageCount.value - 1)
+const visibleData = computed(() => localData.value.slice(pageStart.value, pageStart.value + PAGE_SIZE))
+
+function changePage(next) {
+  page.value = Math.max(0, Math.min(next, pageCount.value - 1))
+  if (tableWrapper.value) tableWrapper.value.scrollTop = 0
+}
+
+watch(pageCount, (count) => {
+  if (page.value >= count) changePage(count - 1)
+})
 
 watch(
   localSelectedIds,
@@ -185,9 +207,16 @@ watch(
   async () => {
     const id = String(props.highlightId || '')
     if (!id || !tableWrapper.value) return
+    const index = localData.value.findIndex((row) => String(getRowId(row) ?? '') === id)
+    if (index < 0) return
+    const targetPage = Math.floor(index / PAGE_SIZE)
+    if (targetPage !== page.value) changePage(targetPage)
     await nextTick()
-    const safe = window.CSS?.escape ? window.CSS.escape(id) : id.replace(/["\\]/g, '')
-    tableWrapper.value.querySelector(`[data-row-id="${safe}"]`)?.scrollIntoView?.({ block: 'center' })
+    const host = tableWrapper.value
+    if (!host || String(props.highlightId || '') !== id) return
+    Array.from(host.querySelectorAll('[data-row-id]'))
+      .find((element) => element.dataset.rowId === id)
+      ?.scrollIntoView?.({ block: 'center' })
   },
 )
 
@@ -323,6 +352,18 @@ defineExpose({
 
 .no-more-tip {
   color: #94a3b8;
+}
+
+.data-table-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.data-table-pages button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .data-table input[type='checkbox'] {

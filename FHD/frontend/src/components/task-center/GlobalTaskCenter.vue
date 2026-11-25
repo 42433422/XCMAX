@@ -34,6 +34,14 @@ const filteredTasks = computed(() =>
   }),
 )
 
+// Keep the existing server task scope; do not duplicate the stream scheduler.
+const TASK_PAGE_SIZE = 60
+const taskPage = ref(0)
+const taskPageCount = computed(() => Math.max(1, Math.ceil(filteredTasks.value.length / TASK_PAGE_SIZE)))
+const visibleTasks = computed(() => filteredTasks.value.slice(taskPage.value * TASK_PAGE_SIZE, (taskPage.value + 1) * TASK_PAGE_SIZE))
+watch(filter, () => { taskPage.value = 0 })
+watch(taskPageCount, (count) => { taskPage.value = Math.min(taskPage.value, count - 1) })
+
 const tutorialScopeKey = computed(() => {
   const run = tutorialStore.currentRun
   return JSON.stringify([run?.id, run?.status, run?.generation, account.tenantId, account.localUserId, account.marketUserId, account.impersonatingMarketUserId, account.accountKind, mods.activeModId])
@@ -96,11 +104,17 @@ onMounted(() => {
   // 登录成功会先写入账号再回到工作台，组件挂上时 id 已经有值，watcher 不会再触发。
   // 启动遮罩还在、或 ready 标记还没写上时，先不拉 200 条任务，避免堵住当前页。
   if (shellReadyForTaskPolling()) resumeIfSignedIn()
-  else window.addEventListener('xcagi:startup-ready', () => resumeIfSignedIn(), { once: true })
+  else window.addEventListener('xcagi:startup-ready', resumeIfSignedIn, { once: true })
 })
-onBeforeUnmount(() => store.stop())
+onBeforeUnmount(() => {
+  window.removeEventListener('xcagi:startup-ready', resumeIfSignedIn)
+  store.stop()
+})
 watch(tutorialScopeKey, (next, previous) => {
-  if (next !== previous) store.restartForScope()
+  if (next !== previous) {
+    taskPage.value = 0
+    store.restartForScope()
+  }
 }, { flush: 'sync' })
 </script>
 
@@ -173,7 +187,7 @@ watch(tutorialScopeKey, (next, previous) => {
 
           <div class="task-center-list" data-tutorial-id="task-workspace-list">
             <button
-              v-for="task in filteredTasks"
+              v-for="task in visibleTasks"
               :key="task.task_id"
               class="task-center-item"
               type="button"
@@ -217,6 +231,11 @@ watch(tutorialScopeKey, (next, previous) => {
                 <span>进入独立对话 →</span>
               </span>
             </button>
+            <nav v-if="taskPageCount > 1" class="task-center-filters" aria-label="工作区分页">
+              <button type="button" :disabled="taskPage === 0" @click="taskPage--">上一页</button>
+              <span aria-live="polite">{{ taskPage + 1 }} / {{ taskPageCount }}</span>
+              <button type="button" :disabled="taskPage + 1 >= taskPageCount" @click="taskPage++">下一页</button>
+            </nav>
             <div v-if="!filteredTasks.length" class="task-center-empty">
               {{ loading ? '正在同步工作区…' : '这里暂时没有工作区' }}
             </div>

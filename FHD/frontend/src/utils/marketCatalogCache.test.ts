@@ -5,6 +5,7 @@ vi.mock('@/utils/tenantStorageScope', () => ({
   resolveTenantStorageScopeFromRuntime: () => scope.value,
 }))
 import {
+  MARKET_CACHE_MAX_ENTRIES,
   buildMarketCatalogCacheKey,
   clearMarketCatalogCache,
   isMarketCatalogCacheFresh,
@@ -14,6 +15,7 @@ import {
 
 describe('marketCatalogCache', () => {
   beforeEach(() => {
+    scope.value = 'tenant-a'
     clearMarketCatalogCache()
   })
 
@@ -28,6 +30,28 @@ describe('marketCatalogCache', () => {
     const hit = readMarketCatalogCache(key)
     expect(hit?.items).toHaveLength(1)
     expect(isMarketCatalogCacheFresh(hit)).toBe(true)
+  })
+
+  it('bounds persisted and memory cache entries across repeated searches', () => {
+    vi.useFakeTimers()
+    try {
+      for (let i = 0; i < MARKET_CACHE_MAX_ENTRIES + 5; i++) {
+        vi.setSystemTime(new Date(1700000000000 + i * 1000))
+        writeMarketCatalogCache(buildMarketCatalogCacheKey('office', String(i)), 'office', [{ id: String(i) } as never])
+      }
+      expect(Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i))
+        .filter(key => key?.startsWith('xcagi_market_catalog_v1:'))).toHaveLength(MARKET_CACHE_MAX_ENTRIES)
+      expect(readMarketCatalogCache(buildMarketCatalogCacheKey('office', '0'))).toBeNull()
+      expect(readMarketCatalogCache(buildMarketCatalogCacheKey('office', String(MARKET_CACHE_MAX_ENTRIES + 4)))?.items[0].id).toBe(String(MARKET_CACHE_MAX_ENTRIES + 4))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('skips oversized payloads without truncating a result', () => {
+    const key = buildMarketCatalogCacheKey('office', 'large')
+    writeMarketCatalogCache(key, 'office', [{ id: 'large', name: 'x'.repeat(300 * 1024) } as never])
+    expect(readMarketCatalogCache(key)).toBeNull()
   })
 
   it('isolates memory caches and targeted removal across tenant switches', () => {
