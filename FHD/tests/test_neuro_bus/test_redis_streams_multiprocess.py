@@ -306,3 +306,26 @@ def test_dlq_soft_limit_never_drops_unconsumed_failures(redis_url, monkeypatch):
     finally:
         _fresh_stream(client)
         client.close()
+
+
+def test_new_group_reads_preexisting_backlog_instead_of_skipping(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 1)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        ids = [
+            client.xadd(STREAM_KEY, {"payload": json.dumps({"n": i})}).decode()
+            for i in range(5)
+        ]
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="new")
+        assert bridge.trim_acknowledged() == 0
+        messages = bridge.consume(count=5, block_ms=1000)
+        assert [message["_msg_id"] for message in messages] == ids
+        for msg_id in ids:
+            bridge.ack(msg_id)
+        assert client.xlen(STREAM_KEY) == 1
+    finally:
+        _fresh_stream(client)
+        client.close()
