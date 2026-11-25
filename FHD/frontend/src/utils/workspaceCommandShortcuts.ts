@@ -6,7 +6,7 @@ export const WORKSPACE_COMMANDS = [
   { id: 'chat', label: '打开智能对话', defaultChord: 'Mod+Alt+J' },
   { id: 'new-chat', label: '新建对话', defaultChord: 'Mod+Alt+N' },
   { id: 'new-task', label: '新建任务草稿', defaultChord: 'Mod+Alt+G' },
-  { id: 'sessions', label: '切换历史会话', defaultChord: 'Mod+Alt+H' },
+  { id: 'sessions', label: '切换历史会话', defaultChord: 'Mod+Shift+H' },
   { id: 'tasks', label: '查看任务工作区', defaultChord: 'Mod+Alt+T' },
   { id: 'sidebar', label: '展开或折叠侧栏', defaultChord: 'Mod+Alt+B' },
 ] as const
@@ -21,9 +21,10 @@ export type WorkspaceCommandPreferences = {
 }
 const PREFIX = 'xcagi.desktop.workspace.commands.v1'
 const IDS = new Set<string>(WORKSPACE_COMMANDS.map((command) => command.id))
-const RESERVED_CHORDS = new Set(['Mod+Q', 'Mod+W', 'Mod+R', 'Mod+T', 'Mod+N', 'Mod+P', 'Mod+F', 'Mod+L', 'Mod+Tab', 'Mod+Comma'])
+// Cmd+Option+H is Electron's macOS hideOthers role. Keep the same safe choices on both platforms.
+const RESERVED_CHORDS = new Set(['Mod+Alt+H', 'Mod+Q', 'Mod+W', 'Mod+R', 'Mod+T', 'Mod+N', 'Mod+P', 'Mod+F', 'Mod+L', 'Mod+Tab', 'Mod+Comma'])
 export const WORKSPACE_SHORTCUT_CHOICES = [
-  'Mod+K', 'Mod+Shift+K', 'Mod+Alt+K', 'Mod+Alt+J', 'Mod+Alt+N', 'Mod+Alt+H',
+  'Mod+K', 'Mod+Shift+K', 'Mod+Alt+K', 'Mod+Alt+J', 'Mod+Alt+N',
   'Mod+Alt+T', 'Mod+Alt+B', 'Mod+Alt+G', 'Mod+Alt+Y', 'Mod+Shift+J',
   'Mod+Shift+G', 'Mod+Shift+H', 'Mod+Shift+Y',
 ] as const
@@ -35,28 +36,33 @@ export function defaultWorkspaceShortcuts(): WorkspaceShortcutMap {
 export function validateWorkspaceShortcut(
   bindings: WorkspaceShortcutMap, id: WorkspaceCommandId, chord: string,
 ): string {
-  if (!WORKSPACE_SHORTCUT_CHOICES.includes(chord as (typeof WORKSPACE_SHORTCUT_CHOICES)[number])) return '不支持此快捷键'
   if (RESERVED_CHORDS.has(chord)) return '该快捷键属于系统或浏览器保留组合'
+  if (!WORKSPACE_SHORTCUT_CHOICES.includes(chord as (typeof WORKSPACE_SHORTCUT_CHOICES)[number])) return '不支持此快捷键'
   if (Object.entries(bindings).some(([key, value]) => key !== id && value === chord)) return '该快捷键已分配给其他工作区命令'
   return ''
 }
 
 export type ShortcutKeyEvent = Pick<KeyboardEvent,
-  'key' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing' | 'repeat' | 'defaultPrevented' | 'keyCode'>
+  'key' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing' | 'repeat' | 'defaultPrevented' | 'keyCode'> & Partial<Pick<KeyboardEvent, 'code' | 'getModifierState'>>
 
 export function workspaceKeyChord(event: ShortcutKeyEvent, isMac: boolean): string {
-  if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return ''
+  if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229 || event.getModifierState?.('AltGraph')) return ''
   if (isMac ? (!event.metaKey || event.ctrlKey) : (!event.ctrlKey || event.metaKey)) return ''
-  if (event.key.length !== 1 || !/^[a-z]$/i.test(event.key)) return ''
-  return ['Mod', ...(event.altKey ? ['Alt'] : []), ...(event.shiftKey ? ['Shift'] : []), event.key.toUpperCase()].join('+')
+  // Option can produce a non-ASCII letter or a dead key on macOS. Use the physical
+  // letter only for that modifier combination; regular keyboard layouts keep key semantics.
+  const letter = /^[a-z]$/i.test(event.key) ? event.key.toUpperCase()
+    : isMac && event.altKey && /^Key[A-Z]$/.test(event.code || '') ? event.code!.slice(3) : ''
+  if (!letter) return ''
+  return ['Mod', ...(event.altKey ? ['Alt'] : []), ...(event.shiftKey ? ['Shift'] : []), letter].join('+')
 }
 
 export function workspaceCommandForKey(
   event: ShortcutKeyEvent, shortcuts: WorkspaceShortcutMap, isMac: boolean,
 ): WorkspaceCommandId | null {
   const chord = workspaceKeyChord(event, isMac)
-  if (!chord) return null
-  return WORKSPACE_COMMANDS.find((command) => shortcuts[command.id] === chord)?.id ?? null
+  if (!chord || RESERVED_CHORDS.has(chord) || !WORKSPACE_SHORTCUT_CHOICES.includes(chord as (typeof WORKSPACE_SHORTCUT_CHOICES)[number])) return null
+  const matches = WORKSPACE_COMMANDS.filter((command) => shortcuts[command.id] === chord)
+  return matches.length === 1 ? matches[0].id : null
 }
 
 /** Do not persist account metadata, task data, or preferences under unauthenticated/shared keys. */
