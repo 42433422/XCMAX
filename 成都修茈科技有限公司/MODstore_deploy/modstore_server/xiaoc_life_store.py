@@ -1246,8 +1246,8 @@ def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict
 
 def require_operating_goal_admission(decision_id: str, proposal: dict[str, Any]) -> None:
     """Require a fresh same-goal observation before the original SQL task claim."""
-    from modstore_server.xiaoc_goal_management import ORIGIN
     from modstore_server.xiaoc_goal_governance import governance_gate
+    from modstore_server.xiaoc_goal_management import ORIGIN
 
     if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
         return
