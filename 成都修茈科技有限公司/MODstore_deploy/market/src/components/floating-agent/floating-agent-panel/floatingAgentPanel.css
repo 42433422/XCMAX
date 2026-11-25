@@ -55,16 +55,18 @@
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
 }
 
-.butler-panel.butler-panel--corp-anchor .panel-composer--corp :deep(.voice-bar) {
+.butler-panel.butler-panel--corp-anchor .panel-composer-layout--corp :deep(.voice-bar) {
   flex-shrink: 0;
   margin: 0;
 }
 
-.butler-panel.butler-panel--corp-anchor .panel-composer--corp :deep(.voice-hint),
-.butler-panel.butler-panel--corp-anchor .panel-composer--corp :deep(.voice-err) {
+.butler-panel.butler-panel--corp-anchor .panel-composer-layout--corp :deep(.voice-hint),
+.butler-panel.butler-panel--corp-anchor .panel-composer-layout--corp :deep(.voice-err) {
   display: none;
 }
 
@@ -203,6 +205,12 @@
   gap: 6px;
 }
 
+.panel-composer-layout { display: flex; flex-direction: column; gap: 6px; min-width: 0; width: 100%; }
+.panel-composer-layout--corp { flex-direction: row; align-items: flex-end; }
+.panel-composer-layout--corp .panel-tools { flex-shrink: 0; align-items: flex-end; }
+.panel-composer-layout--corp .panel-composer { flex: 1 1 auto; min-width: 0; }
+.panel-composer-layout--corp .panel-input-shell { display: flex; flex: 1 1 auto; min-width: 0; }
+.panel-composer-layout--corp .panel-input-shell .panel-input { min-width: 0; width: 100%; }
 .panel-composer {
   display: flex;
   align-items: flex-end;
@@ -241,8 +249,8 @@
   outline: none;
   line-height: 1.4;
   font-family: inherit;
-  min-height: 36px;
-  max-height: 80px;
+  min-height: 44px;
+  max-height: 120px;
   transition: border-color 0.15s;
 }
 
@@ -250,8 +258,8 @@
 .panel-input:focus { border-color: rgba(148, 163, 184, 0.38); }
 
 .panel-send {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 9px;
   display: flex;
   align-items: center;
@@ -275,8 +283,8 @@
 }
 
 .panel-shot-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
