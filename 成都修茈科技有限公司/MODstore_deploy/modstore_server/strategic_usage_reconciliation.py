@@ -23,7 +23,15 @@ from modstore_server.strategic_portfolio import (
 )
 
 logger = logging.getLogger(__name__)
-_READBACK_ERRORS = (PortfolioError, SQLAlchemyError, ValueError, KeyError, TypeError, ImportError)
+_READBACK_ERRORS = (
+    PortfolioError,
+    SQLAlchemyError,
+    ValueError,
+    KeyError,
+    TypeError,
+    ImportError,
+    OverflowError,
+)
 
 
 def bind_transport(reservation: dict[str, Any]) -> dict[str, Any]:
@@ -205,11 +213,16 @@ def _resume_usage_hold(
 
 def _due(record: dict[str, Any], *, pending: bool) -> bool:
     binding = record.get("transport_binding")
-    if not isinstance(binding, dict) or record.get("transport_binding_sha256") != digest(binding):
-        return False
     try:
-        return not pending or _date(binding["deadline"]) <= datetime.now(UTC)
-    except (ValueError, KeyError, TypeError):
+        if (
+            not isinstance(binding, dict)
+            or record.get("transport_binding_sha256") != digest(binding)
+            or not all(isinstance(binding.get(key), str) for key in ("started_at", "deadline"))
+        ):
+            return False
+        started, deadline = _date(binding["started_at"]), _date(binding["deadline"])
+        return started <= deadline and (not pending or deadline <= datetime.now(UTC))
+    except (ValueError, KeyError, TypeError, OverflowError):
         return False
 
 

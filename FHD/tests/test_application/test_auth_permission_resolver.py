@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.application import auth_permission_resolver as permissions
+from app.domain.app_pure import auth_permission_resolver as permissions
 
 
 @pytest.mark.parametrize(
@@ -102,7 +102,7 @@ def test_admin_desktop_detection_failure_falls_back_to_shell(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail_detection() -> bool:
-        raise RuntimeError("runtime probe unavailable")
+        raise OSError("runtime probe unavailable")
 
     monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", fail_detection)
     blocked = permissions.resolve_permissions(

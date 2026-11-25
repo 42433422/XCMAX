@@ -17,10 +17,11 @@ from openai.types.chat import ChatCompletionChunk
 
 from modstore_server.llm_billing_values import exact_reported_usage
 from modstore_server.llm_chat_proxy import _normalize_openai_base
-from modstore_server.llm_gateway_contract import gateway_single_attempt
+from modstore_server.llm_gateway_contract import StreamReceiptBudget, gateway_single_attempt
 from modstore_server.llm_key_resolver import ChatRouteSnapshot, is_minimax_token_plan_key
 from modstore_server.llm_litellm_router import _deployment, _extra_headers, _load_litellm
 from modstore_server.platform_model_config import PlatformApiKey
+from modstore_server.platform_model_transport import bound_model_stream_client
 
 _COUNTERS = ("x-litellm-attempted-retries", "x-litellm-attempted-fallbacks")
 
@@ -75,9 +76,11 @@ class ResponsesTransport:
         self.streaming = False
         self.finish_reasons: set[str] = set()
         self.tool_arguments: dict[int, str] = {}
+        self.stream_budget = StreamReceiptBudget()
 
     def observe(self, response: Any) -> None:
         value = response.model_dump(mode="json", exclude_unset=True)
+        self.stream_budget.consume(value)
         if isinstance(value.get("model"), str) and value["model"]:
             self.models.add(value["model"])
         if isinstance(value.get("usage"), dict):
@@ -184,8 +187,10 @@ class ResponsesTransport:
             default_headers=_extra_headers(self.route.provider, self.route.api_key),
             timeout=self.timeout,
             max_retries=0,
-            http_client=DefaultAsyncHttpxClient(
-                trust_env=False, follow_redirects=False, event_hooks={"request": [before_send]}
+            http_client=bound_model_stream_client(
+                DefaultAsyncHttpxClient(
+                    trust_env=False, follow_redirects=False, event_hooks={"request": [before_send]}
+                )
             ),
         )
         if self.direct:

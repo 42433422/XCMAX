@@ -1,5 +1,5 @@
 """COVERAGE_RAMP Phase 3 round 2: wechat_contact, purchase, xcagi_compat_product,
-tools_workflow_registered, tools_payload_legacy, planner fallback."""
+tools_workflow_registered, planner fallback."""
 
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from app.application.workflow.planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from app.domain.shared_services.purchase_service import PurchaseService
-from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
+from app.domain.shared_services.tools_workflow_registered import (
+    _registered_router_customers,
+)
 from app.services.tools_execution.registry import get_workflow_tool_registry
 
 # ---------------------------------------------------------------------------
@@ -80,7 +81,7 @@ def test_purchase_get_supplier_missing(mock_get_db: MagicMock) -> None:
 
 
 # ---------------------------------------------------------------------------
-# tools_workflow_registered + tools_payload_legacy
+# tools_workflow_registered
 # ---------------------------------------------------------------------------
 
 
@@ -103,26 +104,6 @@ def test_registered_router_customers_ensure_exists(mock_get: MagicMock) -> None:
     assert out["success"] is True
 
 
-def test_dispatch_legacy_tool_products_search() -> None:
-    def _j(data, status=200):
-        return {"body": data, "status": status}
-
-    with patch("app.bootstrap.get_products_service") as mock_ps:
-        mock_ps.return_value.get_products.return_value = {
-            "success": True,
-            "data": [{"name": "漆"}],
-        }
-        resp = dispatch_legacy_tool_payload(
-            "products",
-            "query",
-            {"keyword": "5003"},
-            json_response_fn=_j,
-            hdr_getter=lambda k: "",
-            parse_order_text_fn=lambda t: {},
-        )
-    assert resp["body"]["success"] is True
-
-
 # ---------------------------------------------------------------------------
 # planner fallback / filter
 # ---------------------------------------------------------------------------
@@ -134,7 +115,10 @@ def test_filter_tool_registry_pro_default() -> None:
             "availability": "normal_only",
             "actions": {"run": {"availability": "normal_only"}},
         },
-        "shared": {"availability": "shared", "actions": {"query": {"availability": "shared"}}},
+        "shared": {
+            "availability": "shared",
+            "actions": {"query": {"availability": "shared"}},
+        },
     }
     filtered = _filter_tool_registry_for_profile(reg, "pro_default")
     assert "normal_only_tool" not in filtered
@@ -198,7 +182,9 @@ def test_xcagi_products_list(xcagi_product_client: TestClient) -> None:
     assert r.json()["total"] == 1
 
 
-def test_xcagi_products_resolve_name_hints_501(xcagi_product_client: TestClient) -> None:
+def test_xcagi_products_resolve_name_hints_501(
+    xcagi_product_client: TestClient,
+) -> None:
     with patch(
         "app.legacy.routes.product.compat_routes._business_mod_json_block",
         return_value=None,

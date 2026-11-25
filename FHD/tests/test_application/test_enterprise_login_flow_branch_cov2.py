@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from sqlite3 import OperationalError
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -171,7 +172,7 @@ class TestBindTenantForLogin:
     def test_returns_empty_dict_on_exception(self) -> None:
         with patch(
             "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            side_effect=RuntimeError("boom"),
+            side_effect=OperationalError("database unavailable"),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="brand", username="user")
             assert result == {"tenant_id": None, "tenant_name": ""}
@@ -343,9 +344,9 @@ class TestDeriveAndHealAccountKind:
             mock_db.commit.assert_not_called()
 
     def test_returns_fallback_on_exception(self) -> None:
-        # get_db() 是上下文管理器，__enter__ 抛 RuntimeError 触发 RECOVERABLE_ERRORS
+        # get_db() 是上下文管理器，__enter__ 抛 OperationalError 触发 RECOVERABLE_ERRORS
         mock_ctx = MagicMock()
-        mock_ctx.__enter__.side_effect = RuntimeError("db down")
+        mock_ctx.__enter__.side_effect = OperationalError("db down")
         mock_ctx.__exit__.return_value = None
         with (
             patch("app.db.session.get_db", return_value=mock_ctx),

@@ -776,7 +776,7 @@ class TestCsInboxMessages:
         with (
             patch.object(svc, "enterprise_cs_user_id", return_value=8),
             patch.object(svc, "list_messages", return_value=messages),
-            patch.object(svc, "mark_read", side_effect=RuntimeError("boom")),
+            patch.object(svc, "mark_read", side_effect=OSError("boom")),
         ):
             result = svc.cs_inbox_messages(123)
 
@@ -869,7 +869,7 @@ class TestEmployeeImSummary:
         db = MagicMock()
         db.execute.return_value.scalars.return_value.all.return_value = []  # no profiles
         svc = ImApplicationService(db)
-        with patch.object(svc, "ensure_employee_user", side_effect=RuntimeError("nope")):
+        with patch.object(svc, "ensure_employee_user", side_effect=OSError("nope")):
             result = svc.employee_im_summary(10, [{"id": "e1"}, {"id": "e2"}])
         assert result == {}
 
@@ -968,7 +968,7 @@ class TestEmployeeImSummary:
         with (
             patch.object(svc, "_direct_peer_id", return_value=999),
             patch.object(svc, "_count_unread", return_value=0),
-            patch.object(svc, "get_or_create_direct", side_effect=RuntimeError("fail")),
+            patch.object(svc, "get_or_create_direct", side_effect=OSError("fail")),
         ):
             result = svc.employee_im_summary(10, [{"id": "e1", "name": "A"}])
         assert "e1" not in result
@@ -1034,7 +1034,7 @@ class TestEmployeeImSummary:
             patch.object(
                 svc,
                 "get_or_create_direct",
-                side_effect=RuntimeError("boom"),
+                side_effect=OSError("boom"),
             ),
         ):
             result = svc.employee_im_summary(10, [{"id": "e1", "name": "A"}])

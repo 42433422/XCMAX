@@ -373,6 +373,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
     try:
         from app.db.models.user import Session as UserSession
+        from app.infrastructure.session.session_manager import session_has_expired
         from app.utils.time import utc_now_naive
 
         with _session_row_db_context() as db:
@@ -384,7 +385,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
                 )
                 .first()
             )
-            if row is None:
+            if row is None or session_has_expired(db, row):
                 clear_session_entitlements()
                 return False
             mid = getattr(row, "market_user_id", None)

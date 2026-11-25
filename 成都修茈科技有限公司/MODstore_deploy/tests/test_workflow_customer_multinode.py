@@ -449,6 +449,55 @@ def test_two_original_employees_end_mapping_and_restart_only_finalize(two_employ
         )
 
 
+@pytest.mark.parametrize("fault", [None, "produced_digest", "returned_digest", "terminal_output"])
+def test_completed_history_retains_original_artifacts_but_requires_its_sealed_graph(
+    two_employees, fault
+):
+    state = two_employees
+    state.run()
+    charges = list(state.charged)
+    assert len(charges) == 1
+    with state.factory() as db:
+        execution = original._execution(state, db)
+        execution_id = int(execution.id)
+        binding, produced = delivery.load_completed_delivery(db, execution_id)
+        contract = binding["customer_delivery"]
+        last = delivery.delivery_nodes(contract)[-1]
+        if fault == "produced_digest":
+            row = delivery._event(db, f"{delivery.PRODUCED_EVENT}:{execution_id}:{last['node_id']}")
+            payload = json.loads(row.payload_json)
+            payload["artifacts"][0]["artifact_sha256"] = "f" * 64
+            row.payload_json = json.dumps(payload)
+        elif fault == "returned_digest":
+            row = delivery._event(db, f"{finalization.RETURNED_EVENT}:{execution_id}")
+            payload = json.loads(row.payload_json)
+            payload["receipt_sha256"] = "f" * 64
+            row.payload_json = json.dumps(payload)
+        elif fault == "terminal_output":
+            execution.output_data = json.dumps({"claimed": "different graph"})
+        db.commit()
+    for artifact in produced["artifacts"]:
+        (state.env["workspace"] / artifact["output_path"]).write_bytes(b"later execution output")
+    with state.factory() as db:
+        if fault:
+            with pytest.raises(ValueError):
+                delivery.load_completed_delivery(db, execution_id)
+        else:
+            assert delivery.load_completed_delivery(db, execution_id) == (
+                binding,
+                produced,
+            )
+            assert delivery.load_produced_delivery(db, contract) == produced
+            artifact = produced["artifacts"][-1]
+            response = state.env["http"].get(
+                f"/api/customer-value/workflow-deliveries/{execution_id}/{artifact['artifact_id']}",
+                params=original.customer_tests._query(state.env),
+            )
+            assert response.status_code == 200
+            assert hashlib.sha256(response.content).hexdigest() == artifact["artifact_sha256"]
+    assert len(state.native) == 2 and len(state.feedback) == 1 and state.charged == charges
+
+
 @pytest.mark.parametrize(
     "fault",
     [

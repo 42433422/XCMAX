@@ -18,9 +18,14 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
 
     assert orchestrator.AgentToolExecutor is original_executor
     assert result["execution_mode"] == "fixture_local"
-    assert result["failed"] == 0, [case for case in result["results"] if not case["passed"]]
-    assert result["passed"] == 123
-    assert len(result["results"]) == 123
+    failures = [
+        {"id": case["id"], "failed_checks": case["failed_checks"]}
+        for case in result["results"]
+        if not case["passed"]
+    ]
+    assert not failures, json.dumps(failures, ensure_ascii=False, indent=2)
+    assert result["passed"] == len(eval_module.load_tasks()) == 123
+    assert len(result["results"]) == len(eval_module.load_tasks())
     assert result["score"] == 1.0
     assert result["coverage"] == {
         "fixture_contract_passed": 123,
@@ -28,15 +33,22 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
         "artifact_integrity_verified": 2,
         "task_admission_verified": 1,
         "read_only_contract": 8,
-        "unverified": 68,
-        "not_exercised": 28,
+        "unverified": 45,
+        "not_exercised": 51,
     }
     dispatch_only = [
         row for row in result["results"] if row["coverage_scope"] == "dispatch_contract_only"
     ]
-    assert len(dispatch_only) == 62
+    assert len(dispatch_only) == 39
     assert all(row["business_goal_expected"] for row in dispatch_only)
     assert all(row["result_coverage"] == "unverified" for row in dispatch_only)
+    denied = [
+        row for row in result["results"] if row["coverage_scope"] == "authorization_contract_only"
+    ]
+    assert len(denied) == 23
+    assert all(row["business_goal_expected"] for row in denied)
+    assert all(row["result_coverage"] == "not_exercised" for row in denied)
+    assert all(row["details"]["run"] is None for row in denied)
     missing_spec = next(
         row
         for row in result["results"]
@@ -141,6 +153,81 @@ def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -
     assert tool_permission._LIVE_OWNERS is original_owners
     assert "evaluation-only" not in original_claims
     assert "evaluation-owner" not in original_owners
+
+
+@pytest.mark.parametrize("fail_task", [False, True])
+@pytest.mark.parametrize("existing_store", [False, True])
+def test_eval_drains_owned_traces_before_removing_storage(
+    monkeypatch, tmp_path, fail_task, existing_store
+) -> None:
+    import os
+    import threading
+    from pathlib import Path
+
+    from app.infrastructure.llm import trace_store
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "")
+    caller_path = tmp_path / "caller-traces"
+    previous = trace_store.TraceStore(base_dir=caller_path) if existing_store else None
+    if previous is not None:
+        previous.start()
+    monkeypatch.setattr(trace_store, "_store", previous)
+    monkeypatch.setenv("XCAGI_GENAI_TRACE_DIR", str(caller_path))
+    observed = {}
+    failure = RuntimeError("evaluation task failed")
+    span_ids = {f"evaluation-{index}" for index in range(101)}
+
+    def run_task(_task):
+        before = set(threading.enumerate())
+        store = trace_store.get_trace_store()
+        observed.update(store=store, threads=set(threading.enumerate()) - before)
+        for span_id in span_ids:
+            store.record({"span_id": span_id, "name": "evaluation resource"})
+        if fail_task:
+            raise failure
+        return {"passed": True}
+
+    cleanup = eval_module.tempfile.TemporaryDirectory.cleanup
+
+    def check_cleanup(directory):
+        root = Path(directory.name)
+        if not root.name.startswith("xcagi-agent-eval-"):
+            return cleanup(directory)
+        store = observed["store"]
+        try:
+            assert store is not previous
+            assert store._base_dir.is_relative_to(root)
+            assert store._closed and store._log_provider is None
+            assert not any(thread.is_alive() for thread in observed["threads"])
+            assert {row["span_id"] for row in store.query(limit=200)} == span_ids
+            assert trace_store._store is previous
+            assert os.environ["XCAGI_GENAI_TRACE_DIR"] == str(caller_path)
+            observed["cleaned"] = root
+        finally:
+            if store is not previous:
+                store.stop()
+            cleanup(directory)
+
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [{}])
+    monkeypatch.setattr(eval_module, "run_task", run_task)
+    monkeypatch.setattr(eval_module.tempfile.TemporaryDirectory, "cleanup", check_cleanup)
+    try:
+        if fail_task:
+            with pytest.raises(RuntimeError) as raised:
+                run_eval()
+            assert raised.value is failure
+        else:
+            assert run_eval()["passed"] == 1
+        assert not observed["cleaned"].exists()
+        assert trace_store._store is previous
+        if previous is not None:
+            assert not previous._closed
+            previous.record({"span_id": "caller-after-evaluation"})
+            previous.flush()
+            assert [row["span_id"] for row in previous.query()] == ["caller-after-evaluation"]
+    finally:
+        if previous is not None:
+            previous.stop()
 
 
 def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
@@ -269,7 +356,7 @@ def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:
         assert client.post("/fixture-write").status_code == 401
 
 
-def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -> None:
+def test_shipment_fixture_does_not_admit_missing_tenant(monkeypatch) -> None:
     from unittest.mock import Mock
 
     from fastapi import FastAPI
@@ -281,10 +368,15 @@ def test_legacy_shipment_fixture_does_not_admit_enterprise_tenant(monkeypatch) -
     app.include_router(shipment_orders.router)
     service = Mock()
     monkeypatch.setattr(shipment_orders, "_svc", lambda: service)
-    with TestClient(app) as client, eval_module._authenticated_route_fixture(client, tenant_id=7):
-        response = client.delete("/api/orders/clear-all")
+    with (
+        TestClient(app) as client,
+        eval_module._authenticated_route_fixture(client, tenant_id=None),
+    ):
+        response = client.delete(
+            "/api/orders/clear-all", headers={"Idempotency-Key": "missing-tenant"}
+        )
     assert response.status_code == 403
-    assert "租户数据隔离" in response.json()["detail"]
+    assert response.json().get("error_code") == "approval_scope_required"
     assert not service.mock_calls
 
 
@@ -301,3 +393,20 @@ def test_eval_route_receipts_do_not_leak_into_later_requests(monkeypatch) -> Non
     assert result["passed"] == len(tasks) > 0
     assert claims == tool_permission._IDEMPOTENCY
     assert owners == tool_permission._LIVE_OWNERS
+
+
+def test_original_medium_document_survives_workspace_review(monkeypatch):
+    task = next(
+        row
+        for row in eval_module.load_tasks()
+        if row["id"] == "generate_office_document_requires_approval_and_records_artifact"
+    )
+    assert task["review_channel"] == "workspace"
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [task])
+    result = run_eval()["results"][0]
+    assert result["passed"], result["failed_checks"]
+    assert result["result_coverage"] == "artifact_integrity_verified"
+    run = result["details"]["run"]
+    assert run["status"] == "completed" and len(run["artifacts"]) == 1
+    assert run["metadata"]["plan"]["nodes"][0]["risk"] == "medium"
+    assert run["metadata"]["plan"]["metadata"]["approval_required_node_ids"] == []

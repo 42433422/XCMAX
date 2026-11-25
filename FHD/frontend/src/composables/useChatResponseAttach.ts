@@ -7,7 +7,8 @@ import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { buildAgentRunTraceFromEvents, isTrivialChatTrace, readExecutionObservation } from '@/utils/agentRunTraceModel'
 import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
-import { runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
+import { runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { plannerExecutionState } from './chat-orchestration/chatOrchestrationShared'
 
 export interface UseChatResponseAttachDeps {
   messages: Ref<ChatMessage[]>
@@ -71,7 +72,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
   function attachWorkflowTraceToLastAiMessage(data: ChatPlannerPayload): void {
     const envelope = asRecord(data.data)
     const runtimeContinuation = runtimeContinuationFromPayload(data)
-    const action = runtimeContinuation ? runtimeExecutionState(data) : asString(envelope.action).trim()
+    const action = runtimeContinuation ? plannerExecutionState(data) : asString(envelope.action).trim()
     const nodeResultsRaw = nestedData(data).node_results
     const nodeResults = asArray<Record<string, unknown>>(nodeResultsRaw)
       .map((x) => ({

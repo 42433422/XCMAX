@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from typing import Any
 
 _BASE = "http://127.0.0.1:8793/api/kellai/integrations/xcmax/"
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class KellaiRequestError(RuntimeError):
@@ -17,10 +17,26 @@ class KellaiRequestError(RuntimeError):
         self.status_code = status_code
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise KellaiRequestError("客来来连接不允许重定向", 502)
+
+
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+_PATH = re.compile(
+    r"(?:channels|data-status|customers(?:\?limit=[0-9]+)?|"
+    r"customers/[0-9]+/conversations(?:\?(?:limit=[0-9]+|"
+    r"message_id=(?:[A-Za-z0-9_.~-]|%[0-9A-Fa-f]{2})+&limit=1))?|"
+    r"messages/send|messages/requests/[A-Za-z0-9_-]{12,128})"
+)
+
+
 def request_kellai(
     path: str, connection: dict[str, Any], body: dict[str, Any] | None = None, *, opener=None
 ) -> dict[str, Any]:
     """Never retry a write: lost responses must be reconciled by its request ID."""
+    if not _PATH.fullmatch(path) or body is not None and path != "messages/send":
+        raise KellaiRequestError("客来来请求路径无效", 422)
     receipt_id = (
         str((body or {}).get("client_request_id") or "")
         if path == "messages/send"

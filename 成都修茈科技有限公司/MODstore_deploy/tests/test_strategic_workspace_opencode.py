@@ -47,13 +47,8 @@ def wire_workspace(request, monkeypatch, tmp_path):
     return state
 
 
-@pytest.mark.skipif(
-    not os.environ.get("PARA_TEST_OPENCODE_BINARY"),
-    reason="requires the pinned OpenCode 1.19.6 and ws lock",
-)
-@pytest.mark.parametrize("executor_exists", [True, False], ids=["real_sdk", "missing_executor"])
-def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
-    wire_workspace, monkeypatch, tmp_path, executor_exists
+def _run_workspace_wire(
+    wire_workspace, monkeypatch, tmp_path, deadline_mode=None, *, executor_exists=True
 ):
     state = wire_workspace
     work_tests.attach(state)
@@ -88,10 +83,17 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
     server = uvicorn.Server(uvicorn.Config(state.app, log_level="error", lifespan="off", ws="none"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
-    binary = Path(os.environ["PARA_TEST_OPENCODE_BINARY"])
-    assert (
-        binary.parents[2] / "ws/package.json"
-    ).exists(), "install the existing GitHub worker lock"
+    if deadline_mode:
+        modules = tmp_path / "modules"
+        (modules / "ws").mkdir(parents=True)
+        (modules / "ws/index.js").write_text("module.exports = class { static OPEN = 1 };\n")
+        binary = tmp_path / "unlaunched-opencode"
+        binary.write_text("#!/bin/sh\nexit 99\n")
+        binary.chmod(0o700)
+    else:
+        binary = Path(os.environ["PARA_TEST_OPENCODE_BINARY"])
+        modules = binary.parents[2]
+        assert (modules / "ws/package.json").exists(), "install the existing GitHub worker lock"
     evidence, candidate = tmp_path / "evidence", tmp_path / "candidate"
     child_env = {
         "GITHUB_ACTIONS": "true",
@@ -114,7 +116,7 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
         ),
         "PATH": os.environ["PATH"],
         "HOME": str(tmp_path / "home"),
-        "NODE_PATH": str(binary.parents[2]),
+        "NODE_PATH": str(modules),
         "GIT_CONFIG_COUNT": "1",
         "GIT_CONFIG_KEY_0": f"url.{state.source}.insteadOf",
         "GIT_CONFIG_VALUE_0": f"https://github.com/{work_tests.REPO}.git",
@@ -134,12 +136,13 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
         )
     }
     config = tmp_path / "controller.json"
-    config.write_text(json.dumps({"env": child_env, "task": task}))
+    config.write_text(json.dumps({"env": child_env, "task": task, "deadlineMode": deadline_mode}))
     root = Path(__file__).resolve().parents[3]
     try:
         result = subprocess.run(
             [
                 "node",
+                *(["--experimental-test-module-mocks"] if deadline_mode else []),
                 str(Path(__file__).parent / "fixtures/strategic_workspace_wire.mjs"),
                 str(config),
             ],
@@ -147,7 +150,7 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
                 "PATH": os.environ["PATH"],
                 "WORKSPACE_LOOPBACK": f"http://127.0.0.1:{sock.getsockname()[1]}",
                 "WORKSPACE_RUNTIME_TOOLS": str(root / "FHD/scripts/autonomy/runtime_tools"),
-                "NODE_PATH": str(binary.parents[2]),
+                "NODE_PATH": str(modules),
             },
             capture_output=True,
             text=True,
@@ -169,6 +172,23 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
         assert not p.portfolio_status(state.decision_id)["tasks"]["a"]["calls"]
         workspace_file = tmp_path / "workspaces/task-fix-sub-fix/docs/delivery.txt"
         assert workspace_file.read_text() == "ordinary export before repair\n"
+        return
+    if deadline_mode:
+        assert not seen
+        assert reports[-1]["status"] == "failed"
+        reason = (
+            "workspace_phase_deadline_expired"
+            if deadline_mode == "expired"
+            else "fixture_executor_stopped"
+        )
+        assert reason in reports[-1]["content"]
+        assert "workspace_preserved=" in reports[-1]["content"]
+        assert not (candidate / "manifest.json").exists()
+        assert list((tmp_path / "workspaces").glob("*/docs/delivery.txt"))
+        _, snapshot, _ = work_tests.remote.read_request(state.request_id)
+        assert snapshot["task_grants"][0]["status"] == "closed"
+        assert "model_grant" not in snapshot
+        assert p.portfolio_status(state.decision_id)["tasks"]["a"]["calls"] == {}
         return
     assert len(seen) == 2
     assert reports[-1]["status"] == "completed"
@@ -194,3 +214,21 @@ def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
     )
     assert actual == "ordinary export repaired\n"
     assert json.loads((evidence / "execution.json").read_text())["finished"] is False
+
+
+@pytest.mark.skipif(
+    not os.environ.get("PARA_TEST_OPENCODE_BINARY"),
+    reason="requires the pinned OpenCode 1.19.6 and ws lock",
+)
+@pytest.mark.parametrize("executor_exists", [True, False], ids=["real_sdk", "missing_executor"])
+def test_existing_actions_real_para_task_opencode_sdk_sql_and_candidate(
+    wire_workspace, monkeypatch, tmp_path, executor_exists
+):
+    _run_workspace_wire(wire_workspace, monkeypatch, tmp_path, executor_exists=executor_exists)
+
+
+@pytest.mark.parametrize("deadline_mode", ["expired", "remaining"])
+def test_workspace_preparation_consumes_original_grant_and_still_closes_it(
+    wire_workspace, monkeypatch, tmp_path, deadline_mode
+):
+    _run_workspace_wire(wire_workspace, monkeypatch, tmp_path, deadline_mode)

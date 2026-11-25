@@ -3,9 +3,7 @@
 These tests target branches not covered by ``test_aiopen_service.py``:
 - ``format_tool_result_text`` edge cases (>40 elements, non-dict items, fallback keys,
   empty data, non-dict chat data, detail fallback, code fallback for unknown tool).
-- ``_tool_api_call`` POST with body, status >= 500, TypeError on json parse.
 - ``invoke_tool`` ui_action with/without session_id, ui_sessions remote_control flag.
-- ``openclaw_chat_proxy`` non-JSON body, empty body.
 - ``_repo_stdio_bridge_path`` returns absolute path.
 - ``build_mcp_install_bundle`` web_install_url / install_mode variants.
 - ``build_aiopen_guide`` remote_control_enabled / screen_sessions_online / instructions_for_ai.
@@ -28,7 +26,6 @@ from app.application.aiopen.service import (
     MCP_SERVER_NAME,
     TOOL_DEFINITIONS,
     _repo_stdio_bridge_path,
-    _tool_api_call,
     _tool_chat,
     aiopen_manifest,
     build_aiopen_guide,
@@ -41,7 +38,6 @@ from app.application.aiopen.service import (
     generate_api_key,
     invoke_tool,
     list_api_keys,
-    openclaw_chat_proxy,
     revoke_api_key,
     verify_api_key,
 )
@@ -313,67 +309,29 @@ class TestFormatToolResultTextExt:
     def test_api_catalog_non_dict_route_skipped(self):
         result = {
             "success": True,
-            "routes": [
+            "capabilities": [
                 "not-a-dict",  # should be skipped
-                {"path": "/api/x", "enabled": True},
+                {"capability_id": "ocr.request"},
                 42,  # should be skipped
             ],
         }
         text = format_tool_result_text("api_catalog", result)
-        assert "1/3 已启用" in text
-        assert "/api/x" in text
+        assert "1 项" in text
+        assert "ocr.request" in text
 
     def test_api_catalog_route_missing_path(self):
         result = {
             "success": True,
-            "routes": [{"enabled": True}],  # no 'path' key
+            "capabilities": [{}],
         }
         text = format_tool_result_text("api_catalog", result)
-        # path defaults to ""
-        assert "✓ " in text
+        assert "0 项" in text
 
     def test_api_catalog_routes_not_list(self):
-        result = {"success": True, "routes": "not-a-list"}
+        result = {"success": True, "capabilities": "not-a-list"}
         text = format_tool_result_text("api_catalog", result)
         # routes becomes []
-        assert "0/0 已启用" in text
-
-    def test_api_call_data_none_returns_empty(self):
-        result = {
-            "success": True,
-            "path": "/api/x",
-            "method": "GET",
-            "status_code": 204,
-            "data": None,
-        }
-        text = format_tool_result_text("api_call", result)
-        assert "(empty)" in text
-
-    def test_api_call_missing_status_code_defaults_to_question(self):
-        result = {
-            "success": True,
-            "path": "/api/x",
-            "method": "GET",
-            "data": {"a": 1},
-        }
-        text = format_tool_result_text("api_call", result)
-        assert "HTTP ?" in text
-
-    def test_api_call_missing_method_defaults_to_get(self):
-        result = {
-            "success": True,
-            "path": "/api/x",
-            "status_code": 200,
-            "data": {"a": 1},
-        }
-        text = format_tool_result_text("api_call", result)
-        assert "GET /api/x" in text
-
-    def test_api_call_failure_missing_message(self):
-        result = {"success": False, "path": "/api/x", "method": "GET"}
-        text = format_tool_result_text("api_call", result)
-        # message defaults to ""
-        assert "API 调用失败" in text
+        assert "0 项" in text
 
     def test_chat_non_dict_data_falls_back_to_result(self):
         # When data is not a dict, `data = result` (the whole dict)
@@ -575,174 +533,6 @@ class TestFormatToolResultTextExt:
         assert "x" in text
 
 
-# ── _tool_api_call — gap branches ─────────────────────────────
-
-
-class TestToolApiCallExt:
-    def test_post_call_sets_source_default(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 201
-        mock_resp.json.return_value = {"id": 1}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                _tool_api_call(MagicMock(), {"path": "/api/products", "method": "POST"})
-                # Verify source was set in payload
-                call_kwargs = mock_client.request.call_args
-                payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-                assert payload["source"] == "aiopen"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_post_call_preserves_existing_source(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 201
-        mock_resp.json.return_value = {"id": 1}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                _tool_api_call(
-                    MagicMock(),
-                    {"path": "/api/products", "method": "POST", "body": {"source": "custom"}},
-                )
-                call_kwargs = mock_client.request.call_args
-                payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-                # setdefault doesn't overwrite existing
-                assert payload["source"] == "custom"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_status_code_500_returns_success_false(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.json.return_value = {"error": "internal"}
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is False
-                assert result["status_code"] == 500
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_status_code_499_returns_success_true(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 499
-        mock_resp.json.return_value = {"error": "client error"}
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is True
-                assert result["status_code"] == 499
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_json_type_error_falls_back_to_raw(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        # TypeError on .json()
-        mock_resp.json.side_effect = TypeError("not jsonable")
-        mock_resp.text = "raw text"
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["data"]["raw"] == "raw text"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_body_not_dict_defaults_to_empty(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                # body is a string, not dict -> defaults to {}
-                _tool_api_call(
-                    MagicMock(),
-                    {"path": "/api/products", "method": "POST", "body": "not-a-dict"},
-                )
-                call_kwargs = mock_client.request.call_args
-                payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-                # source is set to aiopen (default in empty dict)
-                assert payload["source"] == "aiopen"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_method_defaults_to_get(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_resp
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                # No method provided
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["method"] == "GET"
-                assert mock_client.get.call_args.args[0] == "/api/products"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_lowercase_method_normalized(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products", "method": "post"})
-                assert result["method"] == "POST"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_recoverable_error_runtime_error(self):
-        with patch("starlette.testclient.TestClient", side_effect=RuntimeError("boom")):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/products": True}
-            try:
-                result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is False
-                assert result["message"] == "请求执行失败"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
-
-    def test_path_with_whitespace_stripped(self):
-        # path is stripped; whitespace-only -> empty -> error
-        result = _tool_api_call(MagicMock(), {"path": "   "})
-        assert result["success"] is False
-        assert "不能为空" in result["message"]
-
-
 # ── _tool_chat — gap branches ─────────────────────────────────
 
 
@@ -750,35 +540,12 @@ class TestToolChatExt:
     def test_whitespace_message_returns_error(self):
         result = _tool_chat(MagicMock(), {"message": "   "})
         assert result["success"] is False
-        assert "不能为空" in result["message"]
+        assert result["error_code"] == "tool_identity_required"
 
     def test_missing_message_returns_error(self):
         result = _tool_chat(MagicMock(), {})
         assert result["success"] is False
-        assert "不能为空" in result["message"]
-
-    def test_chat_delegates_to_api_call_with_unified_chat(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"reply": "hi"}
-        mock_client = MagicMock()
-        mock_client.request.return_value = mock_resp
-        mock_client.cookies.get.return_value = None
-        with patch("starlette.testclient.TestClient", return_value=mock_client):
-            saved_whitelist = AIOPEN_STATE.get("whitelist", {})
-            AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
-            try:
-                result = _tool_chat(MagicMock(), {"message": "hello"})
-                assert result["success"] is True
-                # Verify the path used
-                call_args = mock_client.request.call_args
-                assert call_args.args[0] == "POST"
-                assert call_args.args[1] == "/api/ai/unified_chat"
-                payload = call_args.kwargs.get("json") or call_args[1].get("json")
-                assert payload["message"] == "hello"
-                assert payload["source"] == "aiopen"
-            finally:
-                AIOPEN_STATE["whitelist"] = saved_whitelist
+        assert result["error_code"] == "tool_identity_required"
 
 
 # ── invoke_tool — gap branches ────────────────────────────────
@@ -903,7 +670,8 @@ class TestInvokeToolExt:
     async def test_invoke_tool_args_not_dict_treated_as_empty(self):
         # args is a list, not dict -> becomes {}
         result = await invoke_tool("api_catalog", ["not", "a", "dict"], MagicMock())
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["error_code"] == "capability_discovery_denied"
 
     @pytest.mark.asyncio
     async def test_each_ui_action_routes_correctly(self):
@@ -924,100 +692,6 @@ class TestInvokeToolExt:
                     assert call_args[0][0] == expected_action
         finally:
             AIOPEN_STATE["remote_control_enabled"] = saved
-
-
-# ── openclaw_chat_proxy — gap branches ────────────────────────
-
-
-class TestOpenclawChatProxyExt:
-    def test_non_json_response_falls_back_to_raw(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"not json at all"
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is True
-            assert status == 200
-            assert payload["data"]["raw"] == "not json at all"
-
-    def test_empty_response_body_returns_empty_dict(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b""
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is True
-            assert status == 200
-            assert payload["data"] == {}
-
-    def test_http_error_with_empty_body_uses_str_err(self):
-        import urllib.error
-
-        err = urllib.error.HTTPError("http://x", 503, "Service Unavailable", {}, None)
-        err.read = MagicMock(return_value=b"")
-        with patch("app.application.aiopen.service.urllib.request.urlopen", side_effect=err):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is False
-            assert status == 502
-            assert payload["status_code"] == 503
-            assert payload["message"] == "上游服务请求失败"
-
-    def test_runtime_error_returns_502(self):
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen",
-            side_effect=RuntimeError("runtime fail"),
-        ):
-            payload, status = openclaw_chat_proxy("hi")
-            assert payload["success"] is False
-            assert status == 502
-            assert payload["message"] == "上游服务请求失败"
-
-    def test_target_url_construction(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"ok": true}'
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-        ) as mock_urlopen:
-            openclaw_chat_proxy("test message")
-            call_args = mock_urlopen.call_args
-            req = call_args[0][0]
-            # Default openclaw_base is http://localhost:28789
-            assert req.full_url == "http://localhost:28789/api/chat"
-            assert req.method == "POST"
-
-    def test_request_payload_contains_message(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"{}"
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-        ) as mock_urlopen:
-            openclaw_chat_proxy("my custom message")
-            call_args = mock_urlopen.call_args
-            req = call_args[0][0]
-            # req.data is the JSON-encoded payload
-            import json as _json
-
-            payload = _json.loads(req.data.decode("utf-8"))
-            assert payload["message"] == "my custom message"
-
-    def test_request_has_json_content_type(self):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b"{}"
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-        ) as mock_urlopen:
-            openclaw_chat_proxy("hi")
-            call_args = mock_urlopen.call_args
-            req = call_args[0][0]
-            assert req.headers["Content-type"] == "application/json"
 
 
 # ── aiopen_manifest — additional checks ───────────────────────
@@ -1044,7 +718,6 @@ class TestAiopenManifestExt:
         names = {t["name"] for t in m["tools"]}
         expected = {
             "api_catalog",
-            "api_call",
             "knowledge_search",
             "operation_describe",
             "operation_call",

@@ -216,24 +216,23 @@ class TestRecognizeMainDeep:
     def test_context_data_not_dict_skips_deepseek_skip_logic(
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
-        # When context_data is not a dict, quick_recognize would raise AttributeError
-        # (NOT in RECOVERABLE_ERRORS). To test the recoverable path, we make
-        # quick_recognize raise a RuntimeError (which IS in RECOVERABLE_ERRORS),
-        # and patch _recognize_from_context to handle the non-dict gracefully.
+        # An unknown quick-path failure must propagate before downstream engines run.
         fresh_recognizer._deepseek_recognizer = MagicMock()
         with (
             patch(
                 "app.domain.shared_services.intent_service.quick_recognize",
                 side_effect=RuntimeError("simulated infra failure"),
-            ),
+            ) as quick,
             patch.object(UnifiedIntentRecognizer, "_recognize_rule", return_value=None),
             patch.object(UnifiedIntentRecognizer, "_recognize_from_context", return_value=None),
             patch.object(
                 UnifiedIntentRecognizer, "_recognize_deepseek", return_value=None
             ) as mock_ds,
         ):
-            fresh_recognizer.recognize("msg", context_data={"pending_confirmation": False})
-        mock_ds.assert_called_once()
+            with pytest.raises(RuntimeError, match="^simulated infra failure$"):
+                fresh_recognizer.recognize("msg", context_data={"pending_confirmation": False})
+        quick.assert_called_once_with("msg", {"pending_confirmation": False})
+        mock_ds.assert_not_called()
 
     def test_recognize_returns_recognizer_result(
         self, fresh_recognizer: UnifiedIntentRecognizer

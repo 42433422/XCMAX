@@ -176,12 +176,15 @@ class TestRuntimeContextForLlm:
     def test_write_authorized_branch(self):
         ctx = {"excel_file_path": "/tmp/a.xlsx", "chat_db_write_authorized": True}
         out = format_runtime_context_for_llm(ctx)
-        assert "写入授权" in out
+        assert "统一任务的服务器回执" in out
+        assert "import_excel_to_database" not in out
+        assert "db_write_token" not in out
 
     def test_resume_branch(self):
         ctx = {"db_write_stream_resume": "previous stream content"}
         out = format_runtime_context_for_llm(ctx)
-        assert "同一轮对话续跑" in out
+        assert "同一轮对话记录" in out
+        assert "结果未知时不得重新提交" in out
 
     def test_extra_fields(self):
         ctx = {

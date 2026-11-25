@@ -109,7 +109,7 @@ def test_build_mod_database_seed_plan_empty(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: "/tmp/xcagi-test-data")
     with patch(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
-        side_effect=RuntimeError("no mods"),
+        side_effect=FileNotFoundError("working directory disappeared during mod root discovery"),
     ):
         plan = init_db_mod.build_mod_database_seed_plan()
     assert "architecture_note_zh" in plan
@@ -363,7 +363,7 @@ def test_mobile_home(mock_sync_cls, _shell, _mods, mobile_ext_client: TestClient
     assert "mods" in r.json()["data"]
 
 
-@patch("app.db.xcmax_sync.SyncDb", side_effect=RuntimeError("sync down"))
+@patch("app.db.xcmax_sync.SyncDb", side_effect=sqlite3.OperationalError("sync down"))
 def test_mobile_sync_status_error(_sync, mobile_ext_client: TestClient) -> None:
     r = mobile_ext_client.get("/sync/status")
     assert r.status_code == 200

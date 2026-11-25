@@ -33,7 +33,7 @@ jobs:
       - name: Legacy usage report (168h)
         run: |
           mkdir -p metrics
-          python scripts/dev/legacy_usage_report.py --since 168 --json > metrics/legacy-usage-168h.json 2>legacy-usage-168h.err || true
+          python scripts/dev/legacy_usage_report.py --since 168 --json > metrics/legacy-usage-168h.json 2>legacy-usage-168h.err
           echo "--- report ---"
           cat metrics/legacy-usage-168h.json
           echo "--- stderr ---"
@@ -47,6 +47,12 @@ jobs:
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::error::CI_COMMIT_TOKEN is required to publish the legacy report on protected main."
             exit 1
+          fi
+          # Checkout alone does not supply 168h production log evidence.
+          # An unknown zero must never be promoted into a retirement signal.
+          if ! python -c 'import json,sys; d=json.load(open("metrics/legacy-usage-168h.json")); sys.exit(0 if d.get("source_status") == "observed_events" and d.get("legacy_ratio") is not None else 1)'; then
+            echo "::warning::Legacy usage source is missing or zero coverage is unverified; diagnostic artifact only, no PR."
+            exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

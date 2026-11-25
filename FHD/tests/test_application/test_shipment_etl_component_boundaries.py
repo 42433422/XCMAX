@@ -83,7 +83,7 @@ def test_service_exception_compensates_known_writes_and_marks_unknown_outcome(im
     service, recorded = import_ports
     service.create_shipment.side_effect = [
         {"success": True, "shipment": {"id": 101}},
-        RuntimeError("connection lost while creating shipment"),
+        ConnectionError("connection lost while creating shipment"),
     ]
     result = elt.execute_shipment_excel_elt(
         "",

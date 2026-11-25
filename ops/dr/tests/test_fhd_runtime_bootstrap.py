@@ -9,7 +9,7 @@ class FhdRuntimeBootstrapTest(unittest.TestCase):
     def test_bootstraps_vendored_langgraph_before_restart(self) -> None:
         text = SCRIPT.read_text(encoding="utf-8")
         function_start = text.index("bootstrap_fhd_vendored_langgraph()")
-        apply_start = text.index("apply_fhd()")
+        apply_start = text.index("apply_component()")
         call = text.index(
             'bootstrap_fhd_vendored_langgraph "$target" "$target/.venv/bin/python"',
             apply_start,
@@ -19,6 +19,9 @@ class FhdRuntimeBootstrapTest(unittest.TestCase):
         self.assertLess(function_start, apply_start)
         self.assertLess(apply_start, call)
         self.assertLess(call, compile_step)
+        self.assertLess(
+            compile_step, text.index('activate_component "$component"', compile_step)
+        )
         function_text = text[function_start:apply_start]
         self.assertIn("requirements-langgraph-runtime.txt", function_text)
         self.assertIn("xcagi_vendored_langgraph.pth", function_text)

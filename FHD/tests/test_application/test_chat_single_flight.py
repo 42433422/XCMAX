@@ -1,59 +1,139 @@
 """One account must not start two Codex runtimes at the same time."""
 
+import asyncio
 import threading
 
+import pytest
+
 from app.application.agent_runtime import chat
+from app.application.agent_task_context import scoped_conversation_user_id
 
 
-def test_concurrent_chat_turn_reports_busy_instead_of_racing(monkeypatch):
+@pytest.fixture(autouse=True)
+def private_chat_state(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "app.utils.path_io.path_utils.get_desktop_state_dir", lambda **_kwargs: str(tmp_path)
+    )
+
+
+@pytest.mark.parametrize("scoped", [False, True], ids=["direct", "service"])
+@pytest.mark.parametrize("run_id", [None, "original-s2"], ids=["new", "continuation"])
+def test_concurrent_chat_turn_reports_busy_instead_of_racing(monkeypatch, scoped, run_id):
     started = threading.Event()
     release = threading.Event()
+    calls = []
 
-    def execute(**_kwargs):
-        started.set()
-        release.wait(5)
-        return {"ok": True, "run_id": "parent", "exit_status": "reply_completed"}
+    def execute(**kwargs):
+        calls.append(kwargs)
+        if kwargs["task"] == "a":
+            started.set()
+            assert release.wait(5)
+        return {
+            "ok": True,
+            "run_id": kwargs.get("run_id") or "parent",
+            "exit_status": "reply_completed",
+        }
 
     monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", execute)
 
+    def invoke(message, context):
+        owner = str(context["local_user_id"])
+        return chat.run_runtime_chat(
+            user_id=scoped_conversation_user_id(owner, context) if scoped else owner,
+            message=message,
+            context=context,
+            file_context={},
+        )
+
     first = {}
     worker = threading.Thread(
-        target=lambda: first.update(
-            chat.run_runtime_chat(
-                user_id="owner", message="a", context={"session_id": "s1"}, file_context={}
-            )
-        )
+        target=lambda: first.update(invoke("a", {"local_user_id": 71, "session_id": "s1"}))
     )
     worker.start()
-    assert started.wait(5)
-
-    second = chat.run_runtime_chat(
-        user_id="owner", message="b", context={"session_id": "s2"}, file_context={}
-    )
-    assert second["success"] is False
-    assert second["data"]["error_code"] == "runtime_busy"
-    assert second["retryable"] is True
-    assert second["data"]["run_id"] is None
-
-    release.set()
-    worker.join(5)
+    context = {"local_user_id": 71, "session_id": "s2", "agent_runtime_run_id": run_id}
+    try:
+        assert started.wait(5)
+        second = invoke("b", context)
+        assert second["success"] is False
+        assert second["data"]["error_code"] == "runtime_busy"
+        assert second["retryable"] is True
+        assert second["data"]["run_id"] == run_id
+        assert second["runtime_context_update"] == {
+            "agent_runtime_run_id": run_id,
+            "conversation_id": "s2",
+            "status": "waiting_user" if run_id else "blocked",
+        }
+        assert second["data"]["business_receipts"] == []
+        assert invoke("other", {"local_user_id": 72, "session_id": "s3"})["success"] is True
+        assert [call["task"] for call in calls] == ["a", "other"]
+    finally:
+        release.set()
+        worker.join(5)
+    assert not worker.is_alive()
     assert first["success"] is True
+
+    resumed = invoke("b", context)
+    assert resumed["success"] is True
+    assert calls[-1]["run_id"] == run_id
+    assert calls[-1]["answer_to_waiting_input"] is bool(run_id)
+
+
+@pytest.mark.parametrize("error", [RuntimeError, asyncio.CancelledError])
+def test_failed_or_cancelled_turn_releases_account(monkeypatch, error):
+    def execute(**_kwargs):
+        raise error("interrupted")
+
+    monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", execute)
+    options = {"user_id": "interrupted-owner", "message": "a", "context": {}, "file_context": {}}
+    with pytest.raises(error, match="interrupted"):
+        chat.run_runtime_chat(**options)
+    monkeypatch.setattr(
+        "app.application.agent_runtime.gateway.run_runtime_task",
+        lambda **_kwargs: {"ok": True, "exit_status": "reply_completed"},
+    )
+    assert chat.run_runtime_chat(**options)["success"] is True
+
+
+def test_completed_accounts_do_not_accumulate_in_admission_registry(monkeypatch):
+    monkeypatch.setattr(
+        "app.application.agent_runtime.gateway.run_runtime_task",
+        lambda **_kwargs: {"ok": True, "exit_status": "reply_completed"},
+    )
+    before = set(chat._ACTIVE_SLOTS)
+    for index in range(20):
+        result = chat.run_runtime_chat(
+            user_id=f"completed-owner-{index}", message="a", context={}, file_context={}
+        )
+        assert result["success"] is True
+    assert set(chat._ACTIVE_SLOTS) == before
 
 
 def test_cross_process_lock_busy_even_without_active_thread(monkeypatch, tmp_path):
     from filelock import FileLock
 
     path = tmp_path / "owner.lock"
-    monkeypatch.setattr(chat, "_chat_file_lock_path", lambda _owner: path)
-    monkeypatch.setattr(
-        "app.application.agent_runtime.gateway.run_runtime_task",
-        lambda **_kwargs: {"ok": True, "exit_status": "reply_completed"},
-    )
+    seen_owners = []
+
+    def lock_path(owner):
+        seen_owners.append(owner)
+        return path
+
+    monkeypatch.setattr(chat, "_chat_file_lock_path", lock_path)
+
+    def forbidden(**_kwargs):
+        raise AssertionError("must not execute while another process holds the lock")
+
+    monkeypatch.setattr("app.application.agent_runtime.gateway.run_runtime_task", forbidden)
     # A distinct FileLock handle holds the same on-disk admission lock.
+    context = {"local_user_id": 71, "session_id": "s2"}
     with FileLock(path, timeout=0):
         second = chat.run_runtime_chat(
-            user_id="owner", message="不能并发", context={}, file_context={}
+            user_id=scoped_conversation_user_id("71", context),
+            message="不能并发",
+            context=context,
+            file_context={},
         )
+    assert seen_owners == ["71"]
     assert second["data"]["error_code"] == "runtime_busy"
     assert second["retryable"] is True
 
@@ -126,3 +206,4 @@ def test_busy_continuation_keeps_original_parent_pointer(monkeypatch, tmp_path):
     assert busy["data"]["error_code"] == "runtime_busy"
     assert busy["runtime_context_update"]["agent_runtime_run_id"] == "original-parent"
     assert busy["retryable"] is True
+

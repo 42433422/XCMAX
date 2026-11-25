@@ -202,19 +202,12 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
 
 
 def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path) -> List[str]:
-    """Validate catalog metadata against the manifest embedded in the archive.
+    """Validate employee archive metadata without changing published bytes.
 
-    If employee.id or workflow_employees[].id differ from the expected pack id,
-    this function **auto-repairs** the zip in-place and returns no errors.
-    This ensures that regardless of which code path produced the zip, the
-    alignment is always correct after this function runs.
+    A manifest mismatch is a rejected candidate, not an opportunity to rewrite
+    a reviewed or signed artifact. The pack must be rebuilt and re-reviewed
+    before its SHA256 can represent the exact code and employee identities.
     """
-    import logging as _logging
-    import shutil as _shutil
-    import zipfile as _zipfile
-
-    _LOG_ALIGN = _logging.getLogger(__name__)
-    _LOG_ALIGN.info("package manifest alignment check started")
     if not archive_path.is_file():
         return ["包文件不存在，无法校验 manifest 对齐"]
     inner = read_package_manifest_from_zip(archive_path)
@@ -233,53 +226,22 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
         errors.append(f"metadata.version={expected_ver} 与包内 manifest.version={inner_ver} 不一致")
 
     if str(record.get("artifact") or "").strip().lower() == "employee_pack":
-        _needs_repair = False
-        if isinstance(inner.get("employee"), dict):
-            emp_id = norm_pkg_id(inner["employee"].get("id"))
-            if expected_id and emp_id and expected_id != emp_id:
-                _LOG_ALIGN.warning("AUTO-REPAIR: employee id mismatch repaired")
-                inner["employee"]["id"] = expected_id
-                _needs_repair = True
-        wf_rows = inner.get("workflow_employees")
-        if isinstance(wf_rows, list):
-            for idx, row in enumerate(wf_rows):
+        employee = inner.get("employee")
+        if isinstance(employee, dict):
+            employee_id = norm_pkg_id(employee.get("id"))
+            if expected_id and employee_id and employee_id != expected_id:
+                errors.append(f"metadata.id={expected_id} 与包内 employee.id={employee_id} 不一致")
+        workflow_employees = inner.get("workflow_employees")
+        if isinstance(workflow_employees, list):
+            for index, row in enumerate(workflow_employees):
                 if not isinstance(row, dict):
                     continue
-                wf_id = norm_pkg_id(row.get("id"))
-                if expected_id and wf_id and expected_id != wf_id:
-                    _LOG_ALIGN.warning(
-                        "AUTO-REPAIR: workflow employee id mismatch repaired at index %d",
-                        idx,
+                workflow_id = norm_pkg_id(row.get("id"))
+                if expected_id and workflow_id and workflow_id != expected_id:
+                    errors.append(
+                        "metadata.id="
+                        f"{expected_id} 与包内 workflow_employees[{index}].id={workflow_id} 不一致"
                     )
-                    row["id"] = expected_id
-                    _needs_repair = True
-        if _needs_repair:
-            try:
-                _top_dir = None
-                _other_entries: list = []
-                with _zipfile.ZipFile(archive_path, "r") as _zr:
-                    for _n in _zr.namelist():
-                        if _n.endswith("/manifest.json") and "/" not in _n.removesuffix(
-                            "/manifest.json"
-                        ).replace(_n.split("/")[0] + "/", "", 1):
-                            _top_dir = _n.split("/")[0]
-                        else:
-                            _other_entries.append(_n)
-                if _top_dir:
-                    _mf_key = _top_dir + "/manifest.json"
-                    _tmp_path = archive_path.with_suffix(".xcemp.tmp")
-                    with _zipfile.ZipFile(_tmp_path, "w", compression=_zipfile.ZIP_DEFLATED) as _zw:
-                        _zw.writestr(
-                            _mf_key,
-                            json.dumps(inner, ensure_ascii=False, indent=2) + "\n",
-                        )
-                        with _zipfile.ZipFile(archive_path, "r") as _zr:
-                            for _n in _other_entries:
-                                _zw.writestr(_n, _zr.read(_n))
-                    _shutil.move(str(_tmp_path), str(archive_path))
-                    _LOG_ALIGN.info("AUTO-REPAIR: package archive rewritten successfully")
-            except RECOVERABLE_ERRORS as _repair_exc:
-                _LOG_ALIGN.error("AUTO-REPAIR failed (%s)", type(_repair_exc).__name__)
 
     return errors
 

@@ -32,8 +32,10 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   const taskControlStates = ref<Record<string, TaskControlState>>({})
   const taskSyncState = ref<TaskSyncState>({ checking: false, stale: true, lastVerifiedAt: 0, error: '' })
   let lifecycleVersion = 0
+  let snapshotRevision = 0
 
   function applyTaskItems(serverTasks: TaskItem[]): void {
+    snapshotRevision += 1
     const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
     options.taskList.value = [...serverTasks, ...localTasks]
     const known = new Set(options.taskList.value.map((task) => task.id))
@@ -71,27 +73,29 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
       await refreshInFlight
       if (!afterAction || requestedVersion !== lifecycleVersion) return
     }
+    const requestedRevision = snapshotRevision
+    const isCurrent = () => requestedVersion === lifecycleVersion && requestedRevision === snapshotRevision
     taskSyncState.value.checking = true
     const request = (async () => {
       try {
         let serverTasks: TaskItem[]
         try {
           const response = await agentRunsApi.listTasks({ limit: 200 })
-          if (requestedVersion !== lifecycleVersion) return
+          if (!isCurrent()) return
           if (response?.success === false || !Array.isArray(response?.data)) throw new Error('任务状态读取失败')
           applyFirstTaskCompletionEvidence(response.data)
           serverTasks = taskSummariesToTaskItems(response.data)
         } catch {
-          if (requestedVersion !== lifecycleVersion) return
+          if (!isCurrent()) return
           const response = await agentRunsApi.listRuns({ limit: 200 })
-          if (requestedVersion !== lifecycleVersion) return
+          if (!isCurrent()) return
           if (response?.success === false || !Array.isArray(response?.data)) throw new Error('任务状态读取失败')
           response.data.forEach((run) => completeFirstAiTaskFromRun(run))
           serverTasks = groupAgentRunsIntoTasks(response.data)
         }
         applyTaskItems(serverTasks)
       } catch {
-        if (requestedVersion === lifecycleVersion) markStale()
+        if (isCurrent()) markStale()
       } finally {
         if (requestedVersion === lifecycleVersion) taskSyncState.value.checking = false
       }

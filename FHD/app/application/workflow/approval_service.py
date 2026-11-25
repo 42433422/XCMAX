@@ -21,6 +21,10 @@ from resources.config.approval_config import (
 logger = logging.getLogger(__name__)
 
 
+class ApprovalPersistenceError(RuntimeError):
+    """A required approval could not be durably stored."""
+
+
 def _tenant_from_context(runtime_context: dict[str, Any] | None) -> int | None:
     raw = (runtime_context or {}).get("tenant_id")
     if raw in (None, ""):
@@ -154,7 +158,7 @@ class ApprovalService:
             request, runtime_context=runtime_context, plan=plan, title=title
         )
         if metadata is None and require_persistence:
-            raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
+            raise ApprovalPersistenceError("审批请求未能持久化，已阻止数据库写入")
         self._pending_requests[request_id] = request
         if plan is not None:
             self._pending_workflows[request_id] = {

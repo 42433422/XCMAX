@@ -15,6 +15,8 @@ from typing import Any, cast
 from modstore_server import strategic_portfolio_usage as budget
 from modstore_server.strategic_portfolio import PortfolioError, _json
 
+MAX_REQUEST_BYTES = 2_000_000
+
 _FIELDS = {
     "model",
     "input",
@@ -129,7 +131,7 @@ def _request(
     ):
         raise PortfolioError("max_output_tokens must be a positive integer")
     serialized = _json(payload)
-    if len(serialized.encode("utf-8")) > 2_000_000:
+    if len(serialized.encode("utf-8")) > MAX_REQUEST_BYTES:
         raise PortfolioError("strategic Responses request exceeds 2000000 bytes")
     body = json.loads(serialized)
     model = body.get("model")
@@ -172,6 +174,7 @@ def _client(route: dict[str, Any], provider: str, timeout: float):
     from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
     from modstore_server.llm_litellm_router import _extra_headers
+    from modstore_server.platform_model_transport import bound_model_stream_client
 
     return AsyncOpenAI(
         api_key=route["api_key"],
@@ -179,7 +182,9 @@ def _client(route: dict[str, Any], provider: str, timeout: float):
         max_retries=0,
         timeout=timeout,
         default_headers=_extra_headers(provider, route["api_key"]),
-        http_client=DefaultAsyncHttpxClient(trust_env=False, follow_redirects=False),
+        http_client=bound_model_stream_client(
+            DefaultAsyncHttpxClient(trust_env=False, follow_redirects=False)
+        ),
     )
 
 
@@ -225,7 +230,9 @@ async def budgeted_responses(
     provider: str,
     caller_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from modstore_server.llm_gateway_contract import gateway_single_attempt
+    from openai import APIConnectionError
+
+    from modstore_server.llm_gateway_contract import StreamLimitError, gateway_single_attempt
 
     route, body, reservation = _request(
         payload, provider=provider, stream=False, caller_binding=caller_binding
@@ -251,6 +258,10 @@ async def budgeted_responses(
         response = raw.parse()
         result = cast(dict[str, Any], response.model_dump(mode="json", exclude_unset=True))
         return result
+    except APIConnectionError as exc:
+        if isinstance(exc.__cause__, StreamLimitError):
+            raise exc.__cause__ from None
+        raise
     finally:
         try:
             if client is not None:
@@ -278,7 +289,13 @@ async def budgeted_responses_stream(
     provider: str,
     caller_binding: dict[str, Any] | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    from modstore_server.llm_gateway_contract import gateway_single_attempt
+    from openai import APIConnectionError
+
+    from modstore_server.llm_gateway_contract import (
+        StreamLimitError,
+        StreamReceiptBudget,
+        gateway_single_attempt,
+    )
 
     route, body, reservation = _request(
         payload, provider=provider, stream=True, caller_binding=caller_binding
@@ -288,6 +305,7 @@ async def budgeted_responses_stream(
     exhausted = closed = failed = False
     completed_seen = False
     response_id = None
+    stream_budget = StreamReceiptBudget()
     deadline = asyncio.get_running_loop().time() + reservation["timeout_seconds"]
     try:
         client = _client(route, provider, reservation["timeout_seconds"])
@@ -314,7 +332,10 @@ async def budgeted_responses_stream(
             except StopAsyncIteration:
                 exhausted = True
                 break
+            if completed_seen:
+                raise PortfolioError("model stream continued after its terminal response")
             data = event.model_dump(mode="json", exclude_unset=True)
+            stream_budget.consume(data)
             kind = data.get("type")
             failed = failed or kind in {"error", "response.failed", "response.incomplete"}
             response = data.get("response")
@@ -327,8 +348,6 @@ async def budgeted_responses_stream(
                 )
                 response_id = response_id or current_id
                 if kind == "response.completed":
-                    if completed_seen:
-                        failed = True
                     completed_seen = True
                     measured = _measurement(
                         response,
@@ -337,6 +356,10 @@ async def budgeted_responses_stream(
                         gateway_attempts_verified=gateway_verified,
                     )
             yield data
+    except APIConnectionError as exc:
+        if isinstance(exc.__cause__, StreamLimitError):
+            raise exc.__cause__ from None
+        raise
     finally:
         try:
             try:

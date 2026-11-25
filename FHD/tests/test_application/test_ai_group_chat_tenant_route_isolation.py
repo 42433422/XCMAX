@@ -126,11 +126,13 @@ def _install_session_users(monkeypatch: pytest.MonkeyPatch, users_by_sid: dict[s
 
 @pytest.fixture
 def host_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from app.db.models.tenant import Tenant
     from app.domain.shared_services.session_service import SessionService
 
     engine = create_engine(f"sqlite:///{tmp_path / 'host.db'}")
     User.__table__.create(engine)
     UserSession.__table__.create(engine)
+    Tenant.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.HostSessionLocal", factory)
     service = SessionService()
@@ -140,6 +142,7 @@ def host_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     now = utc_now_naive()
     with factory() as db:
         for suffix, uid, tid in (("a", 101, 11), ("b", 202, 22)):
+            db.add(Tenant(id=tid, code=f"tenant-{suffix}"))
             db.add(
                 User(
                     id=uid,
@@ -331,7 +334,7 @@ def test_admin_and_mobile_routes_establish_tenant_and_hide_cross_tenant(
     with TestClient(app) as client:
 
         def admin_headers(sid: str) -> dict[str, str]:
-            return {"Cookie": f"session_id={sid}"}
+            return {"X-Session-ID": sid}
 
         def mobile_headers(user_id: int, sid: str) -> dict[str, str]:
             tokens = issue_mobile_tokens(
@@ -339,7 +342,7 @@ def test_admin_and_mobile_routes_establish_tenant_and_hide_cross_tenant(
             )
             return {"Authorization": f"Bearer {tokens['access_token']}"}
 
-        # --- admin: tenant A via session cookie / middleware ---
+        # --- admin: tenant A via host session / middleware ---
         created = client.post(
             "/api/admin/ai-groups",
             json={"name": "甲的群"},

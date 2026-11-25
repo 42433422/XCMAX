@@ -230,7 +230,7 @@ def test_batch_refresh_route_dispatches() -> None:
         calls.append(kwargs)
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
@@ -253,7 +253,7 @@ def test_batch_refresh_route_passes_max_age_hours() -> None:
         calls.append(kwargs)
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
@@ -350,7 +350,7 @@ def test_refresh_route_dispatches_and_ingest_records_source_coordinates() -> Non
         calls.append(kwargs)
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     app.include_router(routes.deletion)

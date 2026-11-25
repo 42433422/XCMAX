@@ -20,7 +20,7 @@ import {
 import agentRunsApi from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { employeeDirectoryScope, fetchEmployeeDirectory, type DirectoryEmployee } from '@/api/employeeDirectory'
-import { taskStatusLabel } from '@/utils/taskWorkspacePresentation'
+import { taskStatusLabel, taskStatusOf } from '@/utils/taskWorkspacePresentation'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import AgentTaskRuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import TaskExecutionGraph from './TaskExecutionGraph.vue'
@@ -51,6 +51,8 @@ const canSubmit = computed(
 const employeeFilter = computed(() => typeof route.query.employee === 'string' ? route.query.employee.trim() : '')
 const employeeFilterLabel = computed(() => employees.value.find(e => e.pack_id === employeeFilter.value)?.label || employeeFilter.value)
 const selected = computed(() => (selectedTask.value?.task_id === selectedTaskId.value ? selectedTask.value : null))
+const selectedStatus = computed(() => taskStatusOf(selected.value))
+const selectedUncertain = computed(() => selectedStatus.value === 'unknown')
 const activeRun = computed(
   () => selected.value?.active_run || selected.value?.runs?.find((r) => r.run_id === selected.value?.active_run_id),
 )
@@ -63,14 +65,15 @@ const visibleTasks = computed(() =>
   tasks.value.filter((task) => {
     if (employeeFilter.value && !taskEmployeeIds(task).includes(employeeFilter.value)) return false
     const matches = `${task.title} ${task.task_id}`.toLowerCase().includes(search.value.trim().toLowerCase())
-    const active = ['queued', 'planning', 'running', 'retrying'].includes(task.status)
-    const attention = ['blocked', 'failed', 'waiting_user', 'paused'].includes(task.status)
+    const status = taskStatusOf(task)
+    const active = ['queued', 'planning', 'running', 'retrying'].includes(status)
+    const attention = ['blocked', 'failed', 'waiting_user', 'paused', 'unknown'].includes(status)
     return (
       matches &&
       (filter.value === 'all' ||
         (filter.value === 'active' && active) ||
         (filter.value === 'attention' && attention) ||
-        (filter.value === 'completed' && task.status === 'completed'))
+        (filter.value === 'completed' && status === 'completed'))
     )
   }),
 )
@@ -86,7 +89,7 @@ const actions = [
 function statusType(status: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   if (status === 'completed') return 'success'
   if (status === 'failed') return 'danger'
-  if (['blocked', 'waiting_user', 'paused'].includes(status)) return 'warning'
+  if (['blocked', 'waiting_user', 'paused', 'unknown'].includes(status)) return 'warning'
   if (['running', 'planning', 'retrying'].includes(status)) return 'primary'
   return 'info'
 }
@@ -275,8 +278,8 @@ onActivated(() => void refresh())
           >
             <strong>{{ task.title }}</strong>
             <span
-              ><el-tag :type="statusType(task.status)" size="small" effect="light">{{
-                task.status === 'completed' ? '执行完成' : taskStatusLabel(task.status)
+              ><el-tag :type="statusType(taskStatusOf(task))" size="small" effect="light">{{
+                taskStatusOf(task) === 'completed' ? '执行完成' : taskStatusLabel(taskStatusOf(task))
               }}</el-tag
               ><small>{{ time(task.updated_at) }}</small></span
             >
@@ -300,8 +303,8 @@ onActivated(() => void refresh())
             >
             <div class="workspace-task-heading">
               <h3>{{ selected.title }}</h3>
-              <el-tag :type="statusType(selected.status)">{{
-                selected.status === 'completed' ? '执行完成' : taskStatusLabel(selected.status)
+              <el-tag :type="statusType(selectedStatus)">{{
+                selectedStatus === 'completed' ? '执行完成' : taskStatusLabel(selectedStatus)
               }}</el-tag>
             </div>
             <div class="workspace-facts">
@@ -317,7 +320,7 @@ onActivated(() => void refresh())
                 ><el-button
                   v-if="selected.capabilities?.[action.key] && (!archiveOnly || action.key === 'cancel')"
                   :loading="actionPending === action.key"
-                  :disabled="!!actionPending || !!error || stale"
+                  :disabled="!!actionPending || !!error || stale || selectedUncertain"
                   size="small"
                   @click="store.controlTask(selected.task_id, action.key)"
                   >{{ action.label }}</el-button
@@ -348,7 +351,7 @@ onActivated(() => void refresh())
                 <AgentTaskRuntimePanel
                   v-if="taskItem"
                   :task="taskItem"
-                  :control-state="{ needsVerification: Boolean(archiveOnly || error || actionPending || stale) }"
+                  :control-state="{ needsVerification: Boolean(archiveOnly || error || actionPending || stale || selectedUncertain) }"
                   @open="openConversation"
                   @refresh="refresh"
                   @approve="store.controlTask(selected.task_id, 'approve')"

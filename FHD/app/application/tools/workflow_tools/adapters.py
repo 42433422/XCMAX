@@ -2,24 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, Protocol
-
-import pandas as pd
+from typing import Literal
 
 from app.application.tools.workflow_tools.contracts import (
-    CustomerWriter,
-    JsonTool,
-    Payload,
-    ProductWriter,
-    ShipmentWriter,
     ToolCall,
 )
-
-
-def employee_tools() -> list[Payload]:
-    from app.mod_sdk.employee_tool_registry import build_employee_pack_tool_definitions
-
-    return build_employee_pack_tool_definitions()
 
 
 def invalidate_employee_tools() -> None:
@@ -84,129 +71,10 @@ def template(call: ToolCall) -> str:
     )
 
 
-def crud_tools() -> dict[str, JsonTool]:
-    from app.application.tools.customer_crud_tools import (
-        delete_customer,
-        list_customers,
-        update_customer,
-    )
-    from app.application.tools.rbac_tools import (
-        assign_role,
-        create_role,
-        delete_role,
-        list_roles,
-        update_role,
-    )
-    from app.application.tools.report_config_tools import (
-        configure_report,
-        list_report_configs,
-    )
-    from app.application.tools.shipment_crud_tools import (
-        delete_order,
-        list_orders,
-        update_order,
-    )
-
-    return {
-        "delete_order": delete_order,
-        "update_order": update_order,
-        "list_orders": list_orders,
-        "update_customer": update_customer,
-        "delete_customer": delete_customer,
-        "list_customers": list_customers,
-        "configure_report": configure_report,
-        "list_report_configs": list_report_configs,
-        "create_role": create_role,
-        "update_role": update_role,
-        "delete_role": delete_role,
-        "assign_role": assign_role,
-        "list_roles": list_roles,
-    }
-
-
-class PandasTranslator(Protocol):
-    def translate(
-        self,
-        natural_language: str,
-        df: pd.DataFrame,
-        *,
-        error_feedback: str | None = None,
-    ) -> str | None: ...
-
-
-_TRANSLATOR: PandasTranslator | None = None
-
-
-def translate_pandas(
-    natural_language: str,
-    df: pd.DataFrame,
-    *,
-    error_feedback: str | None = None,
-) -> str | None:
-    global _TRANSLATOR
-    if _TRANSLATOR is None:
-        from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
-
-        _TRANSLATOR = LLMPandasTranslator()
-    return _TRANSLATOR.translate(natural_language, df, error_feedback=error_feedback)
-
-
 def customer_hint(path: str, sheet: str | None) -> str:
     from app.application.template_grid_core import _extract_customer_hint_from_excel
 
     return _extract_customer_hint_from_excel(path, sheet)
-
-
-def inline_customer_hints(text: str) -> list[str]:
-    from app.application.template_grid_core import (
-        _extract_inline_customer_hits_from_cell,
-    )
-
-    return _extract_inline_customer_hits_from_cell(text)
-
-
-def detected_header(analysis: Payload, sheet: str | None) -> int | None:
-    from app.domain.context.session_context import detected_excel_header_row_1based
-
-    return detected_excel_header_row_1based(analysis, preferred_sheet_name=sheet)
-
-
-def customer_writer() -> CustomerWriter:
-    from app.bootstrap import get_customer_app_service
-
-    return get_customer_app_service()
-
-
-def product_writer() -> ProductWriter:
-    from app.bootstrap import get_products_service
-
-    return get_products_service()
-
-
-def shipment_writer() -> ShipmentWriter:
-    from app.bootstrap import get_shipment_app_service
-
-    return get_shipment_app_service()
-
-
-def find_customer(unit_name: str) -> Payload | None:
-    from app.domain.shared_services.unified_query_service import find_purchase_unit
-
-    return find_purchase_unit(unit_name=unit_name)
-
-
-def bulk_import(args: Payload) -> Payload:
-    from app.domain.app_pure.excel_imports import run_bulk_import
-
-    return run_bulk_import(args)
-
-
-def ingest_vector(*, file_path: str, index_name: str | None, index_id: str | None) -> Payload:
-    from app.application import get_excel_vector_ingest_app_service
-
-    return get_excel_vector_ingest_app_service().ingest_excel(
-        file_path=file_path, index_name=index_name, index_id=index_id
-    )
 
 
 def generate_document(request: str, output_format: Literal["docx", "xlsx"]) -> tuple[bytes, str]:

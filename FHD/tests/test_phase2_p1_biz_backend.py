@@ -26,11 +26,6 @@ from app.infrastructure.documents.price_list_export import (
     build_price_list_template_preview_json,
 )
 from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
-from app.infrastructure.persistence.compat_db.writes import (
-    _customers_delete_by_norm_name_pg,
-    _products_delete_by_unit_pg,
-    _purchase_units_delete_by_norm_unit_pg,
-)
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
 from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
@@ -216,21 +211,6 @@ def test_product_repository_find_all_dict_output() -> None:
 # ---------------------------------------------------------------------------
 # compat_db writes early returns
 # ---------------------------------------------------------------------------
-
-
-def test_products_delete_by_unit_pg_empty() -> None:
-    assert _products_delete_by_unit_pg(MagicMock(), "") == 0
-    assert _products_delete_by_unit_pg(MagicMock(), "   ") == 0
-
-
-def test_purchase_units_delete_by_norm_unit_pg_empty() -> None:
-    assert _purchase_units_delete_by_norm_unit_pg(MagicMock(), "") == 0
-
-
-def test_customers_delete_by_norm_name_pg_empty() -> None:
-    eng = MagicMock()
-    insp = MagicMock()
-    assert _customers_delete_by_norm_name_pg(eng, insp, "") == 0
 
 
 # ---------------------------------------------------------------------------

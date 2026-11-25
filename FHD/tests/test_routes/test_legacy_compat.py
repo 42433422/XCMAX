@@ -268,7 +268,11 @@ def test_router_registration_keeps_nonrecoverable_exceptions(fresh_app, strategy
 
 @pytest.mark.parametrize("failure_stage", ["import", "register"])
 def test_compat_registration_function_failure_and_retry(fresh_app, failure_stage):
-    error = RuntimeError("registration unavailable")
+    error = (
+        ImportError("route unavailable")
+        if failure_stage == "import"
+        else OSError("route resource unavailable")
+    )
     callback = MagicMock(side_effect=error if failure_stage == "register" else None)
     module = SimpleNamespace(register_routes=callback)
     with patch.object(
@@ -354,7 +358,7 @@ def test_optional_phase_failure_is_reported_and_retry_recovers(
 
         def fail_selected_router(router, **kwargs):
             if router is getattr(modules[module], attribute):
-                raise RuntimeError("settings router registration unavailable")
+                raise OSError("settings router resource unavailable")
             return include_router(router, **kwargs)
 
         monkeypatch.setattr(fresh_app, "include_router", fail_selected_router)

@@ -97,7 +97,12 @@ def test_codex_super_employee_answers_identity_without_dispatch(tmp_path: Path, 
         or "真实接入" in result["assistant_message"]["body"]
     )
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
-    assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
+    request_id = result["dispatch"]["request_id"]
+    stored = svc._messages.read_dispatch_request(1, request_id)
+    assert stored["dispatch_receipt"]["status"] == "completed"
+    assert stored["dispatch_receipt"]["dispatcher"] == "codex_direct"
+    assert stored["dispatch_receipt"]["queued"] is False
+    assert stored["dispatch_receipt"]["safe_to_fallback"] is False
     # 身份问答走本地直答，不进入 CLI。
     assert seen == []
 
@@ -121,8 +126,18 @@ def test_codex_super_employee_natural_question_uses_codex_cli_without_dispatch(
 
     assert result["dispatch"]["dispatcher"] == "codex_cli"
     assert "不能查看你的真实账户额度" in result["assistant_message"]["body"]
-    assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
+    request_id = result["dispatch"]["request_id"]
+    stored = svc._messages.read_dispatch_request(1, request_id)
+    assert stored["dispatch_receipt"]["status"] == "completed"
+    assert stored["dispatch_receipt"]["dispatcher"] == "codex_cli"
+    assert stored["dispatch_receipt"]["queued"] is False
+    assert stored["dispatch_receipt"]["safe_to_fallback"] is False
     assert any("你有多少额度的" in part for part in seen[0])
+    replay = svc.invoke(user_id=1, message="你有多少额度的", context={"request_id": request_id})
+    assert replay["dispatch"]["request_id"] == request_id
+    assert replay["assistant_message"]["body"] == result["assistant_message"]["body"]
+    assert len(seen) == 1
+    assert len(list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))) == 1
 
 
 def test_codex_super_employee_backfills_stuck_identity_dispatch(
@@ -492,6 +507,11 @@ def test_failed_local_fallback_preserves_dispatch_acceptance_and_stops_replay(
     )
     result = svc.invoke(user_id=1, message="修复登录问题", context={"mode": "code"})
     assert result["dispatch"]["accepted"] is False
+    assert result["dispatch"]["execution_started"] is True
+    stored = svc._messages.read_dispatch_request(1, result["dispatch"]["request_id"])
+    assert stored["dispatch_receipt"]["accepted"] is False
+    assert stored["dispatch_receipt"]["execution_started"] is True
+    assert stored["dispatch_receipt"]["safe_to_fallback"] is False
     assert result["dispatch"]["status"] == "failed"
     assert result["dispatch"]["queued"] is False
     assert result["dispatch"]["fallback"] == "codex_cli"
@@ -501,7 +521,66 @@ def test_failed_local_fallback_preserves_dispatch_acceptance_and_stops_replay(
     assert len(calls) == 1
 
 
-def test_history_read_never_starts_a_cli_attempt(tmp_path, monkeypatch):
+def test_history_read_preserves_original_failure_without_cli_backfill(tmp_path, monkeypatch):
+    from app.application.super_employee.cli import CliExecutionError
+
+    calls = []
+
+    def runner(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 7, "must not replace original evidence", "")
+
+    svc = CodexSuperEmployeeService(storage_root=tmp_path, codex_cli_runner=runner)
+    monkeypatch.setattr(svc, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(svc, "_cli_workspace", lambda context: str(tmp_path))
+    request_id, task_id = "recorded-cli-request", "recorded-cli-task"
+    failure = CliExecutionError(
+        "Codex", "nonzero_exit", exit_code=7, partial_text="调用队列 partial backfill"
+    )
+    failure.receipt.update(request_id=request_id, task_id=task_id)
+    rows = [
+        svc._message_row(
+            user_id=1,
+            role="user",
+            body="解释这段对话",
+            created_at="fixture",
+            request_id="pending-reply",
+            status="sent",
+        ),
+        svc._message_row(
+            user_id=1,
+            role="user",
+            body="原任务",
+            created_at="fixture",
+            request_id=request_id,
+            status="sent",
+        ),
+        svc._message_row(
+            user_id=1,
+            role="assistant",
+            body=failure.body,
+            created_at="fixture",
+            request_id=request_id,
+            status="failed",
+            extra={
+                "kind": CODEX_DIRECT_MESSAGE_KIND,
+                "task_id": task_id,
+                "cli_execution": failure.receipt,
+            },
+        ),
+    ]
+    svc._append_messages(rows)
+    first = svc.list_messages(user_id=1)
+    second = svc.list_messages(user_id=1)
+    assert first == second and len(first) == len(rows)
+    assert first[-1]["status"] == "failed"
+    assert first[-1]["dispatch_request_id"] == request_id and first[-1]["task_id"] == task_id
+    assert "调用队列 partial backfill" in first[-1]["body"]
+    assert svc._messages.read_all_message_rows() == rows
+    assert calls == []
+
+
+def test_history_read_preserves_pending_request_without_cli_backfill(tmp_path, monkeypatch):
     calls = []
 
     def runner(cmd, **kwargs):
@@ -526,6 +605,9 @@ def test_history_read_never_starts_a_cli_attempt(tmp_path, monkeypatch):
     first = svc.list_messages(user_id=1)
     second = svc.list_messages(user_id=1)
     assert first == second
-    assert len(first) == 1 and first[0]["status"] == "sent"
+    assert len(first) == 1
+    assert first[-1]["role"] == "user"
+    assert first[-1]["status"] == "sent"
+    assert first[-1]["body"] == "解释这段对话"
     assert "cli_execution" not in svc._messages.read_all_message_rows()[-1]
     assert calls == []

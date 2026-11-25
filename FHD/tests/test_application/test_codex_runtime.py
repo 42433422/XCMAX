@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.application.agent_orchestrator import run_lifecycle
 from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
 from app.application.agent_runtime import codex_runtime as runtime
 from app.domain.task_lifecycle.agent_runtime_contract import (
@@ -181,7 +182,7 @@ class Transport:
 
 @pytest.fixture
 def setup_runtime(tmp_path, monkeypatch):
-    monkeypatch.setattr(runtime, "continuation_conversation_error", lambda *_args: "")
+    monkeypatch.setattr(run_lifecycle, "continuation_conversation_error", lambda *_args: "")
     config = CodexTransportConfig(
         runtime_root=tmp_path.resolve(),
         scope_id="must-be-replaced",
@@ -748,7 +749,7 @@ def test_changed_conversation_stops_before_native_thread_resume(setup_runtime, m
     invoke, _ = setup_runtime
     store = Store(metadata={"thread_id": "thread-one"})
     monkeypatch.setattr(
-        runtime, "continuation_conversation_error", lambda *_args: "conversation cleared"
+        run_lifecycle, "continuation_conversation_error", lambda *_args: "conversation cleared"
     )
     transport = Transport(store)
     result = asyncio.run(invoke(store, transport))

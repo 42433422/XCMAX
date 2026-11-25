@@ -1,11 +1,14 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
 from app.application import shared_issue_runtime as bridge
+from app.application.private_mod_delivery_artifacts import custom_delivery_remote_json
 
 
 @pytest.fixture
@@ -86,6 +89,60 @@ async def test_confirmation_response_loss_replays_saved_payload_after_ticket_lea
     assert result == {"replayed": True}
     assert remote.await_count == 3  # retry POST does not require a still-pending ticket
     assert remote.await_args.kwargs["payload"] == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure",
+    [
+        httpx.Response(503, json={"detail": "receipt service unavailable"}),
+        RuntimeError("receipt bug"),
+    ],
+    ids=["http503", "programming-error"],
+)
+async def test_failed_background_receipt_keeps_original_pending_evidence(
+    host, monkeypatch, failure
+):
+    request, remote, _, target = host
+    remote.side_effect = [
+        {"items": [{"id": 7, "ready": True, "target": target}]},
+        ConnectionError("response lost"),
+    ]
+    with pytest.raises(ConnectionError):
+        await bridge.report_issue(request, 7)
+    original = list(bridge._records(bridge._owner(request)))
+    client_type, sent = httpx.AsyncClient, []
+
+    def respond(outbound):
+        assert outbound.headers["Authorization"] == "Bearer fixture-token"
+        sent.append(outbound)
+        if outbound.method == "POST":
+            assert outbound.url.path == "/api/customer-service/issues/7/runtime-receipt"
+            if isinstance(failure, Exception):
+                raise failure
+            return failure
+        assert outbound.url.path == "/api/customer-service/issues/pending-runtime"
+        return httpx.Response(200, json={"items": []})
+
+    monkeypatch.setattr(bridge, "custom_delivery_remote_json", custom_delivery_remote_json)
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kw: client_type(transport=httpx.MockTransport(respond), **kw)
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account._market_api_base_url", lambda: "https://market.test"
+    )
+    if isinstance(failure, RuntimeError):
+        with pytest.raises(RuntimeError) as caught:
+            await bridge.report_ready_issue_identities(request)
+        assert caught.value is failure
+        assert len(sent) == 1
+    else:
+        assert await bridge.report_ready_issue_identities(request) == {"reported": 0}
+        assert len(sent) == 2
+    assert list(bridge._records(bridge._owner(request))) == original
+    assert len(original) == 1 and original[0][1]["reported"] is False
+    assert json.loads(sent[0].content) == original[0][1]["payload"]
+    assert original[0][1]["payload"]["customer_confirmed"] is False
 
 
 @pytest.mark.asyncio

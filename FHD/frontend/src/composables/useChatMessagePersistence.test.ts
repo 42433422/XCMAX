@@ -1,10 +1,21 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
-import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
+import { boundedChatMessageCache, localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
 const { save, retryTurn } = vi.hoisted(() => ({ save: vi.fn(), retryTurn: vi.fn() }))
 vi.mock('@/api/chat', () => ({ default: { saveMessage: save, retryTurnPersistence: retryTurn } }))
 beforeEach(() => save.mockReset())
+
+it.each(['submitted', 'streaming'] as const)('retains active %s rows even with an older saved marker', streamStatus => {
+  const rows: UiChatMessage[] = Array.from({ length: 100 }, (_, index) => ({ role: 'ai', content: `message ${index}`, time: '',
+    serverMessageId: index + 1, persistence: { id: `server:${index + 1}`, status: 'saved', durable: true } }))
+  rows[0].streamStatus = streamStatus
+  const cached = boundedChatMessageCache(rows)
+  expect(cached).toHaveLength(81)
+  expect(cached[0]).toBe(rows[0])
+  expect(cached.at(-1)).toBe(rows.at(-1))
+  expect(rows).toHaveLength(100)
+})
 
 function setup() {
   const messages = ref<UiChatMessage[]>([{ role: 'user', content: '订单 A', time: '12:00', persistence: localMessagePersistence() }])

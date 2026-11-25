@@ -546,12 +546,12 @@ def test_real_native_bytes_with_pending_receipt_are_not_customer_delivery(
 def test_native_file_hash_ignores_read_access_but_rejects_content_identity_changes(
     customer_workflow, monkeypatch, change
 ):
-    from modstore_server import catalog_archive_integrity, employee_executor
+    from modstore_server import employee_executor
 
     env = customer_workflow
     target = env["workspace"] / "outputs/output.csv"
     actions = employee_executor._actions_real
-    hash_file = catalog_archive_integrity.sha256_file
+    hash_file = hashlib.file_digest
     reads = []
 
     def native_with_old_access_time(*args, **kwargs):
@@ -560,11 +560,13 @@ def test_native_file_hash_ignores_read_access_but_rejects_content_identity_chang
         os.utime(target, ns=(current.st_mtime_ns - 172_800_000_000_000, current.st_mtime_ns))
         return result
 
-    def hash_then_change(path):
-        if path != target:
-            return hash_file(path)
+    def hash_then_change(source, digest, **kwargs):
+        path = target
+        if not path.exists() or not os.path.samestat(os.fstat(source.fileno()), path.stat()):
+            return hash_file(source, digest, **kwargs)
         before = path.stat()
-        checksum = hash_file(path)  # The actual read updates atime on this filesystem.
+        hashed = hash_file(source, digest, **kwargs)  # The actual descriptor read updates atime.
+        checksum = hashed.hexdigest()
         after = path.stat()
         assert before.st_atime_ns != after.st_atime_ns
         assert all(
@@ -594,10 +596,10 @@ def test_native_file_hash_ignores_read_access_but_rejects_content_identity_chang
                 replacement.write_bytes(changed)
                 os.utime(replacement, ns=(after.st_atime_ns, after.st_mtime_ns))
                 replacement.replace(path)
-        return checksum
+        return hashed
 
     monkeypatch.setattr(employee_executor, "_actions_real", native_with_old_access_time)
-    monkeypatch.setattr(catalog_archive_integrity, "sha256_file", hash_then_change)
+    monkeypatch.setattr(hashlib, "file_digest", hash_then_change)
     response = env["execute"]()
     assert len(reads) == 1
     if change == "atime":

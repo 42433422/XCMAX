@@ -20,7 +20,7 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict, empty string)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, OSError)
+- Exception paths (RECOVERABLE_ERRORS: OSError, ValueError (not unclassified RuntimeError))
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ def _assert_shared_trailing_slash_alias_0(self, _shared_literal_0, _shared_liter
 
 os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
 
+import hashlib
 import json
 import shutil
 import tempfile
@@ -56,10 +57,9 @@ from fastapi.testclient import TestClient
 from app.infrastructure.db import mod_database_url as mod_db_url_mod
 from app.shell import xcagi_mods_discover as discover_mod
 from tests.fixtures.backend_ci_isolation import isolated_login_host_db
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
-# ===========================================================================
 # Shared helpers / fixtures
-# ===========================================================================
 
 
 @pytest.fixture
@@ -139,9 +139,7 @@ def _write_mod(xcagi_root: Path, mod_id: str, manifest: dict) -> Path:
     return mod_dir
 
 
-# ===========================================================================
 # 1. app/shell/xcagi_mods_discover.py
-# ===========================================================================
 
 
 class TestEffectiveSingleModId:
@@ -165,14 +163,14 @@ class TestEffectiveSingleModId:
             result = discover_mod._effective_single_mod_id()
         assert result is None
 
-    def test_returns_none_when_ctx_raises(self, monkeypatch):
+    def test_unexpected_ctx_error_propagates(self, monkeypatch):
         monkeypatch.delenv("XCAGI_SINGLE_MOD_ID", raising=False)
         with patch(
             "app.request_active_mod_ctx.get_request_active_mod_id",
             side_effect=RuntimeError("no ctx"),
         ):
-            result = discover_mod._effective_single_mod_id()
-        assert result is None
+            with pytest.raises(RuntimeError, match="no ctx"):
+                discover_mod._effective_single_mod_id()
 
 
 class TestFilterManifestRowsToSingle:
@@ -357,9 +355,7 @@ class TestLoadingStatusExtras:
         assert extras["primary_mod_id"] is None
 
 
-# ===========================================================================
 # 2. app/infrastructure/db/mod_database_url.py
-# ===========================================================================
 
 
 class TestNormalizeModForEnv:
@@ -543,9 +539,7 @@ class TestResolveDatabaseUrlForActiveMod:
         assert result == "sqlite:///base.db"
 
 
-# ===========================================================================
 # 3. app/services/distillation_data_collector.py
-# ===========================================================================
 
 
 class TestDistillationInitDb:
@@ -586,10 +580,13 @@ class TestDistillationGetDeepseekApiKey:
         config_dir = os.path.join(tmp_dir, "resources", "config")
         os.makedirs(config_dir, exist_ok=True)
         config_file = os.path.join(config_dir, "deepseek_config.py")
-        with open(config_file, "w", encoding="utf-8") as f:
-            f.write('raise RuntimeError("bad config")\n')
+        Path(config_file).touch()
         monkeypatch.setattr(ddc, "BASE_DIR", tmp_dir)
-        result = ddc.get_deepseek_api_key()
+        with patch(
+            "importlib.machinery.SourceFileLoader.get_data",
+            side_effect=PermissionError("cannot read config"),
+        ):
+            result = ddc.get_deepseek_api_key()
         assert result == ""
 
 
@@ -715,9 +712,7 @@ class TestDistillationMain:
             await main()  # Should not raise
 
 
-# ===========================================================================
 # 4. app/utils/performance_initializer.py
-# ===========================================================================
 
 
 class TestPerformanceOptimizerInit:
@@ -767,7 +762,7 @@ class TestPerformanceOptimizerInit:
         with (
             patch(
                 "app.utils.performance.redis_cache.get_redis_cache",
-                side_effect=RuntimeError("no redis"),
+                side_effect=OSError("no redis"),
             ),
             patch(
                 "app.utils.performance.query_optimizer.get_query_optimizer",
@@ -1021,271 +1016,218 @@ class TestOptimizedServiceDecorator:
         assert svc._query_optimizer == "qo"
 
 
-# ===========================================================================
 # 5. app/fastapi_routes/excel_vector.py
-# ===========================================================================
-
-
-def _excel_vector_client() -> TestClient:
-    """Build a minimal FastAPI app with only the excel_vector router (no LAN guard)."""
-    from app.fastapi_routes.excel_vector import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
 
 
 @pytest.fixture
-def vector_runs(monkeypatch):
+def excel_vector_client(monkeypatch, tmp_path, trusted_actor, local_tools):
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.fastapi_routes.excel_vector import router
+    from app.infrastructure.tenant_scope import tenant_scope
 
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "vector-claims.sqlite"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
     repo = InMemoryAgentRunRepository()
     monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
     )
-    return repo
+    actor = trusted_actor(role="admin", tenant_id=None, tier="admin")
+    app = FastAPI()
+    app.include_router(router)
+    with (
+        tenant_scope(None),
+        TestClient(app, headers=actor.headers, raise_server_exceptions=False) as client,
+    ):
+        yield client, actor
 
 
-def _assert_unverified_vector_ingest(response, repo, index_id):
-    assert response.status_code == 400
+def _assert_vector_write_rejected(response, *, status=403, code="approval_scope_required"):
+    assert response.status_code == status, response.text
     body = response.json()
-    assert body["success"] is False and body["agent_status"] == "blocked"
-    assert body["error_code"] == "result_verification_inconclusive"
-    assert body["verification_code"] == "result_verifier_unavailable"
-    assert body["retryable"] is False and body["reconciliation_required"] is True
-    run = repo.get(body["run_id"])
-    assert run is not None and run.status == "blocked" and len(run.tool_calls) == 1
-    call = run.tool_calls[0]
-    assert call.tool_id == "excel_vector_index" and call.action == "execute"
-    assert call.cost_units == 1 and call.output["success"] is True
-    assert call.output["index_id"] == body["index_id"] == index_id
-    assert call.metadata["verification"]["accepted"] is False
-    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
-    return call
+    assert body["success"] is False
+    assert body["error_code"] == code
+    assert body["execution_status"] == "not_started"
+    assert body["retryable"] is False
+    assert not body.get("run_id")
 
 
 class TestExcelVectorIngest:
     """Cover ``ingest_excel_vector`` route."""
 
-    def test_ingest_json_no_file_path_returns_400(self):
-        mock_svc = MagicMock()
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.post("/api/excel/vector/ingest", json={})
+    @pytest.mark.parametrize("body", [{}, {"file_path": ""}])
+    def test_ingest_json_missing_file_path_returns_400(self, excel_vector_client, body):
+        client, _ = excel_vector_client
+        r = client.post("/api/excel/vector/ingest", json=body)
         assert r.status_code == 400
         assert "file_path" in r.json()["message"]
 
-    def test_ingest_json_empty_file_path_returns_400(self):
-        mock_svc = MagicMock()
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.post("/api/excel/vector/ingest", json={"file_path": ""})
-        assert r.status_code == 400
-
-    def test_ingest_json_valid_file_path(self, local_tools, vector_runs):
-        mock_svc = MagicMock()
-        mock_svc.ingest_excel.return_value = {"success": True, "index_id": "abc"}
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+    def test_ingest_json_requires_approval_scope(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service") as ingest:
             r = client.post(
                 "/api/excel/vector/ingest",
                 json={"file_path": "/tmp/test.xlsx", "index_name": "test"},
+                headers={"Idempotency-Key": "vector-json-ingest"},
             )
-        _assert_unverified_vector_ingest(r, vector_runs, "abc")
-        mock_svc.ingest_excel.assert_called_once_with(
-            file_path="/tmp/test.xlsx", index_name="test", index_id=None
-        )
+        _assert_vector_write_rejected(r)
+        ingest.assert_not_called()
 
-    def test_ingest_json_ingest_fails_returns_400(self, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.ingest_excel.return_value = {"success": False, "message": "bad file"}
+    def test_ingest_json_requires_idempotency_key(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service") as ingest:
+            r = client.post("/api/excel/vector/ingest", json={"file_path": "/tmp/test.xlsx"})
+        _assert_vector_write_rejected(r, status=400, code="task_identity_required")
+        ingest.assert_not_called()
+
+    def test_ingest_multipart_save_error_returns_500(self, excel_vector_client):
+        client, _ = excel_vector_client
         with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+            "app.fastapi_routes.excel_vector.save_upload_bytes", side_effect=OSError("disk down")
+        ) as save:
             r = client.post(
                 "/api/excel/vector/ingest",
-                json={"file_path": "/tmp/bad.xlsx"},
-            )
-        assert r.status_code == 400
-
-    def test_ingest_json_exception_returns_500(self, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.ingest_excel.side_effect = RuntimeError("crash")
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.post(
-                "/api/excel/vector/ingest",
-                json={"file_path": "/tmp/crash.xlsx"},
+                files={"excel_file": ("test.xlsx", b"hello")},
+                headers={"Idempotency-Key": "vector-save-error"},
             )
         assert r.status_code == 500
+        assert r.json()["success"] is False
+        assert "disk down" not in r.text
+        save.assert_called_once()
 
-    def test_ingest_multipart_wrong_extension_returns_400(self, tmp_dir):
-        mock_svc = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-                return_value=mock_svc,
-            ),
-            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
-        ):
-            client = _excel_vector_client()
+    def test_ingest_multipart_wrong_extension_returns_400(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.fastapi_routes.excel_vector.save_upload_bytes") as save:
             r = client.post(
                 "/api/excel/vector/ingest",
                 files={"excel_file": ("test.txt", b"hello", "text/plain")},
             )
         assert r.status_code == 400
+        assert ".xlsx/.xls" in r.json()["message"]
+        save.assert_not_called()
 
-    def test_ingest_multipart_valid_file(self, tmp_dir, local_tools, vector_runs):
-        mock_svc = MagicMock()
-        mock_svc.ingest_excel.return_value = {"success": True, "index_id": "x"}
+    def test_ingest_multipart_retains_staged_input(
+        self, excel_vector_client, tmp_path, monkeypatch
+    ):
+        from app.utils.path_io.upload_helpers import save_upload_bytes
+
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        client, actor = excel_vector_client
+        content = b"hello"
+        owner = hashlib.sha256(f"{actor.user_id}::".encode()).hexdigest()
+        subdir = f"excel-vector/{owner}"
+        filename = hashlib.sha256(content).hexdigest() + ".xlsx"
         with (
+            patch("app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service") as ingest,
             patch(
-                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
-                return_value=mock_svc,
-            ),
-            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
+                "app.fastapi_routes.excel_vector.save_upload_bytes", wraps=save_upload_bytes
+            ) as save,
         ):
-            client = _excel_vector_client()
             r = client.post(
                 "/api/excel/vector/ingest",
-                files={
-                    "excel_file": (
-                        "test.xlsx",
-                        b"hello",
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
+                files={"excel_file": ("test.xlsx", content)},
+                headers={"Idempotency-Key": "vector-multipart-ingest"},
             )
-        call = _assert_unverified_vector_ingest(r, vector_runs, "x")
-        mock_svc.ingest_excel.assert_called_once_with(
-            file_path=call.params["file_path"], index_name=None, index_id=None
-        )
-        assert Path(call.params["file_path"]).parent == Path(tmp_dir).resolve()
-        assert not Path(call.params["file_path"]).exists()
+        _assert_vector_write_rejected(r)
+        ingest.assert_not_called()
+        save.assert_called_once_with(content, subdir=subdir, filename=filename)
+        assert (tmp_path / "uploads" / subdir / filename).read_bytes() == content
 
 
 class TestExcelVectorQuery:
     """Cover ``query_excel_vector`` route."""
 
-    def test_query_success(self, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.query.return_value = {"success": True, "hits": []}
+    def test_query_success(self, excel_vector_client):
+        client, _ = excel_vector_client
         with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
+        ) as service:
+            query = service.return_value.query
+            query.return_value = {"success": True, "index_id": "idx1", "hits": []}
             r = client.post(
                 "/api/excel/vector/query",
                 json={"index_id": "idx1", "query": "test", "top_k": 3},
             )
-        assert r.status_code == 200
+        assert r.status_code == 200, r.text
+        assert r.json()["success"] is True and r.json()["hits"] == []
+        query.assert_called_once_with(index_id="idx1", query_text="test", top_k=3)
 
-    def test_query_failure_returns_400(self, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.query.return_value = {"success": False, "message": "not found"}
+    @pytest.mark.parametrize("raises", [False, True])
+    def test_query_failure_returns_400(self, excel_vector_client, raises):
+        client, _ = excel_vector_client
         with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.post(
-                "/api/excel/vector/query",
-                json={"index_id": "bad", "query": "x"},
-            )
-        assert r.status_code == 400
-
-    def test_query_exception_returns_500(self, local_tools):
-        mock_svc = MagicMock()
-        mock_svc.query.side_effect = RuntimeError("db down")
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.post(
-                "/api/excel/vector/query",
-                json={"index_id": "x", "query": "y"},
-            )
-        assert r.status_code == 500
+            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
+        ) as service:
+            query = service.return_value.query
+            query.return_value = {"success": False, "message": "not found"}
+            if raises:
+                query.side_effect = OSError("db down")
+            r = client.post("/api/excel/vector/query", json={"index_id": "bad", "query": "x"})
+        assert r.status_code == 400, r.text
+        assert r.json()["success"] is False
+        if raises:
+            assert r.json()["error_code"] == "excel_vector_exception"
+            assert "db down" not in r.text
+        query.assert_called_once_with(index_id="bad", query_text="x", top_k=5)
 
 
 class TestExcelVectorIndexes:
     """Cover ``list_excel_vector_indexes`` and ``delete_excel_vector_index``."""
 
-    def test_list_indexes_success(self):
-        mock_svc = MagicMock()
-        mock_svc.list_indexes.return_value = {"success": True, "indexes": []}
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+    def test_list_indexes_success(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.application.get_excel_vector_search_app_service") as service:
+            list_indexes = service.return_value.list_indexes
+            list_indexes.return_value = {"success": True, "indexes": []}
             r = client.get("/api/excel/vector/indexes")
-        assert r.status_code == 200
+        assert r.status_code == 200, r.text
+        assert r.json()["success"] is True and r.json()["indexes"] == []
+        list_indexes.assert_called_once_with()
 
-    def test_list_indexes_exception_returns_500(self):
-        mock_svc = MagicMock()
-        mock_svc.list_indexes.side_effect = RuntimeError("fail")
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+    def test_list_indexes_exception_returns_failed_receipt(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.application.get_excel_vector_search_app_service") as service:
+            list_indexes = service.return_value.list_indexes
+            list_indexes.side_effect = RuntimeError("unexpected list failure")
             r = client.get("/api/excel/vector/indexes")
-        assert r.status_code == 500
+        assert r.status_code == 400, r.text
+        assert r.json()["success"] is False
+        assert r.json()["error_code"] == "tool_exception"
+        assert "unexpected list failure" not in r.text
+        list_indexes.assert_called_once_with()
 
-    def test_delete_index_success(self):
-        mock_svc = MagicMock()
-        mock_svc.delete_index.return_value = {"success": True}
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
+    def test_delete_index_requires_approval_scope(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.application.get_excel_vector_search_app_service") as service:
+            r = client.delete(
+                "/api/excel/vector/indexes/idx1", headers={"Idempotency-Key": "vector-delete"}
+            )
+        _assert_vector_write_rejected(r)
+        service.assert_not_called()
+
+    def test_delete_index_requires_idempotency_key(self, excel_vector_client):
+        client, _ = excel_vector_client
+        with patch("app.application.get_excel_vector_search_app_service") as service:
             r = client.delete("/api/excel/vector/indexes/idx1")
-        assert r.status_code == 200
+        _assert_vector_write_rejected(r, status=400, code="task_identity_required")
+        service.assert_not_called()
 
-    def test_delete_index_not_found(self):
-        mock_svc = MagicMock()
-        mock_svc.delete_index.return_value = {"success": False}
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.delete("/api/excel/vector/indexes/idx1")
-        assert r.status_code == 404
-
-    def test_delete_index_exception_returns_500(self):
-        mock_svc = MagicMock()
-        mock_svc.delete_index.side_effect = RuntimeError("fail")
-        with patch(
-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
-            return_value=mock_svc,
-        ):
-            client = _excel_vector_client()
-            r = client.delete("/api/excel/vector/indexes/idx1")
-        assert r.status_code == 500
+    def test_delete_index_denies_tenant_actor(self, excel_vector_client, trusted_actor):
+        client, _ = excel_vector_client
+        actor = trusted_actor(tenant_id=7, role="admin")
+        with patch("app.application.get_excel_vector_search_app_service") as service:
+            r = client.delete(
+                "/api/excel/vector/indexes/idx1",
+                headers={**actor.headers, "Idempotency-Key": "tenant-vector-delete"},
+            )
+        assert r.status_code == 403, r.text
+        assert r.json()["error_code"] == "tool_permission_denied"
+        service.assert_not_called()
 
 
-# ===========================================================================
 # 6. app/application/enterprise_login_flow.py
-# ===========================================================================
 
 
 class TestBindTenantForLogin:
@@ -1329,7 +1271,7 @@ class TestBindTenantForLogin:
 
         with patch(
             "app.application.tenant_subscription_app_service.provision_trial_for_user",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             result = bind_tenant_for_login(user_id=1, company_brand="X", username="alice")
         assert result["tenant_id"] is None
@@ -1488,11 +1430,11 @@ class TestFinalizeEnterpriseLogin:
         with (
             patch(
                 "app.fastapi_routes.market_account.save_session_market_token",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
             patch(
                 "app.application.enterprise_login_flow.extract_market_user_blob",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
         ):
             out = await finalize_enterprise_login(
@@ -1635,9 +1577,7 @@ class TestRunMarketFirstLogin:
         assert err is not None
 
 
-# ===========================================================================
 # 7. app/fastapi_routes/template_api.py
-# ===========================================================================
 
 
 def _template_api_client() -> TestClient:
@@ -1820,15 +1760,13 @@ class TestPublishTemplateEvent:
 
         with patch(
             "app.fastapi_routes.template_api.publish_neuro_event",
-            side_effect=RuntimeError("bus down"),
+            side_effect=OSError("bus down"),
         ):
             # Should not raise
             _publish_template_event("test.event", {})
 
 
-# ===========================================================================
 # 8. app/neuro_bus/routing/policy_nn.py
-# ===========================================================================
 
 
 class TestPolicyNNHelpers:
@@ -1978,9 +1916,7 @@ class TestSavePolicyStateDict:
         assert path.is_file()
 
 
-# ===========================================================================
 # 9. app/services/mobile_push.py
-# ===========================================================================
 
 
 class TestFcmEnabled:

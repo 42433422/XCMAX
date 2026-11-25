@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
@@ -14,6 +15,7 @@ from modstore_server import strategic_portfolio_usage as usage
 from modstore_server.employee_path_guard import check_path_guard
 from modstore_server.employee_verification import run_verification
 from modstore_server.strategic_execution_contract import (
+    _workspace_file,
     bind_file_receipts,
     execution_payload,
     verify_execution_binding,
@@ -25,6 +27,269 @@ from tests.test_strategic_portfolio import claim_proposal, opportunity, proposal
 
 database = fixtures.database
 archived_python = contracts.archived_python
+
+
+@pytest.mark.parametrize("resolver", ["workspace", "source", "output"])
+@pytest.mark.parametrize("case", ["absolute", "parent", "sibling_prefix"])
+def test_workspace_boundaries_reject_lexical_escape_before_resolution(
+    tmp_path, monkeypatch, resolver, case
+):
+    from modstore_server.integrations.vibe_adapter import VibePathError, ensure_within_workspace
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    workspace = tmp_path / "workspaces/7/project"
+    workspace.mkdir(parents=True)
+    outside = tmp_path / "workspaces" / ("7-sibling" if case == "sibling_prefix" else "8")
+    outside.mkdir()
+    outside = outside / "private.json"
+    outside.write_text("another tenant's file")
+    raw = workspace / "../../8/private.json" if case == "parent" else outside
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "workspaces/{user_id}"))
+    realpath = os.path.realpath
+
+    def checked_realpath(path, *args, **kwargs):
+        if os.path.abspath(path) == str(outside):
+            pytest.fail("an out-of-bound path reached filesystem resolution before validation")
+        return realpath(path, *args, **kwargs)
+
+    monkeypatch.setattr(os.path, "realpath", checked_realpath)
+    with pytest.raises(VibePathError if resolver == "workspace" else portfolio.PortfolioError):
+        if resolver == "workspace":
+            ensure_within_workspace(raw, user_id=7)
+        else:
+            _workspace_file(str(raw), str(workspace), 7, exists=resolver == "source")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "absolute",
+        "relative",
+        "internal_symlink",
+        "workspace_symlink",
+        "symlink_parent",
+        "configured_alias",
+        "tenant_root",
+    ],
+)
+def test_workspace_boundaries_preserve_authorized_paths(tmp_path, monkeypatch, case):
+    from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant if case == "tenant_root" else tenant / "project"
+    workspace.mkdir(parents=True)
+    source = workspace / "input.json"
+    source.write_text("authorized input")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "workspaces/{user_id}"))
+    selected, raw = str(workspace), str(source)
+    if case == "relative":
+        monkeypatch.chdir(tmp_path)
+        selected, raw = "workspaces/7/project", "input.json"
+    elif case == "internal_symlink":
+        link = workspace / "linked.json"
+        link.symlink_to(source)
+        raw = str(link)
+    elif case == "workspace_symlink":
+        link = tenant / "linked"
+        link.symlink_to(workspace, target_is_directory=True)
+        selected = str(link)
+    elif case == "symlink_parent":
+        child = workspace / "nested/child"
+        child.mkdir(parents=True)
+        source = child.parent / "input.json"
+        source.write_text("nested authorized input")
+        link = workspace / "linked"
+        link.symlink_to(child, target_is_directory=True)
+        raw = str(link / "../input.json")
+    elif case == "configured_alias":
+        alias = tmp_path / "workspace_alias"
+        alias.symlink_to(tenant.parent, target_is_directory=True)
+        monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(alias / "{user_id}"))
+        selected = str(alias / "7/project")
+    assert ensure_within_workspace(selected, user_id=7) == workspace.resolve()
+    assert _workspace_file(raw, selected, 7, exists=True) == source.resolve()
+    output = _workspace_file("future.csv", selected, 7, exists=False)
+    assert output == workspace.resolve() / "future.csv"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("resolver", ["workspace", "source", "output"])
+def test_workspace_boundaries_reject_symlink_escape(tmp_path, monkeypatch, resolver):
+    from modstore_server.integrations.vibe_adapter import VibePathError, ensure_within_workspace
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    workspace = tmp_path / "workspaces/7"
+    workspace.mkdir(parents=True)
+    outside = tmp_path / "workspaces/8"
+    outside.mkdir()
+    (outside / "private.json").write_text("another tenant's file")
+    link = workspace / "escape"
+    link.symlink_to(outside, target_is_directory=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "workspaces/{user_id}"))
+    with pytest.raises(VibePathError if resolver == "workspace" else portfolio.PortfolioError):
+        if resolver == "workspace":
+            ensure_within_workspace(link, user_id=7)
+        else:
+            filename = "future.csv" if resolver == "output" else "private.json"
+            _workspace_file(str(link / filename), str(workspace), 7, exists=resolver == "source")
+
+
+@pytest.mark.parametrize("boundary", ["tenant", "project"])
+@pytest.mark.parametrize("case", ["absolute", "parent", "prefix", "loop"])
+def test_rejected_path_never_resolves_outside_selected_boundary(
+    tmp_path, monkeypatch, boundary, case
+):
+    from modstore_server.integrations.vibe_adapter import (
+        VibePathError,
+        ensure_within_workspace,
+    )
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    workspace.mkdir(parents=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    allowed = tenant if boundary == "tenant" else workspace
+    outside = allowed.with_name(allowed.name + "-private")
+    outside.mkdir()
+    source = outside / "source.json"
+    source.write_text("private")
+    if case == "loop":
+        source.unlink()
+        source.symlink_to(source)
+    supplied = allowed / ".." / outside.name / source.name if case == "parent" else source
+    if case == "prefix":
+        supplied = outside
+    accesses = []
+    lstat = os.lstat
+
+    def observe(path, *args, **kwargs):
+        accesses.append(Path(path))
+        return lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", observe)
+    error = VibePathError if boundary == "tenant" else portfolio.PortfolioError
+    with pytest.raises(error):
+        if boundary == "tenant":
+            ensure_within_workspace(supplied, user_id=7)
+        else:
+            _workspace_file(str(supplied), str(workspace), 7, exists=True)
+    assert not any(path == outside or outside in path.parents for path in accesses)
+
+
+def test_workspace_boundary_preserves_configured_and_in_project_symlinks(tmp_path, monkeypatch):
+    from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    project = tenant / "project"
+    project.mkdir(parents=True)
+    configured = tmp_path / "configured"
+    configured.symlink_to(tenant, target_is_directory=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(configured))
+    source = project / "source.json"
+    source.write_text("authorized")
+    link = project / "linked.json"
+    link.symlink_to(source)
+    assert ensure_within_workspace(configured, user_id=7) == tenant
+    assert ensure_within_workspace(tenant, user_id=7) == tenant
+    assert ensure_within_workspace(configured / "project", user_id=7) == project
+    assert _workspace_file(str(link), str(project), 7, exists=True) == source
+    assert _workspace_file("outputs/result.csv", str(project), 7, exists=False) == (
+        project / "outputs/result.csv"
+    )
+
+
+@pytest.mark.parametrize("case", ["absolute", "parent", "prefix", "missing_output"])
+def test_file_path_escape_is_rejected_before_filesystem_resolution(tmp_path, monkeypatch, case):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    workspace.mkdir(parents=True)
+    outside = tenant / ("project-copy" if case == "prefix" else "sibling") / "private.csv"
+    outside.parent.mkdir()
+    outside.write_text("outside the approved project")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    original = os.path.realpath
+
+    def guarded_realpath(value, *args, **kwargs):
+        assert os.path.abspath(value) != str(
+            outside
+        ), "unapproved path reached filesystem resolution"
+        return original(value, *args, **kwargs)
+
+    monkeypatch.setattr(os.path, "realpath", guarded_realpath)
+    value = str(outside) if case == "absolute" else os.path.relpath(outside, workspace)
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(value, str(workspace), 7, exists=case != "missing_output")
+
+
+def test_selected_project_is_rechecked_when_symlink_changes_at_tenant_validation(
+    tmp_path, monkeypatch
+):
+    from modstore_server.integrations import vibe_adapter
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    docs = workspace / "docs"
+    docs.mkdir(parents=True)
+    (docs / "source.csv").write_text("approved input")
+    sibling = tenant / "other-project"
+    sibling.mkdir()
+    (sibling / "source.csv").write_text("outside the approved project")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    original = vibe_adapter.ensure_within_workspace
+    swapped = False
+
+    def swap_before_validation(value, *, user_id, **kwargs):
+        nonlocal swapped
+        if Path(value).name == "source.csv" and not swapped:
+            docs.rename(workspace / "original-docs")
+            docs.symlink_to(sibling, target_is_directory=True)
+            swapped = True
+        return original(value, user_id=user_id, **kwargs)
+
+    monkeypatch.setattr(vibe_adapter, "ensure_within_workspace", swap_before_validation)
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file("docs/source.csv", str(workspace), 7, exists=True)
+    assert swapped
+    assert (sibling / "source.csv").read_text() == "outside the approved project"
+
+
+@pytest.mark.parametrize(
+    "case", ["absolute", "relative", "normalized", "internal_symlink", "output", "output_parents"]
+)
+def test_authorized_file_paths_preserve_original_resolution(tmp_path, monkeypatch, case):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces/7"
+    workspace = tenant / "project"
+    source = workspace / "docs/source.csv"
+    source.parent.mkdir(parents=True)
+    source.write_text("approved input")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant))
+    alias = workspace / "alias.csv"
+    alias.symlink_to(source)
+    output = case.startswith("output")
+    target = workspace / (
+        "new/nested/result.csv" if case == "output_parents" else "docs/result.csv"
+    )
+    values = {
+        "absolute": str(source),
+        "relative": "docs/source.csv",
+        "normalized": "docs/../docs/source.csv",
+        "internal_symlink": "alias.csv",
+        "output": str(target),
+        "output_parents": "new/nested/result.csv",
+    }
+    assert _workspace_file(f" {values[case]} ", str(workspace), 7, exists=not output) == (
+        target if output else source
+    )
+    if output:
+        assert not target.exists()
 
 
 @pytest.mark.parametrize(
@@ -57,6 +322,30 @@ def test_file_input_is_rejected_before_approval(database, tmp_path, case):
         )
 
 
+def test_native_file_path_is_not_url_decoded_before_approval(database, tmp_path):
+    workspace = tmp_path / "workspaces/7"
+    safe = workspace / "a/private.json"
+    safe.parent.mkdir(parents=True)
+    safe.write_text("approved")
+    outside = tmp_path / "workspaces/8/private.json"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("private")
+    (workspace / "%61").symlink_to(outside.parent, target_is_directory=True)
+
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        proposal(database, rows=[opportunity(input_data={"file_path": "%61/private.json"})])
+
+
+@pytest.mark.parametrize("path", ["~/new.csv", "./~/new.csv", ".//~/new.csv", "./~other/new.csv"])
+def test_file_path_rejects_normalized_home_aliases(tmp_path, monkeypatch, path):
+    workspace = tmp_path / "7"
+    workspace.mkdir()
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "{user_id}"))
+
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(path, str(workspace), 7, exists=False)
+
+
 def test_input_symlink_changed_after_approval_is_rechecked_before_execution(database, tmp_path):
     workspace = tmp_path / "workspaces/7"
     workspace.mkdir(parents=True)
@@ -79,7 +368,7 @@ def test_input_symlink_changed_after_approval_is_rechecked_before_execution(data
 
 
 @pytest.mark.parametrize(
-    "path", ["../escape.csv", "/tmp/escape.csv", "other/result.csv", "docs/.env"]
+    "path", ["../escape.csv", "/tmp/escape.csv", "~/escape.csv", "other/result.csv", "docs/.env"]
 )
 def test_output_location_rejected_during_freeze(archived_python, path):
     from modstore_server.strategic_execution_contract import freeze_execution
@@ -113,8 +402,9 @@ def test_file_input_alias_cannot_bypass_selected_workspace(archived_python, tmp_
     "case", ["bundled", "workspace_first", "escape", "symlink", "default_output"]
 )
 def test_actual_file_support_resolver_keeps_frozen_templates_and_rejects_escape(
-    archived_python, tmp_path, case
+    archived_python, tmp_path, case, monkeypatch
 ):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "FHD"))
     from app.mod_sdk.file_employee_support import FileEmployeeSupport
 
     from modstore_server.strategic_execution_contract import _verify_file_support
@@ -176,11 +466,11 @@ def test_actual_file_support_resolver_keeps_frozen_templates_and_rejects_escape(
         "pending",
         "false_success",
         "changed",
+        "file_replaced_after_check",
+        "parent_replaced_after_check",
     ],
 )
 def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, monkeypatch, case):
-    from modstore_server import catalog_archive_integrity
-
     decision, task = claim_proposal(database)
     payload = execution_payload(task)
     workspace = Path(payload["project_root"])
@@ -216,14 +506,33 @@ def test_legacy_receipt_needs_real_stable_in_scope_bytes(database, tmp_path, mon
     elif case == "false_success":
         output["ok"] = "true"
     elif case == "changed":
-        digest = catalog_archive_integrity.sha256_file
+        digest = hashlib.file_digest
 
-        def change_after_read(path):
-            value = digest(path)
-            path.write_text("changed after digest")
+        def change_after_read(source, *args, **kwargs):
+            value = digest(source, *args, **kwargs)
+            artifact.write_text("changed after digest")
             return value
 
-        monkeypatch.setattr(catalog_archive_integrity, "sha256_file", change_after_read)
+        monkeypatch.setattr(hashlib, "file_digest", change_after_read)
+    elif case in {"file_replaced_after_check", "parent_replaced_after_check"}:
+        from modstore_server import strategic_execution_contract as contract
+
+        outside = tmp_path / "private/result.csv"
+        outside.parent.mkdir(parents=True)
+        outside.write_bytes(b"private,other-tenant\nsecret,99\n")
+        validate = contract._workspace_file
+
+        def replace_after_check(path, *args, **kwargs):
+            target = validate(path, *args, **kwargs)
+            if case == "file_replaced_after_check":
+                artifact.unlink()
+                artifact.symlink_to(outside)
+            else:
+                artifact.parent.rename(workspace / "original-docs")
+                artifact.parent.symlink_to(outside.parent, target_is_directory=True)
+            return target
+
+        monkeypatch.setattr(contract, "_workspace_file", replace_after_check)
     result = {"outputs": [{"handler": "direct_python", "ok": True, "output": output}]}
     config = {"workspace_policy": {"scope_globs": ["docs/**"], "forbidden_globs": ["**/.env"]}}
     ordinary = deepcopy(result)

@@ -245,7 +245,7 @@ class TestHandleAutoInboundRequested:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         svc_instance = MagicMock()
-        svc_instance.create_purchase_inbound.side_effect = RuntimeError("db down")
+        svc_instance.create_purchase_inbound.side_effect = OSError("db down")
         svc_cls = MagicMock(return_value=svc_instance)
         monkeypatch.setattr(idh, "PurchaseService", svc_cls)
 

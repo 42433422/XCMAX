@@ -8,7 +8,7 @@ vi.mock('@/api/chat', () => ({ default: { sendUnifiedChat: send, sendUnifiedChat
 vi.mock('./useApprovalMode', () => ({ useApprovalMode: () => ({ state: { enabled: false } }) }))
 const scope = (turnId: string): ChatRequestScope => ({ sessionId: 'conversation', messages: [], turnId })
 function setup() {
-  return useChatRequest({ messages: ref([]), sessionId: ref('conversation'), lastRequestContextSummary: ref(''), plannerWriteUnlockResumeDraft: ref(''), resolveChatDbTokensForPayload: () => ({}), injectExcelContextPayload: () => false, consumeMultimodalIntoPlannerContext: () => {} })
+  return useChatRequest({ messages: ref([]), sessionId: ref('conversation'), lastRequestContextSummary: ref(''), injectExcelContextPayload: () => false, consumeMultimodalIntoPlannerContext: () => {} })
 }
 function artifacts(body: Record<string, unknown>) { return (body.context as Record<string, unknown>).artifact_ids }
 beforeEach(() => { clearChatArtifactIds(); send.mockReset() })

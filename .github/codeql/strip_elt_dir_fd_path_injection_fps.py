@@ -3,7 +3,7 @@
 
 1) shipment_excel_elt_security.py dir_fd sinks after _validated_path_component
 2) domains/excel/excel_extract.py sinks after resolve_elt_path
-3) artifact_files.py, workspace_io.py, workflow_spreadsheet_scope.py sinks
+3) workspace_io.py and workflow_spreadsheet_scope.py sinks
    whose single-component/basename guards CodeQL cannot model
 4) local_file_access/paths.py and
    agent_orchestrator/cross_module_chain.py sinks that resolve/grant a caller
@@ -26,7 +26,6 @@ SAFE_RULE = "py/path-injection"
 SAFE_PATH_SUFFIXES = (
     "FHD/app/application/shipment_excel_elt_security.py",
     "FHD/app/fastapi_routes/domains/excel/excel_extract.py",
-    "FHD/app/application/agent_orchestrator/artifact_files.py",
     "FHD/app/application/employee_runtime/workspace_io.py",
     "FHD/app/application/tools/workflow_spreadsheet_scope.py",
     "FHD/app/application/local_file_access/paths.py",
@@ -42,16 +41,13 @@ SAFE_LINES_BY_SUFFIX = {
         316,
     },
 }
-# Independent reviews: artifact_files 2026-11-13; the other three modules
-# re-reviewed 2026-11-16 on the final PR #3245 sources. Every sink is either a
+# Independent reviews: modules re-reviewed 2026-11-16 on final PR #3245 sources.
+# artifact_files changed its content/ownership contract; its old approval is retired.
+# Every remaining sink is either a
 # dir_fd/NOfollow open of one validated component, a constant anchor, or a write
 # inside a freshly created temporary directory. Pin the complete module AST so
 # any semantic change disables the suppression (fail closed).
 _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
-    "FHD/app/application/agent_orchestrator/artifact_files.py": (
-        "0ac15ca38895f00655ebb7e624e269312ff301558aff702d863f69903324c7da",
-        frozenset({73, 96, 97, 105, 107, 129}),
-    ),
     "FHD/app/application/employee_runtime/workspace_io.py": (
         "bf00f63ee9fe4b98ec9ba6c30b344c8919a6c103c8d0431fe64794cbd53490db",
         frozenset({57, 91}),

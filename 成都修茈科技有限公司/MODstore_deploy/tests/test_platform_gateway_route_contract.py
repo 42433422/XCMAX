@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from modstore_server import (
     llm_api,
@@ -30,6 +31,13 @@ async def test_bench_and_chat_share_gateway_catalog_default(database, monkeypatc
         return {"models": models, "runtime_models": models}
 
     monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    if not gateway_models:
+        with pytest.raises(HTTPException) as error:
+            await llm_api.resolve_default_llm_route(database, 0, platform_only=True)
+        assert error.value.status_code == 400
+        assert error.value.detail["code"] == "NO_PLATFORM_CHAT_MODEL"
+        assert llm.resolve_platform_bench_llm() == (None, None)
+        return
     chat = await llm_api.resolve_default_llm_route(database, 0, platform_only=True)
 
     assert llm.resolve_platform_bench_llm() == (chat["provider"], chat["model"])

@@ -88,7 +88,7 @@ class TestGetPrinterConfig:
     def test_printer_service_error(self):
         svc = SystemService()
         mock_ps = MagicMock()
-        mock_ps.list_printers.side_effect = RuntimeError("no printer")
+        mock_ps.list_printers.side_effect = OSError("no printer")
         with patch(
             "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
         ):

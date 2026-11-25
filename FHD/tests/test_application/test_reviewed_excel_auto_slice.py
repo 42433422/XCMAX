@@ -459,11 +459,15 @@ def test_delivery_note_print_area_crossing_fragment_uses_selected_fragment():
     assert inspect_workbook(body)["sha256"] == source["sha256"]
 
 
-def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatch):
+@pytest.mark.parametrize("internal_detail", [False, True])
+def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatch, internal_detail):
     from app.application import reviewed_excel_auto_slice as auto_slice
 
     def refuse(*_args, **_kwargs):
-        raise ReviewedExcelError("打印区域跨越所选文档")
+        error = ReviewedExcelError("打印区域跨越所选文档")
+        if internal_detail:
+            error.args = ("Traceback: private-provider-diagnostic",)
+        raise error
 
     monkeypatch.setattr(auto_slice, "derive_document_workbook", refuse)
     book = Workbook()
@@ -474,6 +478,8 @@ def test_refused_extraction_keeps_values_and_rejects_rows_with_reason(monkeypatc
     assert load_workbook(BytesIO(slices[0]["workbook"])).worksheets[0]["A2"].value == "面漆"
     assert {r["status"] for r in rows} == {"rejected"}
     assert all("打印区域" in r["reason"] for r in rows)
+    assert all("private-provider-diagnostic" not in r["reason"] for r in rows)
+    assert "private-provider-diagnostic" not in slices[0]["review_reason"]
 
 
 @pytest.mark.parametrize("include_hidden_group", [True, False])
@@ -559,8 +565,22 @@ def _hole_filter_book():
     }
 
 
-def test_compatibility_round_uses_the_revised_filter_range(monkeypatch):
+@pytest.mark.parametrize("internal_detail", [False, True])
+def test_compatibility_round_uses_the_revised_filter_range(monkeypatch, internal_detail):
+    from app.application import reviewed_excel_auto_slice as auto_slice
+
     body, classified = _hole_filter_book()
+    original_derive = auto_slice.derive_document_workbook
+
+    def derive(*args, **kwargs):
+        try:
+            return original_derive(*args, **kwargs)
+        except ReviewedExcelError as error:
+            if internal_detail:
+                error.args = ("Traceback: private-provider-diagnostic",)
+            raise
+
+    monkeypatch.setattr(auto_slice, "derive_document_workbook", derive)
     answers = [
         {"can_slice": True, "ranges": ["A1:D4", "A9:D12"]},
         {"can_slice": True, "ranges": ["A1:D12"]},
@@ -583,6 +603,7 @@ def test_compatibility_round_uses_the_revised_filter_range(monkeypatch):
     )
     slices = derive_classified_documents(body, classified, owner_id=7)
     assert len(calls) == 2
+    assert all("private-provider-diagnostic" not in call for call in calls)
     assert "第1轮" in calls[1]
     assert slices[0]["fragments"] == [{"sheet": "One", "range": "A1:D12"}]
     assert slices[0].get("status") != "pending_review"

@@ -83,9 +83,11 @@ export interface XiaoCLifeState {
   revision: number
   level: number
   paused: boolean
+  stopped?: boolean
+  state_version?: number
   status: string
   mission: string
-  activity: { summary?: string; title?: string; status?: string; model?: string } | null
+  activity: { id?: string; phase?: string; phase_started_at?: string; checkpoint_phase?: 'act' | 'reflect' | null; summary?: string; title?: string; status?: string; model?: string } | null
   goals: XiaoCLifeGoal[]
   interests: { topic: string; confidence: number; evidence_refs: string[] }[]
   self_model: Record<string, unknown>
@@ -107,6 +109,7 @@ export interface XiaoCLifeState {
 export interface XiaoCLifeChange {
   level?: number
   paused?: boolean
+  stopped?: boolean
   mission?: string
   policy?: XiaoCLifePolicy
 }
@@ -153,6 +156,7 @@ export function xiaocStateLabel(status: string): string {
     waiting: '等待新事件',
     sleeping: '等待唤醒',
     paused: '自主活动已暂停',
+    stopped: '自主活动已停止',
     blocked: '等待运行条件',
     thinking: '正在规划',
     running: '正在执行',

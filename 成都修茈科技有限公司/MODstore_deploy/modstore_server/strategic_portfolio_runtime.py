@@ -8,7 +8,7 @@ import math
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -21,6 +21,9 @@ from modstore_server.strategic_portfolio import (
     PortfolioError,
     _date,
     _json,
+)
+from modstore_server.strategic_portfolio import _row as _portfolio_row
+from modstore_server.strategic_portfolio import (
     digest,
     mutate_portfolio,
     plan_portfolio,
@@ -84,11 +87,21 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 tasks.get(dep, {}).get("status") != "completed" for dep in opportunity["depends_on"]
             ):
                 continue
+            from modstore_server.xiaoc_goal_management import operating_dependency_handoff
+
+            dependency_handoff = operating_dependency_handoff(opportunity, tasks)
             reservation = {field: opportunity[field] for field in RESOURCES}
-            from modstore_server.xiaoc_life_store import LifePolicyError, require_life_task_capacity
+            from modstore_server.xiaoc_life_store import (
+                LifePolicyError,
+                current_life_claim,
+                require_life_task_capacity,
+                require_operating_goal_admission,
+            )
 
             try:
+                require_operating_goal_admission(decision_id, proposal)
                 require_life_task_capacity(proposal, reservation["tokens"])
+                life_scope = current_life_claim()
             except LifePolicyError as exc:
                 raise PortfolioError(str(exc)) from exc
             if any(
@@ -97,7 +110,7 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 for field in RESOURCES
             ):
                 raise PortfolioError("portfolio resource budget exhausted")
-            task = {
+            task: dict[str, Any] = {
                 "status": "running",
                 "lease_token": token,
                 "reservation": reservation,
@@ -105,6 +118,10 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 "deadline": (now + timedelta(seconds=reservation["compute_seconds"])).isoformat(),
                 "calls": {},
             }
+            if life_scope is not None:
+                task["life_scope"] = life_scope
+            if dependency_handoff:
+                task["dependency_handoff"] = dependency_handoff
             tasks[key] = task
             action = session.execute(
                 select(StrategicActionItem).where(
@@ -136,6 +153,7 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 "owner_user_id": proposal["owner_user_id"],
                 "lease_token": token,
                 "deadline": task["deadline"],
+                **({"dependency_handoff": dependency_handoff} if dependency_handoff else {}),
             }
         return None
 
@@ -614,6 +632,129 @@ def _finish(
     mutate_portfolio(task["decision_id"], apply)
 
 
+def read_life_closeout_receipt(
+    claim: dict[str, Any], decision_id: str, proposal_hash: str
+) -> dict[str, Any] | None:
+    """Read back one original no-model local completion, without granting execution."""
+    from modstore_server.business_decision_review import proposal_content
+    from modstore_server.db.xiaoc_life import XiaoCLifeState
+    from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
+    from modstore_server.xiaoc_life_policy import IDENTITY_ID
+    from modstore_server.xiaoc_life_store import _matches_claim
+
+    try:
+        owner = claim["owner_user_id"]
+        if type(owner) is not int or owner <= 0 or not proposal_hash:
+            return None
+        with get_session_factory()() as session:
+            life_row = session.get(XiaoCLifeState, IDENTITY_ID)
+            if life_row is None:
+                return None
+            active = json.loads(life_row.state_json).get("active_cycle") or {}
+            if (
+                not _matches_claim(active, claim)
+                or active.get("outbound_journal_version") != 1
+                or active.get("outbound_attempted", False) is not False
+                or active.get("steps")
+                != [
+                    {
+                        "kind": "portfolio",
+                        "decision_id": decision_id,
+                        "before_task_ids": [],
+                        "before_call_ids": [],
+                    }
+                ]
+            ):
+                return None
+
+            row, proposal, state = _portfolio_row(session, decision_id, owner)
+            authorization = state.get("authorization") or {}
+            if (
+                row.decided_by not in {"user", "council-vote"}
+                or row.status not in {"executing", "completed", "reviewed"}
+                or not authorization.get("actor")
+                or authorization.get("user_id") != owner
+                or authorization.get("proposal_sha256") != proposal_hash
+                or proposal.get("proposal_sha256") != proposal_hash
+                or state.get("proposal_sha256") != proposal_hash
+                or digest(proposal_content(proposal)) != proposal_hash
+                or state.get("halted") is not False
+            ):
+                return None
+
+            tasks = state["tasks"]
+            if len(tasks) != 1:
+                return None
+            task_id, task = next(iter(tasks.items()))
+            if state["plan"]["selected"] != [task_id]:
+                return None
+            opportunity = next(
+                (item for item in proposal["opportunities"] if item["opportunity_id"] == task_id),
+                None,
+            )
+            scope = task.get("life_scope")
+            if (
+                opportunity is None
+                or (opportunity.get("input_data") or {}).get("remote_execution")
+                or not isinstance(scope, dict)
+                or len(scope) != 7
+                or not _matches_claim(scope, claim)
+                or task.get("status") != "completed"
+                or not task.get("lease_token")
+                or not task.get("completed_at")
+                or "worker_binding" in task
+                or "remote_state" in task
+                or task.get("calls") != {}
+                or type(task.get("actual_tokens")) is not int
+                or task["actual_tokens"] != 0
+            ):
+                return None
+
+            action_id = _action_id(decision_id, task_id)
+            action = session.scalar(
+                select(StrategicActionItem).where(
+                    StrategicActionItem.action_id == action_id,
+                    StrategicActionItem.decision_id == decision_id,
+                )
+            )
+            if (
+                action is None
+                or action.status != "completed"
+                or action.completed_at is None
+                or action.assigned_to != opportunity["employee_id"]
+                or _json(json.loads(cast(str, action.result_json))) != _json(task)
+            ):
+                return None
+
+            receipt = task["execution_receipt"]
+            verified = evaluate_execution_receipt(receipt)
+            if (
+                verified.status != "completed"
+                or verified.reason != "employee_execution_verified"
+                or receipt.get("truncated")
+                or receipt.get("employee_id") != opportunity["employee_id"]
+                or any(key in receipt for key in ("worker_receipt_id", "remote_receipt"))
+                or task.get("result_sha256") != digest(receipt)
+                or any(
+                    output["handler"] != "direct_python" for output in receipt["result"]["outputs"]
+                )
+            ):
+                return None
+    except (PortfolioError, AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+    return {
+        "actual_tokens": 0,
+        "task_id": task_id,
+        "evidence_refs": [
+            f"strategic_portfolio:{decision_id}",
+            f"strategic_action:{action_id}",
+            f"strategic_execution_receipt:{task['result_sha256']}",
+        ],
+        "decision_id": decision_id,
+    }
+
+
 def execute_portfolio_worker(
     binding: dict[str, Any], *, owner_user_id: int, execute: Any
 ) -> dict[str, Any]:
@@ -675,7 +816,7 @@ def _business_outcome(
     )
     from modstore_server.customer_value_payment_source import load_authoritative_payment_orders
     from modstore_server.strategic_customer_outcomes import (
-        BUSINESS_OUTCOME_ATTRIBUTION,
+        VERIFIED_DELIVERY_ATTRIBUTION,
         customer_delivery_evidence,
     )
 
@@ -715,7 +856,7 @@ def _business_outcome(
         ),
         "window_start": start.isoformat(),
         "window_end": now.isoformat(),
-        "attribution": BUSINESS_OUTCOME_ATTRIBUTION,
+        "attribution": VERIFIED_DELIVERY_ATTRIBUTION,
     }
 
 
@@ -804,6 +945,40 @@ def review_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> d
             ),
             "stop_reason": state.get("stop_reason", ""),
         }
+        from modstore_server.xiaoc_life_experiment_review import bound_portfolio_experiment
+
+        experiments = [
+            measured
+            for item in proposal["opportunities"]
+            if (
+                measured := bound_portfolio_experiment(
+                    _session, decision_id, proposal, state, item, now=datetime.now(UTC)
+                )
+            )
+            is not None
+        ]
+        if experiments:
+            report["experiment_evaluations"] = experiments
+        if proposal.get("decision_review"):
+            from modstore_server.business_decision_review import evaluate_review
+
+            evaluation = evaluate_review(proposal, state, datetime.now(UTC))
+            if evaluation is not None:
+                selected_experiment = next(
+                    (
+                        entry
+                        for entry in experiments
+                        if entry.get("opportunity_id") == evaluation.get("option_id")
+                        and entry.get("status") in ("measured", "inconclusive")
+                    ),
+                    None,
+                )
+                if selected_experiment:
+                    evaluation["experiment_snapshot_sha256"] = selected_experiment[
+                        "snapshot_sha256"
+                    ]
+                    evaluation["experiment_scope"] = selected_experiment["scope"]
+                report["decision_evaluation"] = evaluation
         state["reviews"] = [*state.get("reviews", [])[-89:], report]
         return report
 
@@ -861,8 +1036,10 @@ def reallocate_portfolio(decision_id: str, *, owner_user_id: int | None = None) 
                     // (len(history) + 1),
                 }
             )
-        # Exclude descendants whose prerequisites were eliminated by outcomes.
-        while True:
+        # Pruning is monotone: each non-stable pass removes at least one
+        # candidate. Bound passes to the original candidate count so malformed
+        # prerequisite graphs can never hold the execution worker indefinitely.
+        for _ in range(len(candidates)):
             identifiers = {item["opportunity_id"] for item in candidates}
             valid = [item for item in candidates if set(item["depends_on"]).issubset(identifiers)]
             if len(valid) == len(candidates):

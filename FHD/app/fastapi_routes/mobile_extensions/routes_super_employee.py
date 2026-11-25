@@ -38,7 +38,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     TraeSuperEmployeeMobileMessageBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _StreamRead = tuple[dict[str, Any] | None, BaseException | None]
@@ -532,7 +532,8 @@ class SuperEmployeeRoutes:
                             if turn is None or reader.done():
                                 with suppress(asyncio.CancelledError):
                                     await reader
-                except RECOVERABLE_ERRORS as exc:
+                except BOUNDARY_ERRORS as exc:
+                    # The stream boundary reports the original task's unknown receipt.
                     logger.exception("mobile_super_employee_stream failed: %s", exc)
                     yield ports.sse_line(
                         {"type": "error", "message": "原任务回执待核对，请读取原任务。"}

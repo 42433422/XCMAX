@@ -49,6 +49,8 @@ export function usePersyKnowledgeInspector(deps: PersyKnowledgeInspectorDeps): P
       rows.push({ label: '来源', value: memoryEvidenceSource(memory) })
       rows.push({ label: '更新时间', value: formatDate(memory.updated_at) })
       rows.push({ label: '召回次数', value: numberText(memory.recall_count || 0) })
+      if (memory.revision) rows.push({ label: '修订版本', value: String(memory.revision) })
+      if (memory.recorded_at_utc) rows.push({ label: '版本记录时间', value: memory.recorded_at_utc })
       return rows
     }
     if (node.source) rows.push({ label: '来源', value: node.source })

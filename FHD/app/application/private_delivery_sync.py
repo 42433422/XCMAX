@@ -13,6 +13,8 @@ from fastapi import HTTPException, Request
 from app.application.delivery_entitlements import refresh_delivery_entitlements
 from app.application.mod_delivery_receipt_outbox import retry_delivery_receipts
 from app.application.private_mod_delivery_artifacts import (
+    DeliveryInstallError,
+    DeliveryRemoteError,
     fetch_private_mod_library,
     is_newer_version,
     update_private_mod_from_library,
@@ -36,7 +38,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 _ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,95}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 MAX_INSTALLS_PER_SYNC = 3
-_SYNC_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
+_SYNC_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (
+    HTTPException,
+    DeliveryInstallError,
+    DeliveryRemoteError,
+)
 
 
 def _identity(request: Request) -> tuple[str, int]:
@@ -151,7 +157,7 @@ async def _sync_locked(
                 require_account_scope=True,
             )
             if update.get("success") is not True:
-                raise RuntimeError(str(update.get("message") or "私有交付安装未完成"))
+                raise DeliveryInstallError(str(update.get("message") or "私有交付安装未完成"))
             if update.get("updated"):
                 result["installed"].append(mid)
                 result["routes_changed"] = True

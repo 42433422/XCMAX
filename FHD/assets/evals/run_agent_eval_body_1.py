@@ -68,6 +68,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
     from app.application.agent_orchestrator import tool_permission
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
     from app.domain.shared_services.kitten_ai_document import pickup
+    from app.infrastructure.llm import trace_store
 
     class FixtureToolExecutor(AgentToolExecutor):
         def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
@@ -78,6 +79,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         isolated_env = {
             "XCAGI_DATA_DIR": str(tmp_path / "xcagi-data"),
             "XCAGI_DESKTOP_DATA_DIR": str(tmp_path / "xcagi-data"),
+            "XCAGI_GENAI_TRACE_DIR": str(tmp_path / "xcagi-data" / "logs" / "genai_traces"),
             "DATASET_RAG_STORE_PATH": str(tmp_path / "dataset-rag" / "datasets.json"),
             "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
             "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
@@ -86,6 +88,7 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
         }
         with (
             patch.dict(os.environ, isolated_env, clear=False),
+            patch.object(trace_store, "_store", None),
             patch.object(tool_permission, "_IDEMPOTENCY", {}),
             patch.object(tool_permission, "_LIVE_OWNERS", set()),
             patch.object(pickup, "_CACHED_BASE", None),
@@ -94,7 +97,9 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
                 "app.application.agent_orchestrator.orchestrator.AgentToolExecutor",
                 FixtureToolExecutor,
             ),
+            ExitStack() as cleanup,
         ):
+            cleanup.callback(trace_store.reset_trace_store)
             results = [run_task(task) for task in load_tasks(path)]
     passed = sum(1 for result in results if result["passed"])
     total = len(results)
@@ -131,8 +136,10 @@ def _isolated_task_execution_queue(root: Path):
     from sqlalchemy.orm import sessionmaker
 
     from app.application.agent_orchestrator import task_execution_repository as queues
+    from app.db.models.agent_approval import AgentApprovalConsumption
 
     engine = create_engine("sqlite:///" + str(root / "task-execution.sqlite"))
+    AgentApprovalConsumption.__table__.create(engine)
     try:
         with patch.object(queues, "_OPEN_REPOSITORIES", weakref.WeakSet()):
             repository = queues.SQLAlchemyTaskExecutionRepository(
@@ -142,6 +149,18 @@ def _isolated_task_execution_queue(root: Path):
                 yield repository
     finally:
         engine.dispose()
+
+
+def _fixture_run_repository():
+    """Share the real isolated queue database for atomic approval consumption."""
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+
+    return SQLAlchemyAgentRunRepository(
+        session_factory=get_task_execution_repository()._session_factory
+    )
 
 
 @contextmanager
@@ -159,6 +178,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user", permi
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.domain.shared_services.session_service import SessionService
+    from app.infrastructure.tenant_scope import tenant_scope
     from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
@@ -194,6 +214,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7, role_name="user", permi
         client.headers["X-Session-ID"] = sid
         try:
             with (
+                tenant_scope(tenant_id),
                 patch.object(host_db, "HostSessionLocal", factory),
                 patch.object(host_db, "SessionLocal", factory),
                 patch("app.db.session.SessionLocal", factory),
@@ -291,11 +312,220 @@ def run_task(task: dict[str, Any]) -> dict[str, Any]:
     return _failed(task, f"unknown task kind: {kind}")
 
 
+def _require_fixture_plan_approval(plan):
+    """Use canonical admission policy before persisting a test-owned model plan."""
+    from app.application.tools.registered_capabilities import capability_approval_node_ids
+
+    plan.metadata["approval_required_node_ids"] = capability_approval_node_ids(plan)
+    return plan
+
+
+def _review_fixture_run(client, run, repo, checks, expected):
+    """Approve the existing run through the live signed-grant HTTP contract."""
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+
+    current = client.get(f"/api/agent/runs/{run.run_id}")
+    _check_equal(checks, "review_current_run", current.status_code, 200)
+    grant = (current.json().get("approval") or {}).get("grant")
+    _check_equal(checks, "review_bound_grant_present", bool(grant), True)
+    if not grant:
+        return run
+    response = client.post(f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": grant})
+    _check_equal(checks, "review_enqueued_original_run", response.status_code, 202)
+    queue = get_task_execution_repository()
+    claim = queue.claim("eval-review-worker", run_id=run.run_id, lease_seconds=30)
+    _check_equal(
+        checks, "review_original_task_claimed", claim.run_id if claim else None, run.run_id
+    )
+    if claim is not None:
+        AgentTaskDispatcher(execution_repository=queue, run_repository=repo)._execute_claim(
+            claim, "eval-review-worker"
+        )
+    repeated = client.post(f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": grant})
+    _check_equal(checks, "review_grant_cannot_replay", repeated.status_code in {403, 409}, True)
+    checks[-1]["http_status"] = repeated.status_code
+    return repo.get(run.run_id)
+
+
+def _review_workspace_fixture_run(client, run, repository, checks, expected):
+    """Review the original document plan through the persistent approval workspace."""
+    from app import db as host_db
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_repository import (
+        get_task_execution_repository,
+    )
+    from app.application.workflow import get_approval_service
+    from app.application.workflow.workflow_types import plan_from_dict
+    from app.db.models.approval import ApprovalRecord, ApprovalRequest
+
+    plan = plan_from_dict(run.metadata["plan"])
+    waiting = next(step for step in run.steps if step.status == "waiting_user")
+    node = next(node for node in plan.nodes if node.node_id == waiting.node_id)
+    approvals = get_approval_service()
+    request = approvals.create_approval_request(
+        plan_id=plan.plan_id,
+        node=node,
+        plan=plan,
+        require_persistence=True,
+        runtime_context={**run.metadata["runtime_context"], "_approval_agent_run_required": True},
+        request_id="eval-" + run.run_id + "-" + waiting.node_id,
+    )
+    _check_equal(
+        checks,
+        "workspace_bound_to_original_step",
+        approvals.attach_pending_agent_run(
+            request.request_id, agent_run_id=run.run_id, approved_step_id=waiting.node_id
+        ),
+        True,
+    )
+    with host_db.HostSessionLocal() as db:
+        record = db.query(ApprovalRequest).filter_by(request_no=request.request_id).one()
+        approval_id = record.id
+    response = client.post(
+        f"/api/approval/requests/{approval_id}/approve", json={"opinion": "fixture explicit review"}
+    )
+    _check_equal(
+        checks,
+        "workspace_review_status",
+        response.status_code,
+        expected.get("review_status_code", 202),
+    )
+    _check_equal(
+        checks,
+        "workspace_original_run",
+        ((response.json().get("data") or {}).get("workflow_execution") or {}).get("agent_run_id"),
+        run.run_id,
+    )
+    with host_db.HostSessionLocal() as db:
+        _check_equal(
+            checks,
+            "workspace_review_audit_persisted",
+            db.query(ApprovalRecord).filter_by(request_id=approval_id, action="approve").count(),
+            1,
+        )
+    queue = get_task_execution_repository()
+    claim = queue.claim("eval-workspace-review", run_id=run.run_id, lease_seconds=30)
+    _check_equal(
+        checks,
+        "workspace_original_task_claimed",
+        claim.run_id if claim else None,
+        run.run_id if expected.get("review_queued", True) else None,
+    )
+    if claim is not None:
+        AgentTaskDispatcher(execution_repository=queue, run_repository=repository)._execute_claim(
+            claim, "eval-workspace-review"
+        )
+    repeated = client.post(
+        f"/api/approval/requests/{approval_id}/approve", json={"opinion": "same review retry"}
+    )
+    _check_equal(checks, "workspace_review_cannot_replay", repeated.status_code, 400)
+    return repository.get(run.run_id)
+
+
+def _route_contract_client(app, task, repository):
+    """Use the original HTTP route before and after explicit durable review."""
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
+
+    app.include_router(agent_router)
+
+    class ReviewedRouteClient(TestClient):
+        def __init__(self):
+            super().__init__(app, raise_server_exceptions=False)
+            self.headers["Idempotency-Key"] = str(task.get("request_id") or task["id"])
+            self.fixture_checks = []
+            self.fixture_receipts = []
+
+        def request(self, method, url, **kwargs):
+            before = {row.run_id for row in repository.list_recent(limit=1000)}
+            response = super().request(method, url, **kwargs)
+            if str(url).startswith(("/api/approval/", "/api/agent/runs/")):
+                return response
+            initial = response.json()
+            if task["expected"].get("run_attached") is False:
+                after = {row.run_id for row in repository.list_recent(limit=1000)}
+                _check_equal(
+                    self.fixture_checks, "denied_request_admits_no_run", sorted(after - before), []
+                )
+            receipt = {"method": method, "path": str(url), "initial_response": initial}
+            self.fixture_receipts.append(receipt)
+            if not initial.get("pending_approval"):
+                return response
+            checks = self.fixture_checks
+            run_id = str(initial.get("run_id") or "")
+            run = repository.get(run_id)
+            _check_equal(checks, "original_route_waits_for_approval", response.status_code, 202)
+            _check_equal(
+                checks, "original_route_has_no_effect", len(run.tool_calls) if run else -1, 0
+            )
+            _check_equal(
+                checks, "original_route_owner", run.user_id if run else None, str(self.actor_id)
+            )
+            from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
+
+            approval_id = str(initial.get("approval_request_id") or "")
+            snapshot = load_durable_workflow_snapshot(approval_id, allow_terminal=False)
+            _check_equal(
+                checks,
+                "durable_approval_original_run",
+                (snapshot or {}).get("agent_run_id"),
+                run_id,
+            )
+            replay = super().request(method, url, **kwargs)
+            _check_equal(checks, "pending_replay_status", replay.status_code, response.status_code)
+            for key in ("task_id", "request_id", "run_id", "agent_run_id", "approval_request_id"):
+                _check_equal(
+                    checks, "pending_replay." + key, replay.json().get(key), initial.get(key)
+                )
+            if task.get("review_decision") != "approve":
+                return response
+            reviewed = _review_fixture_run(self, run, repository, checks, task["expected"])
+            receipt["reviewed_run_id"] = reviewed.run_id
+            receipt["reviewed_run_status"] = reviewed.status
+            completed = super().request(method, url, **kwargs)
+            receipt["final_response"] = completed.json()
+            for key in ("task_id", "request_id", "run_id", "agent_run_id"):
+                _check_equal(
+                    checks,
+                    "reviewed_original_request." + key,
+                    completed.json().get(key),
+                    initial.get(key),
+                )
+            return completed
+
+    return ReviewedRouteClient()
+
+
+@contextmanager
+def _route_auth_fixture(client, repository, **kwargs):
+    from app.application import agent_orchestrator
+    from app.application.agent_orchestrator import run_repository
+
+    kwargs.setdefault("role_name", "admin")
+    with (
+        _authenticated_route_fixture(client, **kwargs) as actor_id,
+        patch.object(agent_orchestrator, "get_agent_run_repository", return_value=repository),
+        patch.object(run_repository, "_agent_run_repository", repository),
+        patch("app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher"),
+    ):
+        client.actor_id = actor_id
+        yield actor_id
+
+
 def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
     from starlette.requests import Request
 
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application import agent_orchestrator
+    from app.application.agent_orchestrator import AgentOrchestrator, run_repository
     from app.application.facades.tools_facade import execute_registered_workflow_tool
+    from app.fastapi_routes.approval import router as approval_router
+    from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
@@ -329,10 +559,22 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
             return execute_registered_workflow_tool(tool_id, action, params)
         return dict(task.get("mock_result") or {"success": True})
 
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     with tempfile.TemporaryDirectory() as tmp_dir:
         with ExitStack() as stack:
-            fixture_client = SimpleNamespace(headers={})
+            approval_app = FastAPI()
+            approval_app.include_router(agent_router)
+            approval_app.include_router(approval_router)
+            fixture_client = stack.enter_context(TestClient(approval_app))
+            stack.enter_context(
+                patch.object(agent_orchestrator, "get_agent_run_repository", return_value=repo)
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                    return_value=repo,
+                )
+            )
             stack.enter_context(_authenticated_route_fixture(fixture_client, role_name="admin"))
             request = Request(
                 {
@@ -411,11 +653,15 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                     side_effect=fake_execute,
                 )
             )
+            stack.enter_context(patch.object(run_repository, "_agent_run_repository", repo))
+            stack.enter_context(
+                patch("app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher")
+            )
             orchestrator = AgentOrchestrator(repository=repo)
             run = orchestrator.start_run_from_plan(
                 user_id=actor_id,
                 message=str(task.get("message") or task.get("id") or ""),
-                plan=_build_plan(task),
+                plan=_require_fixture_plan_approval(_build_plan(task)),
                 runtime_context=authenticated_runtime_context(
                     {"source": "agent_eval", "task_id": str(task.get("id") or "")}, principal
                 ),
@@ -424,9 +670,12 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
             dispatch_before_approval = len(dispatches)
 
             if expected.get("continue_after_approval"):
-                continued = orchestrator.continue_run(run.run_id, approved_by="agent-eval")
-                if continued is not None:
-                    run = continued
+                review = (
+                    _review_workspace_fixture_run
+                    if task.get("review_channel") == "workspace"
+                    else _review_fixture_run
+                )
+                run = review(fixture_client, run, repo, checks, expected)
 
     _check_equal(
         checks,
@@ -1862,7 +2111,7 @@ def _run_agent_run_llm_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
     run = repo.get(str(result.get("run_id") or ""))
     checks: list[dict[str, Any]] = []
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is None:
         return _result(task, checks, {"payload": result})
 
@@ -2022,7 +2271,7 @@ def _run_agent_run_rag_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
     run = repo.get(str(result.get("run_id") or ""))
     checks: list[dict[str, Any]] = []
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is None:
         return _result(task, checks, {"payload": result})
 
@@ -2133,7 +2382,7 @@ def _run_agent_run_artifact_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
     run = repo.get(str(result.get("run_id") or ""))
     checks: list[dict[str, Any]] = []
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is None:
         return _result(task, checks, {"payload": result})
 
@@ -2241,17 +2490,15 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
 
 def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.excel_vector import router
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "ingest").strip().lower()
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -2260,6 +2507,7 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -2289,7 +2537,6 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     json=dict(
                         task.get("body") or {"index_id": "idx-eval", "query": "5003", "top_k": 3}
                     ),
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
             else:
                 service = Mock()
@@ -2317,7 +2564,6 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                             "index_name": "products",
                         }
                     ),
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
 
     payload = response.json()
@@ -2332,7 +2578,7 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("run_id_present"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
@@ -2345,22 +2591,24 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         checks,
         {
             "response": payload,
+            "dispatch_count": service.query.call_count
+            if action == "query"
+            else service.ingest_excel.call_count,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.ocr import router
     from app.infrastructure.auth.dependencies import get_logged_in_user
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "recognize").strip().lower()
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     service = Mock()
     service.recognize_file.return_value = dict(
         task.get("mock_recognize_result")
@@ -2382,7 +2630,7 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     app.dependency_overrides[get_logged_in_user] = lambda: Mock(
         id=str(task.get("user_id") or "eval-user"), is_active=True
     )
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -2391,6 +2639,7 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -2407,13 +2656,11 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     json=dict(
                         task.get("body") or {"text": "订单编号：SO-1\n购货单位：ACME Trading"}
                     ),
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
             elif action == "extract":
                 response = client.post(
                     "/api/ocr/extract",
                     json=dict(task.get("body") or {"text": "购货单位：ACME Trading"}),
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
             else:
                 path = (
@@ -2424,7 +2671,6 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 response = client.post(
                     path,
                     data=dict(task.get("form") or {"file_path": "/tmp/label.png"}),
-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
                 )
 
     payload = response.json()
@@ -2439,7 +2685,7 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("run_id_present"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
@@ -2461,23 +2707,22 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "response": payload,
             "run": run.to_dict() if run is not None else None,
         },
+        route_contract=client,
     )
 
 
 def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.business_api import router
 
     expected = dict(task.get("expected") or {})
-    repo = InMemoryAgentRunRepository()
+    repo = _fixture_run_repository()
     ocr_domain = Mock()
     ocr_domain.emit_ocr_requested.return_value = bool(task.get("mock_publish_result", True))
     app = FastAPI()
     app.include_router(router)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = _route_contract_client(app, task, repo)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         env_patch = {
@@ -2487,6 +2732,7 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_route_auth_fixture(client, repo))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -2515,8 +2761,16 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
-    _check_equal(checks, "payload.event", payload.get("event"), expected.get("event"))
-    _check_equal(checks, "payload.published", payload.get("published"), expected.get("published"))
+    original_output = run.steps[0].output if run is not None and run.steps else {}
+    _check_equal(
+        checks, "original_receipt.event", original_output.get("event"), expected.get("event")
+    )
+    _check_equal(
+        checks,
+        "original_receipt.published",
+        original_output.get("published"),
+        expected.get("published"),
+    )
     _check_equal(
         checks,
         "payload.run_id_present",
@@ -2524,7 +2778,7 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         expected.get("run_id_present"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(checks, "run_attached", run is not None, expected.get("run_attached", True))
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
@@ -2532,6 +2786,7 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
         )
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
     return _result(
         task,
         checks,
@@ -2540,4 +2795,5 @@ def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "run": run.to_dict() if run is not None else None,
             "publish_call_count": ocr_domain.emit_ocr_requested.call_count,
         },
+        route_contract=client,
     )

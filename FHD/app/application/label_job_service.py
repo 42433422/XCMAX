@@ -11,7 +11,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 
 from sqlalchemy import text
 
@@ -92,11 +92,28 @@ class LabelJobService:
             "paper_height_mm",
             "printer",
             "run_id",
+            "task_id",
+            "approval_request_id",
         )
         return {key: job[key] for key in keys if key in job}
 
     def get(self, owner: tuple[int, int], job_id: str) -> dict:
         return self.public(self._read(owner, job_id)[1])
+
+    def bind_execution(self, owner: tuple[int, int], job_id: str, receipt: dict) -> dict:
+        """Link the existing artifact to its authoritative execution task."""
+        with self._locked(owner, job_id) as (directory, job):
+            for key in ("run_id", "task_id", "approval_request_id"):
+                if receipt.get(key):
+                    job[key] = str(receipt[key])
+            if receipt.get("pending_approval") and job["status"] in {
+                "generated",
+                "failed",
+                "waiting_approval",
+            }:
+                job.update(status="waiting_approval", message="打印任务等待审批，尚未提交打印队列")
+            self._write(directory, job)
+            return self.public(job)
 
     def products(self, owner: tuple[int, int], keyword: str, page: int, per_page: int) -> dict:
         from sqlalchemy import func, or_, select
@@ -255,6 +272,7 @@ class LabelJobService:
             return {
                 "job": self.public(job),
                 "confirm_token": token,
+                "request_id": f"label-job:{job_id}:{hashlib.sha256(token.encode()).hexdigest()[:24]}",
                 "confirm_prompt": f"将 {job['copies']} 张标签（{job['paper_width_mm']} × {job['paper_height_mm']} mm）提交到【{printer}】。请确认纸张规格与预览内容。",
             }
 
@@ -271,6 +289,9 @@ class LabelJobService:
                 or time.time() > expires
                 or not secrets.compare_digest(expected, hashlib.sha256(token.encode()).hexdigest())
             ):
+                if job["status"] == "waiting_approval":
+                    job.update(status="failed", message="打印确认已过期或无效，请重新确认")
+                    self._write(directory, job)
                 raise LabelJobError("打印确认已过期或无效，请重新确认", 409)
             path = self.file(owner, job_id)
             credential = secrets.token_urlsafe(32)
@@ -300,7 +321,7 @@ class LabelJobService:
                     status="outcome_unknown",
                     message="提交结果待确认，请先检查打印队列；为避免重复出纸已暂停重试",
                 )
-            job["run_id"] = result.get("run_id", "")
+            job["run_id"] = job.get("run_id") or result.get("run_id", "")
         except BOUNDARY_ERRORS:
             # An exception after dispatch cannot establish that no pages were queued.
             job.update(
@@ -313,3 +334,57 @@ class LabelJobService:
             )
             self._write(directory, persisted)
         return self.public(persisted)
+
+
+def submit_agent_label_job(params: dict[str, Any], runtime_context: dict[str, Any]) -> dict:
+    """Execute the approved owned-label action through the existing durable claim."""
+    from app.application.facades.print_facade import printer_service
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor
+
+    actor = _bound_actor(runtime_context)
+    if type(actor.tenant_id) is not int or actor.tenant_id < 1 or actor.id < 1:
+        return {
+            "success": False,
+            "error_code": "label_owner_required",
+            "execution_status": "not_started",
+            "http_status_code": 403,
+        }
+    owner = (actor.tenant_id, actor.id)
+    service = LabelJobService()
+    job_id = str(params.get("job_id") or "")
+    try:
+        service.bind_execution(owner, job_id, runtime_context)
+        job = service.submit(
+            owner,
+            job_id,
+            str(params.get("confirm_token") or ""),
+            lambda data: printer_service.print_label(
+                data["file_path"], data["printer_name"], data["copies"]
+            ),
+        )
+    except LabelJobError as exc:
+        return {
+            "success": False,
+            "error_code": "label_submission_rejected",
+            "execution_status": "not_started",
+            "http_status_code": exc.status,
+            "message": str(exc),
+            "job_id": job_id,
+        }
+    status = str(job.get("status") or "")
+    result = {
+        "success": False,
+        "retryable": False,
+        "job_id": job_id,
+        "job": job,
+        "message": str(job.get("message") or ""),
+    }
+    if status in {"submitted", "submitting"}:
+        result.update(execution_state="pending", execution_status="accepted")
+    elif status == "failed":
+        result.update(
+            execution_state="failed", error_code="label_submission_rejected", http_status_code=400
+        )
+    else:
+        result.update(execution_state="unknown", outcome="unknown", reconciliation_required=True)
+    return result

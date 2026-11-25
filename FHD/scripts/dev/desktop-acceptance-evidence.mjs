@@ -32,6 +32,7 @@ export function createEvidenceStep({ getPage, evidence, names, dir, env = proces
 }
 
 export async function visibleVersion(page, expect, expected) {
+  if (typeof expected !== 'string' || !/^\d+\.\d+\.\d+\.\d+$/.test(expected)) throw new Error('Frozen candidate product version required')
   let visible
   await expect(async () => {
     // Settings may replace this node while its version request finishes.

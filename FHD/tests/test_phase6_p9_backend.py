@@ -33,7 +33,6 @@ from app.mod_sdk.planner_tools import (
     _read_planner_manifest,
     _resolve_planner_mod_dir,
     _truthy_env,
-    execute_planner_tool_from_body,
     execute_planner_workflow_tool,
     get_planner_chat_tool_registry,
     is_planner_mod_installed,
@@ -63,21 +62,6 @@ def _shared_scope_handle_0(mock_core):
         ) as mock_reply,
     ):
         yield mock_reply
-
-
-@_shared_scope_contextmanager
-def _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1):
-    with (
-        patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            return_value=mock_exec,
-        ),
-        patch(
-            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
-            return_value=case_value_1,
-        ),
-    ):
-        yield None
 
 
 @_shared_scope_contextmanager
@@ -203,7 +187,7 @@ def test_resolve_planner_mod_dir_manager_raises_recoverable(
     monkeypatch.chdir(tmp_path)
 
     def _raise() -> None:
-        raise RuntimeError("mod manager down")
+        raise OSError("mod manager down")
 
     with (
         patch(
@@ -374,7 +358,7 @@ def test_is_planner_mod_installed_list_all_mods_raises_recoverable() -> None:
         ),
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ),
         patch("app.mod_sdk.planner_tools.is_planner_mod_on_disk", return_value=False),
     ):
@@ -388,7 +372,7 @@ def test_is_planner_mod_installed_is_mods_disabled_raises_recoverable() -> None:
     with (
         patch(
             "app.infrastructure.mods.mod_manager.is_mods_disabled",
-            side_effect=RuntimeError("disabled check fail"),
+            side_effect=OSError("disabled check fail"),
         ),
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -660,7 +644,7 @@ def test_get_planner_chat_tool_registry_no_extensions() -> None:
     assert out == base_reg
 
 
-def test_get_planner_chat_tool_registry_with_extensions() -> None:
+def test_unbound_mod_extensions_cannot_expand_model_registry() -> None:
     base_reg = [{"function": {"name": "tool_a"}}]
     ext = [{"function": {"name": "ext_tool"}}]
     with (
@@ -674,7 +658,7 @@ def test_get_planner_chat_tool_registry_with_extensions() -> None:
         ),
     ):
         out = get_planner_chat_tool_registry()
-    assert out == [{"function": {"name": "tool_a"}}, {"function": {"name": "ext_tool"}}]
+    assert out == base_reg
 
 
 # ---------------------------------------------------------------------------
@@ -790,123 +774,6 @@ def test_execute_planner_workflow_tool_falls_to_host_workflow() -> None:
 
 
 # ---------------------------------------------------------------------------
-# planner_tools — execute_planner_tool_from_body
-# ---------------------------------------------------------------------------
-
-
-def test_execute_planner_tool_from_body_none_body_returns_error() -> None:
-    out = execute_planner_tool_from_body(None)
-    assert out["success"] is False
-    assert out["error"] == "tool_name required"
-
-
-def test_execute_planner_tool_from_body_empty_body_returns_error() -> None:
-    out = execute_planner_tool_from_body({})
-    assert out["success"] is False
-    assert out["error"] == "tool_name required"
-
-
-def test_execute_planner_tool_from_body_no_name_returns_error() -> None:
-    out = execute_planner_tool_from_body({"tool_name": "   "})
-    assert out["success"] is False
-    assert out["error"] == "tool_name required"
-
-
-def test_execute_planner_tool_from_body_name_from_name_field() -> None:
-    raw = '{"success": true}'
-    mock_exec = MagicMock(return_value=raw)
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
-        out = execute_planner_tool_from_body({"name": "my_tool", "arguments": {}})
-    assert out["success"] is True
-    assert out["tool_name"] == "my_tool"
-    assert out["result"] == raw
-    assert out["execution_path"] == "host.workflow"
-    assert out["mod_id"] is None
-    assert out["delegate"] == "host.workflow"
-
-
-def test_execute_planner_tool_from_body_mod_native_path() -> None:
-    raw = '{"success": true, "source": "mod:xcagi-planner-excel-tools"}'
-    mock_exec = MagicMock(return_value=raw)
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
-        out = execute_planner_tool_from_body(
-            {"tool_name": "excel", "args": {}, "db_write_token": 123}
-        )
-    assert out["success"] is True
-    assert out["execution_path"] == "mod_native"
-    assert out["mod_id"] == "xcagi-planner-excel-tools"
-    assert out["delegate"] is None
-
-
-def test_execute_planner_tool_from_body_mod_facade_path() -> None:
-    raw = '{"success": true}'  # 无 source 字段
-    mock_exec = MagicMock(return_value=raw)
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
-        out = execute_planner_tool_from_body({"tool_name": "tool_x"})
-    assert out["success"] is True
-    assert out["execution_path"] == "mod_facade"
-    assert out["mod_id"] == PLANNER_FACADE_MOD_ID
-    assert out["delegate"] == "host.workflow"
-
-
-def test_execute_planner_tool_from_body_recoverable_error() -> None:
-    mock_exec = MagicMock(side_effect=RuntimeError("exec boom"))
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
-        out = execute_planner_tool_from_body({"tool_name": "fail_tool"})
-    assert out["success"] is False
-    assert out["error"] == "工具执行失败，请稍后重试"
-    assert out["error_code"] == "planner_tool_execution_failed"
-    assert out["tool_name"] == "fail_tool"
-
-
-def test_execute_planner_tool_from_body_invalid_json_result() -> None:
-    raw = "not-json"
-    mock_exec = MagicMock(return_value=raw)
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
-        out = execute_planner_tool_from_body({"tool_name": "tool_y"})
-    assert out["success"] is False
-    assert out["error"] == "工具执行返回了无效结果"
-    assert out["execution_path"] == "host.workflow"
-
-
-def test_execute_planner_tool_from_body_propagates_structured_failure() -> None:
-    raw = '{"success": false, "error": "employee output is missing"}'
-    mock_exec = MagicMock(return_value=raw)
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=True):
-        out = execute_planner_tool_from_body({"tool_name": "word-full-read-employee"})
-    assert out["success"] is False
-    assert out["error"] == "工具执行失败，请检查输入后重试"
-    assert "employee output is missing" not in out["result"]
-    assert out["execution_path"] == "mod_facade"
-
-
-def test_execute_planner_tool_from_body_workspace_root_from_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    raw = '{"success": true}'
-    mock_exec = MagicMock(return_value=raw)
-    monkeypatch.setenv("WORKSPACE_ROOT", "/custom/ws")
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
-        execute_planner_tool_from_body({"tool_name": "tool_z"})
-    # workspace_root 应来自 env
-    assert mock_exec.call_args.args[2] == "/custom/ws"
-
-
-def test_execute_planner_tool_from_body_uses_desktop_data_dir_before_cwd(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Packaged desktop tools must not default to the read-only app bundle CWD."""
-
-    raw = '{"success": true}'
-    mock_exec = MagicMock(return_value=raw)
-    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    monkeypatch.setenv("XCAGI_DATA_DIR", "/desktop/user-data")
-    with _shared_scope_execute_planner_tool_from_body_1(mock_exec, case_value_1=False):
-        execute_planner_tool_from_body({"tool_name": "word-generate-employee"})
-    assert mock_exec.call_args.args[2] == "/desktop/user-data"
-
-
-# ---------------------------------------------------------------------------
 # planner_tools — list_planner_tools_registry_detail
 # ---------------------------------------------------------------------------
 
@@ -943,8 +810,7 @@ def test_list_planner_tools_registry_detail_via_mod_disabled() -> None:
     assert out["success"] is True
     assert out["tool_count"] == 1
     assert out["tool_names"] == ["tool_a"]
-    assert out["mod_extension_count"] == 1
-    assert out["mod_extension_names"] == ["ext1"]
+    assert out["unbound_extension_inventory"] == [{"name": "ext1", "executable": False}]
     assert out["execution_via_mod_facade"] is False
     assert out["execution_path"] == "host.workflow"
     assert out["mod_id"] is None
@@ -952,7 +818,7 @@ def test_list_planner_tools_registry_detail_via_mod_disabled() -> None:
     assert out["source"] == "host.workflow_tool_registry"
     assert out["delegate"] == "host.workflow"
     assert out["planner_tools_config"] == {"flag": True}
-    assert out["employee_pack_tools"] == ["emp_tool"]
+    assert out["employee_pack_tools"] == []
     assert "未启用" in out["note"]
 
 
@@ -1130,9 +996,9 @@ async def test_handle_shipment_created_recoverable_error_propagates(
 ) -> None:
     event = _make_event({"shipment_id": "S1", "unit_name": "甲"})
     mock_core = MagicMock()
-    mock_core.create_shipment.side_effect = RuntimeError("db down")
+    mock_core.create_shipment.side_effect = ConnectionError("db down")
     with _shared_scope_handle_0(mock_core) as mock_reply:
-        with pytest.raises(RuntimeError, match="db down"):
+        with pytest.raises(ConnectionError, match="db down"):
             await handlers.handle_shipment_created(event)
     mock_reply.assert_called_once()
     # 第二个参数应为 None（result），第三个为 error
@@ -1198,7 +1064,7 @@ async def test_handle_item_added_recoverable_error_in_try_block(
         if call_count["n"] <= 4:
             return "val"
         # 第 5 次起是 try 块中的 unit_price → 抛错
-        raise LookupError("unit_price missing")
+        raise ValueError("unit_price missing")
 
     event.payload.get.side_effect = _get
     out = await handlers.handle_item_added(event)
@@ -1279,9 +1145,9 @@ async def test_handle_printed_core_raises_recoverable(
 ) -> None:
     event = _make_event({"shipment_id": "1", "printer_name": "p"})
     mock_core = MagicMock()
-    mock_core.mark_as_printed.side_effect = RuntimeError("printer offline")
+    mock_core.mark_as_printed.side_effect = OSError("printer offline")
     with _shared_scope_handle_0(mock_core) as mock_reply:
-        with pytest.raises(RuntimeError, match="printer offline"):
+        with pytest.raises(OSError, match="printer offline"):
             await handlers.handle_printed(event)
     mock_reply.assert_called_once()
     assert mock_reply.call_args.args[1] is None

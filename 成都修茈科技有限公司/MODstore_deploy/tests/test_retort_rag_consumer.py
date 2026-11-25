@@ -194,14 +194,27 @@ def test_unconfigured_rag_training_does_not_open_database(monkeypatch):
 async def test_real_rag_failure_is_preserved_for_training_without_claiming_business_success(
     rag_call,
 ):
+    from unittest.mock import patch
+
     run = rag_call
-    result = await run["call"]()
+    with patch.object(feedback, "complete", wraps=feedback.complete) as complete:
+        result = await run["call"]()
+    complete.assert_called_once()
+    attempt = complete.call_args.args[0]
+    assert attempt["user_id"] == run["user"]
     assert result["reasoning"] == "无来源回答"
     assert "真实私有资料" in run["calls"][0][0]["content"]
+    observation_id = attempt["observation_id"]
     with get_session_factory()() as db:
-        receipts = db.query(OutboxEvent).filter_by(event_name="rag.cognition.completed").all()
+        receipts = (
+            db.query(OutboxEvent)
+            .filter_by(event_name=feedback.COMPLETED, aggregate_id=observation_id)
+            .all()
+        )
         assert len(receipts) == 1
         evidence = json_loads(receipts[0].payload_json, {})
+        assert evidence["observation_id"] == observation_id
+        assert evidence["user_id"] == run["user"]
         assert evidence["measurement_scope"] == MEASUREMENT
         assert evidence["success"] is False
         assert evidence["business_verified"] is False
@@ -417,8 +430,17 @@ async def test_rag_stop_loss_counts_accounts_not_repeated_answers(rag_experiment
             sdk = GrowthBook(attributes={"id": str(subject)})
             try:
                 key = f"xcagi-retort-{run['id']}"
-                result = sdk.run(Experiment(key=key, seed=key, hashVersion=2, variations=[0, 1]))
-                if result.variationId == 1:
+                result = sdk.run(
+                    Experiment(
+                        key=key,
+                        seed=key,
+                        hashVersion=2,
+                        variations=[0, 1],
+                        weights=run["spec"]["lifecycle"]["weights"],
+                        coverage=run["spec"]["lifecycle"]["coverage"],
+                    )
+                )
+                if result.inExperiment and result.hashUsed and result.variationId == 1:
                     subjects.append(subject)
             finally:
                 sdk.destroy()

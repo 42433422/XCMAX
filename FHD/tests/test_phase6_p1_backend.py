@@ -129,7 +129,7 @@ class TestShipmentClearAll:
         cmd = SQLAlchemyShipmentRecordCommand()
         with patch(
             "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-            side_effect=RuntimeError("connection lost"),
+            side_effect=ConnectionError("connection lost"),
         ):
             result = cmd.clear_all()
         assert result["success"] is False
@@ -297,7 +297,7 @@ class TestShipmentClearByUnit:
             ),
             patch(
                 "app.infrastructure.persistence.shipment_record_command_impl.resolve_purchase_unit",
-                side_effect=RuntimeError("lookup down"),
+                side_effect=ConnectionError("lookup down"),
             ),
         ):
             result = cmd.clear_by_unit("甲公司")
@@ -310,7 +310,7 @@ class TestShipmentClearByUnit:
         with (
             patch(
                 "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-                side_effect=RuntimeError("db down"),
+                side_effect=ConnectionError("db down"),
             ),
             patch(
                 "app.infrastructure.persistence.shipment_record_command_impl.resolve_purchase_unit",
@@ -405,7 +405,7 @@ class TestShipmentUpdateRecord:
         cmd = SQLAlchemyShipmentRecordCommand()
         with patch(
             "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=ConnectionError("db down"),
         ):
             result = cmd.update_record(1)
         assert result["success"] is False
@@ -457,7 +457,7 @@ class TestShipmentDeleteRecord:
         cmd = SQLAlchemyShipmentRecordCommand()
         with patch(
             "app.infrastructure.persistence.shipment_record_command_impl.get_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=ConnectionError("db down"),
         ):
             result = cmd.delete_record(1)
         assert result["success"] is False
@@ -735,7 +735,7 @@ class TestConversationUpdateSessionTitle:
     def test_db_error_propagates_and_rolls_back(self) -> None:
         svc = ConversationService()
         mock_db = MagicMock()
-        mock_db.commit.side_effect = RuntimeError("commit failed")
+        mock_db.commit.side_effect = OSError("commit failed")
         mock_query = MagicMock()
         session = MagicMock()
         mock_query.filter.return_value.first.return_value = session
@@ -745,7 +745,7 @@ class TestConversationUpdateSessionTitle:
             "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
-            with pytest.raises(RuntimeError, match="commit failed"):
+            with pytest.raises(OSError, match="commit failed"):
                 svc.update_session_title("s1", "T")
         mock_db.rollback.assert_called_once()
 
@@ -838,7 +838,7 @@ class TestConversationCreateSession:
     def test_create_session_db_error_propagates(self) -> None:
         svc = ConversationService()
         mock_db = MagicMock()
-        mock_db.commit.side_effect = RuntimeError("commit failed")
+        mock_db.commit.side_effect = OSError("commit failed")
 
         with (
             patch(
@@ -847,7 +847,7 @@ class TestConversationCreateSession:
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
         ):
-            with pytest.raises(RuntimeError, match="commit failed"):
+            with pytest.raises(OSError, match="commit failed"):
                 svc.create_session()
         mock_db.rollback.assert_called_once()
 

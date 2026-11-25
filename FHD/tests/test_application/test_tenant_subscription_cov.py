@@ -158,7 +158,7 @@ def test_provision_trial_neuro_notify_error_suppressed():
         with patch("app.application.tenant_subscription_app_service.trial_days", return_value=7):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed",
-                side_effect=RuntimeError("bus down"),
+                side_effect=ConnectionError("bus down"),
             ):
                 # Should not raise even though neuro_notify fails
                 result = provision_trial_for_user(user_id=5, username="carol")

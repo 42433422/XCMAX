@@ -47,9 +47,9 @@ export function renderButlerBubbleHtml(content: string): string {
   })
 
   // 站内路径：/market/ /contact.html …
-  // 跳过已在 href="..." 内的匹配
+  // 跳过 href 属性及实体结束后的斜杠，避免把 &lt;/tag&gt; 当作站内路径。
   html = html.replace(
-    /(^|[\s：:（(>【\d.]|[^\w/"'])(\/[A-Za-z0-9][A-Za-z0-9_\-./%?#=&]{0,160})(?=$|[\s，。；;）)\]】\n])/gm,
+    /(^|[\s：:（(>【\d.]|[^\w/"';])(\/[A-Za-z0-9][A-Za-z0-9_\-./%?#=&]{0,160})(?=$|[\s，。；;）)\]】\n])/gm,
     (full, pre: string, path: string) => {
       if (/href=["']$/.test(pre) || pre.endsWith('="') || pre.endsWith("='")) return full
       if (!isSafeHref(path)) return full

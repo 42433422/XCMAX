@@ -153,58 +153,48 @@ class TestCustomersRouter:
 
 
 class TestMaterialsRouter:
-    def test_list_action(self):
-        mock_svc = MagicMock()
-        mock_svc.get_all_materials.return_value = {"success": True, "data": []}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials("list", {"search": "steel"}, {}, "admin", "")
-            assert result["success"] is True
+    @pytest.fixture
+    def mock_svc(self):
+        with patch("app.application.get_material_application_service") as factory:
+            yield factory.return_value
 
-    def test_query_alias(self):
-        mock_svc = MagicMock()
+    def test_list_action(self, mock_svc):
         mock_svc.get_all_materials.return_value = {"success": True, "data": []}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials("query", {}, {}, "admin", "")
-            assert result["success"] is True
+        result = _registered_router_materials("list", {"search": "steel"}, {}, "admin", "")
+        assert result["success"] is True
 
-    def test_create_action(self):
-        mock_svc = MagicMock()
+    def test_query_alias(self, mock_svc):
+        mock_svc.get_all_materials.return_value = {"success": True, "data": []}
+        result = _registered_router_materials("query", {}, {}, "admin", "")
+        assert result["success"] is True
+
+    def test_create_action(self, mock_svc):
         mock_svc.create_material.return_value = {"success": True}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials("create", {"name": "Steel"}, {}, "admin", "")
-            assert result["success"] is True
+        result = _registered_router_materials("create", {"name": "Steel"}, {}, "admin", "")
+        assert result["success"] is True
 
-    def test_update_action(self):
-        mock_svc = MagicMock()
+    def test_update_action(self, mock_svc):
         mock_svc.update_material.return_value = {"success": True}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials(
-                "update", {"id": 1, "name": "Updated"}, {}, "admin", ""
-            )
-            assert result["success"] is True
+        result = _registered_router_materials(
+            "update", {"id": 1, "name": "Updated"}, {}, "admin", ""
+        )
+        assert result["success"] is True
 
-    def test_delete_action(self):
-        mock_svc = MagicMock()
+    def test_delete_action(self, mock_svc):
         mock_svc.delete_material.return_value = {"success": True}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials("delete", {"id": 1}, {}, "admin", "")
-            assert result["success"] is True
+        result = _registered_router_materials("delete", {"id": 1}, {}, "admin", "")
+        assert result["success"] is True
 
-    def test_batch_delete_action(self):
-        mock_svc = MagicMock()
-        mock_svc.batch_delete_materials.return_value = {"success": True}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials(
-                "batch_delete", {"ids": [1, 2, 3]}, {}, "admin", ""
-            )
-            assert result["success"] is True
+    def test_batch_delete_action(self, mock_svc):
+        mock_svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 2}
+        result = _registered_router_materials("batch_delete", {"ids": [1, 2, 3]}, {}, "admin", "")
+        assert result["success"] is True
+        assert result["deleted_count"] == 2
 
-    def test_export_action(self):
-        mock_svc = MagicMock()
+    def test_export_action(self, mock_svc):
         mock_svc.export_to_excel.return_value = {"success": True, "file_path": "/tmp/out.xlsx"}
-        with patch("app.application.get_material_application_service", return_value=mock_svc):
-            result = _registered_router_materials("export", {"search": "steel"}, {}, "admin", "")
-            assert result["success"] is True
+        result = _registered_router_materials("export", {"search": "steel"}, {}, "admin", "")
+        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +205,7 @@ class TestMaterialsRouter:
 class TestShipmentRecordsRouter:
     @pytest.fixture
     def mock_svc(self):
-        with patch("app.bootstrap.get_shipment_app_service") as factory:
+        with patch("app.bootstrap.get_shipment_application_service_core") as factory:
             yield factory.return_value
 
     def test_list_action(self, mock_svc):
@@ -387,10 +377,17 @@ class TestBusinessDockingRouter:
 
 
 class TestGenerateOfficeDocumentRouter:
-    def test_execute_uses_existing_workflow_tool(self):
-        with patch(
-            "app.application.tools.workflow.execute_workflow_tool",
-            return_value='{"success": true, "file_name": "out.docx", "artifacts": [{"artifact_type": "office_document"}]}',
+    def test_execute_uses_original_document_handler_without_public_alias(self):
+        with (
+            patch(
+                "app.application.tools.workflow_tools.adapters.generate_document",
+                return_value=(b"original document bytes", "out.docx"),
+            ) as generate,
+            patch(
+                "app.application.tools.workflow_tools.adapters.store_document",
+                return_value="original-document-receipt",
+            ) as store,
+            patch("app.application.tools.workflow.execute_workflow_tool") as alias,
         ):
             result = _registered_router_generate_office_document(
                 "execute",
@@ -403,6 +400,14 @@ class TestGenerateOfficeDocumentRouter:
         assert result["success"] is True
         assert result["file_name"] == "out.docx"
         assert result["artifacts"][0]["artifact_type"] == "office_document"
+        assert result["download_url"].endswith("/original-document-receipt")
+        generate.assert_called_once_with("生成合同", "docx")
+        store.assert_called_once_with(
+            b"original document bytes",
+            "out.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        alias.assert_not_called()
 
     def test_unknown_action(self):
         result = _registered_router_generate_office_document("view", {}, {}, "normal", "")
@@ -447,9 +452,7 @@ class TestExecuteRegisteredWorkflowTool:
         expected_keys = {
             "client_product_issue",
             "conversation_history",
-            "kellai",
             "desktop_automation",
-            "image_generate",
             "customers",
             "products",
             "materials",
@@ -471,6 +474,7 @@ class TestExecuteRegisteredWorkflowTool:
             "excel_import",
             "excel_vector_index",
             "generate_office_document",
+            "image_generate",
             "unit_products_import",
             "inventory",
             "purchase",
@@ -484,7 +488,9 @@ class TestExecuteRegisteredWorkflowTool:
             "memory_v2",
             "system_maintenance",
             "elt_import",
-            "import_excel_to_database",
+            "kellai",
+            "openclaw",
+            "tasks",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 

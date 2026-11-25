@@ -11,7 +11,7 @@ on:
       publish: {description: Requires explicit release-owner SHA authorization, default: false, type: boolean}
       security_scan_run_id: {description: Current exact-SHA full security scan, required: false, type: string}
       previous_security_scan_run_id: {description: Prior-day exact-SHA full security scan, required: false, type: string}
-permissions: {actions: read, contents: read}
+permissions: {actions: read, checks: read, contents: read}
 defaults:
   run:
     working-directory: FHD
@@ -28,6 +28,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {ref: '${{ inputs.build_sha }}'}
+      - name: Check out the trusted publication controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-controller
+          persist-credentials: false
+          sparse-checkout: |
+            FHD/scripts/ci
+            FHD/scripts/security
+            scripts/ci
       - uses: actions/setup-python@v7
         with: {python-version: '3.12'}
       - name: Validate main identity and publication authorization
@@ -36,6 +46,7 @@ jobs:
           AUTHORIZED_SHA: ${{ vars.MACOS_FROZEN_PAIR_AUTHORIZED_SHA }}
           ENABLED: ${{ vars.MACOS_FROZEN_PAIR_PUBLICATION_ENABLED }}
           RELEASE_PROTECTION_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
+          CONTROLLER_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           [[ "$BUILD_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -45,22 +56,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$BUILD_SHA"
           relation="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BUILD_SHA...main" --jq .status)"; case "$relation" in ahead|identical) ;; *) exit 1 ;; esac
           if [ "$PUBLISH" = true ]; then
+            test "$CONTROLLER_REF" = refs/heads/main
             test "$ENABLED" = true
             test "$AUTHORIZED_SHA" = "$BUILD_SHA"
-            protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?Admin-read protection token required}" gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks")"
-            checks="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/check-runs?per_page=100")"
-            statuses="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$BUILD_SHA/statuses?per_page=100")"
-            export protection checks statuses
-            python - <<'PY'
-          import json, os
-          p,c,s=(json.loads(os.environ[n]) for n in ('protection','checks','statuses'))
-          required=set(p.get('contexts',[]))|{v['context'] for v in p.get('checks',[])}
-          assert required, 'Readable protected checks required'
-          for name in required:
-              runs=sorted((v for page in c for v in page['check_runs'] if v['name']==name),key=lambda v:v['id'])
-              states=sorted((v for page in s for v in page if v['context']==name),key=lambda v:v['id'])
-              assert (runs[-1]['conclusion']=='success' if runs else bool(states and states[-1]['state']=='success')), name
-          PY
+            python ../release-controller/FHD/scripts/ci/measure_required_checks.py \
+              --repository "$GITHUB_REPOSITORY" --release-sha "$BUILD_SHA" \
+              --authorized-frozen-sha "$AUTHORIZED_SHA"
           fi
       - name: Retrieve immutable native run and artifact identities
         run: |
@@ -118,9 +119,11 @@ jobs:
       - uses: actions/download-artifact@v8
         if: ${{ inputs.publish }}
         with: {name: xcagi-security-release-reports, path: '${{ runner.temp }}/security/previous', run-id: '${{ inputs.previous_security_scan_run_id }}', github-token: '${{ github.token }}'}
-      - name: Enforce unchanged exact-SHA two-day security clearance
+      - name: Enforce original exact-SHA security clearance
         if: ${{ inputs.publish }}
-        run: python scripts/security/verify_security_scan_pair.py --previous-dir "$RUNNER_TEMP/security/previous" --current-dir "$RUNNER_TEMP/security/current" --release-sha "$BUILD_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python ../release-controller/FHD/scripts/security/verify_security_scan_pair.py --previous-dir "$RUNNER_TEMP/security/previous" --current-dir "$RUNNER_TEMP/security/current" --release-sha "$BUILD_SHA" --repository "${{ github.repository }}" --current-run-id "${{ inputs.security_scan_run_id }}" --previous-run-id "${{ inputs.previous_security_scan_run_id }}"
       - name: Publish authorized original pair and read back both architectures
         if: ${{ inputs.publish }}
         env:

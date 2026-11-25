@@ -324,7 +324,7 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
             "success": True,
             "data": {
                 "intent": intent,
-                "note": "仅识别为 ERP 产品表；正式写入请走 import_excel_to_database 导入 ERP 数据库",
+                "note": "仅识别为 ERP 产品表；正式导入使用 execute_erp_capability 的 elt_import.preview 核对预演，再以原 run_id 和 preview_revision 请求 elt_import.execute 并完成审批",
                 "file_path": body.file_path,
             },
         }

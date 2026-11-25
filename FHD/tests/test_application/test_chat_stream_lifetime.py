@@ -63,15 +63,21 @@ def bound_lifetime(lifetime):
         life.current_lifetime.reset(token)
 
 
-def bridge(factory):
-    return extract(
+def bridge(factory, *, facade=False):
+    entrypoint = extract(
         "app/fastapi_routes/xcagi_compat_chat_helpers.py",
         "_xcagi_planner_stream_bytes_async",
         {
             "_xcagi_planner_stream_bytes": factory,
             "_sse_event_line": lambda value: json.dumps(value).encode(),
         },
-    )(None, NS(context={}), ai_tier="synthetic")
+    )
+    if facade:
+        from app.fastapi_routes.domains.conversation import helpers
+
+        _entrypoint_patches.setattr(helpers, "_xcagi_planner_stream_bytes", factory)
+        entrypoint = helpers._xcagi_planner_stream_bytes_async
+    return entrypoint(None, NS(context={}), ai_tier="synthetic")
 
 
 async def wait(event):
@@ -118,9 +124,10 @@ def test_stream_timeout_identity_cannot_be_rebound_to_another_run(lifetime, same
 
 
 @pytest.mark.asyncio
-async def test_cancel_blocked_read_closes_read_and_generator_on_owner_thread():
+@pytest.mark.parametrize("facade", [False, True])
+async def test_cancel_blocked_read_closes_read_and_generator_on_owner_thread(facade):
     entered, released, finished = threading.Event(), threading.Event(), threading.Event()
-    thread_ids, close_calls = [], []
+    thread_ids, close_calls, read_was_released = [], [], []
 
     class Read:
         def close(self):
@@ -133,14 +140,15 @@ async def test_cancel_blocked_read_closes_read_and_generator_on_owner_thread():
             with life.owned_model_read(Read()):
                 yield b"first"
                 entered.set()
-                assert released.wait(2)
+                read_was_released.append(released.wait(2))
+                assert read_was_released[-1]
                 life.check_stream_active()
                 yield b"must-not-arrive"
         finally:
             thread_ids.append(threading.get_ident())
             finished.set()
 
-    stream = bridge(producer)
+    stream = bridge(producer, facade=facade)
     assert await anext(stream) == b"first"
     await wait(entered)
     pending = asyncio.create_task(anext(stream))
@@ -150,6 +158,7 @@ async def test_cancel_blocked_read_closes_read_and_generator_on_owner_thread():
         await pending
     await stream.aclose()
     await wait(finished)
+    assert read_was_released == [True]
     assert close_calls == [1]
     assert thread_ids[0] == thread_ids[1]
 

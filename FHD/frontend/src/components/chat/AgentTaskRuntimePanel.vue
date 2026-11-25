@@ -47,7 +47,7 @@
       <p v-if="verificationMessage" role="status" aria-live="polite">{{ verificationMessage }}</p>
       <p v-if="verificationError" role="alert">{{ verificationError }}</p>
     </section>
-    <div v-if="resultSummary" class="agent-result-summary" :class="{ 'agent-result-summary--unverified': verification && !verification.accepted }">
+    <div v-if="resultSummary" class="agent-result-summary" :class="{ 'agent-result-summary--unverified': rawRunStatus === 'unknown' || (verification && !verificationAccepted) }">
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
@@ -109,6 +109,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { downloadBlob } from '@/utils'
 import { readActiveModIdFromStorage } from '@/utils/chatStorageKeys'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import type { TaskControlState } from '@/composables/useAgentTaskWorkspace'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
@@ -159,16 +160,19 @@ const verification = computed(() => {
   const report = payload.value.finalOutput?.verification
   return report && typeof report === 'object' && !Array.isArray(report) ? report as AgentVerificationReport : null
 })
+const rawRunStatus = computed(() => String(payload.value.rawRunStatus || props.task.status))
+const verificationAccepted = computed(() => rawRunStatus.value !== 'unknown' &&
+  verification.value?.accepted === true && ['verified', 'not_required'].includes(verification.value.status),
+)
 const verificationStatus = computed<AgentVerificationStatus>(() => {
   const status = verification.value?.status
-  if (!status || !(status in verificationLabels)) return 'not_verified'
-  if (['verified', 'not_required'].includes(status) && verification.value?.accepted !== true) return 'inconclusive'
+  if (!status || !Object.prototype.hasOwnProperty.call(verificationLabels, status)) return 'not_verified'
+  if (['verified', 'not_required'].includes(status) && !verificationAccepted.value) return 'inconclusive'
   return status
 })
 const includesArtifactIntegrity = computed(() => Array.isArray(verification.value?.steps) && verification.value.steps.some((step) =>
   Array.isArray(step?.checks) && step.checks.some((check) => check?.evidence?.verification_scope === 'artifact_integrity'),
 ))
-const rawRunStatus = computed(() => String(payload.value.rawRunStatus || props.task.status))
 const canReverify = computed(() => Boolean(
   runId.value && ['blocked', 'failed'].includes(rawRunStatus.value) &&
   verification.value?.protocol === 'xcagi.result-verification.v1' &&
@@ -178,7 +182,7 @@ const verificationPending = ref(false)
 const verificationMessage = ref('')
 const verificationError = ref('')
 let verificationEpoch = 0
-const verificationScope = () => JSON.stringify([props.task.id, runId.value, productReadScopeKey(readActiveModIdFromStorage())])
+const verificationScope = () => JSON.stringify([props.task.id, runId.value, getAuthSessionEpoch(), productReadScopeKey(readActiveModIdFromStorage())])
 function retireVerification(): void {
   verificationEpoch++
   verificationPending.value = false
@@ -218,6 +222,14 @@ async function reverify(): Promise<void> {
 }
 const downloadingId = ref('')
 const downloadError = ref('')
+let downloadEpoch = 0
+function retireDownload(): void {
+  downloadEpoch++
+  downloadingId.value = ''
+  downloadError.value = ''
+}
+watch(verificationScope, retireDownload, { flush: 'sync' })
+onBeforeUnmount(retireDownload)
 const downloadableArtifacts = computed(() =>
   artifacts.value.filter(
     (artifact) =>
@@ -228,21 +240,26 @@ const downloadableArtifacts = computed(() =>
 )
 async function downloadArtifact(artifact: AgentArtifact): Promise<void> {
   if (downloadingId.value || !downloadableArtifacts.value.includes(artifact)) return
+  const requestedRun = runId.value, requestedScope = verificationScope(), epoch = ++downloadEpoch
+  const isCurrent = () => epoch === downloadEpoch && requestedScope === verificationScope()
   downloadingId.value = artifact.artifact_id
   downloadError.value = ''
   try {
-    const response = await agentRunsApi.downloadArtifact(runId.value, artifact.artifact_id)
-    downloadBlob(await response.blob(), artifact.name || '报表.xlsx')
+    const response = await agentRunsApi.downloadArtifact(requestedRun, artifact.artifact_id)
+    if (!isCurrent()) return
+    const blob = await response.blob()
+    if (isCurrent()) downloadBlob(blob, artifact.name || '报表.xlsx')
   } catch {
-    downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
+    if (isCurrent()) downloadError.value = '下载失败，请重试；如果文件已失效，请重新导出。'
   } finally {
-    downloadingId.value = ''
+    if (epoch === downloadEpoch) downloadingId.value = ''
   }
 }
 const resultSummary = computed(() => {
   const output = payload.value.finalOutput
   if (!output || typeof output !== 'object') return ''
-  if (verification.value && verification.value.accepted !== true) return '结果尚未完成核验。'
+  if (rawRunStatus.value === 'unknown') return '结果待核对，请核对原始回执后再确认。'
+  if (verification.value && !verificationAccepted.value) return '结果尚未完成核验。'
   const businessResult =
     output.business_result && typeof output.business_result === 'object' ? (output.business_result as Record<string, unknown>) : null
   const projectedSummary = businessResult?.summary

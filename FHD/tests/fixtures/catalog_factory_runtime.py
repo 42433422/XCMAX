@@ -399,10 +399,11 @@ def _serve(root, *, restart, contention=False):
                         )
                         time.sleep(0.02)
                     time.sleep(0.15)
-                    busy = client.get(
-                        f"{BASE}/edits/{info['operation_id']}", headers=info["headers"]
+                    progress = client.get(
+                        f"/api/agent/runs/{info['run_id']}", headers=info["headers"]
                     )
-                    assert busy.status_code == 409 and busy.json()["retryable"] is False, busy.text
+                    assert progress.status_code == 200, progress.text
+                    assert progress.json()["data"]["status"] == "running", progress.text
                     with sqlite3.connect(
                         (root / "host.sqlite").as_uri() + "?mode=ro", uri=True
                     ) as db:

@@ -27,6 +27,7 @@ from modstore_server.customer_value_classification import (
 from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import (
     payment_amount_cents,
+    provider_payment_breakdown,
 )
 from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
 from modstore_server.customer_value_classification import text as _text
@@ -63,6 +64,104 @@ def _canonical_json(value: Any) -> str:
 
 def load_authoritative_payment_orders(window_days: int) -> dict[str, Any]:
     return _load_authoritative_payment_orders(window_days, java_loader=_load_java_payment_orders)
+
+
+def _release_bound_receipts(
+    session_factory: Callable[..., Any],
+    orders: dict[str, dict[str, Any]],
+    receipts: list[CustomerValueReceipt],
+    installations: list[UpdateInstallationReceipt],
+    release_sha: str,
+    now: datetime,
+) -> tuple[list[CustomerValueReceipt], list[UpdateInstallationReceipt]]:
+    """Resolve original native outputs; historical aggregates cannot acquire a SHA."""
+    from modstore_server.customer_value_release import desktop_publications, published_installation
+    from modstore_server.integrations.vibe_adapter import VibePathError
+    from modstore_server.workflow_customer_delivery import (
+        delivery_node,
+        load_completed_delivery,
+        read_artifact_bytes,
+        required_delivery_artifacts,
+    )
+    from modstore_server.workflow_customer_delivery_api import _ARTIFACT
+
+    publications = desktop_publications()
+    latest: dict[tuple[int, str], UpdateInstallationReceipt] = {}
+    for installation in installations:  # Query is newest first, including failures/other versions.
+        latest.setdefault(
+            (int(installation.user_id), str(installation.installation_id)), installation
+        )
+    installed = [
+        row
+        for row in latest.values()
+        if row.installed_build_sha == release_sha
+        and published_installation(row, publications)
+        and (stamp := _parse_datetime(row.reported_at)) is not None
+        and stamp <= now
+    ]
+    owners = {int(row.user_id) for row in installed}
+    selected: list[CustomerValueReceipt] = []
+    goals: set[str] = set()
+    originals: dict[int, tuple[dict, dict] | None] = {}
+    with session_factory() as db:
+        for row in receipts:
+            match = _ARTIFACT.fullmatch(str(row.artifact_id or ""))
+            if match is None or row.receipt_kind not in {
+                "delivery",
+                "first_use",
+                "outcome",
+                "acceptance",
+                "reuse",
+            }:
+                continue
+            try:
+                owner = int(orders.get(str(row.order_no), {}).get("user_id") or 0)
+                if owner not in owners or row.environment not in {"production", "prod"}:
+                    continue
+                execution_id = int(match[1])
+                if execution_id not in originals:
+                    originals[execution_id] = None
+                    originals[execution_id] = load_completed_delivery(db, execution_id)
+                original = originals[execution_id]
+                if original is None:
+                    continue
+                binding, produced = original
+                contract = binding["customer_delivery"]
+                goal = contract["goal"]
+                body = json.loads(row.evidence_json or "{}")
+                assignment = binding.get("assignment") or {}
+                completed = _parse_datetime(produced.get("completed_at"))
+                occurred = _parse_datetime(row.occurred_at)
+                if (
+                    not isinstance(body, dict)
+                    or not isinstance(assignment, dict)
+                    or assignment.get("release_sha") != release_sha
+                    or contract["user_id"] != owner
+                    or goal["order_no"] != row.order_no
+                    or goal["customer_goal_id"] != row.customer_goal_id
+                    or goal["customer_ref"] != row.customer_ref
+                    or completed is None
+                    or occurred is None
+                    or not completed <= occurred <= now
+                ):
+                    continue
+                artifacts = [
+                    item
+                    for item in required_delivery_artifacts(contract, produced)
+                    if item["artifact_id"] == row.artifact_id
+                    and item["artifact_sha256"] == body.get("artifact_sha256")
+                ]
+                if len(artifacts) != 1:
+                    continue
+                read_artifact_bytes(delivery_node(contract, int(match[2])), artifacts[0])
+                selected.append(row)
+                goals.add(goal["receipt_id"])
+            except (KeyError, TypeError, ValueError, OSError, VibePathError):
+                continue  # Unbound legacy claims remain visible only in the unscoped ledger.
+    selected.extend(
+        row for row in receipts if row.receipt_kind == "goal" and row.receipt_id in goals
+    )
+    return selected, installed
 
 
 def append_customer_value_receipt(
@@ -318,9 +417,12 @@ def build_customer_value_evidence(
     session_factory: Callable[..., Any] | None = None,
     now: datetime | None = None,
     delivery_scope: tuple[int, str, datetime] | None = None,
+    release_sha: str = "",
 ) -> dict[str, Any]:
     """Build a safe aggregate, optionally limited to same-order outcome and acceptance."""
 
+    if release_sha and not re.fullmatch(r"[0-9a-f]{40}", release_sha):
+        raise ValueError("release_sha must be an exact lowercase 40-character Git SHA")
     current = (now or datetime.now(UTC)).astimezone(UTC)
     days = max(1, min(int(window_days), 3650))
     cutoff = current - timedelta(days=days)
@@ -340,15 +442,23 @@ def build_customer_value_evidence(
 
     excluded: Counter[str] = Counter()
     eligible_orders: dict[str, dict[str, Any]] = {}
+    observed_orders: dict[str, dict[str, Any]] = {}
+    ambiguous_orders = False
     for order in raw_orders:
+        order_no = _text(order.get("out_trade_no") or order.get("order_no"), 96)
+        if order_no in observed_orders and observed_orders[order_no] != order:
+            ambiguous_orders = True
+        if order_no:
+            observed_orders[order_no] = order
         eligible, reason = classify_payment_order(order, cutoff=cutoff)
         if not eligible:
             if reason != "not_paid":
                 excluded[reason] += 1
             continue
-        order_no = _text(order.get("out_trade_no") or order.get("order_no"), 96)
         if order_no:
             eligible_orders[order_no] = order
+        else:
+            ambiguous_orders = True
 
     sf = session_factory or get_session_factory()
     append_only_store_available = True
@@ -421,6 +531,21 @@ def build_customer_value_evidence(
             if (row.order_no, row.customer_goal_id) in goals and row.order_no in eligible_orders
         ]
 
+    if release_sha:
+        try:
+            verified_receipts, installation_receipts = _release_bound_receipts(
+                sf, eligible_orders, verified_receipts, installation_receipts, release_sha, current
+            )
+        except SQLAlchemyError:
+            append_only_store_available = False
+            verified_receipts, installation_receipts = [], []
+        bound_orders = {row.order_no for row in verified_receipts}
+        eligible_orders = {
+            order_no: order
+            for order_no, order in eligible_orders.items()
+            if order_no in bound_orders
+        }
+
     paid_amount_cents = sum(_amount_cents(order) for order in eligible_orders.values())
     customer_goal_ids = {
         row.customer_goal_id
@@ -481,6 +606,16 @@ def build_customer_value_evidence(
         "append_only_store_available": append_only_store_available,
         "verified_paid_count": len(eligible_orders),
         "verified_paid_amount_cents": paid_amount_cents,
+        # This additional projection is deliberately separate from legacy
+        # customer-value counts and cannot prove revenue, cash or profit.
+        "provider_payment_breakdown_cents": (
+            provider_payment_breakdown(eligible_orders, now=current)
+            if source_available
+            and source_authoritative
+            and append_only_store_available
+            and not ambiguous_orders
+            else None
+        ),
         "customer_goal_count": len(customer_goal_ids),
         "delivered_count": len(delivered_receipts),
         "unproven_delivery_count": len(raw_delivered_receipts) - len(delivered_receipts),
@@ -492,6 +627,14 @@ def build_customer_value_evidence(
         **lifecycle,
         "excluded": {key: int(excluded.get(key, 0)) for key in excluded_keys},
     }
+    if release_sha:
+        result.update(
+            release_sha=release_sha,
+            verification_scope="native_customer_release",
+            release_binding_source="original_workflow_and_published_desktop",
+        )
+        # Injection remains useful for unit tests, never for formal release evidence.
+        result["value_ledger_ready"] = bool(result["value_ledger_ready"] and orders is None)
     return result
 
 

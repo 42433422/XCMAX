@@ -33,7 +33,11 @@ def test_merge_system_prompt_mentions_template_save() -> None:
     # merge_system_prompt 不直接注入 template_preview 提示；
     # 仅校验 Excel 相关上下文被正确合并。
     assert "excel_analysis" in prompt
-    assert "import_excel_to_database" in prompt
+    assert "execute_erp_capability" in prompt
+    assert "elt_import" in prompt
+    assert "preview_revision" in prompt
+    assert "import_excel_to_database" not in prompt
+    assert "db_write_token" not in prompt
 
 
 def test_registered_router_create_still_works() -> None:

@@ -231,6 +231,39 @@ class RequestLifecycle:
                     {"success": False, "message": "该流程不允许撤回"}, status_code=400
                 )
             status_before = req.status
+            if self.access.is_workflow(req):
+                try:
+                    business = json.loads(req.business_data or "{}")
+                except (ValueError, TypeError):
+                    business = {}
+                snapshot = (
+                    business.get("durable_workflow_snapshot")
+                    if isinstance(business, dict)
+                    else None
+                )
+                conflict = isinstance(business, dict) and "agent_execution_claim" in business
+                if not conflict and isinstance(snapshot, dict) and snapshot.get("agent_run_id"):
+                    # Compete with execution before recording withdrawal, even
+                    # when this session read the request before its claim.
+                    conflict = (
+                        db.query(ApprovalRequest)
+                        .filter(
+                            ApprovalRequest.id == req.id,
+                            ApprovalRequest.status == status_before,
+                            ApprovalRequest.business_data == req.business_data,
+                        )
+                        .update(
+                            {ApprovalRequest.status: ApprovalStatus.WITHDRAWN.value},
+                            synchronize_session=False,
+                        )
+                        != 1
+                    )
+                if conflict:
+                    db.rollback()
+                    return JSONResponse(
+                        {"success": False, "message": "该审批已被领取或状态已变更，请核对原任务。"},
+                        status_code=409,
+                    )
             current_node = req.current_node
             record = ApprovalRecord(
                 request_id=req.id,

@@ -120,7 +120,7 @@ def _csrf_exempt_aiopen(scope: Scope) -> bool:
     path = (scope.get("path") or "").rstrip("/")
     if path == "/api/aiopen/client/key":
         return False
-    return path.startswith("/api/aiopen") or path.startswith("/api/ai/qclaw")
+    return path.startswith("/api/aiopen")
 
 
 def _csrf_exempt_internal_api(scope: Scope) -> bool:

@@ -25,7 +25,9 @@ groups:
           description: "fhd-api-stable 或 modstore-api-production 的 up 序列缺失，检查 /opt/prometheus/config/prometheus.yml。"
 
       - alert: XcmaxProductionScrapeCoverageBelow99
-        expr: avg_over_time(up{environment="production",job=~"fhd-api-stable|modstore-api-production"}[24h]) < 0.99
+        # Match the collector's 15s inventory: missing samples count as missing
+        # coverage, rather than disappearing from avg_over_time's denominator.
+        expr: sum_over_time(up{environment="production",job=~"fhd-api-stable|modstore-api-production"}[24h]) / 5760 < 0.99
         for: 15m
         labels:
           severity: warning

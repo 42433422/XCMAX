@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -101,16 +103,15 @@ def _workspace_file(path: str, workspace: str, user_id: int, *, exists: bool) ->
     from modstore_server.strategic_portfolio import PortfolioError
 
     try:
+        candidate = Path(path.strip())
+        if candidate.parts and candidate.parts[0].startswith("~"):
+            raise ValueError("home aliases are not workspace-relative paths")
         root = ensure_within_workspace(workspace, user_id=user_id)
         if not root.is_dir():
             raise PortfolioError("strategy workspace is not a directory")
-        target = Path(path.strip()).expanduser()
-        target = (target if target.is_absolute() else root / target).resolve()
-        target.relative_to(root)
-        if exists:
-            target = ensure_within_workspace(target, user_id=user_id)
-            if not target.is_file():
-                raise PortfolioError("strategy file is not a regular file")
+        target = ensure_within_workspace(candidate, user_id=user_id, within=root, must_exist=exists)
+        if exists and not target.is_file():
+            raise PortfolioError("strategy file is not a regular file")
     except (VibePathError, ValueError) as exc:
         raise PortfolioError(
             "strategy file is outside the selected workspace or unavailable"
@@ -182,7 +183,7 @@ def bind_file_receipts(
 ) -> None:
     """Adapt legacy file employees only after checking real, authorized artifact bytes."""
     from modstore_server import strategic_portfolio_usage as usage
-    from modstore_server.catalog_archive_integrity import sha256_file
+    from modstore_server.employee_change_request_verification import _workspace_fd
     from modstore_server.employee_path_guard import check_path_guard
     from modstore_server.strategic_execution_receipts import _control
     from modstore_server.strategic_portfolio import PortfolioError
@@ -220,14 +221,21 @@ def bind_file_receipts(
             if guard.get("ok") is not True or guard.get("checked") is not True:
                 raise PortfolioError("file artifact is outside the approved employee scope")
             artifacts = []
-            for rel, path in zip(relative, files, strict=True):
-                before = path.stat()
-                sha = sha256_file(path)
-                after = path.stat()
+            for rel in relative:
+                # Keep every directory and the file anchored while hashing.
+                # Reusing a validated pathname would follow a link substituted
+                # after _workspace_file, even when both stat calls agree.
+                with _workspace_fd(workspace, rel) as fd:
+                    before = os.fstat(fd)
+                    with os.fdopen(os.dup(fd), "rb") as source:
+                        sha = hashlib.file_digest(source, "sha256").hexdigest()
+                    after = os.fstat(fd)
+                    with _workspace_fd(workspace, rel) as current_fd:
+                        current = os.fstat(current_fd)
                 # Hashing may update atime; retain the archive check's content
                 # identity fields plus ownership/mode, never access time.
                 if any(
-                    getattr(before, field) != getattr(after, field)
+                    len({getattr(item, field) for item in (before, after, current)}) != 1
                     for field in (
                         "st_dev",
                         "st_ino",
@@ -332,6 +340,11 @@ def execution_payload(task: dict[str, Any]) -> dict[str, Any]:
         "strategic_decision_id": task["decision_id"],
         "strategic_opportunity_id": task["opportunity_id"],
         "strategic_source_refs": list(task["source_refs"]),
+        **(
+            {"strategic_dependency_receipts": deepcopy(task["dependency_handoff"])}
+            if task.get("dependency_handoff")
+            else {}
+        ),
         "customer_goal_ids": list(task["customer_goal_ids"]),
         "customer_goal_bindings": deepcopy(task.get("customer_goal_bindings") or []),
         "idempotency_key": "portfolio-"
@@ -342,6 +355,19 @@ def execution_payload(task: dict[str, Any]) -> dict[str, Any]:
         "suppress_employee_im": True,
         "suppress_lifecycle_events": True,
     }
+
+
+def _task_handoff(status: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    from modstore_server.strategic_portfolio import PortfolioError
+    from modstore_server.xiaoc_goal_management import operating_dependency_handoff
+
+    saved = status["tasks"][item["opportunity_id"]].get("dependency_handoff")
+    if saved is None:
+        return {}  # Existing in-flight legacy tasks are not granted a new binding.
+    expected = operating_dependency_handoff(item, status["tasks"])
+    if not expected or expected != saved:
+        raise PortfolioError("approved operating dependency receipt changed")
+    return {"dependency_handoff": expected}
 
 
 def bind_reasoning_input(reasoning: dict[str, Any], payload: dict[str, Any]) -> None:
@@ -369,6 +395,7 @@ def bind_reasoning_input(reasoning: dict[str, Any], payload: dict[str, Any]) -> 
                 **item,
                 "decision_id": decision_id,
                 "deadline": status["tasks"][opportunity_id]["deadline"],
+                **_task_handoff(status, item),
             }
         )
         if any(key not in payload or payload[key] != value for key, value in approved.items()):
@@ -436,6 +463,7 @@ def verify_execution_binding(
             **item,
             "decision_id": decision_id,
             "deadline": status["tasks"][opportunity_id]["deadline"],
+            **_task_handoff(status, item),
         }
         if payload != execution_payload(task) or digest(item["input_data"]) != binding.get(
             "input_sha256"

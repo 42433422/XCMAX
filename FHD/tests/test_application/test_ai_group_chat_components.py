@@ -246,7 +246,7 @@ def test_progress_component_caches_sources_and_limits_tenant_scope() -> None:
         def list_messages(self, *, user_id: int, limit: int = 200) -> Rows:
             queried.append((self.employee_id, user_id))
             if self.employee_id == "cursor-super-employee":
-                raise RuntimeError("unavailable source")
+                raise ConnectionError("unavailable source")
             return [
                 {"task_id": task, "kind": "codex_result", "body": "测试通过", "status": "done"}
                 for task in ("t1", "t2")

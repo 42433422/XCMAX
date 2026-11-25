@@ -2,12 +2,13 @@
 
 > **适用对象**：负责验收 XCAGI 桌面端（Windows / macOS）的测试人员。本协议假定你**不需要懂编程**，只要会打开"终端（macOS）/ PowerShell（Windows）"、复制粘贴命令，就能完成全部校验。
 >
-> **适用范围**：每次桌面正式发布（tag `FHD/v*`）完成后一周内，在 Win10、Win11、macOS 三台真实机器上各执行一轮，并按
+> **适用范围**：每次桌面候选晋级前，在声明支持的 Windows / macOS 版本与架构真实机器上，针对冻结的同一原包执行，并按
 > [desktop-acceptance-template.md](./templates/desktop-acceptance-template.md) 留痕到
 > `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`。
 >
 > **关联规格**：`.trae/specs/converge-desktop-acceptance-tech-debt/spec.md` D1-2 / D1-3
 > **历史参考**：[desktop-real-machine-acceptance-2026-07-05.md](../evidence/e2e/desktop-real-machine-acceptance-2026-07-05.md)
+> **版本与放行规则**：[产品版本与原包生命周期](../architecture/PRODUCT_VERSION_SSOT.md)。版本标签、源码回归、旧包报告与缺证据的 PARTIAL / SKIP / UNKNOWN 均不证明当前包通过。
 
 ---
 
@@ -57,8 +58,7 @@
 
 ### 1.2 需要提前知道的信息
 
-1. **本次要验收的版本号**：从 `FHD/VERSION.md`（"XCAGI 稳定产品版本"一行）或 macOS 执行
-   `FHD/scripts/package/acceptance-macos.sh`（不传 `--version` 会自动读取）获得。
+1. **本次原包身份**：记录版本、平台/架构/渠道、完整源码 SHA、原构建 run/attempt、安装器 SHA256 与原 manifest。源码 SHA 必须已在共享 main；`FHD/VERSION.md` 仅表示源码候选数字。无原包或身份不齐时登记 UNKNOWN，先补证据。
 2. **确认线上渠道已就绪**（验收组长做一次即可）：
    ```bash
    # "到货通知单"能打开（返回一串文字而不是 404）
@@ -68,8 +68,7 @@
    curl -sS https://xiu-ci.com/xcagi-v<版本号>/manifest.json
    ```
    > 已知偏差处理：若 `xcagi-v<版本号>/manifest.json` 返回 404 但 latest*.yml 已是新版本，
-   > 说明该版本 manifest 未发布（发布流程缺陷，需登记 issue）；此时 SHA256 校验改为
-   > "记录实测值 + 与 latest*.yml 的 buildSha 核对版本身份"，并在证据中注明。
+   > 说明制品证据缺失，需登记 issue；记录实测摘要与可得身份用于排查，不能代替原 manifest 校验，不能据此晋级。
 3. **确认机器上没有正在运行的旧 XCAGI**：冷启动要求"从零开始"，如果软件已经在跑，请先完全退出
    （macOS：右键 Dock 图标 → 退出；Windows：右下角托盘图标 → 退出）。
    **如果这是你自己的主力机器且正在使用 XCAGI，不要强行退出——改用"验收机/备用机"执行本协议。**
@@ -108,7 +107,7 @@
 | macOS（对 .app） | `codesign -dv --verbose=2 <拖入 XCAGI.app>`（看签名身份）<br>`codesign --verify --deep --strict <XCAGI.app> && echo 签名完整`<br>`spctl -a -vv -t execute <XCAGI.app>` | `Authority=Developer ID Application: ...`；`valid on disk`；`accepted` + `Notarized Developer ID` |
 | Windows（对 .exe） | `Get-AuthenticodeSignature "C:\...\XCAGI-Enterprise-Setup-<版本号>-x64.exe" \| Format-List Status,StatusMessage,SignerCertificate` | `Status: Valid`，证书 Subject 为发布方，且有可信时间戳 |
 
-> macOS 更简单的做法：挂载 dmg 后直接双击 .app，若系统不弹"无法验证开发者"即 Gatekeeper 放行。
+> 未出现系统提示不能代替签名、公证命令的实际结果。
 
 **第 4 步 · 安装**
 
@@ -129,9 +128,9 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 
 ### 2.2 通过判据
 
-1. 下载完成的文件 SHA256 与 manifest.json 对应条目**完全一致**（manifest 缺失该条目时：记录实测值并注明"manifest 无该版本条目"，此项改判 PARTIAL 并登记发布流程 issue）；
+1. 下载完成的文件 SHA256 与原 manifest.json 对应条目**完全一致**；缺条目或缺原件均未通过，不得用版本号或现场自算摘要补造基准；
 2. 签名校验：macOS `spctl` 结果为 `accepted`（Developer ID + 公证）；Windows `Get-AuthenticodeSignature.Status = Valid` 且证书 Subject 符合发布配置；
-3. 安装后 build-info.json 的 `version` 与验收目标版本一致、`gitSha` 与 manifest / latest*.yml 的 buildSha 一致；
+3. 安装后 build-info.json、实际后端、界面与原 manifest 的完整源码 SHA 一致，并记录原构建 run/attempt；安装目录、后端监听 PID、运行路径属于本次安装实例；
 4. 安装过程中系统无"病毒/无法验证"类拦截弹窗（SmartScreen / Gatekeeper）。
 
 ### 2.3 失败时的记录方式
@@ -206,13 +205,13 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 | macOS | `cat "/Applications/XCAGI.app/Contents/Resources/build-info.json"`<br>`cat ~/Library/Application\ Support/XCAGI/rollback-marker.json 2>/dev/null \|\| echo marker已提交`<br>`curl -sS http://127.0.0.1:17500/api/health` | `version` = 新版本；marker 已删除；health healthy |
 | Windows | `Get-Content "C:\安装目录\resources\build-info.json"`<br>`Get-Content "$env:APPDATA\XCAGI\rollback-marker.json" -ErrorAction SilentlyContinue`<br>`Invoke-RestMethod http://127.0.0.1:17500/api/health` | 同上 |
 
-7. 记录更新流水账（可选但推荐）：打开 userData 目录下的 `updater-events.jsonl`，把最后几行复制进证据文件——里面有"检查 → 下载 → 安装"的完整事件与时间戳。
+7. 保留 userData 下本轮完整 `updater-events.jsonl` 与原回滚 marker，记录升级前后版本、完整 SHA、操作 ID、数据库备份路径与摘要；摘要片段不能代替原始文件。
 
 ### 4.2 通过判据
 
-1. 更新前版本号、更新后版本号均有记录且更新后与 latest*.yml 的 `productVersion` 一致；
+1. 升级前后版本、完整源码 SHA、原包 SHA256 均有记录，并与本次原构建和更新清单一致；
 2. 更新源 URL 已记录（latest.yml / latest-mac.yml 的完整地址）；
-3. 更新过程中**未出现签名校验失败提示**（说明 Ed25519 验签通过）；
+3. 有本轮更新清单的实际 Ed25519 验签结果；无报错或仅存在 signature 字段不算验签证据；
 4. 观察期顺利度过（marker 被自动删除、health healthy），未触发回滚。
 
 ### 4.3 失败时的记录方式
@@ -228,11 +227,13 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 - 更新通道可达性检查（latest*.yml 能打开、`signature: ed25519:` 字段存在）；
 - 引用最近一次 OTA 闭环证据（如 `FHD/docs/evidence/e2e/desktop-ota-closed-loop-20260724/`）。
 
+通道可达性与历史记录只用于定位；本轮 OTA 保持未通过，需用本轮原包补测。
+
 ---
 
 ## 5. 步骤四：回滚
 
-目标：验证"更新把软件搞坏时能自动退回旧版本"。回滚有两条路径，至少验证其一：
+目标：验证失败后恢复正确的应用与业务数据。自动回滚与手动恢复分别记录；声明自动回滚能力必须完成路径 A，路径 B 不能代替。
 
 - **路径 A（观察期自动回滚，首选）**：更新后首次启动失败（后端起不来/主窗口崩溃），软件在观察期内自动从备份还原旧版本并写 `rollback-applied.json`；
 - **路径 B（降级安装）**：用上一版本的 dmg/exe 手动重装覆盖（软件会保留 userData 数据）。
@@ -240,7 +241,7 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 ### 5.1 路径 A 操作步骤（需要构造"坏更新"，建议由验收组长在专用验收机上做）
 
 1. 确认当前版本为旧版（记下版本号 V0）；
-2. 让更新通道短暂指向一个"坏包"（由组长在测试更新站准备同版本号但后端损坏的包），在软件里检查更新并安装；
+2. 在隔离验收机使用同一冻结原包和既有故障注入入口制造启动失败，保留原安装器摘要及注入动作。另造坏包的测试只能证明该坏包场景，不能复用为原包验收；不得修改正式更新指针；
 3. 软件重启后进入观察期 → 预期软件自己发现启动异常 → 界面提示"已回滚到 V0"（或自动重启后恢复正常）；
 4. 核对回滚证据：
 
@@ -255,18 +256,19 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 > `FHD/desktop/rollback.test.ts`（回滚单测）与 `FHD/desktop/e2e/update-rollback.e2e.spec.ts`
 > （真实链路：预置 marker → 观察期 → commitRollback/triggerRollback），本步标
 > `PARTIAL（真实机未注入坏更新，回滚机制以自动化 E2E + 代码评审佐证）`。
+> 此状态不满足当前原包的实机失败恢复要求。
 
 ### 5.2 路径 B 操作步骤（降级安装）
 
 1. 从更新站历史目录取上一版本安装包（如 `https://xiu-ci.com/xcagi-v<旧版本>/enterprise/`）；
 2. 重复步骤一（SHA256 + 签名校验）后覆盖安装；
-3. 启动后确认版本回到旧版本、health healthy、历史业务数据仍在（登录后看一眼既有订单/对话）。
+3. 启动后核对旧版完整 SHA、实际后端身份及数据库兼容性；回读验收前保存的订单 ID、金额、库存、附件摘要和授权 Mod，保存前后差异，不以“能打开”代替数据恢复。
 
 ### 5.3 通过判据
 
-1. 回滚后版本号 = 回滚前版本号（V0），有 applied 记录或降级安装凭证；
+1. 回滚前后版本与完整 SHA 均匹配原记录；自动路径保留 applied/marker/操作 ID，手动路径保留原包及实际安装凭证；
 2. 回滚后 `/api/health` 为 healthy；
-3. 用户数据未丢失（可登录、可见历史数据）。
+3. 业务回读与备份对账一致；已执行请求重试无重复扣库存，已消费/未知执行的提案不变回 pending，另一租户数据与审计归属不变。按[可执行验收矩阵](../architecture/PRODUCT_VERSION_SSOT.md#当前版本证据与恢复验收)同时记录旧数据迁移、离线与失败诊断结果。
 
 ### 5.4 失败时的记录方式
 
@@ -285,11 +287,12 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 | FAIL | 执行了但判据未满足（附证据与原因） |
 | PARTIAL | 部分执行/以替代证据佐证（附替代证据说明） |
 | SKIP | 未执行（必须写明原因，如"无升级目标""无独立 Win10 机"） |
+| UNKNOWN | 身份或原始证据不足，无法判断；默认未通过 |
 
 ### 6.2 验收结论规则
 
-- **签字发布**：三台机器（Win10 / Win11 / macOS）安装+冷启动均 PASS，OTA 与回滚合计无 FAIL（PARTIAL/SKIP 需附替代证据）；
-- **任一平台存在 FAIL 或 P0**：该版本桌面验收未闭环，不得对外宣称"三平台可用"；
+- **验收通过**：本次声明的平台/架构/渠道上，身份、安装、冷启动、业务、旧数据/离线、备份恢复、升级和失败恢复的必需项均有同一原包的实际 PASS。验收通过后仍须按产品版本规则取得发布授权并读回公开原字节；
+- **任一必需项 FAIL / PARTIAL / SKIP / UNKNOWN 或缺证据**：保留原结果、关联当前包及待补测步骤，保持候选；技术签字不能把未完成项计为通过。未声明的渠道不得随其他渠道一起晋级；
 - 证据文件命名：`FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本号>-<win10|win11|macos>.md`，
   按模板填写，截图放同目录 `assets/` 子目录并在文中引用相对路径。
 
@@ -303,8 +306,8 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 | Windows（故障注入，项7/8） | `FHD/scripts/package/fault-injection-windows.ps1` | `powershell -ExecutionPolicy Bypass -File fault-injection-windows.ps1`（默认跑 kill-all / kill-orphan / corrupt-backup / corrupt-main 四个可自动化场景并输出 JSON 收据；`corrupt-main` 有安全闸，仅允许 `C:\XCAGI-acceptance` 隔离安装；disk-full 与 power-cut 为人工场景，脚本给指引并记录结果）。runner 级证据可用 GitHub Actions 手动工作流 `fhd-windows-fault-injection` 生成（下载 CVM 测试包 → SHA 校验 → 静默隔离安装 → 注入 → 上传收据，`-CiMode` 跳过人工录入） |
 
 脚本只做"下载、校验、安装位、计时、截图、读版本、覆盖升级前后数据比对"，**OTA 与回滚两步永远输出人工操作指引**（涉及真实更新源与破坏性场景，不允许脚本静默执行）。故障注入脚本同理：注入动作只针对验收隔离环境，`corrupt-main` 场景带安装根安全闸。
-签名项按交付声明判定：声明 `signed` 要求 `Valid` 否则 FAIL；声明 `unsigned`（如 `delivery-receipt.json` 的 `signature_status:unsigned`）时只要求 `NotSigned` 与回执哈希一致并记 PARTIAL，不阻断上机功能验收，但该包不得进入稳定自动更新通道。
+签名项按交付声明判定：声明 `signed` 要求 `Valid` 否则 FAIL；声明 `unsigned` 的临时测试包须有风险接受和原包摘要，签名记 PARTIAL。可继续采集功能观察，但不得计为签名通过或正式发布验收通过，也不得进入稳定自动更新通道。
 
 ---
 
-*协议版本：v1（2026-09-01，随 converge-desktop-acceptance-tech-debt D1-2/D1-3 建立）*
+*本协议维护当前操作要求；历史报告保留当时原始数据与结论，不重写为当前包证明。*

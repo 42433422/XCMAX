@@ -7,8 +7,11 @@ parameter; it does not replace these cases with an in-memory database.
 
 from __future__ import annotations
 
+import json
 import os
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
 import pytest
@@ -20,6 +23,7 @@ from tests.test_application.test_core_execution_reliability import (
     _models,
     _post_task,
     _product_models,
+    _task_body,
 )
 
 
@@ -126,6 +130,433 @@ def _business_lifecycle(env) -> tuple[list[str], int]:
         return modules, session.query(TaskLifecycleIdempotency).count()
     finally:
         session.close()
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "elt_permission",
+        "product_permission",
+        "owner",
+        "tenant",
+        "revision",
+        "rows",
+        "file_only",
+        "errors",
+    ],
+)
+def test_owned_import_requires_live_grants_and_exact_elt_preview(tmp_path, monkeypatch, damage):
+    from copy import deepcopy
+
+    from app.db.models.agent import AgentRunRecord
+    from app.db.models.elt import EltRun, EltRunRow
+    from app.db.models.permission import Role
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        body = deepcopy(_task_body(env, "guarded-import"))
+        with env["factory"]() as db:
+            preview = db.get(EltRun, body["params"]["run_id"])
+            if damage in {"elt_permission", "product_permission"}:
+                code = "elt.execute" if damage == "elt_permission" else "product.edit"
+                role = db.query(Role).filter_by(name="admin").one()
+                role.permissions = [p for p in role.permissions if p.code != code]
+            elif damage == "owner":
+                preview.owner_user_id += 1
+            elif damage == "tenant":
+                preview.tenant_id = 2
+            elif damage == "revision":
+                body["params"]["preview_revision"] = "0" * 64
+            elif damage == "rows":
+                row = db.query(EltRunRow).filter_by(run_id=preview.id, final_action="new").first()
+                row.normalized_json = '{"name":"changed without approval"}'
+            elif damage == "file_only":
+                body["params"] = {"file_paths": [str(env["source"])]}
+            else:
+                body["params"]["valid_rows_only"] = False
+            db.commit()
+        response = env["client"].post("/api/agent/tasks", json=body)
+        assert response.status_code == 400, response.text
+        assert _product_models(env) == []
+        assert _business_lifecycle(env) == ([], 0)
+        with env["factory"]() as db:
+            assert db.query(AgentRunRecord).count() == 0
+            assert db.query(env["approval_model"]).count() == 0
+
+
+def test_product_import_message_cannot_replace_another_admitted_tool(tmp_path, monkeypatch):
+    from copy import deepcopy
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        body = deepcopy(_task_body(env, "unrelated-tool"))
+        body.update(tool_id="business_db", action="read")
+        body["params"] = {"entity": "customers", "file_path": str(env["source"])}
+        response = env["client"].post("/api/agent/tasks", json=body)
+        assert response.status_code == 202, response.text
+        run = env["runs"].get(response.json()["data"]["run_id"])
+        assert "cross_module_checkpoint" not in run.metadata["runtime_context"]
+        assert "approval_request_id" not in run.metadata
+        assert [(s.tool_id, s.action) for s in run.steps] == [("business_db", "read")]
+        assert _product_models(env) == []
+        with env["factory"]() as db:
+            assert db.query(env["approval_model"]).count() == 0
+
+
+@pytest.mark.parametrize("damage", ["revoked", "changed_preview"])
+def test_owned_import_rechecks_authority_before_first_write(tmp_path, monkeypatch, damage):
+    from app.application.agent_orchestrator.cross_module_execution import (
+        execute_claimed_cross_module,
+    )
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.elt.errors import EltError
+    from app.db.models.elt import EltRunRow
+    from app.db.models.permission import Role
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        created = _post_task(env, "revoked-before-write")
+        run = _queue_for_execution(env, created)
+        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        with env["factory"]() as db:
+            if damage == "revoked":
+                role = db.query(Role).filter_by(name="admin").one()
+                role.permissions = [p for p in role.permissions if p.code != "product.edit"]
+            else:
+                preview_id = run.metadata["runtime_context"]["cross_module_checkpoint"][
+                    "elt_params"
+                ]["run_id"]
+                row = db.query(EltRunRow).filter_by(run_id=preview_id, final_action="new").first()
+                row.normalized_json = '{"name":"changed after approval"}'
+            db.commit()
+        with pytest.raises((ValueError, EltError)):
+            execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner="worker",
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert _product_models(env) == []
+        assert _business_lifecycle(env) == ([], 0)
+        finished = env["queue"].get(run.run_id)
+        assert finished.state == "failed"
+        assert finished.last_error_code == "invalid_approved_input"
+        assert finished.execution_count == 1
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+
+
+@pytest.mark.parametrize("after_commit", [False, True])
+def test_unclassified_import_error_preserves_the_claim(tmp_path, monkeypatch, after_commit):
+    from app.application.agent_orchestrator import cross_module_chain as chain
+    from app.application.agent_orchestrator import cross_module_execution as execution
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        created = _post_task(env, "unclassified-import", _models("UNKNOWN"))
+        run = _queue_for_execution(env, created)
+        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        error = RuntimeError("unclassified execution failure")
+
+        def fail(*_args, **_kwargs):
+            raise error
+
+        if after_commit:
+            monkeypatch.setattr(chain, "_run_employee", fail)
+        else:
+            monkeypatch.setattr(execution, "_execute_elt_import", fail)
+        with pytest.raises(RuntimeError) as raised:
+            execution.execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner="worker",
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert raised.value is error
+        pending = env["queue"].get(run.run_id)
+        assert pending.state == "running"
+        assert pending.lease_owner == "worker"
+        assert pending.execution_count == 1
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+        assert _product_models(env) == (["UNKNOWN-1", "UNKNOWN-2"] if after_commit else [])
+        assert _business_lifecycle(env) == (
+            (["cross_module_http_response", "cross_module_import"], 1) if after_commit else ([], 0)
+        )
+
+
+def test_known_import_error_keeps_open_effect_unresolved(tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import cross_module_execution as execution
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.elt.errors import EltConflict
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as env:
+        run = _queue_for_execution(env, _post_task(env, "unresolved-import"))
+        assert env["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+        assert env["queue"].mark_open_effect(run.run_id, "original-write", owner_id="worker")
+        error = EltConflict("ELT_PREVIEW_CHANGED", "changed preview")
+
+        def fail(*_args, **_kwargs):
+            raise error
+
+        monkeypatch.setattr(execution, "_execute_elt_import", fail)
+        with pytest.raises(EltConflict) as raised:
+            execution.execute_claimed_cross_module(
+                AgentOrchestrator(),
+                run,
+                owner="worker",
+                queue=env["queue"],
+                request_id=str(run.metadata["approval_request_id"]),
+                finish=True,
+            )
+        assert raised.value is error
+        pending = env["queue"].get(run.run_id)
+        assert pending.state == "unknown"
+        assert pending.last_error_code == "needs_verification"
+        assert pending.execution_count == 1
+        assert not pending.finished_at
+        assert env["queue"].lifecycle(run.run_id)["effects"] == ["original-write"]
+        assert env["queue"].claim("another-worker", lease_seconds=60, run_id=run.run_id) is None
+        assert _product_models(env) == []
+        assert _business_lifecycle(env) == ([], 0)
+
+
+@pytest.mark.parametrize("scenario", ["execute", "revoked", "approval_projection"])
+def test_owned_import_restores_original_mod_for_execution_and_committed_receipt(
+    tmp_path, monkeypatch, scenario
+):
+    from sqlalchemy.orm import sessionmaker
+    from starlette.requests import Request
+
+    from app import db as db_module
+    from app.application.agent_orchestrator.cross_module_chain import project_rejected_approval
+    from app.application.agent_orchestrator.cross_module_execution import (
+        execute_claimed_cross_module,
+        load_cross_module_http_result,
+    )
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.elt.preview_confirmation import publish_preview
+    from app.db.db_base import Base
+    from app.db.models.approval import ApprovalFlow
+    from app.db.models.elt import EltRun, EltRunRow
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.domain.task_lifecycle.control import SessionBook
+    from app.http.request_context import reset_current_http_request, set_current_http_request
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        agent_mod_execution_scope,
+        bind_agent_mod_scope,
+    )
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.request_active_mod_ctx import (
+        get_request_active_mod_id,
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
+    from tests.test_application.test_core_execution_reliability import _approval_id
+
+    with _execution_database(tmp_path, monkeypatch, "sqlite") as host:
+        host_body = _task_body(host, "host-preview", _models("HOST"))
+        engine = create_engine(f"sqlite:///{tmp_path / 'mod.sqlite3'}")
+        Base.metadata.create_all(engine)
+        factory = sessionmaker(bind=engine, expire_on_commit=False)
+        try:
+            with factory.begin() as db:
+                db.add(
+                    User(
+                        id=host["user_id"],
+                        username="owner-copy",
+                        password="unused",
+                        tenant_id=1,
+                        role="admin",
+                    )
+                )
+            with host["factory"].begin() as db:
+                db.query(UserSession).one().entitled_mod_ids_json = '["private-products"]'
+                db.add(
+                    host["product_model"](
+                        tenant_id=1,
+                        unit="host",
+                        model_number="HOST-SENTINEL",
+                        name="宿主原行",
+                        price=7,
+                    )
+                )
+            binding = bind_agent_mod_scope(
+                session_id="sid-reliability",
+                user_id=str(host["user_id"]),
+                mod_id="private-products",
+            )
+            monkeypatch.setenv("DATABASE_URL", str(host["engine"].url))
+            monkeypatch.setenv(
+                "XCAGI_MOD_DATABASE_URLS", json.dumps({"private-products": str(engine.url)})
+            )
+            monkeypatch.setattr(db_module, "_get_test_db_manager", lambda: None)
+            monkeypatch.setattr("app.db.session.SessionLocal", db_module.SessionLocal)
+            monkeypatch.setattr("app.application.elt.service.SessionLocal", db_module.SessionLocal)
+            mod = {**host, "factory": factory, "engine": engine, "bodies": {}}
+            with agent_mod_execution_scope(binding):
+                body = _task_body(mod, "mod-transaction", _models("MOD"))
+            # The same authenticated owner, tenant and ELT id exist in both physical stores.
+            with host["factory"]() as db, tenant_scope(1):
+                old_id = host_body["params"]["run_id"]
+                preview = db.get(EltRun, old_id)
+                preview.id = body["params"]["run_id"]
+                db.query(EltRunRow).filter_by(run_id=old_id).update({"run_id": preview.id})
+                publish_preview(db, preview)
+                db.commit()
+            host["client"].headers["X-XCAGI-Active-Mod-Id"] = "private-products"
+            created = _post_task(mod, "mod-transaction")
+            run = host["runs"].get(created["data"]["run_id"])
+            context = run.metadata["runtime_context"]
+            checkpoint = context["cross_module_checkpoint"]
+            with host["factory"].begin() as db:
+                SessionBook(db).put(
+                    "cross_module_http_response",
+                    "1",
+                    checkpoint["idempotency_key"],
+                    {"body": {"sentinel": "host"}},
+                )
+            assert get_request_active_mod_id() == ""
+            if scenario == "approval_projection":
+                with host["factory"]() as db:
+                    approval = db.get(host["approval_model"], _approval_id(created))
+                    data = {
+                        column.name: getattr(approval, column.name)
+                        for column in approval.__table__.columns
+                    }
+                    flow = db.get(ApprovalFlow, approval.flow_id)
+                    flow_data = {
+                        column.name: getattr(flow, column.name) for column in flow.__table__.columns
+                    }
+                with factory.begin() as db:
+                    db.execute(ApprovalFlow.__table__.insert().values(flow_data))
+                    db.execute(
+                        host["approval_model"]
+                        .__table__.insert()
+                        .values({**data, "status": "rejected"})
+                    )
+                with agent_mod_execution_scope(binding):
+                    assert project_rejected_approval(run).status == "waiting_user"
+                with host["factory"].begin() as db:
+                    db.get(host["approval_model"], _approval_id(created)).status = "rejected"
+                with factory.begin() as db:
+                    db.get(host["approval_model"], _approval_id(created)).status = "pending"
+                with agent_mod_execution_scope(binding):
+                    assert project_rejected_approval(run).status == "rejected"
+                assert host["queue"].get(run.run_id).state == "rejected"
+                assert _product_models(mod) == []
+            elif scenario == "revoked":
+                run = _queue_for_execution(host, created)
+                assert host["queue"].claim("worker", lease_seconds=60, run_id=run.run_id)
+                with host["factory"].begin() as db:
+                    db.query(UserSession).one().entitled_mod_ids_json = "[]"
+                with pytest.raises(AgentModAuthorizationError):
+                    execute_claimed_cross_module(
+                        AgentOrchestrator(),
+                        run,
+                        owner="worker",
+                        queue=host["queue"],
+                        request_id=str(run.metadata["approval_request_id"]),
+                        finish=True,
+                    )
+                assert _product_models(mod) == []
+            else:
+                # Approval is a host API; its ambient request must not redirect business reads.
+                request_token = set_current_http_request(
+                    Request(
+                        {"type": "http", "path": "/api/approval/requests/1/approve", "headers": []}
+                    )
+                )
+                mod_token = set_request_active_mod_id("unrelated-ambient-mod")
+                try:
+                    approved = host["client"].post(
+                        f"/api/approval/requests/{_approval_id(created)}/approve",
+                        json={"opinion": "确认原预演"},
+                    )
+                    assert approved.status_code == 200, approved.text
+                    assert approved.json()["success"] is True, approved.text
+                    assert get_request_active_mod_id() == "unrelated-ambient-mod"
+                finally:
+                    reset_current_http_request(request_token)
+                    reset_request_active_mod_id(mod_token)
+                assert _product_models(mod) == ["MOD-1", "MOD-2"]
+                receipt = load_cross_module_http_result(
+                    "1", checkpoint["idempotency_key"], runtime_context=context
+                )
+                assert receipt["body"]["data"]["run_id"] == run.run_id
+                assert receipt["body"]["data"]["stored_count"] == 2
+                with factory() as db:
+                    assert db.get(EltRun, body["params"]["run_id"]).executed_rows == 2
+                    assert db.query(host["approval_model"]).count() == 0
+                with host["factory"].begin() as db:
+                    db.query(UserSession).one().entitled_mod_ids_json = "[]"
+                with pytest.raises(AgentModAuthorizationError):
+                    load_cross_module_http_result(
+                        "1", checkpoint["idempotency_key"], runtime_context=context
+                    )
+                assert _product_models(mod) == ["MOD-1", "MOD-2"]
+            assert get_request_active_mod_id() == ""
+            assert _product_models(host) == ["HOST-SENTINEL"]
+            with host["factory"]() as db:
+                assert db.get(EltRun, body["params"]["run_id"]).executed_rows == 0
+                assert SessionBook(db).get(
+                    "cross_module_http_response", "1", checkpoint["idempotency_key"]
+                )["body"] == {"sentinel": "host"}
+        finally:
+            engine.dispose()
+
+
+@pytest.mark.parametrize("dialect", _dialects())
+def test_concurrent_task_admission_persists_one_complete_run_and_replays_it(
+    tmp_path, monkeypatch, dialect
+):
+    import copy
+
+    from app.application.agent_orchestrator import AgentRun, SQLAlchemyAgentRunRepository
+    from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+
+    with _execution_database(tmp_path, monkeypatch, dialect) as env:
+        candidates = [
+            AgentRun(user_id=str(env["user_id"]), message=f"candidate-{index}", status="queued")
+            for index in range(2)
+        ]
+        for run in candidates:
+            run.metadata["task_context"] = {"task_id": "concurrent-admission"}
+            run.metadata["runtime_context"] = {"tenant_id": "1"}
+        barrier = threading.Barrier(2)
+
+        def publish(run):
+            repository = SQLAlchemyAgentRunRepository(
+                session_factory=env["factory"], auto_create=False
+            )
+            barrier.wait(timeout=10)
+            return repository.create_task_run(run)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(publish, candidates))
+        assert sum(created for _, created in results) == 1
+        winner = next(run for run, created in results if created)
+        assert all(
+            run.run_id == winner.run_id and run.message == winner.message for run, _ in results
+        )
+        before = env["runs"].get(winner.run_id)
+        assert before is not None
+        assert before.message == winner.message and before.status == "queued"
+
+        # Exact-run admission must discard both a stale snapshot and the task
+        # identity tentatively inserted for it, without publishing another run.
+        stale = copy.deepcopy(before)
+        stale.message = "must not replace the persisted winner"
+        stale.metadata["task_context"]["task_id"] = "losing-task"
+        replayed, created = env["runs"].create_task_run(stale, initial_only=False)
+        assert not created and replayed.to_dict() == before.to_dict()
+        assert env["runs"].get(winner.run_id).to_dict() == before.to_dict()
+        with env["factory"]() as db:
+            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+            task = db.query(AgentTaskRecord).one()
+            assert task.task_id == "concurrent-admission"
+            assert task.active_run_id == winner.run_id and task.run_count == 1
 
 
 @pytest.mark.parametrize("dialect", _dialects())

@@ -1,5 +1,6 @@
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '../../stores/agent'
+import { useAuthStore } from '../../stores/auth'
 import { api } from '../../api'
 import type { OrchestrationSession } from '../../types/agent'
 
@@ -14,6 +15,7 @@ export function useButlerOrchestrator() {
   const route = useRoute()
   const router = useRouter()
   const agentStore = useAgentStore()
+  const auth = useAuthStore()
 
   /** 根据当前路由推断可编辑的目标（Mod / 工作流 / 员工）。*/
   function detectTarget(): OrchestrationTarget | null {
@@ -40,7 +42,10 @@ export function useButlerOrchestrator() {
    * 启动编排管线：POST /api/agent/butler/orchestrate → 轮询 /api/workbench/sessions/{id}
    * 调用前确保已拿到用户确认（requestAction high-risk）。
    */
-  async function start(brief: string, scope?: string): Promise<{ ok: boolean; error?: string }> {
+  async function start(brief: string, scope?: string): Promise<{ ok: boolean; error?: string; sessionId?: string }> {
+    const generation = agentStore.conversationGeneration
+    const owner = auth.user?.id
+    const isCurrent = () => generation === agentStore.conversationGeneration && owner === auth.user?.id
     const tgt = detectTarget()
     if (!tgt) {
       return {
@@ -61,8 +66,13 @@ export function useButlerOrchestrator() {
       })) as { session_id: string; status: string }
       sessionId = resp.session_id
     } catch (e: unknown) {
+      if (!isCurrent()) return { ok: false, error: '原会话已停止或变化，已发出的改写请求结果尚未确认。' }
       agentStore.setMode('error')
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!isCurrent()) {
+      // Keep the receipt with the original caller; never publish it in the new account.
+      return { ok: false, sessionId, error: '原会话已停止或变化，已发出的改写请求结果尚未确认。' }
     }
 
     // Seed the store so the overlay appears immediately
@@ -73,12 +83,13 @@ export function useButlerOrchestrator() {
     }
 
     // Fire-and-forget poll loop; overlay reacts to store changes
-    void _pollLoop(sessionId)
+    void _pollLoop(sessionId, isCurrent)
     return { ok: true }
   }
 
-  async function _pollLoop(sid: string): Promise<void> {
-    while (true) {
+  async function _pollLoop(sid: string, isCurrent: () => boolean): Promise<void> {
+    const ownsSession = () => isCurrent() && agentStore.orchestrationSession?.sessionId === sid
+    while (ownsSession()) {
       try {
         const s = (await api.workbenchGetSession(sid)) as {
           status: string
@@ -86,6 +97,7 @@ export function useButlerOrchestrator() {
           error?: string | null
           artifact?: Record<string, unknown> | null
         }
+        if (!ownsSession()) return
         const prev = agentStore.orchestrationSession
         const mergedSteps = _mergeStepsMonotonic(prev?.steps, s.steps ?? [])
         agentStore.orchestrationSession = {
@@ -104,6 +116,7 @@ export function useButlerOrchestrator() {
           return
         }
       } catch {
+        if (!ownsSession()) return
         // Network hiccup — keep retrying
       }
       await _delay(POLL_INTERVAL_MS)

@@ -182,7 +182,7 @@ class TestRerankerLocal:
         monkeypatch.setenv("FHD_RERANKER_MODE", "local")
 
         fake_model = MagicMock()
-        fake_model.predict.side_effect = RuntimeError("inference crashed")
+        fake_model.predict.side_effect = ValueError("invalid model input pairs")
         fake_module = types.ModuleType("sentence_transformers")
         fake_module.CrossEncoder = MagicMock(return_value=fake_model)
         monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)

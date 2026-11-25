@@ -10,6 +10,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 
 def _make_mock_user(**overrides):
@@ -189,7 +190,7 @@ class TestUpdateUserFieldBranches:
             patch("app.application.user_app_service.get_db", return_value=db),
             patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_user_changed",
-                side_effect=RuntimeError("bus down"),
+                side_effect=RedisConnectionError("bus down"),
             ),
         ):
             result = self._svc().update_user(1, display_name="X")

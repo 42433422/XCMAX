@@ -633,7 +633,7 @@ class TestRuntimeSelfFix:
 
     def test_propose_fix_kb_search_exception_returns_noop(self, mock_kb):
         """KB 检索异常返回 noop。"""
-        mock_kb.search_fixes.side_effect = RuntimeError("kb error")
+        mock_kb.search_fixes.side_effect = ConnectionError("knowledge store unavailable")
         fixer = RuntimeSelfFix(kb_retriever=mock_kb)
         proposal = fixer.propose_fix("error")
         assert proposal.fix_type == "noop"
@@ -818,7 +818,7 @@ class TestEvolutionHandler:
 
     async def test_handle_exception_returns_handled_false(self, handler, mock_fixer):
         """子组件异常时返回 handled=False。"""
-        mock_fixer.propose_fix.side_effect = RuntimeError("boom")
+        mock_fixer.propose_fix.side_effect = TimeoutError("fix proposal timed out")
         event = self._make_event("error.occurred", {"error": "x"})
         result = await handler.handle(event)
         assert result["handled"] is False

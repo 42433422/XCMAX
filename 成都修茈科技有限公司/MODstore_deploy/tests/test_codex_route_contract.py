@@ -193,3 +193,23 @@ async def test_codex_platform_default_skips_first_model_without_proven_capacity(
     # The ordinary chat default is unchanged, even when it does not qualify as Codex.
     normal = await llm_api.resolve_default_llm_route(database, 1)
     assert normal["model"] == "unqualified-alias"
+
+
+async def test_unqualified_platform_gateway_does_not_fall_back_to_legacy_provider(
+    database, monkeypatch
+):
+    save("xiaomi", model="mimo-v2.6-flash", base_url="https://token-plan-cn.xiaomimimo.com/v1")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "server-only-key")
+    stale = dict(CAPABILITIES)
+    stale.pop("context_window")
+    catalog = AsyncMock(
+        return_value={
+            "runtime_models": ["unqualified-alias"],
+            "models_detailed": [{"id": "unqualified-alias", "model_capabilities": stale}],
+        }
+    )
+    monkeypatch.setattr(llm_catalog, "get_models_for_credentials", catalog)
+    with pytest.raises(HTTPException) as error:
+        await llm_api.resolve_default_llm_route(database, 1, runtime="codex")
+    assert error.value.detail["code"] == "CODEX_MODEL_CAPACITY_REQUIRED"
+    assert [call.args[1] for call in catalog.await_args_list] == ["litellm"]

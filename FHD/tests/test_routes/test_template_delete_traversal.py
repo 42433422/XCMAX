@@ -7,6 +7,7 @@ from threading import Barrier, Event, current_thread
 
 import pytest
 from sqlalchemy import create_engine, event, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
@@ -279,7 +280,7 @@ def test_commit_failure_rolls_back_visibility_and_retry_succeeds(files, monkeypa
     target = _file(runtime / "tenants/11/templates/sample.xlsx")
 
     def denied(_session):
-        raise RuntimeError("synthetic commit refusal")
+        raise OperationalError("COMMIT", None, OSError("synthetic commit refusal"))
 
     with monkeypatch.context() as failing:
         failing.setattr("sqlalchemy.orm.Session.commit", denied)

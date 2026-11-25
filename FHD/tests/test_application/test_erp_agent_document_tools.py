@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.application.capability_catalog import available_employees
+from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
 from app.application.tools.workflow import (
     get_workflow_tool_registry,
     invalidate_workflow_tool_registry,
@@ -17,15 +19,26 @@ from app.mod_sdk.employee_tool_registry import (
     build_employee_tools_status,
     invalidate_employee_tool_cache,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_all_ten_built_in_document_workers_are_registered_and_runnable() -> None:
+def test_all_ten_built_in_document_workers_are_registered_and_runnable(trusted_actor) -> None:
     expected = set(list_office_pack_catalog()["pack_ids"])
     assert len(expected) == 10
     invalidate_employee_tool_cache()
     invalidate_workflow_tool_registry()
     status = build_employee_tools_status()
-    names = {row["function"]["name"] for row in get_workflow_tool_registry() if row.get("function")}
+    actor = trusted_actor(permissions=["employee.list", "employee.execute"])
+    assert get_workflow_tool_registry() == []
+    (model_tool,) = get_workflow_tool_registry(actor.context)
+    function = model_tool["function"]
+    assert function["name"] == ERP_CAPABILITY_TOOL_NAME
+    assert {
+        branch["properties"]["action"]["enum"][0]
+        for branch in function["parameters"]["anyOf"]
+        if branch["properties"]["tool_id"]["enum"] == ["employee"]
+    } >= {"list", "execute"}
+    discovered = {row["employee_id"] for row in available_employees(actor.context)}
 
     assert status["office_ready"] is True
     assert status["missing_office_pack_ids"] == []
@@ -34,7 +47,7 @@ def test_all_ten_built_in_document_workers_are_registered_and_runnable() -> None
     # bundled office employee is executable, not that every optional pack is.
     assert not (expected & set(status["runtime_missing_pack_ids"]))
     assert expected <= set(status["registered_tool_names"])
-    assert expected <= names
+    assert expected <= discovered
 
 
 def test_employee_tool_lookup_self_heals_after_scoped_discovery_cache(monkeypatch) -> None:

@@ -14,7 +14,7 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
-| 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层 |
+| 产品版本四层口径 | [`docs/architecture/PRODUCT_VERSION_SSOT.md`](architecture/PRODUCT_VERSION_SSOT.md) | VERSION.md 数字 + 已发布/候选/构建/运行分层；[实机协议](e2e/desktop-real-machine-acceptance-protocol.md)与[验收模板](e2e/templates/desktop-acceptance-template.md)遵循同一原包身份和证据放行要求 |
 | audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
@@ -49,7 +49,7 @@
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
 | customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
 | deploy-path（部署主从） | [architecture/DEPLOY_PATH_SSOT.md](architecture/DEPLOY_PATH_SSOT.md) | 主路径=桌面私有化+CVM 滚动；Docker/K8s/health_k8s=experimental；权威边界见 ADR-route-a |
-| process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务/交付流程与组件职责归属；§9 维护 14 项统一性核查、来源/派生关系、调用方迁移、候选提交及验收条件；保留各领域权威，不把文档登记或开放 PR 视为完成 |
+| process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务/交付流程与组件职责归属；§9 维护 14 项统一性核查、来源/派生关系、调用方迁移、固定提交快照与整合进度及验收条件；保留各领域权威，不把文档登记或候选回归视为 main 合入或业务完成 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
 | net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
 | macos-release（macOS 发布交付） | [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md) | macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机 + 12 项 Release Gate 状态与实机验收任务；每次发版复用 |

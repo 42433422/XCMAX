@@ -3,6 +3,7 @@ import { plainTextFromChatHtml, plainTextFromChatMarkdown } from '@/utils/saniti
 import { speakText, cleanTextForSpeech } from '@/utils/tts'
 import { estimateMessageHeight } from '@/utils/pretext'
 import { clearVoiceQueue, type ChatMessage } from './useChatMessages'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 
 export interface UseChatMessageUiDeps {
   messages: Ref<ChatMessage[]>
@@ -73,16 +74,6 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   })
 
   /**
-   * 折叠状态按消息身份保存，而不是数组下标。
-   * 历史窗口分页、消息插入都会让下标漂移，旧实现会把折叠态错挂到别的消息上。
-   */
-  function messageCollapseKey(msg: ChatMessage): string {
-    const id = String(msg?.persistence?.id || msg?.turnId || '').trim()
-    if (id) return id
-    return `${String(msg?.time || '')}|${String(msg?.content || '').slice(0, 40)}`
-  }
-
-  /**
    * 普通对话不折叠；只有正文特别长时才折叠。
    * 折叠的唯一目的从「历史消息统一压成摘要」改成「超长内容不刷屏」，
    * 工具链的折叠由 AgentStepChain / AgentRunTrace 自己负责。
@@ -109,13 +100,13 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   const isMessageCollapsed = (msg: ChatMessage, idx: number) => {
     if (!canCollapseMessage(msg)) return false
     if (idx >= latestAiMessageIndex.value) return false
-    return !expandedMessageKeys.value.includes(messageCollapseKey(msg))
+    return !expandedMessageKeys.value.includes(chatMessageKey(msg))
   }
 
   const expandMessage = (idx: number) => {
     const msg = messages.value[idx]
     if (!msg) return
-    const key = messageCollapseKey(msg)
+    const key = chatMessageKey(msg)
     if (!expandedMessageKeys.value.includes(key)) {
       expandedMessageKeys.value = [...expandedMessageKeys.value, key]
     }
@@ -125,7 +116,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     if (idx >= latestAiMessageIndex.value) return
     const msg = messages.value[idx]
     if (!msg) return
-    const key = messageCollapseKey(msg)
+    const key = chatMessageKey(msg)
     if (expandedMessageKeys.value.includes(key)) {
       expandedMessageKeys.value = expandedMessageKeys.value.filter((x) => x !== key)
     }

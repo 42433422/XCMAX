@@ -277,6 +277,35 @@ async def test_bridge_cannot_replace_missing_or_wrong_original_provider_receipt(
     billed["wallet"].release.assert_not_awaited()
 
 
+async def test_native_tool_argument_overflow_is_stopped_before_bridge_retention(
+    native, db, monkeypatch
+):
+    from modstore_server import llm_gateway_contract
+
+    monkeypatch.setattr(llm_gateway_contract, "MAX_STREAM_BYTES", 2048)
+    native["arguments"] = '{"data":"' + "x" * 8192 + '"}'
+    observed = []
+    initialize = transport.ResponsesTransport.__init__
+
+    def capture(self, *args):
+        initialize(self, *args)
+        observed.append(self)
+
+    monkeypatch.setattr(transport.ResponsesTransport, "__init__", capture)
+    billed = native["billed"]
+    body = _body(stream=True)
+    result, events = await _consume(await billed["call"](body=body))
+    assert result is None and events[-1]["code"] == "CODEX_REQUEST_UNRESOLVED"
+    assert observed[0].tool_arguments == {0: "{"}
+    assert native["closed"] and all(client.is_closed for client in billed["clients"])
+    assert len(native["requests"]) == 1 and ledger.lookup(db, 7, KEY, 90) == "settling"
+    billed["wallet"].settle.assert_not_awaited()
+    billed["wallet"].release.assert_not_awaited()
+    with pytest.raises(HTTPException) as error:
+        await billed["call"](body=body)
+    assert error.value.status_code == 409 and len(native["requests"]) == 1
+
+
 @pytest.mark.parametrize(
     "base",
     [

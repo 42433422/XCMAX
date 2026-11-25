@@ -324,7 +324,7 @@ class TestEnrichContextWithKittenBusinessSnapshot:
             "sys.modules",
             {
                 "app.domain.shared_services.kitten_business_snapshot": MagicMock(
-                    build_kitten_business_snapshot=MagicMock(side_effect=RuntimeError("db down"))
+                    build_kitten_business_snapshot=MagicMock(side_effect=ConnectionError("db down"))
                 )
             },
         ):

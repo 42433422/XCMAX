@@ -103,10 +103,13 @@ jobs:
 
       - name: Enforce exact-SHA single-scan security clearance
         env:
+          GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
           --current-dir "${RUNNER_TEMP}/security-reports/current"
+          --repository "${{ github.repository }}"
+          --current-run-id "${{ inputs.security_scan_run_id }}"
           --release-sha "${TARGET_SHA}"
 
       - name: Freeze the exact Git source archive

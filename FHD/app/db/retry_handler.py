@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +131,8 @@ def with_sqlite_retry(
                         if on_retry:
                             try:
                                 on_retry(e, attempt)
-                            except RECOVERABLE_ERRORS:
-                                pass  # Ignore callback errors
+                            except BOUNDARY_ERRORS:
+                                logger.warning("SQLite retry callback failed", exc_info=True)
 
                         time.sleep(delay)
                         delay *= backoff

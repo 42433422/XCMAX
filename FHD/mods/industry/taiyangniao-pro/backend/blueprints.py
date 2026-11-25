@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 
@@ -22,7 +23,7 @@ def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     """主应用「人员管理」同一套 Product 表（model 为 app.db.models.product.Product）。"""
     try:
         from app.mod_sdk.host_services import Product, get_db
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - optional host models may be unavailable
+    except RECOVERABLE_ERRORS:
         return []
     out: list[tuple[str, str, str]] = []
     seen: set[str] = set()
@@ -151,6 +152,32 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         get_database_path=get_database_path,
         _load_products_personnel_roster_from_host=_load_products_personnel_roster_from_host,
     )
+
+    def unavailable_store_mutation():
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "mod_capability_unavailable",
+                "execution_status": "not_started",
+                "retryable": False,
+                "message": "此 Mod 的独立数据源尚未接入统一执行契约，旧写入口已停用",
+            },
+            status_code=410,
+        )
+
+    for path, method in (
+        ("/products/add", "POST"),
+        ("/products/update", "POST"),
+        ("/products/delete", "POST"),
+        ("/products/batch-delete", "POST"),
+        ("/products/batch", "POST"),
+        ("/customers", "POST"),
+        ("/customers/{customer_id}", "PUT"),
+        ("/customers/{customer_id}", "DELETE"),
+        ("/customers/batch-delete", "POST"),
+        ("/customers/import", "POST"),
+    ):
+        router.add_api_route(path, unavailable_store_mutation, methods=[method], deprecated=True)
 
     app.include_router(router, prefix=f"/api/mods/{mod_id}")
     app.include_router(router, prefix=f"/api/mod/{mod_id}")

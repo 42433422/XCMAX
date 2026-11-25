@@ -7,6 +7,7 @@ attendance detail extraction, and all helper functions.
 from __future__ import annotations
 
 import os
+import sqlite3
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -148,7 +149,7 @@ class TestExtractFromExcel:
     def test_extract_error_via_handler(self):
         with patch(
             "app.fastapi_routes.domains.excel.excel_extract._extract_from_excel",
-            side_effect=RuntimeError("corrupt"),
+            side_effect=ValueError("corrupt"),
         ):
             resp = extract_from_excel({"file_path": "/fake/path.xlsx"})
             assert resp.status_code == 500
@@ -417,7 +418,7 @@ class TestImportProductsRoute:
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
         mock_svc = MagicMock()
-        mock_svc.import_data.side_effect = RuntimeError("import fail")
+        mock_svc.import_data.side_effect = sqlite3.OperationalError("import fail")
         with (
             patch(
                 "app.application.facades.excel_facade.get_product_import_service",
@@ -453,7 +454,7 @@ class TestImportCustomersRoute:
 
     def test_import_error(self):
         mock_svc = MagicMock()
-        mock_svc.import_data.side_effect = RuntimeError("import fail")
+        mock_svc.import_data.side_effect = sqlite3.OperationalError("import fail")
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
         with (
@@ -473,7 +474,9 @@ class TestLogsRoute:
             assert resp.status_code == 200
 
     def test_get_logs_error(self):
-        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.bootstrap.get_extract_log_service", side_effect=sqlite3.OperationalError("fail")
+        ):
             resp = get_extract_logs()
             assert resp.status_code == 500
 
@@ -494,7 +497,9 @@ class TestLogDetailRoute:
             assert resp.status_code == 200
 
     def test_error(self):
-        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.bootstrap.get_extract_log_service", side_effect=sqlite3.OperationalError("fail")
+        ):
             resp = get_extract_log(1)
             assert resp.status_code == 500
 
@@ -515,6 +520,8 @@ class TestPreviewRoute:
             assert resp.status_code == 200
 
     def test_error(self):
-        with patch("app.bootstrap.get_extract_log_service", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.bootstrap.get_extract_log_service", side_effect=sqlite3.OperationalError("fail")
+        ):
             resp = get_preview(1)
             assert resp.status_code == 500

@@ -358,7 +358,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
     return {
       session_id: sid,
       title,
-      message_count: Number.isFinite(count) && count >= 0 ? count : meaningful.length,
+      message_count: Number.isFinite(count) && count > 0 ? count : meaningful.length,
       last_message_at: updatedAt,
       is_local_only: true,
     }

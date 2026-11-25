@@ -46,7 +46,8 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 | [Google OR-Tools](https://github.com/google/or-tools/releases/tag/v9.15) | `9.15.6755` / Apache-2.0 | CP-SAT 处理依赖、风险及同公司多组合资源选择，保留各组合分组约束；产品层校验整数边界、审批范围及最终可行性 |
 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | 本轮验证 `2.0.58` / MIT，沿用既有依赖约束 | 公司预算、组合任务、调用预留与行动项使用同事务条件 UPDATE；真实责任未知时不采用 TTL 自动回收 |
 | [GrowthBook Python SDK](https://github.com/growthbook/growthbook-python) | `4.0.1` / MIT | 官方稳定身份分流；与既有 GrowthBook `5.2.0` REST 统计接口衔接真实曝光/结果 |
-| [promptfoo](https://github.com/promptfoo/promptfoo/releases/tag/0.126.0) | CLI `0.126.0` / MIT | 原员工、工作流和 RAG 提示词失败的成对回归；保留真实 chat roles 与输入，复用生产静态校验器或引用完整性断言，只形成待审批候选 |
+| [promptfoo](https://github.com/promptfoo/promptfoo/releases/tag/0.126.0) | CLI `0.126.0` / MIT | 原员工、工作流和 RAG 提示词失败的成对回归；Python 断言复用生产校验器、原生文件执行与独立制品核验，只形成待审批候选 |
+| [openpyxl](https://pypi.org/project/openpyxl/3.1.5/) | `3.1.5` / MIT | 复用现有 XLSX 解析器核对工作表、类型、单元格值、数字格式和合并区域；产品只绑定原合同与独立基准，不另写电子表格引擎 |
 | [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime) | `0.0.83` / Apache-2.0 | 官方命名空间、seccomp、TLS 与请求过滤；原始 key 只在受信控制进程闭包中使用 |
 | [LangGraph](https://github.com/langchain-ai/langgraph) / [GEPA](https://github.com/gepa-ai/gepa) | `1.2.10` / `0.1.4`，MIT | 沿用仓库固定包、持久检查点、审批中断和辅助实验；产品只实现协议适配 |
 | [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
@@ -68,35 +69,48 @@ SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备�
 [LiteLLM 1.109.3](https://github.com/BerriAI/litellm/blob/v1.109.3/litellm/litellm_core_utils/streaming_handler.py)
 可能合成或补齐流式 usage，适配器在 Router 预读首块之前通过专属 SDK client 保留原始 chunk 中的两项 token 计数并核对最终值。
 CI 安装既有 `llm-router` extra，使用真实固定版 SDK 回归缺失、部分用量和取消场景。
-工作流训练通过私有 `WorkflowSandboxRun` 保存原失败；promptfoo 以原 system/user 文本调用同一生产图转换和静态校验器，服务端重验冻结证据。实际 `WorkflowExecution` 终态另用独立 GrowthBook 指标与冻结 SQL 查询，按账号分流并核对实际加载图，撤回会阻止旧 treatment 图再启动；关闭模拟的真实沙盒也使用同一持久回执，运行中改图后原成功不会计到新图。静态校验、执行完成和领域业务达标各保留自己的口径。
+远程报告、默认 Runtime 的 Responses、原生 OpenAI 兼容流及注入 SDK 的 Router，继续使用固定 OpenAI SDK、LiteLLM 与现有 HTTPX 的解析和连接生命周期。远程请求逐块核对原有 2,000,000 字节上限；响应传输及解码后的累计回执分别限 16 MiB，解码事件最多 65,536 个，在工具参数拼接和转发前检查。受控流请求要求 `identity` 编码，异常压缩响应在读取前拒绝，未完成的 SSE 行和心跳也计入字节。其他 LiteLLM 自有供应商 SDK 路径仍在规范化事件边界限额，不据此声称其原始缓冲均已验证。超限或终态后的追加事件关闭原流并保留未知用量；付费、钱包关闭和 BYOK 均不因超限而换模重发，有键请求保留原账本，不释放原预授权。战略 Responses 与账号 Runtime 的严格结算仅在正常 EOF、完整原用量与清理成功一起满足时继续；普通原生与 Router 聊天保留原有用量策略。这些控制共用 `llm_gateway_contract`，不另写协议解析器或模型执行器。
+工作流训练继续从私有 `WorkflowSandboxRun` 与原 `WorkflowExecution`、客户效果回执取样：已完成但 KPI 未达标的任务也进入失败簇；已核验退款继续原停流恢复，待验收和证据缺失保留各自分类，不归因为提示词错误或追补已封口观察。停止、撤回或进入恢复的实验仍可只读提供原失败；推广后新交付达到原固定窗口后，同样从原业务回执读取失败，不增加原实验曝光或观察。采样仍核验当前权限及原发布、合同和观察身份。promptfoo 以原 system/user 文本调用同一生产图转换；普通生成失败仍用静态断言，业务失败必须使用 `workflow_business_artifact_verification` 的真实文件重放，不能降级成静态通过。
+
+业务重放复用原 `WorkflowEngine.run_sandbox(mock_employees=False)`、`EmployeeRuntimeClient` 和已批准的原生文件员工包，在临时 SQLite、目录和上述固定 SRT 0.0.83 的原生系统边界中执行：网络与 Unix socket 默认全部拒绝，仅本次回放目录可写，运行时与 SDK 源码只读。API 封存与 CLI `decide` 共用同一固定员工入口；缺少组件、不支持的宿主、超时或任一双臂执行未核验均不晋级，不降级到普通子进程。服务端与 CI 须配置 `PROMPTFOO_SANDBOX_ENTRY` 到该固定包的 `dist/cli.js`，安装 Node 22.12+；原生业务回放本轮仅准入下文 Ubuntu 22.04 非 root、bubblewrap / socat / ripgrep 与原生 seccomp 的命名空间合同；其他平台明确阻断。固定版 SRT 的 macOS 系统解析服务有残余边界，不据此承诺严格离线回放；外层模型生成沿其原有平台合同。原交付首次准入冻结输入原件、员工包及可选独立参考文件，后续重验复用摘要已核验的 SQL 快照，不重读或补造训练参考，客户权限、业务输入和员工包仍实时核验；候选仅能使用原合同输入和前序产物，输出与必交文件路径必须匹配原合同。参考字节不进入员工进程，由父进程用 openpyxl / 标准库 CSV 独立对账；未缓存的 Excel 公式不能据此证明计算正确。CSV 依据冻结参考文件的方言核对列与单元格并保留空白；方言有歧义或只有单列时，仅接受字节完全一致。promptfoo 原有导出脱敏保持开启，服务端只从已核验的冻结输入恢复被省略的摘要或字节，并独立执行；公开 Actions artifact 仅保留统计和摘要。进程退出、模型自报通过或仅生成同名文件都不足以通过核验。
+
+重放与外层 promptfoo 共用 `FHD/scripts/autonomy/runtime_tools/capability_trainer_deps` 的完整依赖锁（SRT `0.0.83`、promptfoo `0.126.0`）。部署时将该目录的 `package.json` 和 `package-lock.json` 复制到运行时目录，使用 Node 22.12+ 执行 `npm ci --prefix <绝对运行时目录> --ignore-scripts --no-audit --no-fund`。服务环境的 `PROMPTFOO_SANDBOX_ENTRY` 须为 `<绝对运行时目录>/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js`；服务端通过既有 `promptfoo_sandbox.mjs --replay` 入口复用该固定 CLI。
+
+原业务输入按实际字节分组，稳定保留约五分之一组作 holdout；相同原件不能通过改名、换客户或模板进入两组。每轮在提案前按来源固定排序选择一个开发案例和一个保留案例，总私有上下文不超过 160 KB；这是执行与传输成本边界，不是线上效果所需样本量。只有开发组进入提示词提案，独立基准与保留任务不发送给提案模型；缺任一组、原件或有效基准时在付费提案前阻断。模型生成仍在原外层 SRT 内；业务断言明确返回尚未核验／失败，禁止为嵌套回放放宽命名空间。原 `seal_evaluation` 在外层结束后先校验完整案例、provider、源码摘要与 holdout 矩阵，再逐项建立独立 SRT 回放并按真实制品重算双臂得分；原始 promptfoo 全部 PASS 也不能代替此证据。服务端仍先从原 SQL 核对全部选中案例、合同、账号和发布身份，再沿同一封存入口独立重跑完整双臂评测；候选须无回归、全部保留案例通过且确有改善，才能沿原 Retort / LangGraph 审批进入 GrowthBook 客户实验。离线通过不是客户确认、线上收益或推广许可，推广、撤回和下一轮反馈仍走同一原链路。
+
+前置快照由已有 `MODSTORE_RETORT_PROTOCOLS` 的 `training_candidate.offline_business_replay.references` 显式配置，格式为 `{ "<source_group_sha256>": [{ "output_path": "outputs/report.xlsx", "reference_path": "approved/report.xlsx", "sha256": "<已独立审核的参考文件 SHA-256>" }] }`。源组由 `workflow_training_replay.source_group_sha256` 按原合同业务输入计算；参考文件须属于同一授权工作区、覆盖全部必交文件，且不能是原输入或本次产生的文件。当前适配有界的 CSV/XLSX 文件交付；没有配置、历史原件缺失、基准摘要不符或超出传输边界时，正常交付仍沿原流程运行，但不产生合格训练证据。不会从失败产物事后补造正确答案。
+
+训练候选仍按原 `training_plan` 将提示词替换写入共享主干并正式发布。新实验、续租和推广前同时核对固定 `release_sha` 的 GitHub 源码常量及当前进程 `SYSTEM_PROMPT` 等于批准 treatment，使下一轮继续从同一主干基线采样；读回失败阻止新增流量或推广，原回滚和停止路径仍可运行。SRT 仅追加原文件员工 SDK 所需 `FHD/app` 的只读许可，网络、凭据和写目录边界保持。
 RAG 的 `rag_context_prompt` / `employee_rag_context` 消费者位于原员工认知入口，在权限过滤后的检索资料上替换 `rag_service.RAG_SYSTEM_PROMPT`，仍使用原模型调用、费用和预算。私有 SQL 冻结原消息角色、资料与提示词摘要；`rag_citation_integrity` 只核对回答具有引用且编号存在，**不证明陈述受资料支持或业务成功**。原 `MODSTORE_RETORT_PROTOCOLS` 的 RAG training_candidate 和获批 cohort 控制失败采集；现有双镜像 trainer 经 pinned promptfoo、服务端重验与 Retort 审批产生候选。在线统计要求 `rag_outcomes.source=modstore_rag_observations_postgres_v1`、固定 SQL 和按账户 `MAX(VALUE)`，重复调用不增加独立账户样本；停止损失同样按失败账户计算。撤回、过期租约、权限变化或跟踪落库失败均不能增加合格实验结果；推广后继续核验资料权限但不追加实验样本。原资料仅经私有训练端点读取，公共事件只包含身份和摘要。此消费者演进 RAG 上下文提示词，检索算法、模型路由和预算策略仍各需真实消费者与独立效果合同。
-`workflow_customer_accepted_outcome` 将原企业客户的一个或多个原生文件员工与原付款/KPI 协议、实际 producer 制品、管理员测量及客户确认关联到原 assignment。当前支持 `start -> employee -> ... -> end` 的无条件串行图；每个员工仍须是原授权的不可变 `direct_python` 包。条件分支、并行、循环和其他副作用节点继续拒绝进入该客户合同；多领域 KPI 也须各自接入真实效果来源。
-
-多员工图在批准前通过 `employee.config.customer_deliverables` 声明该节点真正必交的文件，例如 `["outputs/customer-report.csv", "outputs/customer-summary.json"]`。路径必须固定、相对且由该节点实际产生；未声明或 `[]` 的节点可以提供中间结果，整图必须至少声明一项必交文件。必交范围来自用户明确要求，不能默认选全部中间文件、主员工或最后节点。原图 API 保留这些配置；仅在已分配 `workflow_customer_accepted_outcome` 的生成场景追加相应提示，缺失范围不会由运行器补猜。批准图指纹、原目标及每个节点合同共同冻结声明；下载列表的 `requires_acceptance` 标明必验文件。
-
-窗口成熟、原付款与协议仍可核验后，所有声明的必验制品都必须各自具有同一原 KPI 协议下的达标测量和随后发生的客户确认，才能记为业务成功。凭证还须匹配原制品 ID、SHA-256、客户、订单及观察窗口；只验收一份必交文件或一个中间文件不能代表整图达标。推广后继续原授权交付，不增加实验样本；精确退款通过原 SQL CAS、LangGraph 效果/恢复尾链和不可变发布控制器撤回。
-
-串行下游文件输入可沿用原 `resolve_value` 的 `{{nodes.上游节点名.output.字段}}` 映射。原引擎在返回节点输出后，将实际 `employee_result`、输出映射和摘要记入同次执行的 `PRODUCED` 回执；下游仅从已冻结的前置回执恢复上下文，再绑定实际输入摘要及原上游制品。跨执行、跨客户、输出映射漂移、缺失前置回执或执行前源字节变化均阻止下游调用。既有任务、审批、包身份、工作区及额度校验仍在原执行边界检查；未知节点不重放。
-
-新交付在现有账户私有存储内按原客户、工作流执行与节点保存独立字节快照。临时文件同步落盘后独占发布；相同身份的持久化重试只核对既有快照，不能覆盖不同字节。后来执行写入或删除同名工作区输出，不会替换先前交付的下载或测量证据。下载仍核验快照的大小和 SHA-256，快照损坏或缺失不会退回另一份工作区文件。真实合同、完整节点输出和图返回留在私有 SQL；`START/CLAIM/PRODUCED/graph_returned` 对应内部事件的总线、webhook、DLQ 和重放仅输出固定身份摘要。
-
-原触发器和 JWT 执行 API 在完整真实图返回且序列化成功后，先持久化 `workflow.customer.graph_returned`，再按原执行身份和 `running` 状态 CAS 写终态与反馈。原恢复消费者可以在新进程中核验完整图、各节点回执及快照后，只补原终态；已有成功 COMMIT 只读确认，不重跑图、员工或计费。只有 `PRODUCED`、尚无完整图返回的运行仍保留未知，不能把局部成果补成整图完成。
-
-兼容边界：已有单员工、单文件合同保留明确的旧口径；旧多员工合同没有必验声明时不推定成功，须补齐并重新批准新图。新动态串联要求原前置回执包含持久节点输出，不能由旧摘要猜造输入。旧完成记录须能核对原图返回及终态；没有原证据时不补写成功。已有旧制品若未保存私有快照，只能继续核对其当时的原回执与仍匹配的可读文件，代码不会凭摘要恢复丢失字节。这些源码与本地回归能力不表示运行环境已迁移、部署或通过业务验收。
-失败收尾则复用原事件执行器抽出的同一事务核心，手动执行 API 的初始 COMMIT/refresh、准入和实际执行故障均先回滚再核对冻结身份；未提交不补造，终态与反馈同事务，确认丢失只读核对。竞争终态保持且不发布虚假失败，公共 HTTP/事件仅使用固定提示或原稳定准入码；诊断保留在原账号隔离记录，成功计费位置与业务执行次数不变。
+`workflow_customer_accepted_outcome` 将原企业客户的串行原生文件员工图与付款/KPI 协议、逐节点制品及原客户确认关联到原 assignment。下游仅引用本次实际前驱输出，全部必交文件均须同制品、同协议且观察窗成熟；内部中间文件不强制客户确认。真实执行合同及完整图返回保留在 SQL，内部事件仅公开固定身份摘要。分支、循环及任意外部副作用图仍需各自生产者和授权合同。
+原触发器和 JWT API 共用 SQLAlchemy 收尾：图真实返回、序列化并核对全部节点及制品后，先封存原 graph_returned，再按原执行身份和 running 状态 CAS 保存终态与反馈。客户图在外部钱包等待前完成此持久化；钱包结果不确定不改写业务事实，也不由恢复器重扣。新进程只读核对原封存记录，缺完整返回、制品损坏或身份变化保持待核对；PRODUCED 本身不能证明整图完成。
+失败收尾共用原事务核心，初始 COMMIT/refresh、准入和实际执行故障先回滚，再核对冻结身份；未提交不补造，确认丢失只读核对，竞争终态不覆盖。普通工作流仍沿原计费顺序，公共 HTTP/事件保留固定提示，私有诊断留在原账号记录。
 原支付服务的退款审批与钱包入账通过内部只读 `/api/internal/payment/refund-evidence` 投影，复用原服务密钥、Spring 事务和 JPA 查询。Python 读完固定边界的全部分页后，核对同一订单、客户、退款与钱包交易，按原退款号向既有客户价值账本追加唯一回执；普通字典不能冒充服务端核验事实。这里记录钱包余额退款，银行或支付网关现金退款仍须各自原回执。
-该客户工作流沿原客户 quota/wallet 计费，不自动继承公司战略预算。观察窗成熟且权威来源可核验后，缺少任一必验制品的合格业务测量或客户确认即记失败；来源不可读时保持等待。公司/组合与 L6 规划的未知模型预留已由 `llm_usage_readback`、`strategic_usage_reconciliation` 和原 L6 恢复入口接入 LiteLLM 原生持久会计账本回查。消费者只读取发送前绑定的原调用、账户、模型和唯一 attempt，且须有明确 `measured` 用量，才补结原消费；不会发起新的模型请求。配置与范围见下文 `MODSTORE_LITELLM_ACCOUNTING_DATABASE_URL`：未接该原生账本的直连供应商、旧无绑定调用、估算或不匹配回执仍保留未知责任，不能据此声称任意供应商回查已就绪。
+该客户工作流沿原客户 quota/wallet 计费，不自动继承公司战略预算。观察窗成熟且权威来源可核验后，没有同制品的合格测量和客户确认即记失败；来源不可读时保持等待。战略调用已接下文的 LiteLLM 原生会计账本只读回查，仅同 request/attempt 的实测用量可结清；其他供应商、旧无绑定记录及身份冲突继续保留未知责任。
 训练 CLI 与 SRT 使用 `capability_trainer_deps` 的完整依赖锁、无安装脚本安装和分步骤凭据；官方 SRT 请求过滤仅允许获批模型的精确 HTTPS 路径。[`5e71eb4b` 的 Ubuntu 22.04 CI](https://github.com/42433422/XCMAX/actions/runs/44895286614) 已通过真实固定 CLI/Python 断言、官方代理及原生 SRT 正向合同；生产宿主和固定模型端点仍须实际验收。
 远程报告复用现成 GitHub executor、OpenCode `1.19.6`、SRT 及原任务回执；原生 Responses 支持显式 `function_call_output` 历史，拒绝隐藏历史、付费托管工具和缺失用量。流尾失败返回固定停止提示，不反射内部异常原文，仍执行原清理并保留未知消费。控制器返回成功后仍须核对原 GitHub job 与报告 ZIP 摘要。
 工程任务复用原 Retort/Para `handleTask`、候选 Git bundle、独立验证和发布链，原公司/组合预算关联每个 event/task/subtask/attempt 与阶段 grant；候选工件不是完成回执。公司封套和执行槽由原 SQL 事务统一争抢，未知责任禁止换池，阶段结束只释放有原生 job 证明的槽位。原提案可显式批准 `remote_execution.life_lease.mode=persistent_phases` 与绝对 `expires_at`，在原 life policy/组合/公司期限内恢复同一工程任务；原周期与预留不变，默认仍为 300 秒。外部采购、支付和未接入的 Para/Cursor 仍有明确适配边界。
 公司调度复用同一 CP-SAT，纳入全部当前可合法启动的原批准候选，包括局部计划曾延后的项目；同时约束公司和每个组合的剩余额度、依赖与容量。实际 claim 再核对并 CAS 预留，完整候选超过 256 时拒绝截断；限时可行解与已证明最优分别记录，不能扩大原批准额度或覆盖未知占用。小 C 预留同样覆盖原批准的就绪候选，容量恢复后不会因旧局部空计划或历史复盘时间饿死任务；原客户验收率的真实复盘进入下一轮认知。
 最新主分支的 LiteLLM 网关按[官方逐请求重试控制](https://docs.litellm.ai/docs/proxy/reliability)接线：在实际 HTTP 正文禁重试/fallback，并读取原始代理 attempt 响应头；本地 Router 自己的零计数不能替代网关回执。缺失或非零回执不结算成零消费。
-另选择性复用 [#3418 的现成修复](https://github.com/42433422/XCMAX/pull/3418)：在真实 SDK 的每帧规范化前保留原始模型，首个不匹配不会被末帧批准别名或 usage 更新覆盖；直接 SSE 与 Router 都保留未知责任。训练 mine CLI 只输出统计，语料删除重复 employee_id，保留原 surface/resource_id、输入、generation_context 与 case 哈希及旧语料兼容；内部认证采集接口保持原私有合同。
+另选择性复用 [#3418 的现成修复](https://github.com/42433422/XCMAX/pull/3418)：在真实 SDK 的每帧规范化前保留原始模型，首个不匹配不会被末帧批准别名或 usage 更新覆盖；直接 SSE 与 Router 都保留未知责任。训练 mine CLI 只输出统计，语料删除重复 employee_id/resource_id，保留原 surface、输入、generation_context 与 case 哈希及旧语料兼容；资源身份仍由原私有 Retort 绑定核验，内部认证采集接口保持原私有合同。
 客户原生文件沿用原客户价值 API、SQL 协议/支付归属和 FastAPI/Starlette HTTP 响应；只返回原客户目标下已完成制品的摘要一致字节，下载不自动生成验收或效果回执。
 SearXNG 参考提交用于固定接口与许可证审查，不代表 `MODSTORE_SEARXNG_URL` 指向的现有实例已经核验版本或启用 JSON。
 战略 Python 任务复用标准库 ZipFile/SourceFileLoader 与原员工解析器，从已批准归档字节创建执行快照；
 这项合同核验不代表新建 OS 沙箱，也不把宿主所有依赖声明为不可变。
+文件输入和输出复用 `ensure_within_workspace` 的租户及选定工作区边界，先检查规范化路径再访问文件系统。
+交付摘要复用现有 `_workspace_fd` 的逐层目录句柄、`O_NOFOLLOW` 和 Python 3.11 的 `hashlib.file_digest`；
+读取前后及重新打开当前路径时核对文件身份，检查后替换文件或父目录不能生成合格交付回执。
+宿主缺少安全目录句柄能力时该交付核验返回失败；原始文件与任务保留，实机资格继续独立核验。
 组件版本、配置可用性、测试、生产回执分别核验；接入组件不代表 L6 生产验收完成。
+
+生产步骤复用原 `PendingBriefTask` 唯一指纹、`DutyGraphRun`、变更请求和发布者记录。
+P1/P2 的宿主改动核对原暂存 Git 字节、原 PR 合并及目标提交中的文件；客户私有 Mod
+继续读取原业务工作流交付。P3/P4/P9 绑定同一主线提交的 CI、原制品、版本和日报进化记录。
+发布包须通过与原源码及 manifest 摘要一致的已部署 `verify_release_archive.py`，并先检查
+标准 gzip/tar 解析的大小、成员及元数据上限；只含身份文件的包不能完成。P5 读取原部署
+账本和运行身份，P6 核对当前签名 feed 与实际下载字节，P7/P8 使用原操作审计及同源安全检查。
+这些是现有生产系统的身份和证据适配，继续使用 SQLAlchemy、HTTPX、cryptography 与 Python
+标准库，没有另建调度、打包或签名框架。审批重验只观察原执行；缺少原证据继续等待。
 
 ## 前端看板
 
@@ -236,6 +250,8 @@ GitHub 配置 `PARA_PLATFORM_POOL=1` 和 `PARA_PLATFORM_GATEWAY_URL=https://…/
 后台仅结算原消费，并在已保存的原业务终态可验证时收尾；撤权、超预算及未知业务结果
 不会因此转成新的执行许可。此协议适用于发送前已保存绑定的新调用；旧无绑定记录或
 未接该原生账本的直连供应商继续显示待核对，不能靠配置切换或重放释放预算。
+账本候选读取保留原 attempt 完整性检查；原表没有 caller 的 JSONB 表达式索引，大表恢复
+时延仍须在实际 PostgreSQL 数据量下验证，不能从只读及超时合同测试推断生产吞吐。
 
 实时语音沿用回合标识与现有请求账本。视频回执在上游任务未完成时标记等待用量，
 独立语音返回经校验的用量或未计费状态。没有有效计费合同的媒体入口继续报告零平台扣费。

@@ -20,15 +20,16 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from app.application.agent_orchestrator.run_lifecycle import (
-    continuation_conversation_error,
-    safe_continuation_error,
-)
-from app.application.agent_orchestrator.run_models import AgentRun, RunStatus, tool_call_from_dict
+from app.application.agent_orchestrator import run_lifecycle
+from app.application.agent_orchestrator.run_models import AgentRun, RunStatus
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.domain.task_lifecycle.agent_runtime_results import ACTIVE_STATES as _ACTIVE
 from app.domain.task_lifecycle.agent_runtime_results import WAITING_STATES as _WAITING
 from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result as _base_result
+from app.domain.task_lifecycle.agent_runtime_results import (
+    classification_metadata,
+    failure_diagnostics,
+)
 from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result as _classify
 from app.domain.task_lifecycle.agent_runtime_results import model_unsettled as _model_unsettled
 from app.domain.task_lifecycle.agent_runtime_results import receipt_state as _receipt_state
@@ -36,7 +37,9 @@ from app.infrastructure.codex.binding import (
     CodexBindingError,
     CodexBindingStore,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.infrastructure.codex.receipts import project_child_calls, resume_error
+from app.infrastructure.codex.transport import CodexTransportError
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     from app.infrastructure.codex import CodexTransportConfig
@@ -113,108 +116,6 @@ def _input_text(
     return "\n\n".join(sections)
 
 
-def _project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
-    """Display child receipts while retaining their original verification owner."""
-    known = {call.call_id for call in run.tool_calls}
-    for row in rows:
-        child_id = str(row.get("child_run_id") or "")
-        if not child_id:
-            continue
-        for raw in (row.get("receipt") or {}).get("tool_calls") or []:
-            if not isinstance(raw, dict) or not raw.get("call_id"):
-                continue
-            projection_id = (
-                "codex_" + hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
-            )
-            if projection_id in known:
-                continue
-            payload = copy.deepcopy(raw)
-            payload["call_id"] = projection_id
-            child_metadata = payload.get("metadata") or {}
-            payload["metadata"] = {
-                **{
-                    key: value
-                    for key, value in child_metadata.items()
-                    if not key.startswith("verification")
-                },
-                "source": "codex_child_receipt",
-                "child_run_id": child_id,
-                "child_call_id": raw["call_id"],
-                # The redacted display payload is not the original child's
-                # output. Its hash/contract must never become a parent-step
-                # verification record. Completion re-reads the original child.
-                "child_verification": {
-                    "contract_sha256": (child_metadata.get("verification_contract") or {}).get(
-                        "contract_sha256"
-                    ),
-                    "output_sha256": child_metadata.get("verification_output_sha256"),
-                    "report_sha256": (child_metadata.get("verification") or {}).get(
-                        "report_sha256"
-                    ),
-                },
-            }
-            run.tool_calls.append(tool_call_from_dict(payload))
-            known.add(projection_id)
-
-
-def _resume_error(store: CodexBindingStore, binding: Any, rows: list[dict[str, Any]]) -> str:
-    if error := continuation_conversation_error(binding.run, binding.context):
-        return error
-    if _model_unsettled(binding.metadata):
-        return "原模型请求或计量结果尚待核对，禁止自动恢复"
-    for row in rows:
-        if _receipt_state(row) == "unknown":
-            return "业务结果尚未确定，禁止恢复模型执行或重放工具"
-        child_id = str(row.get("child_run_id") or "")
-        child = store.repository.get(child_id) if child_id else None
-        if child is not None and child.status in {"failed", "blocked"}:
-            # We never retry a child here; nevertheless enforce the existing
-            # continuation guard before allowing a model to propose more work.
-            if error := safe_continuation_error(child):
-                return error
-    return ""
-
-
-def _classification_metadata(binding: Any) -> dict[str, Any]:
-    from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
-
-    return {
-        **binding.metadata,
-        "goal_contract": binding.run.metadata.get("runtime_goal_contract"),
-        "goal_verification": binding.run.metadata.get("runtime_goal_verification"),
-        "goal_answers": goal_answers(binding.run),
-    }
-
-
-def _completion_mode(binding: Any, requested: str) -> str:
-    return requested
-
-
-def _failure_diagnostics(run: AgentRun, result: dict[str, Any]) -> dict[str, str]:
-    """Describe the current failure; recovered attempts remain in their own ledger."""
-    stage = kind = reason = ""
-    if result.get("exit_status") == "goal_verification_required":
-        report = run.metadata.get("runtime_goal_verification") or {}
-        stage = "goal_verification"
-        kind = str(report.get("error_code") or "goal_verification_required")
-        reason = str(report.get("feedback") or result.get("error") or "")
-    elif result.get("execution_state") == "unknown":
-        model_unknown = _model_unsettled(run.metadata.get("codex_runtime") or {})
-        stage = "model" if model_unknown else "business"
-        kind = "model_usage_unknown" if model_unknown else "business_outcome_unknown"
-        reason = str(result.get("error") or "")
-    elif not result.get("ok") and result.get("execution_state") in {"failed", "blocked"}:
-        stage = str(run.metadata.get("runtime_failure_stage") or "runtime")
-        kind = str(
-            run.metadata.get("runtime_failure_kind")
-            or result.get("error_code")
-            or result.get("exit_status")
-            or "runtime_failed"
-        )
-        reason = str(run.metadata.get("runtime_failure_reason") or result.get("error") or "")
-    return {"failure_stage": stage, "failure_kind": kind, "failure_reason": reason}
-
-
 async def run_codex_agent(
     *,
     run_id: str,
@@ -256,6 +157,7 @@ async def run_codex_agent(
     texts: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
     cancelled: asyncio.CancelledError | None = None
+    fatal_error: Exception | None = None
 
     def mutate(fn: Callable[[AgentRun, dict[str, Any]], None]) -> Any:
         def guarded(run: AgentRun, metadata: dict[str, Any]) -> None:
@@ -290,11 +192,11 @@ async def run_codex_agent(
                 generation=generation,
                 release_coordinator=release_coordinator,
             )
-        except RECOVERABLE_ERRORS:
-            if cancelled is None:
+        except BOUNDARY_ERRORS:
+            if cancelled is None and fatal_error is None:
                 raise
             logger.warning(
-                "Codex cancellation retained after revocation storage failure", exc_info=True
+                "Codex original failure retained after revocation storage failure", exc_info=True
             )
 
     async def stop(reason: str) -> None:
@@ -307,8 +209,128 @@ async def run_codex_agent(
                 try:
                     async with asyncio.timeout(min(float(config.timeout_seconds), 5.0)):
                         await transport.interrupt()
-                except RECOVERABLE_ERRORS:
-                    pass  # Transport context exit also closes the native process.
+                except BOUNDARY_ERRORS as exc:
+                    # Preserve the original cancellation/failure across a secondary
+                    # shutdown bug. Without one, unexpected errors still propagate.
+                    if (
+                        cancelled is None
+                        and fatal_error is None
+                        and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError))
+                    ):
+                        raise
+                    logger.warning("Codex runtime interrupt failed during shutdown", exc_info=True)
+
+    async def finalize() -> None:
+        nonlocal cancelled
+        try:
+            rows = store.receipt_snapshot(run_id)
+            binding = store.get(run_id)
+            result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
+            status: RunStatus = _classify(
+                result,
+                rows,
+                classification_metadata(binding.run),
+                completion_mode,
+                runtime_status,
+            )
+            if runtime_status in {"cancelled", "paused"}:
+                status = "cancelled" if runtime_status == "cancelled" else "paused"
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    exit_status=status,
+                    execution_state=status,
+                    runtime_completed=False,
+                )
+            if result["output"]:
+                result["session_messages"].append(
+                    {"role": "assistant", "content": result["output"]}
+                )
+
+            def finish(run: AgentRun, metadata: dict[str, Any]) -> None:
+                if started_at := metadata.pop("active_started_at", None):
+                    metadata["active_seconds"] = float(metadata.get("active_seconds", 0)) + max(
+                        0.0, time.time() - float(started_at)
+                    )
+                result["active_seconds"] = float(metadata.get("active_seconds") or 0)
+                result["model_request_attempts"] = len(metadata.get("model_requests") or {})
+                result.update(failure_diagnostics(run, result))
+                # Attempts remain in their original events/model ledger. A recovered
+                # transient failure must not label the final successful run as failed.
+                for key, value in (
+                    ("runtime_failure_kind", result["failure_kind"]),
+                    ("runtime_failure_reason", result["failure_reason"]),
+                    ("runtime_failure_stage", result["failure_stage"]),
+                ):
+                    if value:
+                        run.metadata[key] = value
+                    else:
+                        run.metadata.pop(key, None)
+                project_child_calls(run, rows)
+                if run.status not in _TERMINAL and run.status != "paused":
+                    run.status = status
+                elif run.status != "completed":
+                    result.update(
+                        ok=False,
+                        business_completed=False,
+                        reply_completed=False,
+                        exit_status=run.status,
+                        execution_state=run.status,
+                    )
+                run.error = str(result.get("error") or run.error or "")
+                result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
+                run.final_output = {**run.final_output, "codex_result": copy.deepcopy(result)}
+                metadata["runtime_status"] = runtime_status
+                if result.get("reconciliation_required"):
+                    run.metadata["non_retryable"] = True
+                    run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+                run.add_event(
+                    "runtime.codex.finished",
+                    "Codex 轮次与业务回执已核对",
+                    {
+                        "runtime_status": runtime_status,
+                        "business_completed": result["business_completed"],
+                        "receipt_count": len(rows),
+                    },
+                )
+
+            saved = mutate(finish)
+            from app.application.agent_orchestrator.execution_lease import (
+                DurableExecutionLeaseMixin,
+            )
+
+            await asyncio.to_thread(
+                DurableExecutionLeaseMixin._release_browser_run_resources,
+                saved.run,
+                runtime_context=saved.run.metadata.get("runtime_context") or {},
+            )
+            result["run_events"] = [
+                event.to_dict()
+                for event in saved.run.events
+                if event.event_type.startswith("runtime.")
+            ]
+            # Repository-level Business Harness may further reject a purported success.
+            if result["ok"] and saved.run.status != "completed":
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    exit_status=saved.run.status,
+                    execution_state=saved.run.status,
+                    error=saved.run.error or "业务结果未通过核验",
+                )
+        except asyncio.CancelledError as exc:
+            # A disconnect can arrive during browser disposal after the business
+            # receipt is already durable. Preserve it across a failed lease write.
+            cancelled = cancelled or exc
+            raise
+        finally:
+            try:
+                revoke(runtime_status, release_coordinator=True)
+            finally:
+                if cancelled is not None:
+                    raise cancelled
+                if fatal_error is not None:
+                    raise fatal_error
 
     try:
         try:
@@ -325,14 +347,14 @@ async def run_codex_agent(
             ):
                 raise CodexBindingError("binding_conflict", "该任务已有活动的 Codex 执行者")
             rows = store.receipt_snapshot(run_id)
-            if error := _resume_error(store, previous, rows):
+            if error := resume_error(store, previous, rows):
                 raise CodexBindingError("reconciliation_required", error)
             if any(_receipt_state(row) in (_WAITING | _ACTIVE) for row in rows):
                 _classify(
                     result,
                     rows,
-                    _classification_metadata(previous),
-                    _completion_mode(previous, completion_mode),
+                    classification_metadata(previous.run),
+                    completion_mode,
                     "completed",
                 )
                 result["thread_id"] = previous.thread_id
@@ -341,8 +363,8 @@ async def run_codex_agent(
                 _classify(
                     result,
                     rows,
-                    _classification_metadata(previous),
-                    _completion_mode(previous, completion_mode),
+                    classification_metadata(previous.run),
+                    completion_mode,
                     "completed",
                 )
                 return result
@@ -363,7 +385,7 @@ async def run_codex_agent(
         )
         generation = grant.binding.metadata["generation"]
         binding = grant.binding
-        if error := continuation_conversation_error(binding.run, binding.context):
+        if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
             raise CodexBindingError("conversation_changed", error)
         if answer_to_waiting_input:
 
@@ -577,9 +599,7 @@ async def run_codex_agent(
                                     emitted = on_event(
                                         {
                                             **copy.deepcopy(event),
-                                            "runtime_goal_mode": _completion_mode(
-                                                binding, completion_mode
-                                            ),
+                                            "runtime_goal_mode": completion_mode,
                                         }
                                     )
                                     if inspect.isawaitable(emitted):
@@ -651,7 +671,9 @@ async def run_codex_agent(
                     cancelled = exc
                     await stop("cancelled")
                     raise
-                except RECOVERABLE_ERRORS:
+                except BOUNDARY_ERRORS as exc:
+                    if not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+                        fatal_error = exc
                     await stop("interrupted")
                     raise
 
@@ -659,7 +681,12 @@ async def run_codex_agent(
         cancelled = exc
         runtime_status = "cancelled"
         await stop("cancelled")
-    except RECOVERABLE_ERRORS as exc:
+    except BOUNDARY_ERRORS as exc:
+        # This task boundary must finalize ownership even for a programming bug.
+        # Preserve that exception for the HTTP/task caller after durable cleanup;
+        # do not translate it into a successful or retriable business result.
+        if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+            fatal_error = exc
         result.update(
             error_code=getattr(exc, "code", "codex_runtime_failed"),
             error="Codex 运行未完成，原任务和执行回执已保留",
@@ -668,6 +695,8 @@ async def run_codex_agent(
         if isinstance(exc, CodexBindingError) and exc.code in {"cancelled", "paused"}:
             runtime_status = exc.code
         if grant is None:
+            if fatal_error is not None:
+                raise fatal_error
             return {
                 **result,
                 "exit_status": getattr(exc, "code", "failed"),
@@ -675,104 +704,11 @@ async def run_codex_agent(
             }
         await stop(runtime_status)
     finally:
-        revoke(runtime_status)
-
-    try:
-        rows = store.receipt_snapshot(run_id)
-        binding = store.get(run_id)
-        result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
-        status: RunStatus = _classify(
-            result,
-            rows,
-            _classification_metadata(binding),
-            _completion_mode(binding, completion_mode),
-            runtime_status,
-        )
-        if runtime_status in {"cancelled", "paused"}:
-            status = "cancelled" if runtime_status == "cancelled" else "paused"
-            result.update(
-                ok=False,
-                business_completed=False,
-                exit_status=status,
-                execution_state=status,
-                runtime_completed=False,
-            )
-        if result["output"]:
-            result["session_messages"].append({"role": "assistant", "content": result["output"]})
-
-        def finish(run: AgentRun, metadata: dict[str, Any]) -> None:
-            if started_at := metadata.pop("active_started_at", None):
-                metadata["active_seconds"] = float(metadata.get("active_seconds", 0)) + max(
-                    0.0, time.time() - float(started_at)
-                )
-            result["active_seconds"] = float(metadata.get("active_seconds") or 0)
-            result["model_request_attempts"] = len(metadata.get("model_requests") or {})
-            result.update(_failure_diagnostics(run, result))
-            # Attempts remain in their original events/model ledger. A recovered
-            # transient failure must not label the final successful run as failed.
-            for key, value in (
-                ("runtime_failure_kind", result["failure_kind"]),
-                ("runtime_failure_reason", result["failure_reason"]),
-                ("runtime_failure_stage", result["failure_stage"]),
-            ):
-                if value:
-                    run.metadata[key] = value
-                else:
-                    run.metadata.pop(key, None)
-            _project_child_calls(run, rows)
-            if run.status not in _TERMINAL and run.status != "paused":
-                run.status = status
-            elif run.status != "completed":
-                result.update(
-                    ok=False,
-                    business_completed=False,
-                    reply_completed=False,
-                    exit_status=run.status,
-                    execution_state=run.status,
-                )
-            run.error = str(result.get("error") or run.error or "")
-            result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
-            run.final_output = {**run.final_output, "codex_result": copy.deepcopy(result)}
-            metadata["runtime_status"] = runtime_status
-            if result.get("reconciliation_required"):
-                run.metadata["non_retryable"] = True
-                run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
-            run.add_event(
-                "runtime.codex.finished",
-                "Codex 轮次与业务回执已核对",
-                {
-                    "runtime_status": runtime_status,
-                    "business_completed": result["business_completed"],
-                    "receipt_count": len(rows),
-                },
-            )
-
-        saved = mutate(finish)
-        from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
-
-        await asyncio.to_thread(
-            DurableExecutionLeaseMixin._release_browser_run_resources,
-            saved.run,
-            runtime_context=saved.run.metadata.get("runtime_context") or {},
-        )
-        result["run_events"] = [
-            event.to_dict() for event in saved.run.events if event.event_type.startswith("runtime.")
-        ]
-        # Repository-level Business Harness may further reject a purported success.
-        if result["ok"] and saved.run.status != "completed":
-            result.update(
-                ok=False,
-                business_completed=False,
-                exit_status=saved.run.status,
-                execution_state=saved.run.status,
-                error=saved.run.error or "业务结果未通过核验",
-            )
-    finally:
         try:
-            revoke(runtime_status, release_coordinator=True)
+            revoke(runtime_status)
         finally:
-            if cancelled is not None:
-                raise cancelled
+            if grant is not None:
+                await finalize()
     return result
 
 

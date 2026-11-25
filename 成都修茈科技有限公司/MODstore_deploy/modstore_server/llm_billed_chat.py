@@ -41,6 +41,7 @@ from modstore_server.llm_chat_failover import (
     remaining_candidates_after_failure,
 )
 from modstore_server.llm_chat_proxy import chat_dispatch_stream
+from modstore_server.llm_gateway_contract import StreamLimitError
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -85,6 +86,27 @@ def _route_error(route: ChatRouteSnapshot, error: Any, status: int | None = None
             "ok": False,
             **failed_chat_route_detail(route, error),
             "status": status,
+        },
+    )
+
+
+def _stream_limit_pending(route: ChatRouteSnapshot, request_id: str, hold: WalletHold) -> str:
+    return _sse(
+        "error",
+        {
+            "ok": False,
+            **failed_chat_route_detail(
+                route,
+                {
+                    "code": "model_stream_limit_exceeded",
+                    "message": "模型流超出响应限制，原调用用量与预授权状态待核对",
+                    "request_id": request_id,
+                    "hold_no": hold.hold_no,
+                },
+            ),
+            "status": 409,
+            "outcome_unknown": True,
+            "non_retryable": True,
         },
     )
 
@@ -467,13 +489,17 @@ async def stream_billed_llm_chat(
                 if ledger_row is not None
                 else JavaWalletClient()
             )
-            journaled_attempt = ledger_row is not None and not is_byok and wallet.enabled
+            # The original request must survive an uncertain provider outcome,
+            # even when this wallet does not charge the call (BYOK/disabled).
+            journaled_attempt = ledger_row is not None
             upstream_messages = model_runtime_messages(route, msgs, max_tokens)
             try:
                 if is_byok:
                     hold = WalletHold(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
+                    if journaled_attempt:
+                        ledger.mark_settling(db, ledger_row)
                 else:
                     preauth_amount = estimate_preauthorization(
                         db, prov, mdl, upstream_messages, max_tokens
@@ -556,6 +582,9 @@ async def stream_billed_llm_chat(
                     tool_choice=tool_choice,
                 ):
                     if ev.get("type") == "error":
+                        if ev.get("code") == "model_stream_limit_exceeded":
+                            yield _stream_limit_pending(route, request_id, hold)
+                            return
                         err = ev.get("error") or "upstream error"
                         status = ev.get("status")
                         try:
@@ -718,6 +747,9 @@ async def stream_billed_llm_chat(
                     return
                 # break from async for → try next candidate
                 continue
+            except StreamLimitError:
+                yield _stream_limit_pending(route, request_id, hold)
+                return
             except _CHAT_ERRORS as exc:
                 if settlement_started or journaled_attempt:
                     if settlement_started and ledger_row is not None and client_request_id:

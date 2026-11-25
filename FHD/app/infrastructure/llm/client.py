@@ -34,6 +34,10 @@ _request_mode: ContextVar[Literal["online", "offline"] | None] = ContextVar(
 )
 
 
+class _WorkerModelUnavailable(RuntimeError):
+    """The worker's own model scope cannot supply a client."""
+
+
 def has_request_llm_client() -> bool:
     """Whether the current request explicitly owns a model client."""
     return _scoped_client.get() is not None
@@ -130,7 +134,7 @@ def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str,
         config["model"] = model
         json.dumps(config)
         return config
-    except RECOVERABLE_ERRORS + (AttributeError, TypeError):
+    except RECOVERABLE_ERRORS + (AttributeError, TypeError, _WorkerModelUnavailable):
         return {"kind": "unavailable"}
 
 
@@ -200,7 +204,7 @@ def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
 
             token = latest_session_market_token(user_id=config["owner"])
             if not token:
-                raise RuntimeError("任务所属账号没有可用的模型登录凭据，请重新登录")
+                raise _WorkerModelUnavailable("任务所属账号没有可用的模型登录凭据，请重新登录")
             adapter = ModstorePlatformAdapter.from_session(auth_token=token)
             adapter.user_id = None
             client = ModstoreOpenAICompatibleClient(adapter)
@@ -222,7 +226,7 @@ def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
 
         client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
     else:
-        raise RuntimeError("当前请求的模型不可用，不能回退到其他账号")
+        raise _WorkerModelUnavailable("当前请求的模型不可用，不能回退到其他账号")
     return client, str(config["model"])
 
 

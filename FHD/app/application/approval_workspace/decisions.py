@@ -22,6 +22,7 @@ from app.db.models.approval import (
     ApprovalStatus,
 )
 
+from .access import supported_approval_flow, unsupported_approval_policy
 from .outcomes import execution_handed_off, execution_outcome, persist_outcome
 from .protocols import (
     ApprovalAccess,
@@ -107,6 +108,8 @@ class ApprovalDecisions:
             status_before = req.status
             node_id_before = current_node.id
             nodes = self.nodes.ordered(db, req.flow_id)
+            if not supported_approval_flow(req.flow, [current_node, *nodes]):
+                return unsupported_approval_policy()
             try:
                 business = json.loads(req.business_data or "{}")
             except (ValueError, TypeError):
@@ -362,7 +365,7 @@ class ApprovalDecisions:
             db.commit()
             db.refresh(req)
             workflow_execution = None
-            if workflow_without_node:
+            if self.access.is_workflow(req):
                 workflow_execution = self.workflows.reject(
                     request_no=str(req.request_no or ""), reason=reason
                 )
@@ -454,6 +457,8 @@ class ApprovalDecisions:
                 {"success": False, "message": "当前用户无权审批这条 AI 工作流"},
                 status_code=403,
             )
+        if not supported_approval_flow(req.flow, self.nodes.ordered(db, req.flow_id)):
+            return unsupported_approval_policy()
         pending = self.workflows.pending(req.request_no)
         if pending is None:
             return JSONResponse(

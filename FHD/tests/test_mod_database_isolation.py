@@ -3,12 +3,17 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
 
 
 def test_postgres_active_mod_database_url_suffix(monkeypatch):
     from app import db
-    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+    from app.request_active_mod_ctx import (
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:secret@localhost:5432/xcagi")
     monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "1")
@@ -24,9 +29,56 @@ def test_postgres_active_mod_database_url_suffix(monkeypatch):
     assert "secret" in parsed.render_as_string(hide_password=False)
 
 
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "SELECT value FROM host_scope_probe",
+        "INSERT INTO host_scope_probe (value) VALUES ('unexpected-mod-write')",
+    ],
+    ids=["read", "write"],
+)
+def test_missing_mod_schema_never_falls_back_to_host_database(monkeypatch, tmp_path, statement):
+    from app import db
+    from app.request_active_mod_ctx import (
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
+
+    db.dispose_and_recreate_engine()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'host.db'}")
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "1")
+    monkeypatch.delenv("XCAGI_MOD_DATABASE_URLS", raising=False)
+    monkeypatch.delenv("XCAGI_MOD_DATABASE_URL_MISSING_BUSINESS", raising=False)
+    with db.HostSessionLocal() as session:
+        session.execute(text("CREATE TABLE host_scope_probe (value TEXT NOT NULL)"))
+        session.execute(text("INSERT INTO host_scope_probe (value) VALUES ('host-only')"))
+        session.commit()
+    token = set_request_active_mod_id("missing-business")
+    try:
+        isolated_url = db._get_database_url()
+        assert isolated_url != db._resolve_host_database_url()
+        # A real failed Mod SQL operation must never be replayed against the
+        # host schema. Host-owned authentication/account sessions stay explicit.
+        with pytest.raises(OperationalError):
+            with db.SessionLocal() as session:
+                session.execute(text(statement))
+                session.commit()
+        assert db._get_database_url() == isolated_url
+        with db.HostSessionLocal() as session:
+            assert session.execute(text("SELECT value FROM host_scope_probe")).scalars().all() == [
+                "host-only"
+            ]
+    finally:
+        reset_request_active_mod_id(token)
+        db.dispose_and_recreate_engine()
+
+
 def test_session_factories_are_cached_per_resolved_database_url(monkeypatch, tmp_path):
     from app import db
-    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+    from app.request_active_mod_ctx import (
+        reset_request_active_mod_id,
+        set_request_active_mod_id,
+    )
 
     db.dispose_and_recreate_engine()
     base_path = tmp_path / "xcagi.db"
@@ -56,7 +108,11 @@ def test_session_factories_are_cached_per_resolved_database_url(monkeypatch, tmp
     "path,headers,active_mod",
     [
         ("/api/mod/leshan-kc-ai-suite-test/status", [], "leshan-kc-ai-suite-test"),
-        ("/api/mod/path-mod/status", [(b"x-xcagi-active-mod-id", b"header-mod")], "header-mod"),
+        (
+            "/api/mod/path-mod/status",
+            [(b"x-xcagi-active-mod-id", b"header-mod")],
+            "header-mod",
+        ),
     ],
     ids=["infers_active_mod_from_api_path", "header_takes_priority_over_path"],
 )
@@ -102,7 +158,9 @@ def test_mod_context_middleware_routes_ready_mod(monkeypatch, path, headers, act
     assert get_request_active_mod_id() == ""
 
 
-def test_mod_context_middleware_survives_stale_session_with_active_mod_header(monkeypatch):
+def test_mod_context_middleware_survives_stale_session_with_active_mod_header(
+    monkeypatch,
+):
     """过期 session 的 Mod 校验异常须返回 503，且不得继续执行宿主 API。"""
     from app.infrastructure.mods.mod_auth import ModContextMiddleware
     from app.request_active_mod_ctx import get_request_active_mod_id

@@ -16,6 +16,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.auth_app_service import (
     AuthApplicationService,
@@ -195,7 +196,7 @@ class TestAuthenticateHappyPath:
     def test_exception_returns_mapped_message_with_error_id(self) -> None:
         svc = AuthApplicationService()
         with (
-            patch("app.application.auth_app_service.get_db", side_effect=RuntimeError("boot")),
+            patch("app.application.auth_app_service.get_db", side_effect=OSError("db boot")),
             patch(
                 "app.application.auth_app_service._authenticate_failure_message",
                 return_value="mapped",
@@ -254,7 +255,7 @@ class TestChangeAndResetPassword:
         user = MagicMock(password="h")
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = user
-        db.commit.side_effect = RuntimeError("db down")
+        db.commit.side_effect = OperationalError("COMMIT", {}, OSError("db down"))
         with (
             patch("app.application.auth_app_service.get_db") as gdb,
             patch("app.application.auth_app_service.check_password_hash", return_value=True),
@@ -405,7 +406,7 @@ class TestPermissions:
         admin_user = MagicMock(role="admin")
         with patch(
             "app.application.auth_app_service.get_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             perms = svc.get_user_permissions(admin_user)
         # DEFAULT_PERMISSIONS is a list of dicts with 'code' key

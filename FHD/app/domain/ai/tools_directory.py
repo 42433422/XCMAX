@@ -1,24 +1,6 @@
-"""工具目录默认数据与 payload 组装。
-
-Phase 3 从 ``legacy-layer.tools_directory_compat`` 迁入。
-"""
+"""工具页导航元数据与已授权能力契约的展示投影。"""
 
 from __future__ import annotations
-
-from collections.abc import Callable
-
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-# workflow 工具注册表提供者（由上层组装处注入，避免 domain→application 反向依赖）。
-# 注入点：app/fastapi_routes/domains/misc/routes.py（路由模块加载即完成组装）。
-_workflow_tool_registry_provider: Callable[[], list[dict]] | None = None
-
-
-def register_workflow_tool_registry_provider(provider: Callable[[], list[dict]] | None) -> None:
-    """注入 workflow 工具注册表提供者（application 层 ``tools.workflow`` 的门面）。"""
-    global _workflow_tool_registry_provider
-    _workflow_tool_registry_provider = provider
-
 
 DEFAULT_TOOL_CATEGORIES = [
     {
@@ -88,51 +70,32 @@ DEFAULT_TOOLS = [
 ]
 
 
-def _planner_tools_from_registry() -> list[dict]:
-    """Expose LangGraph tool contracts to the compatibility tools catalog."""
-    try:
-        from app.mod_sdk.planner_tools import (
-            get_planner_chat_tool_registry,
-            is_planner_tools_via_mod_enabled,
-        )
-
-        if is_planner_tools_via_mod_enabled():
-            reg = get_planner_chat_tool_registry()
-        else:
-            provider = _workflow_tool_registry_provider
-            if provider is None:
-                return []
-            reg = provider()
-    except RECOVERABLE_ERRORS:
-        return []
+def _planner_tools_from_registry(registry: dict) -> list[dict]:
+    """Render contracts already filtered by the authenticated application boundary."""
     out: list[dict] = []
-    for spec in reg:
-        if not isinstance(spec, dict):
-            continue
-        fn = spec.get("function")
-        if not isinstance(fn, dict):
-            continue
-        name = str(fn.get("name") or "").strip()
-        if not name:
-            continue
-        desc = str(fn.get("description") or "").strip()
-        out.append(
-            {
-                "id": f"planner:{name}",
-                "tool_key": name,
-                "name": name,
-                "description": desc or "（无描述）",
-                "kind": "planner_backend",
-                "planner_callable": True,
-                "parameters": fn.get("parameters"),
-                "category": {"category_key": "planner", "name": "AI Planner"},
-            }
-        )
+    for tool_id, tool in registry.items():
+        for action, spec in tool["actions"].items():
+            name = f"{tool_id}_{action}"
+            out.append(
+                {
+                    "id": f"planner:{name}",
+                    "tool_key": name,
+                    "tool_id": tool_id,
+                    "action": action,
+                    "capability_id": f"{tool_id}.{action}",
+                    "name": name,
+                    "description": spec["description"],
+                    "kind": "planner_backend",
+                    "planner_callable": True,
+                    "parameters": spec["input_schema"],
+                    "category": {"category_key": "planner", "name": "AI Planner"},
+                }
+            )
     return out
 
 
-def get_tools_payload() -> dict:
-    planner_tools = _planner_tools_from_registry()
+def get_tools_payload(registry: dict) -> dict:
+    planner_tools = _planner_tools_from_registry(registry)
     return {
         "success": True,
         "tools": DEFAULT_TOOLS,
@@ -150,5 +113,4 @@ __all__ = [
     "DEFAULT_TOOLS",
     "get_tools_payload",
     "get_tool_categories_payload",
-    "register_workflow_tool_registry_provider",
 ]
