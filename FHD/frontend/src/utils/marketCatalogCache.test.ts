@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 const scope = vi.hoisted(() => ({ value: 'tenant-a' }))
 vi.mock('@/utils/tenantStorageScope', () => ({
@@ -16,6 +17,7 @@ import {
 describe('marketCatalogCache', () => {
   beforeEach(() => {
     scope.value = 'tenant-a'
+    setRuntimeTenantStorageScopeInput(null)
     clearMarketCatalogCache()
   })
 
@@ -52,6 +54,44 @@ describe('marketCatalogCache', () => {
     const key = buildMarketCatalogCacheKey('office', 'large')
     writeMarketCatalogCache(key, 'office', [{ id: 'large', name: 'x'.repeat(300 * 1024) } as never])
     expect(readMarketCatalogCache(key)).toBeNull()
+  })
+
+  it('isolates two accounts in the same tenant', () => {
+    const key = buildMarketCatalogCacheKey('office')
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 10 })
+    writeMarketCatalogCache(key, 'office', [{ id: 'a', is_installed: true } as never])
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 20 })
+    expect(readMarketCatalogCache(key)).toBeNull()
+    writeMarketCatalogCache(key, 'office', [{ id: 'b', is_installed: false } as never])
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 10 })
+    expect(readMarketCatalogCache(key)?.items[0].id).toBe('a')
+  })
+
+  it('owns immutable snapshots and excludes transient component state', () => {
+    const key = buildMarketCatalogCacheKey('office')
+    const item = { id: 'a', dependencies: { base: '1' }, installationInProgress: true }
+    writeMarketCatalogCache(key, 'office', [item as never])
+    item.dependencies.base = 'changed'
+    const hit = readMarketCatalogCache(key)!
+    expect(hit.items[0].dependencies?.base).toBe('1')
+    expect(hit.items[0].installationInProgress).toBeUndefined()
+    hit.items[0].id = 'modified'
+    expect(readMarketCatalogCache(key)?.items[0].id).toBe('a')
+  })
+
+  it('does not treat a future-dated cache entry as fresh after clock rollback', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'))
+      const key = buildMarketCatalogCacheKey('office')
+      writeMarketCatalogCache(key, 'office', [{ id: 'future' } as never])
+      const hit = readMarketCatalogCache(key)
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      expect(isMarketCatalogCacheFresh(hit)).toBe(false)
+      expect(readMarketCatalogCache(key)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('isolates memory caches and targeted removal across tenant switches', () => {
