@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 
 import pytest
 
@@ -159,3 +160,38 @@ def test_audit_missing_event_and_invalid_verdict_fail_closed(tmp_ledger):
     with pytest.raises(ValueError, match="invalid_evolution_audit_verdict"):
         mark_audited(original["event_id"], "self-approved")
     assert tmp_ledger.read_bytes() == before
+
+
+def _audit_in_process(event_id, barrier):
+    barrier.wait(timeout=30)
+    if not mark_audited(event_id, "approved"):
+        raise RuntimeError("audit target missing")
+
+
+def test_same_audit_is_idempotent_across_processes(tmp_ledger):
+    original = append_event({"event_type": "signal_detected"})
+    before = tmp_ledger.read_bytes()
+    ctx = multiprocessing.get_context("spawn")
+    barrier = ctx.Barrier(4)
+    workers = [
+        ctx.Process(target=_audit_in_process, args=(original["event_id"], barrier))
+        for _ in range(4)
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=45)
+            assert worker.exitcode == 0
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=10)
+    after = tmp_ledger.read_bytes()
+    assert after.startswith(before)
+    rows = [json.loads(line) for line in after.splitlines()]
+    assert len(rows) == 2
+    assert rows[1]["event_type"] == "owner_audit_recorded"
+    assert rows[1]["audit_target_event_id"] == original["event_id"]
+    assert list_events()[0]["owner_audit"]["verdict"] == "approved"

@@ -15,6 +15,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from filelock import FileLock
+
 LEDGER_FILENAME = "evolution_decisions.jsonl"
 _LEDGER_LOCK = threading.Lock()
 
@@ -37,6 +39,11 @@ def _ledger_path() -> Path:
 
 _AUDIT_EVENT_TYPE = "owner_audit_recorded"
 _AUDIT_VERDICTS = frozenset({"approved", "rejected", "needs-review"})
+
+
+def _journal_lock(path: Path) -> FileLock:
+    """Serialize local processes on a stable sidecar, never the appended inode."""
+    return FileLock(str(path.with_name(path.name + ".lock")), timeout=30)
 
 
 def _read_records(path: Path) -> List[Dict[str, Any]]:
@@ -75,9 +82,9 @@ def append_event(event: Dict[str, Any]) -> Dict[str, Any]:
     record["recorded_at"] = now
     record["owner_audit"] = {"audited": False, "audited_at": None, "verdict": None}
 
-    path = _ledger_path()
+    path = _ledger_path().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with _LEDGER_LOCK:
+    with _LEDGER_LOCK, _journal_lock(path):
         _append_line(path, record)
     return record
 
@@ -93,13 +100,15 @@ def list_events(
     This is a local decision journal, NOT an independent business-growth proof.
     The underlying historical event bytes remain intact after an audit.
     """
-    path = _ledger_path()
+    path = _ledger_path().resolve()
     if not path.is_file():
         return []
     cutoff = datetime.now(UTC) - timedelta(days=since_days) if since_days is not None else None
     audit_by_target: Dict[str, Dict[str, Any]] = {}
     original_events = []
-    for row in _read_records(path):
+    with _LEDGER_LOCK, _journal_lock(path):
+        records = _read_records(path)
+    for row in records:
         if row.get("event_type") == _AUDIT_EVENT_TYPE:
             target = row.get("audit_target_event_id")
             verdict = row.get("audit_verdict")
@@ -150,10 +159,10 @@ def mark_audited(event_id: str, verdict: str) -> bool:
         raise ValueError("invalid_evolution_event_id")
     if verdict not in _AUDIT_VERDICTS:
         raise ValueError("invalid_evolution_audit_verdict")
-    path = _ledger_path()
+    path = _ledger_path().resolve()
     if not path.is_file():
         return False
-    with _LEDGER_LOCK:
+    with _LEDGER_LOCK, _journal_lock(path):
         rows = _read_records(path)
         if not any(
             row.get("event_id") == event_id and row.get("event_type") != _AUDIT_EVENT_TYPE
@@ -162,7 +171,8 @@ def mark_audited(event_id: str, verdict: str) -> bool:
             return False
         previous = next(
             (
-                row for row in reversed(rows)
+                row
+                for row in reversed(rows)
                 if row.get("event_type") == _AUDIT_EVENT_TYPE
                 and row.get("audit_target_event_id") == event_id
             ),
