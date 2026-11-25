@@ -29,9 +29,7 @@ def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False)
     book = SessionBook(db)
     tenant = tenant_id_of_run(run)
     body = book.get("agent", tenant, run.run_id)
-    completed = {
-        step.step_id for step in run.steps if verified_effect_receipt(run, step)
-    }
+    completed = {step.step_id for step in run.steps if verified_effect_receipt(run, step)}
     remaining = sorted(set(body.get("effects") or []) - completed)
     if clear_confirmed and not remaining and body.get("effects"):
         body["effects"] = []

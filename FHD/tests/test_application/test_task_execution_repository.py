@@ -112,9 +112,7 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     )
     duplicate = AgentRun(user_id="owner", message="external write", status="queued")
     duplicate.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
-    result = recovered.enqueue(
-        duplicate, idempotency_key="request-1", fingerprint="same-body"
-    )
+    result = recovered.enqueue(duplicate, idempotency_key="request-1", fingerprint="same-body")
     assert (result.run_id, result.state) == (run.run_id, "unknown")
     assert recovered.lifecycle(run.run_id)["effects"] == ["business-write"]
     assert recovered.claim("second-worker", lease_seconds=30) is None
