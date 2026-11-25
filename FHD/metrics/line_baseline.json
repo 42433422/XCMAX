@@ -1,5 +1,5 @@
 {
-  "lines": 2733265,
+  "lines": 2733382,
   "updated": "2026-11-25",
-  "note": "后端安全收敛：SQLAlchemy 共用事务边界、Mod 数据源失败关闭、Pydantic/OpenAPI 写入契约，异常装饰器传播编程错误并保留安全调用栈；相对主线净增 131 行，需正式 preflight 与 CI 实测确认"
+  "note": "后端安全收敛：SQLAlchemy 统一会话事务、Mod 失败关闭、Legacy 与 ERP Mod 客户写入共用 Pydantic/OpenAPI 契约、异常传播及安全调用栈；相对主线净增 248 行（正式 preflight/CI 待校验）"
 }

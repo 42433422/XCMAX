@@ -35,10 +35,16 @@ def _service():
     return get_customer_app_service()
 
 
+def _validated_body(body: dict[str, Any]) -> dict[str, Any]:
+    from app.schemas.customer_schema import CustomerCompatMutation
+
+    return CustomerCompatMutation.model_validate(body).model_dump(exclude_unset=True)
+
+
 def _map_body(body: dict[str, Any]) -> dict[str, Any]:
     from app.infrastructure.persistence.compat_db.compat_db_base import _customer_body_name_contact
 
-    name, cp, ph, addr = _customer_body_name_contact(body)
+    name, cp, ph, addr = _customer_body_name_contact(_validated_body(body))
     return {
         "customer_name": name,
         "contact_person": cp or "",
@@ -158,11 +164,12 @@ def customers_create(request: Request, body: dict[str, Any]) -> JSONResponse:
 
 
 def customers_update(request: Request, customer_id: int, body: dict[str, Any]) -> JSONResponse:
-    mapped = _map_body(body)
+    validated = _validated_body(body)
+    mapped = _map_body(validated)
     if not mapped.get("customer_name"):
         raise HTTPException(status_code=400, detail="客户名称不能为空")
-    if "expected_version" in body:
-        mapped["expected_version"] = body.get("expected_version")
+    if "expected_version" in validated:
+        mapped["expected_version"] = validated["expected_version"]
     return _run_customer_capability(request, "update", {"id": customer_id, **mapped})
 
 

@@ -114,6 +114,56 @@ def test_erp_domains_config():
     assert "wechat" not in ids
 
 
+def test_erp_mod_customer_mutations_validate_shared_contract_before_dispatch(monkeypatch):
+    import importlib.util
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    spec = importlib.util.spec_from_file_location(
+        "erp_domain_customer_contract", MOD_DIR / "backend/blueprints.py"
+    )
+    assert spec is not None and spec.loader is not None
+    bridge = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bridge)
+    invoked = []
+
+    def fake_invoke(domain, action, **kwargs):
+        invoked.append((domain, action, kwargs))
+        return {"success": True}
+
+    monkeypatch.setattr(bridge, "_invoke", fake_invoke)
+    app = FastAPI()
+    bridge.register_fastapi_routes(app, "xcagi-erp-domain-bridge")
+    base = "/api/mod/xcagi-erp-domain-bridge/customers"
+
+    with TestClient(app) as client:
+        for bad in (
+            {"unit_name": "Alpha", "name": "Beta"},
+            {"unit_name": 5},
+            {"expected_version": True},
+        ):
+            assert client.post(base, json=bad).status_code == 422
+            assert client.put(base + "/7", json=bad).status_code == 422
+        response = client.post(base, json={"unit_name": "  Acme  ", "tenant_id": 999})
+        assert response.status_code == 200, response.text
+        response = client.put(
+            base + "/7", json={"unit_name": "  Acme  ", "expected_version": "2"}
+        )
+        assert response.status_code == 200, response.text
+
+    assert [(domain, action) for domain, action, _ in invoked] == [
+        ("customers", "create"),
+        ("customers", "update"),
+    ]
+    assert invoked[0][2]["body"] == {"unit_name": "Acme"}
+    assert invoked[1][2]["body"] == {"unit_name": "Acme", "expected_version": 2}
+    schema = app.openapi()["paths"][base]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
+    assert schema["$ref"] == "#/components/schemas/CustomerCompatMutation"
+
+
 def test_blueprints_has_erp_domains():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/products/list" in text
