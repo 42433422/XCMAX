@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, exc, text
 from sqlalchemy.orm import Session
 
 FHD = Path(__file__).resolve().parents[2]
@@ -171,9 +171,9 @@ def _probe(engine, tenant_id, ids):
                         "EXPLAIN (FORMAT JSON) " + sql, params
                     ).scalar_one()
                     plans[plan_key] = _summarize_plan(raw)
-                except Exception as exc:
+                except (exc.SQLAlchemyError, json.JSONDecodeError, EvidenceBlocked) as error:
                     raise EvidenceBlocked(
-                        f"PostgreSQL EXPLAIN failed for {label}: {type(exc).__name__}"
+                        f"PostgreSQL EXPLAIN failed for {label}: {type(error).__name__}"
                     ) from None
             if len(plans) < 4:
                 raise EvidenceBlocked("customer + product + two shipment query plans required")
@@ -277,12 +277,12 @@ def main():
     args = parser.parse_args()
     try:
         evidence = run(args)
-    except Exception as exc:
+    except (EvidenceBlocked, exc.SQLAlchemyError, ModuleNotFoundError, OSError) as error:
         # Do not leak DB URLs, customer names or raw exception strings.
         evidence = {
             "status": "BLOCKED",
-            "reason_type": type(exc).__name__,
-            "reason": str(exc) if isinstance(exc, EvidenceBlocked) else "probe exception",
+            "reason_type": type(error).__name__,
+            "reason": str(error) if isinstance(error, EvidenceBlocked) else "probe exception",
             "scope": "real PostgreSQL only; no synthetic fallback",
             "head_sha": args.head_sha,
             "utc": datetime.now(timezone.utc).isoformat(),
