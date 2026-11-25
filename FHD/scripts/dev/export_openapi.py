@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从 FastAPI 应用导出 OpenAPI 3.0 spec，作为跨端契约 SSOT。
+"""从 FastAPI 应用导出 OpenAPI spec，作为跨端契约 SSOT。
 
 用法：
     python scripts/dev/export_openapi.py [--output assets/contracts/openapi.json]
@@ -24,7 +24,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
-        default=str(FHD_ROOT / "contracts" / "openapi.json"),
+        default=str(FHD_ROOT / "assets" / "contracts" / "openapi.json"),
         help="输出文件路径（默认: assets/contracts/openapi.json）",
     )
     args = parser.parse_args()
