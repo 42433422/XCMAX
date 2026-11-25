@@ -97,9 +97,25 @@ class XiaoxBindingStore:
             raise XiaoxBindingError("durable_storage_required", "Xiaox 运行需要持久化任务仓储")
         self.repository = resolved
 
+    @staticmethod
+    def _reject_legacy_binding(run: AgentRun) -> None:
+        # Do not initialize a second ledger over a pre-upgrade binding,
+        # including cleanup/error paths, before reconciling its effects.
+        if (
+            run.intent == "codex.runtime"
+            or run.metadata.get("runtime_type") == "codex"
+            or "codex_runtime" in run.metadata
+        ):
+            raise XiaoxBindingError(
+                "runtime_migration_required", "原运行绑定尚待迁移，禁止重建运行状态"
+            )
+
     def get(self, run_id: str) -> XiaoxBinding:
         run = self.repository.get(run_id)
-        if run is None or not isinstance(run.metadata.get(_KEY), dict):
+        if run is None:
+            raise XiaoxBindingError("binding_missing", "Xiaox 运行绑定不存在")
+        self._reject_legacy_binding(run)
+        if not isinstance(run.metadata.get(_KEY), dict):
             raise XiaoxBindingError("binding_missing", "Xiaox 运行绑定不存在")
         return XiaoxBinding(run)
 
@@ -115,6 +131,7 @@ class XiaoxBindingStore:
             previous = self.repository.get(run_id)
             if previous is None:
                 raise XiaoxBindingError("binding_missing", "原任务不存在")
+            self._reject_legacy_binding(previous)
             current = copy.deepcopy(previous)
             metadata = current.metadata.setdefault(_KEY, {})
             if generation is not None:
@@ -364,7 +381,9 @@ class XiaoxBindingStore:
         # Business identity belongs to the server. A fresh model call id must not
         # create a second copy of the same effect within the same authorized turn.
         operation = canonical_digest([run_id, fingerprint, call_id if read_only else "effect"])
-        child_task_id = f"xiaox_{operation[:40]}"
+        # Task identity is a persistence protocol, not the display name.
+        child_task_id = f"codex_{operation[:40]}"
+        renamed_task_id = f"xiaox_{operation[:40]}"
         created = False
 
         def claim(run: AgentRun, metadata: dict[str, Any]) -> None:
@@ -378,15 +397,24 @@ class XiaoxBindingStore:
                 raise XiaoxBindingError("goal_mismatch", "回复任务不能申请业务写入")
             calls = metadata.setdefault("calls", {})
             existing = calls.get(call_id)
+            if existing is not None and existing["fingerprint"] != fingerprint:
+                raise XiaoxBindingError("call_conflict", "同一调用标识不能改变操作内容")
+            matches = [
+                c for c in calls.values()
+                if c["child_task_id"] in (child_task_id, renamed_task_id)
+            ]
+            if len({c["child_task_id"] for c in matches}) > 1 or any(
+                c["fingerprint"] != fingerprint for c in matches
+            ):
+                raise XiaoxBindingError(
+                    "reconciliation_required", "同一业务操作存在冲突的历史子任务，禁止重放"
+                )
             if existing is not None:
-                if existing["fingerprint"] != fingerprint:
-                    raise XiaoxBindingError("call_conflict", "同一调用标识不能改变操作内容")
                 return
             if len(calls) >= 256:
                 raise XiaoxBindingError("call_limit", "任务工具调用已达到上限")
-            prior = next((c for c in calls.values() if c["child_task_id"] == child_task_id), None)
-            if prior is not None:
-                calls[call_id] = copy.deepcopy(prior)
+            if matches:
+                calls[call_id] = copy.deepcopy(matches[0])
                 return
             if any((c.get("receipt") or {}).get("pending_approval") for c in calls.values()):
                 raise XiaoxBindingError("waiting_user", "请先处理原业务任务的审批")
