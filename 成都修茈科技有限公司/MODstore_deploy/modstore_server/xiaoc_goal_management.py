@@ -372,6 +372,64 @@ def build_goal_opportunities(
     return rows, ids
 
 
+def compile_autonomous_review_plan(
+    goal: dict[str, Any],
+    *,
+    owner: int,
+    policy: dict[str, Any],
+    goals: list[dict[str, Any]],
+    current_value: dict[str, Any],
+    now: datetime,
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Compile inspect -> plan review tasks using ONLY the existing human policy.
+
+    This never approves the portfolio. Empty tool input prevents automatically
+    selecting a privileged business mutation under a generic employee policy.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate
+
+    limits = policy.get("portfolio_limits")
+    employee_id = policy.get("employee_id")
+    if (
+        not isinstance(limits, dict)
+        or not isinstance(employee_id, str)
+        or not employee_id
+        or policy.get("task_input")
+    ):
+        raise LifePolicyError("自主调查需要原预算、员工及空的安全任务输入")
+    if goal.get("candidate_origin") != ORIGIN or goal.get("status") != "proposed":
+        raise LifePolicyError("仅未审批的原经营候选可自动生成调查提案")
+    check_candidate_promotion(goal, owner, limits, current_value, now=now)
+    if governance_gate(goal, goals, now=now)["status"] != "reviewable":
+        raise LifePolicyError("原候选来源、冲突或前置依赖未通过审查")
+    seconds = limits.get("compute_seconds")
+    if type(seconds) is not int or not 2 <= seconds <= 7_776_000:
+        raise LifePolicyError("原预算不足以执行两个可核验的原子调查步骤")
+    # A single review step may consume at most 240 seconds in the approved worker.
+    allowed_seconds = min(seconds, 480)
+    resources = {
+        name: limits.get(name) for name in ("cost_cents", "tokens", "compute_seconds")
+    }
+    if any(type(value) is not int or value < 0 for value in resources.values()):
+        raise LifePolicyError("原预算资源合同不完整")
+    allocations = []
+    for index, step in enumerate(EXECUTION_STEPS):
+        cost = limits["cost_cents"] // 2 if index == 0 else limits["cost_cents"] - limits["cost_cents"] // 2
+        tokens = limits["tokens"] // 2 if index == 0 else limits["tokens"] - limits["tokens"] // 2
+        compute = allowed_seconds // 2 if index == 0 else allowed_seconds - allowed_seconds // 2
+        allocations.append(
+            GoalStepAllocation(
+                step_id=step,
+                employee_id=employee_id,
+                input_data={},
+                cost_cents=cost,
+                tokens=tokens,
+                compute_seconds=compute,
+            )
+        )
+    return build_goal_opportunities(goal, allocations, limits)
+
+
 def _valid_sha(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and set(value) <= set("0123456789abcdef")
 
