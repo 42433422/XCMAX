@@ -17,7 +17,42 @@ _ERP_REFERENCE_KIND = "erp_fact_reference_v1"
 _FIELD = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SOURCE_VERSION = re.compile(r"^sha256:[0-9a-f]{64}$")
 _FACT_TOKEN = re.compile(r"^erp:[0-9a-f]{64}$")
-
+# A field's presence alone does not grant it memory eligibility. Exclude free
+# text notes, raw line arrays, credentials and mixed-unit aggregates.
+_ALLOWED_ERP_FIELDS: dict[str, frozenset[str]] = {
+    "order": frozenset(
+        {
+            "order_no", "customer_id", "state", "status", "invoice_status",
+            "payment_state", "total_amount", "paid_amount", "currency",
+            "ordered_quantity", "delivered_quantity", "returned_quantity",
+            "remaining_quantity", "quantity_unit",
+        }
+    ),
+    "inventory": frozenset(
+        {
+            "product_id", "warehouse_id", "transaction_type", "quantity",
+            "before_quantity", "after_quantity", "transaction_date",
+            "sales_order_id",
+        }
+    ),
+    "fund": frozenset(
+        {
+            "transaction_type", "amount", "currency", "reference_type",
+            "reference_id", "journal_entry_id", "status", "due_date",
+            "transaction_date",
+        }
+    ),
+    "journal_entry": frozenset(
+        {
+            "entry_no", "journal_date", "status", "reference_type",
+            "reference_id", "debit_total", "credit_total", "reversed_of_id",
+            "reversed_at", "credit_note_of_id", "is_credit_note",
+        }
+    ),
+    "customer": frozenset(
+        {"customer_name", "credit_limit", "credit_used", "is_credit_limited"}
+    ),
+}
 
 
 def build_erp_field_claim(snapshot: dict[str, Any], field: str) -> dict[str, Any] | None:
@@ -25,6 +60,7 @@ def build_erp_field_claim(snapshot: dict[str, Any], field: str) -> dict[str, Any
     if (
         not isinstance(field, str)
         or _FIELD.fullmatch(field) is None
+        or field not in _ALLOWED_ERP_FIELDS.get(snapshot.get("entity_type"), frozenset())
         or snapshot.get("freshness") != "fresh"
         or snapshot.get("retrieved_from") != "authority"
     ):
