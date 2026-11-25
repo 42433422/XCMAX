@@ -270,3 +270,57 @@ def test_stream_progress_and_setup_failure_never_emit_unverified_draft(monkeypat
         "payload": {"item": {"type": "mcpToolCall"}},
     })
     notes.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "setup_code",
+    ["runtime_configuration_required", "runtime_account_model_required"],
+)
+@pytest.mark.parametrize("resume", [False, True])
+def test_json_and_sse_done_share_actionable_setup_error_contract(entry, setup_code, resume):
+    """Exercise the real stream serializer with the exact synchronous chat result."""
+    from app.application.agent_runtime.configuration import RuntimeSetupError
+    from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
+
+    invoke, execute, _service = entry
+    execute.side_effect = RuntimeSetupError(setup_code, "PRIVATE backend credentials")
+    context = {"session_id": "original-session"}
+    if resume:
+        context["agent_runtime_run_id"] = "same-old-run"
+    ordinary = invoke(context)
+
+    assert ordinary["success"] is False
+    assert ordinary["execution_state"] == "blocked"
+    assert ordinary["data"]["error_code"] == setup_code
+    assert ordinary["runtime_context_update"]["conversation_id"] == "original-session"
+
+    # Online streaming uses 'done' with the same response object, not an
+    # unrelated synthetic success or a partially emitted model narrative.
+    serialized = _sse_event_line({"type": "done", "result": ordinary})
+    events = [
+        json.loads(line.partition(":")[2].strip())
+        for line in serialized.decode("utf-8").splitlines()
+        if line.startswith("data:")
+    ]
+    assert len(events) == 1
+    done = events[0]
+    assert done["type"] == "done"
+    assert done["result"]["success"] is False
+    assert done["result"]["data"]["error_code"] == setup_code
+    assert done["result"]["runtime_context_update"]["agent_runtime_run_id"] == (
+        "same-old-run" if resume else None
+    )
+    assert "PRIVATE" not in serialized.decode("utf-8")
+
+    execute.side_effect = None
+    execute.return_value = {
+        "ok": True,
+        "run_id": "same-old-run" if resume else "new-run",
+        "execution_state": "completed",
+        "output": "原任务已恢复",
+    }
+    recovered = invoke(context)
+    assert recovered["success"] is True
+    assert recovered["runtime_context_update"]["conversation_id"] == "original-session"
+    if resume:
+        assert execute.call_args.kwargs["run_id"] == "same-old-run"
