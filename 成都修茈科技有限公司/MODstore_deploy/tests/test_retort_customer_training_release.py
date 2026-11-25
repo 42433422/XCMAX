@@ -163,6 +163,45 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
     assert run["choose"]() == (run["spec"]["lifecycle"]["control_prompt"], None)
 
 
+@pytest.mark.parametrize("tamper", ["no_outbox_regression", "release_changed", "snapshot_changed"])
+def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
+    released_customer_training, tamper
+):
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        effects["training_regression_recheck"] = {
+            "source": "original_experiment_outbox",
+            "reason": "workflow_execution_stop_loss",
+            "request_id": run["id"],
+            "release_sha": (
+                "f" * 40 if tamper == "release_changed" else progress["release_sha"]
+            ),
+            "final_snapshot_sha256": (
+                "f" * 64
+                if tamper == "snapshot_changed"
+                else progress["final_snapshot_sha256"]
+            ),
+        }
+        row.status = "impact_recheck"
+        row.effects_json = json_dumps(effects)
+        db.commit()
+    previous_calls = list(run["api"].calls)
+    state = {**run["state"], "delivery": run["delivery"]}
+    result = training.read_training_impact(run["id"], state)
+    assert result["status"] == "waiting_customer_impact"
+    assert result["reason"] == "training_regression_recheck_unverified"
+    assert run["api"].calls == previous_calls
+    assert run["choose"]() == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])
 @pytest.mark.parametrize("fault", ["source", "runtime"])
 def test_customer_training_release_drift_blocks_forward_progress(
