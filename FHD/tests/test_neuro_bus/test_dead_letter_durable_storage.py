@@ -82,18 +82,24 @@ def test_global_storage_error_never_falls_back(isolated_global, monkeypatch):
 
 
 def test_committed_dead_letter_survives_process_exit(isolated_global):
+    # Keep the first instance open while an independent interpreter accesses
+    # the same durable database. This is local process evidence, not multi-pod.
+    queue = module.get_dead_letter_queue()
+    parent_entry_id = _enqueue(queue)
     script = """
 import os
+import sys
 from app.neuro_bus.dead_letter_queue import get_dead_letter_queue, DeadLetterReason
 from app.neuro_bus.events.events_base import NeuroEvent
 queue = get_dead_letter_queue()
-entry = queue.enqueue(NeuroEvent(event_type="test.durable", payload={"value": 7}),
+assert queue.dequeue(sys.argv[1]).original_event.payload == {"value": 7}
+entry = queue.enqueue(NeuroEvent(event_type="test.durable", payload={"value": 8}),
                       DeadLetterReason.TIMEOUT, "failure", 1)
 print(entry, flush=True)
 os._exit(0)
 """
     result = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", script, parent_entry_id],
         cwd=Path(__file__).resolve().parents[2],
         capture_output=True,
         text=True,
@@ -101,9 +107,14 @@ os._exit(0)
         check=True,
     )
     entry_id = result.stdout.strip().splitlines()[-1]
-    queue = module.get_dead_letter_queue()
-    assert queue.dequeue(entry_id).original_event.payload == {"value": 7}
+    assert entry_id != parent_entry_id
+    assert queue.dequeue(parent_entry_id).original_event.payload == {"value": 7}
+    assert queue.dequeue(entry_id).original_event.payload == {"value": 8}
     assert queue.get_audit_history(entry_id)[0]["action"] == "enqueued"
+    queue.close()
+    reopened = module.get_dead_letter_queue()
+    assert reopened.dequeue(parent_entry_id).original_event.payload == {"value": 7}
+    assert reopened.dequeue(entry_id).original_event.payload == {"value": 8}
 
 
 def test_archive_restore_and_audit_survive_restart(tmp_path):
