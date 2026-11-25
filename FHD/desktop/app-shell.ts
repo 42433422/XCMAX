@@ -247,7 +247,7 @@ export function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
   })
 }
 
-type DesktopWorkspaceMenuCommand = 'palette' | 'chat' | 'new-chat' | 'sessions' | 'tasks'
+type DesktopWorkspaceMenuCommand = 'palette' | 'chat' | 'new-chat' | 'new-task' | 'sessions' | 'tasks'
 /** Menu commands remain UI-only. Use the main renderer's existing account guards and routes. */
 export function dispatchWorkspaceMenuCommand(command: DesktopWorkspaceMenuCommand): boolean {
   const win = desktopRuntime.mainWindow
@@ -296,6 +296,7 @@ export function createMenu(): void {
         { label: '打开命令面板', click: () => dispatchWorkspaceMenuCommand('palette') },
         { label: '智能对话', click: () => dispatchWorkspaceMenuCommand('chat') },
         { label: '新建对话', click: () => dispatchWorkspaceMenuCommand('new-chat') },
+        { label: '新建任务草稿', click: () => dispatchWorkspaceMenuCommand('new-task') },
         { label: '历史会话', click: () => dispatchWorkspaceMenuCommand('sessions') },
         { label: '任务中心', click: () => dispatchWorkspaceMenuCommand('tasks') },
       ],
