@@ -93,6 +93,7 @@ describe('ERP domain bridge InventoryView', () => {
     expect(wrapper.get('[data-testid="inventory-export"]').attributes('disabled')).toBeUndefined()
     expect((wrapper.get('.search-box select').element as HTMLSelectElement).value).toBe('3')
     expect((wrapper.get('.search-box input').element as HTMLInputElement).value).toBe('涂料')
+    wrapper.unmount()
   })
 
   it('exports CSV with the same filters and blocks concurrent Excel downloads', async () => {
@@ -131,6 +132,7 @@ describe('ERP domain bridge InventoryView', () => {
     for (const id of ['inventory-export', 'inventory-export-csv'])
       expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeUndefined()
     expect((wrapper.get('.search-box input').element as HTMLInputElement).value).toBe('涂料')
+    wrapper.unmount()
   })
 
   it.each([
@@ -199,6 +201,7 @@ describe('ERP domain bridge InventoryView', () => {
     await flushPromises()
     expect(getMock).toHaveBeenCalledWith('/api/inventory', { page: 2, per_page: 50 })
     await wrapper.get('.search-box input').setValue(' SKU-003 ')
+    await new Promise((resolve) => setTimeout(resolve, 320))
     await flushPromises()
     expect(getMock).toHaveBeenLastCalledWith('/api/inventory', { page: 1, per_page: 50, keyword: 'SKU-003' })
     expect((wrapper.get('.search-box input').element as HTMLInputElement).value).toBe(' SKU-003 ')
@@ -218,12 +221,53 @@ describe('ERP domain bridge InventoryView', () => {
     const wrapper = mount(InventoryView)
     await flushPromises()
     await wrapper.get('.search-box input').setValue('旧')
+    await new Promise((resolve) => setTimeout(resolve, 320))
     await wrapper.get('.search-box input').setValue('新')
+    await new Promise((resolve) => setTimeout(resolve, 320))
     await flushPromises()
     resolveOlder({ success: true, data: [{ id: 1, product_name: '旧库存结果' }], total: 1 })
     await flushPromises()
     expect(wrapper.text()).toContain('新库存结果')
     expect(wrapper.text()).not.toContain('旧库存结果')
+  })
+
+  it('debounces inventory keyword requests and uses the final server-side filter', async () => {
+    const wrapper = mount(InventoryView)
+    await flushPromises()
+    const initialCount = getMock.mock.calls.filter(([path]) => path === '/api/inventory').length
+    const input = wrapper.get('.search-box input')
+    await input.setValue('S')
+    await input.setValue('SK')
+    await input.setValue('SKU')
+    expect(getMock.mock.calls.filter(([path]) => path === '/api/inventory')).toHaveLength(initialCount)
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    await flushPromises()
+    expect(getMock.mock.calls.filter(([path]) => path === '/api/inventory')).toHaveLength(initialCount + 1)
+    expect(getMock).toHaveBeenLastCalledWith('/api/inventory', { page: 1, per_page: 50, keyword: 'SKU' })
+    wrapper.unmount()
+  })
+
+  it('blocks duplicate stock-out clicks until the write finishes and refreshes stock', async () => {
+    let finishPost!: (response: unknown) => void
+    postMock.mockImplementation((path: string) => path === '/api/inventory/out'
+      ? new Promise((resolve) => { finishPost = resolve }) : Promise.resolve({ success: true }))
+    const wrapper = mount(InventoryView)
+    await flushPromises()
+    const outButton = wrapper.findAll('.inventory-actions button').find((button) => button.text() === '出库')
+    await outButton!.trigger('click')
+    const selects = wrapper.findAll('.modal.active select')
+    await selects[0].setValue('7')
+    await selects[1].setValue('3')
+    const confirm = wrapper.findAll('.modal.active button').find((button) => button.text() === '确认出库')
+    await confirm!.trigger('click')
+    expect(confirm!.attributes('disabled')).toBeDefined()
+    await confirm!.trigger('click')
+    expect(postMock).toHaveBeenCalledTimes(1)
+    finishPost({ success: true })
+    await flushPromises()
+    expect(wrapper.find('.modal.active').exists()).toBe(false)
+    expect(getMock.mock.calls.filter(([path]) => path === '/api/inventory').length).toBeGreaterThan(1)
+    wrapper.unmount()
   })
 
   it('shows a warehouse setup guide when no active warehouse exists and initializes one on click', async () => {
