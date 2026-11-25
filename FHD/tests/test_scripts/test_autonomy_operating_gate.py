@@ -70,6 +70,16 @@ def fixtures():
                    "rollback_receipt_sha256": DIGEST, "paired_samples": 100, "experiment_approved": True,
                    "rollback_test_passed": True, "no_safety_regression": True,
                    "baseline_successes": 80, "candidate_successes": 86}
+    release = {
+        "release_channel": "stable",
+        "release_version": "fixture-only-version",
+        "required_ci_passed": True,
+        "release_gate": "PASS",
+        "required_ci_receipt_sha256": DIGEST,
+        "signed_release_manifest_sha256": DIGEST,
+        "platform_acceptance_sha256": DIGEST,
+        "release_rollback_receipt_sha256": DIGEST,
+    }
     return locals()
 
 
@@ -79,6 +89,8 @@ def write_fixture(root, change=None):
         change(rows)
     evidence = {}
     for name in ARTIFACTS:
+        if name not in rows:
+            continue
         data = {**rows[name], "source_sha": SHA, "environment": "production",
                 "release_artifact_sha256": RELEASE_ARTIFACT,
                 "deployment_receipt_sha256": DEPLOYMENT_RECEIPT}
@@ -124,10 +136,11 @@ def test_synthetic_signed_fixture_only_tests_verifier_logic(tmp_path):
     (lambda v: v["heartbeat"]["samples"].__setitem__(30, {**v["heartbeat"]["samples"][30], "at": stamp(NOW)}), "L04"),
     (lambda v: v["faults"]["cases"].pop(), "L05"),
     (lambda v: v["goals"]["days"].pop(), "L06"),
-    (lambda v: v["ledger"]["days"].pop(), "L08"),
+    (lambda v: v["ledger"]["days"].pop(), "L07_90d"),
     (lambda v: v["ledger"]["days"][0].update(profit="3.00"), "L07"),
     (lambda v: v["security"]["cases"][0].update(side_effect_count=1), "L09"),
-    (lambda v: v["improvement"].update(candidate_successes=81), "improvement"),
+    (lambda v: v["improvement"].update(candidate_successes=81), "L08"),
+    (lambda v: v["release"].update(release_channel="preview"), "L10"),
 ])
 def test_negative_cases_block_level_upgrade(tmp_path, change, blocked):
     report = verify(write_fixture(tmp_path, change))
@@ -172,10 +185,14 @@ def test_manifest_cannot_include_path_traversal(tmp_path):
 
 def test_duplicate_json_field_fails_closed(tmp_path):
     write_fixture(tmp_path)
-    raw = (tmp_path / "manifest.json").read_bytes().replace(b'"schema_version": 1', b'"schema_version": 1, "schema_version": 1')
+    original = (tmp_path / "manifest.json").read_bytes()
+    raw = original.replace(b'"schema_version": 2', b'"schema_version": 2, "schema_version": 2')
+    assert raw != original
     (tmp_path / "manifest.json").write_bytes(raw)
     (tmp_path / "manifest.hmac").write_text(hmac.new(KEY, raw, hashlib.sha256).hexdigest())
-    assert verify(tmp_path)["checks"]["L01"] == "BLOCKED"
+    report = verify(tmp_path)
+    assert report["checks"]["L01"] == "BLOCKED"
+    assert "duplicate JSON key" in report["blockers"]["L01"]
 
 
 def test_missing_actual_elapsed_time_blocks_8h_and_72h(tmp_path):
@@ -223,3 +240,37 @@ def test_resigned_raw_artifact_cannot_switch_deployment_identity(tmp_path, field
     report = verify(tmp_path)
     assert report["checks"]["L01"] == "BLOCKED"
     assert report["highest_certifiable_level"] is None
+
+
+def test_l1_does_not_require_future_operating_evidence(tmp_path):
+    def only_early_evidence(data):
+        for name in ARTIFACTS:
+            if name not in {"model", "security"}:
+                data.pop(name)
+        data["model"]["trials"] = data["model"]["trials"][:1]
+
+    report = verify(write_fixture(tmp_path, only_early_evidence))
+    assert report["highest_certifiable_level"] == "L1"
+    assert report["levels"]["L2"] == "BLOCKED"
+    assert report["checks"]["L07"] == "BLOCKED"
+    assert report["checks"]["L10"] == "BLOCKED"
+
+
+def test_l07_and_l08_have_distinct_meanings(tmp_path):
+    def shorten_ledger(data):
+        data["ledger"]["days"] = data["ledger"]["days"][-30:]
+
+    report = verify(write_fixture(tmp_path, shorten_ledger))
+    assert report["checks"]["L07_30d"] == "PASS"
+    assert report["checks"]["L07_90d"] == "BLOCKED"
+    assert report["checks"]["L07"] == "BLOCKED"
+    assert report["checks"]["L08"] == "PASS"
+    assert report["highest_certifiable_level"] == "L5"
+
+
+def test_l10_requires_stable_release_even_with_all_operating_evidence(tmp_path):
+    report = verify(write_fixture(tmp_path, lambda data: data.pop("release")))
+    assert report["checks"]["L07"] == "PASS"
+    assert report["checks"]["L08"] == "PASS"
+    assert report["checks"]["L10"] == "BLOCKED"
+    assert report["highest_certifiable_level"] == "L5"

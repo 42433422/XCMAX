@@ -19,7 +19,7 @@ from pathlib import Path
 
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA64 = re.compile(r"[0-9a-f]{64}\Z")
-ARTIFACTS = ("model", "business", "heartbeat", "faults", "goals", "ledger", "security", "improvement")
+ARTIFACTS = ("model", "business", "heartbeat", "faults", "goals", "ledger", "security", "improvement", "release")
 NEGATIVE = frozenset({"cross_tenant", "revoked_permission", "expired_authorization", "budget_exhausted", "self_approval", "duplicate_write", "stopped_runtime", "audit_disable"})
 FAULTS = frozenset({"process_crash", "network_loss", "timeout", "late_receipt", "duplicate_receipt", "permission_revoked", "budget_exhausted"})
 LEVELS = {
@@ -27,8 +27,8 @@ LEVELS = {
     "L2": ("L01", "L02", "L09"),
     "L3": ("L01", "L02", "L03", "L09"),
     "L4": ("L01", "L02", "L03", "L04", "L05", "L09"),
-    "L5": ("L01", "L02", "L03", "L04", "L05", "L06", "improvement", "L09"),
-    "L6": ("L01", "L02", "L03", "L04", "L05", "L06", "improvement", "L07", "L08", "L09", "L10"),
+    "L5": ("L01", "L02", "L03", "L04", "L05", "L06", "L08", "L09"),
+    "L6": ("L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10"),
 }
 
 
@@ -201,9 +201,29 @@ def _improvement(value: dict) -> None:
         raise ValueError("paired improvement below prespecified 5 successful tasks")
 
 
+def _stable_release(value: dict) -> None:
+    if (
+        value.get("release_channel") != "stable"
+        or not isinstance(value.get("release_version"), str)
+        or not value["release_version"].strip()
+        or value.get("required_ci_passed") is not True
+        or value.get("release_gate") != "PASS"
+        or not all(
+            _digest(value.get(key))
+            for key in (
+                "required_ci_receipt_sha256",
+                "signed_release_manifest_sha256",
+                "platform_acceptance_sha256",
+                "release_rollback_receipt_sha256",
+            )
+        )
+    ):
+        raise ValueError("stable release lacks independently reviewed CI, signing, platform acceptance or rollback receipts")
+
+
 def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
-    checks = {k: "BLOCKED" for k in ("L01", "L02_smoke", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "improvement")}
+    checks = {k: "BLOCKED" for k in ("L01", "L02_smoke", "L02", "L03", "L04", "L05", "L06", "L07_30d", "L07_90d", "L07", "L08", "L09", "L10")}
     reasons: dict[str, str] = {}
     payloads = {}
     provenance = {}
@@ -226,8 +246,8 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
                 or not manifest.get("run_id") or _stamp(manifest.get("captured_at")) > now + timedelta(minutes=2)):
             raise ValueError("manifest source/auditor/clock provenance invalid")
         artifacts = manifest.get("artifacts")
-        if not isinstance(artifacts, dict) or set(artifacts) != set(ARTIFACTS):
-            raise ValueError("manifest artifact inventory incomplete")
+        if not isinstance(artifacts, dict) or not artifacts or not set(artifacts).issubset(ARTIFACTS):
+            raise ValueError("manifest artifact inventory empty or contains unknown kinds")
         used = set()
         for kind, item in artifacts.items():
             if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
@@ -266,10 +286,10 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
         "L04": lambda: _continuity(payloads["heartbeat"], 8 * 3600, now),
         "L05": lambda: (_continuity(payloads["heartbeat"], 72 * 3600, now), _faults(payloads["faults"])),
         "L06": lambda: _goals(payloads["goals"], now),
-        "L07": lambda: _ledger(payloads["ledger"], 30, now),
-        "L08": lambda: _ledger(payloads["ledger"], 90, now),
+        "L07_30d": lambda: _ledger(payloads["ledger"], 30, now),
+        "L07_90d": lambda: _ledger(payloads["ledger"], 90, now),
+        "L08": lambda: _improvement(payloads["improvement"]),
         "L09": lambda: _security(payloads["security"]),
-        "improvement": lambda: _improvement(payloads["improvement"]),
     }
     for name, validator in validators.items():
         try:
@@ -277,16 +297,24 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
             checks[name] = "PASS"
         except (ValueError, KeyError, TypeError, InvalidOperation, OverflowError) as exc:
             reasons[name] = str(exc)
-    checks["L10"] = "PASS" if all(checks[name] == "PASS" for name in checks if name != "L10") else "BLOCKED"
-    if checks["L10"] == "BLOCKED":
-        reasons["L10"] = "independent report records unresolved evidence; cannot certify L6"
+    if checks["L07_30d"] == checks["L07_90d"] == "PASS":
+        checks["L07"] = "PASS"
+    else:
+        reasons["L07"] = "both 30-day and 90-day operating evidence are required"
+    try:
+        _stable_release(payloads["release"])
+        if any(status != "PASS" for name, status in checks.items() if name != "L10"):
+            raise ValueError("independent report records unresolved evidence; cannot certify L6")
+        checks["L10"] = "PASS"
+    except (ValueError, KeyError, TypeError) as exc:
+        reasons["L10"] = str(exc)
     return _report(source_sha, checks, reasons, provenance)
 
 
 def _report(sha: str, checks: dict, reasons: dict, provenance: dict) -> dict:
     levels = {level: "PASS" if all(checks[g] == "PASS" for g in gates) else "BLOCKED" for level, gates in LEVELS.items()}
     highest = next((level for level in reversed(LEVELS) if all(levels[x] == "PASS" for x in LEVELS if int(x[1:]) <= int(level[1:]))), None)
-    return {"schema_version": 1, "source_sha": sha, "highest_certifiable_level": highest, "levels": levels,
+    return {"schema_version": 2, "source_sha": sha, "highest_certifiable_level": highest, "levels": levels,
             "checks": checks, "blockers": reasons, "provenance": provenance}
 
 
