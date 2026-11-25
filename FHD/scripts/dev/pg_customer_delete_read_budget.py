@@ -15,6 +15,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -194,6 +195,19 @@ def _p95(values):
     return ordered[math.ceil(0.95 * len(ordered)) - 1]
 
 
+def _verify_checkout_head(expected):
+    """Bind the report to the actual checked-out Git commit, not an arbitrary CLI label."""
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(FHD.parent), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise EvidenceBlocked("actual Git checkout SHA unavailable") from None
+    if probe.returncode != 0 or probe.stdout.strip() != expected:
+        raise EvidenceBlocked("actual checkout HEAD does not match --head-sha")
+
+
 def run(args):
     if not re.fullmatch(r"[0-9a-f]{40}", args.head_sha):
         raise EvidenceBlocked("--head-sha requires a real 40-digit Git commit SHA")
@@ -207,6 +221,7 @@ def run(args):
         engine.dispose()
         raise EvidenceBlocked("not a PostgreSQL engine: SQLite is not evidence")
     try:
+        _verify_checkout_head(args.head_sha)
         with engine.connect() as conn:
             server_version = str(conn.exec_driver_sql("SHOW server_version").scalar_one())
         samples = _samples(engine, args.tenant_id)
@@ -225,6 +240,8 @@ def run(args):
                 "min_denied_associations": min(
                     run["denied_association_count"] for run in runs
                 ),
+                "latency_samples_ms": [run["elapsed_ms"] for run in runs],
+                "sql_count_samples": [run["sql_total"] for run in runs],
                 "explain": runs[-1]["plans"],
                 "status": "PASS" if (
                     p95 <= args.max_p95_ms
