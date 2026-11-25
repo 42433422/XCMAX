@@ -142,57 +142,126 @@ class _TaskListScreenState extends State<TaskListScreen>
                   if (refreshing && tasks.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  final pendingApprovals =
-                      tasks.where((task) => task.approvalRequired).length;
+                  var pendingApprovals = 0;
+                  final taskIndexById = <String, int>{};
+                  for (var i = 0; i < tasks.length; i++) {
+                    final task = tasks[i];
+                    if (task.approvalRequired) pendingApprovals++;
+                    if (task.taskId.isNotEmpty) {
+                      taskIndexById.putIfAbsent(task.taskId, () => i);
+                    }
+                  }
+                  final radius = Radius.circular(XcagiShapeTokens.large);
                   return RefreshIndicator(
                     color: colors.brand,
                     onRefresh: _refresh,
-                    child: ListView(
+                    child: CustomScrollView(
+                      key: const PageStorageKey<String>('mobile-task-list'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: [
-                        if (refreshing) const LinearProgressIndicator(),
+                      slivers: [
+                        if (refreshing)
+                          const SliverToBoxAdapter(
+                            child: LinearProgressIndicator(),
+                          ),
                         if (snapshot.hasError || tasks.isEmpty)
-                          ListTile(
-                            title: Text(
-                              snapshot.hasError
-                                  ? mobileErrorText(snapshot.error)
-                                  : '暂无任务',
+                          SliverToBoxAdapter(
+                            child: ListTile(
+                              title: Text(
+                                snapshot.hasError
+                                    ? mobileErrorText(snapshot.error)
+                                    : '暂无任务',
+                              ),
+                              subtitle: const Text('下拉刷新，或点击重试'),
+                              trailing: const Icon(Icons.refresh),
+                              onTap: _refresh,
                             ),
-                            subtitle: const Text('下拉刷新，或点击重试'),
-                            trailing: const Icon(Icons.refresh),
-                            onTap: _refresh,
                           ),
-                        if (pendingApprovals > 0) ...[
-                          WeCellGroup(
-                            children: [
-                              WeCell(
-                                title: '待审批',
-                                subtitle: '$pendingApprovals 项任务需要你确认',
-                                icon: Icons.fact_check_outlined,
-                                iconColor: colors.brand,
-                                iconBg: colors.brandContainer,
-                                showDivider: false,
-                                onTap: refreshing ? null : _openApprovals,
+                        if (pendingApprovals > 0)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: WeCellGroup(
+                                children: [
+                                  WeCell(
+                                    title: '待审批',
+                                    subtitle: '$pendingApprovals 项任务需要你确认',
+                                    icon: Icons.fact_check_outlined,
+                                    iconColor: colors.brand,
+                                    iconBg: colors.brandContainer,
+                                    showDivider: false,
+                                    onTap: refreshing ? null : _openApprovals,
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                        ],
-                        WeCellGroup(
-                          children: [
-                            for (var i = 0; i < tasks.length; i += 1)
-                              _TaskCell(
-                                task: tasks[i],
-                                onTap: refreshing || tasks[i].taskId.isEmpty
-                                    ? null
-                                    : () => _openTask(tasks[i]),
-                                showDivider: i != tasks.length - 1,
+                        if (tasks.isNotEmpty)
+                          SliverPadding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            sliver: DecoratedSliver(
+                              decoration: BoxDecoration(
+                                color: colors.surface,
+                                borderRadius: BorderRadius.all(radius),
+                                border: Border.all(
+                                  color: colors.divider.withValues(alpha: 0.45),
+                                ),
                               ),
-                          ],
+                              sliver: SliverPadding(
+                                padding: const EdgeInsets.all(1),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      final task = tasks[index];
+                                      final isFirst = index == 0;
+                                      final isLast = index == tasks.length - 1;
+                                      final cell = _TaskCell(
+                                        task: task,
+                                        onTap: refreshing || task.taskId.isEmpty
+                                            ? null
+                                            : () => _openTask(task),
+                                        showDivider: !isLast,
+                                      );
+                                      // Valid unique identities survive reorder.
+                                      // Malformed duplicate or empty IDs cannot
+                                      // provide stable identity; use a local key.
+                                      final key = taskIndexById[task.taskId] == index
+                                          ? ValueKey<String>(task.taskId)
+                                          : ValueKey<int>(index);
+                                      return KeyedSubtree(
+                                        key: key,
+                                        child: isFirst || isLast
+                                            ? ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.vertical(
+                                                  top: isFirst
+                                                      ? radius
+                                                      : Radius.zero,
+                                                  bottom: isLast
+                                                      ? radius
+                                                      : Radius.zero,
+                                                ),
+                                                child: cell,
+                                              )
+                                            : cell,
+                                      );
+                                    },
+                                    childCount: tasks.length,
+                                    addAutomaticKeepAlives: false,
+                                    findChildIndexCallback: (key) =>
+                                        key is ValueKey<String>
+                                            ? taskIndexById[key.value]
+                                            : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 24),
+                            child: _DesktopStatusLine(future: _devicesFuture),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        _DesktopStatusLine(future: _devicesFuture),
                       ],
                     ),
                   );
