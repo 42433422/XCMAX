@@ -85,6 +85,26 @@ def redis_url():
             server.wait(timeout=5)
 
 
+@pytest.fixture(autouse=True)
+def isolated_stream_namespace(redis_url, monkeypatch):
+    """Use unique keys even when a test Redis service is shared across jobs."""
+    from app.neuro_bus.transports import redis_streams as streams
+
+    tag = uuid.uuid4().hex
+    stream_key = f"neurobus:test:{{{tag}}}:events"
+    dlq_key = f"neurobus:test:{{{tag}}}:dlq"
+    monkeypatch.setattr(streams, "STREAM_KEY", stream_key)
+    monkeypatch.setattr(streams, "DLQ_KEY", dlq_key)
+    monkeypatch.setitem(globals(), "STREAM_KEY", stream_key)
+    monkeypatch.setitem(globals(), "DLQ_KEY", dlq_key)
+    try:
+        yield
+    finally:
+        # Never FLUSHDB or delete the shared production/default stream names.
+        with redis_lib.Redis.from_url(redis_url) as client:
+            client.delete(stream_key, dlq_key)
+
+
 def _client(url):
     return redis_lib.Redis.from_url(url, decode_responses=False)
 
@@ -106,7 +126,10 @@ def test_cross_process_publish_and_consume(redis_url) -> None:
 
     code = (
         "import redis, json, sys\n"
-        "from app.neuro_bus.transports.redis_streams import RedisStreamsBridge\n"
+        "from app.neuro_bus.transports import redis_streams as streams\n"
+        f"streams.STREAM_KEY = {STREAM_KEY!r}\n"
+        f"streams.DLQ_KEY = {DLQ_KEY!r}\n"
+        "RedisStreamsBridge = streams.RedisStreamsBridge\n"
         f"c = redis.Redis.from_url({redis_url!r})\n"
         "b = RedisStreamsBridge(bus=None, redis_client=c, consumer_id='publisher-proc')\n"
         f"b.publish(json.loads(sys.argv[1]))\n"
