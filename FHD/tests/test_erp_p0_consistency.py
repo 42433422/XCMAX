@@ -95,12 +95,23 @@ def test_purchase_progress_uses_completed_receipts_and_exact_decimal():
         id=11, quantity=Decimal("0.3000"), received_quantity=Decimal("0"), status="approved"
     )
     order = SimpleNamespace(id=7, tenant_id=3, status="approved", items=[row])
+    from app.db.models import PurchaseInboundItem, PurchaseOrder, PurchaseReturnItem
+
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = order
-    db.query.return_value.join.return_value.filter.return_value.all.return_value = [
+    order_q = MagicMock()
+    order_q.filter.return_value.first.return_value = order
+    inbound_q = MagicMock()
+    inbound_q.join.return_value.filter.return_value.all.return_value = [
         SimpleNamespace(quantity=Decimal("0.1000")),
         SimpleNamespace(quantity=Decimal("0.2000")),
     ]
+    returns_q = MagicMock()
+    returns_q.join.return_value.join.return_value.filter.return_value.all.return_value = []
+    db.query.side_effect = lambda model: {
+        PurchaseOrder: order_q,
+        PurchaseInboundItem: inbound_q,
+        PurchaseReturnItem: returns_q,
+    }[model]
     PurchaseService()._update_order_received_quantity(db, 7)
     assert row.received_quantity == Decimal("0.3000")
     assert row.status == order.status == "completed"
