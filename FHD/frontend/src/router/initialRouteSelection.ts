@@ -9,6 +9,7 @@ const SANDBOX_ALLOWED = new Set([
   'login-forgot-account',
   'login-forgot-password',
   'chat',
+  'employee-workbench',
   'workflow-employee-space',
   'workflow-employee-stitch-full',
   'mod-landing',

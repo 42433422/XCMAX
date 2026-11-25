@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, StrictBool, model_validator
 
 from .clarification_lifecycle import option_letter_ordinal, resolve_confirmed_target
 
@@ -67,6 +67,24 @@ class ClarificationExtraction(BaseModel):
     resolved: StrictBool
     parameters: dict[str, Any]
 
+    @model_validator(mode="after")
+    def coherent_answer(self) -> "ClarificationExtraction":
+        if self.turn_kind != "answer" and (self.resolved or self.parameters):
+            raise ValueError("Only an answer may resolve a clarification")
+        if not self.resolved and self.parameters:
+            raise ValueError("An unresolved answer cannot supply parameters")
+        return self
+
+
+class ClarificationTurnError(ValueError):
+    """A failed classification is different from a valid, unclear user turn."""
+
+    def __init__(self, *, unavailable: bool = False, failure: dict[str, Any] | None = None) -> None:
+        self.failure = failure or {}
+        self.code = "model_response_invalid"
+        self.retryable = True
+        super().__init__("澄清识别服务未返回有效结果" if unavailable else "澄清识别结果不符合协议")
+
 
 CLARIFICATION_PARSER = PydanticOutputParser(pydantic_object=ClarificationExtraction)
 
@@ -76,9 +94,9 @@ def select_clarified_target(
     candidates: list[dict[str, Any]],
     *,
     affirmative: bool,
-    extract: Callable[..., dict[str, Any] | None],
+    extract: Callable[..., ClarificationExtraction],
     request: dict[str, Any],
-) -> dict[str, Any] | None:
+) -> dict[str, Any] | ClarificationExtraction | None:
     selected = resolve_confirmed_target(text, candidates)
     if selected is not None or not candidates:
         return selected
@@ -95,7 +113,10 @@ def select_clarified_target(
     )
     if affirmative or text.strip().isdigit() or option_letter_ordinal(text) or duplicate_name:
         return None
-    selected = extract(**request, answer=text, allowed_fields={"id"}, candidates=candidates)
+    turn = extract(**request, answer=text, allowed_fields={"id"}, candidates=candidates)
+    if turn.turn_kind != "answer":
+        return turn
+    selected = turn.parameters if turn.resolved else None
     if (
         not isinstance(selected, dict)
         or set(selected) != {"id"}

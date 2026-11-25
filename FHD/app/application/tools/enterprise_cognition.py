@@ -6,7 +6,10 @@ import logging
 
 from pydantic import ValidationError
 
-from app.application.enterprise_cognition.service import get_cognition_service
+from app.application.enterprise_cognition.service import (
+    cognition_result_verified,
+    get_cognition_service,
+)
 from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -36,13 +39,7 @@ def execute_enterprise_cognition(action: str, params: dict, context: dict) -> di
                 "data": {**identity, "status": result.status},
             }
         return {
-            "success": (
-                result.get("observation_verified") is True
-                if action == "evaluate"
-                else result.get("current_state_verified") is True
-                if action == "query"
-                else True
-            ),
+            "success": cognition_result_verified(action, params, result),
             "data": result,
         }
     except (AgentModAuthorizationError, PermissionError):

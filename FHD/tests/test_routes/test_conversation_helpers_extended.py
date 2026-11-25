@@ -235,8 +235,8 @@ class TestXcagiPlannerStreamBytesAsync:
         """Async wrapper should yield chunks from sync generator."""
         body = helpers.XcagiCompatChatBody(message="hello")
 
-        with _patch_conversation(
-            "_xcagi_planner_stream_bytes",
+        with patch(
+            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_planner_stream_bytes",
             return_value=iter([b"chunk1", b"chunk2"]),
         ):
             chunks = []

@@ -259,7 +259,7 @@ class TestEnrichRegisterWithTenant:
     def test_infra_transient_returns_unchanged(self, auth_mod):
         with patch(
             "app.application.enterprise_login_flow.bind_tenant_for_login",
-            side_effect=RuntimeError("db down"),
+            side_effect=ConnectionError("db down"),
         ):
             result = auth_mod._enrich_register_with_tenant(
                 result={"user": {"id": 1}},
@@ -299,7 +299,7 @@ class TestJitCreateLocalUser:
 
     def test_infra_transient_returns_false(self, auth_mod):
         mock_db = MagicMock()
-        mock_db.query.side_effect = RuntimeError("db down")
+        mock_db.query.side_effect = ConnectionError("db down")
         mock_db.__enter__ = lambda s: mock_db
         mock_db.__exit__ = MagicMock(return_value=False)
         with patch("app.db.session.get_db", return_value=mock_db):

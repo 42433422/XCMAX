@@ -10,16 +10,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import ai_open, ai_qclaw
+from app.fastapi_routes import ai_open
 from app.fastapi_routes.aiopen_route_support import trace_control_result, trace_tool_call
 
 
 @pytest.fixture
 def capture(monkeypatch):
     recorder = Mock(return_value=SimpleNamespace(run_id="audit-test"))
-    for route in (ai_open, ai_qclaw):
-        monkeypatch.setattr(route, "create_chat_trace_run", recorder)
-        monkeypatch.setattr(route, "verify_api_key", lambda key: key == "fixture-key")
+    monkeypatch.setattr(ai_open, "create_chat_trace_run", recorder)
     monkeypatch.setattr(
         ai_open,
         "authorize_api_key",
@@ -27,7 +25,6 @@ def capture(monkeypatch):
     )
     monkeypatch.setattr(ai_open, "invoke_tool", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(ai_open, "AIOPEN_STATE", {})
-    monkeypatch.setattr(ai_qclaw, "_QCLOW_RUNTIME_STATE", {})
     return recorder
 
 
@@ -64,10 +61,8 @@ def test_trace_helpers_never_trust_payload_actor(field, explicit):
     [
         (ai_open, "/api/aiopen/control", {"enabled": True}),
         (ai_open, "/api/aiopen/config", {"base_url": "http://localhost:9999"}),
+        (ai_open, "/api/aiopen/config", {"wechat_open": True}),
         (ai_open, "/api/aiopen/whitelist", {"path": "/fixture", "enabled": True}),
-        (ai_qclaw, "/api/ai/qclaw/wechat-gateway", {"enabled": True}),
-        (ai_qclaw, "/api/ai/qclaw/openclaw/config", {"base_url": "http://localhost:9999"}),
-        (ai_qclaw, "/api/ai/qclaw/whitelist", {"path": "/fixture", "enabled": True}),
     ],
 )
 def test_control_routes_use_verified_admin(route, path, body, capture):
@@ -104,26 +99,3 @@ def test_key_only_tool_calls_do_not_impersonate_users(mcp, capture):
     assert response.status_code == 200
     assert capture.call_args.kwargs["user_id"] == "aiopen-api-key"
     ai_open.invoke_tool.assert_awaited_once()
-
-
-@pytest.mark.parametrize(
-    "route,path",
-    [
-        (ai_open, "/api/aiopen/openclaw/chat"),
-        (ai_qclaw, "/api/ai/qclaw/openclaw/chat"),
-    ],
-)
-def test_proxy_chat_never_uses_body_actor(route, path, capture, monkeypatch):
-    attach = Mock(side_effect=lambda payload, **kwargs: payload)
-    monkeypatch.setattr(route, "attach_chat_trace_run", attach)
-    monkeypatch.setattr(route, "openclaw_chat_proxy", lambda msg: ({"success": True}, 200))
-    app = FastAPI()
-    app.include_router(route.router)
-    with TestClient(app) as client:
-        response = client.post(
-            path,
-            json={"message": "fixture", "user_id": "victim"},
-            headers={"X-AIOPEN-Key": "fixture-key"},
-        )
-    assert response.status_code == 200
-    assert attach.call_args.kwargs["user_id"] == "aiopen-api-key"

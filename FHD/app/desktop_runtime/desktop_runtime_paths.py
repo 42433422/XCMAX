@@ -81,6 +81,15 @@ def sqlite_database_url(data_dir: str | os.PathLike[str] | None = None) -> str:
     return "sqlite:///" + dirs["data"].joinpath("xcagi.db").as_posix()
 
 
+def mark_database_recovery_required(data_dir: str | os.PathLike[str] | None = None) -> None:
+    marker = get_desktop_data_dir(data_dir) / "config" / _DB_RECOVERY_MARKER
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    with marker.open("w", encoding="utf-8") as stream:
+        stream.write("corrupt_no_backup\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def clear_database_recovery_marker(data_dir: str | os.PathLike[str] | None = None) -> bool:
     marker = get_desktop_data_dir(data_dir) / "config" / _DB_RECOVERY_MARKER
     try:
@@ -122,9 +131,11 @@ def configure_desktop_environment(
                 logging.getLogger(__name__).error(
                     "desktop db corrupt and no usable backup: %s", recovery["detail"]
                 )
-                marker.write_text("corrupt_no_backup\n", encoding="utf-8")
+                mark_database_recovery_required(root)
             elif recovery["action"] == "restored":
-                if clear_database_recovery_marker(root):
+                # Recovery clears its own marker under the migration lock.
+                # A marker present now may belong to a newer concurrent attempt.
+                if not marker.exists():
                     os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
                 else:
                     os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"

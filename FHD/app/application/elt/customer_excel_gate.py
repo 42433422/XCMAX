@@ -13,11 +13,12 @@ import os
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
 from openpyxl import load_workbook
+from openpyxl.utils.cell import range_boundaries
 from openpyxl.utils.exceptions import InvalidFileException
 
 from app.application.elt.attendance_pipeline import _hours, persist_attendance_rows
@@ -99,6 +100,13 @@ _ITEMS: tuple[tuple[str, str], ...] = (
 )
 CHECK_IDS = tuple(f"B31-{number}" for number, _title in _ITEMS)
 _WORKBOOK_ERRORS = (OSError, ValueError, BadZipFile, InvalidFileException, ParseError)
+
+
+class _SheetInfo(TypedDict):
+    name: str
+    state: str
+    max_row: int
+    max_column: int
 
 
 def _mark(checks: dict[str, str], number: str, ok: bool | None) -> None:
@@ -193,6 +201,32 @@ def _tenant_isolated(db_path: Path) -> bool | None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_daily_records)")}
     # Columns are necessary, but do not prove that a second tenant cannot read rows.
     return None if {"tenant_id", "customer_id"} <= columns else False
+
+
+def _slice_matches_source(row: ParsedRow, sheets: dict[str, _SheetInfo]) -> bool:
+    source = sheets.get(row.sheet)
+    item = row.provenance.get("slice") or {}
+    try:
+        left, top, right, bottom = range_boundaries(str(item.get("table_region") or ""))
+    except ValueError:
+        return False
+    if (
+        not source
+        or not isinstance(left, int)
+        or not isinstance(top, int)
+        or not isinstance(right, int)
+        or not isinstance(bottom, int)
+    ):
+        return False
+    columns = row.provenance.get("columns") or {}
+    return (
+        item.get("sheet") == row.sheet
+        and item.get("original_row_range") == [row.row_number, row.row_number]
+        and 1 <= left <= right <= source["max_column"]
+        and 1 <= top <= row.row_number <= bottom <= source["max_row"]
+        and bool(columns)
+        and all(isinstance(column, int) and left <= column <= right for column in columns.values())
+    )
 
 
 def _daily_rows(db_path: Path) -> dict[str, tuple]:
@@ -320,8 +354,14 @@ def evaluate_workbook(
     try:
         book = load_workbook(path, read_only=False, data_only=False)
         try:
-            actual_sheets = [
-                {"name": sheet.title, "state": sheet.sheet_state} for sheet in book.worksheets
+            actual_sheets: list[_SheetInfo] = [
+                {
+                    "name": sheet.title,
+                    "state": sheet.sheet_state,
+                    "max_row": sheet.max_row,
+                    "max_column": sheet.max_column,
+                }
+                for sheet in book.worksheets
             ]
             content_rows = {
                 sheet.title: {
@@ -412,6 +452,29 @@ def evaluate_workbook(
     slice_ids = [item.get("slice_id") for item in slices]
     _mark(checks, "15", bool(rows) and all(slice_ids))
     _mark(checks, "16", bool(rows) and not orphans)
+    source_sheets = {sheet["name"]: sheet for sheet in actual_sheets}
+    boundaries_match = bool(rows) and all(_slice_matches_source(row, source_sheets) for row in rows)
+    _mark(checks, "17", boundaries_match if rows else None)
+    if rows and not boundaries_match:
+        hard_fail = True
+        notes.append("切片边界与原件的工作表、源行或字段列不一致")
+    business_sheets = {
+        item["name"]
+        for item in recorded
+        if item.get("status") == "identified"
+        and content_rows.get(item["name"], set())
+        - {
+            number
+            for number, role in destinations.get(item["name"], {}).items()
+            if role not in {"record", "exception"}
+        }
+    }
+    if len(business_sheets) > 1:
+        _mark(
+            checks,
+            "18",
+            {row.sheet for row in rows} == business_sheets and boundaries_match and not orphans,
+        )
     if rows:
         _mark(checks, "19", len(slice_ids) == len(set(slice_ids)))
         _mark(checks, "20", all(item.get("source_sha256") == digest for item in slices))
@@ -471,7 +534,13 @@ def evaluate_workbook(
     )
     output_path = ""
     written = 0
-    if dataset is not None and confirmed and same_task:
+    if (
+        dataset is not None
+        and confirmed
+        and same_task
+        and not hard_fail
+        and "fail" not in checks.values()
+    ):
         ready = _payload(dataset)
         db_path = data_dir / "b31.sqlite"
         fault_db = data_dir / "b31-fault.sqlite"
@@ -612,6 +681,8 @@ def evaluate_workbook(
         if wanted_metrics and not metrics_ok:
             hard_fail = True
             notes.append(f"核算指标与人工基准不一致: {metrics}")
+    elif hard_fail or "fail" in checks.values():
+        notes.append("确认前校验失败，未写入数据库")
     elif not confirmed:
         notes.append("未经确认，未写入数据库")
     _mark(checks, "34", written == 0 or confirmed)

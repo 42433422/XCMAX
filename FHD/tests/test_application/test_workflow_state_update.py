@@ -188,8 +188,15 @@ class TestPublicRunState:
         assert run.status == "completed", (run.error, run.final_output)
         assert run.steps[0].status == "completed"
         events = orchestrator.list_events(run.run_id)
-        assert any(event.event_type == "run.completed" for event in events)
         assert events[-1].event_type == "run.observed"
         assert events[-1].data["status"] == "completed"
+        assert sum(event.event_type == "run.completed" for event in events) == 1
+        assert [event.event_type for event in events[-2:]] == ["run.completed", "run.observed"]
+        observed = events[-1].data
+        assert observed["status"] == "completed" and observed["phase"] == "execution"
+        assert observed["duration_scope"] == "active"
+        assert observed["phase_duration_ms"] >= 0
+        assert round(observed["phase_duration_ms"], 3) <= observed["duration_ms"]
+        assert observed["duration_ms"] == run.metadata["active_duration_ms"]
         assert all(event.run_id == run.run_id for event in events)
         assert repository.get(run.run_id).steps[0].output["data"] == []

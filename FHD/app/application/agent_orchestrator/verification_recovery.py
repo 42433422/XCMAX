@@ -9,11 +9,13 @@ import uuid
 from typing import Any
 
 from app.application.agent_orchestrator.result_verification import (
+    pending_execution_receipt,
     restore_verified_artifacts,
     summarize_verification,
+    verified_step_output,
     verify_step_result,
 )
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
@@ -25,13 +27,17 @@ from app.application.agent_orchestrator.runtime_context import (
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.task_execution_models import _task_id_of
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
-from app.domain.task_lifecycle.results import execution_result_error
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_requires_reconciliation,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 VERIFICATION_RECOVERY_KEY = "verification_recovery"
 _KEY = VERIFICATION_RECOVERY_KEY
 _LEASE_SECONDS = 120.0
 _DONE = {"queued", "observed", "not_recoverable"}
+_OBSERVABLE_RUN_STATES = ("blocked", "failed", "running", "unknown")
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +76,10 @@ def _read_context(run: AgentRun, current: dict[str, Any] | None) -> dict[str, An
         str(current.get("user_id") or "") != run.user_id
         or str(current.get("tenant_id") or "") != tenant_id_of_run(run)
         or original_mod != current_mod
+        or (
+            "_credential_authorization" in current
+            and current["_credential_authorization"] != context.get("_credential_authorization")
+        )
     ):
         raise RuntimeContextOwnershipError("核验不能更改原任务的账户、租户或 Mod")
     # The authenticated HTTP principal may have a renewed read session. Use it
@@ -82,8 +92,12 @@ def _read_context(run: AgentRun, current: dict[str, Any] | None) -> dict[str, An
 
 
 def _stopped_queue_proof(
-    repository: AgentRunRepository, run: AgentRun, *, allow_parked: bool = False
-) -> tuple[Any, Any]:
+    repository: AgentRunRepository,
+    run: AgentRun,
+    *,
+    allow_parked: bool = False,
+    optional: bool = False,
+) -> tuple[Any, Any] | None:
     from app.application.agent_orchestrator.run_repository import (
         InMemoryAgentRunRepository,
         get_agent_run_repository,
@@ -109,8 +123,12 @@ def _stopped_queue_proof(
         if not isinstance(queue, InMemoryTaskExecutionRepository):
             raise VerificationRecoveryError("核验缺少与原任务配对的执行队列")
     else:
+        if optional:
+            return None
         raise VerificationRecoveryError("核验缺少原执行租约的权威终止记录")
     execution = queue.get(run.run_id)
+    if execution is None and optional:
+        return None
     if (
         execution is None
         or (execution.run_id, execution.task_id, execution.user_id, execution.tenant_id)
@@ -151,6 +169,71 @@ def _stopped_queue_conditions(execution: Any) -> tuple[Any, ...]:
     )
 
 
+def _completed_original_receipts(run: AgentRun) -> bool:
+    """A stopped graph can retain a complete return while its readback is unavailable."""
+    latest = {call.step_id: call for call in run.tool_calls}
+    completed = [step for step in run.steps if step.status == "completed"]
+    return bool(
+        run.status in {"blocked", "failed"}
+        and (run.metadata.get("execution") or {}).get("state") != "active"
+        and not run.metadata.get("non_retryable")
+        and (run.metadata.get("recovery") or {}).get("state") != "manual_reconciliation_required"
+        and completed
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and all(
+            (call := latest.get(step.step_id)) is not None
+            and call.status == "completed"
+            and call.metadata.get("verification_contract")
+            and call.output == step.output
+            and call.output.get("success") is True
+            and not execution_result_error(call.output)
+            and not execution_result_requires_reconciliation(call.output)
+            for step in completed
+        )
+    )
+
+
+def _can_settle_queue(
+    run: AgentRun, previous: AgentRun, body: dict[str, Any], queue_state: str
+) -> bool:
+    """Every open effect must name a verified original step, never a guessed dispatch."""
+    from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
+
+    model = run.metadata.get("codex_runtime") or {}
+    return bool(
+        (
+            (
+                (previous.metadata.get("recovery") or {}).get("state") == "result_pending"
+                and any(pending_execution_receipt(call.output) for call in run.tool_calls)
+            )
+            or (queue_state == "unknown" and _completed_original_receipts(previous))
+        )
+        and run.steps
+        and not run.metadata.get("reserved_cost_units")
+        and not model.get("model_reconciliation_required")
+        and not any(
+            request.get("state") in {"reserved", "unknown"}
+            for request in (model.get("model_requests") or {}).values()
+        )
+        and verification_report(run).get("accepted") is True
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and not safe_continuation_error(run)
+        and set(body.get("effects") or [])
+        <= {step.step_id for step in run.steps if step.status == "completed"}
+    )
+
+
+def _settlement_body(body: dict[str, Any], run: AgentRun, state: str, now: str) -> None:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.domain.task_lifecycle.control import remember
+
+    body["effects"] = []
+    body["verification_receipt_sha256"] = canonical_hash(verification_report(run))
+    remember(
+        body, at=now, source=state, target="blocked", code="result_verified", actor=run.user_id
+    )
+
+
 def _save_observation(
     repository: AgentRunRepository,
     run: AgentRun,
@@ -162,23 +245,60 @@ def _save_observation(
     queue, execution = proof
     if isinstance(repository, SQLAlchemyAgentRunRepository):
         from app.db.models.agent import AgentTaskExecutionRecord as Record
+        from app.domain.task_lifecycle.control import SessionBook
 
-        # Recheck and fence the authoritative queue row in the same transaction
-        # as the original run CAS. No clock-based guess can evict a live owner.
         with repository.transaction() as db:
-            matched = (
-                db.query(Record)
-                .filter(*_stopped_queue_conditions(execution))
-                .update({Record.updated_at: execution.updated_at}, synchronize_session=False)
-            )
-            return bool(matched == 1 and repository.save_if_unchanged_in_session(db, run, previous))
+            # Fencing uses the original queue identity and generation in the same
+            # transaction as the run CAS. Merely observing an expired clock is insufficient.
+            query = db.query(Record).filter(*_stopped_queue_conditions(execution))
+            if (
+                query.update({Record.updated_at: execution.updated_at}, synchronize_session=False)
+                != 1
+            ):
+                return False
+            book = SessionBook(db)
+            body = book.get("agent", execution.tenant_id, execution.run_id)
+            settle = _can_settle_queue(run, previous, body, execution.state)
+            run.metadata["verification_queue_state"] = "blocked" if settle else execution.state
+            if not repository.save_if_unchanged_in_session(db, run, previous):
+                return False
+            if settle:
+                now = utc_now_iso()
+                if (
+                    query.update(
+                        {
+                            Record.state: "blocked",
+                            Record.last_error_code: "result_verified",
+                            Record.updated_at: now,
+                        },
+                        synchronize_session=False,
+                    )
+                    != 1
+                ):
+                    raise VerificationRecoveryError("核验期间原执行队列已变化")
+                _settlement_body(body, run, execution.state, now)
+                book.put("agent", execution.tenant_id, execution.run_id, body)
+            return True
     with queue._lock:
         latest = queue.get(previous.run_id)
-        return bool(
-            latest is not None
-            and latest.to_dict() == execution.to_dict()
-            and repository.save_if_unchanged(run, previous)
-        )
+        if latest is None or latest.to_dict() != execution.to_dict():
+            return False
+        body = queue._book.get("agent", execution.tenant_id, execution.run_id)
+        settle = _can_settle_queue(run, previous, body, execution.state)
+        run.metadata["verification_queue_state"] = "blocked" if settle else execution.state
+        if not repository.save_if_unchanged(run, previous):
+            return False
+        if settle:
+            now = utc_now_iso()
+            latest.state, latest.last_error_code, latest.updated_at = (
+                "blocked",
+                "result_verified",
+                now,
+            )
+            queue._rows[latest.run_id] = copy.deepcopy(latest)
+            _settlement_body(body, run, execution.state, now)
+            queue._book.put("agent", execution.tenant_id, execution.run_id, body)
+        return True
 
 
 def reverify_run(
@@ -196,7 +316,7 @@ def reverify_run(
     previous = repository.get(run_id)
     if previous is None:
         return None
-    if previous.status not in {"blocked", "failed", "running"}:
+    if previous.status not in _OBSERVABLE_RUN_STATES:
         raise VerificationRecoveryError("只有已停止的失败或待核验任务可以重新核验")
     context = _read_context(previous, runtime_context)
     run = copy.deepcopy(previous)
@@ -222,11 +342,12 @@ def reverify_run(
         for call in contracted
         if (
             steps[call.step_id].status == call.status == "completed"
-            and call.output.get("success") is True
             and (
-                not execution_result_error(call.output)
+                pending_execution_receipt(call.output)
+                or (call.output.get("success") is True and not execution_result_error(call.output))
                 or (
-                    (call.tool_id, call.action) == ("enterprise_cognition", "plan")
+                    call.output.get("success") is True
+                    and (call.tool_id, call.action) == ("enterprise_cognition", "plan")
                     and plan_admission_receipt(call.output)
                 )
             )
@@ -242,14 +363,23 @@ def reverify_run(
     )
     proof = (
         _stopped_queue_proof(
-            repository, previous, allow_parked=require_stopped_queue or unknown_delivery
+            repository,
+            previous,
+            allow_parked=require_stopped_queue or unknown_delivery or previous.status == "unknown",
         )
         if require_stopped_queue
         or unknown_delivery
-        or previous.status == "running"
+        or previous.metadata.get("verification_queue_state") == "unknown"
+        or previous.status in {"running", "unknown"}
         or (previous.metadata.get("execution") or {}).get("state") == "active"
         else None
     )
+    if proof is None and any(pending_execution_receipt(call.output) for call in calls):
+        proof = _stopped_queue_proof(repository, previous, optional=True)
+    if proof is None and _completed_original_receipts(previous):
+        # Queue and run must be fenced together even when the writer returned
+        # success. A later independent read may settle only those original effects.
+        proof = _stopped_queue_proof(repository, previous, allow_parked=True, optional=True)
     for call in calls:
         step = steps[call.step_id]
         verify_step_result(
@@ -266,11 +396,22 @@ def reverify_run(
         )
         restore_verified_artifacts(run, step, call)
     report = verification_report(run)
+    if (
+        report.get("accepted") is True
+        and any(pending_execution_receipt(call.output) for call in calls)
+        and all(step.status in {"completed", "skipped"} for step in run.steps)
+        and (run.metadata.get("recovery") or {}).get("state") == "result_pending"
+    ):
+        # Only the original accepted effects are settled. Their immutable raw
+        # receipts stay pending; the host's bound readback is the current result.
+        run.metadata.pop("non_retryable", None)
+        run.metadata.pop("recovery", None)
     if proof is not None and (
         previous.status == "running"
         or (previous.metadata.get("execution") or {}).get("state") == "active"
     ):
-        run.status = "blocked"
+        if previous.status != "unknown":
+            run.status = "blocked"
         run.metadata["execution"] = {**(run.metadata.get("execution") or {}), "state": "idle"}
     run.metadata["verification"] = report
     run.final_output["verification"] = copy.deepcopy(report)
@@ -293,11 +434,13 @@ def verification_can_finalize(run: AgentRun) -> bool:
     from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
 
     return bool(
-        run.steps
+        run.status != "unknown"
+        and run.steps
+        and run.metadata.get("verification_queue_state") != "unknown"
         and verification_report(run).get("accepted") is True
         and all(step.status in {"completed", "skipped"} for step in run.steps)
         and all(
-            not execution_result_error(step.output)
+            not execution_result_error(verified_step_output(run, step))
             for step in run.steps
             if step.status == "completed"
         )
@@ -318,7 +461,7 @@ def _eligible(run, now: float) -> bool:
 
     state = run.metadata.get(_KEY) or {}
     return bool(
-        run.status in {"blocked", "failed", "running"}
+        run.status in _OBSERVABLE_RUN_STATES
         and (run.metadata.get("verification") or {}).get("protocol") == PROTOCOL
         and state.get("status") not in _DONE
         and float(state.get("next_attempt_at") or 0) <= now
@@ -370,7 +513,7 @@ def _candidates(repository, now: float, limit: int):
             db.query(Run)
             .join(Execution, Execution.run_id == Run.run_id)
             .filter(
-                Run.status.in_(("blocked", "failed", "running")),
+                Run.status.in_(_OBSERVABLE_RUN_STATES),
                 Execution.state.in_(("blocked", "failed", "unknown")),
                 Execution.user_id == Run.user_id,
                 Execution.tenant_id
@@ -422,6 +565,8 @@ def recover_stopped_verification(
         if run is None or not _eligible(run, current_time):
             return None
         proof = _stopped_queue_proof(repository, run, allow_parked=True)
+        if proof is None:
+            return None
         previous = copy.deepcopy(run)
         state = dict(run.metadata.get(_KEY) or {})
         attempt = max(0, int(state.get("attempt") or 0)) + 1

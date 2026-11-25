@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_delivery_workbench_start import (
+    _save_delivery_evidence,
     persist_delivery_update,
     recover_paid_delivery_start,
 )
@@ -21,7 +22,6 @@ from modstore_server.customer_service_delivery_models import (
     custom_delivery_pricing_mode,
 )
 from modstore_server.customer_service_orchestrator import audit
-from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
 from modstore_server.models_cs import CustomerServiceTicket
 from modstore_server.payment_cs_internal import (
@@ -157,8 +157,9 @@ async def create_custom_delivery_checkout(
     )
     evidence["payment_attempts"] = attempts[-20:]
     evidence["crm"] = crm
-    ticket.evidence_json = json_dumps(evidence)
-    ticket.updated_at = datetime.now(UTC)
+    # Payment reconciliation can commit the original production while checkout waits.
+    if not _save_delivery_evidence(db, ticket, evidence):
+        raise HTTPException(409, "工单已变化，请刷新后核对原付款及交付状态")
     audit(
         db,
         event_type="custom_delivery_payment_order_created",

@@ -256,7 +256,7 @@ export function createMenu(): void {
     },
     { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
     { type: 'separator' },
-    { role: 'quit', label: '退出' }
+    { role: 'quit', label: '退出', accelerator: 'CmdOrCtrl+Q' }
   ]
 
   if (process.platform === 'darwin') {

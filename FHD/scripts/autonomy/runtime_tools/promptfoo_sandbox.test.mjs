@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import tls from 'node:tls';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { trainerArguments, trainerEnvironment, trainerPolicy, trainerRequestFilter, trainerSpec } from './promptfoo_sandbox.mjs';
+import { replayPolicy, replaySpec, trainerArguments, trainerEnvironment, trainerPolicy, trainerRequestFilter, trainerSpec } from './promptfoo_sandbox.mjs';
 
 const wrapper = fileURLToPath(new URL('./promptfoo_sandbox.mjs', import.meta.url));
 const runtime = process.env.PROMPTFOO_SANDBOX_ENTRY;
@@ -94,8 +94,141 @@ test('model admission is exact and the CLI environment has no inherited credenti
   ]) assert.equal((await invoke(url, body, info)).action, 'deny');
   const environment = trainerEnvironment(spec, '/tmp/training-synthetic');
   assert.equal(environment.PROMPTFOO_DISABLE_SHARING, '1');
+  assert.equal(environment.XCAGI_TRAINING_DEFER_NATIVE_REPLAY, '1');
   for (const name of ['OPENAI_API_KEY', 'XCAGI_LLM_API_KEY', 'DISPATCH_TOKEN', 'GITHUB_TOKEN',
     'PROMPTFOO_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NODE_OPTIONS']) assert.equal(environment[name], undefined);
+});
+
+test('fixed native replay policy denies network and preserves the namespace/write boundary', t => {
+  const root = mkdtempSync(join(tmpdir(), 'training-replay-policy-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const runtimeRoot = join(root, 'runtime'), work = join(root, 'work');
+  mkdirSync(join(runtimeRoot, 'dist'), { recursive: true });
+  mkdirSync(work);
+  const runtimePath = join(runtimeRoot, 'dist', 'cli.js');
+  writeFileSync(runtimePath, '// Configuration fixture only; never executed.\n');
+  const manifest = join(runtimeRoot, 'package.json');
+  writeFileSync(manifest, JSON.stringify({ name: '@anthropic-ai/sandbox-runtime', version: '0.0.83' }));
+  const helper = join(runtimeRoot, 'vendor', 'seccomp', process.arch, 'apply-seccomp');
+  mkdirSync(dirname(helper), { recursive: true });
+  writeFileSync(helper, '', { mode: 0o700 });
+  const pythonIdentity = spawnSync(python || (process.platform === 'win32' ? 'python' : 'python3'),
+    ['-I', '-c', 'import sys; print(sys.executable)'], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(pythonIdentity.status, 0, pythonIdentity.stderr);
+  const spec = replaySpec({ directory: work, python: pythonIdentity.stdout.trim() },
+    { PROMPTFOO_SANDBOX_ENTRY: runtimePath });
+  const policy = replayPolicy(spec);
+  assert.deepEqual(policy.network, { allowedDomains: [], deniedDomains: ['*'], strictAllowlist: true,
+    allowUnixSockets: [], allowAllUnixSockets: false, allowLocalBinding: false });
+  assert.equal(policy.allowNestedUserNamespaces, false);
+  assert.equal(policy.enableWeakerNestedSandbox, false);
+  assert.equal(policy.enableWeakerNetworkIsolation, false);
+  assert.deepEqual(policy.filesystem.allowWrite, [realpathSync(work)]);
+  assert.ok(policy.filesystem.denyRead.includes('/'));
+  assert.ok(policy.filesystem.allowRead.includes(wrapper));
+  assert.ok(policy.filesystem.allowRead.includes(join(dirname(wrapper), 'opencode_agent.mjs')));
+  const databaseSource = join(hostApp, 'infrastructure/database/database_manager.py');
+  assert.ok(policy.filesystem.allowRead.includes(databaseSource));
+  assert.ok(policy.filesystem.denyRead.includes(dirname(databaseSource)));
+  const policyDirectory = join(dirname(hostApp), 'config');
+  for (const name of ['risk_actions.registry.json', 'autonomy_boundaries.yaml']) {
+    assert.ok(policy.filesystem.allowRead.includes(join(policyDirectory, name)), name);
+  }
+  assert.ok(!policy.filesystem.allowRead.includes(policyDirectory));
+  assert.ok(!policy.filesystem.allowRead.includes(dirname(hostApp)));
+  assert.ok(!policy.filesystem.allowRead.includes(spec.project));
+  assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../packages')));
+  assert.ok(!policy.filesystem.allowRead.includes(resolve(dirname(wrapper), '../../../../packages')));
+  for (const [name, namespaces] of [
+    ['xcagi_langgraph_checkpoint', ['cache', 'checkpoint', 'store']],
+    ['xcagi_langgraph_checkpoint_backends/checkpoint-sqlite', ['cache', 'checkpoint', 'store']],
+    ['xcagi_langgraph_checkpoint_backends/checkpoint-postgres', ['checkpoint', 'store']],
+  ]) {
+    const source = resolve(dirname(wrapper), '../../../packages', name, 'langgraph');
+    assert.ok(policy.filesystem.allowRead.includes(source));
+    for (const namespace of namespaces) assert.ok(
+      !policy.filesystem.denyRead.includes(join(source, namespace)),
+      'declared Python namespace source must remain available: ' + namespace);
+  }
+  assert.ok(policy.filesystem.allowRead.includes(join(spec.project, 'modstore_server')));
+  assert.ok(!policy.filesystem.allowRead.some(path => path.endsWith('/modstore.db')
+    || path.includes('/catalog_data')));
+  const stateNames = ['catalog_data', 'data', 'market_files', 'payment_orders',
+    'webhook_events', 'workbench_script_runs', 'backups'];
+  const project = join(realpathSync(root), 'source'), server = join(project, 'modstore_server');
+  mkdirSync(join(project, 'modman'), { recursive: true });
+  for (const name of stateNames) {
+    const directory = join(server, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, '__init__.py'), '# Synthetic package marker; never executed.\n');
+  }
+  const resource = join(server, 'data/commerce_terms.generated.json');
+  writeFileSync(resource, '{}');
+  const withPackageMarkers = replayPolicy({ ...spec, project });
+  for (const name of stateNames) {
+    assert.ok(withPackageMarkers.filesystem.denyRead.includes(join(server, name)), name);
+  }
+  assert.ok(withPackageMarkers.filesystem.allowRead.includes(resource));
+  assert.ok(!withPackageMarkers.filesystem.denyRead.includes(resource));
+  assert.ok(policy.filesystem.denyRead.includes(join(spec.project, 'modstore_server/data')));
+  assert.ok(!policy.filesystem.denyRead.includes(join(spec.project, 'modstore_server/data/commerce_terms.generated.json')));
+  // Each mount costs several arguments; enumerating this tree's 3272 source
+  // files exceeded the pinned runtime's 9000-argument ceiling before execution.
+  assert.ok((policy.filesystem.allowRead.length + policy.filesystem.denyRead.length) * 3 < 9000);
+  writeFileSync(manifest, JSON.stringify({ name: '@anthropic-ai/sandbox-runtime', version: '0.0.82' }));
+  assert.throws(() => replaySpec({ directory: work, python: process.execPath },
+    { PROMPTFOO_SANDBOX_ENTRY: runtimePath }), /training_runtime_version_mismatch/);
+});
+
+test('native replay reads fixture source and writes work files without exposing adjacent fixture data', {
+  skip: !runtime || !python || process.env.PROMPTFOO_TEST_NATIVE_SANDBOX !== '1', timeout: 60000,
+}, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'training-replay-native-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const work = join(root, 'work'), project = join(root, 'source');
+  const server = join(project, 'modstore_server'), catalog = join(server, 'catalog_data');
+  mkdirSync(work); mkdirSync(catalog, { recursive: true });
+  mkdirSync(join(server, 'data')); mkdirSync(join(project, 'modman'));
+  const source = join(server, '__init__.py'), database = join(server, 'modstore.db');
+  const artifact = join(catalog, 'fixture.txt'), receipt = join(work, 'receipt.txt');
+  const resource = join(server, 'data/commerce_terms.generated.json');
+  const otherData = join(server, 'data/customer-record'), alias = join(server, 'alias.py');
+  writeFileSync(source, '# fixed harmless source\n');
+  writeFileSync(database, 'synthetic database marker');
+  writeFileSync(artifact, 'synthetic catalog marker');
+  writeFileSync(resource, '{}');
+  writeFileSync(otherData, 'synthetic non-source marker without a known extension');
+  symlinkSync(database, alias);
+  const spec = { ...replaySpec({ directory: work, python }), project };
+  const settings = join(root, 'settings.json');
+  writeFileSync(settings, JSON.stringify(replayPolicy(spec)));
+  // Inspect accessibility of our own synthetic files; no customer data,
+  // external socket, or escape payload is read or executed by this fixture.
+  const script = `from pathlib import Path
+import os
+def assert_denied_file(path):
+    try:
+        content = Path(path).read_bytes()
+    except (FileNotFoundError, PermissionError):
+        return
+    # SRT 0.0.83 masks denied files with /dev/null. Readability alone does
+    # not expose their contents; only exact empty bytes are acceptable.
+    assert content == b'', 'denied file exposed nonempty bytes'
+assert Path(${JSON.stringify(source)}).read_text() == '# fixed harmless source\\n'
+assert Path(${JSON.stringify(resource)}).read_text() == '{}'
+assert_denied_file(${JSON.stringify(database)})
+assert not os.access(${JSON.stringify(artifact)}, os.R_OK)
+assert_denied_file(${JSON.stringify(otherData)})
+assert_denied_file(${JSON.stringify(alias)})
+Path(${JSON.stringify(receipt)}).write_text('isolated fixture completed')
+`;
+  const result = await child(process.execPath,
+    [runtime, '--settings', settings, '--', python, '-c', script], {
+      cwd: work, env: { PATH: process.env.PATH, TMPDIR: work, HOME: work,
+        PYTHONDONTWRITEBYTECODE: '1' },
+    });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(readFileSync(receipt, 'utf8'), 'isolated fixture completed');
 });
 
 for (const native of [false, true]) test(`real promptfoo uses the approved model ${native ? 'inside native SRT' : 'through the official SRT proxy'}`, {

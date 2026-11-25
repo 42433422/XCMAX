@@ -41,7 +41,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     PairingLookupBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +84,8 @@ class PairingRoutes:
                 return None
             try:
                 relay = ports.register_relay(host=host, port=port)
-            except RECOVERABLE_ERRORS as exc:
-                logger.warning("desktop relay registration skipped: %s", exc)
-                return None
-            except RECOVERABLE_ERRORS as exc:
-                logger.warning(
-                    "desktop relay registration skipped after unexpected failure: %s", exc
-                )
+            except BOUNDARY_ERRORS as exc:
+                logger.warning("desktop relay registration skipped: %s", type(exc).__name__)
                 return None
             if not relay:
                 return None

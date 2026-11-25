@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.label_job_service import LabelJobError, LabelJobService
@@ -90,21 +90,14 @@ def confirm_label(job_id: str, owner=Depends(_owner)):
 
 @router.post("/{job_id}/submit")
 def submit_label(job_id: str, body: ConfirmLabel, request: Request, owner=Depends(_owner)):
-    # The authenticated identity is authoritative; caller headers cannot select an agent owner.
-    trusted_scope = dict(request.scope)
-    trusted_scope["headers"] = [
-        (k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"x-user-id"
-    ]
-    trusted_scope["headers"].append((b"x-user-id", str(owner[1]).encode()))
-    trusted_request = Request(trusted_scope)
-
-    def dispatch(params: dict) -> dict:
-        return run_print_agent(
-            request=trusted_request,
-            action="print_label",
-            params=params,
-            route_path=f"/api/print/label-jobs/{job_id}/submit",
-        )
-
-    job = _call(_service().submit, owner, job_id, body.confirm_token, dispatch)
-    return {"success": True, "job": job}
+    service = _service()
+    job = _call(service.get, owner, job_id)
+    receipt, status = run_print_agent(
+        request=request,
+        action="submit_label_job",
+        params={"job_id": job_id, "confirm_token": body.confirm_token},
+        route_path=f"/api/print/label-jobs/{job_id}/submit",
+    )
+    if receipt.get("run_id"):
+        job = _call(service.bind_execution, owner, job_id, receipt)
+    return JSONResponse({**receipt, "job": job}, status_code=status)

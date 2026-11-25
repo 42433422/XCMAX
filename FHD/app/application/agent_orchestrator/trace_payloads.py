@@ -141,3 +141,77 @@ def _attach_run_id(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
 _coerce_trace_int = _scalars.coerce_int
 
 _coerce_trace_float = _scalars.coerce_float
+
+
+def agent_node_output(run: Any, node_id: str, *, include_run_error: bool = True) -> dict[str, Any]:
+    from copy import deepcopy
+
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = deepcopy(node_outputs.get(node_id) or {})
+    for step in getattr(run, "steps", []) or []:
+        if str(getattr(step, "node_id", "")) == node_id:
+            from app.application.agent_orchestrator.result_verification import verified_step_output
+            from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+
+            if isinstance(run, AgentRun) and isinstance(step, AgentStep):
+                output = verified_step_output(run, step)
+            elif not output:
+                output = deepcopy(getattr(step, "output", {}) or {})
+            break
+    if not output:
+        output = {
+            "success": False,
+            "error_code": "execution_receipt_missing",
+            "message": "原执行回执缺失，不能根据任务状态推定业务成功",
+        }
+    for call in reversed(getattr(run, "tool_calls", []) or []):
+        if str(getattr(call, "node_id", "")) != node_id:
+            continue
+        metadata = getattr(call, "metadata", {}) or {}
+        verification = metadata.get("verification") or {}
+        status = verification.get("status")
+        if (
+            metadata.get("verification_contract")
+            and verification.get("accepted") is False
+            and status in {"failed", "inconclusive"}
+            and output.get("success") is True
+        ):
+            # The HTTP projection must not promote a raw tool receipt rejected
+            # by its host verifier. The original receipt stays on the run.
+            output.update(
+                success=False,
+                error_code=f"result_verification_{status}",
+                message="工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。",
+                verification_code=str(verification.get("code") or ""),
+                retryable=False,
+                reconciliation_required=True,
+                outcome="unknown",
+            )
+        break
+    if (
+        include_run_error
+        and not output.get("success")
+        and getattr(run, "error", False)
+        and not output.get("message")
+    ):
+        output["message"] = getattr(run, "error", False)
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    metadata = getattr(run, "metadata", {})
+    metadata = metadata if isinstance(metadata, dict) else {}
+    context = metadata.get("task_context") or {}
+    runtime = metadata.get("runtime_context") or {}
+    output["task_id"] = str(context.get("task_id") or runtime.get("task_id") or run_id)
+    output["root_run_id"] = str(context.get("root_run_id") or run_id)
+    for key in ("turn_id", "client_request_id"):
+        if value := context.get(key) or runtime.get(key):
+            output[key] = str(value)
+    if isinstance(metadata.get("verification"), dict):
+        output["verification"] = deepcopy(metadata["verification"])
+    if output["agent_status"] != "completed" or execution_result_error(output):
+        output["success"] = False
+    return output

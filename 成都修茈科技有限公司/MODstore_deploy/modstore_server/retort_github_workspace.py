@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import io
 import json
 import os
 import re
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
 
 import httpx
+from fastapi import HTTPException
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.customer_ticket_github import github
@@ -202,11 +203,17 @@ def collect_execution(request_id):
         }
     if run.get("status") == "completed":
         if run.get("conclusion") != "success":
-            return {
+            result = {
                 "status": "failed",
                 "reason": "github_run_failed",
                 "run_id": run["id"],
             }
+            if run.get("conclusion") == "failure":
+                report = archive_failed_verification(request_id, protocol, effects, run)
+                if report:
+                    result["target_sha"] = report["target_sha"]
+                    result["failed_verification_sha256"] = report["evidence_digest"]
+            return result
         state = worker_status(request_id)
         if not state["finished"] or state["conclusion"] != "success" or not state.get("target_sha"):
             return {"status": "failed", "reason": "employee_receipt_incomplete"}
@@ -389,6 +396,71 @@ def slot_finished(request_id):
     )
 
 
+def archive_failed_verification(request_id, protocol, effects, run):
+    """Retain an already-produced failed comparison, with no acceptance authority."""
+    from modstore_server.integrations.repository_packages import load_repository_module
+
+    if (
+        run.get("status") != "completed"
+        or run.get("conclusion") != "failure"
+        or run.get("id") != effects.get("run_id")
+        or run.get("run_attempt") != 1
+        or run.get("head_sha") != protocol["source_sha"]
+        or run.get("path") != f".github/workflows/{WORKFLOW}"
+    ):
+        return None
+    previous = effects.get("failed_verification")
+    if previous and previous.get("run_id") == str(run["id"]):
+        return previous
+    try:
+        worker = worker_status(request_id)
+        target = worker.get("target_sha")
+        if (
+            worker.get("finished") is not True
+            or worker.get("conclusion") != "success"
+            or not isinstance(target, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", target)
+            or worker.get("request_id") != request_id
+            or worker.get("run_id") != run["id"]
+        ):
+            return None
+        repo = protocol["repository"]
+        artifacts = github("GET", f"/repos/{repo}/actions/runs/{run['id']}/artifacts").get(
+            "artifacts", []
+        )
+        matches = [
+            a
+            for a in artifacts
+            if a.get("name") == f"retort-verification-{request_id}" and not a.get("expired")
+        ]
+        if len(matches) != 1:
+            return None
+        artifact = matches[0]
+        with tempfile.TemporaryDirectory(prefix="retort-failed-evidence-") as directory:
+            root = Path(directory)
+            _download_artifact(repo, artifact["id"], root, artifact.get("digest", ""))
+            bundle = json.loads((root / "verification.json").read_text())
+            contract = load_repository_module("retort_engine.evolution_contract")
+            report = contract.inspect_bundle(
+                protocol, bundle, root, run_id=str(run["id"]), target_sha=target
+            )
+            report["evidence_archive"] = _retain_artifact(request_id, artifact["digest"], root)
+        # A failed workflow never becomes an accepted verification, even if
+        # all recorded checks returned zero. Keep the report on a separate key.
+        report.update(
+            status="workflow_failed",
+            artifact_id=artifact["id"],
+            artifact_digest=artifact["digest"],
+            workflow_conclusion="failure",
+        )
+    except (HTTPException, httpx.HTTPError, OSError, ValueError, zipfile.BadZipFile):
+        # Evidence may be absent when a workflow fails before the comparison.
+        # Preserve the failure; absence of evidence is not a verified result.
+        return None
+    _save(request_id, failed_verification=report)
+    return report
+
+
 def verify_execution(request_id, state):
     from modstore_server.integrations.repository_packages import load_repository_module
 
@@ -468,59 +540,90 @@ def _retain_artifact(request_id, artifact_digest, root):
     return archive
 
 
-def _download_artifact(repo, artifact_id, root, expected_digest):
+def _download_artifact(
+    repo,
+    artifact_id,
+    root,
+    expected_digest,
+    *,
+    max_bytes=32 * 1024 * 1024,
+    max_unpacked_bytes=64 * 1024 * 1024,
+    max_members=4096,
+):
     # GitHub returns a signed storage URL. Never forward its API credential to storage.
-    with httpx.Client(timeout=30, trust_env=False, follow_redirects=False) as client:
-        response = client.get(
+    def receive(response, target):
+        response.raise_for_status()
+        digest, size = hashlib.sha256(), 0
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > max_bytes:
+                raise ValueError("证据包超出大小限制")
+            digest.update(chunk)
+            target.write(chunk)
+        if expected_digest != "sha256:" + digest.hexdigest():
+            raise ValueError("GitHub 证据包摘要不匹配")
+        target.seek(0)
+
+    with (
+        tempfile.TemporaryFile() as data,
+        httpx.Client(timeout=30, trust_env=False, follow_redirects=False) as client,
+    ):
+        with client.stream(
+            "GET",
             f"https://api.github.com/repos/{repo}/actions/artifacts/{int(artifact_id)}/zip",
             headers={"Authorization": "Bearer " + os.environ.get("MODSTORE_GITHUB_TOKEN", "")},
-        )
-        if response.status_code != 302:
-            response.raise_for_status()
-        if response.status_code == 302:
-            from urllib.parse import urlparse
+        ) as response:
+            if response.status_code == 302:
+                from urllib.parse import urlparse
 
-            url = response.headers["location"]
-            parsed = urlparse(url)
+                url = response.headers["location"]
+                parsed = urlparse(url)
+                if (
+                    parsed.scheme != "https"
+                    or parsed.username
+                    or parsed.password
+                    or not parsed.hostname
+                    or not (
+                        parsed.hostname.endswith(".blob.core.windows.net")
+                        or parsed.hostname.endswith(".githubusercontent.com")
+                    )
+                ):
+                    raise ValueError("不受信任的 GitHub 证据下载地址")
+                with client.stream("GET", url) as download:
+                    receive(download, data)
+            else:
+                receive(response, data)
+        with zipfile.ZipFile(data) as archive:
             if (
-                parsed.scheme != "https"
-                or parsed.username
-                or parsed.password
-                or not parsed.hostname
-                or not (
-                    parsed.hostname.endswith(".blob.core.windows.net")
-                    or parsed.hostname.endswith(".githubusercontent.com")
-                )
+                len(archive.infolist()) > max_members
+                or sum(item.file_size for item in archive.infolist()) > max_unpacked_bytes
             ):
-                raise ValueError("不受信任的 GitHub 证据下载地址")
-            data = bytearray()
-            with client.stream("GET", url) as download:
-                download.raise_for_status()
-                for chunk in download.iter_bytes():
-                    data.extend(chunk)
-                    if len(data) > 32 * 1024 * 1024:
-                        raise ValueError("证据包超出大小限制")
-        else:
-            data = response.content
-        if len(data) > 32 * 1024 * 1024:
-            raise ValueError("证据包超出大小限制")
-        if expected_digest != "sha256:" + hashlib.sha256(data).hexdigest():
-            raise ValueError("GitHub 证据包摘要不匹配")
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            if sum(item.file_size for item in archive.infolist()) > 64 * 1024 * 1024:
                 raise ValueError("证据包展开超出大小限制")
             seen = set()
             for item in archive.infolist():
                 path = root / item.filename
                 if (
                     not path.resolve().is_relative_to(root.resolve())
-                    or item.filename in seen
+                    or path.resolve() in seen
+                    or Path(item.filename).is_absolute()
+                    or ".." in Path(item.filename).parts
                     or "\\" in item.filename
                     or (item.external_attr >> 16) & 0o170000 == 0o120000
+                    or (path.exists() and not item.is_dir())
                 ):
                     raise ValueError("证据包包含无效路径")
-                seen.add(item.filename)
-                if item.is_dir():
-                    continue
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(archive.read(item))
+                seen.add(path.resolve())
+            with tempfile.TemporaryDirectory(prefix=".artifact-", dir=root) as temporary:
+                stage = Path(temporary)
+                for item in archive.infolist():
+                    if item.is_dir():
+                        continue
+                    path = stage / item.filename
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(item) as source, path.open("wb") as target:
+                        shutil.copyfileobj(source, target, length=1024 * 1024)
+                for path in stage.rglob("*"):
+                    if path.is_file():
+                        target = root / path.relative_to(stage)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        path.replace(target)

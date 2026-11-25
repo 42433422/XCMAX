@@ -1,0 +1,16 @@
+{
+  "mode": "task_holdout",
+  "llm_verified": false,
+  "status": "UNVERIFIED",
+  "evidence": {
+    "report": "test_reports/task_holdout_report.json",
+    "model_responses": 0,
+    "total_tasks": 13,
+    "trials": 3,
+    "pass_1": 0.0,
+    "pass_k": 0.0
+  },
+  "run_id": "45312878748",
+  "sha": "1a5e1d194f1b361ea488bf9bd781a788f767419f",
+  "actor": "42433422"
+}

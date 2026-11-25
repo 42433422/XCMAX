@@ -292,7 +292,7 @@ class TestIntentServiceUncoveredBranches:
         with patch.object(
             mod,
             "_recognize_intents_impl",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("intent rules could not be read"),
         ):
             result = mod.recognize_intents("hello")
 
@@ -321,7 +321,9 @@ class TestIntentServiceUncoveredBranches:
         engine.match_hint_intents.return_value = []
 
         with (
-            patch.object(mod, "_reflex_basic_intents", side_effect=RuntimeError("reflex down")),
+            patch.object(
+                mod, "_reflex_basic_intents", side_effect=TimeoutError("reflex budget exceeded")
+            ),
             patch.object(mod, "get_rule_engine", return_value=engine),
         ):
             result = mod.recognize_intents("嗯")
@@ -743,7 +745,7 @@ class TestCompatDbQueriesUncoveredBranches:
             ),
             patch(
                 "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
-                side_effect=RuntimeError("no engine"),
+                side_effect=OSError("no engine"),
             ),
         ):
             result = compat_queries._load_purchase_units_rows_pg()
@@ -1295,7 +1297,7 @@ class TestNeuroBusUncoveredBranches:
     def test_neuro_bus_reliability_status_circuit_exception(self):
         bus = NeuroBus()
         bus._rel_circuit = MagicMock()
-        bus._rel_circuit.can_execute.side_effect = RuntimeError("circuit err")
+        bus._rel_circuit.can_execute.side_effect = OSError("circuit err")
         status = bus.get_reliability_status()
         assert status["circuit_open"] is None
 
@@ -1333,7 +1335,7 @@ class TestXcmaxSyncServiceUncoveredBranches:
 
     def test_record_change_exception_returns_minus_one(self):
         with patch("app.db.xcmax_sync.SyncDb") as mock_cls:
-            mock_cls.side_effect = RuntimeError("db fail")
+            mock_cls.side_effect = OSError("db fail")
             result = sync_svc.record_change("e", "1", "insert", {})
         assert result == -1
 

@@ -216,8 +216,14 @@ def _append(business, kind, minute, **extra):
     )
 
 
-def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(business):
+def _create_value_facts(business, overrides=None):
     consumer, factory, scope, now = business
+
+    def append(kind, minute, **extra):
+        replacement = dict((overrides or {}).get(kind) or {})
+        evidence = {**extra.pop("evidence", {}), **replacement.pop("evidence", {})}
+        return _append(business, kind, minute, **{**extra, **replacement, "evidence": evidence})
+
     agreement = {
         "baseline": 1,
         "target": 2,
@@ -227,10 +233,11 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
         "agreement_sha256": "a" * 64,
         "customer_confirmed": True,
     }
+    outcome = ((overrides or {}).get("outcome") or {}).get("evidence") or {}
+    agreement.update({name: outcome[name] for name in ("baseline", "target") if name in outcome})
     _append(business, "goal", 1, evidence=agreement)
     _append(business, "delivery", 2)
-    _append(
-        business,
+    append(
         "first_use",
         3,
         evidence={
@@ -240,8 +247,7 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
             "task_type": "report",
         },
     )
-    _append(
-        business,
+    append(
         "outcome",
         4,
         evidence={
@@ -251,7 +257,34 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
             "source_material_sha256": "b" * 64,
         },
     )
+    return {"business": scope}
+
+
+def test_private_mod_production_consumes_original_business_graph_without_host_dispatch(
+    business, monkeypatch
+):
+    from modstore_server import employee_orchestrator
+
+    consumer, factory, scope, now = business
+
+    def forbid_dispatch(*args, **kwargs):
+        raise AssertionError("customer workflow must retain its original execution")
+
+    monkeypatch.setattr(employee_orchestrator, "plan_and_dispatch", forbid_dispatch)
+    orch = pipeline.ProductionLineOrchestrator()
+    orch._release_train_subset = True
     context = {"business": scope}
+    waiting = run(orch.run_step("P2", context))
+    assert waiting.status == pipeline.StepStatus.WAITING_EVIDENCE
+    _create_value_facts(business)
+    completed = run(orch.run_step("P2", context))
+    assert completed.data["result"]["status"] == "completed"
+    assert completed.data["result"]["evidence"]["source"] == "customer_value_receipts"
+
+
+def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(business):
+    consumer, factory, scope, now = business
+    context = _create_value_facts(business)
     assert consumer.observe_business_step("O8", context)["result"]["status"] == "waiting_evidence"
     _append(business, "acceptance", 5, evidence={"customer_confirmed": True})
     for step in ["O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8"]:
@@ -286,6 +319,30 @@ def test_real_order_delivery_and_customer_confirmation_complete_separate_steps(b
         assert consumer.observe_business_step(step, context)["result"]["status"] == "completed"
     _append(business, "refund", 6)
     assert consumer.observe_business_step("O8", context)["result"]["reason"] == "payment_refunded"
+
+
+@pytest.mark.parametrize(
+    ("kind", "replacement"),
+    [
+        ("first_use", {"artifact_id": "different-delivery"}),
+        ("first_use", {"evidence": {"artifact_sha256": "f" * 64}}),
+        ("outcome", {"artifact_id": "different-delivery"}),
+        ("outcome", {"evidence": {"measured_value": float("inf")}}),
+        ("outcome", {"evidence": {"measured_value": True, "target": 1}}),
+        ("outcome", {"evidence": {"baseline": float("-inf")}}),
+    ],
+)
+def test_customer_value_cannot_reuse_other_artifact_or_nonfinite_measurement(
+    business, kind, replacement
+):
+    consumer, factory, scope, _ = business
+    _create_value_facts(business, {kind: replacement})
+    _append(business, "acceptance", 5, evidence={"customer_confirmed": True})
+    step = "O6" if kind == "first_use" else "O8"
+    assert (
+        consumer.observe_business_step(step, {"business": scope})["result"]["status"]
+        == "waiting_evidence"
+    )
 
 
 def test_approval_rechecks_payment_and_cannot_approve_a_refunded_order(business):

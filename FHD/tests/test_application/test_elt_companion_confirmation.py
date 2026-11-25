@@ -268,15 +268,24 @@ def test_batch_readback_requires_every_original_target_and_durable_receipt(
         finally:
             with tenant_scope(value if attr == "tenant_id" else 1), state.elt.factory.begin() as db:
                 setattr(db.get(EltRun, ids[1]), attr, before)
+    for field, value in (
+        ("preview_revision", "0" * 64),
+        ("plan_sha256", "0" * 64),
+        ("plan_sha256", None),
+    ):
+        with state.elt.factory.begin() as db:
+            row = db.get(EltRun, ids[1])
+            before = row.summary_json
+            details = json.loads(before)
+            if value is None:
+                details["execution_confirmation"].pop(field)
+            else:
+                details["execution_confirmation"][field] = value
+            row.summary_json = json.dumps(details)
+        assert readback()["code"] == "result_preview_changed", (field, value)
+        with state.elt.factory.begin() as db:
+            db.get(EltRun, ids[1]).summary_json = before
     with state.elt.factory.begin() as db:
-        row = db.get(EltRun, ids[1])
-        before = row.summary_json
-        details = json.loads(before)
-        details["execution_confirmation"]["preview_revision"] = "0" * 64
-        row.summary_json = json.dumps(details)
-    assert readback()["code"] == "result_preview_changed"
-    with state.elt.factory.begin() as db:
-        db.get(EltRun, ids[1]).summary_json = before
         shipment = db.query(ShipmentRecord).filter_by(product_name="核验边界产品-1").one()
         shipment_id = shipment.id
         shipment.product_name = "未审批内容"

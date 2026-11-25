@@ -40,29 +40,10 @@ class SessionService(NeuroEventPublisherMixin):
             }
 
     def validate_session(self, session_id: str):
-        from app.infrastructure.session.session_manager import get_session_manager
-
-        return get_session_manager().validate_session(session_id)
+        return get_service_registry().session_manager.validate_session(session_id)
 
     def get_session_info(self, session_id: str):
-        with get_db() as db:
-            user_session = (
-                db.query(UserSession).filter(UserSession.session_id == session_id).first()
-            )
-
-            if not user_session:
-                return None
-
-            if user_session.expires_at < utc_now_naive():
-                return None
-
-            return {
-                "session_id": user_session.session_id,
-                "user_id": user_session.user_id,
-                "username": user_session.user.username,
-                "created_at": user_session.created_at.isoformat(),
-                "expires_at": user_session.expires_at.isoformat(),
-            }
+        return get_service_registry().session_manager.get_session_info(session_id)
 
     def delete_session(self, session_id: str) -> bool:
         with get_db() as db:

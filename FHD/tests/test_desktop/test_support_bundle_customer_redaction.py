@@ -1,4 +1,4 @@
-"""Customer logs are redacted before they are stored in a support bundle."""
+"""Current, rotated and customer logs are redacted in a support bundle."""
 
 from __future__ import annotations
 
@@ -32,6 +32,9 @@ def test_customer_logs_in_zip_do_not_contain_secrets(tmp_path, monkeypatch):
             '{"client_secret":"customer-json-secret","access_token":"customer-access-token"}',
         ]
     ).encode()
+    log_names = ("electron-backend.log", "electron-backend.old.log", "electron-backend.log.1")
+    for name in log_names:
+        (dirs["logs"] / name).write_bytes(secret_log)
 
     blob = support_bundle.build_support_bundle_zip(customer_logs=[("client.log", secret_log)])
     archive = zipfile.ZipFile(io.BytesIO(blob))
@@ -50,5 +53,7 @@ def test_customer_logs_in_zip_do_not_contain_secrets(tmp_path, monkeypatch):
         assert secret not in packed
     readme = archive.read("README.txt").decode()
     assert "customer-logs/client.log" in archive.namelist()
+    for name in log_names:
+        assert f"logs/{name}" in archive.namelist()
     assert "已脱敏" in readme
     assert "postgresql://" not in packed

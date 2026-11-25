@@ -380,7 +380,7 @@ class TestPersistSessionAccountMeta:
     def test_recoverable_error_swallowed(self) -> None:
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             # 不应抛出
             persist_session_account_meta("sid", account_kind="admin")
@@ -469,7 +469,7 @@ class TestPersistSessionMembershipTier:
     def test_recoverable_error_swallowed(self) -> None:
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             persist_session_membership_tier("sid", "gold")
 
@@ -529,7 +529,7 @@ class TestLoadSessionAccountMeta:
     def test_recoverable_error_returns_none(self) -> None:
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             assert load_session_account_meta("sid") is None
 
@@ -797,7 +797,7 @@ class TestEnrichSessionMetaWithTenant:
             ),
             patch(
                 "app.application.session_account_meta.get_host_db",
-                side_effect=RuntimeError("db down"),
+                side_effect=OSError("db down"),
             ),
         ):
             result = enrich_session_meta_with_tenant("sid", None)
@@ -846,7 +846,7 @@ class TestClearImpersonation:
     def test_recoverable_error_swallowed(self) -> None:
         with patch(
             "app.application.session_account_meta.get_host_db",
-            side_effect=RuntimeError("db down"),
+            side_effect=OSError("db down"),
         ):
             clear_impersonation("sid")
 
@@ -985,7 +985,7 @@ class TestShouldReceiveEnterpriseDedicatedCs:
 
     def test_fallback_db_error_returns_false(self) -> None:
         mock_db = MagicMock()
-        mock_db.get.side_effect = RuntimeError("db down")
+        mock_db.get.side_effect = OSError("db down")
         assert should_receive_enterprise_dedicated_cs(None, 1, mock_db) is False
 
     def test_fallback_type_error_returns_false(self) -> None:

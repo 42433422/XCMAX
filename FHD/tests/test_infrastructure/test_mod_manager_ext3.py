@@ -35,7 +35,7 @@ class TestModManagerListMods:
             patch.object(mm, "scan_mods", return_value=[meta]),
             patch(
                 "app.enterprise.mod_entitlements.filter_mod_rows_for_enterprise",
-                side_effect=RuntimeError("unavailable") if failure else lambda rows: rows,
+                side_effect=OSError("unavailable") if failure else lambda rows: rows,
             ),
         ):
             result = mm.list_all_mods()
@@ -54,7 +54,7 @@ class TestModManagerGetRoutes:
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
                 return_value=True,
-                side_effect=RuntimeError("unavailable") if failure else None,
+                side_effect=OSError("unavailable") if failure else None,
             ),
         ):
             result = mm.get_routes()
@@ -76,7 +76,7 @@ class TestModManagerLoadAllMods:
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
                 return_value=True,
-                side_effect=RuntimeError("unavailable") if failure else None,
+                side_effect=OSError("unavailable") if failure else None,
             ),
         ):
             result = mm.load_all_mods()

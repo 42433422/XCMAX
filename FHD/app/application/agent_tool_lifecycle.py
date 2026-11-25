@@ -637,32 +637,6 @@ def discovery(actor: Actor) -> dict[str, Any]:
     return _cached(key, build)
 
 
-def discovery_for_runtime(employee_id: str) -> list[dict[str, Any]]:
-    from app.infrastructure.tenant_scope import current_tenant_id
-
-    tenant = current_tenant_id()
-    if tenant is None or not str(employee_id or "").strip():
-        return []
-    actor = Actor(
-        actor_id=str(employee_id),
-        role="employee",
-        employee_id=str(employee_id),
-        tenant_id=int(tenant),
-    )
-    conn = _connect()
-    try:
-        _ensure_principal(conn, actor)
-    except ToolLifecycleError:
-        conn.close()
-        return []
-    else:
-        conn.close()
-    try:
-        return list(discovery(actor)["tools"])
-    except ToolLifecycleError:
-        return []
-
-
 def _can_invoke(conn: sqlite3.Connection, actor: Actor, row: sqlite3.Row, *, quiet: bool) -> bool:
     try:
         _assert_invoke(conn, actor, row, None)
@@ -784,18 +758,8 @@ def invoke_tool(
 
 
 def begin_call(actor: Actor, tool_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
-    result = invoke_tool(actor, tool_id, body)
-    conn = _connect()
-    try:
-        with _tx(conn):
-            conn.execute(
-                "UPDATE calls SET status = 'inflight', finished_at = NULL WHERE id = ?",
-                (result["call_id"],),
-            )
-    finally:
-        conn.close()
-    result["status"] = "inflight"
-    return result
+    """A schema-only definition can create a validation receipt, never an inflight run."""
+    return invoke_tool(actor, tool_id, body)
 
 
 def finish_call(actor: Actor, call_id: str) -> dict[str, Any]:
@@ -942,52 +906,6 @@ def list_audit(
     _require_admin(actor)
     page, page_size, *_ = _list_args({"page_size": 100, **(query or {})})
     return read_audit(actor, tool_id, page, page_size)
-
-
-def execute_if_registered(
-    name: str, args: Any, runtime_context: Mapping[str, Any] | None
-) -> str | None:
-    from app.infrastructure.tenant_scope import current_tenant_id
-
-    tenant = current_tenant_id()
-    if tenant is None or not str(name or "").strip():
-        return None
-    conn = _connect()
-    try:
-        row = conn.execute(
-            "SELECT id FROM tools WHERE tenant_id = ? AND tool_key = ?",
-            (int(tenant), str(name)),
-        ).fetchone()
-    finally:
-        conn.close()
-    if row is None:
-        return None
-    context = dict(runtime_context or {})
-    employee_id = str(context.get("employee_id") or "")
-    if isinstance(args, str):
-        try:
-            args = json.loads(args or "{}")
-        except json.JSONDecodeError:
-            args = {}
-    actor = Actor(
-        actor_id=employee_id or "employee",
-        role="employee",
-        employee_id=employee_id or None,
-        tenant_id=int(tenant),
-    )
-    body = {
-        "arguments": args if isinstance(args, dict) else {},
-        "version_id": context.get("version_id"),
-    }
-    try:
-        result = invoke_tool(actor, row["id"], body)
-    except ToolLifecycleError as exc:
-        result = {
-            "ok": False,
-            "success": False,
-            "error": {"code": exc.code, "message": exc.message},
-        }
-    return json.dumps(result, ensure_ascii=False)
 
 
 def calls_for(

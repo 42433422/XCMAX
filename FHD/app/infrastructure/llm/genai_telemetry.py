@@ -1,8 +1,8 @@
 """GenAI (LLM) 调用遥测 — 属性命名对齐 OTel GenAI semantic conventions。
 
 设计要点：
-- 自研轻量 span，不强依赖 OTel SDK（OTLP 导出由 trace_store 负责）。
-- 与 neuro_bus tracer 仅靠 trace_id 桥接，不合并。
+- 保留既有模型属性与 JSONL 视图，批处理、导出和关闭由 trace_store 的 OTel SDK 负责。
+- 与工具及 NeuroBus 沿用同一 W3C trace/parent 身份和应用 SDK 生命周期。
 - 消息内容默认只记 len + sha256；XCAGI_GENAI_TRACE_CAPTURE_CONTENT=1 记全文。
 """
 

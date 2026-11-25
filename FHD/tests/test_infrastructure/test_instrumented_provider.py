@@ -38,14 +38,14 @@ def store(tmp_path: Path):
     original_record = s.record
 
     def _record_then_flush(span_dict: dict[str, Any]) -> None:
-        # TraceStore 为队列 + 后台 flush 设计；测试未 start 后台线程，
-        # 此处同步落盘以便 query 立即可见。
+        # Drain SDK batching so the query observes this completed call.
         original_record(span_dict)
         s.flush()
 
     s.record = _record_then_flush
     with patch.object(ip, "get_trace_store", return_value=s):
         yield s
+    s.stop()
 
 
 @pytest.mark.asyncio

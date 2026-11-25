@@ -1046,4 +1046,6 @@ def test_generic_read_grant_cannot_bypass_entity_read_permission(
     )
     assert result["success"] is False
     assert result["error_code"] == "tool_permission_denied"
-    assert result["reason"] == "permission_denied"
+    assert result["reason"] == (
+        "owned_business_permission_denied" if entity == "products" else "permission_denied"
+    )

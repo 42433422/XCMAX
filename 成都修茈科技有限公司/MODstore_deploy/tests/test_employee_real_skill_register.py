@@ -376,8 +376,8 @@ def _make_mock_db_with_workflow() -> MagicMock:
 async def test_preset_nodes_injected_when_llm_omits():
     """LLM 不生成 preset eskill 节点时，apply_nl_workflow_graph 应真正自动补齐。
 
-    调用真实的 apply_nl_workflow_graph（仅 mock LLM 调用 / 沙箱 / DB 会话三个外部
-    边界），让 LLM 只返回 start+end，断言生产代码自身把漏掉的预置 ESkill 节点补回，
+    调用真实的 apply_nl_workflow_graph（mock LLM 调用 / 沙箱 / DB 与实验分配边界），
+    让 LLM 只返回 start+end，断言生产代码自身把漏掉的预置 ESkill 节点补回，
     并以正确的 skill_id 落库、串进 start→eskill→end 链。
     """
     import json as _json
@@ -427,6 +427,10 @@ async def test_preset_nodes_injected_when_llm_omits():
         patch.object(g, "_eskill_catalog_lines", return_value=""),
         patch.object(g, "_create_generated_skills", return_value={}),
         patch.object(g, "run_workflow_sandbox", return_value={"ok": True, "errors": []}),
+        patch(
+            "modstore_server.retort_experiment_runtime.select_variant",
+            return_value=(g.SYSTEM_PROMPT, None),
+        ),
     ):
         result = await g.apply_nl_workflow_graph(
             db,

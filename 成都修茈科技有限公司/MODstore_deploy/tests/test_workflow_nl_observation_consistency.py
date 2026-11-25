@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
@@ -119,7 +121,12 @@ async def test_observation_write_failure_cannot_leave_saved_graph_reported_faile
     except OperationalError as exc:
         escaped = exc
     # Previously the finally block raised after all four tables were committed.
-    assert persisted_graph(run) == {"nodes": [], "edges": [], "skill": None, "versions": []}
+    assert persisted_graph(run) == {
+        "nodes": [],
+        "edges": [],
+        "skill": None,
+        "versions": [],
+    }
     assert escaped is None
     assert result["ok"] is False
     assert result["error_code"] == "workflow_observation_commit_failed"
@@ -179,7 +186,8 @@ async def test_committed_graph_survives_original_outbox_retry_without_regenerati
         sandbox = (
             db.query(OutboxEvent)
             .filter_by(
-                aggregate_id=str(payload["workflow_id"]), event_name=WORKFLOW_SANDBOX_COMPLETED
+                aggregate_id=str(payload["workflow_id"]),
+                event_name=WORKFLOW_SANDBOX_COMPLETED,
             )
             .one()
         )
@@ -241,7 +249,12 @@ async def test_final_commit_failure_rolls_back_graph_skills_and_observation(
         event.remove(Session, "before_commit", fail_commit)
     assert result["ok"] is False
     assert result["experiment_observation"] == {"status": "not_recorded"}
-    assert persisted_graph(run) == {"nodes": [], "edges": [], "skill": None, "versions": []}
+    assert persisted_graph(run) == {
+        "nodes": [],
+        "edges": [],
+        "skill": None,
+        "versions": [],
+    }
     assert observations(run) == []
     assert len(observations(run, "experiment.exposed")) == 1
     provenance = generation_provenance(run)
@@ -260,7 +273,8 @@ def test_management_workflow_http_status_matches_saved_state_and_polling_is_read
         return "test", "test-model", None
 
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.resolve_llm_provider_model_auto", configured_model
+        "modstore_server.mod_scaffold_runner.resolve_llm_provider_model_auto",
+        configured_model,
     )
     with get_session_factory()() as db:
         user = db.get(User, run["users"][0])
@@ -295,7 +309,12 @@ def test_management_workflow_http_status_matches_saved_state_and_polling_is_read
     _, failed = start_and_read()
     assert failed["status"] == "error"
     assert "工作流未保存" in failed["error"]
-    assert persisted_graph(run) == {"nodes": [], "edges": [], "skill": None, "versions": []}
+    assert persisted_graph(run) == {
+        "nodes": [],
+        "edges": [],
+        "skill": None,
+        "versions": [],
+    }
     assert observations(run) == []
 
     monkeypatch.setattr(db_outbox, "enqueue", original)
@@ -313,3 +332,31 @@ def test_management_workflow_http_status_matches_saved_state_and_polling_is_read
         assert persisted_graph(run) == graph
     assert len(run["prompts"]) == 2
     assert len(observations(run)) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("observation_fails", [False, True])
+async def test_cancellation_keeps_original_exception_and_no_graph(
+    workflow_with_skill, monkeypatch, observation_fails
+):
+    run = workflow_with_skill
+    run["exception"] = asyncio.CancelledError("original cancellation")
+    original = db_outbox.enqueue
+
+    def enqueue(session, event_name, *args, **kwargs):
+        if observation_fails and event_name == "experiment.observed":
+            raise OperationalError("insert observation", {}, RuntimeError("outbox unavailable"))
+        return original(session, event_name, *args, **kwargs)
+
+    monkeypatch.setattr(db_outbox, "enqueue", enqueue)
+    with pytest.raises(asyncio.CancelledError, match="original cancellation") as caught:
+        await run["generate"]()
+    assert persisted_graph(run) == {
+        "nodes": [],
+        "edges": [],
+        "skill": None,
+        "versions": [],
+    }
+    assert [row["success"] for row in observations(run)] == ([] if observation_fails else [False])
+    if observation_fails:
+        assert "experiment_observation_not_recorded" in caught.value.__notes__

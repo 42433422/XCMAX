@@ -30,33 +30,6 @@ def _normalize_products_create_payload(payload: Payload) -> Payload:
     return data
 
 
-def _http_exception_result(exc: HTTPException) -> Payload:
-    return {
-        "success": False,
-        "message": str(exc.detail),
-        "status_code": int(exc.status_code),
-        "error_code": "http_exception",
-    }
-
-
-def response_status(result: Payload, recoverable_errors: tuple[type[Exception], ...]) -> int:
-    if result.get("success"):
-        return 200
-    status_code = result.get("status_code")
-    if status_code is None:
-        parsed = 0
-    else:
-        try:
-            parsed = int(status_code)
-        except recoverable_errors:
-            parsed = 0
-    if 400 <= parsed < 600:
-        return parsed
-    return (
-        500 if str(result.get("error_code") or "") in {"tool_exception", "http_exception"} else 200
-    )
-
-
 def service_enabled(
     factory: Callable[[], ProductServiceFacade],
     recoverable_errors: tuple[type[Exception], ...],
@@ -103,7 +76,6 @@ class ProductMutations:
     normalize_create: Callable[[Payload], Payload]
     preflight: Callable[[Request, str, Payload], dict | None]
     run_agent: ProductAgentCall
-    status_code: Callable[[Payload], int]
     response: Callable[[Payload, int], JSONResponse]
 
     def submit(
@@ -115,7 +87,7 @@ class ProductMutations:
         gate = self.preflight(request, action, payload)
         if gate:
             return gate
-        result = self.run_agent(
+        result, status = self.run_agent(
             request=request, action=action, params=payload, route_path=route_path
         )
-        return self.response(result, self.status_code(result))
+        return self.response(result, status)

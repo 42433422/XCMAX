@@ -6,7 +6,7 @@ import copy
 import json
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import asdict
 from typing import cast
 
@@ -38,7 +38,6 @@ from app.application.agent_orchestrator.task_models import (
     task_from_run,
     tenant_id_of_run,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _TASK_ID_PATH = "$.metadata.task_context.task_id"
 _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
@@ -238,6 +237,7 @@ def preserve_run_evidence(
     from app.application.agent_orchestrator.verification_integrity import (
         preserve_verification_receipts,
         unchanged_receipt_observation,
+        verified_pending_settlement,
     )
 
     preserve_verification_receipts(run, previous)
@@ -258,9 +258,13 @@ def preserve_run_evidence(
                 )
             return
     old = previous.metadata
-    if old.get("non_retryable"):
+    settled_pending = allow_planning_replacement and verified_pending_settlement(run, previous)
+    if old.get("non_retryable") and not settled_pending:
         run.metadata["non_retryable"] = True
-    recovery = {**copy.deepcopy(old.get("recovery") or {}), **(run.metadata.get("recovery") or {})}
+    recovery = {
+        **({} if settled_pending else copy.deepcopy(old.get("recovery") or {})),
+        **(run.metadata.get("recovery") or {}),
+    }
     if (old.get("recovery") or {}).get("state") == "manual_reconciliation_required":
         recovery["state"] = "manual_reconciliation_required"
     if recovery:
@@ -376,6 +380,14 @@ def preserve_run_evidence(
     run.events = list(events.values())
     if not allow_safe_retry and (
         (previous.status in terminal and run.status != previous.status)
+        or (
+            previous.status == "unknown"
+            and run.status != previous.status
+            and (
+                old.get("non_retryable")
+                or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            )
+        )
         or (
             previous.status in {"paused", "blocked"}
             and run.status in {"queued", "planning", "running", "retrying"}
@@ -1179,17 +1191,13 @@ class SQLAlchemyAgentRunRepository:
 
             # Scheduling state must be visible outside the originating Mod request.
             session_factory = HostSessionLocal
-        db = session_factory()
-        try:
+        with closing(session_factory()) as db, ExitStack() as rollback:
+            # Failed reads also roll back; inactive sessions only need closing.
+            rollback.callback(lambda: db.rollback() if db.is_active else None)
             yield db
             if not read_only:
                 db.commit()
-        except RECOVERABLE_ERRORS:
-            if not read_only:
-                db.rollback()
-            raise
-        finally:
-            db.close()
+            rollback.pop_all()
 
     def _ensure_schema(self) -> None:
         # 就绪状态按 bind（引擎实例）键控：引擎缓存按 URL 解析，测试/多库环境下

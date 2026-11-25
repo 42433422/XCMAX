@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 
 def _read_workbook_tool(tool_name: str, payload: dict, runtime_context: dict) -> dict:
     """Reuse workbook operations after opening each input under its durable owner."""
-    import json
     from contextlib import ExitStack
 
-    from app.application.tools.workflow import execute_workflow_tool
+    import pandas as pd
+
+    from app.application.tools.workflow import _excel_io
+    from app.application.tools.workflow_tools.excel_operations import WorkbookOperations
 
     arguments = dict(payload)
     keys = (
@@ -49,27 +51,11 @@ def _read_workbook_tool(tool_name: str, payload: dict, runtime_context: dict) ->
                         raise PermissionError("文件类型不支持表格分析")
                     values = [str(path) for path in snapshots]
                 arguments[key] = values if key == "file_paths" else values[0]
-            raw = execute_workflow_tool(
-                tool_name,
-                arguments,
-                workspace_root=runtime_context.get("workspace_root"),
-                runtime_context=runtime_context,
+            result = WorkbookOperations(_excel_io(), pd.read_excel).join_compare(
+                arguments, runtime_context.get("workspace_root")
             )
-        result = json.loads(raw) if isinstance(raw, str) else raw
         if not isinstance(result, dict) or result.get("success") is False or result.get("error"):
             return {"success": False, "error_code": "spreadsheet_read_failed"}
-        if tool_name == "excel_schema_understand":
-            snapshot = result.get("snapshot")
-            if not isinstance(snapshot, dict):
-                return {"success": False, "error_code": "spreadsheet_receipt_invalid"}
-            # The legacy service also supplies placeholder LLM prose. Only the
-            # observed DataFrame snapshot is a receipt for this read operation.
-            return {
-                "success": True,
-                "action": "structure",
-                "data": snapshot,
-                "file_path": payload["file_path"],
-            }
         if result.get("action") != payload.get("action") or not any(
             key in result for key in ("row_count", "rows_with_value_changes")
         ):
@@ -90,38 +76,6 @@ def _registered_router_excel_join_compare(
     return _read_workbook_tool("excel_join_compare", {**params, "action": action}, runtime_context)
 
 
-def _registered_router_import_excel_to_database(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    """把已分析的 Excel 写入业务库；文件名按当前账号解析成自己的上传文件。"""
-    if action != "import":
-        return {"success": False, "message": "不支持的 Excel 导入操作"}
-    import json
-
-    payload = dict(params or {})
-    file_path = str(payload.get("file_path") or "").strip()
-    if file_path:
-        from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
-
-        payload["file_path"] = resolve_owned_upload_path(file_path, runtime_context)
-    if not str(payload.get("file_path") or "").strip():
-        return {"success": False, "message": "import_excel_to_database 缺少 file_path 参数"}
-    try:
-        from app.application.tools.workflow import _handle_import_excel_to_database
-
-        workspace_root = runtime_context.get("workspace_root")
-        raw = _handle_import_excel_to_database(
-            payload, str(workspace_root) if workspace_root else None
-        )
-        parsed = json.loads(raw) if isinstance(raw, str) else raw
-        return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}
-    except PermissionError as err:
-        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
-    except RECOVERABLE_ERRORS as err:
-        logger.error("import_excel_to_database 执行失败: %s", err, exc_info=True)
-        return {"success": False, "message": f"Excel 导入失败：{str(err)}"}
-
-
 def _registered_router_excel_analysis(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -135,11 +89,8 @@ def _registered_router_excel_analysis(
         payload["file_path"] = str(excel_ctx.get("file_path") or "").strip()
     if not str(payload.get("file_path") or "").strip():
         return {"success": False, "message": "excel_analysis 缺少 file_path 参数"}
-    if action == "structure":
-        return _read_workbook_tool("excel_schema_understand", payload, runtime_context)
     if action == "query" and not payload.get("query_expression"):
-        payload["action"] = "excel_query"
-        payload["natural_language"] = str(payload.get("question") or user_message).strip()
+        payload["question"] = str(payload.get("question") or user_message).strip()
     try:
         from app.application.tools.workflow import handle_excel_analysis
 
@@ -148,7 +99,7 @@ def _registered_router_excel_analysis(
 
             result = export_workflow_spreadsheet(payload, runtime_context, handle_excel_analysis)
         elif (
-            action in {"read", "query", "aggregate", "statistics"}
+            action in {"read", "structure", "query", "aggregate", "statistics"}
             and "_actor_authorization" in runtime_context
         ):
             from app.application.tools.workflow_spreadsheet_scope import (
@@ -230,18 +181,15 @@ def _registered_router_generate_office_document(
     payload = dict(params or {})
     payload.setdefault("user_request", user_message)
     try:
-        import json
+        from app.application.tools.workflow_tools import adapters
+        from app.application.tools.workflow_tools.documents import generate_office_document
 
-        from app.application.tools.workflow import execute_workflow_tool
-
-        raw = execute_workflow_tool(
-            "generate_office_document",
+        return generate_office_document(
             payload,
-            workspace_root=runtime_context.get("workspace_root"),
+            adapters.generate_document,
+            adapters.store_document,
             runtime_context=runtime_context,
         )
-        parsed = json.loads(raw) if isinstance(raw, str) else raw
-        return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}
     except RECOVERABLE_ERRORS as err:
         logger.error("generate_office_document 执行失败: %s", err, exc_info=True)
         return {"success": False, "message": f"文档生成失败：{str(err)}"}
@@ -250,6 +198,20 @@ def _registered_router_generate_office_document(
 def _registered_router_excel_vector_index(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action == "list":
+        from app.application import get_excel_vector_search_app_service
+
+        return dict(get_excel_vector_search_app_service().list_indexes() or {})
+    if action == "delete":
+        from app.application import get_excel_vector_search_app_service
+
+        result = dict(
+            get_excel_vector_search_app_service().delete_index(index_id=str(params["index_id"]))
+            or {}
+        )
+        if result.get("success") is not True:
+            result.setdefault("http_status_code", 404)
+        return result
     if action == "execute":
         file_path = str(params.get("file_path") or "").strip()
         if not file_path:

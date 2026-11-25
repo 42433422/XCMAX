@@ -148,6 +148,24 @@ describe('企业唯一小 C 管理界面', () => {
     expect(wrapper.text()).toContain('自主活动已暂停')
   })
 
+  it('停止后只能明确启动，原身份及持久状态版本来自服务端', async () => {
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue(snapshot({ state_version: 10 }))
+    const update = vi.spyOn(xiaocLifeApi, 'update')
+      .mockResolvedValueOnce(snapshot({ revision: 5, state_version: 11, stopped: true, paused: true, status: 'stopped' }))
+      .mockResolvedValueOnce(snapshot({ revision: 6, state_version: 12 }))
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11 } }))
+    await flushPromises()
+    await click(wrapper, '停止自主活动')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith(4, { stopped: true })
+    expect(wrapper.text()).toContain('状态版本 11')
+    expect(wrapper.text()).not.toContain('恢复自主活动')
+    await click(wrapper, '启动自主活动')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith(5, { stopped: false, paused: false })
+    expect(wrapper.text()).toContain('状态版本 12')
+  })
+
   it('切换账号丢弃上一账号未完成的读取，退出视图后清掉轮询监听', async () => {
     const delayed = deferred<XiaoCLifeState>()
     const read = vi

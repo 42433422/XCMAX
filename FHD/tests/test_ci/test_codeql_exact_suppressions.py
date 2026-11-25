@@ -220,8 +220,8 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
 
 
 # These modules were re-reviewed 2026-11-16 on the final PR #3245 sources.
-# artifact_files and workflow_spreadsheet_scope changed their I/O and may not
-# inherit their former approval.
+# artifact_files, workflow_spreadsheet_scope and cross_module_chain changed
+# their contracts and may not inherit their former approval.
 # These single-component / dir_fd
 # sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
@@ -236,7 +236,6 @@ _REVIEWED_FILE_SINKS = {
         973,
     ),
     "FHD/app/application/local_file_access/paths.py": (76, 134),
-    "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),
 }
 
 
@@ -282,8 +281,8 @@ def _sink_source_tree(tmp_path, uri, source):
 @pytest.mark.parametrize(
     "path",
     [
-        "FHD/app/application/agent_orchestrator/artifact_files.py",
         "FHD/app/application/tools/workflow_spreadsheet_scope.py",
+        "FHD/app/application/agent_orchestrator/cross_module_chain.py",
     ],
 )
 def test_changed_file_io_cannot_reuse_former_suppression(path):
@@ -298,6 +297,13 @@ def test_changed_file_io_cannot_reuse_former_suppression(path):
         assert keep_result(_finding(uri=path, line=line)) is True
 
 
+@pytest.mark.parametrize("line", [73, 96, 97, 105, 107, 129, 99, 122, 123, 131, 133, 155])
+def test_changed_run_artifact_store_keeps_old_and_current_findings(line):
+    path = "FHD/app/application/agent_orchestrator/artifact_files.py"
+    assert path not in _SCRIPT_NS["_REVIEWED_FILE_SINKS"]
+    assert keep_result(_finding(uri=path, line=line)) is True
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -308,7 +314,7 @@ def test_changed_file_io_cannot_reuse_former_suppression(path):
 def test_resolver_suppression_fails_closed_after_semantic_change(tmp_path, path):
     source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
     root = _sink_source_tree(tmp_path, path, source + "\nREVIEWED_GUARD = False\n")
-    for line in _REVIEWED_FILE_SINKS[path]:
+    for line in _SCRIPT_NS["_REVIEWED_FILE_SINKS"][path][1]:
         assert keep_result(_finding(uri=path, line=line), source_root=root) is True
 
 

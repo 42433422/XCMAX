@@ -69,6 +69,8 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { platformModelApi, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
 import { appConfirm } from '@/utils/appDialog'
 import { notifyPlatformModelChanged } from '@/api/platformModel'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const props = defineProps<{ canManage: boolean }>()
 const state = ref<PlatformModelList | null>(null)
@@ -234,7 +236,10 @@ function dispose() {
   loadError.value = ''
   resetDraft()
 }
-watch(() => props.canManage, allowed => { if (allowed) void load(); else dispose() }, { immediate: true })
+watch(() => [props.canManage, getAuthSessionEpoch(), productReadAccountEpoch.value], () => {
+  dispose()
+  if (props.canManage) void load()
+}, { immediate: true, flush: 'sync' })
 onBeforeUnmount(dispose)
 </script>
 

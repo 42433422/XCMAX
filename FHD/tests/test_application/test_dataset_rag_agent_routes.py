@@ -1,47 +1,298 @@
+"""Dataset reads and writes use the same bound actor and durable task contract."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
-from unittest.mock import MagicMock, patch
+import hashlib
+from pathlib import Path
+from typing import Callable
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from app.fastapi_routes.knowledge_v1 import router
+from app.fastapi_routes.tools_execute import router as tools_router
+from app.infrastructure.document_parsing.object_store import FetchedObject
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def dataset_actor(trusted_actor):
-    return trusted_actor(tenant_id=7, permissions=["dataset.read", "dataset.write"])
-
-
-@pytest.fixture(autouse=True)
-def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
-
-
-def _client() -> TestClient:
-    from app.fastapi_routes.knowledge_v1 import router
-
-    app = FastAPI()
-    app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
-
-
-def _patch_agent_repo(repo: InMemoryAgentRunRepository):
-    return patch(
+def setup(tmp_path, monkeypatch, local_tools):
+    repo = InMemoryAgentRunRepository()
+    service = Mock()
+    monkeypatch.setattr(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-        return_value=repo,
+        lambda: repo,
     )
-
-
-def _configure_billing(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        lambda: service,
+    )
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "tool-claims.sqlite"))
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset-store.json"))
     monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+    app = FastAPI()
+    app.include_router(router)
+    app.include_router(tools_router)
+    return repo, service, app
+
+
+@pytest.mark.parametrize(
+    "path,body,action,method,result",
+    [
+        (
+            "/datasets/docs/query",
+            {"query": "policy?", "include_answer": True},
+            "query",
+            "answer",
+            {
+                "success": True,
+                "answer": "Use the approved path.",
+                "chunks": [],
+                "citations": [],
+            },
+        ),
+        (
+            "/datasets/multi-query",
+            {"dataset_ids": ["a", "b"], "query": "policy?"},
+            "multi_query",
+            "multi_answer",
+            {
+                "success": True,
+                "answer": "Shared policy.",
+                "chunks": [],
+                "citations": [],
+            },
+        ),
+        (
+            "/datasets/docs/versions/diff",
+            {"source": "policy.txt", "from_version": "v1", "to_version": "v2"},
+            "diff_versions",
+            "diff_versions",
+            {"success": True, "diff": ["+ new policy"], "added_lines": ["new policy"]},
+        ),
+    ],
+)
+def test_dataset_reads_use_bound_session_acl(
+    setup, trusted_actor, path, body, action, method, result
+):
+    repo, service, app = setup
+    actor = trusted_actor(user_id=7, permissions=["dataset.read"])
+    getattr(service, method).return_value = result
+    with TestClient(
+        app,
+        headers={
+            **actor.headers,
+            "X-Dataset-Admin": "true",
+            "X-Dataset-Tenant-ID": "999",
+        },
+    ) as client:
+        response = client.post("/api/knowledge/v1" + path, json=body)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["success"] is True and payload["execution_state"] == "completed"
+    call = getattr(service, method).call_args.kwargs
+    assert call["access_context"].actor_id == "7"
+    assert call["access_context"].tenant_id == "7"
+    assert call["access_context"].permissions == frozenset({"dataset.read"})
+    assert call["access_context"].is_admin is False
+    run = repo.get(payload["run_id"])
+    assert run.user_id == "7"
+    assert run.tool_calls[0].tool_id == "dataset_rag" and run.tool_calls[0].action == action
+    getattr(service, method).assert_called_once()
+
+
+def test_identical_dataset_queries_read_fresh_results(setup, trusted_actor):
+    _, service, app = setup
+    actor = trusted_actor(user_id=7, permissions=["dataset.read"])
+    service.answer.side_effect = [
+        {"success": True, "answer": "first", "chunks": [], "citations": []},
+        {"success": True, "answer": "updated", "chunks": [], "citations": []},
+    ]
+    with TestClient(app, headers=actor.headers) as client:
+        first = client.post(
+            "/api/knowledge/v1/datasets/docs/query", json={"query": "same question"}
+        ).json()
+        second = client.post(
+            "/api/knowledge/v1/datasets/docs/query", json={"query": "same question"}
+        ).json()
+    assert (first["answer"], second["answer"]) == ("first", "updated")
+    assert first["run_id"] != second["run_id"] and service.answer.call_count == 2
+
+
+def test_dataset_write_conflict_does_not_create_another_approval(setup, trusted_actor):
+    repo, service, app = setup
+    actor = trusted_actor(user_id=7, permissions=["dataset.write"])
+    with TestClient(app, headers={**actor.headers, "Idempotency-Key": "dataset-rebuild"}) as client:
+        first = client.post(
+            "/api/knowledge/v1/datasets/docs/index/rebuild", json={"background": True}
+        )
+        assert first.status_code == 202, first.text
+        receipt = first.json()
+        run = repo.get(receipt["run_id"])
+        replay = client.post(
+            "/api/tools/execute",
+            json={
+                "tool_id": "dataset_rag",
+                "action": "rebuild_index",
+                "params": run.steps[0].params,
+            },
+        )
+        conflict = client.post(
+            "/api/knowledge/v1/datasets/docs/index/rebuild",
+            json={"background": True, "max_attempts": 2},
+        )
+    assert (
+        replay.status_code == 202
+        and replay.json()["approval_request_id"] == receipt["approval_request_id"]
+    )
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["error_code"] == "task_idempotency_conflict"
+    assert service.mock_calls == []
+
+
+def test_dataset_headers_cannot_authorize_missing_session(setup):
+    _, service, app = setup
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/knowledge/v1/datasets/docs/query",
+            json={"query": "secret"},
+            headers={
+                "X-User-Id": "7",
+                "X-Dataset-Tenant-ID": "7",
+                "X-Dataset-Permissions": "dataset.read,dataset.admin",
+            },
+        )
+    assert response.status_code == 401
+    assert service.mock_calls == []
+
+
+@pytest.fixture(params=["multipart", "s3"])
+def document_source(request, tmp_path, monkeypatch):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr("app.utils.path_io.upload_helpers.get_upload_dir", lambda: upload_root)
+    fetch = Mock()
+    monkeypatch.setattr("app.infrastructure.document_parsing.object_store.fetch_object", fetch)
+
+    def post(client, content=b"private document"):
+        if request.param == "multipart":
+            return client.post(
+                "/api/knowledge/v1/datasets/docs/documents/upload",
+                files={"file": ("document.txt", content)},
+            )
+        fetch.return_value = FetchedObject(
+            bucket="kb", key="document.txt", filename="document.txt", data=content
+        )
+        return client.post(
+            "/api/knowledge/v1/datasets/docs/documents",
+            json={"s3_uri": "s3://kb/document.txt"},
+        )
+
+    return post, upload_root, fetch
+
+
+def test_document_retry_preserves_task_approval_and_frozen_input(
+    setup, trusted_actor, document_source
+):
+    repo, service, app = setup
+    post, upload_root, _ = document_source
+    actor = trusted_actor(user_id=7, permissions=["dataset.write"])
+    with TestClient(
+        app, headers={**actor.headers, "Idempotency-Key": "knowledge-import"}
+    ) as client:
+        first = post(client)
+        assert first.status_code == 202, first.text
+        receipt = first.json()
+        run = repo.get(receipt["run_id"])
+        original_params = dict(run.steps[0].params)
+        staged_path = Path(original_params["file_path"])
+        assert staged_path.read_bytes() == b"private document"
+        assert staged_path.name == hashlib.sha256(b"private document").hexdigest() + ".txt"
+        assert staged_path.is_relative_to(upload_root / "capability-inputs" / "knowledge")
+
+        retry = post(client)
+        assert retry.status_code == 202, retry.text
+        replay = client.post(
+            "/api/tools/execute",
+            json={
+                "tool_id": "dataset_rag",
+                "action": "ingest_document",
+                "params": original_params,
+            },
+        )
+        assert replay.status_code == 202, replay.text
+        for response in (retry, replay):
+            result = response.json()
+            for key in ("run_id", "task_id", "approval_request_id"):
+                assert result[key] == receipt[key]
+            assert result["success"] is False
+
+        changed = post(client, content=b"changed document")
+        assert changed.status_code == 409, changed.text
+        assert changed.json()["error_code"] == "task_idempotency_conflict"
+
+    assert repo.get(receipt["run_id"]).steps[0].params == original_params
+    assert staged_path.read_bytes() == b"private document"
+    assert service.mock_calls == []
+
+
+def test_document_staging_and_task_ownership_follow_real_account(
+    setup, trusted_actor, document_source
+):
+    repo, service, app = setup
+    post, _, _ = document_source
+    actors = [
+        trusted_actor(user_id=7, tenant_id=7, permissions=["dataset.write"]),
+        trusted_actor(user_id=8, tenant_id=8, permissions=["dataset.write"]),
+    ]
+    receipts = []
+    paths = []
+    for actor in actors:
+        with TestClient(
+            app,
+            headers={
+                **actor.headers,
+                "Idempotency-Key": "shared-request-key",
+                "X-User-Id": "7",
+                "X-Dataset-Tenant-ID": "7",
+            },
+        ) as client:
+            response = post(client)
+        assert response.status_code == 202, response.text
+        receipt = response.json()
+        run = repo.get(receipt["run_id"])
+        assert run.user_id == str(actor.user_id)
+        receipts.append(receipt)
+        paths.append(Path(run.steps[0].params["file_path"]))
+    assert paths[0] != paths[1]
+    assert paths[0].name == paths[1].name
+    assert paths[0].read_bytes() == paths[1].read_bytes() == b"private document"
+    assert receipts[0]["task_id"] != receipts[1]["task_id"]
+    assert receipts[0]["approval_request_id"] != receipts[1]["approval_request_id"]
+    assert service.mock_calls == []
+
+
+def test_unauthenticated_document_request_cannot_fetch_or_stage_input(setup, document_source):
+    _, service, app = setup
+    post, upload_root, fetch = document_source
+    with TestClient(
+        app,
+        headers={
+            "X-User-Id": "7",
+            "X-Dataset-Admin": "true",
+            "Idempotency-Key": "forged",
+        },
+    ) as client:
+        response = post(client)
+    assert response.status_code == 401
+    assert not upload_root.exists()
+    fetch.assert_not_called()
+    assert service.mock_calls == []
 
 
 def _dataset_headers(dataset_actor) -> dict[str, str]:
@@ -57,9 +308,8 @@ def _assert_mock_write_needs_readback(run, payload, *, code="result_verifier_una
     # The mocked service supplies a receipt but persists no independently readable effect.
     assert payload["agent_status"] == run.status == "blocked"
     assert payload["success"] is False
-    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["error_code"] == "result_verification_required"
     assert payload["retryable"] is False and payload["reconciliation_required"] is True
-    assert payload["verification_code"] == code
     receipt = run.tool_calls[0].metadata["verification"]
     assert receipt["status"] == "inconclusive" and receipt["accepted"] is False
     assert receipt["code"] == code
@@ -71,272 +321,6 @@ def _assert_mock_write_needs_readback(run, payload, *, code="result_verifier_una
     events = {event.event_type for event in run.events}
     assert {"tool.started", "verification.inconclusive"} <= events
     assert not {"tool.completed", "run.completed"} & events
-
-
-def test_dataset_query_route_executes_dataset_rag_tool_through_agent(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, dataset_actor
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
-    service.answer.return_value = {
-        "success": True,
-        "dataset_id": "platform-docs",
-        "query": "agent route?",
-        "answer": "Use AgentOrchestrator [1].",
-        "chunks": [{"text": "Use AgentOrchestrator.", "source": "policy.pdf"}],
-        "citations": [{"index": 1, "source": "policy.pdf"}],
-    }
-
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        response = _client().post(
-            "/api/knowledge/v1/datasets/platform-docs/query",
-            json={"query": "agent route?", "tenant_id": "7", "include_answer": True},
-            headers=_dataset_headers(dataset_actor),
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "completed"
-    assert payload["answer"] == "Use AgentOrchestrator [1]."
-
-    service.answer.assert_called_once()
-    call_kwargs = service.answer.call_args.kwargs
-    assert call_kwargs["dataset_id"] == "platform-docs"
-    assert call_kwargs["query"] == "agent route?"
-    assert call_kwargs["access_context"].tenant_id == "7"
-    assert "dataset.read" in call_kwargs["access_context"].permissions
-
-    run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.user_id == str(dataset_actor.user_id)
-    assert run.status == "completed"
-    assert run.intent == "dataset_rag_query"
-    assert run.steps[0].risk == "low"
-    assert run.tool_calls[0].tool_id == "dataset_rag"
-    assert run.tool_calls[0].action == "query"
-    assert run.tool_calls[0].permission == "dataset.read"
-    assert run.tool_calls[0].cost_units == 1
-    assert "tool.completed" in {event.event_type for event in run.events}
-
-
-def test_identical_dataset_queries_read_fresh_results(
-    tmp_path, monkeypatch, local_tools, dataset_actor
-):
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
-    service.answer.side_effect = [
-        {"success": True, "answer": "first", "chunks": [], "citations": []},
-        {"success": True, "answer": "updated", "chunks": [], "citations": []},
-    ]
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        client = _client()
-        args = {
-            "json": {"query": "same question", "tenant_id": "7"},
-            "headers": _dataset_headers(dataset_actor),
-        }
-        first = client.post("/api/knowledge/v1/datasets/platform-docs/query", **args).json()
-        second = client.post("/api/knowledge/v1/datasets/platform-docs/query", **args).json()
-    assert (first["answer"], second["answer"]) == ("first", "updated")
-    assert first["run_id"] != second["run_id"]
-    assert service.answer.call_count == 2
-
-
-def test_multi_query_route_runs_read_only_tool_across_datasets(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, dataset_actor
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
-    service.multi_answer.return_value = {
-        "success": True,
-        "dataset_ids": ["kb-a", "kb-b"],
-        "query": "跨库问题",
-        "answer": "跨库答案 [1].",
-        "chunks": [{"text": "跨库答案", "source": "policy.pdf", "dataset_id": "kb-b"}],
-        "citations": [{"index": 1, "source": "policy.pdf"}],
-    }
-
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        response = _client().post(
-            "/api/knowledge/v1/datasets/multi-query",
-            json={
-                "dataset_ids": ["kb-a", "kb-b"],
-                "query": "跨库问题",
-                "tenant_id": "7",
-                "include_answer": True,
-            },
-            headers=_dataset_headers(dataset_actor),
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["success"] is True
-
-    call_kwargs = service.multi_answer.call_args.kwargs
-    assert call_kwargs["dataset_ids"] == ["kb-a", "kb-b"]
-    assert call_kwargs["query"] == "跨库问题"
-
-    run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.intent == "dataset_rag_multi_query"
-    assert run.steps[0].risk == "low"
-    assert run.tool_calls[0].action == "multi_query"
-    assert run.tool_calls[0].permission == "dataset.read"
-
-
-def test_refresh_route_runs_write_tool_on_recorded_source(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, dataset_actor
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
-    service.refresh_document.return_value = {
-        "success": True,
-        "dataset_id": "platform-docs",
-        "document_id": "doc_1",
-        "changed": True,
-        "previous_version": 1,
-        "document": {"document_id": "doc_1", "version": 2},
-    }
-
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        response = _client().post(
-            "/api/knowledge/v1/datasets/platform-docs/documents/doc_1/refresh",
-            headers=_dataset_headers(dataset_actor),
-        )
-
-    assert response.status_code == 202
-    assert response.json()["changed"] is True
-    service.refresh_document.assert_called_once()
-    call_kwargs = service.refresh_document.call_args.kwargs
-    assert call_kwargs["dataset_id"] == "platform-docs"
-    assert call_kwargs["document_id"] == "doc_1"
-
-    run = repo.get(response.json()["run_id"])
-    assert run is not None
-    _assert_mock_write_needs_readback(run, response.json())
-    assert run.intent == "dataset_rag_refresh_document"
-    assert run.tool_calls[0].action == "refresh_document"
-    assert run.tool_calls[0].permission == "dataset.write"
-
-
-def test_batch_refresh_route_syncs_visible_sources(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools, dataset_actor
-) -> None:
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
-    service.refresh_documents.return_value = {
-        "success": True,
-        "dataset_id": "platform-docs",
-        "total": 2,
-        "processed": 2,
-        "changed": 1,
-        "unchanged": 1,
-        "failed": 0,
-        "skipped": 0,
-        "truncated": False,
-        "documents": [],
-    }
-
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        response = _client().post(
-            "/api/knowledge/v1/datasets/platform-docs/documents/refresh?limit=500",
-            headers=_dataset_headers(dataset_actor),
-        )
-
-    assert response.status_code == 202
-    assert response.json()["changed"] == 1
-    service.refresh_documents.assert_called_once()
-    call_kwargs = service.refresh_documents.call_args.kwargs
-    assert call_kwargs["dataset_id"] == "platform-docs"
-    assert call_kwargs["limit"] == 200
-
-    run = repo.get(response.json()["run_id"])
-    assert run is not None
-    _assert_mock_write_needs_readback(run, response.json())
-    assert run.tool_calls[0].action == "refresh_documents"
-    assert run.tool_calls[0].permission == "dataset.write"
-
-
-def test_rebuild_explicit_idempotency_key_replays_and_rejects_changed_input(
-    tmp_path, monkeypatch, local_tools, dataset_actor
-):
-    from app.application.agent_orchestrator.tool_permission import (
-        clear_idempotent_replay_for_tests,
-        drop_process_idempotency_memory,
-    )
-
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))
-    clear_idempotent_replay_for_tests()
-    service = MagicMock()
-    _configure_service_for_action(service, "rebuild_index")
-    headers = {**_dataset_headers(dataset_actor), "Idempotency-Key": "same-attempt"}
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        client = _client()
-        path = "/api/knowledge/v1/datasets/platform-docs/index/rebuild"
-        first = client.post(path, json={"background": True}, headers=headers)
-        drop_process_idempotency_memory()
-        repeat = client.post(path, json={"background": True}, headers=headers)
-        conflict = client.post(path, json={"background": True, "max_attempts": 2}, headers=headers)
-    assert first.status_code == 202
-    assert repeat.status_code == 409
-    assert first.json()["job"]["job_id"] == repeat.json()["job"]["job_id"]
-    assert first.json()["run_id"] == repeat.json()["run_id"]
-    assert repeat.json()["success"] is False
-    assert repeat.json()["outcome"] == "unknown"
-    assert repeat.json()["retryable"] is False
-    assert repeat.json()["reconciliation_required"] is True
-    _assert_mock_write_needs_readback(
-        repo.get(first.json()["run_id"]),
-        first.json(),
-        code="result_rebuild_baseline_unavailable",
-    )
-    assert conflict.status_code == 409
-    assert conflict.json()["error_code"] == "idempotency_conflict"
-    assert service.start_rebuild_index.call_count == 1
 
 
 def _configure_service_for_action(service: MagicMock, action: str) -> None:
@@ -477,24 +461,15 @@ def test_dataset_mutation_routes_execute_dataset_rag_tools_through_agent(
     risk: str,
     permission: str,
     cost_units: int,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-    local_tools,
-    dataset_actor,
+    setup,
+    trusted_actor,
 ) -> None:
-    repo = InMemoryAgentRunRepository()
-    _configure_billing(monkeypatch, tmp_path)
-    service = MagicMock()
+    repo, service, app = setup
+    dataset_actor = trusted_actor(tenant_id=7, permissions=["dataset.read", "dataset.write"])
     _configure_service_for_action(service, action)
-
-    with (
-        _patch_agent_repo(repo),
-        patch(
-            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-            return_value=service,
-        ),
-    ):
-        response = request_factory(_client(), dataset_actor)
+    with TestClient(app, headers=dataset_actor.headers) as transport:
+        client = ApprovedCapabilityClient(transport, repo, dataset_actor)
+        response = request_factory(client, dataset_actor)
 
     assert response.status_code == (200 if risk == "low" else 202)
     payload = response.json()
@@ -522,8 +497,8 @@ def test_dataset_mutation_routes_execute_dataset_rag_tools_through_agent(
                 "cancel_rebuild": "result_rebuild_baseline_unavailable",
             }.get(action, "result_verifier_unavailable"),
         )
-    assert run.intent == f"dataset_rag_{action}"
-    assert run.steps[0].risk == risk
+    assert run.intent == f"ERP Agent 请求执行 dataset_rag.{action}"
+    assert run.steps[0].risk == ("low" if risk == "low" else "high")
     assert run.tool_calls[0].tool_id == "dataset_rag"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == permission

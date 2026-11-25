@@ -151,10 +151,8 @@ class TestMeterLlmCall:
         assert len(_read_ledger(tmp_path)) == 1
 
     def test_failure_returns_none(self, monkeypatch):
-        from app.utils.operational_errors import RECOVERABLE_ERRORS
-
         def _boom(**kwargs):
-            raise RuntimeError("ledger unavailable")
+            raise OSError("ledger unavailable")
 
         monkeypatch.setattr("app.infrastructure.billing.model_usage.record_model_usage", _boom)
         assert meter_llm_call(source="agent_planner", model="m", usage={"total_tokens": 3}) is None
@@ -185,10 +183,8 @@ class TestRecallKnowledgeContext:
         svc.query.assert_called_once()
 
     def test_backend_failure_degrades(self, monkeypatch):
-        from app.utils.operational_errors import RECOVERABLE_ERRORS
-
         def _boom():
-            raise RuntimeError("dataset backend down")
+            raise ConnectionError("dataset backend down")
 
         monkeypatch.setattr(
             "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
@@ -241,17 +237,15 @@ class TestRememberRunOutcome:
         assert remember_run_outcome(user_id="u1", task="", summary="") is False
 
     def test_backend_failure_degrades_false(self, monkeypatch):
-        from app.utils.operational_errors import RECOVERABLE_ERRORS
-
         svc = MagicMock()
-        svc.save_message.side_effect = RuntimeError("db down")
+        svc.save_message.side_effect = ConnectionError("db down")
         monkeypatch.setattr(
             "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
         )
         monkeypatch.setattr(
             "app.application.user_memory_vector_app_service."
             "get_user_memory_vector_ingest_app_service",
-            MagicMock(side_effect=RuntimeError("vector down")),
+            MagicMock(side_effect=ConnectionError("vector down")),
         )
         assert remember_run_outcome(user_id="u1", task="t", summary="s", session_id="s1") is False
 
@@ -265,13 +259,12 @@ class TestOrchestratorMainLinkWiring:
 
         return AgentOrchestrator(repository=InMemoryAgentRunRepository())
 
-    def test_terminal_writeback_event_on_completed_run(self):
-        orch = self._build_orchestrator()
-        from app.application.agent_orchestrator.run_models import AgentRun
+    def test_terminal_writeback_event_on_completed_run(self, monkeypatch):
+        from tests.test_application.test_verified_result_feedback import verified_run
 
-        run = AgentRun(user_id="u1", message="查库存")
-        run.status = "completed"
-        run.final_output = {"node_outputs": {"n1": {"message": "库存充足"}}}
+        orch = self._build_orchestrator()
+        run = verified_run(monkeypatch)
+        orch._repo.save(run)
         with (
             patch(
                 "app.application.agent_runtime.pipeline.agent_runtime_hooks_enabled",
@@ -286,7 +279,7 @@ class TestOrchestratorMainLinkWiring:
 
         mock_remember.assert_called_once()
         assert mock_remember.call_args.kwargs["success"] is True
-        assert mock_remember.call_args.kwargs["summary"] == "库存充足"
+        assert mock_remember.call_args.kwargs["summary"] == "Created A"
         assert any(e.event_type == "runtime.memory_writeback" for e in run.events)
 
     def test_writeback_skipped_when_hooks_off(self):
@@ -416,7 +409,7 @@ class TestEmployeeModLlmMetering:
     def test_metering_failure_does_not_break_completion(self, tmp_path):
         with patch(
             "app.application.agent_runtime.pipeline.meter_llm_call",
-            side_effect=RuntimeError("ledger exploded"),
+            side_effect=OSError("ledger exploded"),
         ):
             result = self._run_complete(self._raw_response())
         assert result["success"] is True

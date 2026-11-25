@@ -41,7 +41,16 @@ class BootstrapPreflightTests(unittest.TestCase):
             path = Path(td) / "manifest.json"
             path.write_text(json.dumps(manifest), encoding="utf-8")
             valid = subprocess.run(
-                ["python3", "-c", code, str(path), release_sha, "production", "apply-latest"],
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -58,27 +67,69 @@ class BootstrapPreflightTests(unittest.TestCase):
                     )
                 ),
             )
+
             self.assertEqual(
                 json.loads(base64.b64decode(valid.stdout.strip().rsplit("|", 1)[1])), manifest
             )
 
-            for environment in ("production", "staging"):
-                wrong_sha = subprocess.run(
-                    ["python3", "-c", code, str(path), "c" * 40, environment, "apply-latest"],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertNotEqual(wrong_sha.returncode, 0)
+            wrong_sha = subprocess.run(
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    "c" * 40,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(wrong_sha.returncode, 0)
+            self.assertIn("manifest git_sha differs from authorized release_sha", wrong_sha.stderr)
+            wrong_artifact = subprocess.run(
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    "e" * 64,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(wrong_artifact.returncode, 0)
+            self.assertIn(
+                "manifest artifact differs from dispatched release_artifact_sha256",
+                wrong_artifact.stderr,
+            )
             manifest["artifact"] = "../fhd-full-1.2.3.tar.gz"
             path.write_text(json.dumps(manifest), encoding="utf-8")
             unsafe_path = subprocess.run(
-                ["python3", "-c", code, str(path), release_sha, "production", "apply-latest"],
+                [
+                    "python3",
+                    "-c",
+                    code,
+                    str(path),
+                    release_sha,
+                    "production",
+                    "apply-latest",
+                    manifest["sha256"],
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
             )
             self.assertNotEqual(unsafe_path.returncode, 0)
+            self.assertIn(
+                "manifest artifact is not a safe FHD tarball basename", unsafe_path.stderr
+            )
 
     def test_staging_apply_never_substitutes_a_queued_release(self) -> None:
         """Execute the workflow's SSH body and real updater; only the host/apply boundary is local."""
@@ -194,6 +245,7 @@ class BootstrapPreflightTests(unittest.TestCase):
                             "ACTION": "apply-latest",
                             "ACTION_ID": "loop:test",
                             "RELEASE_SHA": selected_sha,
+                            "RELEASE_ARTIFACT_SHA256": manifests[0]["sha256"],
                             "PRESERVE_RELEASE_HISTORY": "0",
                             "FHD_PUSH_HOST": "fixture.invalid",
                             "FHD_PUSH_USER": "fixture",

@@ -119,7 +119,7 @@ def _route_client(calls: list[dict]) -> TestClient:
         calls.append(kwargs)
         return JSONResponse({"success": True})
 
-    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     return TestClient(app, raise_server_exceptions=False)

@@ -21,7 +21,9 @@ if TYPE_CHECKING:
         get_ai_product_parser as get_ai_product_parser,
         get_product_import_service as get_product_import_service,
     )
-    from app.application.facades.intent_facade import BertIntentClassifier as BertIntentClassifier
+    from app.application.facades.intent_facade import (
+        BertIntentClassifier as BertIntentClassifier,
+    )
     from app.application.facades.inventory_facade import (
         InventoryService as InventoryService,
         PurchaseService as PurchaseService,
@@ -67,10 +69,7 @@ if TYPE_CHECKING:
     from app.application.facades.tools_facade import (
         _parse_order_text as _parse_order_text,
         execute_registered_workflow_tool as execute_registered_workflow_tool,
-        execute_tool_from_payload as execute_tool_from_payload,
         get_workflow_tool_registry as get_workflow_tool_registry,
-        run_archive_tools_execute as run_archive_tools_execute,
-        set_tool_execute_headers as set_tool_execute_headers,
     )
     from app.application.facades.tts_facade import (
         synthesize_to_data_uri as synthesize_to_data_uri,
@@ -118,10 +117,7 @@ _SERVICE_EXPORTS: dict[str, str] = {
     "document_templates_service": "template_facade",
     "_parse_order_text": "tools_facade",
     "execute_registered_workflow_tool": "tools_facade",
-    "execute_tool_from_payload": "tools_facade",
     "get_workflow_tool_registry": "tools_facade",
-    "run_archive_tools_execute": "tools_facade",
-    "set_tool_execute_headers": "tools_facade",
     "synthesize_to_data_uri": "tts_facade",
     "trigger_common_tts_warmup": "tts_facade",
     "EMPLOYEE_MOD_ID": "user_cs_employee_facade",
@@ -144,10 +140,7 @@ __all__ = [
     "_extract_structured_excel_preview",
     "_parse_order_text",
     "execute_registered_workflow_tool",
-    "execute_tool_from_payload",
     "get_workflow_tool_registry",
-    "run_archive_tools_execute",
-    "set_tool_execute_headers",
     "build_kitten_business_snapshot",
     "build_kitten_docx",
     "chart_service",

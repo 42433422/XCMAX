@@ -8,9 +8,10 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.db.models.approval import ApprovalFlowNode, ApprovalRequest, ApprovalStatus
+from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 from app.db.models.user import User
 
 AI_WORKFLOW_BUSINESS_TYPE = "workflow_tool"
@@ -21,6 +22,28 @@ FINAL_STATUSES = (
     ApprovalStatus.WITHDRAWN.value,
     ApprovalStatus.CANCELLED.value,
 )
+
+
+def serial_approval_supported(node_type: object, min_approvals: object = 1) -> bool:
+    return node_type in (None, "", "serial") and min_approvals in (None, "", 1, "1")
+
+
+def supported_approval_flow(flow: ApprovalFlow | None, nodes: list[ApprovalFlowNode]) -> bool:
+    return serial_approval_supported(getattr(flow, "node_type", None)) and all(
+        serial_approval_supported(node.node_type, node.min_approvals) for node in nodes
+    )
+
+
+def unsupported_approval_policy() -> JSONResponse:
+    return JSONResponse(
+        {
+            "success": False,
+            "code": "unsupported_approval_policy",
+            "message": "当前仅支持串行审批（serial），每个节点通过人数必须为 1。"
+            "会签、并行和多票审批尚不支持；请使用受支持的流程配置并重新发起审批。",
+        },
+        status_code=409,
+    )
 
 
 def allow_x_user_id_header() -> bool:

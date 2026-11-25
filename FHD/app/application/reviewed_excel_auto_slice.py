@@ -211,8 +211,8 @@ def _rule_slice(body, source, sheet, region, hidden, used_names, copy_sources) -
                 body, [fragment], print_area_mode="source"
             )
         except ReviewedExcelError as exc:
-            record["error"] = str(exc)
-            reason = f"自动保真提取未通过：{exc}；已生成复核副本，需人工确认去向"
+            record["error"] = exc.public_message
+            reason = f"自动保真提取未通过：{exc.public_message}；已生成复核副本，需人工确认去向"
     if reason:
         record["status"] = "pending_review"
         record["review_reason"] = reason
@@ -573,7 +573,7 @@ def derive_classified_documents(
                 body, fragments, print_area_mode=print_area_mode, object_receipt=object_receipt
             )
         except ReviewedExcelError as exc:
-            message = str(exc)
+            message = exc.public_message
             if "所选片段作为派生打印区域" in message:
                 print_area_mode = "selected"
                 object_receipt = {}
@@ -625,7 +625,7 @@ def derive_classified_documents(
                         hidden_hold = None
                         break
                     except ReviewedExcelError as again:
-                        retry_message = str(again)
+                        retry_message = again.public_message
                         if "所选片段作为派生打印区域" in retry_message:
                             print_area_mode = "selected"
                             object_receipt = {}

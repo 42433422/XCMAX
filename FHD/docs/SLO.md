@@ -13,7 +13,7 @@
 | SLO-AI-01 | 聊天首包 P95 | < 1500ms | `histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket[WINDOW]))) * 1000` | `xcagi-slo:3` |
 | SLO-BUS-01 | NeuroBus 投递 | ≥ 99.95% | `1 - (sum(rate(neurobus_events_dead_lettered_total[WINDOW])) + sum(rate(neurobus_events_lost_total[WINDOW]))) / clamp_min(sum(rate(neurobus_events_published_total[WINDOW])),1)` | `xcagi-slo:7` |
 
-将 `WINDOW` 替换为 `7d`（验收）或 `30d`（合同滚动）。
+将 `WINDOW` 替换为实际观察窗口；正式生产准入使用 `90d`，`7d` / `30d` 仅供阶段观察。生产环境标签、固定目标、查询和最小样本数以 [`collect_slo_metrics.py`](../scripts/observability/collect_slo_metrics.py) 为唯一执行口径，不能省略环境过滤或仅凭图表判定通过。
 
 ## 业务 SLO（BIZ 五域）
 
@@ -75,11 +75,11 @@ except Exception:
 | 层 | 路径 |
 |----|------|
 | 应用指标 | `GET /metrics` — [`app/utils/metrics.py`](../app/utils/metrics.py) |
-| Prometheus | [`k8s/ops/monitoring/prometheus/`](../k8s/ops/monitoring/prometheus/)（静态 ConfigMap） |
-| Prometheus Operator | [`k8s/monitoring/servicemonitor-xcagi-backend.yaml`](../k8s/monitoring/servicemonitor-xcagi-backend.yaml) · [`prometheusrule-xcagi-alerts.yaml`](../k8s/ops/monitoring/prometheusrule-xcagi-alerts.yaml) — `kubectl apply -k k8s/monitoring/` |
-| Grafana 看板 | [`k8s/monitoring/grafana/dashboards/xcagi-slo.json`](../k8s/monitoring/grafana/dashboards/xcagi-slo.json) |
+| Prometheus | [`prometheus.production.yml`](../ops/monitoring/prometheus.production.yml)，原生生产采集配置 |
+| 告警规则 | [`production-alerts.yml`](../ops/monitoring/production-alerts.yml)，真实 `promtool` 在 [`slo-promql-tests.yml`](../.github/workflows/slo-promql-tests.yml) 执行 |
+| Grafana 看板 | [`ops/monitoring/grafana/`](../ops/monitoring/grafana/) 的既有 provisioning |
 | 本地栈 | `bash scripts/observability/local_stack_up.sh` |
-| Staging runbook | [`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) |
+| 生产采集工作流 | [`slo-metrics-collect.yml`](../.github/workflows/slo-metrics-collect.yml)，正式 Day 0 仍需真实发布身份收敛 |
 
 ## 探针与 CI
 
@@ -88,7 +88,20 @@ except Exception:
 | Health 延迟 | `pytest tests/test_sla_health_probe.py`；真实 HTTP、前端预算与合成业务规模回归见 [`performance-smoke.yml`](../.github/workflows/performance-smoke.yml)，原始证据上传为 `performance-<源码SHA>`，不替代生产观察窗口 |
 | 前端 SLA | `npm run test:e2e:sla` |
 | Prometheus 采集 | `python scripts/observability/collect_slo_metrics.py --window 30d` |
-| 7 天验收 | `bash scripts/observability/run_staging_7d_acceptance.sh` |
+| 生产窗口 | `python scripts/observability/verify_production_slo_window.py --evidence-dir <原始证据目录> --release-id <原发布ID>`；默认连续 90 天，最终核对 10 项指标与最小样本 |
+| 近期采集观察 | 同一 verifier 的 `--observation-days 7`；以当前 UTC 日期为终点，缺目标、篡改、缺日和采样不足均阻断 |
+| Staging 7 天合成对话 | `SOURCE_SHA=<部署完整SHA> K6_EVIDENCE_DIR=<原始输出目录> bash scripts/observability/run_staging_7d_acceptance.sh` |
+
+Staging 使用独立只读验收账号，在受控环境运行真实登录、聊天与原持久轮次回读。设置 `XCAGI_BASE_URL`、`E2E_USER`、`E2E_PASSWORD`、`SOURCE_SHA` 后，从 `FHD/` 启动：
+
+```bash
+mkdir -p "$K6_EVIDENCE_DIR"
+XCAGI_SOAK_DURATION=168h K6_SUMMARY_PATH="$K6_EVIDENCE_DIR/k6-7d-summary.json" \
+  k6 run --out "json=$K6_EVIDENCE_DIR/k6-7d-samples.jsonl" \
+  scripts/observability/k6_7d_contract.js
+```
+
+`K6_EVIDENCE_DIR` 应为本轮独立且不存在旧输出的目录。`XCAGI_SOAK_DURATION` 控制场景时长；不要设置 k6 原生 `K6_DURATION`，它会替换已固定的到达率场景并被拒绝。短时冒烟保留实际时长，不能通过 7 天收尾验证。收尾要求完整 JSONL、原生 summary、同一运行 SHA、固定 30 次/分钟负载、全部检查通过及每轮原回执已完成；程序不会重发聊天 POST。
 
 ## 覆盖率门禁口径（质量 SLO · Delta A）
 
@@ -102,8 +115,10 @@ except Exception:
 
 | 模式 | 适用 | 证据 |
 |------|------|------|
-| `ab_supplement` | 内部 demo | `acceptance-20260605.yaml` |
-| `k6_7d` / `staging_natural` | **合同签署** | `docs/evidence/slo/grafana-staging-m0-*.png` + `reading_7d` 非 null |
+| 历史 `ab_supplement` | 内部 demo | 历史材料保持原范围，不作生产准入 |
+| `k6_7d` | 合成 staging 对话稳定性 | 原生 k6 summary + 7 天完整 JSONL + 同版本持久回执；不能证明真实业务对账或生产 SLA |
+| `preflight` / 近期 7 天观察 | 检查采集是否完整连续 | 固定抓取目标、真实成功样本数及当前窗口；不证明正式 SLO 达标 |
+| `formal` | 正式生产 SLO 准入 | 已批准 Day 0、同一发布身份、连续 90 天不可变证据链、各目标覆盖率 ≥99%、Prometheus 实测保留 ≥120 天，以及最终指标/样本门槛全部通过 |
 
 `ab_supplement` **不适用** 99.9% SLA 合同（见 [`M0-remaining-gaps.md`](M0-remaining-gaps.md)）。
 
@@ -119,7 +134,7 @@ except Exception:
 | SLO-TIER-C-04 | AI 流式并发 | ≥200 路并发流 × 15min | `scripts/loadtest/tier_c_chat_streams.js` | `tier-c/chat-streams-report.json` |
 | SLO-TIER-C-05 | AI 首包 P95 | < 1500ms（SLO-AI-01） | 同上 | Grafana `xcagi-slo:3` |
 | SLO-TIER-C-06 | Celery 队列延迟 | OCR/导出 P95 < 60s | Prometheus `celery_task_duration` | `tier-c/celery-latency.png` |
-| SLO-TIER-C-07 | 7 天自然流量 | k6 阶梯流量 + M0 全绿 | `k8s/monitoring/k6-configmap.yaml` `tier_c_ramp` | `docs/evidence/slo/` |
+| SLO-TIER-C-07 | 7 天自然流量 | 真实业务流量 + M0 全绿 | 原始 Prometheus 观察；合成 k6 不能替代自然流量 | `docs/evidence/slo/` |
 
 本地冒烟：
 

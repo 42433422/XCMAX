@@ -131,7 +131,10 @@ def safe_continuation_error(
         return "持久化审批节点清单无效，不能恢复"
     for node in plan.nodes:
         step = steps[node.node_id]
-        if execution_result_requires_reconciliation(step.output):
+        from app.application.agent_orchestrator.result_verification import verified_step_output
+
+        observed = verified_step_output(run, step) if step.status == "completed" else step.output
+        if execution_result_requires_reconciliation(observed):
             return "步骤执行结果尚需人工核对，不能恢复执行"
         if (node.tool_id, node.action, node.params, node.depends_on) != (
             step.tool_id,
@@ -141,7 +144,7 @@ def safe_continuation_error(
         ):
             return "原计划与执行步骤已变化，不能恢复"
         if step.status == "completed":
-            if step.output.get("success") is not True or execution_result_error(step.output):
+            if observed.get("success") is not True or execution_result_error(observed):
                 return "已完成步骤缺少成功回执，需要人工核对"
             continue
         if step.status == "skipped":

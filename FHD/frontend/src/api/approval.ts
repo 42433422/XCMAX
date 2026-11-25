@@ -112,6 +112,12 @@ export interface ApprovalWorkflowExecutionNode {
 
 export interface ApprovalWorkflowExecution {
   workflow_executed: boolean
+  agent_run_id?: string
+  execution_state?: string
+  execution_accepted?: boolean
+  code?: string
+  requires_reconciliation?: boolean
+  retryable?: boolean
   approval_request_id?: string
   approved_in_memory?: boolean
   success?: boolean

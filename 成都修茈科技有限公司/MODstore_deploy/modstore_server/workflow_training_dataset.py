@@ -180,8 +180,7 @@ def seal_business_evidence(bundle, tests, verified, verdict):
     if any(
         report.get("measurement_scope") != BUSINESS_SCOPE
         or report.get("runtime_verified") is not True
-        for (arm, _index), report in verified.items()
-        if arm == 1
+        for report in verified.values()
     ):
         return {
             **verdict,

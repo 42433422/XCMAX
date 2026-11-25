@@ -129,6 +129,15 @@ def list_auto_ingest_batches(
     from app.application.elt.auto_ingest_service import get_auto_ingest_service
     from app.infrastructure.tenant_scope import tenant_id_for_write
 
+    if not mine and not (
+        getattr(user, "role", None) == "admin"
+        and getattr(user, "tier", None) == "admin"
+        and getattr(user, "tenant_id", None) is None
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "ELT_AUTO_INGEST_FORBIDDEN", "message": "只能查看自己的入库批次"},
+        )
     owner = _user_id(user) if mine else None
     items = get_auto_ingest_service().list_batches(
         tenant_id=int(tenant_id_for_write()),

@@ -3,10 +3,12 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import { appAlert, appPrompt } from '@/utils/appDialog'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import ApprovalWorkspace from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/ApprovalWorkspaceView.vue'
 
-const { get, validateSession } = vi.hoisted(() => ({ get: vi.fn(), validateSession: vi.fn() }))
-vi.mock('@/api/core', () => ({ api: { get, post: vi.fn(), delete: vi.fn() } }))
+const { get, post, validateSession } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), validateSession: vi.fn() }))
+vi.mock('@/api/core', () => ({ api: { get, post, delete: vi.fn() } }))
 vi.mock('@/api/auth', () => ({ authApi: { validateSession } }))
 vi.mock('@/utils/approvalPaths', () => ({ resolveApprovalApiPath: (path: string) => path }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn(), appPrompt: vi.fn(), appConfirm: vi.fn() }))
@@ -22,7 +24,7 @@ async function openWorkspace() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/approval-hub/workspace', component: ApprovalWorkspace }] })
   await router.push('/approval-hub/workspace')
   await router.isReady()
-  const wrapper = mount(ApprovalWorkspace, { global: { plugins: [router] } })
+  const wrapper = mount(ApprovalWorkspace, { global: { plugins: [router], stubs: { teleport: true } } })
   await flushPromises()
   return wrapper
 }
@@ -30,11 +32,96 @@ async function openWorkspace() {
 describe('actual approval Mod complete lists', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    post.mockReset()
     setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 42 })
     validateSession.mockResolvedValue({ success: true, local_user_id: 42 })
     get.mockImplementation(async (_path, params) => response(params.approver_id ? '待审批' : '我发起', params.page))
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
+
+  function pendingExecution(state: string = 'queued') {
+    return { id: 12, request_no: 'customer-approval-12', title: '智能对话写操作：sales.execute_closed_loop',
+      status: 'approved', business_type: 'workflow_tool', created_at: '', records: [],
+      workflow_execution: { agent_run_id: 'original-sales-run', workflow_executed: false, success: false,
+        execution_state: state, execution_accepted: state === 'queued', code: state === 'unknown' ? 'outcome_unknown' : state,
+        requires_reconciliation: state === 'unknown', retryable: false,
+        nodes_executed: 0, nodes_total: 3, message: state === 'unknown' ? '请核对原任务，勿重复提交。' : '审批已通过，原任务尚未完成。' } }
+  }
+
+  it.each(['queued', 'unknown'] as const)('reads back the original %s execution after a real 202 approval envelope', async state => {
+    vi.useFakeTimers()
+    let current = pendingExecution(state)
+    let submitted = false
+    get.mockImplementation(async (path, params) => path.endsWith('/12')
+      ? { success: true, data: current }
+      : { success: true, data: params.approver_id && submitted ? [] : [{ ...current, status: submitted ? 'approved' : 'pending' }] })
+    post.mockImplementation(async () => { submitted = true; return { success: false, accepted: true, data: current, message: current.workflow_execution.message } })
+    vi.mocked(appPrompt).mockResolvedValue('确认本次销售范围')
+    const wrapper = await openWorkspace()
+    await wrapper.get('.btn-approve').trigger('click'); await flushPromises()
+    expect(post).toHaveBeenCalledExactlyOnceWith('/api/approval/requests/12/approve', { approver_id: 42, opinion: '确认本次销售范围' }, { headers: { 'X-User-ID': '42' } })
+    expect(get).toHaveBeenCalledWith('/api/approval/requests/12')
+    const details = wrapper.get('[data-tutorial-id="approval-detail"]')
+    expect(details.text()).toContain(state === 'queued' ? '等待执行' : '结果待核对')
+    expect(details.text()).not.toContain('未触发执行')
+    expect(wrapper.find('.workflow-execution-panel.failed').exists()).toBe(false)
+    expect(wrapper.find('[data-tutorial-id="approval-approve-action"]').exists()).toBe(false)
+    const detailReads = () => get.mock.calls.filter(([path]) => path === '/api/approval/requests/12').length
+    const reads = detailReads()
+    if (state === 'queued') {
+      current = { ...current, workflow_execution: { ...current.workflow_execution, execution_state: 'completed', workflow_executed: true, execution_accepted: false, success: true, nodes_executed: 3, message: '业务结果核对完成。' } }
+      await vi.advanceTimersByTimeAsync(2000); await flushPromises()
+      expect(detailReads()).toBe(reads + 1)
+      expect(wrapper.get('[data-tutorial-id="approval-detail"]').text()).toContain('执行完成')
+    } else {
+      await vi.advanceTimersByTimeAsync(2000); await flushPromises()
+      expect(detailReads()).toBe(reads)
+      await wrapper.findAll('button').find(button => button.text() === '刷新执行结果')!.trigger('click'); await flushPromises()
+      expect(detailReads()).toBe(reads + 1)
+    }
+    expect(post).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('counts 202 approval acknowledgements as awaiting results instead of failed or completed business', async () => {
+    post.mockResolvedValue({ success: false, accepted: true, data: pendingExecution(), message: '原任务已入队' })
+    vi.mocked(appPrompt).mockResolvedValue('确认批准范围')
+    const wrapper = await openWorkspace()
+    await (wrapper.vm as any).tm.approveMany([12])
+    expect(appAlert).toHaveBeenLastCalledWith(expect.stringContaining('已受理待核对 1 条'))
+    expect(appAlert).not.toHaveBeenLastCalledWith(expect.stringContaining('失败 1 条'))
+    wrapper.unmount()
+  })
+
+  it('retires a pending approval prompt after the same account changes session', async () => {
+    let finish!: (opinion: string) => void
+    vi.mocked(appPrompt).mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    post.mockResolvedValue({ success: false, accepted: true, data: pendingExecution() })
+    const wrapper = await openWorkspace()
+    const approving = (wrapper.vm as any).tm.approve(12)
+    invalidateEnterpriseSessionCache()
+    finish('旧会话中确认的范围')
+    await approving
+    expect(post).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['account', 'session', 'close', 'unmount'])('does not reopen a stale approval detail after %s', async change => {
+    const wrapper = await openWorkspace()
+    let finish!: (result: unknown) => void
+    get.mockImplementation((path, params) => path.endsWith('/12') ? new Promise(resolve => { finish = resolve }) : Promise.resolve(response('当前账号', params.page)))
+    const tm = (wrapper.vm as any).tm
+    const reading = tm.viewDetails(12)
+    if (change === 'account') productReadAccountEpoch.value++
+    if (change === 'session') invalidateEnterpriseSessionCache()
+    if (change === 'close') tm.closeDetails()
+    if (change === 'unmount') wrapper.unmount()
+    finish({ success: true, data: pendingExecution() })
+    await reading; await flushPromises()
+    expect(tm.showDetails.value).toBe(false)
+    expect(tm.selectedRequest.value).toBeNull()
+    if (change !== 'unmount') wrapper.unmount()
+  })
 
   it.each([['pending', 0, '待审批', 'approver_id'], ['initiated', 1, '我发起', 'applicant_id']] as const)(
     'opens and pages the %s list using the authenticated user and returns to the workspace', async (_type, index, label, filter) => {

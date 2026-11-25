@@ -32,7 +32,7 @@ from app.neuro_bus.health_monitor_types import (
     RemediationHandler,
     RemediationOutcome,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.neuro_bus.health_monitor")
 
@@ -419,7 +419,7 @@ class HealthRemediationMixin:
         for callback in self._alert_callbacks:
             try:
                 callback(alert)
-            except RECOVERABLE_ERRORS as e:
+            except BOUNDARY_ERRORS as e:
                 logger.error("[HealthMonitor] 告警回调失败: %s", e)
 
         logger.warning(

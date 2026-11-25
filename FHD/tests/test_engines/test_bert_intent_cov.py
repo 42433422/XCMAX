@@ -283,7 +283,7 @@ class TestBertIntentClassifierPredict:
 
     def test_predict_failure_returns_unk(self):
         clf = self._make_initialized_clf()
-        clf.tokenizer.side_effect = RuntimeError("tokenizer error")
+        clf.tokenizer.side_effect = ValueError("tokenizer error")
 
         result = clf.predict("hello")
         assert result["intent"] == "unk"

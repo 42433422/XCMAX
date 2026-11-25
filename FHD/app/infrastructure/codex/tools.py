@@ -18,7 +18,6 @@ from app.application.agent_orchestrator.run_models import utc_now_iso
 from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
-    build_tool_specs_v2,
     get_tool_action_spec,
     validate_tool_call,
 )
@@ -141,6 +140,8 @@ class CodexToolBridge:
             if self.run_id is not None and binding.run_id != self.run_id:
                 raise CodexBindingError("scope_conflict", "运行凭据不属于此工具入口")
             if name == "capability_search":
+                from app.application.capability_catalog import authorized_tool_specs
+
                 query = str(arguments.get("query") or "").strip().casefold()[:200]
                 limit = arguments.get("limit", 12)
                 offset = arguments.get("offset", 0)
@@ -149,7 +150,9 @@ class CodexToolBridge:
                 if type(offset) is not int or offset < 0:
                     raise CodexBindingError("invalid_arguments", "能力检索起点必须为非负整数")
                 matches = []
-                for _, spec in sorted(build_tool_specs_v2().items()):
+                for _, spec in sorted(
+                    authorized_tool_specs(binding.context, include_aiopen=True).items()
+                ):
                     text = f"{spec.tool_id}.{spec.action} {spec.description}".casefold()
                     if all(word in text for word in query.split()) and self._allowed(spec, binding):
                         matches.append(
@@ -227,7 +230,13 @@ class CodexToolBridge:
             raise CodexBindingError("unknown_tool", "工具不属于当前运行接口")
 
     def _spec(self, binding: CodexBinding, args: dict[str, Any]) -> ToolActionSpecV2:
+        from app.application.capability_catalog import authorized_tool_specs
+
         spec = get_tool_action_spec(str(args.get("tool_id") or ""), str(args.get("action") or ""))
+        if spec is not None:
+            spec = authorized_tool_specs(
+                binding.context, include_aiopen=True, tool_actions={(spec.tool_id, spec.action)}
+            ).get((spec.tool_id, spec.action))
         if spec is None or not self._allowed(spec, binding, args.get("params")):
             raise CodexBindingError("permission_denied", "当前账号或员工未获授权使用该能力")
         return spec

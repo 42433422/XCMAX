@@ -388,15 +388,25 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         data="object", http_status_code="integer"
     ),
     ("excel_analysis", "read"): _result(required=["success", "data"], data="object"),
-    ("excel_analysis", "query"): {
+    ("excel_analysis", "structure"): {
         "type": "object",
         "required": ["success", "data"],
         "properties": {
             "success": {"type": "boolean"},
-            "answer": {"type": "string"},
-            "data": {"type": "object"},
+            "data": {
+                "type": "object",
+                "required": ["row_count", "column_count", "columns", "dtypes", "sample_rows"],
+                "properties": {
+                    "row_count": {"type": "integer"},
+                    "column_count": {"type": "integer"},
+                    "columns": {"type": "array", "items": {"type": "string"}},
+                    "dtypes": {"type": "object"},
+                    "sample_rows": {"type": "array", "maxItems": 3},
+                },
+            },
         },
     },
+    ("excel_analysis", "query"): _result(required=["success", "data"], data="object"),
     ("excel_analyzer", "analyze"): _result(
         required=["success", "file_path"],
         file_path="string",

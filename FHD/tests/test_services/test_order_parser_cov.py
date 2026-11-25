@@ -669,7 +669,7 @@ class TestPatternLoopException:
         from app.services.tools_execution import order_parser as _mod
 
         def _stubbed_normalize_qty(token):
-            raise RuntimeError("forced error")
+            raise ValueError("forced error")
 
         # Use text WITHOUT slot-mode keywords (no 规格, no 型号/编号/共)
         # Pattern 2 matches: ^([^\d]+?)(\d+|...)\s*桶\s*(.+)$

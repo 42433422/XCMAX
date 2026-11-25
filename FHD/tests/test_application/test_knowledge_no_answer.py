@@ -133,7 +133,7 @@ def test_multi_answer_refuses_out_of_domain(tmp_path) -> None:
 def test_query_endpoint_validates_min_relevance() -> None:
     from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
 
-    routes = DocumentRoutes(dispatch=lambda: lambda **_: None, uploads=lambda _get: None)
+    routes = DocumentRoutes(dispatch=lambda: lambda **_: None, uploads=lambda: None)
     app = FastAPI()
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)

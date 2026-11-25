@@ -8,14 +8,15 @@ checks run in the parent; reference bytes never enter the employee process.
 from __future__ import annotations
 
 import base64
-import csv
 import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from copy import deepcopy
 from pathlib import Path
@@ -417,6 +418,20 @@ def capture_business_replay(db, contract, inputs):
         }
 
 
+def require_original_business_inputs(contract):
+    """Keep the original source-byte guard without re-reading optional oracles."""
+    frozen = contract.get("business_replay") or {}
+    if frozen.get("replay_ready") is not True:
+        return
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    assets = frozen["assets"]
+    for item in assets["input_files"]:
+        path = _workspace_file(item["path"], assets["workspace"], contract["user_id"], exists=True)
+        if _read_asset(path) != _bytes(item):
+            raise ValueError("workflow customer delivery business input bytes changed")
+
+
 def export_customer_replay(binding, execution_input, source_evidence_sha256):
     contract = deepcopy(binding.get("customer_delivery") or {})
     frozen = contract.pop("business_replay", {})
@@ -445,76 +460,15 @@ def export_customer_replay(binding, execution_input, source_evidence_sha256):
 
 
 def _workbook(raw):
-    from openpyxl import load_workbook
+    from modstore_server.workflow_training_artifact_verification import _workbook as read_workbook
 
-    # Reject oversized zip expansion before openpyxl allocates cell objects.
-    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        if sum(item.file_size for item in archive.infolist()) > MAX_OUTPUT_BYTES:
-            raise ValueError("training_replay_workbook_too_large")
-    workbook = load_workbook(io.BytesIO(raw), data_only=False, keep_links=False)
-    values = load_workbook(io.BytesIO(raw), data_only=True, keep_links=False)
-    try:
-        if any(sheet.max_row * sheet.max_column > 250_000 for sheet in workbook):
-            raise ValueError("training_replay_workbook_too_large")
-        result = []
-        for sheet in workbook:
-            rows = []
-            for row in sheet.iter_rows():
-                cells = []
-                for cell in row:
-                    cached = values[sheet.title][cell.coordinate].value
-                    if cell.data_type == "f" and cached is None:
-                        raise ValueError("training_replay_formula_value_unverified")
-                    cells.append((cell.data_type, cell.value, cached, cell.number_format))
-                rows.append(cells)
-            result.append(
-                (
-                    sheet.title,
-                    sorted(str(item) for item in sheet.merged_cells.ranges),
-                    rows,
-                )
-            )
-        return result
-    finally:
-        workbook.close()
-        values.close()
+    return read_workbook(raw, max_output_bytes=MAX_OUTPUT_BYTES)
 
 
 def _equal_files(path, actual, expected):
-    if Path(path).suffix.lower() == ".xlsx":
-        return _workbook(actual) == _workbook(expected)
-    if actual == expected:
-        return True
-    try:
-        reference = expected.decode("utf-8-sig")
-        dialects = []
-        for delimiter in ",;\t|":
-            try:
-                dialect = csv.Sniffer().sniff(reference, delimiters=delimiter)
-                # Match the native DictWriter's defaults: whitespace is cell data,
-                # and doubled quote characters are escapes, even if absent in gold.
-                dialect.skipinitialspace = False
-                dialect.doublequote = True
-                rows = list(csv.reader(io.StringIO(reference, newline=""), dialect, strict=True))
-            except csv.Error:
-                continue
-            if rows and len(rows[0]) > 1 and all(len(row) == len(rows[0]) for row in rows):
-                dialects.append((dialect, rows))
-        # Only the frozen oracle chooses the dialect. Ambiguous/single-column
-        # references can establish exact bytes, never inferred semantic success.
-        if len(dialects) != 1:
-            return False
-        dialect, rows = dialects[0]
-        return (
-            list(
-                csv.reader(
-                    io.StringIO(actual.decode("utf-8-sig"), newline=""), dialect, strict=True
-                )
-            )
-            == rows
-        )
-    except (csv.Error, UnicodeError):
-        return False
+    from modstore_server.workflow_training_artifact_verification import _equal_files as equal_files
+
+    return equal_files(path, actual, expected, workbook=_workbook)
 
 
 def _remap(value, original, workspace):
@@ -527,24 +481,88 @@ def _remap(value, original, workspace):
     return value
 
 
+def _sandbox_support():
+    return (
+        Path(__file__).resolve().parents[3]
+        / "FHD/scripts/autonomy/runtime_tools/opencode_agent.mjs"
+    )
+
+
+def _verify_worker_isolation():
+    if sys.platform == "linux":
+        result = subprocess.run(
+            [
+                shutil.which("node") or "node",
+                "--input-type=module",
+                "-e",
+                "import {readFileSync} from 'node:fs'; "
+                "const {assertLinuxWorkloadIsolation}=await import(process.argv[1]); "
+                "assertLinuxWorkloadIsolation(readFileSync(0, 'utf8'));",
+                _sandbox_support().as_uri(),
+            ],
+            input=Path("/proc/self/status").read_text(),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode:
+            raise ValueError("training_replay_workload_isolation_required")
+    else:
+        raise ValueError("training_replay_sandbox_unavailable")
+
+
 def _run_worker(request, directory, env, *, timeout=60):
     from modstore_server.self_maintenance_subprocess import terminate_subprocess
 
-    with subprocess.Popen(
-        [sys.executable, "-m", __name__, "--worker"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=directory,
-        env=env,
-        start_new_session=os.name == "posix",
-    ) as proc:
+    deadline = time.monotonic() + timeout
+    node = shutil.which("node")
+    runtime = os.environ.get("PROMPTFOO_SANDBOX_ENTRY")
+    if not node or not runtime:
+        raise ValueError("training_replay_sandbox_unavailable")
+    wrapper = (
+        Path(__file__).resolve().parents[3]
+        / "FHD/scripts/autonomy/runtime_tools/promptfoo_sandbox.mjs"
+    )
+    with (
+        tempfile.TemporaryDirectory(
+            prefix="workflow-replay-policy-", dir=directory.parent
+        ) as control,
+        subprocess.Popen(
+            [
+                node,
+                str(wrapper),
+                "--replay",
+                "--directory",
+                str(directory),
+                "--python",
+                sys.executable,
+                "--control",
+                control,
+            ],
+            stdin=subprocess.PIPE,
+            # Employee logs are not evidence; discard them instead of buffering unbounded data.
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            cwd=directory,
+            env={
+                **env,
+                "PROMPTFOO_SANDBOX_ENTRY": runtime,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONNOUSERSITE": "1",
+            },
+            start_new_session=os.name == "posix",
+        ) as proc,
+    ):
         try:
-            stdout, stderr = proc.communicate(json.dumps(request), timeout=timeout)
-            return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+            stdout, stderr = proc.communicate(
+                json.dumps(request), timeout=max(0, deadline - time.monotonic())
+            )
+            return subprocess.CompletedProcess(
+                proc.args, proc.returncode, stdout or "", stderr or ""
+            )
         finally:
-            # Reap the owned group before Popen closes its pipes, including on timeout.
+            # Reap the owned group before removing its private control directory.
             terminate_subprocess(proc, process_group=True)
 
 
@@ -605,7 +623,7 @@ def evaluate_business_replay(output, source):
             )
             result = _run_worker(request, root, env)
             if result.returncode or not (root / "executed.json").exists():
-                return failed
+                return {**failed, "reason": "training_replay_sandbox_execution_failed"}
             executed = json.loads((root / "executed.json").read_text())
             if executed.get("runtime_verified") is not True:
                 return failed
@@ -648,9 +666,12 @@ def evaluate_business_replay(output, source):
                 "runtime_verified": True,
                 "business_evidence": evidence,
             }
+    except ValueError as exc:
+        if str(exc) == "training_replay_sandbox_unavailable":
+            return {**failed, "reason": str(exc)}
+        return failed
     except (
         OSError,
-        ValueError,
         KeyError,
         TypeError,
         subprocess.TimeoutExpired,
@@ -661,6 +682,7 @@ def evaluate_business_replay(output, source):
 
 def _worker(request):
     """Restore the frozen native packages and call the existing product runtime."""
+    _verify_worker_isolation()
     from cryptography.fernet import Fernet
     from sqlalchemy import select
 

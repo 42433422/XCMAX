@@ -14,7 +14,7 @@
 2. **决策**：下一步有哪些合法动作、各自风险等级、是否需要人签核？
 3. **执行**：动作由谁触发（LLM 编排 / 事件驱动 / 人工），落库何张单据？
 
-范围：**业务域状态、跨域编排、组件权威归属及迁移验收**。CI/CD 与合入顺序见 [CI_SSOT.md](../../../docs/CI_SSOT.md)，自治运营见 [autonomy.md](../../../docs/autonomy.md)。§9 的历史核查仅核对源码与规范，未执行真实业务或重跑候选 PR 的测试；§2.2–2.3 的候选实现与分支回归分列记录，不替代 main 合入或生产验收。
+范围：**业务域状态、跨域编排、组件权威归属及迁移验收**。CI/CD 与合入顺序见 [CI_SSOT.md](../../../docs/CI_SSOT.md)，自治运营见 [autonomy.md](../../../docs/autonomy.md)。§9 的历史核查仅核对源码与规范，未执行真实业务或重跑候选 PR 的测试；§2.2–2.4 的候选实现与分支回归分列记录，不替代 main 合入或生产验收。
 
 ## 2. 基础设施盘点（基线可定位的实现）
 
@@ -76,7 +76,7 @@
 剩余边界必须继续公开：
 
 - 普通聊天、手机员工和新 LAN 超级员工请求可按原 turn 查询；新中继请求可按原 relay 与客户端请求键查询。旧客户端未携带稳定键、旧 outbox 未保存原身份、或历史回执已按旧策略删除时，不能凭空找回或自动重建任务；只能停止重发并保留待核对。
-- 管理端员工仅在提供稳定请求键时保证跨 POST 幂等；旧无键调用保留兼容语义。注册能力及管理端同步路径的原子准入不冒充后台 SQL 队列租约；`_execute_with_durable_lease` 的 metadata 也不是分布式锁。
+- 管理端员工执行必须提供稳定请求键；缺键拒绝为未开始，不再直接调用员工运行器。注册能力及管理端同步路径的原子准入不冒充后台 SQL 队列租约；`_execute_with_durable_lease` 的 metadata 也不是分布式锁。
 - Web 管理端不再自动切换到缺少原键回读契约的 market 或旧 Mod HTTP 执行口；新本机入口不可用时明确阻断。已有员工执行器和 Mod 组件仍由新本机入口调用，部署须保持前后端同版。
 - 通用 unknown 状态仍需要原工具/执行端的确定回执或人工核对。没有业务供应方的幂等接口和读回凭证，LangGraph 检查点、数据库事务及客户端去重不能证明外部副作用恰好一次。
 - Codex 的 thread/turn/item 协议是本次状态对照来源；本仓既有超级员工与中继适配不因此自动获得完整 app-server 协议、所有模型能力或生产成熟度。
@@ -84,7 +84,7 @@
 
 ### 2.3 企业认知：权威状态 → 经营目标 → 原任务执行 → 指标证据
 
-本节记录企业认知第二阶段的**候选实现与验收契约**。认知层读取原业务权威源，只维护派生状态、事件游标和目标绑定；业务动作仍由 §2.2 的统一任务链执行。实现依赖 [PR #3441](https://github.com/42433422/XCMAX/pull/3441) 的原子任务准入，核对提交为 `910babadc74559628ae3713b11b686e2dcd50c6c`。该依赖提交、分支代码和本地测试均不代表已合入 `main`、已部署或已通过真实客户验收；合入与运行身份须按最终 PR / CI / 发布证据确认。
+本节记录企业认知第二阶段的**候选实现与验收契约**。认知层读取原业务权威源，只维护派生状态、事件游标和目标绑定；业务动作仍由 §2.2 的统一任务链执行。本轮来源为 [PR #3449 的固定提交](https://github.com/42433422/XCMAX/commit/f71246900c1b7141b40c7ba61c654d0b4211d6d7)，沿用已纳入候选的 #3441 原子任务准入。来源祖先、分支代码和本地测试均不代表已合入 `main`、已部署或已通过真实客户验收；合入与运行身份须按最终 PR / CI / 发布证据确认。
 
 #### 企业实体清单与权威来源
 
@@ -126,8 +126,8 @@
 | 步骤 | 当前接线 | 核验入口与仍需证明的事实 |
 |---|---|---|
 | 1. 实体清单 | `catalog.py` → 原五类 ORM 模型 | `tests/test_application/test_enterprise_projection.py`：原 ID、权限、owner / tenant / Mod 范围 |
-| 2. 只读事件订阅 | 原 `neuro_bus_events.yaml` → `source_events.py` → 原 NeuroBus → `subscriptions.py` | 同上：真实总线消费、仅提交后发布、嵌套回滚、重复 / 乱序、发布失败；bulk SQL 边界单列 |
-| 3. 状态投影 | `sources.py` → `projection.py` → 两张派生表 | 同上：五类详情 / 列表、缓存权限重验、TTL、子明细指纹、故障时 `unknown`，原业务数据不因查询而改变 |
+| 2. 只读事件订阅 | 原 `neuro_bus_events.yaml` → `infrastructure/enterprise_cognition_events.py` → 原 NeuroBus → `projection.py::register_enterprise_subscriptions` | 同上：真实总线消费、仅提交后发布、嵌套回滚、重复 / 乱序、发布失败；bulk SQL 边界单列 |
+| 3. 状态投影 | `infrastructure/enterprise_cognition_sources.py` → `projection.py` → 两张派生表 | 同上：五类详情 / 列表、缓存权限重验、TTL、子明细指纹、故障时 `unknown`，原业务数据不因查询而改变 |
 | 4. 经营目标 | `domain/enterprise_cognition/goal_contract.py` 与 `application/enterprise_cognition/goals.py` 绑定原实体、指标、单位、方向、目标值及可选期限；只读引用 `autonomy/strategic_plan_app_service.latest_plan` 的精确内容指纹和条目 | `tests/test_application/test_enterprise_goals.py`：租户 / 主体 / Mod 隔离、单位可比、策略来源校验；目标变更用新 ID，旧绑定不覆盖。研发战略条目不自动成为企业经营事实 |
 | 5. 规划与任务 | `execution.py` 将原 goal、order、task/request 身份交给唯一 Codex 入口；原 `AgentOrchestrator` 原子准入实际业务子动作 | `tests/test_application/test_enterprise_execution.py`：完整目标覆盖、当前工具权限、规划前后实体版本、稳定请求键、原任务回读、审批前无副作用。首批业务写动作仅接与同一 `order_id` 绑定的原 `sales` 生命周期动作；其他实体的写动作仍需各自审核过的选择器契约 |
 | 6. 指标与记忆 | `outcomes.py` 只接受原父目标核验终态及对应动作回执，强制回查同一权威实体，冻结前后观测；单动作子任务不得提前结算整体目标；`memory.py` 复用 MemoryV2 追加带证据的经历候选 | `tests/test_application/test_enterprise_outcomes.py`：原任务 / 审批 / 动作绑定、同来源同单位、观测窗口、重复评估、未知回执与记忆失败恢复。观察到变化不证明因果，保留 `attribution=unproven`；记忆候选沿原确认治理，不覆盖原始事实 |
@@ -135,13 +135,49 @@
 
 该候选的只读回答明确区分：已观察到的未履约数量、用户目标是否达到、用户目标期限是否错过，以及仍未知的订单承诺交期和延期原因。**当前 `SalesOrder` 没有权威交期字段，用户目标的 `deadline` 不是订单的承诺交期。** 因此不得仅凭未交数量或目标过期给出“订单已延期若干天”或断言原因。完整订单延期验收还需要可追溯的原承诺交期和原因证据；不能用固定样例或模型解释补成事实。
 
-2026-11-21 候选本地组合验证：上述八个企业认知测试文件，加原 Business Harness、dispatcher、runtime context、approval consumption/transaction、工具契约/注册和 Agent HTTP 路由，共 **443 项通过、无跳过**。真实 SQLite 场景只控制 planner 输出，原 `sales.confirm → sales.deliver` 两个步骤各自审批；待交数量 `10 → 0 件`、库存 `20 → 10 件`，有唯一库存流水和原回执。重复规划、审批与评估不重复业务副作用、观察或记忆；记忆仍为 pending、归因仍为 unproven。双库同 ID 不同值、Mod 库无派生表和真实 NeuroBus 提交失效均有反例测试。这不替代真实模型、PostgreSQL、原客户延期原因与部署同版验收。
+组合回归以真实 SQLite 核对同一订单的原 `sales.confirm → sales.deliver`、逐步审批、库存流水与原回执，包含重复规划、审批、评估和记忆失败恢复的反例。MemoryV2 候选保持原审核，归因保持 `unproven`；双库同 ID、Mod 库无派生表和真实 NeuroBus 提交失效分别核对。来源候选的历史测试计数不计作本次合解后的通过记录；最终统一树回归、真实模型、PostgreSQL、客户延期原因和部署同版验收仍分别取得证据。
 
 #### 小C入口与审批归属
 
 HTTP 入口为 `POST /api/enterprise/cognition`，请求体为 `{"action": "…", "params": {…}}`。动作包括 `catalog`（实体目录）、`query`（当前状态）、`goals`（原目标绑定）、`bind_goal`（保存目标元数据）、`plan`（生成并登记待审批原任务）、`evaluate`（按原 run 回查结果）。HTTP 入口复用 `app/fastapi_routes/domains/agent/task_routes.py`，编排位于 `app/application/enterprise_cognition/service.py`，参数契约在 `app/domain/enterprise_cognition/contracts.py`。模型工具名为 `enterprise_cognition`，从现有工具注册 / 派发链调用 `app/application/tools/enterprise_cognition.py`，与 HTTP 共用同一应用服务。
 
 `plan` 接收 `goal_id / request_id / message`，不接受 `approved=true`、审批人或替换主体；相同请求读取原任务，不创建另一条执行链。审批、拒绝、继续、取消和回执查询继续使用原 agent / 审批工作台路由（`app/fastapi_routes/domains/agent/agent_routes.py`）；认知层不自批、不直接调用业务执行器。任务终态由原 `app/application/agent_orchestrator/task_dispatcher.py` 调用结果观测；`evaluate` 提供同一回执的显式核对入口。任何外层 `success=true` 都不能替代投影 `freshness`、任务状态和独立观测结论。
+
+
+### 2.4 能力契约与调用方迁移（T03–T12）
+
+本节记录集成候选的代码边界；不把分支回归视为主干、发布或真实业务联调通过。
+
+唯一权威能力是 `ToolActionSpecV2`。内置动作只在现有 `risk_actions.registry.json` 定义，外部 MCP 只经现有注册器装载；身份重复即拒绝，供应方移除的动作不保留旧授权。Workflow、模型工具、AIOPEN 与小 C 都从 `capability_catalog.py` 投影这份契约。OpenAPI 的 HTTP 路径只作非执行资源说明，不能成为第二套能力或任意 URL 执行通道。
+
+| 项目 | 集成实现 | 重点回归 |
+|---|---|---|
+| T03 权威目录 | 删除重复参数表与商品能力注册；保留原 MCP 动作名、完整 schema 与版本 | `test_tool_spec_v2.py`、`test_capability_catalog.py`、MCP 注册回归 |
+| T04 小 C 真实发现 | 重新核对有效账号、租户、Mod、员工工具授权、API Key scope 和实际员工包；管理端复用现有可信上下文桥接 | `test_capability_catalog.py`、`test_xiaoc_admin_context.py`，MODstore butler/context 回归 |
+| T05 统一执行 | 小 C、REST、MCP、Codex 工具桥和员工调用进入注册能力及现有 AgentTask/AgentRun 执行链 | `test_unified_tool_entry.py`、`test_tools_execute_agent_route.py`、`test_aiopen_operation_call.py` |
+| T06 权限、审批与幂等 | 真实会话密封绑定；同一契约权限、原任务键与审批摘要；审批后重查凭据、连接与 schema；不接受模型自报身份/批准 | `test_approval_scope_binding.py`、`test_tool_receipt_permissions.py`、AIOPEN 真实会话回归 |
+| T07 稳定状态与回执 | 原 task/run/step/approval/request 标识贯穿执行与核验；不同等待原因保留；未知结果禁止自动重放 | §2.2 回归及 `test_verification_recovery.py` |
+| T08 现有企业状态 | `business_db.read`、`tasks.query` 与实际员工目录读取现有仓储；按权限裁剪实体；不另建企业状态表 | `test_task_query_capability.py`、真实 SQLite 归属与撤权回归 |
+| T09 外部适配 | MCP/Para 沿用共享契约；客来来绑定当前用户/租户/授权范围，固定本机传输，原 run/step 派生供应方请求 ID；OpenClaw 使用受审批能力 | `test_kellai_tools.py`、`test_kellai_binding.py`、共享执行与 OpenClaw 回归 |
+| T10 核验与反馈 | 分派前冻结契约；保存不可变回执摘要；独立业务读回；只有已持久化且同源的核验结果可回写原会话记忆 | `test_result_verification_engine.py`、`test_verification_integrity.py`、`test_verified_result_feedback.py` |
+| T11 旧调用迁移 | 桌面公共请求层、手机既有 turn、管理端 SSE/员工请求、Planner Mod、业务 REST 和外部 SDK 使用稳定原请求；业务路由只做格式与可信上下文适配 | 桌面请求层、手机回执、MODstore 前端和业务路由真实会话回归 |
+| T12 删除重复实现 | 删除旧 tools executor/context、tools_payload 执行族、员工重复目录、任意 HTTP gateway、AIOPEN 独立审批、Qclaw/OpenClaw 直达执行、旧 skills/Workflow 业务别名、随包 Mod 私有处理器及前端令牌解锁重发与任意 URL 执行回退；旧导入实现退役，使用现有 ELT 契约 | 活跃调用扫描、已迁移入口回归、preflight 与 CI |
+
+审批前不能执行业务写入。旧全局业务表的限制直接进入契约 `data_scope=legacy_global` 和共用权限门禁，管理员身份也不能让企业租户越界；已实现严格归属的客户删除、发货记录等沿用其现有租户仓储。工具目录不公开账号不可执行的旧全局能力，产品发现与执行共用套餐及权限检查。SQL 工具按当前可信租户进入严格归属范围；旧数据迁移开关不能使无租户行可读、可改或可删。模板上传与自动保存先按真实身份暂存内容及摘要，经同一上传能力审批后读取绑定字节；文件改变不能复用原批准。
+
+桌面任务卡缺少有效能力契约时明确未开始，不向任意 URL 发起执行；已有原 run 的历史卡仍可只读核对原回执。旧 `requires_token` 保留为等待授权，解锁事件不能重发任务或充当审批。Excel 的读取、结构、查询和统计明确只读；查询从自然语言 `question` 或有界 `query_expression` 二选一。自然语言沿当前账号模型授权生成受 schema 校验的 JSON 筛选、转换与聚合计划，执行仍使用现有安全筛选器；不接受 Python、函数调用、文件或网络操作。结构直接读取真实表格，旧私有自然语言转任意 Pandas 代码入口继续退役。
+
+核验读取原始调用与当前真实业务对象，`success=true`、模型文本、HTTP 200 和供应方已受理都不能单独证明写入完成。凭据/连接变化、证据不匹配、丢失回执、尚有未核对副作用或其他 worker 持有租约时不能推进原任务。历史写入缺少核验契约时保留原回执及未知状态，后续安全读取成功也不能使整体任务完成。已回答的澄清步骤须有同一 run 的宿主回答事件才能认作控制转换；单独的答案字段不能绕过核验。回写小 C 的记忆必须绑定已持久化终态、原会话、原回执摘要及核验报告，重复核验不重复写入。
+
+尚未取得的证据与能力边界：
+
+- 当前源码没有找到可复用的真实企业地图数据源；系统能力地图不作为企业数据地图交付。
+- 员工自建工具的生命周期表仅有定义、版本与参数校验，没有执行实现绑定；管理定义仍可查询并明确 `executable=false`，不会添加进模型可执行目录或把校验记录标为执行中。
+- 太阳鸟 Mod 的客户、产品旧 SQLite 写入没有现成的统一归属契约；未经授权的独立写入入口停止提供执行能力，保留其原数据，不能静默改写为宿主的另一套业务库。
+- 无租户的平台账号不能借用其他企业的审批存储。现有审批表与快照要求真实租户，缺少该范围的业务写入明确拒绝为未开始；不会创建假租户、绕开隔离或另建审批引擎。
+- 客来来配套 [供应方 PR #2](https://github.com/42433422/kellai/pull/2) 已合入供应方主干，本集成保留后续修复版本的 gitlink `d680714fae8917f692e261c67856e5d266cafb05`。本地供应方部署及真实渠道发送/送达尚未验收；历史无账号绑定须重新配对，默认范围仍只读。
+- 通用 MCP 适配不等于所有浏览器或 Para 特性已验收。只有已安装、已授权且有实际实现的动作可发现；没有独立核验器的写入不会因执行器自报成功而完成。
+- 本地自动回归不能代替同提交 CI、受保护主干审查、正式部署和真实账号/设备/供应方联调。T12 的交付关闭仍须这些回执，不能仅凭删除清单宣布完成。
 
 ## 3. 工作流程（企业内部业务）
 
@@ -192,7 +228,7 @@ HTTP 入口为 `POST /api/enterprise/cognition`，请求体为 `{"action": "…"
 
 ### 9.1 判定口径与共同边界
 
-以下是 **14 项统一性核查范围，不是已证实的 14 套重复实现**。状态列保留 2026-11-21 指定基线的源码核查结论，不冒充当前集成提交的验收结果；集成候选契约见 §2.2–2.3，关闭证据按 §9.4 更新。“已定位”仅表示当时已读源码；“候选”指当时未合入的 PR；“待核验”表示证据不足，不等同于缺失。实现、分支回归、main 合入、同 SHA 发布和真实业务验收分别记录，不相互替代。
+以下是 **14 项统一性核查范围，不是已证实的 14 套重复实现**。状态列保留 2026-11-21 指定基线的源码核查结论，不冒充当前集成提交的验收结果；集成候选契约见 §2.2–2.4，关闭证据按 §9.4 更新。“已定位”仅表示当时已读源码；“候选”指当时未合入的 PR；“待核验”表示证据不足，不等同于缺失。实现、分支回归、main 合入、同 SHA 发布和真实业务验收分别记录，不相互替代。
 
 - 按职责确定决策拥有方。宿主沿用 AgentOrchestrator；MODstore、Para、Kellai 保留各自领域记录，通过适配器关联原请求/任务/回执，不强制跨进程共用一张表或直接调用宿主实例。
 - 请求键、task、run、step/call、attempt、外部任务 ID、会话/轮次和 trace 分别表达不同身份。保留其映射及账号/租户/Mod/工作区范围；trace 仅作观测，不作为幂等键或任务主键。
@@ -203,9 +239,9 @@ HTTP 入口为 `POST /api/enterprise/cognition`，请求体为 `{"action": "…"
 
 ### 9.2 组件清单与迁移责任
 
-下表“收敛动作”是待落实和验证的要求；不因写入本文就变成已实现。链接指向基线已有文件，候选新增浏览器文件另用固定提交链接。
+下表记录原始 `171418352d…` 核查快照；其中“main”均指该快照，不是当前分支的实时状态。“收敛动作”是待落实和验证的要求；不因写入本文就变成已实现。链接指向基线已有文件，候选新增浏览器文件另用固定提交链接。后续已纳入集成的来源见 §9.3，发布与业务结果仍须独立回读。
 
-| 项 / 优先级 | 现有职责与源码依据 | 调用方及收敛动作 | 核查状态 / 候选 |
+| 项 / 优先级 | 现有职责与源码依据 | 调用方及收敛动作 | 原始核查发现 / 后续来源 |
 |---|---|---|---|
 | U01 执行准入 / P0 | [unified_task](../../app/application/agent_orchestrator/unified_task.py)、[task_plan](../../app/application/agent_orchestrator/task_plan.py) 和 [Orchestrator](../../app/application/agent_orchestrator/orchestrator.py) 共用执行核心 | 聊天、任务 API、公共 tools/skills、管理端员工、Mod/SDK、移动 relay 共享稳定请求键和原子准入；旧入口只做鉴权/参数适配 | 已定位不同准入路径；[tools_execute](../../app/fastapi_routes/tools_execute.py) 未登记路径仍可转 archive；#3440/#3441 候选 |
 | U02 状态与回执 / P0 | [AgentTask](../../app/application/agent_orchestrator/task_models.py) 是跨运行投影；[AgentRun/Step/Call](../../app/application/agent_orchestrator/run_models.py)、[任务队列](../../app/application/agent_orchestrator/task_execution_models.py)、员工账本各有事实粒度 | 按原 task/run/attempt 综合运行、队列控制和业务回执；迟到快照不覆盖新代次；不能只信聊天或只忽略队列故障 | 已定位分层；#3441/#3433 候选；等待态具体问题见 U14 |
@@ -222,15 +258,15 @@ HTTP 入口为 `POST /api/enterprise/cognition`，请求体为 `{"action": "…"
 | U13 市场资源目录 / P2 | [Mod 商店门面](../../app/application/mod_store_catalog_app.py)、[员工花名册](../../config/duty_roster.json) 和各原领域目录 | 模块/员工分类共用原包身份、授权、安装与完整分页；商品包、员工身份、工具动作和公开能力证据不互相替代 | #3415 为界面/目录消费候选；未证明需要合并底层存储 |
 | U14 前端状态投影 / P1 | [planned_workflow_dispatch](../../app/application/ai_chat/planned_workflow_dispatch.py)、[agentRunExecution](../../frontend/src/utils/agentRunExecution.ts) 与各客户端读回 | 聊天、任务页、审批页、移动端以原运行/队列/回执投影，回调或流结束不独立完成任务 | main 静态发现等待态用 `setdefault`，不能覆盖已有 completed；#3446 修复叠在 #3441，本轮未执行该反例 |
 
-### 9.3 开放候选身份与整合约束
+### 9.3 候选身份快照与整合约束
 
-2026-11-21 读取 API 元数据时，下列 PR 均 open、未合入。表中 head 是核查快照，不是“永远最新”或测试通过声明；候选变化须重读代码差异及该提交检查。正文中的旧 SHA、测试总数和 mergeable 标志不代替合入或发布证据。
+2026-11-21 原始 API 核查时，下列 PR 均 open、未合入。表中 head 是来源快照，不是实时 PR 状态或测试通过声明；候选变化须重读代码差异及该提交检查。正文中的旧 SHA、测试总数和 mergeable 标志不代替合入或发布证据。
 
 | PR | 核查 head | 接入关系 |
 |---|---|---|
 | [#3440](https://github.com/42433422/XCMAX/pull/3440) | `8440f9a32ceb95e2d578d1fe80e66355986bf027` | 工具入口、授权范围与安全重试；与 #3441 共改员工/工具入口，须语义整合 |
-| [#3441](https://github.com/42433422/XCMAX/pull/3441) | `910babadc74559628ae3713b11b686e2dcd50c6c` | 原子准入/状态候选；其 [§2.2](https://github.com/42433422/XCMAX/blob/910babadc74559628ae3713b11b686e2dcd50c6c/FHD/docs/architecture/PROCESS_FLOW_SSOT.md) 为实现来源，集成契约保留于本文 §2.2；章节合并不代表 publish_task_run 已在 main 或通过全部验收 |
-| [#3446](https://github.com/42433422/XCMAX/pull/3446) | `8728855690accb824594f1d1671e6232817a40ff` | base 为 #3441 分支 `910babad…`，不能按独立 main 修复直接排合入 |
+| [#3441](https://github.com/42433422/XCMAX/pull/3441) | `910babadc74559628ae3713b11b686e2dcd50c6c` | 原子准入/状态候选；其 [§2.2](https://github.com/42433422/XCMAX/blob/910babadc74559628ae3713b11b686e2dcd50c6c/FHD/docs/architecture/PROCESS_FLOW_SSOT.md) 为来源实现证据；统一执行整合已将说明保留在本文 §2.2，main 状态仍以实际合入回执为准 |
+| [#3446](https://github.com/42433422/XCMAX/pull/3446) | `8728855690accb824594f1d1671e6232817a40ff` | 来源叠在 #3441 的 `910babad…` 上；2026-11-21 已改以 main 为 base，但祖先依赖仍须随 #3441 一并核验 |
 | [#3433](https://github.com/42433422/XCMAX/pull/3433) | `a28ed80eaa0d7bc1db97fcd1bb6d2aa190d129a9` | 上下文/澄清/恢复；metadata base SHA 为 `48f8f40d…`，需核对主线差异与 #3443 交叉修改 |
 | [#3443](https://github.com/42433422/XCMAX/pull/3443) | `cfbbb44adb2bea1473e0afcef41b9335a8669127` | 真实模型容量、摘要和预算接入；保留完整工具合同及原业务记忆 |
 | [#3430](https://github.com/42433422/XCMAX/pull/3430) | `8a165d72c5e8620e2243d28dbf9ceacfd6dd9563` | 桌面与直接浏览器；先处理 U06 重叠 |

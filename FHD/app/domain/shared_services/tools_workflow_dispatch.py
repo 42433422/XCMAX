@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.domain.shared_services.tools_workflow_business_db import (
-    _registered_router_business_db,
-)
-from app.domain.shared_services.tools_workflow_elt import (
-    _registered_router_elt_import,
-)
+from app.domain.shared_services.tools_workflow_business_db import _registered_router_business_db
+from app.domain.shared_services.tools_workflow_elt import _registered_router_elt_import
 from app.domain.shared_services.tools_workflow_erp import (
     _registered_router_customers,
     _registered_router_finance,
@@ -27,7 +23,6 @@ from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_join_compare,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
-    _registered_router_import_excel_to_database,
 )
 from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
     _registered_router_excel_import,
@@ -84,75 +79,142 @@ def _run_awaitable(value):
     """同步工具分发里执行 async 适配器方法；已有事件循环时改用独立线程。"""
     import asyncio
     import concurrent.futures
+    import contextvars
 
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(value)
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, value).result()
+        return pool.submit(contextvars.copy_context().run, asyncio.run, value).result()
+
+
+def _image_adapter(runtime_context):
+    from app.application.market_llm.authentication import authenticated_agent_session_id
+    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
+
+    return ModstorePlatformAdapter.from_session(authenticated_agent_session_id(runtime_context))
+
+
+async def _generate_image_and_close(adapter, body):
+    import logging
+
+    from app.utils.operational_errors import INFRA_TRANSIENT
+
+    try:
+        return await adapter.generate_image(body)
+    finally:
+        try:
+            await adapter.close()
+        except INFRA_TRANSIENT as exc:
+            # A close failure must not discard an already confirmed paid receipt.
+            logging.getLogger(__name__).warning("Image client close failed: %s", type(exc).__name__)
 
 
 def _registered_router_image_generate(action, params, runtime_context, profile, user_message):
-    if action != "generate":
-        return {"success": False, "message": "不支持的生图操作"}
-    prompt = str(params.get("prompt") or "").strip() or str(user_message or "").strip()
-    if not prompt:
-        return {"success": False, "message": "请描述要生成的图片"}
-    from uuid import uuid4
+    import hashlib
+    import re
 
-    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
-
-    session_id = str(runtime_context.get("session_id") or "").strip() or None
-    request_id = str(params.get("client_request_id") or f"agent-{uuid4().hex}")
-    adapter = ModstorePlatformAdapter.from_session(session_id)
-    if not adapter.auth_token:
-        return {"success": False, "message": "当前账号未绑定市场模型服务授权，无法生图"}
-    # The market adapter distinguishes a confirmed rejection from an unknown
-    # paid side effect. Never expose transport exceptions or silently retry an
-    # ambiguous image request with a different request key.
-    from contextlib import suppress
-
-    import httpx
     from fastapi import HTTPException
 
-    try:
-        data = _run_awaitable(
-            adapter.generate_image({"prompt": prompt, "client_request_id": request_id})
-        )
-    except HTTPException as exc:
-        if exc.status_code >= 500 or exc.status_code == 409:
+    from app.application.market_llm.multimodal import safe_image_result_urls
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    if action != "generate":
+        return {"success": False, "message": "不支持的生图操作"}
+    prompt = params.get("prompt", user_message)
+    if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 4000:
+        return {"success": False, "message": "请提供不超过 4000 字的图片描述"}
+    prompt = prompt.strip()
+    request_id = params.get("client_request_id")
+    if request_id is None:
+        key = str(runtime_context.get("idempotency_key") or "").strip()
+        if not key:
             return {
                 "success": False,
-                "status": "blocked",
-                "client_request_id": request_id,
-                "message": "生图结果待核对，请保留原请求键",
+                "message": "生图任务缺少可恢复的请求键，请重新提交任务",
             }
-        return {"success": False, "message": "生图请求被拒绝，请检查授权或参数"}
-    except (httpx.HTTPError, OSError, RuntimeError, ValueError):
+        request_id = "agent-image-" + hashlib.sha256(key.encode()).hexdigest()
+    if not isinstance(request_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{8,128}", request_id):
+        return {"success": False, "message": "生图请求键格式无效"}
+    receipt = {"client_request_id": request_id}
+    try:
+        adapter = _image_adapter(runtime_context)
+    except PermissionError:
         return {
             "success": False,
-            "status": "blocked",
-            "client_request_id": request_id,
-            "message": "生图结果待核对，请保留原请求键",
+            "message": "生图需要当前账号的有效登录授权",
+            **receipt,
         }
-    finally:
-        with suppress(httpx.HTTPError, OSError, RuntimeError, ValueError):
-            _run_awaitable(adapter.close())
-    images = [
-        str(url)
-        for url in (data.get("images") or [])
-        if str(url).startswith("data:image/") or str(url).startswith("https://")
-    ]
-    if not images:
-        return {"success": False, "message": "生图结果没有可显示的图片"}
-    return {
-        "success": True,
-        "images": images,
-        "model": str(data.get("model") or ""),
-        "billed": bool(data.get("billed")),
-        "charge_amount": str(data.get("charge_amount") or ""),
+    if not adapter.auth_token:
+        return {
+            "success": False,
+            "message": "当前账号未绑定市场模型服务授权，无法生图",
+            **receipt,
+        }
+    unknown = {
+        "success": False,
+        "message": "生图结果与计费状态待核对，请保留原请求键，勿重复提交新任务",
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+        **receipt,
     }
+    try:
+        data = _run_awaitable(_generate_image_and_close(adapter, {"prompt": prompt, **receipt}))
+    except HTTPException as exc:
+        remote_id = exc.detail.get("request_id") if isinstance(exc.detail, dict) else None
+        if isinstance(remote_id, str) and remote_id:
+            receipt["request_id"] = remote_id
+        if exc.status_code in {400, 401, 402, 403, 404, 413, 422, 429}:
+            return {
+                "success": False,
+                "message": "生图请求被拒绝",
+                "status_code": exc.status_code,
+                **receipt,
+            }
+        return {**unknown, **receipt}
+    except RECOVERABLE_ERRORS:
+        return unknown
+    receipt.update(
+        {
+            key: data[key]
+            for key in (
+                "provider",
+                "model",
+                "billed",
+                "charge_amount",
+                "usage",
+                "usage_details",
+                "request_id",
+                "operation",
+                "key_source",
+                "pricing",
+                "hold_no",
+            )
+            if key in data
+        }
+    )
+    images = safe_image_result_urls(data.get("images"))
+    if not images:
+        return {
+            **unknown,
+            **receipt,
+            "message": "已收到生图回执但图片无法安全显示，请核对原请求",
+        }
+    return {"success": True, "images": images, **receipt}
+
+
+def _registered_router_openclaw(action, params, runtime_context, profile, user_message):
+    from app.application.aiopen.service import dispatch_openclaw_chat
+
+    return dispatch_openclaw_chat(params, runtime_context)
+
+
+def _registered_router_tasks(action, params, runtime_context, profile, user_message):
+    from app.application.tools.tasks import query_tasks
+
+    return query_tasks(action, params, runtime_context)
 
 
 def _registered_router_kellai(action, params, runtime_context, profile, user_message):
@@ -210,11 +272,12 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "conversation_history": _registered_router_conversation_history,
-        "kellai": _registered_router_kellai,
         "image_generate": _registered_router_image_generate,
+        "kellai": _registered_router_kellai,
+        "openclaw": _registered_router_openclaw,
+        "tasks": _registered_router_tasks,
         "excel_analysis": _registered_router_excel_analysis,
         "excel_join_compare": _registered_router_excel_join_compare,
-        "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,

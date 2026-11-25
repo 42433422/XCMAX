@@ -12,7 +12,9 @@ import pytest
 from fastapi import HTTPException
 
 from app.application.task_conversation_store import task_conversation_store
-from app.fastapi_routes.mobile_extensions.models import CodexSuperEmployeeMobileMessageBody
+from app.fastapi_routes.mobile_extensions.models import (
+    CodexSuperEmployeeMobileMessageBody,
+)
 from app.fastapi_routes.mobile_extensions.routes_super_employee import (
     SuperEmployeeRoutes,
     SuperEmployeeRoutesPorts,
@@ -115,6 +117,45 @@ async def test_json_original_turn_is_replayed_without_execution(bound_super, sta
 
 
 @pytest.mark.asyncio
+async def test_mobile_active_pointer_does_not_store_execution_credentials(bound_super, tmp_path):
+    from app.application.ai_chat.active_conversation import active_conversation_for
+
+    component, actor, service = bound_super
+    service.invoke.return_value = {"response": "finished original turn"}
+    body = _body()
+    canaries = ["pointer-secret-canary", "pointer-token-canary", "forged-proof-canary"]
+    body["context"].update(
+        secret=canaries[0],
+        access_token=canaries[1],
+        session_id=actor.session_id,
+        _actor_authorization={"proof": canaries[2]},
+    )
+    response = await component._invoke(
+        actor.request, "codex", CodexSuperEmployeeMobileMessageBody(**body), None
+    )
+    assert response["data"]["history_persistence"]["status"] == "saved"
+    service.invoke.assert_called_once()
+    execution_context = service.invoke.call_args.kwargs["context"]
+    assert execution_context["_actor_authorization"] == actor.context["_actor_authorization"]
+    assert execution_context["conversation_id"] == execution_context["session_id"] == "pinned:codex"
+    pointers = list((tmp_path / "dialogue").glob("*-active.json"))
+    assert len(pointers) == 1
+    stored = pointers[0].read_text(encoding="utf-8")
+    for value in [
+        *canaries,
+        actor.session_id,
+        actor.context["_actor_authorization"]["proof"],
+    ]:
+        assert value not in stored
+    with tenant_scope(actor.tenant_id):
+        assert (
+            active_conversation_for(actor.user_id, tenant_id=str(actor.tenant_id)) == "pinned:codex"
+        )
+        assert active_conversation_for(actor.user_id + 1, tenant_id=str(actor.tenant_id)) == ""
+        assert active_conversation_for(actor.user_id, tenant_id="other") == ""
+
+
+@pytest.mark.asyncio
 async def test_json_lost_delivery_and_concurrent_duplicate_keep_one_intent(bound_super):
     component, actor, service = bound_super
     started, finish = threading.Event(), threading.Event()
@@ -143,7 +184,9 @@ async def test_json_lost_delivery_and_concurrent_duplicate_keep_one_intent(bound
 
 
 @pytest.mark.asyncio
-async def test_stream_disconnect_drains_original_iterator_and_persists_result(bound_super):
+async def test_stream_disconnect_drains_original_iterator_and_persists_result(
+    bound_super,
+):
     component, actor, service = bound_super
     finish, closed = asyncio.Event(), asyncio.Event()
 
@@ -171,16 +214,21 @@ async def test_stream_disconnect_drains_original_iterator_and_persists_result(bo
 
 
 @pytest.mark.asyncio
-async def test_stream_exception_stays_unknown_and_is_never_redispatched(bound_super):
+@pytest.mark.parametrize("error_type", [ConnectionError, RuntimeError, TypeError])
+async def test_stream_exception_stays_unknown_and_is_never_redispatched(
+    bound_super, error_type, caplog
+):
     component, actor, service = bound_super
+    error = error_type("lost execution acknowledgement")
 
     async def source(**kwargs):
         yield {"type": "token", "text": "partial"}
-        raise RuntimeError("lost execution acknowledgement")
+        raise error
 
     service.invoke_stream.side_effect = source
     response = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)
     assert (await _events(response))[-1]["type"] == "error"
+    assert any(record.exc_info and record.exc_info[1] is error for record in caplog.records)
     assert _history(actor)["status"] == "unknown"
     again = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)
     assert (await _events(again))[-1]["result"]["execution_state"] == "unknown"
@@ -234,7 +282,10 @@ async def test_admitted_stream_completes_even_when_response_is_never_iterated(
         seen.append(str(current_tenant_id()))
         for _ in range(50):
             yield {"type": "token", "text": "partial"}
-        yield {"type": "done", "result": {"response": "original result without HTTP consumer"}}
+        yield {
+            "type": "done",
+            "result": {"response": "original result without HTTP consumer"},
+        }
 
     service.invoke_stream.side_effect = source
     response = await component._stream_super_employee_invoke(actor.request, "codex", _body(), None)
@@ -304,7 +355,9 @@ async def test_stream_close_failure_still_settles_unknown(bound_super):
 
 
 @pytest.mark.asyncio
-async def test_sql_reconstruction_preserves_original_dispatch_and_admission(bound_super):
+async def test_sql_reconstruction_preserves_original_dispatch_and_admission(
+    bound_super,
+):
     from app.application.ai_chat import dialogue_memory
 
     component, actor, service = bound_super
@@ -379,13 +432,20 @@ async def test_exact_turn_get_refreshes_only_the_original_dispatch(bound_super, 
     service.list_messages.assert_not_called()
 
 
-@pytest.mark.parametrize("state", ["completed", "running", "missing", "wrong_task", "unbound"])
+@pytest.mark.parametrize(
+    "state",
+    ["completed", "running", "missing", "wrong_task", "unbound", "messages_only"],
+)
 def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
-    from app.application.super_employee_service import CODEX_PROFILE, SuperEmployeeService
+    from app.application.super_employee_service import (
+        CODEX_PROFILE,
+        SuperEmployeeService,
+    )
 
     service = SuperEmployeeService(CODEX_PROFILE, storage_root=tmp_path)
     request = {
         "user_id": 71,
+        "employee_id": service._p.employee_id,
         "request_id": "original-dispatch",
         "created_at": "2026-11-21T00:00:00Z",
         "dispatch_receipt": {
@@ -393,12 +453,16 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
             "task_id": "original-task",
             "dispatcher": "para_api",
             "status": "accepted",
+            "accepted": True,
             "api_url": "" if state == "unbound" else "https://para.test",
         },
     }
-    service._messages.write_outbox(request, status="accepted", accepted=True, reason="")
-    outbox_path = next(service._messages.outbox_dir.glob("*.json"))
-    original_outbox = outbox_path.read_bytes()
+    outbox_path = None
+    original_outbox = None
+    if state != "messages_only":
+        service._messages.write_outbox(request, status="accepted", accepted=True, reason="")
+        outbox_path = next(service._messages.outbox_dir.glob("*.json"))
+        original_outbox = outbox_path.read_bytes()
     service._read_all_message_rows = MagicMock(
         side_effect=AssertionError("presentation rows are not dispatch authority")
     )
@@ -407,12 +471,14 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
     service._para_token = MagicMock(return_value="read-token")
     service._para_request = MagicMock(
         return_value={
-            "task": None
-            if state == "missing"
-            else {
-                "id": "other-task" if state == "wrong_task" else "original-task",
-                "status": state,
-            }
+            "task": (
+                None
+                if state == "missing"
+                else {
+                    "id": "other-task" if state == "wrong_task" else "original-task",
+                    "status": state,
+                }
+            )
         }
     )
     service._para_task_status_reply = lambda task: "task receipt"
@@ -423,14 +489,16 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
     receipt = service.read_dispatch_receipt(
         user_id=71, request_id="original-dispatch", task_id="original-task"
     )
-    assert (receipt is None) is (state in {"missing", "wrong_task", "unbound"})
+    assert (receipt is None) is (state in {"missing", "wrong_task", "unbound", "messages_only"})
     if state in {"completed", "running"}:
         assert receipt["dispatch"] == {
             "request_id": "original-dispatch",
             "task_id": "original-task",
             "dispatcher": "para_api",
+            "accepted": True,
             "status": state,
             "task_status": state,
+            "reconciliation_required": False,
         }
         assert receipt["assistant_message"]["body"] == "task receipt"
     assert (
@@ -439,14 +507,22 @@ def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
         )
         is None
     )
-    if state == "unbound":
+    if state in {"unbound", "messages_only"}:
         service._para_request.assert_not_called()
         service._para_token.assert_not_called()
     else:
         service._para_request.assert_called_once_with(
-            ANY, "https://para.test", "read-token", "GET", "/api/tasks/original-task"
+            ANY,
+            "https://para.test",
+            "read-token",
+            "GET",
+            "/api/tasks/original-task",
+            json_body=None,
         )
-    assert outbox_path.read_bytes() == original_outbox
+    if outbox_path is not None:
+        assert outbox_path.read_bytes() == original_outbox
+    else:
+        assert not list(service._messages.outbox_dir.glob("*.json"))
     service._dispatching.dispatch.assert_not_called()
     service.list_messages.assert_not_called()
     service._read_all_message_rows.assert_not_called()

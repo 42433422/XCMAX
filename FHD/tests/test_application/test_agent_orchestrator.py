@@ -82,6 +82,38 @@ def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
     assert run.events[-1].data["harness"]["protocol"] == "xcagi.business-harness.v1"
 
 
+@pytest.mark.parametrize("error_type", [ValueError, RuntimeError])
+def test_agent_graph_exception_details_stay_in_server_logs(caplog, error_type):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    secret = "Traceback: database password=do-not-expose"
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="graph_failure",
+        intent="read_products",
+        nodes=[
+            WorkflowNode(
+                node_id="read", tool_id="business_db", action="read", params={"entity": "products"}
+            )
+        ],
+    )
+    with patch(
+        "app.infrastructure.workflow.langgraph_runtime.XCAGILangGraphRuntime.run",
+        side_effect=error_type(secret),
+    ) as execute_graph:
+        run = AgentOrchestrator(repository=repo).start_run_from_plan(
+            user_id="u1", message="读取产品", plan=plan
+        )
+    execute_graph.assert_called_once()
+    assert run.status == "blocked" and run.error == "计划图校验或执行失败"
+    assert secret not in str(repo.get(run.run_id).to_dict())
+    assert secret in caplog.text
+    assert run.tool_calls == []
+    assert any(event.event_type == "workflow.graph_rejected" for event in run.events)
+
+
 def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

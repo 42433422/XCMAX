@@ -54,6 +54,11 @@ def runtime_environment(plan: dict) -> dict[str, str]:
         "TEMP": str(state / "tmp"),
         "XCMAX_CODEX_PROVIDER_KEY": plan["provider_token"],
         "XCMAX_CODEX_MCP_TOKEN": plan["mcp_token"],
+        # The model/MCP endpoints are private loopback. Some HTTP clients read a
+        # host-wide system proxy without honouring its loopback exceptions, which
+        # turns every local call into a proxy 502. Pin an explicit bypass.
+        "NO_PROXY": "127.0.0.1,localhost,::1",
+        "no_proxy": "127.0.0.1,localhost,::1",
     }
     # Windows needs these OS locations to load system libraries. No inherited
     # PATH, proxy, Python, Codex, cloud-account or provider credential is copied.

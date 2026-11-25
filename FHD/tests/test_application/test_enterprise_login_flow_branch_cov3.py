@@ -16,6 +16,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.enterprise_login_flow import (
     ensure_local_user_after_market,
@@ -222,7 +223,10 @@ class TestEnsureLocalUserAfterMarketBranches:
         auth_svc = MagicMock()
         auth_svc.login.return_value = {"success": False}
         with (
-            patch("app.db.session.get_db", return_value=_mock_db_ctx(exc=RuntimeError("db down"))),
+            patch(
+                "app.db.session.get_db",
+                return_value=_mock_db_ctx(exc=OperationalError("SELECT 1", {}, OSError("db down"))),
+            ),
             patch("app.db.init_db.ensure_runtime_auth_bootstrap"),
         ):
             result, err = await ensure_local_user_after_market(
@@ -389,6 +393,9 @@ class TestFinalizeEnterpriseLogin:
             "token": "mtok",
             "active_plan_id": "saas-permanent-growth",
             "account_tier": "pro",
+            "is_enterprise": True,
+            "account_state": "active",
+            "desktop_access": True,
         }
         with (
             patch("app.fastapi_routes.market_account.save_session_market_token"),
@@ -408,6 +415,7 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.tenant_subscription_app_service.apply_paid_plan_for_user",
                 return_value=True,
             ) as mock_apply,
+            patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
             patch(
                 "app.application.enterprise_login_flow._derive_and_heal_account_kind",
                 return_value="enterprise",
@@ -428,7 +436,13 @@ class TestFinalizeEnterpriseLogin:
                 sku="personal",
             )
 
-        mock_apply.assert_called_once_with(user_id=7, plan_id="saas-permanent-growth")
+        mock_apply.assert_called_once_with(
+            user_id=7,
+            plan_id="saas-permanent-growth",
+            sync_from_market=True,
+            active_plan_expires_at=None,
+            verified_account_sync=True,
+        )
         assert out["account_license_plan_id"] == "saas-permanent-growth"
         assert out["account_tier"] == "pro"
 
@@ -744,7 +758,7 @@ class TestFinalizeEnterpriseLogin:
         with (
             patch(
                 "app.fastapi_routes.market_account.save_session_market_token",
-                side_effect=RuntimeError("market sync failed"),
+                side_effect=OperationalError("UPDATE sessions", {}, OSError("market sync failed")),
             ),
         ):
             out = await finalize_enterprise_login(
@@ -822,7 +836,7 @@ class TestFinalizeEnterpriseLogin:
         with (
             patch(
                 "app.enterprise.account_mod_binding.augment_entitled_client_mod_ids_for_username",
-                side_effect=RuntimeError("fallback failed"),
+                side_effect=OperationalError("SELECT entitlements", {}, OSError("fallback failed")),
             ),
         ):
             out = await finalize_enterprise_login(

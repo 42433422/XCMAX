@@ -27,6 +27,15 @@ CLASSNAME = "tests.test_application.test_idempotency_recovery_e23_e24"
 NAME = "test_e23_kill_after_commit_returns_the_same_row"
 EXPORT_CLASS = "tests.test_application.test_shipment_records_agent_routes"
 EXPORT_NAME = "test_approved_shipment_then_export_uses_full_persisted_plan"
+SALES_CLASS = "tests.test_application.test_sales_closed_loop_restart"
+SALES_CASES = [
+    "test_sale_process_loss_and_backup_restore_preserve_one_original_effect[stock_written]",
+    "test_sale_process_loss_and_backup_restore_preserve_one_original_effect[committed]",
+    "test_persisted_sales_plan_survives_restart_and_exports_once[False-None]",
+    "test_persisted_sales_plan_survives_restart_and_exports_once[True-None]",
+    "test_persisted_sales_plan_survives_restart_and_exports_once[False-delete]",
+    "test_persisted_sales_plan_survives_restart_and_exports_once[False-withdraw]",
+]
 
 
 def _case(classname: str, name: str, inner: str = "") -> str:
@@ -146,6 +155,35 @@ def test_missing_required_result_is_rejected(tmp_path: Path):
     absent = dict(evidence)
     absent["scenarios"] = []
     assert any("no result" in error for error in _validate(absent))
+
+
+@pytest.mark.parametrize("name", SALES_CASES)
+def test_sales_recovery_node_cannot_be_removed_from_catalog(name):
+    node_id = f"tests/test_application/test_sales_closed_loop_restart.py::{name}"
+    assert node_id in REQUIRED_TESTS.values()
+    data = load_catalog()
+    for item in data["contracts"]:
+        item["tests"] = [test for test in item["tests"] if test != node_id]
+    assert any(
+        error.startswith("required test removed:") and node_id in error
+        for error in catalog_errors(data)
+    )
+
+
+@pytest.mark.parametrize("name", SALES_CASES)
+@pytest.mark.parametrize("fault", ["missing", "skipped"])
+def test_sales_recovery_requires_every_original_parameter(tmp_path: Path, name, fault):
+    """Validator fixtures cannot stand in for any omitted real business case."""
+    body = _passing_pair()
+    for sales_case in SALES_CASES:
+        case = _case(SALES_CLASS, sales_case)
+        if case not in body:
+            body += case
+    replacement = "" if fault == "missing" else _case(SALES_CLASS, name, "<skipped/>")
+    body = body.replace(_case(SALES_CLASS, name), replacement)
+    _write(tmp_path, body)
+    with pytest.raises(ValueError, match="R07-sales-.*NOT RUN"):
+        ci_gate(tmp_path, source_sha="a" * 40, run_id="9", run_attempt="1", backend="ran")
 
 
 def test_wrong_sha_skip_and_retry_cover_are_rejected(tmp_path: Path):

@@ -81,7 +81,7 @@ Please include the following information in your report:
 1. **Code Review**: All code changes must be reviewed
 2. **Testing**: Security-sensitive code must have tests
 3. **Documentation**: Document security implications
-4. **Input Validation**: Always validate and sanitize user input
+4. **Input Validation**: Validate types, lengths, permissions and business constraints while preserving submitted JSON values and signed request bytes. Encode or sanitize content when rendering HTML, according to the output context.
 5. **Error Handling**: Never expose sensitive information in error messages
 
 ## Security Features
@@ -93,7 +93,7 @@ XCAGI includes several security features:
 - **CORS Protection**: Configurable CORS policies
 - **CSRF Protection**: Double-submit token pattern (OWASP recommended)
 - **Rate Limiting**: Protection against brute-force attacks
-- **Input Sanitization**: Protection against SQL injection and XSS
+- **Data and Display Boundaries**: Parameterized database access, Vue text interpolation, and the existing HTML/Markdown output sanitizers protect their respective sinks; JSON request bodies are not globally HTML-escaped or stripped.
 - **LAN Security**: CIDR whitelist + HMAC-SHA256 token authorization
 - **Security Headers**: X-Content-Type-Options, X-Frame-Options, CSP
 

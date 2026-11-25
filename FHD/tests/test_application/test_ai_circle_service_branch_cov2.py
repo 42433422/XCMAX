@@ -212,9 +212,8 @@ class TestRecordEmployeeActivity:
 
     def test_recoverable_exception_swallowed(self) -> None:
         with patch.object(
-            ai_circle, "ensure_ai_circle_tables", side_effect=RuntimeError("db down")
+            ai_circle, "ensure_ai_circle_tables", side_effect=ConnectionError("db down")
         ):
-            # Should not raise - RECOVERABLE_ERRORS includes RuntimeError
             ai_circle.record_employee_activity("emp1", success=True)
 
     def test_unrecoverable_exception_propagates(self) -> None:

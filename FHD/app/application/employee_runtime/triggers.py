@@ -22,7 +22,7 @@ from app.domain.employee.events import (
     EVENT_TASK_FAILED,
 )
 from app.domain.employee.trigger_binding import TriggerBinding
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,13 @@ def publish_employee_task_failed(
                 "message": message,
             }
         )
-        return bool(get_neuro_bus().publish(NeuroEvent(EVENT_TASK_FAILED, payload)))
+        event = NeuroEvent(EVENT_TASK_FAILED, payload)
+        try:
+            published = get_neuro_bus().publish(event)
+        except BOUNDARY_ERRORS:
+            logger.debug("publish_employee_task_failed skipped", exc_info=True)
+            return False
+        return bool(published)
     except RECOVERABLE_ERRORS:
         logger.debug("publish_employee_task_failed skipped", exc_info=True)
         return False

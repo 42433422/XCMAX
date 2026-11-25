@@ -1,10 +1,9 @@
 """Approval invalid-data handling, private logs and independent domain imports."""
 
-import ast
-import json
 import logging
 import subprocess
 import sys
+import tomllib
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -70,24 +69,15 @@ def test_logs_do_not_copy_expressions_or_context(expression, caplog):
 
 def test_domain_rule_is_mandatory_and_has_no_exemptions():
     root = Path(safe_dsl.__file__).resolve().parents[3]
-    config = json.loads((root / "config/import_boundary.yaml").read_text())
-    rule = next(r for r in config["rules"] if r["name"] == "approval-domain-no-infrastructure")
-    assert rule["required"] is True
-    assert rule["allow_files"] == []
-    for path in (root / "app/domain/approval").glob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            imports = (
-                [n.name for n in node.names]
-                if isinstance(node, ast.Import)
-                else [node.module or ""]
-                if isinstance(node, ast.ImportFrom)
-                else []
-            )
-            assert not any(
-                name == prefix or name.startswith(prefix + ".")
-                for name in imports
-                for prefix in rule["forbid"]
-            ), path
+    config = tomllib.loads((root / "pyproject.toml").read_text())
+    rule = next(
+        r
+        for r in config["tool"]["importlinter"]["contracts"]
+        if r["id"] == "approval-domain-no-infrastructure"
+    )
+    assert rule["source_modules"] == ["app.domain.approval"]
+    assert not rule.get("ignore_imports")
+    assert not rule.get("allow_indirect_imports")
 
 
 def test_evaluator_loads_without_infrastructure_dependencies():

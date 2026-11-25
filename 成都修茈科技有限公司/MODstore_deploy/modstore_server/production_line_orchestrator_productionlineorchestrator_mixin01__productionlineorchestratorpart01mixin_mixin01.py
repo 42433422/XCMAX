@@ -20,6 +20,7 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         self._callbacks: _facade().Dict[str, _facade().Callable] = {}
         self._running = False
         self._step_contexts = {}
+        self._business_scope = None
 
     def register_callback(self, event: str, callback: _facade().Callable) -> None:
         self._callbacks[event] = callback
@@ -90,6 +91,19 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 status=_facade().StepStatus.FAILED,
                 error="step not found",
             )
+        context = deepcopy(context or {})
+        if step_id.startswith("P") and not context.get("source_sha"):
+            from modstore_server.production_line_sources import checkout_source_sha
+
+            try:
+                context["source_sha"] = checkout_source_sha()
+            except RECOVERABLE_ERRORS:
+                pass  # The source consumer reports missing identity without dispatching.
+        if step_id.startswith("O") and context.get("business") != self._business_scope:
+            self._step_results = {
+                key: value for key, value in self._step_results.items() if not key.startswith("O")
+            }
+            self._business_scope = deepcopy(context.get("business"))
         self._step_results[step_id] = _facade().StepResult(
             step_id=step_id, status=_facade().StepStatus.RUNNING
         )
@@ -99,7 +113,6 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         for attempt in range(attempts):
             try:
                 output = await self._execute_step(step, deepcopy(context or {}))
-                return await self._finish_step(step, {**(context or {}), **output}, context or {})
             except RECOVERABLE_ERRORS as exc:
                 if attempt + 1 < attempts and step_id != "O7":
                     continue
@@ -113,6 +126,8 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
 
                     record_dispatch_failure(dict(context or {}), error)
                 return self._step_results[step_id]
+            # A callback/next-step error must never replay this step's side effects.
+            return await self._finish_step(step, {**context, **output}, context)
         raise AssertionError("unreachable step attempt")
 
     async def _finish_step(self, step, data, context):
@@ -128,7 +143,7 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         }
         failed = result.get("ok") is False and not waiting
         if step.step_id == "O7" and not context.get("business"):
-            failed = not execution_succeeded(result)
+            failed = not waiting and not execution_succeeded(result)
         if waiting or failed:
             state = (
                 _facade().StepStatus.WAITING_EVIDENCE if waiting else _facade().StepStatus.FAILED
@@ -249,9 +264,30 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 status=_facade().StepStatus.FAILED,
                 error="step not awaiting approval",
             )
-        if step_id.startswith("O"):
+        if (
+            step.approval_gate
+            in {_facade().ApprovalGate.ADMIN, _facade().ApprovalGate.ADMIN_AND_CI}
+            and admin_user_id <= 0
+        ):
+            return _facade().StepResult(
+                step_id=step_id,
+                status=_facade().StepStatus.FAILED,
+                error="authenticated administrator approval required",
+            )
+        if step_id.startswith(("O", "P")):
             # Approval authorizes progression; it cannot stand in for a source receipt.
             context = deepcopy(self._step_contexts.get(step_id) or {})
+            context["_production_read_only"] = True
+            if step_id == "O7" and not context.get("business"):
+                output = {
+                    "step": step_id,
+                    "result": {
+                        "ok": False,
+                        "status": "waiting_evidence",
+                        "reason": "original customer issue business evidence required for approval",
+                    },
+                }
+                return await self._finish_step(step, {**context, **output}, context)
             output = await self._execute_step(step, context)
             if (output.get("result") or {}).get("status") != "completed":
                 return await self._finish_step(step, {**context, **output}, context)
@@ -372,51 +408,39 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
     async def _step_site_and_seo(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
+        from modstore_server.production_line_employee import dispatch_employee_step
 
-        out = plan_and_dispatch(
+        return dispatch_employee_step(
+            "P1",
+            "site-content-editor",
             "更新官网内容、SEO站点地图、robots.txt、营销站构建；确保所有页面可访问、SEO合规。",
             context,
-            target_employee_id="site-content-editor",
-            created_by_user_id=0,
-            include_dependencies=True,
         )
-        return {"step": "P1", "result": out}
 
     async def _step_ai_coding(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.craft_executor import (
-            CRAFT_PIPELINE_ORDER,
-            CRAFT_STEP_EMPLOYEE_MAP,
-            dispatch_craft_step,
+        from modstore_server.production_line_employee import dispatch_employee_step
+
+        if context.get("business"):
+            # Private Mod delivery and acceptance remain owned by the original delivery graph.
+            from modstore_server.production_line_business import observe_business_step
+
+            observed = observe_business_step("O5", context)
+            return {**observed, "step": "P2"}
+        if context.get("craft_step_ids"):
+            return {
+                "step": "P2",
+                "result": {
+                    "ok": False,
+                    "status": "waiting_evidence",
+                    "reason": "original_customer_workflow_identity_required",
+                },
+            }
+        return dispatch_employee_step(
+            "P2",
+            "fhd-core-maintainer",
+            context.get("task_description")
+            or "根据运营线反馈或遥测 backlog 修复 FHD app/ 并提交 PR。",
+            context,
         )
-
-        results = {}
-        for employee_id in CRAFT_PIPELINE_ORDER:
-            step_id = next(
-                (s for (s, e) in CRAFT_STEP_EMPLOYEE_MAP.items() if e == employee_id),
-                employee_id,
-            )
-            try:
-                r = await dispatch_craft_step(step_id, **context)
-                results[employee_id] = r
-            except RECOVERABLE_ERRORS as exc:
-                _facade().logger.warning("craft step %s failed: %s", step_id, exc)
-                results[employee_id] = {"ok": False, "error": str(exc)}
-        fhd_out: _facade().Dict[str, _facade().Any] = {}
-        try:
-            from modstore_server.employee_orchestrator import plan_and_dispatch
-
-            fhd_out = plan_and_dispatch(
-                context.get("task_description")
-                or "根据运营线反馈或遥测 backlog 修复 FHD app/ 并提交 PR。",
-                context,
-                target_employee_id="fhd-core-maintainer",
-                created_by_user_id=int(context.get("created_by_user_id") or 0),
-                include_dependencies=True,
-            )
-        except RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning("fhd-core-maintainer dispatch failed: %s", exc)
-            fhd_out = {"ok": False, "error": str(exc)}
-        return {"step": "P2", "craft_results": results, "fhd_core": fhd_out}

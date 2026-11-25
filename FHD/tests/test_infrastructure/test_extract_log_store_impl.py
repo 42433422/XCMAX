@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.persistence.extract_log_store_impl import SQLAlchemyExtractLogStore
 
@@ -139,7 +141,9 @@ class TestExtractLogStoreImpl:
 
     @patch("app.infrastructure.persistence.extract_log_store_impl.get_db")
     def test_find_all_db_error(self, mock_get_db: MagicMock, store: SQLAlchemyExtractLogStore):
-        mock_get_db.return_value.__enter__.side_effect = RuntimeError("db down")
+        mock_get_db.return_value.__enter__.side_effect = OperationalError(
+            None, None, sqlite3.OperationalError("db down")
+        )
         out = store.find_all()
         assert out["success"] is False
         assert out["data"] == []

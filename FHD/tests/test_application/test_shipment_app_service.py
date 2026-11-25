@@ -323,7 +323,7 @@ class TestCreateShipment:
 
     def test_create_shipment_recoverable_error(self):
         repo = MagicMock()
-        repo.save.side_effect = RuntimeError("DB connection lost")
+        repo.save.side_effect = OSError("DB connection lost")
         svc = ShipmentApplicationService(repository=repo)
         items = [
             {
@@ -351,7 +351,7 @@ class TestCreateShipment:
                 "amount": 50.0,
             }
         ]
-        with patch("app.infrastructure.mods.hooks.trigger", side_effect=RuntimeError("hook fail")):
+        with patch("app.infrastructure.mods.hooks.trigger", side_effect=OSError("hook fail")):
             result = svc.create_shipment(unit_name="测试单位", items_data=items)
         assert result["success"] is True
 
@@ -398,8 +398,8 @@ class TestListShipments:
 
     def test_list_shipments_error(self):
         repo = MagicMock()
-        repo.find_all.side_effect = RuntimeError("DB error")
-        repo.count.side_effect = RuntimeError("DB error")
+        repo.find_all.side_effect = OSError("DB error")
+        repo.count.side_effect = OSError("DB error")
         svc = ShipmentApplicationService(repository=repo)
         result = svc.list_shipments()
         assert result["success"] is False
@@ -747,7 +747,7 @@ class TestExportShipmentRecords:
 
     def test_export_error_handling(self, tmp_path):
         rq = MagicMock()
-        rq.get_shipment_records.side_effect = RuntimeError("DB error")
+        rq.get_shipment_records.side_effect = OSError("DB error")
         svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
         result = svc.export_shipment_records()
         assert result["success"] is False
@@ -844,7 +844,7 @@ class TestMarkAsPrinted:
 
     def test_mark_as_printed_error(self):
         repo = MagicMock()
-        repo.find_by_id.side_effect = RuntimeError("DB error")
+        repo.find_by_id.side_effect = OSError("DB error")
         svc = ShipmentApplicationService(repository=repo)
         result = svc.mark_as_printed(shipment_id=1)
         assert result["success"] is False
@@ -872,7 +872,7 @@ class TestCancelShipment:
 
     def test_cancel_error(self):
         repo = MagicMock()
-        repo.find_by_id.side_effect = RuntimeError("DB error")
+        repo.find_by_id.side_effect = OSError("DB error")
         svc = ShipmentApplicationService(repository=repo)
         result = svc.cancel_shipment(shipment_id=1)
         assert result["success"] is False
@@ -900,7 +900,7 @@ class TestDeleteShipment:
 
     def test_delete_error(self):
         repo = MagicMock()
-        repo.delete.side_effect = RuntimeError("DB error")
+        repo.delete.side_effect = OSError("DB error")
         svc = ShipmentApplicationService(repository=repo)
         result = svc.delete_shipment(shipment_id=1)
         assert result["success"] is False
@@ -1069,7 +1069,7 @@ class TestGenerateShipmentDocument:
     def test_generate_record_store_error_does_not_block(self):
         doc_gen = DummyDocumentGenerator(success=True)
         record_store = MagicMock()
-        record_store.record_document_generation.side_effect = RuntimeError("write fail")
+        record_store.record_document_generation.side_effect = OSError("write fail")
         svc = ShipmentApplicationService(
             repository=DummyRepository(),
             document_generator=doc_gen,

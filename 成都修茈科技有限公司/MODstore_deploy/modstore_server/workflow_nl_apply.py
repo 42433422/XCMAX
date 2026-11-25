@@ -81,6 +81,14 @@ async def apply_nl_workflow_graph(
         default_value=_facade().SYSTEM_PROMPT,
     )
     begin_observation(assignment)
+    event_name = (
+        "experiment.generation_observed"
+        if assignment
+        and assignment.get("measurement_scope")
+        in {WORKFLOW_EXECUTION_MEASUREMENT, WORKFLOW_CUSTOMER_MEASUREMENT}
+        and not assignment.get("execution_id")
+        else "experiment.observed"
+    )
     started = time.perf_counter()
     generation_feedback: dict[str, Any] = {}
 
@@ -188,16 +196,31 @@ async def apply_nl_workflow_graph(
             }
         if assignment is not None:
             result["experiment_observation"] = {"status": "not_recorded"}
+            # The graph transaction is gone. Preserve the original failed-attempt
+            # observation when storage has recovered, without retrying generation.
+            try:
+                record_observation(
+                    assignment,
+                    result=result,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    session=db,
+                )
+                db.commit()
+            except RECOVERABLE_ERRORS as observation_error:
+                db.rollback()
+                logger.warning(
+                    "workflow rollback observation not saved workflow_id=%s error_type=%s",
+                    workflow_id,
+                    type(observation_error).__name__,
+                )
+            else:
+                result["experiment_observation"] = {
+                    "status": "queued",
+                    "event_id": f"{event_name}:{assignment['observation_id']}",
+                }
         preserve_failed_generation(result)
         return result
     if assignment is not None:
-        event_name = (
-            "experiment.generation_observed"
-            if assignment.get("measurement_scope")
-            in {WORKFLOW_EXECUTION_MEASUREMENT, WORKFLOW_CUSTOMER_MEASUREMENT}
-            and not assignment.get("execution_id")
-            else "experiment.observed"
-        )
         result["experiment_observation"] = {
             "status": "queued",
             "event_id": f"{event_name}:{assignment['observation_id']}",

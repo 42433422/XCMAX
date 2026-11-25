@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -17,13 +18,15 @@ def _client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _assert_mock_template_needs_readback(run, payload):
+def _assert_mock_template_needs_readback(run, payload, actor):
     # Fake archive results prove dispatch only; no template row was persisted.
     assert payload["agent_status"] == run.status == "blocked"
-    assert payload["success"] is False
-    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["success"] is False and payload["outcome"] == "unknown"
+    assert payload["error_code"] == "result_verification_required"
     assert payload["retryable"] is False and payload["reconciliation_required"] is True
-    assert payload["verification_code"] == "result_template_receipt_unavailable"
+    assert not {"template", "deleted", "result", "verification_code"} & payload.keys()
+    assert payload["agent_run_id"] == payload["run_id"] == run.run_id
+    assert run.metadata["runtime_context"]["tenant_id"] == str(actor.tenant_id)
     receipt = run.tool_calls[0].metadata["verification"]
     assert receipt["status"] == "inconclusive" and receipt["accepted"] is False
     assert receipt["code"] == "result_template_receipt_unavailable"
@@ -64,7 +67,7 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
             ),
         ) as create,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/templates/create",
             json={"name": "发货模板", "template_type": "Excel"},
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
@@ -73,17 +76,12 @@ def test_templates_create_route_executes_document_template_tool_through_agent(
     create.assert_called_once()
     assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is False
-    assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "blocked"
-    assert payload["template"]["id"] == "db:1"
-
     run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.user_id == str(actor.user_id)
-    _assert_mock_template_needs_readback(run, payload)
-    assert run.intent == "document_template_create"
-    assert run.steps[0].risk == "medium"
+    assert run is not None and run.user_id == str(actor.user_id)
+    _assert_mock_template_needs_readback(run, payload, actor)
+    assert run.tool_calls[0].output["template"]["id"] == "db:1"
+    assert run.intent == "ERP Agent 请求执行 document_template.create"
+    assert run.steps[0].risk == "high"
     assert run.steps[0].status == "completed"
     assert run.tool_calls[0].tool_id == "document_template"
     assert run.tool_calls[0].action == "create"
@@ -122,7 +120,7 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
             ),
         ) as update,
     ):
-        response = _client().post(
+        response = ApprovedCapabilityClient(_client(), repo, actor).post(
             "/api/templates/update",
             json={"id": "db:1", "name": "发货模板 v2"},
             headers={**actor.headers, "X-User-Id": "untrusted-client-actor"},
@@ -131,17 +129,12 @@ def test_templates_update_route_executes_document_template_tool_through_agent(
     update.assert_called_once()
     assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is False
-    assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "blocked"
-    assert payload["template"]["name"] == "发货模板 v2"
-
     run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.user_id == str(actor.user_id)
-    _assert_mock_template_needs_readback(run, payload)
-    assert run.intent == "document_template_update"
-    assert run.steps[0].risk == "medium"
+    assert run is not None and run.user_id == str(actor.user_id)
+    _assert_mock_template_needs_readback(run, payload, actor)
+    assert run.tool_calls[0].output["template"]["name"] == "发货模板 v2"
+    assert run.intent == "ERP Agent 请求执行 document_template.update"
+    assert run.steps[0].risk == "high"
     assert run.tool_calls[0].tool_id == "document_template"
     assert run.tool_calls[0].action == "update"
     assert run.tool_calls[0].permission == "tool.document_template.update"
@@ -176,7 +169,7 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
             ),
         ) as delete,
     ):
-        response = _client().request(
+        response = ApprovedCapabilityClient(_client(), repo, actor).request(
             "DELETE",
             "/api/templates/delete",
             json={"id": "db:1"},
@@ -186,16 +179,11 @@ def test_templates_delete_route_executes_document_template_tool_through_agent(
     delete.assert_called_once()
     assert response.status_code == 202
     payload = response.json()
-    assert payload["success"] is False
-    assert payload["agent_run_id"] == payload["run_id"]
-    assert payload["agent_status"] == "blocked"
-    assert payload["deleted"]["id"] == "db:1"
-
     run = repo.get(payload["run_id"])
-    assert run is not None
-    assert run.user_id == str(actor.user_id)
-    _assert_mock_template_needs_readback(run, payload)
-    assert run.intent == "document_template_delete"
+    assert run is not None and run.user_id == str(actor.user_id)
+    _assert_mock_template_needs_readback(run, payload, actor)
+    assert run.tool_calls[0].output["deleted"]["id"] == "db:1"
+    assert run.intent == "ERP Agent 请求执行 document_template.delete"
     assert run.steps[0].risk == "high"
     assert run.steps[0].status == "completed"
     assert run.tool_calls[0].tool_id == "document_template"

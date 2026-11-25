@@ -109,14 +109,14 @@ async def test_internal_employee_message_failure_paths(
         "conversation_id": 5,
         "message": {"id": 9},
     }
-    hub = SimpleNamespace(send_to_user=AsyncMock(side_effect=RuntimeError("ws down")))
+    hub = SimpleNamespace(send_to_user=AsyncMock(side_effect=OSError("ws down")))
     with _im_runtime(service), patch("app.infrastructure.im.ws_hub.im_ws_hub", hub):
         persisted = await internal_im.internal_employee_message(
             request, {"boss_user_id": 7, "employee_id": "e", "body": "x"}
         )
     assert persisted["success"] is True
 
-    service.post_employee_message.side_effect = RuntimeError("db down")
+    service.post_employee_message.side_effect = OSError("db down")
     with _im_runtime(service):
         errored = await internal_im.internal_employee_message(
             request, {"boss_user_id": 7, "employee_id": "e", "body": "x"}
@@ -133,7 +133,7 @@ def test_list_conversations_authorization_success_and_failure() -> None:
     assert result == {"success": True, "conversations": [{"id": 1}]}
     db.close.assert_called_once()
 
-    service.list_conversations.side_effect = RuntimeError("db down")
+    service.list_conversations.side_effect = OSError("db down")
     with _im_runtime(service):
         response = internal_im.im_list_conversations(SimpleNamespace(id=7))
     assert response.status_code == 500
@@ -148,7 +148,7 @@ def test_create_direct_validation_success_and_errors() -> None:
         result = internal_im.im_create_direct({"peer_user_id": 8}, SimpleNamespace(id=7))
     assert result["conversation"] == {"id": 3}
 
-    for error, status in ((ValueError("bad"), 400), (RuntimeError("db"), 500)):
+    for error, status in ((ValueError("bad"), 400), (OSError("db"), 500)):
         service.get_or_create_direct.side_effect = error
         with _im_runtime(service):
             response = internal_im.im_create_direct({"peer_user_id": 8}, SimpleNamespace(id=7))
@@ -164,7 +164,7 @@ def test_list_messages_authorization_success_and_errors() -> None:
     assert result["messages"] == [{"id": 2}]
     service.list_messages.assert_called_once_with(1, 7, limit=10)
 
-    for error, status in ((PermissionError(), 403), (RuntimeError("db"), 500)):
+    for error, status in ((PermissionError(), 403), (OSError("db"), 500)):
         service.list_messages.side_effect = error
         with _im_runtime(service):
             response = internal_im.im_list_messages(1, SimpleNamespace(id=7))
@@ -199,7 +199,7 @@ def test_post_message_relay_success_no_relay_and_errors() -> None:
     for error, status in (
         (PermissionError(), 403),
         (ValueError("bad"), 400),
-        (RuntimeError("db"), 500),
+        (OSError("db"), 500),
     ):
         service.send_message.side_effect = error
         with _im_runtime(service):
@@ -221,7 +221,7 @@ def test_mark_read_default_explicit_success_and_errors() -> None:
         internal_im.im_mark_read(1, {"last_message_id": 9}, SimpleNamespace(id=7))
     service.mark_read.assert_called_once_with(1, 7, 9)
 
-    for error, status in ((PermissionError(), 403), (RuntimeError("db"), 500)):
+    for error, status in ((PermissionError(), 403), (OSError("db"), 500)):
         service.mark_read.side_effect = error
         with _im_runtime(service):
             response = internal_im.im_mark_read(1, {}, SimpleNamespace(id=7))
@@ -259,7 +259,7 @@ async def test_post_message_pushes_realtime_to_other_members_like_web_route() ->
 
 @pytest.mark.asyncio
 async def test_post_message_ws_push_failure_is_best_effort() -> None:
-    hub = SimpleNamespace(send_to_user=AsyncMock(side_effect=RuntimeError("ws down")))
+    hub = SimpleNamespace(send_to_user=AsyncMock(side_effect=OSError("ws down")))
     with patch("app.infrastructure.im.ws_hub.im_ws_hub", hub):
         await internal_im._push_mobile_im_message(
             7, 3, {"message": {"id": 1}, "member_user_ids": [7, 8]}

@@ -14,8 +14,10 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.utils import decorators as dec
+from app.utils.performance.performance_monitor import PerformanceMonitor
 
 
 # ``async_task`` reads ``XCAGI_FORCE_SYNC_TASKS`` from ``os.environ`` at call
@@ -139,7 +141,7 @@ class TestCached:
 
     def test_handles_cache_error(self):
         cache = MagicMock()
-        cache.get.side_effect = RuntimeError("redis down")
+        cache.get.side_effect = RedisConnectionError("redis down")
         calls = {"n": 0}
 
         @dec.cached(ttl=60, cache_instance=cache)
@@ -243,7 +245,7 @@ class TestRateLimited:
 
     def test_handles_limiter_error(self):
         fake_rl_module = MagicMock()
-        fake_rl_module.check_rate_limit.side_effect = RuntimeError("redis down")
+        fake_rl_module.check_rate_limit.side_effect = RedisConnectionError("redis down")
         with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
@@ -266,10 +268,7 @@ class TestMonitored:
 
     def test_records_success(self):
         monitor = MagicMock()
-        track_ctx = MagicMock()
-        track_ctx.__enter__ = MagicMock(return_value=None)
-        track_ctx.__exit__ = MagicMock(return_value=False)
-        monitor.track.return_value = track_ctx
+        monitor.track.return_value = PerformanceMonitor.track(monitor, "my_metric")
 
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.return_value = MagicMock(
@@ -291,10 +290,7 @@ class TestMonitored:
 
     def test_records_failure(self):
         monitor = MagicMock()
-        track_ctx = MagicMock()
-        track_ctx.__enter__ = MagicMock(return_value=None)
-        track_ctx.__exit__ = MagicMock(return_value=False)
-        monitor.track.return_value = track_ctx
+        monitor.track.return_value = PerformanceMonitor.track(monitor, "my_metric")
 
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.return_value = MagicMock(
@@ -314,6 +310,7 @@ class TestMonitored:
             with pytest.raises(RuntimeError):
                 fn()
             monitor.record_metric.assert_called_once()
+            assert monitor.record_metric.call_args.kwargs["success"] is False
 
 
 # ── deduplicated ─────────────────────────────────────────────────────────────

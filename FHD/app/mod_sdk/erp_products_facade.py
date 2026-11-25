@@ -1,4 +1,4 @@
-"""里程碑 G+：产品 CRUD 统一经 ``ProductsService``（Mod handler 与宿主 compat 共用）。"""
+"""Canonical product admission and the existing product read service."""
 
 from __future__ import annotations
 
@@ -122,116 +122,6 @@ def products_get(request: Request, product_id: int) -> dict | JSONResponse:
     return JSONResponse(result, status_code=404)
 
 
-def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    gate = _write_gate(request)
-    if gate:
-        return gate
-    name = str(body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="产品名称不能为空")
-    result = _service().create_product(_map_create_body(body))
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("message") or "添加失败")
-    data = result.get("data") or {}
-    pid = data.get("id") if isinstance(data, dict) else getattr(data, "id", None)
-    if pid is None:
-        pid = result.get("product_id")
-    return {
-        "success": True,
-        "data": {"id": int(pid) if pid is not None else None},
-        "source": f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}",
-        "execution_path": "products_service",
-    }
-
-
-def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
-
-    gate = _write_gate(request)
-    if gate:
-        return gate
-    pid = _product_parse_id(body.get("id"))
-    if pid is None:
-        raise HTTPException(status_code=400, detail="id 无效或缺失")
-    name = str(body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="产品名称不能为空")
-    payload = dict(body)
-    payload.pop("id", None)
-    if payload.get("price") == "":
-        payload["price"] = 0
-    result = _service().update_product(pid, payload)
-    if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("message") or "产品不存在")
-    return {
-        "success": True,
-        "data": {"id": pid},
-        "source": f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}",
-        "execution_path": "products_service",
-    }
-
-
-def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
-
-    gate = _write_gate(request)
-    if gate:
-        return gate
-    pid = _product_parse_id(body.get("id"))
-    if pid is None:
-        raise HTTPException(status_code=400, detail="id 无效或缺失")
-    result = _service().delete_product(pid)
-    if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("message") or "产品不存在")
-    return {
-        "success": True,
-        "message": result.get("message") or "已删除",
-        "source": f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}",
-        "execution_path": "products_service",
-    }
-
-
-def products_batch_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
-
-    gate = _write_gate(request)
-    if gate:
-        return gate
-    raw_ids = body.get("ids") or body.get("product_ids") or []
-    if not isinstance(raw_ids, list) or not raw_ids:
-        raise HTTPException(status_code=400, detail="ids 须为非空数组")
-    int_ids: list[int] = []
-    skipped: list[str] = []
-    for raw in raw_ids:
-        pid = _product_parse_id(raw)
-        if pid is None:
-            skipped.append(str(raw))
-        else:
-            int_ids.append(pid)
-    if not int_ids:
-        raise HTTPException(status_code=400, detail="无有效产品 id")
-    result = _service().batch_delete_products(int_ids)
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("message") or "批量删除失败")
-    deleted = result.get("deleted_count")
-    if deleted is None and isinstance(result.get("data"), dict):
-        deleted = result["data"].get("deleted_count")
-    if type(deleted) is not int or not 0 <= deleted <= len(set(int_ids)):
-        return {
-            "success": False,
-            "error_code": "outcome_unknown",
-            "message": "删除结果未确认，请核对产品后再操作",
-        }
-    return {
-        "success": True,
-        "message": f"已删除 {deleted} 条",
-        "deleted": deleted,
-        "skipped": skipped,
-        "source": f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}",
-        "execution_path": "products_service",
-    }
-
-
 def products_product_names(keyword: str = "") -> dict[str, Any]:
     out = _service().get_product_names(keyword=keyword or None)
     out["source"] = f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}"
@@ -239,15 +129,46 @@ def products_product_names(keyword: str = "") -> dict[str, Any]:
     return cast("dict[str, Any]", out)
 
 
-def products_batch(body: dict[str, Any]) -> dict[str, Any]:
+def _run_product_capability(request: Request, action: str, body: dict[str, Any]) -> JSONResponse:
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
+    from app.legacy.routes.product.mutation_flow import _normalize_products_create_payload
+
+    if request is None:
+        raise HTTPException(status_code=401, detail="产品操作需要已绑定的登录会话")
+    gate = _write_gate(request)
+    if gate:
+        return JSONResponse(gate, status_code=403)
+    params = _normalize_products_create_payload(body) if action == "create" else dict(body)
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "products", "action": action, "params": params},
+        route_path=str(request.url.path),
+    )
+    return JSONResponse(result, status_code=status)
+
+
+def products_add(request: Request, body: dict[str, Any]) -> JSONResponse:
+    return _run_product_capability(request, "create", body)
+
+
+def products_update(request: Request, body: dict[str, Any]) -> JSONResponse:
+    return _run_product_capability(request, "update", body)
+
+
+def products_delete(request: Request, body: dict[str, Any]) -> JSONResponse:
+    return _run_product_capability(request, "delete", body)
+
+
+def products_batch_delete(request: Request, body: dict[str, Any]) -> JSONResponse:
+    return _run_product_capability(request, "batch_delete", body)
+
+
+def products_batch(request: Request, body: dict[str, Any]) -> JSONResponse:
     products = body.get("products") or []
     if not isinstance(products, list) or not products:
-        return {"success": False, "message": "products 必须为非空数组"}
+        raise HTTPException(status_code=400, detail="products 必须为非空数组")
     mapped = [_map_create_body(p) if isinstance(p, dict) else p for p in products]
-    out = _service().batch_add_products(mapped)
-    out["source"] = f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}"
-    out["execution_path"] = "products_service"
-    return cast("dict[str, Any]", out)
+    return _run_product_capability(request, "batch_create", {"products": mapped})
 
 
 __all__ = [

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -735,16 +736,22 @@ class TestModStoreInstallHostFoundation:
         data = resp.json()
         assert data["success"] is True
 
-    def test_failure(self, client: TestClient) -> None:
+    @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
+    def test_failure(self, client: TestClient, error_type) -> None:
         with patch(
             "app.fastapi_routes.mod_store_routes._install_host_foundation_internal",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("install failed"),
-        ):
+            side_effect=error_type("install failed"),
+        ) as install:
             resp = client.post("/install-host-foundation")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is False
+        install.assert_awaited_once()
+        if error_type is RuntimeError:
+            assert resp.status_code == 500
+        else:
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is False
+            assert "install failed" in data["message"]
 
 
 class TestModStoreBootstrapEditionPack:
@@ -1010,9 +1017,11 @@ class TestInstallHostFoundationInternal:
             )
         assert result.success is True
 
-    def test_materialize_failure(self) -> None:
+    @pytest.mark.parametrize("error_type", [OSError, RuntimeError])
+    def test_materialize_failure(self, error_type) -> None:
         import asyncio
 
+        error = error_type("materialize failed")
         with (
             patch(
                 "app.fastapi_routes.mod_store_routes._ensure_host_foundation_employee_on_disk",
@@ -1025,13 +1034,54 @@ class TestInstallHostFoundationInternal:
             ),
             patch(
                 "app.mod_sdk.host_foundation.materialize_host_foundation_bridges",
-                side_effect=RuntimeError("materialize failed"),
+                side_effect=error,
+            ) as materialize,
+        ):
+            if error_type is RuntimeError:
+                with pytest.raises(RuntimeError) as raised:
+                    asyncio.get_event_loop().run_until_complete(
+                        ms._install_host_foundation_internal(None)
+                    )
+                assert raised.value is error
+            else:
+                result = asyncio.get_event_loop().run_until_complete(
+                    ms._install_host_foundation_internal(None)
+                )
+                assert result.success is False
+                assert "materialize failed" in result.message
+                assert result.data["ready"] is False
+        materialize.assert_called_once_with("generic")
+
+    def test_real_materialize_io_failure_does_not_load_mods(self, tmp_path, caplog) -> None:
+        import asyncio
+
+        target = tmp_path / "mods"
+        target.write_text("synthetic occupied directory")
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        manager = MagicMock(mods_root=str(target))
+        with (
+            patch(
+                "app.fastapi_routes.mod_store_routes._ensure_host_foundation_employee_on_disk",
+                new_callable=AsyncMock,
+                return_value=(True, "ok"),
             ),
+            patch("app.mod_sdk.edition_policy.bundled_mods_dir", return_value=bundle),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=manager),
         ):
             result = asyncio.get_event_loop().run_until_complete(
-                ms._install_host_foundation_internal(None)
+                ms._install_host_foundation_internal("generic")
             )
         assert result.success is False
+        assert result.data == {"edition": "generic", "missing_mod_ids": [], "ready": False}
+        assert "展开宿主 bridge 失败" in result.message
+        assert any(
+            record.exc_info and isinstance(record.exc_info[1], FileExistsError)
+            for record in caplog.records
+        )
+        assert target.read_text() == "synthetic occupied directory"
+        manager.load_all_mods.assert_not_called()
+        manager.scan_mods.assert_not_called()
 
     def test_not_ready(self) -> None:
         import asyncio
@@ -1114,6 +1164,66 @@ class TestRequestPayload:
 
 
 class TestPrivateDeliveryRequests:
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.Response(503, json={"detail": "request service unavailable"}),
+            RuntimeError("request bug"),
+        ],
+        ids=["http503", "programming-error"],
+    )
+    def test_library_request_failure_preserves_project_state(
+        self, client, monkeypatch, tmp_path, failure
+    ):
+        from app.application import private_mod_delivery_app as delivery
+
+        monkeypatch.setattr(delivery, "_state_path", lambda: tmp_path / "delivery.json")
+        monkeypatch.setattr(
+            private_delivery_routes,
+            "_private_mod_context",
+            AsyncMock(return_value={"mod_ids": {"taiyangniao-pro"}, "market_user_id": 29}),
+        )
+        monkeypatch.setattr(private_delivery_routes, "_private_mod_local_rows", lambda _: {})
+        monkeypatch.setattr(
+            private_delivery_routes, "_market_token", AsyncMock(return_value="fixture-token")
+        )
+        monkeypatch.setattr(delivery, "fetch_private_mod_library", AsyncMock(return_value=[]))
+        monkeypatch.setattr(
+            "app.application.mod_delivery_receipt_outbox.retry_delivery_receipts_best_effort",
+            AsyncMock(return_value={}),
+        )
+        client_type, sent = httpx.AsyncClient, []
+
+        def respond(outbound):
+            assert outbound.method == "GET"
+            assert outbound.url.path == "/api/customer-service/custom-deliveries"
+            assert outbound.headers["Authorization"] == "Bearer fixture-token"
+            sent.append(outbound)
+            if isinstance(failure, Exception):
+                raise failure
+            return failure
+
+        monkeypatch.setattr(
+            httpx,
+            "AsyncClient",
+            lambda **kw: client_type(transport=httpx.MockTransport(respond), **kw),
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.market_account._market_api_base_url", lambda: "https://market.test"
+        )
+        response = client.get("/private-delivery")
+        assert len(sent) == 1
+        if isinstance(failure, RuntimeError):
+            assert response.status_code == 500
+        else:
+            assert response.status_code == 200, response.text
+            data = response.json()["data"]
+            assert data["request_error"] == "request service unavailable"
+            assert data["requests"] == [] and data["remote_error"] == ""
+            assert data["projects"][0]["mod_id"] == "taiyangniao-pro"
+            assert data["projects"][0]["installed"] is False
+            assert data["projects"][0]["overall_status"] != "delivered"
+
     def test_original_ticket_rework_forwards_main_source_choice(self, client, monkeypatch):
         from app.services import private_mod_delivery as delivery
 

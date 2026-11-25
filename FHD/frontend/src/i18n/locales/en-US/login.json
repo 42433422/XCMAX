@@ -35,6 +35,7 @@
     "submitting": "Signing in…",
     "submit": "Agree to notice and sign in",
     "offlineLogin": "Offline sign-in",
+    "offlinePasswordHint": "Re-enter the password for an account previously used on this device.",
     "qrHint": "Scan with the XCAGI Android app and confirm sign-in",
     "qrAlt": "Sign-in QR code",
     "qrCountdown": "{seconds}s left · switch tab to refresh when expired",

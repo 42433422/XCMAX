@@ -379,8 +379,7 @@ class TestReplay:
         assert reason == ""
         assert len(replayed_events) == 1
 
-    def test_replay_callback_exception_is_swallowed(self) -> None:
-        """Replay callback raises RECOVERABLE_ERRORS → logged, not re-raised."""
+    def test_replay_callback_exception_does_not_record_success(self) -> None:
         dlq = make_dlq()
 
         def bad_callback(event: NeuroEvent) -> None:
@@ -388,8 +387,10 @@ class TestReplay:
 
         dlq.on_replay(bad_callback)
         eid = _enqueue(dlq)
-        ok, _ = dlq.replay(eid)
-        assert ok is True  # still returns success
+        with pytest.raises(ValueError, match="simulated callback failure"):
+            dlq.replay(eid)
+        assert dlq.get_stats()["replayed"] == 0
+        assert eid in {entry.entry_id for entry in dlq.get_all_entries()}
 
 
 # ===========================================================================

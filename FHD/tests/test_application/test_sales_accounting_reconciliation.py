@@ -190,3 +190,74 @@ def test_historical_invoice_pairs_must_match_the_original_journal_contract(sales
             else:
                 entry.lines.clear()
     assert verify(invoice_case, invoice_output)["accepted"] is False
+
+
+@pytest.mark.parametrize(
+    "corruption", [None, "reference", "original", "original_not_posted", "partner", "duplicate"]
+)
+def test_original_finance_reversal_preserves_invoice_reconciliation(sales, corruption):
+    from app.domain.shared_services.accounting_services import (
+        create_journal_entry,
+        journal_entry_reverse,
+    )
+
+    first_case = prepare(sales, "invoice")
+    first = effect(sales, first_case)
+    assert verify(first_case, first)["accepted"]
+    actor = sales[0]
+    with tenant_scope(actor.tenant_id):
+        reversed_receipt = journal_entry_reverse(first["data"]["id"])
+    assert reversed_receipt["success"], reversed_receipt
+    second_case = prepare(sales, "invoice")
+    second = effect(sales, second_case)
+    assert second["success"], second
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        reversal = db.get(JournalEntry, reversed_receipt["data"]["id"])
+        original = db.get(JournalEntry, first["data"]["id"])
+        assert reversal.reference_type == "reversal"
+        assert reversal.reference_id == reversal.reversed_of_id == original.id
+        assert original.tenant_id == reversal.tenant_id == actor.tenant_id
+        assert original.reversed_at and reversal.reversed_at is None
+        assert (
+            reversal.debit_total
+            == sum(line.debit for line in reversal.lines)
+            == original.debit_total
+        )
+        assert (
+            reversal.credit_total
+            == sum(line.credit for line in reversal.lines)
+            == original.credit_total
+        )
+        if corruption == "reference":
+            reversal.reference_id = second["data"]["id"]
+        elif corruption == "original":
+            reversal.reversed_of_id = second["data"]["id"]
+        elif corruption == "original_not_posted":
+            original.status = "draft"
+        elif corruption == "partner":
+            next(line for line in reversal.lines if line.account_code == "1122").partner_id = 99999
+        elif corruption == "duplicate":
+            duplicate = create_journal_entry(
+                {
+                    "reference_type": reversal.reference_type,
+                    "reference_id": reversal.reference_id,
+                    "reversed_of_id": reversal.reversed_of_id,
+                    "lines": [
+                        {
+                            "account_code": line.account_code,
+                            "debit": line.debit,
+                            "credit": line.credit,
+                            "partner_id": line.partner_id,
+                        }
+                        for line in reversal.lines
+                    ],
+                },
+                db=db,
+            )
+            assert duplicate["success"]
+    assert second["data"]["id"] != first["data"]["id"]
+    assert verify(second_case, second)["accepted"] is (corruption is None)
+    if corruption is None:
+        credit_case = prepare(sales, "credit_note")
+        credit = effect(sales, credit_case)
+        assert verify(credit_case, credit)["accepted"]

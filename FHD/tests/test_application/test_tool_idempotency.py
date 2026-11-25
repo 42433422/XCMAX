@@ -244,7 +244,7 @@ def test_fresh_process_retains_a_crashed_workers_committed_effect(claims):
         {"status": "accepted"},
     ],
 )
-def test_unknown_receipt_is_retained_across_restart(claims, output):
+def test_unsettled_receipt_is_retained_across_restart(claims, output):
     key, replay = _begin()
     assert replay is None
     permissions.finish_idempotent_replay(key, output)
@@ -252,8 +252,12 @@ def test_unknown_receipt_is_retained_across_restart(claims, output):
     assert permissions.recover_idempotent_claims()["retained_unknown"] == 1
     _key, replay = _begin()
     assert replay["success"] is False
-    assert replay["outcome"] == "unknown" and replay["retryable"] is False
-    assert replay["reconciliation_required"] is True
+    assert replay["retryable"] is False
+    if output.get("status") == "accepted":
+        assert replay == {**output, "success": False, "retryable": False}
+    else:
+        assert replay["outcome"] == "unknown"
+        assert replay["reconciliation_required"] is True
     _key, conflict = permissions.begin_idempotent_replay(
         CONTEXT, "products", "create", {**PARAMS, "name": "changed"}
     )
@@ -397,17 +401,24 @@ def test_valid_receipt_cannot_release_or_complete_an_uncertain_effect(claims, mo
 
 
 @pytest.mark.parametrize(
-    "marker",
+    "marker,expected_state",
     [
-        {"requires_reconciliation": True},
-        {"outcome_unknown": True},
-        {"execution_status": "unknown"},
-        {"result": {"execution_status": "timeout"}},
-        {"result": {"outputs": [{"execution_state": "unknown"}]}},
-        {"payload": {"final_output": {"node_outputs": {"job": {"status": "accepted"}}}}},
+        ({"requires_reconciliation": True}, "unknown"),
+        ({"outcome_unknown": True}, "unknown"),
+        ({"execution_status": "unknown"}, "unknown"),
+        ({"result": {"execution_status": "timeout"}}, "unknown"),
+        ({"result": {"outputs": [{"execution_state": "unknown"}]}}, "unknown"),
+        (
+            {"payload": {"final_output": {"node_outputs": {"job": {"status": "accepted"}}}}},
+            "accepted",
+        ),
     ],
 )
-def test_first_executor_receipt_matches_durable_unknown_replay(claims, monkeypatch, marker):
+def test_first_executor_receipt_matches_durable_unfinished_replay(
+    claims, monkeypatch, marker, expected_state
+):
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+
     def dispatch(*_args, **_kwargs):
         with sqlite3.connect(claims) as conn:
             conn.execute("insert into effects default values")
@@ -433,8 +444,13 @@ def test_first_executor_receipt_matches_durable_unknown_replay(claims, monkeypat
     )
     context = {**CONTEXT, "idempotency_key": "unknown-export"}
     first = AgentToolExecutor().execute(step, runtime_context=context)
-    assert first["success"] is False and first["outcome"] == "unknown"
-    assert first["retryable"] is False and first["reconciliation_required"] is True
+    assert first["success"] is False and first["retryable"] is False
+    assert execution_result_pending_state(first) == expected_state
+    if expected_state == "unknown":
+        assert first["outcome"] == "unknown" and first["reconciliation_required"] is True
+    else:
+        assert first.get("outcome") != "unknown"
+        assert first.get("reconciliation_required") is not True
     assert first["request_id"] == "original-request" and first["action_id"] == "original-effect"
     for key, value in marker.items():
         assert first[key] == value

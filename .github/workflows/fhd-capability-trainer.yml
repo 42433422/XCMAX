@@ -29,7 +29,6 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy
       PACKS_DIR: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
-      CORPUS_DIR: ${{ github.workspace }}/FHD/evals/employee
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,14 +133,25 @@ jobs:
           XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
         run: |
           set -euo pipefail
-          python -m modstore_server.capability_trainer prepare \
-            --clusters /tmp/top-cluster.json \
-            --packs-dir "$PACKS_DIR" \
-            --corpus-dir "$CORPUS_DIR" \
-            --out-dir /tmp/eval \
-            --employee-id "$employee" \
-            --surface "$surface" --baseline "$baseline" \
-            --candidate-prompt /tmp/candidate-prompt.txt > /tmp/prepare.json
+          umask 077
+          # This job has no persistent corpus. Keep its key in this process and
+          # use a new private temporary directory, never re-key existing data.
+          python - <<'PY' > /tmp/prepare.json
+          import os
+          from tempfile import TemporaryDirectory
+          from cryptography.fernet import Fernet
+          from modstore_server.capability_trainer import main
+
+          os.environ["MODSTORE_LLM_MASTER_KEY"] = Fernet.generate_key().decode("ascii")
+          with TemporaryDirectory(prefix="capability-corpus-", dir=os.environ["RUNNER_TEMP"]) as corpus:
+              raise SystemExit(main([
+                  "prepare", "--clusters", "/tmp/top-cluster.json",
+                  "--packs-dir", os.environ["PACKS_DIR"], "--corpus-dir", corpus,
+                  "--out-dir", "/tmp/eval", "--employee-id", os.environ["employee"],
+                  "--surface", os.environ["surface"], "--baseline", os.environ["baseline"],
+                  "--candidate-prompt", "/tmp/candidate-prompt.txt",
+              ]))
+          PY
           cat /tmp/prepare.json
           jq -e '.ok == true' /tmp/prepare.json > /dev/null
 

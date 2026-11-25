@@ -22,10 +22,12 @@ Covers:
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.neuro_bus.domains import finance_domain_handlers as fdh
 from app.neuro_bus.domains.finance_domain_handlers import (
@@ -408,7 +410,8 @@ class TestHandleApprovalCompleted:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         svc_instance = MagicMock()
-        svc_instance.update_inbound_approval_status.side_effect = RuntimeError("db down")
+        error = OperationalError(None, None, sqlite3.OperationalError("db down"))
+        svc_instance.update_inbound_approval_status.side_effect = error
         svc_cls = MagicMock(return_value=svc_instance)
         monkeypatch.setattr(fdh, "PurchaseService", svc_cls)
 
@@ -423,7 +426,7 @@ class TestHandleApprovalCompleted:
 
         assert result["success"] is False
         assert result["stage"] == "update_inbound"
-        assert result["error"] == "db down"
+        assert result["error"] == str(error)
 
     @pytest.mark.asyncio
     async def test_business_failure_publishes_failed(self, monkeypatch: pytest.MonkeyPatch) -> None:

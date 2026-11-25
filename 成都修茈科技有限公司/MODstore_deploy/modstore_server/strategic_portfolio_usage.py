@@ -24,6 +24,7 @@ from modstore_server.strategic_portfolio import (
     PortfolioError,
     _date,
     _json,
+    _row,
     digest,
     mutate_portfolio,
     require_active_portfolio_owner,
@@ -272,7 +273,10 @@ def remaining_execution_seconds() -> float | None:
         return None
     decision_id, opportunity_id, lease_token = scope
 
-    def check(row: Any, proposal: dict[str, Any], state: dict[str, Any], _session: Any) -> float:
+    # A fresh short snapshot sees revocation without rewriting the budget ledger
+    # for every streamed token. Reservations and settlement still use CAS writes.
+    with get_session_factory()() as session:
+        row, proposal, state = _row(session, decision_id)
         require_authorization(row, proposal, state)
         task = state.get("tasks", {}).get(opportunity_id, {})
         if task.get("status") != "running" or task.get("lease_token") != lease_token:
@@ -284,8 +288,6 @@ def remaining_execution_seconds() -> float | None:
         if remaining <= 0:
             raise PortfolioError("strategic execution deadline expired")
         return remaining
-
-    return mutate_portfolio(decision_id, check)
 
 
 def unmetered_delegate_block(

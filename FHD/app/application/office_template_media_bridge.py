@@ -95,7 +95,10 @@ def _extract_pptx_text_via_zip(file_path: str) -> tuple[str, int]:
 def _extract_pptx_text_via_lib(file_path: str) -> tuple[str, int]:
     from pptx import Presentation
 
-    prs = Presentation(file_path)
+    try:
+        prs = Presentation(file_path)
+    except KeyError as exc:
+        raise ValueError("PPTX package is missing a required part or relationship") from exc
     chunks: list[str] = []
     for idx, slide in enumerate(prs.slides, start=1):
         chunks.append(f"[slide {idx}]")

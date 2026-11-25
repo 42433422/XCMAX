@@ -104,7 +104,7 @@ def table_group(name: GroupName, orm_table: Callable[[type[Base]], Table]) -> Ta
         ),
         "bridge": (m.ServiceRequest, m.ServiceBridgeConfig),
         "persona": (m.PersonaProfileModel, m.PersonaEventLogModel),
-        "local_file": (m.LocalFileGrant, m.LocalFileDocument),
+        "local_file": (m.LocalFileGrant, m.LocalFileDocument, m.CodeEditProposal),
         "enterprise_cognition": (
             m.EnterpriseStateProjection,
             m.EnterpriseEventCursor,

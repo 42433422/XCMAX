@@ -190,6 +190,8 @@ async def resolve_default_llm_route(
             return selected
         invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
     byok = [p for p, (_, _, source) in credentials.items() if source == "user_override"]
+    if mode == "byok" and not byok:
+        invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
     if mode != "platform" and byok:
         for p in byok:
             selected = await select(p, "", "byok")
@@ -198,11 +200,14 @@ async def resolve_default_llm_route(
         invalid(
             "BYOK 未提供可用聊天模型，请选择其他 BYOK 模型或明确恢复跟随平台", "NO_BYOK_CHAT_MODEL"
         )
-    # 统一网关配置后即代表平台模型池，优先于历史的单厂商默认配置。
+    # 统一网关配置后即代表平台模型池，不静默回落历史的单厂商默认配置。
     if platform_credentials("litellm", state=state)[0]:
         selected = await select("litellm", "", "platform_gateway", platform_only=True)
         if selected:
             return selected
+        invalid(
+            "统一网关没有可用的平台聊天模型，请联系管理员检查网关模型池", "NO_PLATFORM_CHAT_MODEL"
+        )
     configured = state["providers"].get(state.get("default_provider"))
     if configured:
         selected = await select(

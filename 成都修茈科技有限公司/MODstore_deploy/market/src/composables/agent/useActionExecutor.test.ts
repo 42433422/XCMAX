@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../../stores/auth'
+import { useAgentStore } from '../../stores/agent'
 import { xiaocLifeApi, type XiaoCLifeState } from '../../application/xiaocLifeApi'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   requestAction: vi.fn(),
-  setMode: vi.fn(),
   detectTarget: vi.fn(),
   start: vi.fn(),
   serializeVisibleDom: vi.fn(),
-  conversationGeneration: 0,
 }))
 
 vi.mock('vue-router', () => ({
@@ -18,15 +18,6 @@ vi.mock('vue-router', () => ({
 
 vi.mock('./usePrivacyManager', () => ({
   usePrivacyManager: () => ({ requestAction: mocks.requestAction }),
-}))
-
-vi.mock('../../stores/agent', () => ({
-  useAgentStore: () => ({
-    setMode: mocks.setMode,
-    get conversationGeneration() {
-      return mocks.conversationGeneration
-    },
-  }),
 }))
 
 vi.mock('./useButlerOrchestrator', () => ({
@@ -44,11 +35,11 @@ import { getActionLog, useActionExecutor } from './useActionExecutor'
 
 describe('useActionExecutor', () => {
   beforeEach(() => {
-    document.body.innerHTML = ''
+    setActivePinia(createPinia())
+    document.body.replaceChildren()
     sessionStorage.clear()
     vi.restoreAllMocks()
     vi.clearAllMocks()
-    mocks.conversationGeneration = 0
     mocks.push.mockResolvedValue(undefined)
     mocks.requestAction.mockResolvedValue(true)
     mocks.detectTarget.mockReturnValue({ type: 'mod', id: 'demo-mod' })
@@ -317,11 +308,7 @@ describe('useActionExecutor', () => {
     auth.user = { id: 11, username: 'admin', is_admin: true }
     auth.currentMode = 'admin'
     let confirm!: (value: boolean) => void
-    mocks.requestAction.mockReturnValue(
-      new Promise<boolean>((resolve) => {
-        confirm = resolve
-      }),
-    )
+    mocks.requestAction.mockReturnValue(new Promise<boolean>((resolve) => { confirm = resolve }))
     const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
     const button = document.createElement('button')
     button.id = 'pending-business-action'
@@ -346,7 +333,7 @@ describe('useActionExecutor', () => {
       }),
     )
     const navigation = useActionExecutor().navigate({ name: 'plans' })
-    mocks.conversationGeneration += 1
+    useAgentStore().stopRequest()
     finish({ scope: 'enterprise', level: 2 } as XiaoCLifeState)
 
     expect((await navigation).success).toBe(false)
@@ -365,34 +352,75 @@ describe('useActionExecutor', () => {
     expect(mocks.start).not.toHaveBeenCalled()
   })
 
+  it.each(['account', 'clear', 'stop'] as const)('旧确认卡在 %s 后不能点击、填表、选项或启动改写', async (boundary) => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'A', is_admin: false }
+    const store = useAgentStore()
+    const button = document.createElement('button')
+    button.id = 'old-click'
+    button.click = vi.fn()
+    const input = document.createElement('input')
+    input.id = 'old-input'
+    input.value = 'original'
+    const select = document.createElement('select')
+    select.id = 'old-select'
+    select.append(...['old', 'new'].map((value) => Object.assign(document.createElement('option'), { value })))
+    document.body.append(button, input, select)
+    const confirmations: ((value: boolean) => void)[] = []
+    mocks.requestAction.mockImplementation(() => new Promise<boolean>((resolve) => { confirmations.push(resolve) }))
+    const executor = useActionExecutor()
+    const pending = [
+      executor.click({ selector: '#old-click' }),
+      executor.fill({ selector: '#old-input', value: 'private A' }),
+      executor.select({ selector: '#old-select', value: 'new' }),
+      executor.enhanceCurrentPage({ brief: 'old request' }),
+    ]
+    if (boundary === 'account') auth.user = { id: 22, username: 'B', is_admin: false }
+    else if (boundary === 'clear') store.clearMessages()
+    else store.stopRequest()
+    confirmations.forEach((confirm) => confirm(true))
+    const results = await Promise.all(pending)
+    expect(results.every((result) => !result.success)).toBe(true)
+    expect(button.click).not.toHaveBeenCalled()
+    expect(input.value).toBe('original')
+    expect(select.value).toBe('old')
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(getActionLog()).toEqual([])
+  })
+
+  it('清空后迟到的 L2 权限读取不能导航、滚动或读取新页面', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 11, username: 'admin', is_admin: true }
+    auth.currentMode = 'admin'
+    const store = useAgentStore()
+    const reads: ((value: XiaoCLifeState) => void)[] = []
+    vi.spyOn(xiaocLifeApi, 'read').mockImplementation(() => new Promise((resolve) => { reads.push(resolve) }))
+    const executor = useActionExecutor()
+    const pending = [executor.navigate({ name: 'plans' }), executor.read(), executor.scroll({ direction: 'down' })]
+    store.clearMessages()
+    reads.forEach((resolve) => resolve({ scope: 'enterprise', level: 2 } as XiaoCLifeState))
+    const results = await Promise.all(pending)
+    expect(results.every((result) => !result.success)).toBe(true)
+    expect(mocks.push).not.toHaveBeenCalled()
+    expect(mocks.serializeVisibleDom).not.toHaveBeenCalled()
+    expect(window.scrollBy).not.toHaveBeenCalled()
+  })
+
   it('小 C 不得通过页面工具修改自己的等级或消费授权', async () => {
     const auth = useAuthStore()
     auth.user = { id: 11, username: 'admin', is_admin: true }
     auth.currentMode = 'admin'
     vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue({ scope: 'enterprise', level: 6 } as XiaoCLifeState)
-    const controlPlane = document.createElement('section')
-    controlPlane.setAttribute('data-xiaoc-control-plane', '')
-    const saveControl = document.createElement('button')
-    saveControl.setAttribute('id', 'save-life')
-    saveControl.textContent = '保存'
-    const budgetInput = document.createElement('input')
-    budgetInput.setAttribute('id', 'life-budget')
-    budgetInput.setAttribute('value', '0')
-    const levelSelect = document.createElement('select')
-    levelSelect.setAttribute('id', 'life-level')
-    for (const [value, label] of [
-      ['1', 'L1'],
-      ['6', 'L6'],
-    ]) {
-      const option = document.createElement('option')
-      option.setAttribute('value', value)
-      option.textContent = label
-      levelSelect.append(option)
-    }
-    controlPlane.append(saveControl, budgetInput, levelSelect)
-    document.body.replaceChildren()
-    document.body.append(controlPlane)
-    const button = document.querySelector<HTMLButtonElement>('#save-life')!
+    const controls = document.createElement('section')
+    controls.dataset.xiaocControlPlane = ''
+    const button = Object.assign(document.createElement('button'), { id: 'save-life', textContent: '保存' })
+    const budget = Object.assign(document.createElement('input'), { id: 'life-budget', value: '0' })
+    const level = Object.assign(document.createElement('select'), { id: 'life-level' })
+    level.append(...['1', '6'].map((value) =>
+      Object.assign(document.createElement('option'), { value, textContent: `L${value}` }),
+    ))
+    controls.append(button, budget, level)
+    document.body.replaceChildren(controls)
     button.click = vi.fn()
     const executor = useActionExecutor()
     expect((await executor.click({ selector: '#save-life' })).success).toBe(false)

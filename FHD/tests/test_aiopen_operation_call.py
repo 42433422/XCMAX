@@ -1,337 +1,315 @@
-"""AIOPEN P1 执行层测试：operation_call 的组包、分级闸门与 scope 鉴权。"""
+"""AIOPEN must consume the same live grants, task identity and business receipt."""
 
 from __future__ import annotations
 
+import json
+from unittest.mock import Mock
+
 import pytest
-from fastapi import APIRouter, FastAPI, Query
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.aiopen.catalog_builder import get_catalog
-from app.application.aiopen.service import (
-    AIOPEN_STATE,
-    generate_api_key,
-    revoke_api_key,
+from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+from app.application.aiopen import service
+from app.application.aiopen.generated_tools import operation_call
+from app.domain.aiopen.principal import ScreenPrincipal
+from app.infrastructure.aiopen.principal_context import execution_context_scope
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.mark.parametrize(
+    "state,label", [("waiting_input", "等待输入"), ("blocked", "已阻断"), ("accepted", "已受理")]
 )
-from app.fastapi_routes.ai_open import router as ai_open_router
+def test_mcp_text_preserves_known_wait_in_nested_receipt(state, label):
+    from app.application.aiopen.result_text import format_tool_result_text
 
-_KEY = "fixture-operation-key"
-
-
-def _operation_id(app, method: str, path: str) -> str:
-    for entry in get_catalog(app)["operations"]:
-        if entry["method"] == method and entry["path"] == path:
-            return entry["operation_id"]
-    raise AssertionError(f"operation not found: {method} {path}")
-
-
-@pytest.fixture()
-def state():
-    return {"created": None, "deleted": False}
-
-
-@pytest.fixture()
-def app(monkeypatch, state):
-    monkeypatch.setenv("AIOPEN_API_KEY", _KEY)
-    monkeypatch.delenv("AIOPEN_ENABLE_WRITES", raising=False)
-    monkeypatch.setitem(
-        AIOPEN_STATE,
-        "whitelist",
-        {"/api/products": True, "/api/orders": True},
+    text = format_tool_result_text(
+        "operation_call",
+        {
+            "success": True,
+            "execution_state": "completed",
+            "operation_id": "capability.fixture.action",
+            "run_id": "original-run",
+            "result": {"success": False, "execution_state": state},
+        },
     )
+    assert label in text
+    assert "已完成" not in text and "待核对" not in text
+    assert "original-run" in text
+
+
+@pytest.fixture
+def bound_key(trusted_actor, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setitem(service.AIOPEN_STATE, "runtime_keys", {})
+    actor = trusted_actor(permissions=["customer.view", "customer.create"])
+
+    def issue(scopes=None, expires_at=None):
+        return service.generate_api_key(
+            principal=ScreenPrincipal(str(actor.user_id), str(actor.tenant_id)),
+            scopes=scopes or ["*"],
+            expires_at=expires_at,
+            execution_context=actor.context,
+        )
+
+    return actor, issue
+
+
+def test_key_grant_never_exceeds_current_role_and_revocation_is_live(bound_key):
+    from app.db.models.permission import Role
+
+    actor, issue = bound_key
+    issued = issue(["capability.business_db.read"])
+    assert "execution_context" not in issued
+    context = service.resolve_api_key_execution_context(issued["key"])
+    assert actor_tool_denial("business_db", "read", context, {"entity": "customers"}) is None
+    assert actor_tool_denial("customers", "create", context)["reason"] == "credential_scope_denied"
+    with actor.factory.begin() as db:
+        db.query(Role).filter_by(name="user").one().permissions = []
+    assert (
+        actor_tool_denial("business_db", "read", context, {"entity": "customers"})["reason"]
+        == "permission_denied"
+    )
+    assert service.revoke_api_key(issued["key"])
+    assert service.resolve_api_key_execution_context(issued["key"]) is None
+    assert (
+        actor_tool_denial("business_db", "read", context, {"entity": "customers"})["reason"]
+        == "credential_scope_denied"
+    )
+
+
+def test_key_scope_cannot_be_replaced_in_durable_context(bound_key):
+    _, issue = bound_key
+    issued = issue(["capability.business_db.read"])
+    context = service.resolve_api_key_execution_context(issued["key"])
+    context["_credential_authorization"]["scopes"] = ["*"]
+    assert actor_tool_denial("customers", "create", context)["reason"] == "credential_scope_denied"
+
+
+def test_expired_key_and_logged_out_actor_cannot_execute(bound_key):
+    from app.db.models.user import Session
+
+    actor, issue = bound_key
+    assert service.resolve_api_key_execution_context(issue(expires_at=1)["key"]) is None
+    active = issue()
+    context = service.resolve_api_key_execution_context(active["key"])
+    with actor.factory.begin() as db:
+        db.delete(db.get(Session, actor.session_row_id))
+    assert service.resolve_api_key_execution_context(active["key"]) is None
+    assert (
+        actor_tool_denial("business_db", "read", context, {"entity": "customers"})["reason"]
+        == "credential_scope_denied"
+    )
+
+
+@pytest.mark.asyncio
+async def test_raw_http_tool_is_removed():
+    result = await service.invoke_tool(
+        "api_call", {"path": "/api/customers", "method": "DELETE"}, FastAPI()
+    )
+    assert result["code"] == "UNKNOWN_TOOL"
+    assert "api_call" not in {item["name"] for item in service.aiopen_manifest()["tools"]}
+
+
+def test_request_key_mismatch_stops_before_executor(bound_key, monkeypatch):
+    _, issue = bound_key
+    context = service.resolve_api_key_execution_context(issue()["key"])
+    context["idempotency_key"] = "original"
+    executor = Mock()
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", executor
+    )
+    with execution_context_scope(context):
+        result = operation_call(
+            FastAPI(), {"operation_id": "capability.business_db.read", "request_id": "changed"}
+        )
+    assert result["code"] == "INVALID_ARGUMENT"
+    executor.assert_not_called()
+
+
+def test_rest_and_mcp_keep_original_business_receipt(bound_key, monkeypatch):
+    from app.fastapi_routes import ai_open
+
+    actor, issue = bound_key
+    issued = issue()
+    expected = {
+        "success": False,
+        "execution_state": "waiting_approval",
+        "pending_approval": True,
+        "run_id": "original-run",
+        "agent_run_id": "original-run",
+        "task_id": "original-task",
+        "approval_request_id": "original-approval",
+    }
+    calls = []
+
+    def execute(args, *, runtime_context):
+        calls.append((args, runtime_context))
+        assert runtime_context["user_id"] == str(actor.user_id)
+        assert runtime_context["idempotency_key"] == "stable-request"
+        assert (
+            runtime_context["_credential_authorization"]["credential_id"] == issued["credential_id"]
+        )
+        return json.dumps(expected)
+
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    trace = Mock(
+        side_effect=AssertionError("business receipt must not be replaced with a trace run")
+    )
+    monkeypatch.setattr(ai_open, "_trace_aiopen_tool_call", trace)
     app = FastAPI()
-    business = APIRouter()
-
-    @business.get("/api/products", summary="商品列表")
-    def list_products(page: int = Query(default=1)):
-        return {"page": page, "items": []}
-
-    @business.get("/api/products/{product_id}", summary="商品详情")
-    def product_detail(product_id: str):
-        return {"product_id": product_id}
-
-    @business.post("/api/products", summary="创建商品")
-    def create_product(payload: dict):
-        state["created"] = payload
-        return {"success": True, "payload": payload}
-
-    @business.delete("/api/products/{product_id}", summary="删除商品")
-    def delete_product(product_id: str):
-        state["deleted"] = True
-        return {"success": True}
-
-    @business.get("/api/orders", summary="订单列表")
-    def list_orders():
-        return {"items": []}
-
-    app.include_router(business)
-    app.include_router(ai_open_router)
-    return app
-
-
-@pytest.fixture()
-def client(app):
-    return TestClient(app, headers={"X-AIOPEN-Key": _KEY})
-
-
-def _call(
-    client,
-    operation_id: str,
-    *,
-    params=None,
-    body=None,
-    key: str | None = None,
-    approval_id: int | None = None,
-):
-    payload = {"operation_id": operation_id}
-    if params is not None:
-        payload["params"] = params
-    if body is not None:
-        payload["body"] = body
-    if approval_id is not None:
-        payload["approval_id"] = approval_id
-    headers = {"X-AIOPEN-Key": key} if key else None
-    return client.post(
-        "/api/aiopen/invoke",
-        json={"tool": "operation_call", "args": payload},
-        headers=headers,
-    )
-
-
-def test_manifest_exposes_operation_call(client):
-    tools = client.get("/api/aiopen/manifest").json()["tools"]
-    assert "operation_call" in {tool["name"] for tool in tools}
-
-
-def test_operation_call_reads_with_query_params(client, app):
-    operation_id = _operation_id(app, "GET", "/api/products")
-    response = _call(client, operation_id, params={"page": 2})
-    body = response.json()
-    assert body["success"] is True
-    assert body["data"]["page"] == 2
-    assert body["risk"] == "read"
-
-
-def test_operation_call_interpolates_path_params(client, app):
-    operation_id = _operation_id(app, "GET", "/api/products/{product_id}")
-    response = _call(client, operation_id, params={"product_id": "P-42"})
-    body = response.json()
-    assert body["success"] is True
-    assert body["data"]["product_id"] == "P-42"
-
-
-def test_write_is_disabled_by_default(client, app, state):
-    operation_id = _operation_id(app, "POST", "/api/products")
-    body = _call(client, operation_id, body={"name": "螺丝"})
-    assert body.json()["code"] == "WRITE_DISABLED"
-    assert state["created"] is None
-
-
-def test_write_executes_when_enabled(client, app, state, monkeypatch):
-    monkeypatch.setenv("AIOPEN_ENABLE_WRITES", "1")
-    operation_id = _operation_id(app, "POST", "/api/products")
-    body = _call(client, operation_id, body={"name": "螺丝"})
-    assert body.json()["success"] is True
-    assert state["created"]["name"] == "螺丝"
-
-
-def test_danger_requires_approval_and_never_executes(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.setattr(
-        approval_bridge,
-        "submit",
-        lambda entry, args, principal: {
-            "status": "pending",
-            "code": "APPROVAL_REQUIRED",
-            "approval_id": 91,
-            "request_no": "APR20261117-TEST",
-            "message": "已提交审批",
-        },
-    )
-    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
-    assert body["code"] == "APPROVAL_REQUIRED"
-    assert body["approval_id"] == 91
-    assert state["deleted"] is False
-
-
-def test_danger_executes_with_approved_ticket(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.setattr(
-        approval_bridge,
-        "consume",
-        lambda approval_id, entry, args, principal: {
-            "status": "approved",
-            "approval_id": approval_id,
-            "request_no": "APR20261117-TEST",
-        },
-    )
-    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"}, approval_id=91).json()
-    assert body["success"] is True
-    assert state["deleted"] is True
-
-
-def test_danger_rejects_rejected_ticket(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.setattr(
-        approval_bridge,
-        "consume",
-        lambda approval_id, entry, args, principal: {
-            "status": "pending",
-            "code": "APPROVAL_PENDING",
-            "message": "审批尚未通过",
-        },
-    )
-    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"}, approval_id=91).json()
-    assert body["code"] == "APPROVAL_PENDING"
-    assert state["deleted"] is False
-
-
-def test_danger_auto_approves_when_both_switches_on(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.setenv("AIOPEN_ENABLE_WRITES", "1")
-    monkeypatch.setenv(approval_bridge.AUTO_APPROVE_ENV, "1")
-    calls: list[int] = []
-    monkeypatch.setattr(
-        approval_bridge,
-        "submit",
-        lambda entry, args, principal: {
-            "status": "pending",
-            "code": "APPROVAL_REQUIRED",
-            "approval_id": 93,
-            "request_no": "APR20261117-AUTO",
-            "message": "已提交审批",
-        },
-    )
-    monkeypatch.setattr(
-        approval_bridge,
-        "auto_approve",
-        lambda approval_id, principal: calls.append(approval_id) or True,
-    )
-    monkeypatch.setattr(
-        approval_bridge,
-        "consume",
-        lambda approval_id, entry, args, principal: {
-            "status": "approved",
-            "approval_id": approval_id,
-            "request_no": "APR20261117-AUTO",
-        },
-    )
-    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
-    assert body["success"] is True
-    assert state["deleted"] is True
-    assert calls == [93]
-
-
-def test_danger_auto_approve_still_requires_writes(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.delenv("AIOPEN_ENABLE_WRITES", raising=False)
-    monkeypatch.setenv(approval_bridge.AUTO_APPROVE_ENV, "1")
-    monkeypatch.setattr(
-        approval_bridge,
-        "submit",
-        lambda entry, args, principal: {
-            "status": "pending",
-            "code": "APPROVAL_REQUIRED",
-            "approval_id": 94,
-            "request_no": "APR20261117-AUTO2",
-            "message": "已提交审批",
-        },
-    )
-    monkeypatch.setattr(
-        approval_bridge,
-        "auto_approve",
-        lambda approval_id, principal: True,
-    )
-    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
-    assert body["code"] == "APPROVAL_REQUIRED"
-    assert state["deleted"] is False
-
-
-def test_api_call_write_is_gated(client, app, state):
-    body = client.post(
-        "/api/aiopen/invoke",
-        json={
-            "tool": "api_call",
-            "args": {"path": "/api/products", "method": "POST", "body": {"name": "x"}},
-        },
+    app.include_router(ai_open.router)
+    client = TestClient(app, headers={"X-AIOPEN-Key": issued["key"]})
+    arguments = {
+        "operation_id": "capability.business_db.read",
+        "params": {"entity": "customers"},
+        "request_id": "stable-request",
+    }
+    rest = client.post(
+        "/api/aiopen/invoke", json={"tool": "operation_call", "args": arguments}
     ).json()
-    assert body["code"] == "WRITE_DISABLED"
-    assert state["created"] is None
-
-
-def test_api_call_danger_requires_approval(client, app, state, monkeypatch):
-    from app.application.aiopen import approval_bridge
-
-    monkeypatch.setattr(
-        approval_bridge,
-        "submit",
-        lambda entry, args, principal: {
-            "status": "pending",
-            "code": "APPROVAL_REQUIRED",
-            "approval_id": 92,
-            "request_no": "APR20261117-TEST2",
-            "message": "已提交审批",
-        },
-    )
-    body = client.post(
-        "/api/aiopen/invoke",
-        json={
-            "tool": "api_call",
-            "args": {"path": "/api/products/P-1", "method": "DELETE"},
-        },
-    ).json()
-    assert body["code"] == "APPROVAL_REQUIRED"
-    assert state["deleted"] is False
-
-
-def test_unknown_operation_is_rejected(client):
-    body = _call(client, "ghost.none").json()
-    assert body["code"] == "OPERATION_NOT_FOUND"
-
-
-def test_missing_path_param_is_rejected(client, app):
-    operation_id = _operation_id(app, "GET", "/api/products/{product_id}")
-    body = _call(client, operation_id).json()
-    assert body["code"] == "INVALID_ARGUMENT"
-
-
-def test_scope_limits_operation_call(client, app):
-    created = generate_api_key("scoped", scopes=["read:products"], expires_at=None)
-    key = created["key"]
-    products = _operation_id(app, "GET", "/api/products")
-    orders = _operation_id(app, "GET", "/api/orders")
-    try:
-        assert _call(client, products, key=key).status_code == 200
-        denied = _call(client, orders, key=key)
-        assert denied.status_code == 403
-        assert denied.json()["code"] == "AIOPEN_SCOPE_DENIED"
-    finally:
-        revoke_api_key(key)
-
-
-def test_mcp_operation_call_returns_readable_text(client, app):
-    operation_id = _operation_id(app, "GET", "/api/products")
-    response = client.post(
+    mcp = client.post(
         "/api/aiopen/mcp",
         json={
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": 7,
             "method": "tools/call",
-            "params": {
-                "name": "operation_call",
-                "arguments": {"operation_id": operation_id, "params": {"page": 3}},
-            },
+            "params": {"name": "operation_call", "arguments": arguments},
         },
+    ).json()["result"]
+    assert rest["run_id"] == mcp["_meta"]["run_id"] == "original-run"
+    assert rest["task_id"] == mcp["structuredContent"]["task_id"] == "original-task"
+    assert mcp["_meta"]["approval_request_id"] == "original-approval"
+    assert mcp["_meta"]["request_id"] == "stable-request"
+    assert all(
+        call[0] == {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}}
+        for call in calls
     )
-    text = response.json()["result"]["content"][0]["text"]
-    assert operation_id in text
-    assert "HTTP 200" in text
+    assert len(calls) == 2
+    trace.assert_not_called()
+
+
+def test_environment_key_cannot_borrow_browser_session(bound_key, monkeypatch):
+    from app.fastapi_routes import ai_open
+
+    actor, _ = bound_key
+    monkeypatch.setenv("AIOPEN_API_KEY", "unbound-service-key")
+    execute = Mock()
+    monkeypatch.setattr(
+        "app.application.tools.registered_capabilities.execute_registered_capability", execute
+    )
+    app = FastAPI()
+    app.include_router(ai_open.router)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/aiopen/invoke",
+            headers={**actor.headers, "X-AIOPEN-Key": "unbound-service-key"},
+            json={
+                "tool": "operation_call",
+                "args": {
+                    "operation_id": "capability.business_db.read",
+                    "params": {"entity": "customers"},
+                },
+            },
+        )
+    assert response.json()["error_code"] == "tool_identity_required"
+    execute.assert_not_called()
+
+
+def test_discovery_is_narrowed_by_api_key_scope(bound_key):
+    from app.application.capability_catalog import discover_capabilities
+
+    _, issue = bound_key
+    context = service.resolve_api_key_execution_context(
+        issue(["capability.business_db.read"])["key"]
+    )
+    result = discover_capabilities(context)
+    assert result["success"] is True
+    assert [row["capability_id"] for row in result["capabilities"]] == ["business_db.read"]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("market_user_id", 999),
+        ("market_is_admin", True),
+        ("account_kind", "admin"),
+        ("impersonating_market_user_id", 999),
+        ("tenant_id", 999),
+    ],
+)
+def test_live_market_session_change_invalidates_bound_task(trusted_actor, field, value):
+    from app.db.models.user import Session
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+    actor = trusted_actor(permissions=["customer.view"])
+    assert validate_actor_context(actor.context) is None
+    with actor.factory.begin() as db:
+        setattr(db.get(Session, actor.session_row_id), field, value)
+    assert validate_actor_context(actor.context)["error_code"] == "tool_identity_required"
+
+
+def test_chat_goal_uses_original_task_and_rejects_changed_request(bound_key, tmp_path, monkeypatch):
+    from app.application.agent_orchestrator import task_dispatcher
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.application.agent_runtime import gateway
+    from app.application.aiopen.generated_tools import execute_message
+    from app.infrastructure.codex import queued_runtime
+    from app.infrastructure.codex.policy import ModelRoute, RuntimeSettings
+
+    actor, issue = bound_key
+    context = service.resolve_api_key_execution_context(issue()["key"])
+    repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
+    settings = RuntimeSettings(
+        engine="codex",
+        route=ModelRoute(
+            base_url="http://127.0.0.1:19112/v1",
+            model="queue-fixture",
+            provider_id="fixture",
+            upstream_vendor="fixture",
+            context_window=32000,
+            max_output_tokens=4000,
+        ),
+        runtime_root=tmp_path / "codex-runtime",
+    )
+    monkeypatch.setattr(gateway, "runtime_settings", lambda: settings)
+    monkeypatch.setattr(gateway, "get_agent_run_repository", lambda: repository)
+    monkeypatch.setattr(queued_runtime, "get_task_execution_repository", lambda: queue)
+    notified = Mock()
+    monkeypatch.setattr(task_dispatcher, "notify_agent_task_dispatcher", notified)
+    runtime = Mock(side_effect=AssertionError("durable admission must not execute a model"))
+    monkeypatch.setattr(gateway, "run_codex_agent", runtime)
+    with execution_context_scope(context):
+        first = execute_message({"message": "读取客户", "request_id": "same-goal"})
+        second = execute_message({"message": "读取客户", "request_id": "same-goal"})
+        conflict = execute_message({"message": "改为创建客户", "request_id": "same-goal"})
+    other_credential = service.resolve_api_key_execution_context(
+        issue(["capability.business_db.read"])["key"]
+    )
+    with execution_context_scope(other_credential):
+        foreign_key = execute_message({"message": "读取客户", "request_id": "same-goal"})
+    assert foreign_key["error_code"] == "owner_changed"
+    assert foreign_key["success"] is False
+    assert first["execution_state"] == second["execution_state"] == "queued", first
+    assert first["run_id"] == second["run_id"]
+    assert first["task_id"] == second["task_id"]
+    assert first["success"] is False and first["pending_approval"] is False
+    assert second["deduplicated"] is True
+    assert conflict["error_code"] == "task_idempotency_conflict"
+    notified.assert_called_once()
+    runtime.assert_not_called()
+    run = repository.get(first["run_id"])
+    assert run.intent == "codex.runtime" and run.metadata["runtime_type"] == "codex"
+    assert run.tool_calls == [] and run.message == "读取客户"
+    assert (
+        run.metadata["runtime_context"]["_credential_authorization"]
+        == context["_credential_authorization"]
+    )
+    assert run.metadata["task_context"]["task_id"] == first["task_id"]
+    assert queue.get(first["run_id"]).execution_count == 0

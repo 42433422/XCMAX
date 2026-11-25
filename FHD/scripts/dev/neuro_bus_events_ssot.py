@@ -15,7 +15,7 @@
 交叉校验(check 时同时执行):
   1. 派生产物字节级一致(同 service_topology 范式)
   2. 所有 dataclass event_type 默认值在 ALL_EVENT_TYPES
-  3. 所有 orchestrator/chat_trace/artifact_ingestion 的 add_event 字符串在 ALL_EVENT_TYPES
+  3. 所有 orchestrator/chat_trace/task_context/artifact_ingestion 的 add_event 字符串在 ALL_EVENT_TYPES
   4. OpenAPI AgentRunEvent schema 存在且 enum 匹配 agent_run 流
   5. 前端 useAgentRunEvents.ts 字符串字面量在 agent_run 流(只警告,不阻断 — 前端可能扩展)
 """
@@ -46,6 +46,7 @@ NEURO_BUS_EVENTS_DIR = ROOT / "app" / "neuro_bus" / "events"
 ORCHESTRATOR_FILES = [
     ROOT / "app" / "application" / "agent_orchestrator" / "orchestrator.py",
     ROOT / "app" / "application" / "agent_orchestrator" / "chat_trace.py",
+    ROOT / "app" / "application" / "agent_orchestrator" / "task_context.py",
     ROOT / "app" / "application" / "agent_orchestrator" / "artifact_ingestion.py",
 ]
 APP_BRIDGE_FILES = [

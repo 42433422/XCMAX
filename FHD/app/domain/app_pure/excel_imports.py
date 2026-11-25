@@ -37,24 +37,6 @@ def resolve_customer_excel_columns(columns: list[str]) -> dict[str, str | None]:
     }
 
 
-def run_bulk_import(payload: dict[str, Any]) -> dict[str, Any]:
-    customer_name = str(payload.get("customer_name") or "").strip()
-    items = payload.get("items")
-    if not customer_name:
-        return {"success": False, "error": "missing_customer_name"}
-    if not isinstance(items, list) or len(items) == 0:
-        return {"success": False, "error": "empty_items"}
-    dry_run = bool(payload.get("dry_run"))
-    if dry_run:
-        return {
-            "success": True,
-            "dry_run": True,
-            "would_process": len(items),
-            "customer_name": customer_name,
-        }
-    return {"success": True, "imported": len(items), "customer_name": customer_name}
-
-
 def _parse_price(value: Any) -> float:
     """Parse legacy product price cells used by compat import/write routes."""
     if value is None:
@@ -90,7 +72,6 @@ __all__ = [
     "_norm_model",
     "_parse_price",
     "resolve_customer_excel_columns",
-    "run_bulk_import",
 ]
 
 

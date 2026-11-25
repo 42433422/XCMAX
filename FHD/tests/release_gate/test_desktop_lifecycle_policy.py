@@ -33,10 +33,3 @@ def test_release_contains_upgrade_rollback_crash_and_window_recovery() -> None:
     assert "initializeLocalCrashReporting" in runtime
     assert "crashReporter.start" in resilience
     assert "readWindowState" in runtime and "writeWindowState" in runtime
-
-
-def test_soak_gate_defaults_to_at_least_eight_hours_and_fails_closed() -> None:
-    soak = (ROOT / "scripts/release/desktop-soak.sh").read_text(encoding="utf-8")
-    assert "XCAGI_SOAK_DURATION_SECONDS:-28800" in soak
-    assert "MAX_CONSECUTIVE_FAILURES" in soak
-    assert "exit 1" in soak

@@ -9,9 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
-from app.application.user_memory.retrieve import build_memory_context as build_memory_context
+from app.application.user_memory.relation_retrieval import parse_as_of, relation_write_conflicts
+from app.application.user_memory.retrieve import (
+    build_memory_context as build_memory_context,
+)
 from app.application.user_memory.retrieve import search as search
-from app.application.user_memory.write import normalize_memory_text as normalize_memory_text
+from app.application.user_memory.write import (
+    normalize_memory_text as normalize_memory_text,
+)
 from app.application.user_memory.write import remember as remember
 
 
@@ -32,8 +37,8 @@ def get_memory_v2_action_meta(action: str) -> dict[str, Any] | None:
 
 
 def _memory_source():
-    from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
     from app.domain.shared_services import user_memory_service as memory
+    from app.domain.user_memory.policy import MemoryPolicy, PolicyPorts
     from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
     from app.infrastructure.user_memory.persistence import MemoryRepository
 
@@ -81,7 +86,9 @@ def _memory_snapshot(backend, path):
                 )
                 if os.name == "nt"
                 else os.open(
-                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
+                    path.name,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                    dir_fd=directory,
                 )
             )
         except FileNotFoundError:
@@ -132,13 +139,24 @@ def _memory_record_proof(record: dict[str, Any] | None) -> dict[str, Any] | None
     }
 
 
-def _proposed_memory_matches(policy, params, record) -> bool:
+def _memory_revision_time_valid(record: dict[str, Any]) -> bool:
+    value = record.get("recorded_at_utc")
+    if not isinstance(value, str):
+        return False
+    try:
+        parse_as_of(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _proposed_memory_matches(policy, params, record, conflicts) -> bool:
     confidence = params.get("confidence")
     expected = {
         **policy.govern_candidate(
             source=str(params.get("source") or "memory_v2_api"),
             confidence=0.5 if confidence in (None, "") else float(confidence),
-            evidence=params.get("evidence") if isinstance(params.get("evidence"), list) else None,
+            evidence=(params.get("evidence") if isinstance(params.get("evidence"), list) else None),
         ),
         "memory_id": record["memory_id"],
         "memory_type": policy.normalize_type(
@@ -149,6 +167,7 @@ def _proposed_memory_matches(policy, params, record) -> bool:
         "created_at": record.get("created_at"),
         "updated_at": record.get("created_at"),
         "revision": 1,
+        "recorded_at_utc": record.get("recorded_at_utc"),
         "history": [],
     }
     expected["status"] = "rejected" if expected["source_policy"] == "blocked" else "pending"
@@ -158,7 +177,13 @@ def _proposed_memory_matches(policy, params, record) -> bool:
     if expected["status"] == "rejected":
         expected["rejected_at"] = expected["created_at"]
         expected["rejected_reason"] = "source_policy_blocked"
-    return bool(expected["created_at"]) and canonical_hash(record) == canonical_hash(expected)
+    elif conflicts:
+        expected["conflict_review"] = conflicts
+    return (
+        bool(expected["created_at"])
+        and _memory_revision_time_valid(record)
+        and canonical_hash(record) == canonical_hash(expected)
+    )
 
 
 def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bool:
@@ -188,9 +213,12 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         or canonical_hash(previous) != before.get("sha256")
         or canonical_hash(history[:-1]) != before.get("history_sha256")
         or last.get("action")
-        != {"confirm": "confirm", "correct": "correct", "reject": "rejected", "delete": "deleted"}[
-            step.action
-        ]
+        != {
+            "confirm": "confirm",
+            "correct": "correct",
+            "reject": "rejected",
+            "delete": "deleted",
+        }[step.action]
         or not record.get("updated_at")
         or last.get("at") != record["updated_at"]
     ):
@@ -199,6 +227,7 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         **previous,
         "revision": before["revision"] + 1,
         "updated_at": record["updated_at"],
+        "recorded_at_utc": record.get("recorded_at_utc"),
         "history": history,
     }
     if step.action == "correct":
@@ -227,7 +256,9 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
                 expected["confidence"] = max(0.0, min(1.0, float(correction["confidence"])))
             expected["correction_count"] = int(previous.get("correction_count") or 0) + 1
         expected.update(
-            status="active", eligible_for_planner=True, confirmed_at=record["updated_at"]
+            status="active",
+            eligible_for_planner=True,
+            confirmed_at=record["updated_at"],
         )
     else:
         if previous.get("status") == "deleted":
@@ -244,7 +275,9 @@ def _memory_mutation_matches(policy, step, before: dict[str, Any], record) -> bo
         expected["fingerprint"] = policy.fingerprint(
             str(expected["memory_type"]), str(expected["key"]), expected.get("value")
         )
-    return canonical_hash(record) == canonical_hash(expected)
+    return _memory_revision_time_valid(record) and canonical_hash(record) == canonical_hash(
+        expected
+    )
 
 
 def capture_memory_baseline(step, context) -> dict[str, Any]:
@@ -256,6 +289,7 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
         policy, backend, path, source = _memory_source()
         memory = _memory_snapshot(backend, path).get(owner)
         records = memory.memory_v2_records if memory is not None and memory.user_id == owner else []
+        conflicts = None
         if step.action == "propose_candidate":
             fingerprint = policy.fingerprint(
                 policy.normalize_type(
@@ -270,6 +304,8 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
                 if row.get("fingerprint") == fingerprint
                 and row.get("status") in {"pending", "active", "rejected"}
             ]
+            if not matches:
+                conflicts = relation_write_conflicts(records, {"value": step.params.get("value")})
         else:
             target = str(step.params.get("memory_id") or step.params.get("id") or "").strip()
             matches = [row for row in records if row.get("memory_id") == target]
@@ -279,6 +315,9 @@ def capture_memory_baseline(step, context) -> dict[str, Any]:
             "store_sha256": source,
             "owner_sha256": canonical_hash(owner),
             "record": _memory_record_proof(matches[0] if matches else None),
+            "relation_conflicts_sha256": canonical_hash(conflicts)
+            if conflicts is not None
+            else None,
         }
     except (PermissionError, OSError) + RECOVERABLE_ERRORS:
         return {}
@@ -334,6 +373,14 @@ def verify_memory_mutation(step, call, output, context) -> dict[str, Any]:
     if type(revision) is not int or revision <= 0:
         return _report("failed", "result_memory_revision_mismatch", source)
     if step.action == "propose_candidate":
+        conflicts = (
+            relation_write_conflicts(
+                memory.memory_v2_records,
+                {"value": step.params.get("value"), "memory_id": record["memory_id"]},
+            )
+            if before is None
+            else []
+        )
         valid = record.get("fingerprint") == policy.fingerprint(
             policy.normalize_type(
                 str(step.params.get("memory_type") or step.params.get("type") or "preference")
@@ -346,7 +393,8 @@ def verify_memory_mutation(step, call, output, context) -> dict[str, Any]:
             if before is not None
             else (
                 output.get("created") is True
-                and _proposed_memory_matches(policy, step.params, record)
+                and baseline.get("relation_conflicts_sha256") == canonical_hash(conflicts)
+                and _proposed_memory_matches(policy, step.params, record, conflicts)
             )
         )
     else:

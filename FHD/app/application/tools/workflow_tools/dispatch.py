@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 
 from app.application.tools.workflow_tools.contracts import (
     ExtensionHandler,
-    JsonTool,
     Payload,
     ToolCall,
     ToolHandler,
 )
-from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -37,8 +35,6 @@ class WorkflowToolDispatcher:
     template: ToolHandler
     legacy_employee: ExtensionHandler
     builtins: Mapping[str, ToolHandler]
-    business_db: Callable[[str, Payload], Payload | None]
-    resolve_crud: Callable[[str], JsonTool | None]
     logger: logging.Logger
 
     def execute(self, call: ToolCall) -> str:
@@ -59,30 +55,16 @@ class WorkflowToolDispatcher:
         builtin = self.builtins.get(call.name)
         if builtin is not None:
             return builtin(call)
-        payload = self.business_db(
-            call.name,
-            {**call.args, "_runtime_context": dict(call.runtime_context or {})},
-        )
-        if payload is not None:
-            return json.dumps(payload, ensure_ascii=False, default=json_safe)
-        crud = self.resolve_crud(call.name)
-        if crud is not None:
-            # These old model aliases call services directly and use a
-            # model-controlled confirm flag. They have no ToolActionSpec or
-            # approval receipt. Keep their explicit domain APIs, but require
-            # the model to use a registered capability before business access.
-            return json.dumps(
-                {
-                    "success": False,
-                    "error_code": "tool_contract_unavailable",
-                    "execution_status": "not_started",
-                    "retryable": False,
-                    "message": "旧工具别名未绑定执行契约，请使用已登记的业务能力入口",
-                },
-                ensure_ascii=False,
-            )
         return json.dumps(
-            {"success": False, "error": "unknown_tool", "tool": call.name},
+            {
+                "success": False,
+                "error": "unknown_tool",
+                "error_code": "unknown_tool",
+                "execution_status": "not_started",
+                "execution_state": "not_started",
+                "retryable": False,
+                "tool": call.name,
+            },
             ensure_ascii=False,
         )
 
@@ -90,17 +72,18 @@ class WorkflowToolDispatcher:
         try:
             return handler(call)
         except RECOVERABLE_ERRORS:
-            # Only an explicit None means that this adapter does not own the
-            # tool. An exception can occur after its external effect committed.
-            self.logger.exception("%s tool execution interrupted", label)
+            # Only an explicit None means this adapter does not own the tool.
+            # Exceptions can follow an external effect; never dispatch again.
+            self.logger.exception("%s tool receipt unavailable; dispatch stopped", label)
             return json.dumps(
                 {
                     "success": False,
+                    "error": "tool_receipt_unavailable",
                     "error_code": "tool_execution_interrupted",
-                    "execution_state": "unknown",
                     "outcome": "unknown",
                     "retryable": False,
                     "reconciliation_required": True,
+                    "tool": call.name,
                     "message": "工具结果待核对，未继续调用其他实现",
                 },
                 ensure_ascii=False,

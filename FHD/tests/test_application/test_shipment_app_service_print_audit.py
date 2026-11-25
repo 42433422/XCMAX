@@ -9,6 +9,7 @@ Covers:
 
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 from app.application.shipment_app_service import ShipmentApplicationService
@@ -83,7 +84,7 @@ class TestCreateShipment:
         svc = _svc()
         with patch(
             "app.application.shipment_app_service.Shipment.create",
-            side_effect=RuntimeError("boom"),
+            side_effect=sqlite3.OperationalError("boom"),
         ):
             out = svc.create_shipment(unit_name="X", items_data=[])
         assert out["success"] is False

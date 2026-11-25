@@ -20,6 +20,33 @@ from tests.fixtures.agent_tool_lifecycle_checks import _section_ad, _section_ap,
 from tests.fixtures.agent_tool_lifecycle_support import SCHEMA, Suite, _base_body, _data, _err
 
 
+@pytest.mark.parametrize("change", ["configured_path", "replaced_file"])
+def test_registry_schema_and_cached_discovery_follow_database_identity(
+    tmp_path, monkeypatch, change
+):
+    first_path = tmp_path / "first.sqlite3"
+    monkeypatch.setenv("XCAGI_AGENT_TOOL_DB", str(first_path))
+    service.reset_for_tests()
+    actor = Actor(actor_id="owner", role="admin", employee_id=None, tenant_id=1)
+    try:
+        service.create_tool(actor, _base_body("original_tool"))
+        assert service.list_tools(actor, {})["items"][0]["tool_key"] == "original_tool"
+        assert service.list_tools(actor, {})["total"] == 1
+        if change == "configured_path":
+            monkeypatch.setenv("XCAGI_AGENT_TOOL_DB", str(tmp_path / "second.sqlite3"))
+        else:
+            first_path.rename(tmp_path / "previous.sqlite3")
+        # Changing the data directory, or restoring a different file at its path,
+        # must initialize that database and cannot reuse another registry's cache.
+        assert service.list_tools(actor, {})["items"] == []
+        service.create_tool(actor, _base_body("replacement_tool"))
+        listed = service.list_tools(actor, {})
+        assert listed["total"] == 1
+        assert listed["items"][0]["tool_key"] == "replacement_tool"
+    finally:
+        service.reset_for_tests()
+
+
 def test_agent_tool_lifecycle_acceptance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -933,3 +960,19 @@ def test_call_pages_keep_append_order_for_calls_in_the_same_second(tmp_path, mon
         assert service.calls_for(actor, tool["id"], page=3, page_size=1)[0]["id"] == "a"
     finally:
         service.reset_for_tests(None)
+
+
+def test_registry_initialization_and_cache_follow_configured_database(tmp_path, monkeypatch):
+    from app.application import agent_tool_registry_store as store
+
+    monkeypatch.setattr(store, "_DB_OVERRIDE", None)
+    monkeypatch.setattr(store, "_SCHEMA_READY", None)
+    monkeypatch.setattr(store, "_CACHE", {})
+    for name in ("first", "second", "first"):
+        monkeypatch.setenv("XCAGI_AGENT_TOOL_DB", str(tmp_path / f"{name}.sqlite3"))
+        connection = store._connect()
+        try:
+            assert connection.execute("SELECT COUNT(*) FROM tools").fetchone()[0] == 0
+        finally:
+            connection.close()
+        assert store._cached(("same-tool",), lambda: {"database": name}) == {"database": name}

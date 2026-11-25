@@ -9,6 +9,7 @@ from contextvars import Context
 
 import pytest
 
+from modstore_server import llm_gateway_contract as gateway_contract
 from modstore_server import llm_litellm_router as router
 from modstore_server import strategic_portfolio_usage as usage
 from tests import test_strategic_stream_usage as stream_tests
@@ -16,10 +17,13 @@ from tests.test_strategic_stream_usage import _calls, _stream
 
 mandate = stream_tests.mandate
 real_router_runtime = stream_tests.real_router_runtime
-pytestmark = pytest.mark.usefixtures("real_router_runtime")
+pytestmark = [
+    pytest.mark.usefixtures("real_router_runtime"),
+    pytest.mark.filterwarnings(*stream_tests.ROUTER_SDK_WARNINGS),
+]
 
 
-def _router_sse(monkeypatch, mandate):
+def _router_sse(monkeypatch, mandate, *, extra_chunks=None, initial_choices=None):
     """Keep the real Router and SDK; pause only the upstream HTTP body."""
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     import litellm
@@ -35,6 +39,7 @@ def _router_sse(monkeypatch, mandate):
         "clients": [],
         "responses": [],
         "requests": [],
+        "read": 0,
     }
 
     class Body(transport_api.AsyncByteStream):
@@ -46,7 +51,18 @@ def _router_sse(monkeypatch, mandate):
                 "object": "chat.completion.chunk",
                 "choices": [{"index": 0, "delta": {"content": "routed"}, "finish_reason": None}],
             }
-            yield ("data: " + json.dumps(chunk) + "\n\n").encode()
+            if initial_choices is not None:
+                chunk["choices"] = initial_choices
+            observed["read"] += 1
+            yield ("data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n").encode()
+            if extra_chunks is not None:
+                for extra in extra_chunks:
+                    observed["read"] += 1
+                    yield (
+                        "data: " + json.dumps({**chunk, **extra}, ensure_ascii=False) + "\n\n"
+                    ).encode()
+                yield b"data: [DONE]\n\n"
+                return
             observed["waiting"].set()
             try:
                 await asyncio.Event().wait()
@@ -111,6 +127,75 @@ async def test_cross_context_close_does_not_leak_reservation(mandate, monkeypatc
         assert await anext(stream) == {"type": "delta", "delta": "routed"}
         assert usage._CALL.get() is None
     await asyncio.create_task(stream.aclose(), context=Context())
+    _assert_closed_with_hold(observed, mandate)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overflow", ["events", "prefetch", "arguments", "single", "metadata"])
+async def test_router_stops_oversized_receipts_before_retaining_or_forwarding(
+    mandate, monkeypatch, overflow
+):
+    monkeypatch.setattr(
+        gateway_contract,
+        "MAX_STREAM_EVENTS",
+        3 if overflow in {"events", "prefetch"} else 100,
+        raising=False,
+    )
+    monkeypatch.setattr(gateway_contract, "MAX_STREAM_BYTES", 1500, raising=False)
+    if overflow in {"events", "prefetch"}:
+        # The real Router may swallow empty chunks; its SDK must count them.
+        chunks = [{"choices": []} for _ in range(5)]
+    elif overflow == "metadata":
+        chunks = [{"choices": [], "provider_metadata": "猫" * 1000}]
+    else:
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call-original",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "approved" if index == 0 else "",
+                                        "arguments": "猫" * (1000 if overflow == "single" else 120),
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ]
+            }
+            for index in range(4)
+        ]
+    chunks.extend(
+        [
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            {
+                "choices": [],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+            },
+        ]
+    )
+    observed = _router_sse(
+        monkeypatch,
+        mandate,
+        extra_chunks=chunks,
+        initial_choices=[] if overflow == "prefetch" else None,
+    )
+    with usage.portfolio_usage_scope(mandate[0], "a", mandate[1]["lease_token"]):
+        received = [event async for event in _stream()]
+    if overflow != "prefetch":
+        assert received[0] == {"type": "delta", "delta": "routed"}
+    assert received[-1]["type"] == "error", received
+    assert received[-1]["code"] == "model_stream_limit_exceeded", received
+    assert received[-1]["outcome_unknown"] is True and received[-1]["non_retryable"] is True
+    assert not any(event["type"] in {"toolcall", "finish", "usage"} for event in received)
+    assert observed["read"] < len(chunks) + 1
     _assert_closed_with_hold(observed, mandate)
 
 

@@ -112,8 +112,8 @@ def test_chat_exception_records_and_raises() -> None:
     opt = _bare_ai()
     opt._monitor = MagicMock()
     opt._service = MagicMock()
-    opt._service.chat.side_effect = RuntimeError("boom")
-    with pytest.raises(RuntimeError):
+    opt._service.chat.side_effect = ConnectionError("provider unavailable")
+    with pytest.raises(ConnectionError):
         opt.chat("u1", "hello")
     assert opt._monitor.record_metric.called
 
@@ -142,7 +142,7 @@ def test_chat_async_fallback_to_sync() -> None:
     opt._service.chat.return_value = {"text": "sync"}
     with patch(
         "app.utils.async_task.async_tasks.get_async_task_manager",
-        side_effect=RuntimeError("no queue"),
+        side_effect=OSError("no queue"),
     ):
         out = opt.chat_async("u1", "hello")
     assert out["text"] == "sync"
@@ -168,7 +168,7 @@ def test_clear_user_cache_with_cache() -> None:
 def test_clear_user_cache_error() -> None:
     opt = _bare_ai()
     opt._cache = MagicMock()
-    opt._cache.clear_pattern.side_effect = RuntimeError("redis down")
+    opt._cache.clear_pattern.side_effect = ConnectionError("redis down")
     assert opt.clear_user_cache("u1") == 0
 
 

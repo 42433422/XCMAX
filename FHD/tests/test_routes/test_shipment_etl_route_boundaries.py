@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import io
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -79,11 +80,25 @@ async def test_failed_upload_releases_owned_file_and_input(
     method = elt_adapters.execute if route == "execute" else elt_adapters.preview
     method.return_value = {"success": False, "message": "password=private"}
     if raises:
-        method.side_effect = RuntimeError("password=private")
+        method.side_effect = OSError("password=private")
     upload = UploadFile(io.BytesIO(b"rejected"), filename="shipment.xlsx")
     response = await _call(f"shipment_elt_{route}", file=upload)
     assert response.status_code == (500 if raises else 400)
     assert b"private" not in bytes(response.body)
+    assert list(tmp_path.iterdir()) == []
+    assert upload.file.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["preview", "execute", "ocr_preview"])
+async def test_unexpected_adapter_error_propagates_after_upload_cleanup(
+    route: str, elt_adapters: Mock, tmp_path: Path
+) -> None:
+    method = elt_adapters.execute if route == "execute" else elt_adapters.preview
+    method.side_effect = RuntimeError("unexpected adapter error")
+    upload = UploadFile(io.BytesIO(b"rejected"), filename="shipment.xlsx")
+    with pytest.raises(RuntimeError, match="unexpected adapter error"):
+        await _call(f"shipment_elt_{route}", file=upload)
     assert list(tmp_path.iterdir()) == []
     assert upload.file.closed
 
@@ -148,7 +163,7 @@ async def test_caller_owned_path_survives_failure(
     existing = tmp_path / "caller-owned.xlsx"
     existing.write_bytes(b"original")
     method = elt_adapters.execute if route == "execute" else elt_adapters.preview
-    method.side_effect = RuntimeError("fail")
+    method.side_effect = OSError("fail")
     response = await _call(f"shipment_elt_{route}", file=None, file_path=str(existing))
     assert response.status_code == 500
     assert existing.read_bytes() == b"original"
@@ -184,7 +199,8 @@ def test_log_read_errors_do_not_expose_backend_details(
     name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.bootstrap.get_extract_log_service", Mock(side_effect=RuntimeError("password=private"))
+        "app.bootstrap.get_extract_log_service",
+        Mock(side_effect=sqlite3.OperationalError("password=private")),
     )
     response = getattr(api, name)(*(() if name == "get_extract_logs" else (1,)))
     assert response.status_code == 500

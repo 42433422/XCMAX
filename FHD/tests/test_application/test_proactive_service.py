@@ -77,7 +77,7 @@ def test_in_app_sender_reports_only_successful_socket_sends(monkeypatch, socket_
     hub = ws_hub.ImWsHub()
     socket = AsyncMock()
     if socket_status == "broken":
-        socket.send_text.side_effect = RuntimeError("disconnected")
+        socket.send_text.side_effect = ConnectionError("disconnected")
     if socket_status != "offline":
         hub._connections[7].add(socket)
     monkeypatch.setattr(ws_hub, "im_ws_hub", hub)

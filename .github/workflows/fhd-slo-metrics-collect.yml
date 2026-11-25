@@ -65,9 +65,116 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
 
+      - name: Require prior metrics publication on main before collecting
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          test "${GITHUB_REF_NAME}" = main
+          # Job concurrency ends before an auto-merge PR necessarily lands.
+          # Never collect a sibling of a snapshot still awaiting publication.
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=all&base=main&sort=created&direction=desc&per_page=100" \
+            --jq '.[] | select(.head.ref | startswith("automation/slo-metrics-")) | {number, state, created_at, merged_at, merge_commit_sha, head_ref: .head.ref, head_repo: .head.repo.full_name, base_ref: .base.ref, base_repo: .base.repo.full_name} | @json' \
+            > "${RUNNER_TEMP}/slo-pr-history.jsonl"
+          git fetch --no-tags origin main
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from datetime import datetime
+          from pathlib import Path
+
+          def fail(message):
+              raise SystemExit(f"::error::SLO publication guard: {message}")
+
+          def timestamp(value):
+              stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+              if stamp.tzinfo is None:
+                  fail("PR timestamps must include a timezone")
+              return stamp
+
+          history = Path(os.environ["RUNNER_TEMP"]) / "slo-pr-history.jsonl"
+          records = [json.loads(line) for line in history.read_text().splitlines() if line.strip()]
+          if not records:
+              fail("prior automatic metrics PR history is unavailable")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          for record in records:
+              if (
+                  not isinstance(record, dict)
+                  or type(record.get("number")) is not int
+                  or record["number"] <= 0
+                  or record.get("head_repo") != repository
+                  or record.get("base_repo") != repository
+                  or record.get("base_ref") != "main"
+                  or not str(record.get("head_ref", "")).startswith("automation/slo-metrics-")
+                  or record.get("state") not in {"open", "closed"}
+              ):
+                  fail("automatic metrics PR provenance could not be verified")
+              timestamp(record.get("created_at"))
+              if record["state"] == "open":
+                  fail(f"metrics PR #{record['number']} is still open; await its merge")
+          latest = max(records, key=lambda record: (timestamp(record["created_at"]), record["number"]))
+          if not latest.get("merged_at"):
+              fail(f"latest metrics PR #{latest['number']} was closed without merging")
+          if timestamp(latest["merged_at"]) < timestamp(latest["created_at"]):
+              fail("latest metrics PR has invalid merge provenance")
+          merge_sha = str(latest.get("merge_commit_sha") or "")
+          if not re.fullmatch(r"[0-9a-f]{40}", merge_sha):
+              fail("latest metrics PR merge SHA is unavailable")
+          for ancestor, descendant in (("HEAD", "origin/main"), (merge_sha, "HEAD"), (merge_sha, "origin/main")):
+              if subprocess.run(["git", "merge-base", "--is-ancestor", ancestor, descendant]).returncode:
+                  fail(f"latest metrics PR #{latest['number']} is not proven in this checkout and current main")
+          print(f"Verified metrics PR #{latest['number']} merged at {merge_sha}; collection may append.")
+          PY
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+
+      - name: Generate mature Sloth multi-window burn-rate rules (candidate)
+        id: sloth_generate
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Sloth generates the Prometheus rules. Do not auto-activate them on
+          # production until the existing promtool + alert-drill rollout passes.
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "${PWD}/scripts/observability:/source:ro" \
+            -v "${RUNNER_TEMP}:/output" \
+            ghcr.io/slok/sloth:v0.16.0 \
+            generate -i /source/sloth.production.yml -o /output/xcagi-sloth-rules.yml
+          test -s "${RUNNER_TEMP}/xcagi-sloth-rules.yml"
+
+      - name: Upload generated Sloth candidate (not proof of activation)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-sloth-rules-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/xcagi-sloth-rules.yml
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Install collector components from the existing lock
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tomllib
+
+          wanted = {"filelock", "tenacity"}
+          packages = [p for p in tomllib.loads(Path("uv.lock").read_text())["package"] if p["name"] in wanted]
+          assert {p["name"] for p in packages} == wanted
+          requirements = Path(os.environ["RUNNER_TEMP"]) / "slo-collector-requirements.txt"
+          requirements.write_text("".join(
+              f"{p['name']}=={p['version']} " + " ".join(f"--hash={w['hash']}" for w in p["wheels"]) + "\n"
+              for p in packages
+          ))
+          subprocess.run([sys.executable, "-m", "pip", "install", "--require-hashes", "--only-binary=:all:", "--no-deps", "-r", str(requirements)], check=True)
+          PY
 
       - name: Authorize formal Day 0 from live release convergence
         if: ${{ env.SLO_MODE == 'formal' }}
@@ -245,7 +352,7 @@ jobs:
           gh pr merge "$pr_url" --auto --squash --delete-branch
 
       - name: Fail closed when production SLO evidence is not admissible
-        if: always() && steps.slo_collect.outcome != 'success'
+        if: always() && (steps.slo_collect.outcome != 'success' || steps.sloth_generate.outcome != 'success')
         run: |
-          echo "::error::Production SLO evidence is unavailable, empty, or formal targets/sample floors failed; no PASS was emitted."
+          echo "::error::Production SLO evidence or Sloth rule generation failed; no PASS was emitted."
           exit 1

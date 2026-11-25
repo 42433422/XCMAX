@@ -40,6 +40,8 @@ QUALIFICATION_CHECKS = (
 class RuntimePolicyError(ValueError):
     """A configured runtime is unavailable or has not been qualified."""
 
+    public_message = "运行配置尚未通过核验，请检查模型设置或联系部署管理员。"
+
 
 def qualification_host_identity() -> dict[str, str]:
     """Bind evidence to the actual host source and platform, not mutable rollout metadata."""

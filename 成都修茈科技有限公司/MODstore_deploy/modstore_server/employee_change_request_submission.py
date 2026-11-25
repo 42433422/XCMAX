@@ -5,13 +5,39 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Iterator, Optional, Sequence
 
 from modstore_server.employee_change_request_verification import _guard_under_workspace
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_duty_graph_execution: ContextVar[Optional[dict[str, int | str]]] = ContextVar(
+    "change_request_duty_graph_execution", default=None
+)
+
+
+@contextmanager
+def duty_graph_change_request_context(
+    *, run_id: int, node_id: int, employee_id: str, user_id: int
+) -> Iterator[None]:
+    """Bind writes to the persisted native node, never caller or model input."""
+    if any(type(value) is not int or value <= 0 for value in (run_id, node_id, user_id)):
+        raise ValueError("invalid native duty graph identity")
+    token = _duty_graph_execution.set(
+        {
+            "duty_graph_run_id": run_id,
+            "duty_graph_node_id": node_id,
+            "employee_id": employee_id,
+            "user_id": user_id,
+        }
+    )
+    try:
+        yield
+    finally:
+        _duty_graph_execution.reset(token)
 
 
 def defer_write_as_change_request(
@@ -50,6 +76,14 @@ def defer_write_as_change_request(
     sg = [str(x).strip() for x in (scope_globs or []) if str(x).strip()]
     fg = [str(x).strip() for x in (forbidden_globs or []) if str(x).strip()]
     ag = [str(x).strip() for x in (approval_required_globs or []) if str(x).strip()]
+    execution = _duty_graph_execution.get()
+    # A delegated employee needs its own native graph node; it cannot inherit
+    # another employee's execution identity just by copying the input payload.
+    provenance = (
+        {"source_execution": execution}
+        if execution is not None and execution["employee_id"] == source_employee_id
+        else {}
+    )
     blob = json.dumps(
         {
             "path": path,
@@ -58,6 +92,7 @@ def defer_write_as_change_request(
             "scope_globs_snapshot": sg,
             "forbidden_globs_snapshot": fg,
             "approval_required_globs_snapshot": ag,
+            **provenance,
         },
         ensure_ascii=False,
     )

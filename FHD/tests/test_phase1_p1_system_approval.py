@@ -16,7 +16,7 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def system_client(trusted_actor, local_tools, monkeypatch) -> TestClient:
+def system_client(trusted_actor, local_tools, monkeypatch, request) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
@@ -24,12 +24,18 @@ def system_client(trusted_actor, local_tools, monkeypatch) -> TestClient:
     repo = InMemoryAgentRunRepository()
     app.state.agent_runs = repo
     monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repo,
     )
     app.include_router(system_routes.router)
     app.include_router(tools_execute_router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+        app,
+        raise_server_exceptions=False,
+        headers={
+            **trusted_actor(role="admin").headers,
+            "Idempotency-Key": request.node.name,
+        },
     )
 
 
@@ -94,11 +100,14 @@ def test_performance_cache_clear(
 ) -> None:
     mock_get.return_value = _optimizer_mock()
     r = system_client.post("/api/performance/cache/clear")
-    assert r.status_code == 200
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False
+    assert r.json()["approval_request_id"]
+    mock_get.return_value.clear_cache.assert_not_called()
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
-@pytest.mark.parametrize("body, status", [({"keys": ["k"]}, 200), ({"key": "k"}, 400)])
+@pytest.mark.parametrize("body, status", [({"keys": ["k"]}, 202), ({"key": "k"}, 400)])
 def test_performance_cache_invalidate(
     mock_get: MagicMock, system_client: TestClient, body: dict, status: int
 ) -> None:
@@ -107,26 +116,11 @@ def test_performance_cache_invalidate(
     r = system_client.post("/api/performance/cache/invalidate", json=body)
     assert r.status_code == status, r.text
     assert r.json()["success"] is False
-    if status == 200:
-        assert r.json()["data"]["deleted_count"] == 1
-        assert r.json()["data"]["requested_keys"] == 1
-        optimizer.redis_cache.delete.assert_called_once_with("k")
-        payload = r.json()
-        assert payload["outcome"] == "unknown"
-        assert payload["error_code"] == "result_verification_inconclusive"
-        assert payload["verification_code"] == "result_verifier_unavailable"
-        assert payload["retryable"] is False and payload["reconciliation_required"] is True
-        run = system_client.app.state.agent_runs.get(payload["run_id"])
-        assert run.status == "blocked" and len(run.tool_calls) == 1
-        call = run.tool_calls[0]
-        assert (call.tool_id, call.action) == ("system_maintenance", "invalidate_performance_cache")
-        assert call.output["success"] is True
-        assert call.metadata["verification"]["accepted"] is False
-        assert run.steps[0].attempt_count == 1
-        assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    if status == 202:
+        assert r.json()["approval_request_id"]
     else:
-        assert r.json()["error_code"] == "schema_validation_failed"
-        optimizer.redis_cache.delete.assert_not_called()
+        assert r.json().get("error_code") == "schema_validation_failed"
+    optimizer.redis_cache.delete.assert_not_called()
 
 
 @patch("app.utils.performance.performance_initializer.get_performance_optimizer")
@@ -196,7 +190,7 @@ def test_skills_list(mock_reg: MagicMock, system_client: TestClient) -> None:
     mock_reg.return_value.list_all.assert_called_once_with()
 
 
-@pytest.mark.parametrize("path", ["/api/skills/execute", "/api/tools/execute"])
+@pytest.mark.parametrize("path", ["/api/tools/execute"])
 def test_tools_execute_empty(system_client: TestClient, path: str) -> None:
     with patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator:
         r = system_client.post(path, json={})

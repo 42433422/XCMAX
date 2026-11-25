@@ -1,9 +1,9 @@
 /** Fixed promptfoo CLI inside the repository's official SRT network/filesystem boundary. */
-import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { assertLinuxWorkloadIsolation, assertOpenCodeHost,
@@ -13,6 +13,109 @@ const entry = fileURLToPath(import.meta.url);
 const placeholder = 'xcmax-training-provider-placeholder';
 const deny = () => ({ action: 'deny', reason: 'training_model_request_not_admitted' });
 const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
+
+// Reuse the pinned SRT CLI for a single product-owned entry. No command, policy
+// or network allowance is accepted from the replay's model/package payload.
+export function replaySpec({ directory, python }, env = process.env) {
+  const runtime = pinnedPackage(env.PROMPTFOO_SANDBOX_ENTRY,
+    '@anthropic-ai/sandbox-runtime', '0.0.83');
+  if (!['cli.js', 'index.js'].some(name => runtime.path === join(runtime.root, 'dist', name))) {
+    throw new Error('training_replay_runtime_required');
+  }
+  runtime.path = realpathSync(join(runtime.root, 'dist/cli.js'));
+  if (runtime.path !== join(runtime.root, 'dist/cli.js')) throw new Error('training_replay_runtime_required');
+  const root = realpathSync(directory);
+  if (!python || !statSync(python).isFile() || !statSync(root).isDirectory() || root === dirname(root)) {
+    throw new Error('training_replay_runtime_required');
+  }
+  return { runtime, directory: root, python: resolve(python),
+    project: realpathSync(resolve(dirname(entry), '../../../../成都修茈科技有限公司/MODstore_deploy')) };
+}
+
+export function replayPolicy(spec) {
+  const settings = sandboxSettings(spec.directory, spec.directory, spec.python,
+    process.execPath, new URL('https://replay.invalid'), false, spec.runtime.path);
+  const repository = resolve(dirname(entry), '../../../..');
+  const sourcePackages = [
+    ...['retort_engine', 'xcagi_common'].map(name => join(repository, 'packages', name, name)),
+    ...['core', 'checkpoint', 'prebuilt'].map(name =>
+      join(repository, 'FHD/packages', 'xcagi_langgraph_' + name, 'langgraph')),
+    join(repository, 'FHD/packages/xcagi_langgraph_sdk/langgraph_sdk'),
+    ...['sqlite', 'postgres'].map(name => join(repository,
+      'FHD/packages/xcagi_langgraph_checkpoint_backends', 'checkpoint-' + name, 'langgraph'))];
+  const programs = [join(spec.project, 'modstore_server'), join(spec.project, 'modman'),
+    resolve(dirname(entry), '../../../app'), ...sourcePackages];
+  const resource = join(spec.project, 'modstore_server/data/commerce_terms.generated.json');
+  // The SDK imports this module from a namespace directory without __init__.py.
+  const databaseSource = join(repository, 'FHD/app/infrastructure/database/database_manager.py');
+  const riskPolicies = ['risk_actions.registry.json', 'autonomy_boundaries.yaml']
+    .map(name => join(repository, 'FHD/config', name));
+  if ([...programs, resource, databaseSource, ...riskPolicies].some(path => realpathSync(path) !== path)
+      || [resource, databaseSource, ...riskPolicies].some(path => !statSync(path).isFile())) {
+    throw new Error('training_replay_source_boundary_changed');
+  }
+  // One read-only mount per program tree avoids SRT's 9000-argument limit.
+  // Deny every adjacent non-source entry, including unknown extensions and
+  // symlinks; preserve only the declared resource as a read exception.
+  const nonPrograms = (directory, namespacePackage = false) => readdirSync(directory, { withFileTypes: true }).flatMap(item => {
+    const path = join(directory, item.name);
+    if (item.isDirectory() && item.name !== '__pycache__'
+        && (namespacePackage || existsSync(join(path, '__init__.py'))
+        || resource.startsWith(path + sep))) return nonPrograms(path, namespacePackage);
+    return item.isFile() && (item.name.endsWith('.py') || path === resource) ? [] : [path];
+  });
+  const helper = resolve(dirname(entry),
+    '../../../../成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_training_sandbox.py');
+  if (realpathSync(helper) !== helper) throw new Error('training_replay_source_boundary_changed');
+  const metadata = spawnSync(spec.python, ['-I', helper], {
+    encoding: 'utf8', timeout: 10000, maxBuffer: 131072, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (metadata.error || metadata.status !== 0) throw new Error('training_replay_python_required');
+  const python = JSON.parse(metadata.stdout);
+  if (realpathSync(python.executable) !== realpathSync(spec.python)
+      || !Array.isArray(python.read_paths) || !python.read_paths.every(path =>
+        typeof path === 'string' && resolve(path) === path && existsSync(path))) {
+    throw new Error('training_replay_python_identity_changed');
+  }
+  settings.filesystem.allowRead.push(entry, spec.runtime.root, ...python.read_paths,
+    ...programs, resource, databaseSource, ...riskPolicies);
+  settings.filesystem.denyRead.push(...programs.flatMap(path =>
+    nonPrograms(path, sourcePackages.includes(path))));
+  // Runtime state stays denied even when it contains Python package markers.
+  settings.filesystem.denyRead.push(...['catalog_data', 'data', 'market_files', 'payment_orders',
+    'webhook_events', 'workbench_script_runs', 'backups', 'tests'].map(name =>
+    join(spec.project, 'modstore_server', name)));
+  settings.filesystem.allowWrite = [spec.directory];
+  return { ...settings, enableWeakerNestedSandbox: false, enableWeakerNetworkIsolation: false,
+    network: { allowedDomains: [], deniedDomains: ['*'], strictAllowlist: true,
+      allowUnixSockets: [], allowAllUnixSockets: false, allowLocalBinding: false } };
+}
+
+async function runReplaySandbox(options) {
+  // This offline boundary requires a private network namespace. Do not claim
+  // that other platforms' system DNS/service mediation is an offline replay.
+  if (process.platform !== 'linux') throw new Error('training_replay_linux_namespace_required');
+  assertOpenCodeHost();
+  const spec = replaySpec(options);
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 22 || (major === 22 && minor < 12)) throw new Error('training_node_22_12_required');
+  // The Python owner removes this sibling control directory only after the
+  // controller and its entire process group have exited, including on timeout.
+  const control = realpathSync(options.control || '');
+  if (!statSync(control).isDirectory() || control === spec.directory
+      || control.startsWith(spec.directory + sep)) throw new Error('training_replay_control_required');
+  const settings = join(control, 'sandbox-settings.json');
+  writeFileSync(settings, JSON.stringify(replayPolicy(spec)), { flag: 'wx', mode: 0o600 });
+  process.env.MODSTORE_REPLAY_PYTHON = spec.python;
+  process.env.MODSTORE_REPLAY_WORKDIR = spec.directory;
+  process.env.TMPDIR = control;
+  process.env.PYTHONDONTWRITEBYTECODE = '1';
+  process.argv = [process.execPath, spec.runtime.path, '--settings', settings,
+    '--', process.execPath, entry, '--replay-worker'];
+  // SRT owns native setup/cleanup; all descendants stay in the Python caller's
+  // owned process group, which is reaped on timeout as well as normal exit.
+  await import(pathToFileURL(spec.runtime.path));
+}
 
 function pinnedPackage(executable, name, version) {
   const path = realpathSync(executable || '');
@@ -64,6 +167,7 @@ export function trainerEnvironment(spec, temp) {
     PROMPTFOO_SELF_HOSTED: '1', PROMPTFOO_INSECURE_SSL: '0',
     PROMPTFOO_CONFIG_DIR: join(temp, 'promptfoo'), PROMPTFOO_LOG_DIR: join(temp, 'logs'),
     PROMPTFOO_PYTHON: spec.python, PYTHONPATH: spec.pythonpath,
+    XCAGI_TRAINING_DEFER_NATIVE_REPLAY: '1',
     PYTHONDONTWRITEBYTECODE: '1',
   };
 }
@@ -205,7 +309,14 @@ export async function runTrainerSandbox(options, env = process.env) {
 
 if (process.argv[1] && resolve(process.argv[1]) === entry) {
   try {
-    if (process.argv[2] === '--sandbox-worker') {
+    if (process.argv[2] === '--replay-worker') {
+      if (process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
+      process.env.TMPDIR = process.env.MODSTORE_REPLAY_WORKDIR;
+      const child = spawn(process.env.MODSTORE_REPLAY_PYTHON,
+        ['-B', '-m', 'modstore_server.workflow_training_replay', '--worker'], { stdio: 'inherit' });
+      child.once('error', () => { process.exitCode = 1; });
+      child.once('close', code => { process.exitCode = code ?? 1; });
+    } else if (process.argv[2] === '--sandbox-worker') {
       if (process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
       const chunks = [];
       for await (const chunk of process.stdin) chunks.push(chunk);
@@ -217,8 +328,11 @@ if (process.argv[1] && resolve(process.argv[1]) === entry) {
       process.argv = [process.execPath, workload.cli, ...workload.args];
       await import(pathToFileURL(workload.cli));
     } else {
-      const { values } = parseArgs({ options: { config: { type: 'string' }, output: { type: 'string' } } });
-      process.exitCode = await runTrainerSandbox(values);
+      const { values } = parseArgs({ options: { config: { type: 'string' }, output: { type: 'string' },
+        replay: { type: 'boolean' }, directory: { type: 'string' }, python: { type: 'string' },
+        control: { type: 'string' } } });
+      if (values.replay) await runReplaySandbox(values);
+      else process.exitCode = await runTrainerSandbox(values);
     }
   } catch {
     process.stderr.write('training_sandbox_failed; no unsandboxed evaluation fallback\n');

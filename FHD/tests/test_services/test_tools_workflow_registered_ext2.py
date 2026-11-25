@@ -191,42 +191,116 @@ class TestCustomersRouterMissingBranches:
         assert result["success"] is False
         assert "customers" in result["message"]
 
-    def test_fastapi_customer_route_delegate(self):
-        # Patch the function directly on the module: `from pkg import routes` uses
-        # getattr(pkg, 'routes') which bypasses sys.modules when the module is
-        # already cached as a parent-package attribute.
-        with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._execute_customers_route_action",
-            return_value={"success": True},
-        ):
+    @pytest.mark.parametrize("source", [None, "fastapi_customer_route", "mcp", "employee"])
+    def test_every_customer_entry_uses_the_same_service(self, source):
+        svc = self._mock_svc()
+        svc.get_all.return_value = {"success": True, "data": [{"id": 7}], "total": 1}
+        with patch("app.application.get_customer_app_service", return_value=svc):
             result = _registered_router_customers(
                 "query",
-                {},
-                {"service_source": "fastapi_customer_route"},
+                {"keyword": "Acme"},
+                {"service_source": source} if source else {},
                 "admin",
                 "",
             )
         assert result["success"] is True
+        assert result["data"] == [{"id": 7}]
+        svc.get_all.assert_called_once_with(keyword="Acme", page=1, per_page=20)
+
+    @pytest.mark.parametrize("source", [None, "fastapi_customer_route", "mcp", "employee"])
+    def test_customer_update_preserves_explicit_clear_and_omitted_fields(self, source):
+        svc = self._mock_svc()
+        svc.update.return_value = {"success": True, "data": {"id": 7}}
+        with patch("app.application.get_customer_app_service", return_value=svc):
+            result = _registered_router_customers(
+                "update",
+                {"id": 7, "contact_person": "", "address": "", "expected_version": 4},
+                {"service_source": source} if source else {},
+                "admin",
+                "",
+            )
+        assert result["success"] is True
+        svc.update.assert_called_once_with(
+            7, {"contact_person": "", "contact_address": "", "expected_version": 4}
+        )
 
 
 class TestProductsRouterMissingBranches:
     def _svc(self):
         return MagicMock()
 
-    def test_create_via_fastapi_product_route(self):
+    @pytest.mark.parametrize(
+        "source", [None, "fastapi_product_route", "fastapi_product_compat_route", "mcp", "employee"]
+    )
+    def test_every_product_entry_uses_the_same_service_and_fields(self, source):
         svc = self._svc()
-        svc.create_product.return_value = {"success": True}
-        # Patch _svc directly on the module: `from pkg import routes` uses
-        # getattr(pkg, 'routes') which bypasses sys.modules when already cached.
-        with patch("app.fastapi_routes.domains.product.product_routes._svc", return_value=svc):
+        svc.create_product.return_value = {"success": True, "product_id": 5}
+        params = {
+            "name": "P1",
+            "unit_price": 5.0,
+            "product_code": "m-1",
+            "unit": "件",
+            "quantity": 9,
+            "description": "完整字段",
+            "category": "材料",
+            "brand": "B",
+            "is_active": False,
+        }
+        with patch("app.services.get_products_service", return_value=svc):
             result = _registered_router_products(
                 "create",
-                {"name": "P1", "unit_price": 5.0},
-                {"service_source": "fastapi_product_route"},
+                params,
+                {"service_source": source} if source else {},
                 "admin",
                 "",
             )
         assert result["success"] is True
+        assert result["product_id"] == 5
+        svc.create_product.assert_called_once_with(
+            {
+                **params,
+                "name": "P1",
+                "product_name": "P1",
+                "model_number": "M-1",
+                "product_code": "M-1",
+                "specification": None,
+                "price": 5.0,
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "source", [None, "fastapi_product_route", "fastapi_product_compat_route", "mcp", "employee"]
+    )
+    def test_product_update_normalization_is_entry_independent(self, source):
+        svc = self._svc()
+        svc.update_product.return_value = {"success": True}
+        with patch("app.services.get_products_service", return_value=svc):
+            _registered_router_products(
+                "update",
+                {
+                    "id": 10,
+                    "unit_price": 0,
+                    "product_code": "M-2",
+                    "measure_unit": "箱",
+                    "description": "",
+                    "quantity": 0,
+                    "is_active": False,
+                },
+                {"service_source": source} if source else {},
+                "admin",
+                "",
+            )
+        svc.update_product.assert_called_once_with(
+            10,
+            {
+                "price": 0,
+                "model_number": "M-2",
+                "unit": "箱",
+                "description": "",
+                "quantity": 0,
+                "is_active": False,
+            },
+        )
 
     def test_create_product_failure(self):
         svc = self._svc()
@@ -288,18 +362,13 @@ class TestProductsRouterMissingBranches:
 
     def test_batch_delete_products_success(self):
         svc = self._svc()
-        svc.batch_delete_products.return_value = {"success": True}
+        svc.batch_delete_products.return_value = {"success": True, "deleted_count": 1}
         with patch("app.services.get_products_service", return_value=svc):
             result = _registered_router_products("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
         assert result["success"] is True
-
-    def test_batch_delete_products_fallback_to_batch_delete(self):
-        svc = self._svc()
-        del svc.batch_delete_products  # ensure not callable via getattr
-        svc.batch_delete = MagicMock(return_value={"success": True})
-        with patch("app.services.get_products_service", return_value=svc):
-            result = _registered_router_products("batch_delete", {"ids": [3]}, {}, "admin", "")
-        assert result["success"] is True
+        assert result["deleted_count"] == 1
+        svc.batch_delete_products.assert_called_once_with([1, 2])
+        svc.batch_delete.assert_not_called()
 
     def test_batch_delete_products_empty(self):
         result = _registered_router_products("batch_delete", {"ids": []}, {}, "admin", "")
@@ -332,12 +401,26 @@ class TestProductsRouterMissingBranches:
     def test_clear_collects_and_deletes_all_products(self):
         svc = self._svc()
         svc.get_products.return_value = {"success": True, "data": [{"id": 3}, {"id": 4}]}
-        svc.batch_delete_products.return_value = {"success": True}
+        svc.batch_delete_products.return_value = {"success": True, "deleted_count": 1}
         with patch("app.services.get_products_service", return_value=svc):
             result = _registered_router_products("clear", {}, {}, "admin", "")
         svc.batch_delete_products.assert_called_once_with([3, 4])
         assert result["success"] is True
-        assert result["deleted_count"] == 2
+        assert result["deleted_count"] == 1
+        svc.batch_delete.assert_not_called()
+
+    @pytest.mark.parametrize("action", ["batch_delete", "clear"])
+    def test_product_delete_preserves_failure_without_claiming_a_count(self, action):
+        svc = self._svc()
+        svc.get_products.return_value = {"success": True, "data": [{"id": 3}, {"id": 4}]}
+        receipt = {"success": False, "error_code": "storage_rejected"}
+        svc.batch_delete_products.return_value = receipt
+        with patch("app.services.get_products_service", return_value=svc):
+            result = _registered_router_products(action, {"ids": [3, 4]}, {}, "admin", "")
+        assert result == receipt
+        assert "deleted_count" not in result
+        svc.batch_delete_products.assert_called_once_with([3, 4])
+        svc.batch_delete.assert_not_called()
 
     def test_exists_model_in_list_but_name_matches(self):
         svc = self._svc()
@@ -385,36 +468,51 @@ class TestShipmentRecordsRouterCreate:
         result = _registered_router_shipment_records("fly", {}, {}, "admin", "")
         assert result["success"] is False
 
-    def test_clear_deletes_every_shipment_record(self):
+    @pytest.mark.parametrize(
+        "receipt",
+        [{"success": True, "deleted_count": 151}, {"success": False, "message": "delete rejected"}],
+    )
+    def test_clear_preserves_canonical_service_receipt(self, receipt):
         svc = MagicMock()
-        svc.get_shipment_records.return_value = {
-            "success": True,
-            "data": [{"id": 11}, {"id": 12}],
-        }
-        svc.delete_shipment_record.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        svc.clear_all_orders.return_value = receipt
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_records("clear", {}, {}, "admin", "")
-        assert svc.delete_shipment_record.call_count == 2
-        assert result["success"] is True
-        assert result["deleted_count"] == 2
+        svc.clear_all_orders.assert_called_once_with()
+        svc.get_shipment_records.assert_not_called()
+        svc.delete_shipment_record.assert_not_called()
+        assert result == receipt
 
 
 class TestShipmentOrdersRouterBranches:
     def _svc(self):
         return MagicMock()
 
+    def _products(self):
+        return [
+            {
+                "id": 1,
+                "product_name": "P1",
+                "quantity_tins": 2,
+                "tin_spec": 10,
+                "unit_price": 5,
+            }
+        ]
+
     def test_generate_success(self):
         svc = self._svc()
         svc.generate_shipment_document.return_value = {"success": True, "file_path": "/tmp/s.pdf"}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "generate",
-                {"unit_name": "Co", "products": [{"id": 1}]},
+                {"unit_name": "Co", "products": self._products()},
                 {},
                 "admin",
                 "",
             )
         assert result["success"] is True
+        svc.generate_shipment_document.assert_called_once_with(
+            unit_name="Co", products=self._products(), date=None
+        )
 
     def test_generate_missing_unit_name(self):
         result = _registered_router_shipment_orders(
@@ -433,12 +531,12 @@ class TestShipmentOrdersRouterBranches:
     def test_generate_batch_success(self):
         svc = self._svc()
         svc.generate_shipment_document.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "generate_batch",
                 {
                     "shipments": [
-                        {"unit_name": "Co", "products": [{"id": 1}]},
+                        {"unit_name": "Co", "products": self._products()},
                     ]
                 },
                 {},
@@ -447,6 +545,9 @@ class TestShipmentOrdersRouterBranches:
             )
         assert result["success"] is True
         assert result["data"]["processed"] == 1
+        svc.generate_shipment_document.assert_called_once_with(
+            unit_name="Co", products=self._products(), date=None
+        )
 
     def test_generate_batch_empty(self):
         result = _registered_router_shipment_orders(
@@ -483,33 +584,41 @@ class TestShipmentOrdersRouterBranches:
     def test_generate_batch_service_failure(self):
         svc = self._svc()
         svc.generate_shipment_document.return_value = {"success": False, "message": "err"}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "generate_batch",
-                {"shipments": [{"unit_name": "Co", "products": [1]}]},
+                {"shipments": [{"unit_name": "Co", "products": self._products()}]},
                 {},
                 "admin",
                 "",
             )
         assert result["data"]["errors"][0]["error"] == "err"
+        assert result["success"] is False and result["data"]["processed"] == 0
+        svc.generate_shipment_document.assert_called_once_with(
+            unit_name="Co", products=self._products(), date=None
+        )
 
     def test_generate_batch_service_exception(self):
         svc = self._svc()
-        svc.generate_shipment_document.side_effect = RuntimeError("boom")
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        svc.generate_shipment_document.side_effect = OSError("boom")
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "generate_batch",
-                {"shipments": [{"unit_name": "Co", "products": [1]}]},
+                {"shipments": [{"unit_name": "Co", "products": self._products()}]},
                 {},
                 "admin",
                 "",
             )
         assert "boom" in result["data"]["errors"][0]["error"]
+        assert result["success"] is False and result["data"]["processed"] == 0
+        svc.generate_shipment_document.assert_called_once_with(
+            unit_name="Co", products=self._products(), date=None
+        )
 
     def test_print_with_order_id(self):
         svc = self._svc()
         svc.mark_as_printed.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "print",
                 {"file_path": "/tmp/s.pdf", "order_id": 42, "printer_name": "HP"},
@@ -521,7 +630,7 @@ class TestShipmentOrdersRouterBranches:
         assert "updated" in result
 
     def test_print_without_order_id(self):
-        with patch("app.bootstrap.get_shipment_app_service", return_value=MagicMock()):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=MagicMock()):
             result = _registered_router_shipment_orders(
                 "print", {"file_path": "/tmp/s.pdf"}, {}, "admin", ""
             )
@@ -535,7 +644,7 @@ class TestShipmentOrdersRouterBranches:
     def test_clear_shipment(self):
         svc = self._svc()
         svc.clear_shipment_by_unit.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "clear_shipment", {"purchase_unit": "Co"}, {}, "admin", ""
             )
@@ -548,7 +657,7 @@ class TestShipmentOrdersRouterBranches:
     def test_set_sequence(self):
         svc = self._svc()
         svc.set_order_sequence.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders(
                 "set_sequence", {"sequence": 5}, {}, "admin", ""
             )
@@ -557,21 +666,21 @@ class TestShipmentOrdersRouterBranches:
     def test_reset_sequence(self):
         svc = self._svc()
         svc.reset_order_sequence.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders("reset_sequence", {}, {}, "admin", "")
         assert result["success"] is True
 
     def test_clear_all(self):
         svc = self._svc()
         svc.clear_all_orders.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders("clear_all", {}, {}, "admin", "")
         assert result["success"] is True
 
     def test_delete_shipment(self):
         svc = self._svc()
         svc.delete_shipment.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+        with patch("app.bootstrap.get_shipment_application_service_core", return_value=svc):
             result = _registered_router_shipment_orders("delete", {"id": 3}, {}, "admin", "")
         assert result["deleted_id"] == 3
 
@@ -772,23 +881,48 @@ class TestMaterialsRouterBranches:
             result = _registered_router_materials("delete", {"id": 3}, {}, "admin", "")
         assert result["message"] == "删除成功"
 
-    def test_batch_delete_service_exception(self):
+    @pytest.mark.parametrize("action", ["batch_delete", "clear"])
+    def test_batch_delete_service_exception(self, action):
         svc = MagicMock()
-        svc.batch_delete_materials.side_effect = RuntimeError("db error")
+        svc.get_all_materials.return_value = {"success": True, "data": [{"id": 1}]}
+        svc.batch_delete_materials.side_effect = ConnectionError("db error")
         with patch("app.application.get_material_application_service", return_value=svc):
-            result = _registered_router_materials("batch_delete", {"ids": [1]}, {}, "admin", "")
+            result = _registered_router_materials(action, {"ids": [1]}, {}, "admin", "")
         assert result["success"] is False
+        assert result["execution_state"] == "unknown"
         assert result["outcome"] == "unknown"
-        assert result["reconciliation_required"] and result["retryable"] is False
+        assert result["error_code"] == "material_delete_outcome_unknown"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
         assert "deleted_count" not in result and "warning" not in result
+        svc.batch_delete_materials.assert_called_once_with([1])
 
-    def test_batch_delete_non_dict_result(self):
+    @pytest.mark.parametrize("action", ["batch_delete", "clear"])
+    @pytest.mark.parametrize(
+        "receipt", [None, {}, {"success": True}, {"success": True, "deleted_count": "2"}]
+    )
+    def test_batch_delete_missing_valid_receipt(self, action, receipt):
         svc = MagicMock()
-        svc.batch_delete_materials.return_value = None
+        svc.get_all_materials.return_value = {"success": True, "data": [{"id": 1}, {"id": 2}]}
+        svc.batch_delete_materials.return_value = receipt
         with patch("app.application.get_material_application_service", return_value=svc):
-            result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
-        assert result["success"] is True
-        assert result["deleted_count"] == 2
+            result = _registered_router_materials(action, {"ids": [1, 2]}, {}, "admin", "")
+        assert result["success"] is False
+        assert result["execution_state"] == "unknown"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
+        assert "deleted_count" not in result
+        svc.batch_delete_materials.assert_called_once_with([1, 2])
+
+    @pytest.mark.parametrize("action", ["batch_delete", "clear"])
+    def test_delete_preserves_actual_service_failure(self, action):
+        svc = MagicMock()
+        svc.get_all_materials.return_value = {"success": True, "data": [{"id": 1}, {"id": 2}]}
+        receipt = {"success": False, "error_code": "storage_rejected", "message": "未删除"}
+        svc.batch_delete_materials.return_value = receipt
+        with patch("app.application.get_material_application_service", return_value=svc):
+            result = _registered_router_materials(action, {"ids": [1, 2]}, {}, "admin", "")
+        assert result == receipt
+        assert "deleted_count" not in result
+        svc.batch_delete_materials.assert_called_once_with([1, 2])
 
     def test_clear_collects_and_deletes_all_materials(self):
         svc = MagicMock()
@@ -797,9 +931,19 @@ class TestMaterialsRouterBranches:
             "data": [{"id": 8}, {"id": 9}],
             "total": 2,
         }
-        svc.batch_delete_materials.return_value = {"success": True}
+        svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 1}
         with patch("app.application.get_material_application_service", return_value=svc):
             result = _registered_router_materials("clear", {}, {}, "admin", "")
         svc.batch_delete_materials.assert_called_once_with([8, 9])
         assert result["success"] is True
-        assert result["deleted_count"] == 2
+        assert result["deleted_count"] == 1
+
+    @pytest.mark.parametrize("listing", [None, {"success": False, "data": []}])
+    def test_clear_cannot_report_empty_success_when_listing_fails(self, listing):
+        svc = MagicMock()
+        svc.get_all_materials.return_value = listing
+        with patch("app.application.get_material_application_service", return_value=svc):
+            result = _registered_router_materials("clear", {}, {}, "admin", "")
+        assert result["success"] is False
+        assert "deleted_count" not in result
+        svc.batch_delete_materials.assert_not_called()

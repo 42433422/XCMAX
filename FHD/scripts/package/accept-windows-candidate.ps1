@@ -2,11 +2,13 @@ param(
   [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade','Gui','Recovery','Rollback')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$CandidatePath,
   [Parameter(Mandatory=$true)][string]$CandidateSha,
+  [Parameter(Mandatory=$true)][string]$CandidateVersion,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
   [string]$OldPath = '',
   [string]$BaselineVersion = ''
 )
-$ErrorActionPreference = 'Stop'; . (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion
+$ErrorActionPreference = 'Stop'; . (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion -SourceSha $CandidateSha
+if ($CandidateVersion -cne $productVersion) { throw 'Candidate receipt version differs from its frozen source' }
 $accountMode = if ($env:XCAGI_ACCEPTANCE_ACCOUNT_MODE) { $env:XCAGI_ACCEPTANCE_ACCOUNT_MODE } else { 'shared-serial' }
 $baselines = (Get-Content (Join-Path $PSScriptRoot '../../config/download_release.json') -Raw | ConvertFrom-Json).windows_acceptance_baselines
 if (-not $BaselineVersion) { $BaselineVersion = $baselines.default }
@@ -129,6 +131,7 @@ function Backup-And-Version {
 function Run-Gui([string]$phase, [string]$directory, [string]$seed = '') {
   New-Item -ItemType Directory -Force -Path $directory | Out-Null; $env:XCAGI_GUI_EVIDENCE = (Resolve-Path $directory).Path; $env:XCAGI_GUI_PHASE = $phase; $env:XCAGI_GUI_SEED = $seed
   $env:XCAGI_GUI_MODE = $Mode
+  $env:XCAGI_GUI_PRODUCT_VERSION = $productVersion
   $env:XCAGI_GUI_BUILD_SHA = (Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json).gitSha
   & node (Join-Path $PSScriptRoot '../dev/record_enterprise_desktop_init.mjs'); Check ($LASTEXITCODE -eq 0) "normal_gui_$phase" 'requested GUI phase must complete with all assertions'
   return (Join-Path $env:XCAGI_GUI_EVIDENCE 'gui-business.json')

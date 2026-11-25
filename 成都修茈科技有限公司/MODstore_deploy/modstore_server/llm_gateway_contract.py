@@ -7,8 +7,37 @@ native HTTP response headers before any local Router normalization.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
+
+MAX_STREAM_BYTES = 16_777_216
+MAX_STREAM_EVENTS = 65_536
+
+
+class StreamLimitError(ValueError):
+    """The original model response exceeded the host's resource budget."""
+
+
+class StreamReceiptBudget:
+    """Bound SDK-decoded receipts before forwarding or retaining tool arguments."""
+
+    def __init__(self) -> None:
+        self._events = 0
+        self._bytes = 0
+
+    def consume(self, data: Mapping[str, Any]) -> None:
+        self._events += 1
+        if self._events > MAX_STREAM_EVENTS:
+            raise StreamLimitError("model stream event limit exceeded")
+        try:
+            self._bytes += len(
+                json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            )
+        except ValueError:
+            raise StreamLimitError("model stream contains invalid JSON text") from None
+        if self._bytes > MAX_STREAM_BYTES:
+            raise StreamLimitError("model stream byte limit exceeded")
 
 
 def codex_deployment_identity(info: Mapping[str, Any], params: Mapping[str, Any]) -> dict[str, str]:

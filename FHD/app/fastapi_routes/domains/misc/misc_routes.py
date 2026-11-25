@@ -12,11 +12,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application import tenant_workspace_prefs as _prefs
+from app.application.workflow_registry_app import get_workflow_tool_registry
 from app.domain.ai.tools_directory import (
     get_tool_categories_payload,
     get_tools_payload,
-    register_workflow_tool_registry_provider,
 )
+from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 from app.fastapi_routes.domains.misc import memory_v2_agent as _memory_agent
 from app.fastapi_routes.domains.misc.persona_route_helpers import resolve_persona_user_id
 from app.infrastructure.auth.db_token import (
@@ -31,16 +32,6 @@ from app.infrastructure.db.sync_engine import (
     switch_to_test_mode,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-
-def _workflow_tool_registry_provider() -> list[dict]:
-    """组装注入：domain 工具目录经本门面惰性访问 application 层 workflow 注册表。"""
-    from app.application.tools.workflow import get_workflow_tool_registry
-
-    return get_workflow_tool_registry()
-
-
-register_workflow_tool_registry_provider(_workflow_tool_registry_provider)
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -378,8 +369,8 @@ def compat_intent_packages_underscore_slash() -> dict:
 
 @router.get("/tools", summary="工具表目录（与 XCAGI ToolsView / pro-mode 对齐）")
 @router.get("/tools/", summary="工具表目录（尾斜杠）", include_in_schema=False)
-def compat_tools_list(role: str | None = Query(default=None)) -> dict:
-    payload = get_tools_payload()
+def compat_tools_list(request: Request, role: str | None = Query(default=None)) -> dict:
+    payload = get_tools_payload(get_workflow_tool_registry(request_runtime_context(request)))
     if role:
         tools = payload.get("tools") or []
         filtered = [t for t in tools if not t.get("roles") or role in t.get("roles", [])]
@@ -389,13 +380,8 @@ def compat_tools_list(role: str | None = Query(default=None)) -> dict:
 
 @router.get("/db-tools", summary="工具表目录别名（前端优先请求）")
 @router.get("/db-tools/", summary="工具表目录别名（尾斜杠）", include_in_schema=False)
-def compat_db_tools_list(role: str | None = Query(default=None)) -> dict:
-    payload = get_tools_payload()
-    if role:
-        tools = payload.get("tools") or []
-        filtered = [t for t in tools if not t.get("roles") or role in t.get("roles", [])]
-        payload = {**payload, "tools": filtered}
-    return payload
+def compat_db_tools_list(request: Request, role: str | None = Query(default=None)) -> dict:
+    return compat_tools_list(request, role)
 
 
 @router.get("/tool-categories", summary="工具分类列表")

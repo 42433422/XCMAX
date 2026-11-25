@@ -14,6 +14,7 @@ from __future__ import annotations
 from contextlib import contextmanager as _shared_scope_contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 import app.domain.shared_services.deepseek_intent_service as ds
@@ -331,7 +332,7 @@ class TestRecognizeAsync:
         msg = "RECOGNIZE_ERROR_UNIQUE_004"
         with patch(
             "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(side_effect=RuntimeError("network down")),
+            new=AsyncMock(side_effect=httpx.ConnectError("network down")),
         ):
             out = await recognizer.recognize(msg)
         assert out["intent"] is None
@@ -436,8 +437,9 @@ class TestHybridRecognize:
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=RuntimeError("boom"))
         with _shared_scope_case_0(rule):
-            out = await h.recognize("触发异常")
-        assert out["intent_source"] == "rule"
+            with pytest.raises(RuntimeError, match="^boom$"):
+                await h.recognize("触发异常")
+        h.deepseek_recognizer.recognize.assert_awaited_once_with("触发异常", None)
 
 
 # --------------------------------------------------------------------------- #

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""校验运行时依赖名；为 CI 从现有 uv.lock 读取唯一 pytest 精确版本。"""
+"""校验运行时依赖名；为 CI 从现有 uv.lock 读取测试工具链精确版本。"""
 
 from __future__ import annotations
 
@@ -47,24 +47,36 @@ def parse_lock(path: Path) -> set[str]:
     return names
 
 
-def locked_pytest_requirement(lock: Path = ROOT / "uv.lock") -> str:
+def locked_requirements(names: tuple[str, ...], lock: Path = ROOT / "uv.lock") -> list[str]:
     with lock.open("rb") as stream:
         packages = tomllib.load(stream)["package"]
-    versions = [p.get("version", "") for p in packages if p.get("name") == "pytest"]
-    if len(versions) != 1 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){2}", versions[0]):
-        raise ValueError("uv.lock must contain exactly one stable pytest X.Y.Z version")
-    return f"pytest=={versions[0]}"
+    pins = []
+    for name in names:
+        versions = [p.get("version", "") for p in packages if p.get("name") == name]
+        if len(versions) != 1 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){2}", versions[0]):
+            raise ValueError(f"uv.lock must contain exactly one stable {name} X.Y.Z version")
+        pins.append(f"{name}=={versions[0]}")
+    return pins
+
+
+def locked_pytest_requirement(lock: Path = ROOT / "uv.lock") -> str:
+    return locked_requirements(("pytest",), lock)[0]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pytest-pin", action="store_true")
+    pins = parser.add_mutually_exclusive_group()
+    pins.add_argument("--pytest-pin", action="store_true")
+    pins.add_argument("--test-toolchain-pins", action="store_true")
     args = parser.parse_args(argv)
-    if args.pytest_pin:
+    if args.pytest_pin or args.test_toolchain_pins:
         try:
-            print(locked_pytest_requirement())
+            names = (
+                ("pytest", "pytest-cov", "coverage") if args.test_toolchain_pins else ("pytest",)
+            )
+            print(" ".join(locked_requirements(names)))
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            print(f"cannot read locked pytest requirement: {exc}", file=sys.stderr)
+            print(f"cannot read locked test requirements: {exc}", file=sys.stderr)
             return 1
         return 0
     if not REQ.is_file():
