@@ -46,6 +46,24 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     return reply;
   }
 
+  Future<Map<String, Object?>> loadChatComposerDraft(
+      String conversationId) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return const {};
+    final draft = await store.readChatDraft(conversationId);
+    return scope == await _offlineScope() ? draft : const {};
+  }
+
+  Future<void> saveChatComposerDraft(String conversationId, String text,
+      {List<String> attachmentNames = const []}) async {
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return;
+    await store.saveChatDraft(conversationId, text,
+        attachmentNames: attachmentNames);
+  }
+
   Future<List<ChatMessage>> loadInitialMessages(
     ConversationItem conversation,
   ) async {
