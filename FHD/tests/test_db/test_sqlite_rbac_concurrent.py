@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Event
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.pool import NullPool
 
 from app.db.bootstrap.seeding import seed_rbac
@@ -25,8 +25,13 @@ def _engine(db_path):
     )
 
 
-def _seed_from_independent_connection(db_path, barrier):
+def _seed_from_independent_connection(db_path, barrier, write_attempt=None):
     engine = _engine(db_path)
+    if write_attempt is not None:
+        def _watch_begin(_conn, _cursor, statement, _params, _context, _many):
+            if statement.strip().upper() == "BEGIN IMMEDIATE":
+                write_attempt.set()
+        event.listen(engine, "before_cursor_execute", _watch_begin)
     try:
         barrier.wait(timeout=10)
         seed_rbac(engine, logger=_LOGGER)
@@ -88,12 +93,18 @@ def test_seed_waits_for_external_sqlite_writer_and_preserves_existing_rows(tmp_p
         with engine.connect() as writer:
             writer.exec_driver_sql("BEGIN IMMEDIATE")
             with ThreadPoolExecutor(max_workers=1) as executor:
+                write_attempt = Event()
                 future = executor.submit(
                     _seed_from_independent_connection,
                     db_path,
                     Barrier(1),
+                    write_attempt,
                 )
-                writer.commit()
+                try:
+                    assert write_attempt.wait(timeout=10)
+                    assert not future.done()
+                finally:
+                    writer.commit()
                 future.result(timeout=30)
         with engine.connect() as conn:
             codes = conn.execute(text("SELECT code FROM permissions")).scalars().all()
