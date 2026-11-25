@@ -1,9 +1,9 @@
 <template>
-  <div ref="hostRef" class="msg-body" v-html="rendered" />
+  <div ref="hostRef" class="msg-body" v-html="rendered" @click="onBodyClick" />
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
 
@@ -14,6 +14,8 @@ const props = defineProps<{
 }>()
 
 const hostRef = ref<HTMLDivElement | null>(null)
+let disposed = false
+const feedbackTimers = new Set<number>()
 
 const rendered = computed(() => {
   const text = props.content || ''
@@ -58,17 +60,19 @@ function hashStr(s: string): number {
 
 async function flushMermaid() {
   const host = hostRef.value
-  if (!host) return
+  if (!host || disposed) return
   const els = Array.from(host.querySelectorAll('.md-mermaid')) as HTMLElement[]
   if (!els.length) return
   let mer
   try {
     mer = await getMermaid()
+    if (disposed || hostRef.value !== host) return
   } catch {
     for (const el of els) el.textContent = '[流程图加载失败]'
     return
   }
   for (const el of els) {
+    if (disposed || hostRef.value !== host || !host.contains(el)) return
     const src = el.dataset.source || ''
     if (!src) {
       el.dataset.rendered = '1'
@@ -112,58 +116,57 @@ async function flushMermaid() {
         `</div>` +
         `<pre class="md-code"><code class="md-code__body">${escapeText(src)}</code></pre>` +
         `</div>`
-      const copyBtn = el.querySelector('[data-copy-source]') as HTMLButtonElement | null
-      if (copyBtn) {
-        copyBtn.addEventListener('click', async () => {
-          const orig = copyBtn.textContent
-          try {
-            await navigator.clipboard.writeText(src)
-            copyBtn.textContent = '已复制'
-          } catch {
-            copyBtn.textContent = '复制失败'
-          }
-          window.setTimeout(() => {
-            copyBtn.textContent = orig || '复制源码'
-          }, 1400)
-        })
-      }
+      // The host click delegate handles copied Mermaid sources.
     }
     el.dataset.rendered = '1'
     el.dataset.srcHash = srcHash
   }
 }
 
-function bindCopyButtons() {
+async function onBodyClick(event: MouseEvent) {
   const host = hostRef.value
-  if (!host) return
-  const btns = Array.from(host.querySelectorAll('.md-code__copy')) as HTMLButtonElement[]
-  for (const btn of btns) {
-    if (btn.dataset.bound === '1') continue
-    btn.dataset.bound = '1'
-    btn.addEventListener('click', async () => {
-      const code = btn.parentElement?.parentElement?.querySelector('.md-code__body')?.textContent || ''
-      try {
-        await navigator.clipboard.writeText(code)
-        const orig = btn.textContent
-        btn.textContent = '已复制'
-        window.setTimeout(() => {
-          btn.textContent = orig || '复制'
-        }, 1400)
-      } catch {
-        btn.textContent = '复制失败'
-      }
-    })
+  const target = event.target
+  if (disposed || !host || !(target instanceof Element)) return
+  const button = target.closest<HTMLButtonElement>('.md-code__copy, [data-copy-source]')
+  if (!button || !host.contains(button)) return
+  const source = button.hasAttribute('data-copy-source')
+  const value = source
+    ? button.closest<HTMLElement>('.md-mermaid')?.dataset.source || ''
+    : button.parentElement?.parentElement?.querySelector('.md-code__body')?.textContent || ''
+  const initial = button.textContent
+  try {
+    await navigator.clipboard.writeText(value)
+    if (disposed || !host.contains(button)) return
+    button.textContent = '已复制'
+  } catch {
+    if (disposed || !host.contains(button)) return
+    button.textContent = '复制失败'
   }
+  const timer = window.setTimeout(() => {
+    feedbackTimers.delete(timer)
+    if (!disposed && hostRef.value?.contains(button)) {
+      button.textContent = initial || (source ? '复制源码' : '复制')
+    }
+  }, 1400)
+  feedbackTimers.add(timer)
 }
 
 async function flushAll() {
   await nextTick()
-  bindCopyButtons()
-  await flushMermaid()
+  if (!disposed) await flushMermaid()
 }
 
 onMounted(() => {
   void flushAll()
+})
+onBeforeUnmount(() => {
+  disposed = true
+  if (_postFlushRafId !== null) {
+    cancelAnimationFrame(_postFlushRafId)
+    _postFlushRafId = null
+  }
+  for (const timer of feedbackTimers) clearTimeout(timer)
+  feedbackTimers.clear()
 })
 
 // 流式输出中只更新 rendered HTML（computed 自动处理），
@@ -179,7 +182,7 @@ watch(
     if (_postFlushRafId !== null) return
     _postFlushRafId = requestAnimationFrame(() => {
       _postFlushRafId = null
-      void flushAll()
+      if (!disposed) void flushAll()
     })
   },
 )
