@@ -5432,7 +5432,7 @@ void main() {
     expect(find.text('电脑工具已完成任务。'), findsOneWidget);
   });
 
-  testWidgets('chat detail failed assistant bubble can resend like Flutter', (
+  testWidgets('chat detail unconfirmed assistant bubble reads only the original receipt', (
     WidgetTester tester,
   ) async {
     final repository = _FakeFailThenStreamingRepository();
@@ -5453,7 +5453,10 @@ void main() {
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 
-    expect(find.text('发送失败'), findsOneWidget);
+    expect(find.text('结果未确认'), findsOneWidget);
+    expect(find.text('发送失败'), findsNothing);
+    expect(repository.calls, ['继续']);
+    expect(repository.resumeFlags, [false]);
     expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
     expect(find.text('核对结果'), findsOneWidget);
@@ -5466,7 +5469,8 @@ void main() {
     expect(repository.turnKeys[0], isNotEmpty);
     expect(repository.turnKeys[1], repository.turnKeys[0]);
     expect(find.text('原任务核对完成'), findsOneWidget);
-    expect(find.text('发送失败'), findsNothing);
+    expect(find.text('结果未确认'), findsNothing);
+    expect(find.text('核对结果'), findsNothing);
     expect(find.text('继续'), findsOneWidget);
   });
 
