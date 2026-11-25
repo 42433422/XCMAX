@@ -1,5 +1,5 @@
 {
-  "lines": 2736522,
+  "lines": 2736647,
   "updated": "2026-11-25",
-  "note": "集成候选 #3615/#3620/#3621/#3623，基于 main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37。共用 CHANGELOG 累加，客户 CRUD 同时保留 #3620 分页/排序和 #3621 更新事务/版本合同。逐文件净增估算 2733134+3388=2736522；仍需原 check_net_deletion/preflight/required CI/真实 PostgreSQL/客户授权原件与独立签收验证，不得以此登记代替 PASS。"
+  "note": "#3658 当前候选 HEAD 9e0d508ae6f5fe4b433892bc1e6fd0f412ce737f 相对 main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37 受审源码及文档净增长 3513 行，对应总数 2736647；新增 business receipt 身份/PG 查询 SHA 与延迟样本防伪等回归。GitHub compare 人工登记，原 check_net_deletion/preflight/CI 尚未执行通过；不得替代真实业务签收或授权 PostgreSQL 验收，不降低原门禁。"
 }
