@@ -25,7 +25,7 @@
       @keydown="onKeydown"
       @blur="onBlur"
     />
-    <Teleport to="body">
+    <Teleport to="body" :disabled="paletteOpen">
       <ul
         v-if="open"
         id="top-quick-nav-list"
@@ -259,13 +259,10 @@ function placeList() {
   const el = inputRef.value
   if (!el?.getBoundingClientRect) return
   const rect = el.getBoundingClientRect()
-  listStyle.value = {
-    position: 'fixed',
-    top: `${rect.bottom + 6}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    zIndex: paletteOpen.value ? 4602 : 4000,
-  }
+  listStyle.value = paletteOpen.value
+    ? { position: 'relative', top: 'auto', left: 'auto', width: '100%', zIndex: 1 }
+    : { position: 'fixed', top: `${rect.bottom + 6}px`, left: `${rect.left}px`,
+        width: `${rect.width}px`, zIndex: 4000 }
 }
 
 function cancelBlur() {
@@ -657,6 +654,17 @@ function onKeydown(event) {
   font-size: 15px;
   padding-left: 38px;
 }
+.top-quick-nav--palette .top-quick-nav__list {
+  margin: 8px 0 0;
+  width: 100%;
+  box-sizing: border-box;
+  max-height: min(48vh, 460px);
+  padding: 4px 0;
+  background: var(--el-bg-color-overlay, #fff);
+  border: 0;
+  box-shadow: none;
+}
+
 .top-quick-nav--palette .top-quick-nav__icon { left: 24px; top: 34px; }
 .top-quick-nav__star { color: #b48b24; margin-left: auto; }
 .top-quick-nav__footer {
