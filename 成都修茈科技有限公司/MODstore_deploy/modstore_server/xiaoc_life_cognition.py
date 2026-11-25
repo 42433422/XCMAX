@@ -505,6 +505,8 @@ def _readback_measurement(
     ):
         return None
     feedback = details.get("outcome_feedback")
+    if not isinstance(feedback, dict):
+        return None
     measured = _measurement_receipt(feedback, evidence_refs=evidence)
     if measured["status"] != "measurement_verified" or feedback[
         "evidence_ref"
@@ -566,9 +568,10 @@ def _settled_reflections(
             ):
                 continue
         else:
-            receipt = _readback_measurement(state, event, details, evidence)
-            if receipt is None:
+            restored = _readback_measurement(state, event, details, evidence)
+            if restored is None:
                 continue
+            receipt = restored
         settled.append((event_id, details["outcome_feedback"], receipt))
     return settled
 

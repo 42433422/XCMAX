@@ -319,7 +319,8 @@ def read_accrual(state: dict[str, Any]) -> dict[str, Any]:
                 record = portfolios[cache_key]
                 if record.get("owner_user_id") != owner or record.get("decision_id") != decision:
                     return None
-                return record.get("tasks", {}).get(opportunity, {}).get("calls", {}).get(request)
+                found = record.get("tasks", {}).get(opportunity, {}).get("calls", {}).get(request)
+                return found if isinstance(found, dict) else None
             with get_session_factory()() as session:
                 row = session.scalar(
                     select(LlmClientRequest).where(
@@ -329,10 +330,12 @@ def read_accrual(state: dict[str, Any]) -> dict[str, Any]:
                 )
                 if row is None or row.state != "completed":
                     return None
-                receipt = json.loads(row.done_json or "{}")
-                if receipt.get("request_id") != request or receipt.get("owner_user_id") != owner:
+                parsed = json.loads(row.done_json or "{}")
+                if not isinstance(parsed, dict):
                     return None
-                return receipt
+                if parsed.get("request_id") != request or parsed.get("owner_user_id") != owner:
+                    return None
+                return parsed
         except (PortfolioError, SQLAlchemyError, ValueError, OSError):
             return None
 

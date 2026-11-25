@@ -315,7 +315,7 @@ def create_portfolio_proposal(
                 select(StrategicDecision).where(StrategicDecision.decision_id == stable_id)
             )
             if previous is not None:
-                stored = json.loads(previous.decision_payload_json or "{}")
+                stored = json.loads(cast(str | None, previous.decision_payload_json) or "{}")
                 if (
                     stored.get("_idempotency_key") != record_key
                     or stored.get("decision_review", {}).get("request_sha256") != request_sha
@@ -325,7 +325,7 @@ def create_portfolio_proposal(
                 return {
                     "schema": SCHEMA,
                     "decision": _model_to_record(previous).to_dict(),
-                    "plan": json.loads(previous.execution_plan_json or "{}"),
+                    "plan": json.loads(cast(str | None, previous.execution_plan_json) or "{}"),
                     "decision_review": stored["decision_review"],
                 }
         comparison, selected = compare_options(

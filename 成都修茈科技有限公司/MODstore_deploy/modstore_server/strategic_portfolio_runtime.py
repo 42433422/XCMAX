@@ -8,7 +8,7 @@ import math
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -110,7 +110,7 @@ def _claim(decision_id: str, owner_user_id: int | None) -> dict[str, Any] | None
                 for field in RESOURCES
             ):
                 raise PortfolioError("portfolio resource budget exhausted")
-            task = {
+            task: dict[str, Any] = {
                 "status": "running",
                 "lease_token": token,
                 "reservation": reservation,
@@ -722,7 +722,7 @@ def read_life_closeout_receipt(
                 or action.status != "completed"
                 or action.completed_at is None
                 or action.assigned_to != opportunity["employee_id"]
-                or _json(json.loads(action.result_json)) != _json(task)
+                or _json(json.loads(cast(str, action.result_json))) != _json(task)
             ):
                 return None
 
