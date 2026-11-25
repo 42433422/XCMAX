@@ -1,5 +1,5 @@
 {
-  "lines": 2733199,
+  "lines": 2733201,
   "updated": "2026-11-25",
-  "note": "工作组09 I09 / #3608：修复 NeuroBus 死信重放 publish(False) 假成功和原入队回执传递；增加内存与 SQLite 拒绝/恢复/去重负例。只调整实际代码、测试和 CHANGELOG 净增 65 行，不降低 SLO、审批及 CI 门槛。"
+  "note": "工作组09 I09 / #3608：修复 NeuroBus 死信重放 publish(False) 假成功和原入队回执传递；增加内存与 SQLite 拒绝/恢复/去重负例。只调整实际代码、测试和 CHANGELOG 净增 67 行，不降低 SLO、审批及 CI 门槛。"
 }

@@ -53,7 +53,11 @@ def test_legacy_callback_none_still_means_callback_completed() -> None:
     dlq = DeadLetterQueue()
     observed: list[str] = []
     dlq.on_replay(lambda event: observed.append(event.event_type))
-    entry_id = dlq.enqueue(NeuroEvent(event_type="test.legacy", payload={}),
-                           DeadLetterReason.TIMEOUT, "first failure", 0)
+    entry_id = dlq.enqueue(
+        NeuroEvent(event_type="test.legacy", payload={}),
+        DeadLetterReason.TIMEOUT,
+        "first failure",
+        0,
+    )
     assert dlq.replay(entry_id) == (True, "")
     assert observed == ["test.legacy"]
