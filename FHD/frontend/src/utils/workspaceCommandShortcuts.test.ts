@@ -39,6 +39,22 @@ describe('desktop workspace keyboard and preference contract', () => {
     expect(validateWorkspaceShortcut(d, 'chat', 'Mod+W')).not.toBe('')
     expect(validateWorkspaceShortcut(d, 'chat', 'Mod+Alt+Y')).toBe('')
   })
+  it('reserves the native macOS hide-others chord and migrates old saved bindings', () => {
+    const d = defaultWorkspaceShortcuts()
+    const legacy = key({ metaKey: true, altKey: true, key: 'h', code: 'KeyH' })
+    expect(validateWorkspaceShortcut(d, 'sessions', 'Mod+Alt+H')).toContain('保留')
+    expect(workspaceCommandForKey(legacy, { ...d, sessions: 'Mod+Alt+H' }, true)).toBeNull()
+    expect(workspaceCommandForKey(key({ metaKey: true, shiftKey: true, key: 'H' }), d, true)).toBe('sessions')
+    const m = memory()
+    m.setItem('legacy', JSON.stringify({ shortcuts: { sessions: 'Mod+Alt+H' } }))
+    expect(readWorkspaceCommandPreferences('legacy', m).shortcuts.sessions).toBe('Mod+Shift+H')
+  })
+  it('handles macOS Option-produced characters and rejects AltGraph or duplicate dispatch', () => {
+    const d = defaultWorkspaceShortcuts()
+    expect(workspaceCommandForKey(key({ metaKey: true, altKey: true, key: 'Dead', code: 'KeyN' }), d, true)).toBe('new-chat')
+    expect(workspaceCommandForKey(key({ ctrlKey: true, altKey: true, key: 'n', getModifierState: name => name === 'AltGraph' }), d, false)).toBeNull()
+    expect(workspaceCommandForKey(key({ ctrlKey: true }), { ...d, chat: d.palette }, false)).toBeNull()
+  })
   it('persists per-account preferences, favorites, recents and layout', () => {
     const m = memory(), prefs = defaultWorkspaceCommandPreferences()
     prefs.shortcuts.chat = 'Mod+Alt+Y'
