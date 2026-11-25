@@ -105,6 +105,10 @@ class AppTheme {
         space: 0,
       ),
       cardTheme: _cardTheme(surface),
+      dialogTheme: _dialogTheme(surface),
+      bottomSheetTheme: _bottomSheetTheme(surface, divider),
+      popupMenuTheme: _popupMenuTheme(surface),
+      sliderTheme: _sliderTheme(brand, divider),
       filledButtonTheme: _filledButtonTheme(),
       inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(textPrimary),
@@ -180,11 +184,60 @@ class AppTheme {
         space: 0,
       ),
       cardTheme: _cardTheme(darkSurface),
+      dialogTheme: _dialogTheme(darkSurface),
+      bottomSheetTheme: _bottomSheetTheme(darkSurface, darkBorder),
+      popupMenuTheme: _popupMenuTheme(darkSurface),
+      sliderTheme: _sliderTheme(darkBrand, darkBorder),
       filledButtonTheme: _filledButtonTheme(),
       inputDecorationTheme: _inputDecorationTheme,
       textTheme: _typography(darkTextPrimary),
     );
   }
+
+  // Use native Material overlays and their built-in focus, modal barrier, layer
+  // and keyboard behavior. Geometry and motion values come from DesignTokens.
+  static DialogThemeData _dialogTheme(Color color) => DialogThemeData(
+        backgroundColor: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLarge),
+        ),
+      );
+
+  static BottomSheetThemeData _bottomSheetTheme(Color color, Color divider) =>
+      BottomSheetThemeData(
+        backgroundColor: color,
+        modalBackgroundColor: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        modalElevation: DesignTokens.elevationLevel3,
+        showDragHandle: true,
+        dragHandleColor: divider,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(DesignTokens.radiusLarge),
+          ),
+        ),
+      );
+
+  static PopupMenuThemeData _popupMenuTheme(Color color) =>
+      PopupMenuThemeData(
+        color: color,
+        surfaceTintColor: Colors.transparent,
+        elevation: DesignTokens.elevationLevel2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+        ),
+      );
+
+  static SliderThemeData _sliderTheme(Color primary, Color divider) =>
+      SliderThemeData(
+        trackHeight: DesignTokens.spacingXs,
+        activeTrackColor: primary,
+        inactiveTrackColor: divider,
+        thumbColor: primary,
+      );
 
   // Native Material components keep the same geometry in both themes.
   static CardThemeData _cardTheme(Color color) => CardThemeData(
