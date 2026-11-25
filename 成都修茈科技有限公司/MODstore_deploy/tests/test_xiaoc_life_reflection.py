@@ -380,6 +380,8 @@ def test_experience_scope_is_exact_and_advisory_only():
     scope = experience_scope(candidates[0])
     assert scope is not None
     assert scope["category"] == "approved_task_with_observed_metric"
+    assert experience_scope({**candidates[0], "target": float("inf")}) is None
+    assert experience_scope({**candidates[0], "target": float("nan")}) is None
     hypothesis = {
         "metric_id": candidates[0]["metric_id"],
         "direction": candidates[0]["direction"],
