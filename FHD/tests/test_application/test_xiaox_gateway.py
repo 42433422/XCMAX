@@ -617,3 +617,52 @@ def test_sync_entry_preserves_request_inside_running_event_loop(setup_gateway):
 
     result = asyncio.run(scenario())
     assert result["run_id"] and len(state.calls) == 1
+
+
+def test_legacy_request_identity_blocks_replay_before_qualification(setup_gateway, monkeypatch):
+    state = setup_gateway
+    options = {"start_paused": True, "completion_mode": "auto"}
+    staged = asyncio.run(state.invoke(**options))
+    assert staged["run_id"].startswith("run_codex_")
+    old = state.repository.get(staged["run_id"])
+    old.intent = "codex.runtime"
+    old.metadata["runtime_type"] = "codex"
+    old.metadata["codex_runtime"] = old.metadata.pop("xiaox_runtime")
+    old.final_output["codex_result"] = old.final_output.pop("xiaox_result")
+    state.repository.save(old)
+    snapshot = state.repository.get(old.run_id).to_dict()
+    unavailable = Mock(side_effect=AssertionError("legacy replay must not qualify"))
+    monkeypatch.setattr(gateway, "runtime_settings", unavailable)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", unavailable)
+    result = asyncio.run(state.invoke(settings=None, **options))
+    assert result["run_id"] == old.run_id
+    assert result["error_code"] == "runtime_migration_required"
+    assert result["retryable"] is False
+    assert state.repository.get(old.run_id).to_dict() == snapshot
+    assert state.repository.get(old.run_id.replace("run_codex_", "run_xiaox_", 1)) is None
+    unavailable.assert_not_called()
+    assert state.calls == [] and state.servers == []
+
+
+def test_dual_request_namespaces_are_not_merged_or_executed(setup_gateway, monkeypatch):
+    state = setup_gateway
+    options = {"start_paused": True, "completion_mode": "auto"}
+    staged = asyncio.run(state.invoke(**options))
+    old_id = staged["run_id"]
+    renamed_id = old_id.replace("run_codex_", "run_xiaox_", 1)
+    assert renamed_id != old_id
+    original = state.repository.get(old_id)
+    other = AgentRun(
+        run_id=renamed_id, user_id=original.user_id, intent="xiaox.runtime", message="历史记录"
+    )
+    state.repository.save(other)
+    snapshots = {rid: state.repository.get(rid).to_dict() for rid in (old_id, renamed_id)}
+    unavailable = Mock(side_effect=AssertionError("split request must not qualify"))
+    monkeypatch.setattr(gateway, "runtime_settings", unavailable)
+    monkeypatch.setattr(gateway, "get_account_runtime_settings", unavailable)
+    result = asyncio.run(state.invoke(settings=None, **options))
+    assert result["error_code"] == "runtime_identity_conflict"
+    assert result["retryable"] is False
+    assert all(state.repository.get(rid).to_dict() == saved for rid, saved in snapshots.items())
+    unavailable.assert_not_called()
+    assert state.calls == [] and state.servers == []
