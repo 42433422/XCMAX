@@ -608,11 +608,14 @@ class CyclePorts:
         # Reusing a human-confirmed case is a scoped citation in a NEW proposal,
         # not a task approval, a causal result or an executable strategy.
         if decision.goal is not None:
-            from modstore_server.xiaoc_life_experience_review import experience_scope_matches
+            from modstore_server.xiaoc_life_experience_review import (
+                experience_scope_matches,
+            )
 
             cited = set(decision.goal.evidence_refs)
             prior_cases = [
-                row for row in state["facts"]
+                row
+                for row in state["facts"]
                 if row.get("ref") in cited
                 and isinstance(row.get("reviewed_experience"), dict)
                 and isinstance(row.get("learning_assessment"), dict)
