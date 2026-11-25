@@ -33,7 +33,9 @@ def customer_list_engine(tmp_path):
         engine.dispose()
 
 
-def test_customer_pages_are_bounded_stable_and_tenant_scoped(customer_list_engine, monkeypatch):
+def test_customer_pages_are_bounded_stable_and_tenant_scoped(
+    customer_list_engine, monkeypatch
+):
     service = CustomerApplicationService()
     monkeypatch.setattr(service, "_get_session", lambda: Session(customer_list_engine))
     statements = []
@@ -53,7 +55,11 @@ def test_customer_pages_are_bounded_stable_and_tenant_scoped(customer_list_engin
         assert all(item["success"] is True for item in (first, second, final))
         assert all(item["total"] == 200 for item in (first, second, final))
         assert [len(item["data"]) for item in (first, second, final)] == [50, 50, 50]
-        ids = [record["id"] for item in (first, second, final) for record in item["data"]]
+        ids = [
+            record["id"]
+            for item in (first, second, final)
+            for record in item["data"]
+        ]
         assert len(ids) == len(set(ids))
         assert [row["customer_name"] for row in first["data"]] == [
             f"Customer-{n:04d}" for n in range(50)
