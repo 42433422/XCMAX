@@ -1,0 +1,222 @@
+"""A04: real Redis consumer lifecycle and failure-path contracts."""
+
+import asyncio
+import os
+import shutil
+import subprocess
+import time
+import uuid
+from contextlib import suppress
+
+import pytest
+
+from app.neuro_bus.bus import NeuroBus
+from app.neuro_bus.events.events_base import NeuroEvent
+from app.neuro_bus.transports import redis_streams as streams
+
+redis = pytest.importorskip("redis")
+
+
+@pytest.fixture
+def redis_client(monkeypatch, tmp_path):
+    """Never flush or touch production stream keys; use a private Redis instance."""
+    url = os.environ.get("XCAGI_NEUROBUS_TEST_REDIS_URL")
+    process = None
+    if url:
+        client = redis.from_url(url, socket_timeout=3, socket_connect_timeout=3)
+    else:
+        executable = shutil.which("redis-server")
+        if not executable or os.name == "nt":
+            pytest.skip("dedicated Redis service or redis-server executable required")
+        socket_path = str(tmp_path / "redis.sock")
+        process = subprocess.Popen(
+            [
+                executable, "--port", "0", "--unixsocket", socket_path,
+                "--save", "", "--appendonly", "no",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        client = redis.Redis(unix_socket_path=socket_path, socket_timeout=3)
+    namespace = "neurobus:test:{" + uuid.uuid4().hex + "}"
+    monkeypatch.setattr(streams, "STREAM_KEY", namespace + ":events")
+    monkeypatch.setattr(streams, "DLQ_KEY", namespace + ":dlq")
+    monkeypatch.setattr(streams, "CLAIM_IDLE_MS", 150)
+    monkeypatch.setenv("FHD_ENV", "development")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_REDIS_PUBSUB", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_DEDUP", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_CIRCUIT", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_RATE_LIMIT", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_LIFELINE", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_RETRY", "0")
+    monkeypatch.setenv("XCAGI_NEURO_BUS_DLQ_AUTO", "0")
+    try:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                client.ping()
+                break
+            except redis.exceptions.ConnectionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+        yield client
+    finally:
+        with suppress(redis.exceptions.RedisError):
+            client.delete(streams.STREAM_KEY, streams.DLQ_KEY)
+        client.close()
+        if process is not None:
+            process.terminate()
+            process.wait(timeout=5)
+
+
+async def _until(predicate, timeout=5):
+    async with asyncio.timeout(timeout):
+        while not predicate():
+            await asyncio.sleep(0.02)
+
+
+def _event(event_type="a04.test"):
+    return NeuroEvent(event_type, {}).with_timeout(30000)
+
+
+def _pending(client):
+    return client.xpending(streams.STREAM_KEY, streams.CONSUMER_GROUP)["pending"]
+
+
+def _bus(client):
+    bus = NeuroBus(enable_metrics=False)
+    bridge = streams.RedisStreamsBridge(bus, client)
+    bus._redis_bridge = bridge
+    return bus, bridge
+
+
+@pytest.mark.asyncio
+async def test_automatic_consume_ack_only_after_handler_and_restart(redis_client):
+    bus, bridge = _bus(redis_client)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    seen = []
+
+    async def handler(event):
+        seen.append(event.metadata.event_id)
+        entered.set()
+        await release.wait()
+
+    bus.subscribe("a04.test", handler)
+    try:
+        await bus.start()
+        original_task = bridge._task
+        await bus.start()
+        assert bridge._task is original_task
+        await _until(lambda: bridge.get_stats()["ready"])
+        event = _event()
+        assert bus.publish(event)
+        await asyncio.wait_for(entered.wait(), 5)
+        assert _pending(redis_client) == 1
+        # Hold longer than reclaim-idle; heartbeat prevents another worker claiming.
+        await asyncio.sleep(0.35)
+        other = streams.RedisStreamsBridge(bus, redis_client, consumer_id="other")
+        assert other._recover_one() == []
+        release.set()
+        await _until(lambda: _pending(redis_client) == 0)
+        assert seen == [event.metadata.event_id]
+        await bus.stop()
+        assert not bridge.get_stats()["running"]
+        await bus.start()
+        assert bridge._task is not original_task
+        second = _event()
+        assert bus.publish(second)
+        await _until(lambda: len(seen) == 2 and _pending(redis_client) == 0)
+        assert seen[-1] == second.metadata.event_id
+    finally:
+        release.set()
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_reclaim_abandoned_consumer_and_fence_stale_ack(redis_client):
+    bus, bridge = _bus(redis_client)
+    seen = []
+    abandoned = streams.RedisStreamsBridge(bus, redis_client, consumer_id="abandoned")
+    event = _event()
+    msg_id = abandoned.publish(event.to_dict())
+    assert abandoned.consume(count=1, block_ms=20)[0]["_msg_id"] == msg_id
+    assert _pending(redis_client) == 1
+
+    async def handler(event):
+        seen.append(event.metadata.event_id)
+        # Ownership has changed: the old consumer cannot remove the PEL entry.
+        assert not abandoned.ack(msg_id)
+        assert _pending(redis_client) == 1
+
+    bus.subscribe("a04.test", handler)
+    await asyncio.sleep(0.2)
+    try:
+        await bus.start()
+        await _until(lambda: seen and _pending(redis_client) == 0)
+        assert seen == [event.metadata.event_id]
+        assert bridge.get_stats()["ready"]
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_failed_handler_and_poison_message_go_to_dlq(redis_client):
+    bus, bridge = _bus(redis_client)
+
+    async def handler(event):
+        raise ValueError("test handler failure")
+
+    bus.subscribe("a04.test", handler)
+    try:
+        await bus.start()
+        await _until(lambda: bridge.get_stats()["ready"])
+        assert bus.publish(_event())
+        redis_client.xadd(streams.STREAM_KEY, {"payload": b"\xff"})
+        await _until(lambda: redis_client.xlen(streams.DLQ_KEY) == 2)
+        assert _pending(redis_client) == 0
+        assert bridge.get_stats()["running"]
+    finally:
+        await bus.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_during_handler_leaves_recoverable_pending(redis_client):
+    bus, bridge = _bus(redis_client)
+    entered = asyncio.Event()
+    never = asyncio.Event()
+    completed = []
+
+    async def interrupted(event):
+        entered.set()
+        await never.wait()
+
+    subscription = bus.subscribe("a04.test", interrupted)
+    event = _event()
+    try:
+        await bus.start()
+        assert bus.publish(event)
+        await asyncio.wait_for(entered.wait(), 5)
+        await bus.stop()
+        assert _pending(redis_client) == 1
+        assert not bridge.get_stats()["running"]
+        bus.unsubscribe(subscription)
+
+        async def recovered(event):
+            completed.append(event.metadata.event_id)
+
+        bus.subscribe("a04.test", recovered)
+        await bus.start()
+        await _until(lambda: completed and _pending(redis_client) == 0)
+        assert completed == [event.metadata.event_id]
+    finally:
+        await bus.stop()
+
+
+def test_missing_redis_client_cannot_start():
+    bridge = streams.RedisStreamsBridge(NeuroBus(enable_metrics=False))
+    with pytest.raises(RuntimeError, match="client missing"):
+        bridge.start()
+    assert not bridge.get_stats()["running"]
