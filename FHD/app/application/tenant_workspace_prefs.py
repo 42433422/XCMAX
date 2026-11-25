@@ -88,19 +88,6 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
         return {}
 
 
-def _save_workspace_prefs(owner_id: str, prefs: dict[str, Any]) -> None:
-    owner = str(owner_id or "").strip()
-    if not owner:
-        return
-    from app.domain.shared_services.user_preference_service import get_user_preference_service
-
-    get_user_preference_service().set_preference(
-        owner,
-        WORKSPACE_PREFS_KEY,
-        json.dumps(prefs, ensure_ascii=False),
-    )
-
-
 _OWNER_PREF_PREFIX = "user_pref:"
 
 
@@ -157,26 +144,31 @@ def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, A
     owner = str(owner_id or "").strip()
     if not owner:
         return {}
-    current = get_workspace_prefs(owner)
-    merged = dict(current)
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
-    for key, value in (partial or {}).items():
-        if key not in ALLOWED_TOP_LEVEL_KEYS:
-            continue
-        if key == "workflow_ai_employees" and isinstance(value, dict):
-            wae = dict(merged.get("workflow_ai_employees") or {})
-            for emp_id, enabled in value.items():
-                eid = str(emp_id or "").strip()
-                if not eid:
-                    continue
-                if isinstance(enabled, bool):
-                    wae[eid] = enabled
-            merged["workflow_ai_employees"] = wae
-        else:
-            merged[key] = value
+    def merge(raw: str | None) -> str:
+        current = json.loads(raw) if raw is not None else {}
+        if not isinstance(current, dict):
+            raise ValueError("Workspace preferences must contain a JSON object")
+        merged = dict(current)
 
-    _save_workspace_prefs(owner, merged)
-    return merged
+        for key, value in (partial or {}).items():
+            if key not in ALLOWED_TOP_LEVEL_KEYS:
+                continue
+            if key == "workflow_ai_employees" and isinstance(value, dict):
+                wae = dict(merged.get("workflow_ai_employees") or {})
+                for emp_id, enabled in value.items():
+                    eid = str(emp_id or "").strip()
+                    if eid and isinstance(enabled, bool):
+                        wae[eid] = enabled
+                merged["workflow_ai_employees"] = wae
+            else:
+                merged[key] = value
+
+        return json.dumps(merged, ensure_ascii=False)
+
+    saved = get_user_preference_service().mutate_preference(owner, WORKSPACE_PREFS_KEY, merge)
+    return json.loads(saved)
 
 
 def bind_selected_industry_for_user(
