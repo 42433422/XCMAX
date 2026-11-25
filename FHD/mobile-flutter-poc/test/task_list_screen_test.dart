@@ -29,6 +29,7 @@ class TaskApi extends MobileApiClient {
   bool denied = false;
   bool offline = false;
   String status = 'completed';
+  Completer<void>? delayedRead;
   @override
   Future<Map<String, Object?>> workspaceRequest(
     String path, {
@@ -45,13 +46,17 @@ class TaskApi extends MobileApiClient {
       throw const MobileApiException(
           statusCode: 403, message: '没有权限', body: {});
     }
+    final responseStatus = status;
+    final gate = delayedRead;
+    delayedRead = null;
+    if (gate != null) await gate.future;
     return {
       'success': true,
       'data': {
         'task_id': 'task/a',
         'title': '整理考勤',
-        'status': status,
-        'capabilities': <String, bool>{'pause': status == 'running'}
+        'status': responseStatus,
+        'capabilities': <String, bool>{'pause': responseStatus == 'running'}
       }
     };
   }
@@ -246,6 +251,47 @@ void main() {
       api.requested.toSet(),
       {'api/mobile/v1/workspace/agent/tasks/task%2Fa'},
     );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('resume discards pre-suspension response and reconciles immediately',
+      (tester) async {
+    final api = TaskApi()..status = 'running';
+    final repo = Tasks(api);
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: NativeTaskWorkspaceScreen(taskId: 'task/a', repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(api.requested.length, 1);
+    expect(find.text('状态：正在处理'), findsOneWidget);
+
+    final gate = Completer<void>();
+    api.delayedRead = gate;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(api.requested.length, 2);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsOneWidget);
+
+    api.status = 'completed';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(api.requested.length, 3);
+    expect(find.text('状态：已完成'), findsOneWidget);
+    expect(find.text('状态：正在处理'), findsNothing);
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsNothing);
+    expect(api.requested.toSet(), {
+      'api/mobile/v1/workspace/agent/tasks/task%2Fa',
+    });
     await tester.pumpWidget(const SizedBox());
   });
 
