@@ -167,3 +167,91 @@ def test_rejected_reopens_accepted_issue(monkeypatch):
     monkeypatch.setattr(m, "_http", github)
     assert m.run(args()) == 0
     assert calls[1] == ("PATCH", {"state": "open"})
+
+def _business_evidence():
+    identity = {
+        "version": "1.0.0.7", "build_sha": SHA,
+        "tenant_id": "tenant1", "customer_id": "customer1",
+        "task_id": "task1", "run_id": "run1",
+    }
+    stages = {
+        kind: {
+            **identity, "receipt_id": f"receipt-{kind}", "source_sha256": "0" * 64,
+            "status": "accepted" if kind == "customer_confirmation" else "verified",
+        }
+        for kind in (
+            "source", "approval", "execution", "database", "artifact",
+            "independent_reconciliation", "customer_confirmation",
+        )
+    }
+    stages["approval"]["approved_action_sha256"] = "2" * 64
+    stages["execution"].update(approved_action_sha256="2" * 64, executed_by="worker1")
+    stages["artifact"]["artifact_sha256"] = "1" * 64
+    stages["customer_confirmation"].update(
+        artifact_sha256="1" * 64, confirmed_by="customer1",
+        confirmed_at="2026-11-25T12:00:00Z",
+    )
+    stages["independent_reconciliation"].update(
+        verifier_id="readback1", original_to_database=True,
+        database_to_artifact=True, inventory_and_accounting=True,
+        approval_scope=True,
+    )
+    return {
+        **identity, "source_sha256": "0" * 64, "artifact_sha256": "1" * 64,
+        "status": "accepted", "stages": stages,
+    }
+
+
+def test_installer_pass_does_not_close_business_work_order(monkeypatch):
+    m = load()
+    issue = {"number": 42, "state": "open", "labels": [
+        {"name": "business-acceptance-required"}
+    ]}
+    events = []
+
+    def github(method, _url, _token, body=None):
+        events.append((method, body))
+        assert method == "GET", "business proof missing, do not mutate the issue"
+        return issue
+
+    monkeypatch.setattr(m, "_fetch_published_release", lambda _: config())
+    monkeypatch.setattr(m, "_fetch_acceptance", lambda *a: receipt())
+    monkeypatch.setattr(m, "_ensure_label", lambda *a: None)
+    monkeypatch.setattr(m, "_record_verdict_local", lambda *a: pytest.fail("no receipt"))
+    monkeypatch.setattr(m, "_http", github)
+    assert m.run(args()) == 1
+    assert events == [("GET", None)]
+
+
+@pytest.mark.parametrize("drift", [
+    "source", "approval", "execution", "database", "artifact",
+    "independent_reconciliation", "customer_confirmation", "foreign_tenant",
+    "other_artifact", "self_verified", "wrong_amounts",
+])
+def test_business_receipts_fail_closed_on_missing_or_mismatched_stage(drift):
+    m = load()
+    issue = {"number": 42, "labels": [{"name": "business-acceptance-required"}]}
+    record = _business_evidence()
+    if drift == "foreign_tenant":
+        record["stages"]["approval"]["tenant_id"] = "other"
+    elif drift == "other_artifact":
+        record["stages"]["customer_confirmation"]["artifact_sha256"] = "3" * 64
+    elif drift == "self_verified":
+        record["stages"]["independent_reconciliation"]["verifier_id"] = "worker1"
+    elif drift == "wrong_amounts":
+        record["stages"]["independent_reconciliation"]["inventory_and_accounting"] = False
+    else:
+        record["stages"].pop(drift)
+    assert not m._business_receipts_complete(
+        issue, {"business_receipts": {"42": record}}, "1.0.0.7", SHA
+    )
+
+
+def test_complete_business_identity_contract_is_distinct_from_installer_status():
+    m = load()
+    issue = {"number": 42, "labels": [{"name": "business-acceptance-required"}]}
+    assert m._business_receipts_complete(
+        issue, {"business_receipts": {"42": _business_evidence()}}, "1.0.0.7", SHA
+    )
+
+
