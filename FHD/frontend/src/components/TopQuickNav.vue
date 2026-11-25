@@ -276,6 +276,9 @@ function onFocus() {
   highlightIndex.value = 0
   keyboardMoved.value = false
   placeList()
+  // Use the existing scoped task center read path, never a second polling loop.
+  if (desktopEnabled && taskStore?.stale === true && !taskStore.loading &&
+    typeof taskStore.refresh === 'function') void taskStore.refresh()
 }
 
 function onViewportChange() {
