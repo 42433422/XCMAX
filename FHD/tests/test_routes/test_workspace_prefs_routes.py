@@ -386,3 +386,29 @@ async def test_versioned_industry_patch_keeps_single_preference_revision(monkeyp
     assert result["success"] is True
     assert result["revision"] == 5
     assert observed == [("prefs", "tenant:42", 4), ("user", "涂料", False)]
+
+
+def test_workspace_expected_owner_rejects_account_switch_before_any_write(monkeypatch):
+    from app.fastapi_routes import workspace_prefs_routes as routes
+
+    user = SimpleNamespace(id=8)
+    write = MagicMock()
+    monkeypatch.setattr(routes, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(
+        routes, "resolve_workspace_owner_id", lambda *_: "tenant:99"
+    )
+    monkeypatch.setattr(routes, "patch_workspace_prefs", write)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        result = client.patch(
+            "/api/workspace/prefs",
+            json={
+                "expected_revision": 1,
+                "expected_owner_id": "tenant:42",
+                "host_pack_acknowledged": True,
+            },
+        )
+    assert result.status_code == 409
+    assert result.json()["detail"]["error_code"] == "workspace_prefs_owner_changed"
+    write.assert_not_called()
