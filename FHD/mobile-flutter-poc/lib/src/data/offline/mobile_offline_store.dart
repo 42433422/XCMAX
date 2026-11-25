@@ -305,11 +305,15 @@ class MobileOfflineStore {
 
   // ── 进行中的中继任务 ────────────────────────────────────────
 
-  Future<void> saveTurnDispatch(String conversationId, String turnId,
+  // The first durable claim owns the dispatch channel for this turn.
+  // Replacing it could send a possibly accepted LAN POST through Relay.
+  Future<bool> saveTurnDispatch(String conversationId, String turnId,
       Map<String, Object?> dispatch) async {
-    await _db.customUpdate('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+    final inserted = await _db.customUpdate(
+        'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)',
         variables: [Variable<String>('turn-dispatch:${jsonEncode([conversationId, turnId])}'),
           Variable<String>(jsonEncode(dispatch))]);
+    return inserted == 1;
   }
 
   Future<Map<String, Object?>> turnDispatch(String conversationId, String turnId) async {

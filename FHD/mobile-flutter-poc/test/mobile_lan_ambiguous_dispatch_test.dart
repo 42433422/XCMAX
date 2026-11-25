@@ -124,6 +124,27 @@ void main() {
     expect(originalDispatch['base_url'], 'http://127.0.0.1:59999/');
   });
 
+  test('direct retry of an existing turn only reads the original receipt', () async {
+    client.receiptKnown = false;
+    await expectLater(
+      repository.streamMessage(
+        conversation: conversation,
+        body: '写入企业库存',
+        idempotencyKey: 'stable-original-turn',
+      ),
+      throwsA(isA<MobileApiException>()
+          .having((error) => error.errorCode, 'code', 'CHAT_RECEIPT_PENDING')),
+    );
+    client.receiptKnown = true;
+    expect(await repository.streamMessage(
+      conversation: conversation,
+      body: '写入企业库存',
+      idempotencyKey: 'stable-original-turn',
+    ), '原任务结果已核验');
+    expect(client.attemptedPosts, 1);
+    expect(client.receiptReads, 2);
+  });
+
   test('legacy pending row never replays a possibly accepted original POST', () async {
     client.receiptKnown = false;
     await expectLater(

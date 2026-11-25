@@ -288,6 +288,9 @@ void main() {
       'scope': 'original-account', 'channel': 'relay',
     });
     await store.saveTurnDispatch('pinned:codex', 'second', {'client_request_id': 'second'});
+    expect(await store.saveTurnDispatch('pinned:codex', 'first', {
+      'channel': 'super', 'base_url': 'https://different.example/',
+    }), isFalse);
     final original = await store.turnDispatch('pinned:codex', 'first');
     expect(original['relay_id'], 'original-relay');
     expect(original['base_url'], 'https://original.example/');

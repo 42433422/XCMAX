@@ -133,9 +133,13 @@ abstract class _RepoChatBase extends _RepoRelayBase {
     }
 
     if (tool != null) {
-      if (resumeOnly) {
-        final dispatch = await _turnDispatch(conversation.id, idempotencyKey);
-        await requireScope();
+      // A caller retrying the same turn without resumeOnly is still a retry.
+      // Read the persisted original channel rather than replace its claim.
+      final dispatch = idempotencyKey.isEmpty
+          ? const <String, Object?>{}
+          : await _turnDispatch(conversation.id, idempotencyKey);
+      await requireScope();
+      if (resumeOnly || dispatch.isNotEmpty) {
         if (dispatch.isNotEmpty) {
           final reply = dispatch['channel'] == 'relay'
               ? await _readRelayTurn(conversationId: conversation.id, dispatch: dispatch,
