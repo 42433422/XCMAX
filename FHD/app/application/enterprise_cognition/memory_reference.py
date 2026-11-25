@@ -11,6 +11,7 @@ from app.application.enterprise_cognition.service import (
     make_fact_reference,
     verify_source_reference,
 )
+from app.domain.user_memory.policy import is_erp_bound_memory
 
 _ERP_REFERENCE_KIND = "erp_fact_reference_v1"
 _FIELD = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -67,16 +68,18 @@ def revalidate_erp_memory(
     their existing semantics, while ERP-bound claims must recheck source RBAC,
     original row identity, version and the exact field value on every recall.
     """
+    if not is_erp_bound_memory(record):
+        return record, False
     evidence = record.get("evidence")
     if not isinstance(evidence, list):
-        return (None, True) if record.get("source") == "erp_authority" else (record, False)
+        return None, True
     bindings = [
         row
         for row in evidence
         if isinstance(row, dict) and row.get("kind") == _ERP_REFERENCE_KIND
     ]
     if not bindings:
-        return (None, True) if record.get("source") == "erp_authority" else (record, False)
+        return None, True
     if len(bindings) != 1:
         return None, True
     binding = bindings[0]
@@ -135,6 +138,7 @@ def revalidate_erp_memory(
     # sentence always comes from the re-read typed source field.
     checked = {
         **record,
+        "value": claim["value"],
         "statement": claim["value"]["statement"],
         "erp_fact_verification": {
             "status": "current",
