@@ -100,3 +100,24 @@ def test_process_exit_at_admission_boundary(tmp_path, phase, exit_code, committe
             assert store.admit(event).newly_admitted
     finally:
         store.close()
+
+
+@pytest.mark.parametrize(
+    ("pragma", "reason"),
+    [
+        ("PRAGMA synchronous=OFF", "synchronous=FULL"),
+        ("PRAGMA journal_mode=OFF", "durable WAL or rollback journal"),
+    ],
+)
+def test_unsafe_sqlite_settings_never_return_durable_receipt(tmp_path, pragma, reason):
+    """A file path alone is not a promise of crash-safe commit semantics."""
+    store = EventStore(EventStoreMode.SQLITE, str(tmp_path / "unsafe.sqlite"))
+    try:
+        assert store._conn is not None
+        store._conn.execute(pragma).close()
+        event = NeuroEvent("test.unsafe_admission", {"tenant_id": "t1"})
+        with pytest.raises(RuntimeError, match=reason):
+            store.admit(event)
+        assert store.get_admitted_event(event.metadata.event_id) is None
+    finally:
+        store.close()
