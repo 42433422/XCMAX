@@ -23,7 +23,9 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import threading
+from pathlib import Path
 from typing import Any, Literal
 
 from app.domain.ports.embedder import EmbedderPort
@@ -59,6 +61,32 @@ def _resolve_mode() -> EmbeddingMode | Literal["auto"]:
     return "auto" if raw in {"", "auto"} else "hash"
 
 
+def _fastembed_cache_dir() -> Path | None:
+    explicit = (os.environ.get("FHD_EMBEDDING_FASTEMBED_CACHE_DIR") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
+    for relative in ("resources/models/fastembed", "assets/models/fastembed", "models/fastembed"):
+        candidate = root / relative
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _fastembed_artifact_revision(model_name: str) -> str:
+    cache = _fastembed_cache_dir()
+    if cache is None:
+        return ""
+    try:
+        manifest = json.loads((cache / "xcmax-model.json").read_text(encoding="utf-8"))
+        digest = manifest.get("sha256")
+        if manifest.get("model") == model_name and isinstance(digest, str) and len(digest) == 64:
+            return digest
+    except RECOVERABLE_ERRORS:
+        pass
+    return ""
+
+
 def _load_cached_fastembed(model_name: str) -> tuple[Any | None, int]:
     """Select a locally provisioned semantic model before publishing its fingerprint.
 
@@ -68,7 +96,9 @@ def _load_cached_fastembed(model_name: str) -> tuple[Any | None, int]:
     try:
         from fastembed import TextEmbedding
 
-        model = TextEmbedding(model_name=model_name, local_files_only=True)
+        cache = _fastembed_cache_dir()
+        options = {"cache_dir": str(cache)} if cache is not None else {}
+        model = TextEmbedding(model_name=model_name, local_files_only=True, **options)
         vectors = list(model.embed(["dimension_probe"]))
         if len(vectors) == 1 and len(vectors[0]) > 0:
             return model, len(vectors[0])
@@ -113,6 +143,8 @@ class EmbeddingService(EmbedderPort):
             "endpoint": self._remote_url if self._mode == "remote" else "",
             "revision": (os.environ.get("FHD_EMBEDDING_MODEL_REVISION") or "").strip(),
         }
+        if self._mode == "fastembed":
+            identity["artifact_revision"] = _fastembed_artifact_revision(self._model_name)
         self._embedding_fingerprint = hashlib.sha256(
             json.dumps(identity, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -311,7 +343,9 @@ class EmbeddingService(EmbedderPort):
             try:
                 from fastembed import TextEmbedding
 
-                self._fastembed_model = TextEmbedding(model_name=model_name)
+                cache = _fastembed_cache_dir()
+                options = {"cache_dir": str(cache)} if cache is not None else {}
+                self._fastembed_model = TextEmbedding(model_name=model_name, **options)
                 logger.info("EmbeddingService fastembed 模型加载完成: %s", model_name)
                 return self._fastembed_model
             except RECOVERABLE_ERRORS as e:

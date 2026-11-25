@@ -70,6 +70,10 @@ if ($env:XCAGI_BUNDLE_COMPUTER_USE -eq '1') {
   python -m pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"
   if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
 }
+python -m pip install -r ops/deploy/requirements-memory-runtime.txt
+if ($LASTEXITCODE -ne 0) { throw "semantic memory dependency installation failed" }
+python scripts/dev/provision_memory_model.py
+if ($LASTEXITCODE -ne 0) { throw "offline semantic memory model provisioning failed" }
 python -m pip check
 if ($LASTEXITCODE -ne 0) { throw "server-api runtime dependencies are inconsistent" }
 python -m pip install "pyinstaller>=6.0" appdirs

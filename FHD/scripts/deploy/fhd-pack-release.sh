@@ -176,6 +176,21 @@ for package_dir in "${LANGGRAPH_PACKAGE_DIRS[@]}"; do
 done
 cp "$FHD_ROOT/ops/deploy/requirements-langgraph-runtime.txt" \
   "$STAGING/requirements-langgraph-runtime.txt"
+cp "$FHD_ROOT/ops/deploy/requirements-memory-runtime.txt" "$STAGING/requirements-memory-runtime.txt"
+mkdir -p "$STAGING/scripts/dev"
+cp "$FHD_ROOT/scripts/dev/provision_memory_model.py" "$STAGING/scripts/dev/"
+# A release contains offline model bytes. Use an isolated build-only environment
+# when the builder has not explicitly supplied a qualified model Python.
+if [[ -n "${FHD_MEMORY_MODEL_PYTHON:-}" ]]; then
+  MEMORY_PYTHON="$FHD_MEMORY_MODEL_PYTHON"
+else
+  python3 -m venv "$STAGING/.memory-build-venv"
+  MEMORY_PYTHON="$STAGING/.memory-build-venv/bin/python"
+  "$MEMORY_PYTHON" -m pip install -r "$STAGING/requirements-memory-runtime.txt"
+fi
+"$MEMORY_PYTHON" "$STAGING/scripts/dev/provision_memory_model.py" \
+  --output "$STAGING/resources/models/fastembed"
+rm -rf "$STAGING/.memory-build-venv"
 
 mkdir -p "$STAGING/templates/admin-vue-dist"
 rsync -a --delete "$ADMIN_DIST/" "$STAGING/templates/admin-vue-dist/"

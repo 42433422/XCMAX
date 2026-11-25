@@ -167,6 +167,7 @@ class UserMemoryRagApplicationService:
         self._vector_store = vector_store or get_user_memory_vector_store()
         self._embedder = embedder or HashEmbedder()
         self._recall_validator = recall_validator
+        self._use_semantic_projection = embedder is None
 
     def _validated_hits(self, user_id: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         from app.application.user_memory.retrieve import filter_recalled_memories
@@ -190,12 +191,27 @@ class UserMemoryRagApplicationService:
         if callable(prune):
             prune(index_id=user_id, older_than=cutoff, max_chunks=max_chunks)
         bounded = max(1, min(20, int(top_k)))
-        hits = self._vector_store.query(
-            index_id=user_id,
-            query_vector=self._embedder.embed_query(query_text),
-            top_k=bounded,
-            filters={"created_after": cutoff, "governed_only": self._recall_validator is None},
-        )
+        hits = None
+        if self._use_semantic_projection:
+            from app.infrastructure.memory.semantic_projection import query_semantic_projection
+
+            hits = query_semantic_projection(
+                self._vector_store,
+                user_id,
+                query_text,
+                cutoff=cutoff,
+                governed_only=self._recall_validator is None,
+                limit=max_chunks,
+                top_k=bounded,
+            )
+        embedding_space = "semantic" if hits is not None else "legacy_hash"
+        if hits is None:
+            hits = self._vector_store.query(
+                index_id=user_id,
+                query_vector=self._embedder.embed_query(query_text),
+                top_k=bounded,
+                filters={"created_after": cutoff, "governed_only": self._recall_validator is None},
+            )
         from app.application.ai_feature_isolation import allows_channel, current_ai_feature_channel
         from app.application.user_memory import retrieve
 
@@ -233,6 +249,7 @@ class UserMemoryRagApplicationService:
             "query": query_text,
             "top_k": top_k,
             "min_score": floor,
+            "embedding_space": embedding_space,
             "hits": safe_hits,
         }
 
