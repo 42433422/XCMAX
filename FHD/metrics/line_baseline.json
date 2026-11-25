@@ -1,5 +1,5 @@
 {
-  "lines": 2733462,
+  "lines": 2733537,
   "updated": "2026-11-25",
-  "note": "业务真实验收：客户原件SHA/版本/租户/任务/审批来源绑定，七段原件→客户确认回执核验且写回唯一摘要；新增拒绝伪证据、跨租户、错误财务、缺回执和账本存证回归。相对原主干净增328行（产品124、测试202、CHANGELOG2），显式申请评审，未放宽质量门槛。"
+  "note": "业务真实验收：客户原件SHA/版本/租户/任务/审批来源绑定，七段原件→客户确认回执核验且写回唯一摘要；新增拒绝伪证据、跨租户、错误财务、缺回执和账本存证回归。相对原主干净增328行（产品124、测试202、CHANGELOG2），显式申请评审，未放宽质量门槛。；本轮补充变更（PR #3615）：新增实证门禁/数据库只读核验/事务异常回归，按 GitHub 差异统计计入 75 行（FHD/CHANGELOG.md +2；FHD/scripts/dev/release_acceptance_closeout.py +27；FHD/tests/release_gate/test_release_acceptance_closeout.py +46）。这是显式评审候选，未经本 SHA check_net_deletion.py、preflight 和 CI 实测，仍需独立审核，不降低原门禁。"
 }
