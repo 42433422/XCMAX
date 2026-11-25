@@ -491,7 +491,10 @@ def training_plan(request_id):
 
 def read_training_impact(request_id, state):
     from modstore_server.retort_feedback_experiments import approved_policy
-    from modstore_server.retort_workflow_metrics import execution_stop_loss
+    from modstore_server.retort_workflow_metrics import (
+        execution_stop_loss,
+        postpromotion_stop_reason,
+    )
 
     reject = False
     with get_session_factory()() as db:
@@ -519,7 +522,11 @@ def read_training_impact(request_id, state):
                     and isinstance(recheck.get("promoted_at"), str)
                     and bool(recheck["promoted_at"])
                     and policy == source["growthbook"]
-                    and execution_stop_loss(db, row, policy)
+                    and (
+                        execution_stop_loss(db, row, policy)
+                        or postpromotion_stop_reason(db, row, policy)
+                        == "workflow_execution_stop_loss"
+                    )
                 )
             except (KeyError, TypeError, ValueError):
                 bound = False
@@ -761,6 +768,15 @@ def request_postpromotion_regression_rechecks():
                     or policy != source.get("growthbook")
                 ):
                     continue
+                from modstore_server.workflow_customer_feedback import (
+                    reconcile_postpromotion_customer_outcomes,
+                )
+
+                # Settle actual customer outcomes from the original business
+                # ledger in this transaction, without touching the frozen A/B
+                # event stream. Repeated ticks are idempotent by execution ID.
+                reconcile_postpromotion_customer_outcomes(row.id, session=db)
+                db.flush()
                 block = traffic_block_reason(db, row, verified)
                 if not block:
                     # One cumulative as-of snapshot per UTC day; never a causal
