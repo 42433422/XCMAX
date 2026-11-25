@@ -15,6 +15,7 @@ class _InventoryApi extends MobileApiClient {
           ),
         );
 
+  int inventoryRowCount = 1;
   final reads = <({String path, Map<String, String> query})>[];
   final writes = <({String path, Map<String, Object?>? body})>[];
   Completer<Map<String, Object?>>? receipt;
@@ -43,6 +44,22 @@ class _InventoryApi extends MobileApiClient {
         'api/inventory/warehouses' => [
             {'id': 9, 'name': '主仓库', 'status': 'active'},
           ],
+        'api/inventory' when inventoryRowCount > 1 => List.generate(
+            inventoryRowCount,
+            (index) => {
+              'id': 1000 + index,
+              'product_id': 1000 + index,
+              'product_name': '压测产品 $index',
+              'product_code': 'STRESS-$index',
+              'warehouse_id': 9,
+              'warehouse_name': '主仓库',
+              'batch_no': 'B-01',
+              'location_id': 3,
+              'quantity': 10,
+              'available_quantity': 7,
+              'unit': '桶',
+            },
+          ),
         'api/inventory' => [
             {
               'id': 18,
@@ -92,6 +109,23 @@ Future<void> _open(WidgetTester tester, _InventoryApi api) async {
 }
 
 void main() {
+  for (final count in [1000, 10000]) {
+    testWidgets('inventory uses lazy builder with $count server rows', (tester) async {
+      final api = _InventoryApi()..inventoryRowCount = count;
+      await _open(tester, api);
+      final slivers = tester.widgetList<SliverList>(
+        find.byType(SliverList, skipOffstage: false),
+      );
+      expect(
+        slivers.any((sliver) =>
+          sliver.delegate is SliverChildBuilderDelegate &&
+          (sliver.delegate as SliverChildBuilderDelegate).estimatedChildCount == count),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final incoming in [true, false]) {
     for (final quantity in [0.5, 1.5]) {
       testWidgets(
