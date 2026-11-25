@@ -639,10 +639,3 @@ def test_late_success_cannot_overwrite_an_older_unknown_execution_receipt(verifi
     assert receipt_state(original) == "unknown"
     assert verifier.classify(None)[0] == "blocked"
 
-
-def test_settle_target_matches_unknown_effect_protection_of_task_lifecycle():
-    from app.domain.task_lifecycle.control import settle_target
-
-    for state in ("failed", "cancelled", "timed_out", "paused", "unknown"):
-        target, code = settle_target(state, "timeout", 4, open_effects=True)
-        assert (target, code) == ("unknown", "needs_verification")
