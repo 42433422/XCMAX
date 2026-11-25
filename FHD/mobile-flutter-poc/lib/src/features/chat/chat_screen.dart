@@ -68,8 +68,30 @@ class _ChatScreenState extends _ChatStateActions {
     _messages = [...widget.initialMessages];
     _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
+    _chatGeneration = _repository?.client.authGeneration ?? 0;
+    _controller.addListener(_scheduleChatDraftSave);
     _attachmentSessionSubscription = _repository?.client.sessionChanges
-        .listen((_) => _checkAttachmentScope());
+        .listen((_) {
+      if (_repository?.client.authGeneration != _chatGeneration) {
+        _draftTimer?.cancel();
+        _chatInvalidated = true;
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+            _attachments.clear();
+            _failedAttachments.clear();
+            _recoveredAttachmentNames.clear();
+            _activeAssistantId = null;
+            _sending = false;
+            _controller.clear();
+          });
+          _syncFlyerChat();
+        }
+      } else {
+        unawaited(_checkAttachmentScope());
+      }
+    });
+    unawaited(_restoreChatDraft());
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
     _loadRemoteMessages();
     _loadUserAvatar();
@@ -79,6 +101,9 @@ class _ChatScreenState extends _ChatStateActions {
   @override
   void dispose() {
     _attachmentSessionSubscription?.cancel();
+    _draftTimer?.cancel();
+    _persistChatDraftSnapshot();
+    _controller.removeListener(_scheduleChatDraftSave);
     _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
@@ -197,10 +222,16 @@ class _ChatScreenState extends _ChatStateActions {
                 ),
               ),
             ),
+            if (_chatInvalidated)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('账号已切换，请返回后重新打开此会话。'),
+              ),
             _Composer(
               controller: _controller,
               onSend:
-                  _uploading || _failedAttachments.isNotEmpty ? () {} : _send,
+                  _chatInvalidated || _uploading || _failedAttachments.isNotEmpty
+                       ? () {} : _send,
               onStop: _stopChat,
               busy: _sending,
               topContent: _composerTopContent(
