@@ -25,6 +25,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   bool _restoringDraft = false;
   bool _draftTouched = false;
   bool _chatInvalidated = false;
+  bool _chatForeground = true;
+  bool _resumingPendingChat = false;
+  int _chatEpoch = 0;
   int _chatGeneration = 0;
   List<MobileChatAttachment> _lastSentAttachments = const [];
   var _runningGitOp = false;
