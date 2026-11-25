@@ -346,10 +346,12 @@ def runtime_settings() -> RuntimeSettings:
         if not isinstance(data, dict):
             raise ValueError("expected object")
         engine = data.get("engine", "xiaox")
-        if engine != "xiaox":
+        if type(engine) is not str or engine not in ("codex", "xiaox"):
             raise RuntimePolicyError(
                 "Native agent loops are retired; configure the fixed Xiaox executor"
             )
+        # Legacy deployment label selects the same executor; never rewrite the config.
+        engine = "xiaox"
         surfaces = data.get("surfaces", ["chat", "employee"])
         if not isinstance(surfaces, list) or sorted(surfaces) != ["chat", "employee"]:
             raise RuntimePolicyError("The fixed executor must own both chat and employee tasks")
