@@ -12,7 +12,7 @@ const _conversation = ConversationItem(
   timestampText: '',
 );
 
-Widget _bubble(ChatDeliveryStatus status, VoidCallback onRead) =>
+Widget _bubble(ChatDeliveryStatus status, VoidCallback onRead, {String body = '任务执行后等待原回执核对'}) =>
     MaterialApp(
       theme: AppTheme.light(),
       home: Scaffold(
@@ -21,7 +21,7 @@ Widget _bubble(ChatDeliveryStatus status, VoidCallback onRead) =>
             id: 'pending-turn',
             conversationId: 'pinned:assistant',
             role: ChatRole.assistant,
-            body: '任务执行后等待原回执核对',
+            body: body,
             timeText: '',
             status: status,
           ),
@@ -39,6 +39,24 @@ Widget _bubble(ChatDeliveryStatus status, VoidCallback onRead) =>
     );
 
 void main() {
+  testWidgets('fenced code remains selectable and horizontally scrollable',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(_bubble(
+      ChatDeliveryStatus.sent,
+      () {},
+      body: '代码如下：\\n```dart\\nconst literal = "<script>not HTML</script>";\\n```',
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectableText), findsOneWidget);
+    expect(find.textContaining('<script>not HTML</script>'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('unconfirmed turns expose a minimum 44px receipt action',
       (tester) async {
     tester.view.devicePixelRatio = 1;
