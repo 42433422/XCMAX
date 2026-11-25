@@ -226,3 +226,90 @@ def test_financial_reference_replay_does_not_accept_new_amount():
         posted, {"amount": "100.00", "currency": "USD", "counterparty_id": 3},
         Decimal("100.00")
     )
+
+
+def test_order_reservation_cas_fences_a_stale_writer(tmp_path, monkeypatch):
+    from app.domain.shared_services import inventory_orders
+
+    base = declarative_base()
+
+    class Ledger(base):
+        __tablename__ = "order_reserved_cas_test"
+        id = Column(Integer, primary_key=True)
+        tenant_id = Column(Integer, nullable=False)
+        quantity = Column(Numeric(18, 4), nullable=False)
+        available_quantity = Column(Numeric(18, 4), nullable=False)
+        reserved_quantity = Column(Numeric(18, 4), nullable=False)
+        updated_at = Column(DateTime)
+
+    monkeypatch.setattr(inventory_orders, "InventoryLedger", Ledger)
+    engine = create_engine(f"sqlite:///{tmp_path / 'order-cas.sqlite'}")
+    base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(Ledger(id=1, tenant_id=3, quantity=10, available_quantity=10, reserved_quantity=0))
+        db.commit()
+    with Session(engine) as stale, Session(engine) as writer:
+        old_row = stale.get(Ledger, 1)
+        current = writer.get(Ledger, 1)
+        assert inventory_orders._order_ledger_cas(
+            writer, current, physical_delta=Decimal("0"),
+            available_delta=Decimal("-4"), reserved_delta=Decimal("4"),
+            now=datetime(2026, 11, 25),
+        )
+        writer.commit()
+        assert not inventory_orders._order_ledger_cas(
+            stale, old_row, physical_delta=Decimal("-8"),
+            available_delta=Decimal("-8"), reserved_delta=Decimal("0"),
+            now=datetime(2026, 11, 25),
+        )
+        stale.rollback()
+    with Session(engine) as db:
+        row = db.get(Ledger, 1)
+        assert (row.quantity, row.available_quantity, row.reserved_quantity) == (
+            Decimal("10"), Decimal("6"), Decimal("4")
+        )
+    engine.dispose()
+
+
+def test_approval_node_claim_rejects_stale_status_and_reassigned_node(tmp_path, monkeypatch):
+    from app.application.approval_workspace import decisions
+
+    base = declarative_base()
+
+    class Request(base):
+        __tablename__ = "approval_cas_test"
+        id = Column(Integer, primary_key=True)
+        tenant_id = Column(Integer, nullable=False)
+        status = Column(Integer, nullable=False)
+        current_node_id = Column(Integer, nullable=False)
+        current_node_order = Column(Integer, nullable=False)
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'approval-cas.sqlite'}")
+    base.metadata.create_all(engine)
+    monkeypatch.setattr(decisions, "ApprovalRequest", Request)
+    with Session(engine) as db:
+        db.add(Request(id=1, tenant_id=3, status=1, current_node_id=5, current_node_order=1))
+        db.commit()
+    with Session(engine) as stale, Session(engine) as writer:
+        old_req = stale.get(Request, 1)
+        changed = writer.query(Request).filter(Request.id == 1).update({
+            Request.current_node_id: 8, Request.current_node_order: 2
+        })
+        assert changed == 1
+        writer.commit()
+        assert not decisions._claim_open_step(stale, old_req, 2)
+        stale.rollback()
+    with Session(engine) as db:
+        current = db.get(Request, 1)
+        assert (current.status, current.current_node_id) == (1, 8)
+    engine.dispose()
+
+
+def test_approval_reviewer_cannot_act_after_tenant_change():
+    from app.application.approval_workspace.decisions import _active_decision_actor
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(tenant_id=4)
+    assert not _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
+    db.query.return_value.filter.return_value.first.return_value = None
+    assert not _active_decision_actor(db, SimpleNamespace(tenant_id=3), actor=5)
