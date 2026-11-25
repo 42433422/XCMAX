@@ -57,7 +57,7 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
       final files = await (widget.attachmentPicker ?? openFiles)();
       if (mounted && selectionScope == await _currentAttachmentScope() &&
           mounted && !_chatInvalidated) {
-        await _uploadAttachments(files);
+        await _uploadAttachments(files, selectionScope: selectionScope);
       }
     } catch (error) {
       if (mounted) _showMessage('选择文件失败：${mobileErrorText(error)}');
@@ -75,14 +75,15 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
           photo != null &&
           selectionScope == await _currentAttachmentScope() &&
           mounted && !_chatInvalidated) {
-        await _uploadAttachments([photo]);
+        await _uploadAttachments([photo], selectionScope: selectionScope);
       }
     } catch (error) {
       if (mounted) _showMessage('拍照失败：${mobileErrorText(error)}');
     }
   }
 
-  Future<void> _uploadAttachments(List<XFile> files) async {
+  Future<void> _uploadAttachments(List<XFile> files,
+      {String? selectionScope}) async {
     final client = _repository?.client;
     if (!mounted || _chatInvalidated || _sending || _uploading ||
         client == null || files.isEmpty) return;
@@ -107,6 +108,11 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
       final expectedBase = await client.resolveSessionBaseUrl();
       if (!active()) return;
       final expectedScope = '$generation|$expectedBase';
+      if ((selectionScope != null && selectionScope != expectedScope) ||
+          (_attachmentScope != null && _attachmentScope != expectedScope)) {
+        _showMessage('账号或连接已切换，请重新选择附件');
+        return;
+      }
       _attachmentScope = expectedScope;
 
       Future<bool> current() async {
