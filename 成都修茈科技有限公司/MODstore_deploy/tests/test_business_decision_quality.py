@@ -110,6 +110,21 @@ def test_post_hoc_prediction_is_not_scored_and_frozen_values_are_checked():
         "option_id": "op-1",
     }
 
+    simultaneous_proposal, simultaneous_state, _ = _example()
+    simultaneous_proposal["decision_review"]["frozen_at"] = simultaneous_state[
+        "authorization"
+    ]["approved_at"]
+    simultaneous_proposal["proposal_sha256"] = digest(
+        review.proposal_content(simultaneous_proposal)
+    )
+    simultaneous_state["authorization"]["proposal_sha256"] = simultaneous_proposal[
+        "proposal_sha256"
+    ]
+    assert review.evaluate_review(simultaneous_proposal, simultaneous_state, as_of) == {
+        "status": "unscorable_prediction_timing",
+        "option_id": "op-1",
+    }
+
     invalid_proposal, invalid_state, _ = _example(probability=1.2)
     assert review.evaluate_review(invalid_proposal, invalid_state, as_of) == {
         "status": "unscorable_invalid_frozen_forecast",
