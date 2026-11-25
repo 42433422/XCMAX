@@ -86,6 +86,11 @@ function t(label, fg, bg) {
   pair(label, () => token(fg), () => token(bg));
 }
 
+for (const mode of ['light', 'dark']) {
+  t('Shared ' + mode + ' main text / surface', 'semantic.' + mode + '.text_primary', 'semantic.' + mode + '.surface');
+  t('Shared ' + mode + ' secondary text / surface', 'semantic.' + mode + '.text_secondary', 'semantic.' + mode + '.surface');
+}
+
 t('Flutter light onPrimary', lightSurface, lightPrimary);
 t('Flutter light onSecondary', 'colors.neutral_light.n900', 'colors.status.success');
 t('Flutter light onError', 'colors.neutral_light.n900', 'colors.status.danger');
