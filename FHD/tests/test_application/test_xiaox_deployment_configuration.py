@@ -78,6 +78,38 @@ def deployment(monkeypatch, tmp_path):
     return state
 
 
+@pytest.mark.parametrize("invalid", ["relative", "outside", "traversal"])
+def test_runtime_loader_rejects_unbound_qualification_path(
+    deployment, tmp_path, invalid
+):
+    paths = {
+        "relative": "qualification.json",
+        "outside": str(tmp_path / "other" / "qualification.json"),
+        "traversal": str(deployment.root / ".." / "other" / "qualification.json"),
+    }
+    deployment.data["qualification_file"] = paths[invalid]
+    deployment.config.write_text(json.dumps(deployment.data))
+    with pytest.raises(RuntimePolicyError, match="qualification_file"):
+        configuration.runtime_settings()
+    assert deployment.attempts == []
+    assert not deployment.root.exists()
+
+
+def test_codex_compat_signing_failure_preserves_specific_recovery(monkeypatch):
+    from app.infrastructure.modstore_transport import MarketModelError
+
+    def reject(*_args, **_kwargs):
+        failure = MarketModelError({"status": 503})
+        failure.code = "CODEX_ROUTE_SIGNING_UNAVAILABLE"
+        raise failure
+
+    monkeypatch.setattr(configuration, "resolve_account_route", reject)
+    with pytest.raises(configuration.RuntimeSetupError) as raised:
+        configuration._prepared_route(None, None)
+    assert raised.value.code == "runtime_configuration_required"
+    assert "签发" in str(raised.value)
+
+
 def _write_legacy_deployment_receipt(deployment):
     deployment.root.mkdir(mode=0o700)
     route = configuration.runtime_settings().route

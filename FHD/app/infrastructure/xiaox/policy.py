@@ -357,6 +357,22 @@ def runtime_settings() -> RuntimeSettings:
         root = Path(data["runtime_root"]).expanduser() if data.get("runtime_root") else None
         if root is None or not root.is_absolute():
             raise RuntimePolicyError("Xiaox requires an absolute private runtime_root")
+        qualification = (
+            Path(data["qualification_file"]).expanduser()
+            if data.get("qualification_file")
+            else None
+        )
+        if qualification is not None and (
+            not qualification.is_absolute()
+            or not qualification.is_relative_to(root)
+            or not qualification.relative_to(root).parts
+            or ".." in qualification.relative_to(root).parts
+            or root.is_symlink()
+            or not qualification.resolve().is_relative_to(root.resolve())
+        ):
+            raise RuntimePolicyError(
+                "Xiaox qualification_file must be inside the private runtime_root"
+            )
         return RuntimeSettings(
             engine=engine,
             surfaces=tuple(surfaces),
@@ -364,9 +380,7 @@ def runtime_settings() -> RuntimeSettings:
             runtime_root=root,
             codex_bin=data.get("codex_bin"),
             turn_timeout_seconds=_positive(data.get("turn_timeout_seconds", 180), "timeout", 3570),
-            qualification_file=Path(data["qualification_file"])
-            if data.get("qualification_file")
-            else None,
+            qualification_file=qualification,
         )
     except (OSError, KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, RuntimePolicyError):

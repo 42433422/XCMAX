@@ -379,6 +379,7 @@ def _prepared_route(connection: Connection, selected: tuple[str, str] | None) ->
                 "CODEX_MODEL_UNSUPPORTED": "当前模型地址或密钥协议不支持独立运行，请在已有模型设置中核对模型服务。",
                 "CODEX_MODEL_METADATA_REQUIRED": "当前模型缺少已确认的独立上游厂商和真实模型标识，请在模型设置中核对。",
                 "CODEX_MODEL_CAPACITY_REQUIRED": "当前模型缺少有效的上下文容量和最大输出量，请在模型设置中补全。",
+                "CODEX_ROUTE_SIGNING_UNAVAILABLE": "平台暂时无法签发当前账号的模型路由，请联系管理员检查模型网关配置。",
                 "XIAOX_ROUTE_SIGNING_UNAVAILABLE": "平台暂时无法签发当前账号的模型路由，请联系管理员检查模型网关配置。",
             }.get(exc.code or "", "平台模型配置暂时不可用，请检查账号连接和已保存的模型设置。")
             raise RuntimeSetupError("runtime_configuration_required", message) from exc
