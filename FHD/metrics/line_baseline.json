@@ -1,5 +1,5 @@
 {
-  "lines": 2737235,
+  "lines": 2737605,
   "updated": "2026-11-25",
-  "note": "#3658 c8105ff0cbb6ab6fa98bf2ac8fd31bb43416fc1e 统一集成 #3615/#3620/#3621/#3623 及 #3623 新增采购退货反冲/迁移候选；相对 main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37 共 56 个文件，计入代码/文档净增 4101 行，审阅基线 2737235。仅按 GitHub diff 人工登记，check_net_deletion.py/preflight/required CI 尚未核验。真实 PG/客户授权原件/最终 Excel/独立财务对账与签收仍为 BLOCKED；不得降低门禁或以行数登记代替 PASS。"
+  "note": "#3658 同一集成候选：main 21c7225e96f447c8f9139c3d948bfbbbc47f3b37 + #3615/#3620/#3621/#3623（已吸收采购退货迁移/反冲及其新增两份测试至 2cefe60cf378e57daaa1aa23c1fedf52f4c47597）；相对 main 58 文件净增 4471 行，基线 2737605。按 GitHub 逐文件差分登记，原 check_net_deletion.py/preflight/required CI/真实 PostgreSQL 尚未验证。真实原件、客户审批、库存财务权威核对、可下载 XLSX、客户签认缺失仍 BLOCKED；任何门禁不得降低。"
 }
