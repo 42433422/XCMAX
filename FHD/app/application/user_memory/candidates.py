@@ -74,6 +74,7 @@ class CandidateMemory:
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
         activate_personal_capture: bool = False,
+        auto_review_capture: bool = False,
     ) -> dict[str, Any]:
         """Persist a candidate or activate an authorized personal capture in one commit."""
         normalized_type = self.ports.normalize_type(memory_type)
@@ -92,7 +93,26 @@ class CandidateMemory:
             and governance["source_policy"] == "observed_pending"
             and bool(governance["evidence"])
         )
-        activate = activate_personal_capture and personal_capture
+        expected_scope = (
+            "user" if user_id.startswith("personal-memory:v1:") else
+            "tenant" if user_id.startswith("enterprise-memory:v1:") else
+            "global_preference" if user_id.startswith("global-preference:v1:") else ""
+        )
+        reviewed_capture = (
+            auto_review_capture
+            and bool(expected_scope)
+            and governance["source"] == "chat_trace"
+            and governance["source_policy"] == "observed_pending"
+            and any(
+                item.get("kind") == "conversation_turn"
+                and item.get("scope") == expected_scope
+                and item.get("user_excerpt")
+                and item.get("tenant_id")
+                for item in governance["evidence"]
+            )
+            and (expected_scope != "global_preference" or normalized_type == "preference")
+        )
+        activate = (activate_personal_capture and personal_capture) or reviewed_capture
         memory = self.access.get_memory(user_id) or self.access.new_memory(user_id)
         fingerprint = self.ports.fingerprint(normalized_type, normalized_key, value)
         for record in memory.memory_v2_records:
@@ -145,10 +165,23 @@ class CandidateMemory:
             if conflicts:
                 candidate["conflict_review"] = conflicts
                 activate = False
+        # A different active value for the same key is a review task, not a
+        # silent overwrite or an additional contradictory planner fact.
+        if reviewed_capture and any(
+            row.get("status") == "active"
+            and row.get("key") == normalized_key
+            and row.get("fingerprint") != fingerprint
+            for row in memory.memory_v2_records
+        ):
+            candidate["governance_flags"].append("auto_review_conflicting_key")
+            activate = False
         if activate:
             candidate.update(
                 status="active",
-                source_policy="personal_auto_saved",
+                source_policy=(
+                    "personal_auto_saved" if expected_scope == "user" else "capture_auto_reviewed"
+                ),
+                auto_review_policy="direct_assertion_v1" if reviewed_capture else "legacy_personal",
                 auto_confirm_allowed=True,
                 requires_user_confirmation=False,
                 eligible_for_planner=True,

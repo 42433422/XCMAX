@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import threading
 from datetime import UTC, datetime
@@ -26,7 +27,7 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     _memory_owner_id,
     _personal_preference,
-    _personal_subject,
+    review_explicit_capture,
 )
 from app.application.persy_memory_utils import (
     _memory_owners as _memory_owners,
@@ -175,6 +176,13 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         source: str,
     ) -> dict[str, Any]:
         message = str(user_message or "").strip()
+        if (os.environ.get("XCAGI_MEMORY_CAPTURE") or "1").strip().lower() in {
+            "0", "false", "off", "no",
+        }:
+            return {"success": True, "created_count": 0, "candidates": []}
+        auto_review = (os.environ.get("XCAGI_MEMORY_AUTO_REVIEW") or "1").strip().lower() not in {
+            "0", "false", "off", "no",
+        }
         if not message or _SENSITIVE_PATTERN.search(message) or redact_text(message) != message:
             return {"success": True, "created_count": 0, "candidates": []}
         candidates = None
@@ -197,7 +205,6 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         except RECOVERABLE_ERRORS:
             # Model unavailability permits only the bounded offline candidate parser.
             candidates = None
-        assertion_context_verified = candidates is not None
         if candidates is None:
             candidates = extract_explicit_memories(message)
         if normalized_scope == "global_preference":
@@ -210,6 +217,10 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         created_count = 0
         now = _utc_now_iso()
         for candidate in candidates[:8]:
+            reviewed = (
+                review_explicit_capture(candidate, message, normalized_scope) if auto_review else None
+            )
+            candidate = reviewed or candidate
             evidence = {
                 "kind": "conversation_turn",
                 "source": str(source or "chat")[:80],
@@ -229,11 +240,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 source="chat_trace",
                 confidence=float(candidate["confidence"]),
                 evidence=[evidence],
-                activate_personal_capture=(
-                    assertion_context_verified
-                    and normalized_scope == "user"
-                    and _personal_subject(candidate)
-                ),
+                auto_review_capture=reviewed is not None,
             )
             record = result.get("candidate") if isinstance(result, dict) else None
             if not result.get("success"):

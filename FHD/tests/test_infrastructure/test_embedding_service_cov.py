@@ -95,21 +95,21 @@ class TestResolveMode:
         monkeypatch.delenv("FHD_EMBEDDING_MODE", raising=False)
         for val in ("1", "true", "yes", "on", "auto"):
             monkeypatch.setenv("XCAGI_RAG_ENABLED", val)
-            assert emb_mod._resolve_mode() == "hash", val
+            assert emb_mod._resolve_mode() == "auto", val
 
     def test_unset_falls_back_to_hash_on_desktop(self, monkeypatch: pytest.MonkeyPatch):
         """未设置 mode 与 RAG 时，桌面与网页一样用 hash。"""
         monkeypatch.delenv("FHD_EMBEDDING_MODE", raising=False)
         monkeypatch.delenv("XCAGI_RAG_ENABLED", raising=False)
         monkeypatch.setattr("app.utils.deployment.is_desktop_mode", lambda: True)
-        assert emb_mod._resolve_mode() == "hash"
+        assert emb_mod._resolve_mode() == "auto"
 
     def test_unset_falls_back_to_non_desktop_hash(self, monkeypatch: pytest.MonkeyPatch):
         """未设置 mode / RAG，非 desktop → hash。"""
         monkeypatch.delenv("FHD_EMBEDDING_MODE", raising=False)
         monkeypatch.delenv("XCAGI_RAG_ENABLED", raising=False)
         monkeypatch.setattr("app.utils.deployment.is_desktop_mode", lambda: False)
-        assert emb_mod._resolve_mode() == "hash"
+        assert emb_mod._resolve_mode() == "auto"
 
     def test_unset_mode_value_strips_whitespace_and_lowercases(
         self, monkeypatch: pytest.MonkeyPatch
@@ -122,7 +122,7 @@ class TestResolveMode:
         """空字符串视为未设置。"""
         monkeypatch.setenv("FHD_EMBEDDING_MODE", "")
         monkeypatch.setattr("app.utils.deployment.is_desktop_mode", lambda: False)
-        assert emb_mod._resolve_mode() == "hash"
+        assert emb_mod._resolve_mode() == "auto"
 
 
 # ---------------------------------------------------------------------------

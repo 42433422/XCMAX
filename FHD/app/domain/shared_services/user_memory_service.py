@@ -296,6 +296,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
         activate_personal_capture: bool = False,
+        auto_review_capture: bool = False,
     ) -> dict[str, Any]:
         return self._candidates.propose(
             user_id,
@@ -306,6 +307,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
             confidence=confidence,
             evidence=evidence,
             activate_personal_capture=activate_personal_capture,
+            auto_review_capture=auto_review_capture,
         )
 
     def confirm_memory_candidate(

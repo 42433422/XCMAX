@@ -1,0 +1,9 @@
+# Default-on memory and bounded automatic review
+
+- Neuro working memory defaults to short + governed long-term recall. Explicit opt-out remains supported.
+- Embedding defaults to auto: cached FastEmbed is preferred, otherwise hash. The chosen vector space and fingerprint are fixed per process. Provision model files and restart to re-probe; do not silently mix hash and semantic vectors. The fixed 256-dimensional legacy employee/user vector projection is unchanged in this increment; Mem0 uses the configured fingerprinted embedding space.
+- MemoryV2 remains authoritative. Persy capture defaults to automatic review of independently matched, single direct low-risk assertions. Private preferences/habits, explicitly scoped global preferences, and authorized tenant business assertions in a narrow predicate allowlist qualify. No implicit tenant or global publication; source and access checks are unchanged.
+- The canonical rule-extracted record, not the model's unsupported fields, is persisted for auto-reviewed captures. Conflicts, uncertain/quoted text, sensitive values, and unsupported types stay pending or are rejected by existing policy. No retroactive mass approval.
+- Set XCAGI_MEMORY_AUTO_REVIEW=0 to retain manual review for new Persy captures; XCAGI_MEMORY_CAPTURE=0 stops automatic capture. Existing records, deletion tombstones, revision validation and projection repair remain intact.
+- FastEmbed is currently an optional dependency (intent-semantic extra); provision the offline model in each deployment before claiming semantic default active. Explicit hash/local/remote/disabled overrides remain available. Existing Mem0 auto, consolidation and employee memory defaults are retained.
+- Release acceptance requires CI, real installed-model fingerprints, vector migration/rebuild, tenant/Mod isolation, and desktop/production performance verification. This change alone does not certify runtime readiness.
