@@ -567,6 +567,32 @@ describe('ChatView interactions', () => {
     localStorage.clear()
   })
 
+  it('桌面快捷命令复用当前对话的新建和历史会话控制器，忙碌时不打断', async () => {
+    const wrapper = await mountChatView()
+    window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    expect(mockChatViewApi.showHistoryPanel).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    isLoadingRef.value = true
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+    expect(showAppToast).toHaveBeenCalledWith(expect.stringContaining('当前对话'), 'warning')
+    wrapper.unmount()
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    expect(mockChatViewApi.newConversation).toHaveBeenCalledTimes(1)
+  })
+
+  it('独立任务工作区不响应主对话的新建及历史会话快捷命令', async () => {
+    await mountChatView({ workspaceTaskId: 'task-1', workspaceConversationId: 'conv-1' })
+    window.dispatchEvent(new Event('xcagi:workspace-open-sessions'))
+    window.dispatchEvent(new Event('xcagi:workspace-new-conversation'))
+    await flushPromises()
+    expect(mockChatViewApi.newConversation).not.toHaveBeenCalled()
+    expect(mockChatViewApi.showHistoryPanel).not.toHaveBeenCalled()
+  })
+
   it('语音通话入口只发起点话且不展开悬浮面板', async () => {
     const wrapper = await mountChatView()
     const listener = vi.fn()
