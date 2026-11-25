@@ -281,7 +281,7 @@ def test_no_unreviewed_direct_legacy_business_or_offline_dispatch_callers():
     """Catch new direct call sites bypassing the one guarded offline boundary.
 
     This audits Python calls in FHD/app only; it is not a claim about external
-    plugins, packaged clients or the not-yet-integrated Xiaox migration.
+    plugins, packaged clients or dynamically loaded Xiaox consumers.
     """
     import ast
     from pathlib import Path
