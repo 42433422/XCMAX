@@ -62,6 +62,11 @@ def seed_rbac(real_engine: Engine, *, logger: Logger) -> None:
         return
     SessionLocal = sessionmaker(bind=real_engine)
     with SessionLocal() as session:
+        if real_engine.dialect.name == "sqlite":
+            # Reserve SQLite's single writer before reading the catalog.
+            # Otherwise two bootstrap processes can both see missing rows,
+            # then conflict or fail with 'database is locked' during flush.
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
         perm_by_code = {perm.code: perm for perm in session.query(Permission).all()}
         for row in DEFAULT_PERMISSIONS:
             perm = perm_by_code.get(row["code"])
