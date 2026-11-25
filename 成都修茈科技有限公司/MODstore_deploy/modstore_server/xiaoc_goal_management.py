@@ -207,6 +207,65 @@ def discover_goal_candidate(
     return None
 
 
+def resumable_operating_candidate(
+    context: dict[str, Any],
+    state: dict[str, Any],
+    owner: int,
+    *,
+    now: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Return a sourced existing proposal after a previous unconfigured/failed cycle.
+
+    The original stable goal and idempotency key are reused, so no parallel
+    queue or duplicate business action is created by a repeat observation.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate
+
+    policy = state.get("policy") or {}
+    value = context.get("customer_value")
+    if (
+        state.get("paused")
+        or state.get("stopped")
+        or not policy.get("employee_id")
+        or not isinstance(policy.get("portfolio_limits"), dict)
+        or not isinstance(value, dict)
+        or type(owner) is not int
+        or owner <= 0
+    ):
+        return None
+    pending = []
+    goals = state.get("goals") or []
+    for goal in goals:
+        if (
+            not isinstance(goal, dict)
+            or goal.get("candidate_origin") != ORIGIN
+            or goal.get("status") != "proposed"
+            or goal.get("candidate_owner_user_id") != owner
+            or goal.get("decision_id")
+            or goal.get("step_bindings")
+        ):
+            continue
+        try:
+            if goal.get("next_review_at") and parse_time(goal["next_review_at"]) > now:
+                continue
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if (
+            candidate_gate(goal, owner, value, now=now)["status"] != "eligible"
+            or governance_gate(goal, goals, now=now)["status"] != "reviewable"
+        ):
+            continue
+        priority = goal.get("priority") or {}
+        score = priority.get("score") if isinstance(priority, dict) else 0
+        pending.append((score if type(score) is int else 0, goal))
+    if not pending:
+        return None
+    selected = sorted(pending, key=lambda row: (-row[0], row[1]["id"]))[0][1]
+    observation = selected["observation"]
+    fact = {"ref": selected["evidence_refs"][0], "text": json.dumps(observation, ensure_ascii=False)}
+    return dict(selected), fact
+
+
 def check_candidate_promotion(
     goal: dict[str, Any],
     owner: int,
