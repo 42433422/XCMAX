@@ -158,7 +158,7 @@ def test_rebuild_fetches_every_page_before_archiving(monkeypatch):
     assert outcome["complete"] is True
     assert outcome["rebuilt"] == 501
     assert outcome["pages_read"] == 2
-    assert requested == [0, 500]
+    assert requested == [0, 500, 0, 500]
     assert archived == list(range(1, 502))
 
 
@@ -229,6 +229,41 @@ def test_insert_must_be_independently_read_back(db_factory, monkeypatch):
         "archived": False,
         "reason_code": "invoice_archive_readback_failed",
     }
+
+
+def test_invoice_rebuild_refuses_source_mutation_between_scans(monkeypatch):
+    import app.domain.shared_services.user_cs_crm_store as store
+
+    called = 0
+
+    def pages(**_kw):
+        nonlocal called
+        called += 1
+        value = invoice(amount_cents=729 if called == 1 else 730)
+        return {"items": [value], "total": 1, "offset": 0}
+
+    monkeypatch.setattr(store, "list_crm_invoices", pages)
+    writes = []
+    monkeypatch.setattr(
+        archive, "archive_from_crm_invoice", lambda row, **_kw: writes.append(row)
+    )
+    result = archive.rebuild_ledger_archive()
+    assert result["complete"] is False
+    assert result["reason_code"] == "invoice_source_changed_during_pagination"
+    assert writes == []
+
+
+def test_replay_cannot_override_original_invoice_counterparty(db_factory):
+    with tenant_scope(7):
+        result = archive.archive_from_crm_invoice(
+            invoice(market_user_id=17), market_user_id=18
+        )
+        assert result == {
+            "archived": False,
+            "reason_code": "invoice_counterparty_conflict",
+        }
+        with db_factory() as db:
+            assert db.scalars(select(FinancialTransaction)).all() == []
 
 
 def test_invoice_projection_is_document_only(db_factory):
