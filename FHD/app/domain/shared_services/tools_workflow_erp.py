@@ -404,6 +404,10 @@ def _registered_router_purchase(
         return cast("dict[Any, Any]", svc.cancel_purchase_order(int(params.get("order_id") or 0)))
     if action == "create_inbound":
         return cast("dict[Any, Any]", svc.create_purchase_inbound(dict(params or {})))
+    if action == "post_return":
+        # Use the same ToolSpecV2/approval/tenant execution path. The posting
+        # service independently checks the original approval and frozen inputs.
+        return cast("dict[Any, Any]", svc.post_purchase_return(dict(params or {})))
     return {"success": False, "message": f"未注册的 purchase 动作: {action}"}
 
 
