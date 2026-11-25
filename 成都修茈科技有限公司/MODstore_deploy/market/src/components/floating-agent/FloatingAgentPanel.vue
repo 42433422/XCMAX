@@ -34,13 +34,6 @@
       />
     </header>
 
-    <XiaoCLifeControl
-      v-if="!corpMode && activityOwner !== undefined"
-      :owner="activityOwner"
-      :light="isLightTheme"
-      @open-life="activitySection = 'life'; showActivity = true"
-    />
-
     <!-- 状态条 -->
     <AgentStatusBar v-if="!corpMode && !activityOpen" :mode="mode" @stop="agentStore.stopRequest()" />
 
@@ -110,7 +103,16 @@
         @toggle-voice="toggleVoice"
         @pick-image="openImagePicker"
         @send="sendText"
-      />
+      >
+        <template v-if="!corpMode && activityOwner !== undefined" #autonomy>
+          <XiaoCLifeControl
+            :owner="activityOwner"
+            :light="isLightTheme"
+            compact
+            @open-life="activitySection = 'life'; showActivity = true"
+          />
+        </template>
+      </PanelComposer>
     </footer>
   </div>
 </template>

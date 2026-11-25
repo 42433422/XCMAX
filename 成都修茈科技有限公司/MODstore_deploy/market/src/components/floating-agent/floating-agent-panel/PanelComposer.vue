@@ -135,16 +135,19 @@ defineExpose({ autoResize })
       </button>
     </div>
     <div class="panel-composer">
-      <textarea
-        ref="textareaRef"
-        :value="draft"
-        class="panel-input"
-        placeholder="说点什么…"
-        rows="1"
-        aria-label="发送消息"
-        @keydown.enter.exact.prevent="$emit('send')"
-        @input="onDraftInput"
-      />
+      <div class="panel-input-shell" :class="{ 'panel-input-shell--autonomy': !!$slots.autonomy }">
+        <textarea
+          ref="textareaRef"
+          :value="draft"
+          class="panel-input"
+          placeholder="说点什么…"
+          rows="1"
+          aria-label="发送消息"
+          @keydown.enter.exact.prevent="$emit('send')"
+          @input="onDraftInput"
+        />
+        <slot name="autonomy" />
+      </div>
       <button
         type="button"
         class="panel-send"

@@ -97,6 +97,43 @@ describe('企业唯一小 C 管理界面', () => {
     expect(wrapper.text()).toContain('全企业生效')
   })
 
+  it('输入框紧凑模式仅在确认后更新企业等级，等待服务端回执', async () => {
+    vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue(snapshot())
+    const next = deferred<XiaoCLifeState>()
+    const update = vi.spyOn(xiaocLifeApi, 'update').mockReturnValue(next.promise)
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true } }))
+    await flushPromises()
+    const disclosure = wrapper.get('details').element as HTMLDetailsElement
+    expect(disclosure.open).toBe(false)
+    expect(wrapper.get('summary').text()).toContain('L4 · 自治运营')
+    disclosure.open = true
+    const slider = wrapper.getComponent(ElSlider)
+    slider.vm.$emit('update:modelValue', 6)
+    slider.vm.$emit('change', 6)
+    await flushPromises()
+    expect(update).not.toHaveBeenCalled()
+    expect(wrapper.get('summary').text()).toContain('L4 · 自治运营')
+    await click(wrapper, '确认切换')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith(4, { level: 6 })
+    expect(wrapper.get('summary').text()).toContain('L4 · 自治运营')
+    next.resolve(snapshot({ revision: 5, level: 6 }))
+    await flushPromises()
+    expect(wrapper.get('summary').text()).toContain('L6 · 数字生命')
+    expect(disclosure.open).toBe(false)
+  })
+
+  it('紧凑模式拒绝读取失败时更改自治等级', async () => {
+    vi.spyOn(xiaocLifeApi, 'read').mockRejectedValue(new ApiError('unavailable', 503))
+    const update = vi.spyOn(xiaocLifeApi, 'update')
+    const wrapper = track(mount(XiaoCLifeControl, { props: { owner: 11, compact: true } }))
+    await flushPromises()
+    expect(wrapper.get('summary').text()).toContain('自治待核实')
+    expect(wrapper.getComponent(ElSlider).props('disabled')).toBe(true)
+    expect(wrapper.findAll('button').find(node => node.text().trim() === '确认切换')?.attributes('disabled')).toBeDefined()
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('同一页面的控制与活动共用一次读取，窗口重新聚焦后同步后台降级', async () => {
     const read = vi.spyOn(xiaocLifeApi, 'read').mockResolvedValue(snapshot())
     const wrapper = track(
