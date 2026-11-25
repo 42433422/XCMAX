@@ -75,7 +75,12 @@ class ReplayDelivery:
             )
             # The claim covers live delivery, not a database transaction or
             # the storage mutex. Handlers may read, enqueue or schedule retry.
-            for callback in self.callbacks:
+            # Persist before invoking any callback. A process death or exception
+            # between publication and recording acceptance leaves an unknown
+            # outcome, which must not be published again automatically.
+            if not self.ledger.begin_delivery(entry_id, replay_count):
+                return False, "replay_outcome_unknown"
+            for index, callback in enumerate(self.callbacks):
                 try:
                     accepted = callback(entry.original_event)
                 except BOUNDARY_ERRORS as error:
@@ -83,8 +88,11 @@ class ReplayDelivery:
                     raise
                 if accepted is False:
                     self.runtime.log().warning("[DeadLetterQueue] 重播发布被拒绝: %s", entry_id)
+                    if index == 0:
+                        self.ledger.clear_delivery_pending(entry_id)
                     return False, "publish_rejected"
             self.ledger.mark_replayed(entry_id, replay_count)
+            self.ledger.clear_delivery_pending(entry_id)
             with self.lock:
                 self.stats["replayed"] += 1
             return True, ""
