@@ -13,8 +13,8 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app.application.rbac_app_service import RbacAppService
-from app.errors import AppError
 from app.db.models import Permission, Role, User, UserSession, role_permissions
+from app.errors import AppError
 from app.utils.time import utc_now_naive
 
 
