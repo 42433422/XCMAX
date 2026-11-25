@@ -143,6 +143,7 @@ def observe_enterprise(
         or not 1 <= limit_per_source <= 5
     ):
         raise ValueError("invalid_enterprise_perception_scope")
+    live_clock = now is None
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("enterprise_perception_clock_timezone_required")
@@ -180,6 +181,8 @@ def observe_enterprise(
                 source_statuses[name] = "unavailable"
                 continue
             samples = []
+            source_observed = 0
+            source_alerts = []
             for ref in refs["refs"][:limit_per_source]:
                 if (
                     not isinstance(ref, dict)
@@ -200,7 +203,9 @@ def observe_enterprise(
                 if not isinstance(snapshot, dict) or snapshot.get("entity_id") != entity_id or snapshot.get("entity_type") != entity_type:
                     samples.append({"status": "unknown", "reason_code": "source_identity_mismatch"})
                     continue
-                health = _snapshot_health(snapshot, scope, now)
+                health = _snapshot_health(
+                    snapshot, scope, datetime.now(UTC) if live_clock else now
+                )
                 if health != "fresh":
                     samples.append({
                         "entity_id": entity_id,
@@ -208,27 +213,30 @@ def observe_enterprise(
                         "reason_code": snapshot.get("reason_code") or "observation_not_current",
                     })
                     continue
-                observed += 1
+                source_observed += 1
                 samples.append({
                     "entity_id": entity_id,
                     "status": "fresh",
                     "snapshot": snapshot,
                 })
                 if candidate := _journal_anomaly(snapshot):
-                    alerts.append(candidate)
+                    source_alerts.append(candidate)
             flags = {item["status"] for item in samples}
             if "permission_denied" in flags:
                 status = "permission_denied"
                 samples = []  # Never return partial records after a permission reversal.
-            elif "unknown" in flags:
-                status = "unknown"
-            elif "stale" in flags:
-                status = "stale"
-            elif not samples:
-                status = "no_visible_records"
-            elif refs["has_more"] or len(refs["refs"]) > limit_per_source:
-                status = "partial_sample"
             else:
+                observed += source_observed
+                alerts.extend(source_alerts)
+            if "permission_denied" not in flags and "unknown" in flags:
+                status = "unknown"
+            elif "permission_denied" not in flags and "stale" in flags:
+                status = "stale"
+            elif "permission_denied" not in flags and not samples:
+                status = "no_visible_records"
+            elif "permission_denied" not in flags and (refs["has_more"] or len(refs["refs"]) > limit_per_source):
+                status = "partial_sample"
+            elif "permission_denied" not in flags:
                 status = "fresh_sample"
             sources.append({
                 "source": name,
@@ -261,7 +269,7 @@ def observe_enterprise(
         "continuous_freshness_monitoring_verified": False,
     }
     return {
-        "observed_at": now.isoformat(),
+        "observed_at": (datetime.now(UTC) if live_clock else now).isoformat(),
         "scope": "current_actor_visible_recent_samples_not_enterprise_wide",
         "limit_per_source": limit_per_source,
         "force_refresh": force_refresh,
