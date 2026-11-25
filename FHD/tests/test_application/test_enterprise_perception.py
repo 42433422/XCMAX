@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.application.enterprise_cognition.perception import observe_enterprise
 from app.application.enterprise_cognition.service import cognition_result_verified
 from app.domain.enterprise_cognition.contracts import CognitionRequest, INPUT_MODELS
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 NOW = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)
 SCOPE = {"tenant_id": "11", "actor_id": "7", "mod_id": ""}
@@ -246,7 +247,10 @@ def test_perception_http_reads_real_authorized_order_without_claiming_kpis(
         rows = [sample["snapshot"] for sample in sales["samples"] if sample["status"] == "fresh"]
         assert any(row["entity_id"] == order_id for row in rows)
         assert all(row["tenant_id"] == str(actor.tenant_id) for row in rows)
-        assert payload["domains"]["B01"]["required_metrics"]["revenue"]["knowledge_kind"] == "unknown"
+        assert (
+            payload["domains"]["B01"]["required_metrics"]["revenue"]["knowledge_kind"]
+            == "unknown"
+        )
         assert payload["domains"]["B01"]["sources"][0]["status"] == "permission_denied"
         forged = client.post(
             "/api/enterprise/cognition",
