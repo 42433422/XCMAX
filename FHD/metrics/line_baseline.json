@@ -1,5 +1,5 @@
 {
-  "lines": 2733446,
+  "lines": 2733572,
   "updated": "2026-11-25",
-  "note": "后端安全收敛：SQLAlchemy 统一会话事务、Mod 失败关闭、Legacy 与 ERP Mod 客户写入共用 Pydantic/OpenAPI 契约、异常传播及安全调用栈；相对主线净增 248 行（正式 preflight/CI 待校验）；本轮补充变更（PR #3621）：新增实证门禁/数据库只读核验/事务异常回归，按 GitHub 差异统计计入 64 行（FHD/CHANGELOG.md +2；FHD/app/application/customer_crud_mixin.py +12；FHD/tests/test_application/test_customer_app_service.py +50）。这是显式评审候选，未经本 SHA check_net_deletion.py、preflight 和 CI 实测，仍需独立审核，不降低原门禁。"
+  "note": "后端安全收敛：SQLAlchemy 统一会话事务、Mod 失败关闭、Legacy 与 ERP Mod 客户写入共用 Pydantic/OpenAPI 契约、异常传播及安全调用栈；相对主线净增 248 行（正式 preflight/CI 待校验）；本轮补充变更（PR #3621）：新增实证门禁/数据库只读核验/事务异常回归，按 GitHub 差异统计计入 64 行（FHD/CHANGELOG.md +2；FHD/app/application/customer_crud_mixin.py +12；FHD/tests/test_application/test_customer_app_service.py +50）。这是显式评审候选，未经本 SHA check_net_deletion.py、preflight 和 CI 实测，仍需独立审核，不降低原门禁。；再次登记 #3621 截至本 SHA 的剩余代码/合同测试净变更，依据 GitHub 文件级 diff 总增长 190 行（相对原 PR HEAD），上次记录 2733446，本次登记 2733572。含前端业务响应和 CAS 版本合同 / PostgreSQL 四查询 EXPLAIN 校验；实际净删除工具、preflight 与必需 CI 未执行通过，须独立复核，不能当通过证明。"
 }
