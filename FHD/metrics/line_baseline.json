@@ -1,5 +1,5 @@
 {
-  "lines": 2734051,
+  "lines": 2734050,
   "updated": "2026-11-25",
-  "note": "On main 21c7225, +575 net #3613 holdout/SQLite implementation and +342 net #3614 two-process regression/test CI and two changelog lines. All source-growth and CI gates remain mandatory; real 13x3 model and SQLite process evidence pending latest SHA."
+  "note": "On main 21c7225, +575 net #3613 holdout/SQLite implementation and +341 net #3614 two-process regression/test CI and two changelog lines. All source-growth and CI gates remain mandatory; real 13x3 model and SQLite process evidence pending latest SHA."
 }
