@@ -15,19 +15,25 @@ An observed ERP snapshot carries `source`, `entity_type`, `entity_id`,
 `source_version=sha256:<64 lowercase hex chars>`, and UTC `observed_at`.
 The SHA-256 covers the **selected authority state and source_last_changed**;
 it is not a database transaction ID, a commit sequence or evidence for fields
-omitted from the source adapter. Up to 32 prior recorded observations remain
-available for audit. Recorded observation time is not an effective-business-time
-ledger.
+omitted from the source adapter. Each current query also returns `fact_references`;
+its `fact_token=erp:<64 lowercase hex chars>` binds the tenant, Mod, source
+table, entity type and entity ID to that exact `source_version`. The token
+prevents replaying a same-content snapshot for a different record or tenant.
+It is an opaque identity checksum, **not** an authorization or signed receipt.
+Up to 32 prior recorded observations remain available for audit. Recorded
+observation time is not an effective-business-time ledger.
 
 ## Reconcile remembered facts (query, read only)
 
 1. Read a visible entity through the original `enterprise_cognition.query`
-   action and save its `source_version` with a memory/decision reference.
+   action and save its `source_version` **and** `fact_references[].fact_token`
+   with a memory/decision reference.
    For orders, inventory movements, fund and journal entries, and customers,
    never store an unversioned textual memory as an independently verified ERP
    fact. Unverified chat assertions remain claims.
 2. Before reusing that reference for a decision, call the **same** query action
-   with `entity_type`, `entity_id` and `expected_source_version`.
+   with `entity_type`, `entity_id`, `expected_source_version` **and**
+   `expected_fact_token`. The latter two are mandatory as a pair.
    The backend forces an original-source SELECT, bypassing the 30-second
    projection TTL. Historical `as_of`, scenarios and multi-entity scans cannot
    be combined with this contract.
@@ -35,6 +41,8 @@ ledger.
    projection matches the referenced version. A changed source returns
    `superseded`, `memory_reuse_allowed=false`,
    `requires_reconciliation=true` and model-tool `success=false`.
+   Replayed references to an identical-content row in another tenant/Mod or
+   entity also return `superseded`, with an explicit scope/identity reason.
    Unavailable or unauthorized source returns `unknown` (or access denial),
    never a stale positive result. Mismatched/unknown versions do not emit
    operating-gap proposals in this response.
