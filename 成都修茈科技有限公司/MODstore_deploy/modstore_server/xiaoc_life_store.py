@@ -732,7 +732,9 @@ def finish_cycle(
                 data["unknown_usage"] = True
             elif expected_closeout is not None and budget["reserved_tokens"] == 0:
                 data["unknown_usage"] = False
-        safe = fresh and actual_tokens is not None and actual_tokens <= reserved
+        # A failed or blocked cycle may settle real tokens, but must not adopt
+        # a goal, interest or self-assessment just because the lease was fresh.
+        safe = fresh and status == "completed" and actual_tokens is not None and actual_tokens <= reserved
         if fresh:
             _advance_goal_cursor(data, claim, details)
         if safe:
