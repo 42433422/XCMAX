@@ -504,9 +504,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         stored = event_store.get_admitted_event(receipt.event_id)
         if stored is None:
             raise RuntimeError("committed admission record is unavailable")
-        return replace(receipt, queued=self.publish(stored))
+        return replace(receipt, queued=self.publish(stored, _preserve_queue_identity=True))
 
-    def publish(self, event: NeuroEvent) -> bool:
+    def publish(self, event: NeuroEvent, *, _preserve_queue_identity: bool = False) -> bool:
         """Best-effort local queue admission; not a durable acceptance receipt.
 
         Reliable callers must use publish_reliable with a durable EventStore.
@@ -538,7 +538,11 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             span_id = sp.span_id
             self._trace_by_event_id[event.metadata.event_id] = span_id
 
-        success = self._event_queue.put(event)
+        success = (
+            self._event_queue.put(event, preserve_identity=True)
+            if _preserve_queue_identity
+            else self._event_queue.put(event)
+        )
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
