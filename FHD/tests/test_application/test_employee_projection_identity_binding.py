@@ -4,19 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
 from sqlalchemy import select
 
 from app.db.models import AiEmployeeProfile, User
 from app.db.models.employee_run_log import EmployeeRunLog
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_application.test_enterprise_projection import get, world as inherited_world
+from tests.test_application import test_enterprise_projection
 
-
-@pytest.fixture(name="world")
-def employee_world(inherited_world):
-    """Expose the existing projection fixture without shadowing its import."""
-    return inherited_world
+get = test_enterprise_projection.get
+world = test_enterprise_projection.world
 
 
 def test_employee_projection_refuses_misbound_virtual_user(world):
