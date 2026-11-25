@@ -157,6 +157,7 @@ def build_pricing(plans_cfg: dict) -> dict:
         "commercial_terms": {
             "customization_from_cents": customization_from,
             "customization_from_display": format_cents(customization_from),
+            "launch_campaign": plans_cfg["commercial_terms"].get("launch_campaign", {}),
         },
         "all_plans": out,
         "purchase_url_tpl": "/market/account-plans?plan={plan_id}&source=official-site",

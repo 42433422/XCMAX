@@ -36,9 +36,9 @@
       {
         "id": "saas-permanent-standard",
         "title": "XCAGI 软件买断",
-        "description": "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
-        "amount_cents": 680000,
-        "amount_display": "¥6,800",
+        "description": "3,000 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+        "amount_cents": 300000,
+        "amount_display": "¥3,000",
         "quota_cents": 0,
         "quota_display": null,
         "duration_days": null,
@@ -48,8 +48,14 @@
     ],
     "extended_plans": [],
     "commercial_terms": {
-      "customization_from_cents": 298000,
-      "customization_from_display": "¥2,980"
+      "customization_from_cents": 99900,
+      "customization_from_display": "¥999",
+      "launch_campaign": {
+        "enabled": false,
+        "starts_at": null,
+        "ends_at": null,
+        "benefits": []
+      }
     },
     "all_plans": [
       {
@@ -79,9 +85,9 @@
       {
         "id": "saas-permanent-standard",
         "title": "XCAGI 软件买断",
-        "description": "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
-        "amount_cents": 680000,
-        "amount_display": "¥6,800",
+        "description": "3,000 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+        "amount_cents": 300000,
+        "amount_display": "¥3,000",
         "quota_cents": 0,
         "quota_display": null,
         "duration_days": null,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi } from '@/api/auth'
 import modelPaymentApi, { type ModelPaymentPlan } from '@/api/modelPayment'
@@ -15,6 +15,33 @@ const errorMessage = ref('')
 const subscription = ref<Record<string, unknown> | null>(null)
 const permanentActivated = computed(() => subscription.value?.active === true && String(subscription.value.plan_id || '').startsWith('saas-permanent-'))
 const customizationFrom = ref<number | null>(null)
+type LaunchCampaign = { enabled: boolean; starts_at: string | null; ends_at: string | null; benefits: string[] }
+const launchCampaign = ref<LaunchCampaign | null>(null)
+const campaignNow = ref(Date.now())
+let campaignTimer: ReturnType<typeof setInterval> | undefined
+const campaignClock = computed(() => {
+  const campaign = launchCampaign.value
+  if (!campaign || campaign.enabled !== true || !Array.isArray(campaign.benefits) ||
+    !campaign.benefits.length || !campaign.benefits.every(item => typeof item === 'string' && item.trim())) return null
+  const timestamp = (value: string | null) => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN
+  const start = timestamp(campaign.starts_at)
+  const end = timestamp(campaign.ends_at)
+  const now = campaignNow.value
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || now < start || now >= end) return null
+  const seconds = Math.ceil((end - now) / 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${Math.floor(seconds / 86400)} 天 : ${pad(Math.floor(seconds / 3600) % 24)} 时 : ${pad(Math.floor(seconds / 60) % 60)} 分 : ${pad(seconds % 60)} 秒`
+})
+function startCampaignClock() {
+  clearInterval(campaignTimer)
+  campaignNow.value = Date.now()
+  if (launchCampaign.value?.enabled === true) campaignTimer = setInterval(() => {
+    campaignNow.value = Date.now()
+    if (campaignNow.value >= Date.parse(launchCampaign.value?.ends_at || '')) clearInterval(campaignTimer)
+  }, 1000)
+}
+onUnmounted(() => clearInterval(campaignTimer))
+
 const standard = computed(() => plans.value.find(plan => plan.id === 'saas-permanent-standard'))
 const trial = computed(() => plans.value.find(plan => plan.id === 'saas-trial-30'))
 const { plansUrl, marketPlanUrl } = useMarketUrls()
@@ -42,6 +69,8 @@ onMounted(async () => {
     if (!planRes?.success) throw new Error('plans unavailable')
     plans.value = planRes.data?.plans || []
     customizationFrom.value = planRes.data?.commercial_terms?.customization_from_cents ?? null
+    launchCampaign.value = planRes.data?.commercial_terms?.launch_campaign ?? null
+    startCampaignClock()
     subscription.value = (subRes as { data?: Record<string, unknown> } | null)?.data || null
   } catch {
     errorMessage.value = '暂时无法加载价格，请稍后重试。'
@@ -84,6 +113,12 @@ async function purchase(planId: string) {
             <h2>{{ standard.title }}</h2>
             <p class="saas-price"><strong class="saas-price-num">¥{{ formatYuan(standard.amount_cents) }}</strong><span>一次付费</span></p>
             <p class="saas-desc">{{ standard.description }}</p>
+            <div v-if="campaignClock && !permanentActivated" class="launch-campaign" aria-label="首发权益活动">
+              <strong>✦ 首发专属权益</strong>
+              <p>{{ launchCampaign?.benefits.join(' · ') }}</p>
+              <div class="launch-campaign-clock"><span>权益领取倒计时</span><output :key="campaignClock" role="timer" aria-live="off">{{ campaignClock }}</output></div>
+              <small>活动结束后长期买断价与定制起价不变。</small>
+            </div>
             <button class="saas-buy-btn" :disabled="checkoutPlanId !== null || permanentActivated" @click="purchase(standard.id)">{{ permanentActivated ? '已开通永久使用' : checkoutPlanId === standard.id ? '正在前往支付…' : `立即购买 ¥${formatYuan(standard.amount_cents)}` }}</button>
           </article>
           <article class="saas-plan-card">
@@ -130,4 +165,15 @@ async function purchase(planId: string) {
 .saas-test-entry { padding: 16px 0; border-top: 1px solid #e5e7eb; }
 .saas-test-entry summary { cursor: pointer; }
 .saas-back-link { margin-top: 24px; background: none; border: 0; color: #2563eb; cursor: pointer; text-decoration: underline; }
+
+/* Launch benefits are separate from permanent pricing; inherit existing theme colors. */
+.launch-campaign { margin: 16px 0; padding: 14px 18px; border: 1px solid var(--line, currentColor); border-radius: var(--radius-md, 12px); color: inherit; }
+.launch-campaign[hidden] { display: none !important; }
+.launch-campaign strong { letter-spacing: .04em; }
+.launch-campaign p { margin: 4px 0; }
+.launch-campaign-clock { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.launch-campaign-clock time, .launch-campaign-clock output { font-weight: 750; font-variant-numeric: tabular-nums; animation: launch-clock-enter .24s ease-out both; }
+.launch-campaign small { display: block; opacity: .8; }
+@keyframes launch-clock-enter { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .launch-campaign-clock time, .launch-campaign-clock output { animation: none; } }
 </style>

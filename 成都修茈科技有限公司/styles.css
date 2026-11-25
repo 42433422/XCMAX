@@ -4241,3 +4241,14 @@ body.page-contact .contact-channels-section {
 .case-flow-video figcaption{margin-top:9px;color:#58677a;font-size:13px;line-height:1.6}
 @media(max-width:980px){.case-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.home-terms{grid-template-columns:1fr}}
 @media(max-width:600px){.case-flow{grid-template-columns:1fr}}
+
+/* Launch benefits are separate from permanent pricing; inherit existing theme colors. */
+.launch-campaign { margin: 16px 0; padding: 14px 18px; border: 1px solid var(--line, currentColor); border-radius: var(--radius-md, 12px); color: inherit; }
+.launch-campaign[hidden] { display: none !important; }
+.launch-campaign strong { letter-spacing: .04em; }
+.launch-campaign p { margin: 4px 0; }
+.launch-campaign-clock { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.launch-campaign-clock time, .launch-campaign-clock output { font-weight: 750; font-variant-numeric: tabular-nums; animation: launch-clock-enter .24s ease-out both; }
+.launch-campaign small { display: block; opacity: .8; }
+@keyframes launch-clock-enter { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .launch-campaign-clock time, .launch-campaign-clock output { animation: none; } }

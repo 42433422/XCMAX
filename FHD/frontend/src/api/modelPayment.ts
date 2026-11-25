@@ -40,7 +40,7 @@ export const modelPaymentApi = {
         plans: ModelPaymentPlan[]
         integration: ModelPaymentIntegration
         budget_range?: string | null
-        commercial_terms?: { customization_from_cents?: number }
+        commercial_terms?: { customization_from_cents?: number; launch_campaign?: { enabled: boolean; starts_at: string | null; ends_at: string | null; benefits: string[] } }
       }
       message?: string
     }
