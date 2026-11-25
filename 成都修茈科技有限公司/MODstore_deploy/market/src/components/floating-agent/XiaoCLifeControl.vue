@@ -258,7 +258,7 @@ async function applyLevel() {
   font-size: 0.75rem;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(.2,.8,.2,1);
+  transition: background-color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease), color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease), transform var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out);
 }
 .xiaoc-life-disclosure__trigger:hover,
 .xiaoc-life-disclosure__trigger--open { background: #ffffff0d; color: #f2efe8; }
@@ -267,7 +267,7 @@ async function applyLevel() {
 .xiaoc-life-disclosure__trigger--light.xiaoc-life-disclosure__trigger--open { background: #24201808; color: #302e29; }
 .xiaoc-life-disclosure__trigger:active { transform: scale(.97); }
 .xiaoc-life-disclosure__trigger:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.xiaoc-life-disclosure__trigger svg { opacity: 0.72; transition: transform 180ms cubic-bezier(.2,.8,.2,1); }
+.xiaoc-life-disclosure__trigger svg { opacity: 0.72; transition: transform var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out); }
 .xiaoc-life-disclosure__trigger--open svg { transform: rotate(180deg); }
 
 :global(.xiaoc-autonomy-popover.el-popper) {
@@ -280,14 +280,14 @@ async function applyLevel() {
   box-shadow: none;
 }
 /* Popper owns positioning. Animate the inner surface, never its position transform. */
-:global(.xiaoc-autonomy-motion-enter-active) { transition: opacity 180ms cubic-bezier(.2,.8,.2,1); }
-:global(.xiaoc-autonomy-motion-leave-active) { transition: opacity 130ms ease; }
+:global(.xiaoc-autonomy-motion-enter-active) { transition: opacity var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out); }
+:global(.xiaoc-autonomy-motion-leave-active) { transition: opacity var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease); }
 :global(.xiaoc-autonomy-motion-enter-from),
 :global(.xiaoc-autonomy-motion-leave-to) { opacity: 0; }
 :global(.xiaoc-autonomy-motion-enter-active .xiaoc-life-control--compact) {
-  transition: transform 180ms cubic-bezier(.2,.8,.2,1);
+  transition: transform var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out);
 }
-:global(.xiaoc-autonomy-motion-leave-active .xiaoc-life-control--compact) { transition: transform 130ms ease; }
+:global(.xiaoc-autonomy-motion-leave-active .xiaoc-life-control--compact) { transition: transform var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease); }
 :global(.xiaoc-autonomy-motion-enter-from .xiaoc-life-control--compact),
 :global(.xiaoc-autonomy-motion-leave-to .xiaoc-life-control--compact) { transform: translateY(4px) scale(.985); }
 
@@ -407,7 +407,7 @@ async function applyLevel() {
   background: var(--life-accent);
   border: 2px solid var(--life-surface);
   box-shadow: 0 0 0 1px var(--life-accent), 0 2px 5px #0002;
-  transition: transform 170ms cubic-bezier(.2,.9,.3,1), box-shadow 170ms ease;
+  transition: transform var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out), box-shadow var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
 }
 .xiaoc-life-control--compact :deep(.el-slider:not(.is-disabled) .el-slider__button-wrapper:hover .el-slider__button) {
   transform: scale(1.10);
@@ -422,7 +422,7 @@ async function applyLevel() {
   color: var(--life-muted);
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
-  transition: color 150ms ease;
+  transition: color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
 }
 .xiaoc-life-control--compact :deep([data-autonomy-preview="1"] .el-slider__marks-text:nth-child(1)),
 .xiaoc-life-control--compact :deep([data-autonomy-preview="2"] .el-slider__marks-text:nth-child(2)),
@@ -436,10 +436,10 @@ async function applyLevel() {
 @supports selector(:has(*)) {
   /* Follow the pointer directly; ease only discrete clicks and keyboard changes. */
   .xiaoc-life-control--compact :deep(.el-slider:not(:has(.el-slider__button-wrapper.dragging)) .el-slider__button-wrapper) {
-    transition: left 170ms cubic-bezier(.2,.8,.2,1);
+    transition: left var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out);
   }
   .xiaoc-life-control--compact :deep(.el-slider:not(:has(.el-slider__button-wrapper.dragging)) .el-slider__bar) {
-    transition: width 170ms cubic-bezier(.2,.8,.2,1);
+    transition: width var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out);
   }
 }
 .xiaoc-life-control__preview {
@@ -457,7 +457,7 @@ async function applyLevel() {
   padding: 4px 6px;
   border-radius: 6px;
   text-decoration: none;
-  transition: background-color 140ms ease, opacity 140ms ease;
+  transition: background-color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease), opacity var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
 }
 .xiaoc-life-control--compact button:hover:not(:disabled) { background: var(--life-hover); }
 .xiaoc-life-control--compact button:focus-visible { outline: 2px solid var(--life-accent); outline-offset: 1px; }
