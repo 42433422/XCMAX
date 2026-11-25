@@ -11,6 +11,7 @@ import '../../policy/pinned_ids.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_chat_core/flutter_chat_core.dart';
+import 'chat_stream_frame_batcher.dart';
 
 import '../../api/mobile_models.dart' show MobileMeData;
 import '../../data/ai_employee_profile.dart';
@@ -75,6 +76,7 @@ class _ChatScreenState extends _ChatStateActions
     _attachmentSessionSubscription = _repository?.client.sessionChanges
         .listen((_) {
       if (_repository?.client.authGeneration != _chatGeneration) {
+        _streamTokenBatcher.clear();
         _draftTimer?.cancel();
         _chatInvalidated = true;
         if (mounted) {
@@ -104,6 +106,11 @@ class _ChatScreenState extends _ChatStateActions
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final foreground = state == AppLifecycleState.resumed;
     if (_chatForeground == foreground) return;
+    // Paint the last received bytes before hiding the screen; later packets
+    // remain fenced by the existing lifecycle/receipt recovery policy.
+    if (!foreground && mounted && _activeAssistantId != null) {
+      _streamTokenBatcher.flushFor(_activeAssistantId!);
+    }
     _chatForeground = foreground;
     _chatEpoch++;
     if (!foreground) {
@@ -135,6 +142,7 @@ class _ChatScreenState extends _ChatStateActions
     _draftTimer?.cancel();
     _persistChatDraftSnapshot();
     _controller.removeListener(_scheduleChatDraftSave);
+    _streamTokenBatcher.dispose();
     _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
