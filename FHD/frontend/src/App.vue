@@ -16,6 +16,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useRoute, useRouter } from 'vue-router'
+import { RouteScrollMemory } from '@/utils/routeScrollMemory'
 
 const viewPending = ref(false)
 const { hideChrome, appReady, startupVisible, startupError, startupStage, retryStartup, cancelStartup, isAdminConsoleSpa } = useAppBoot(viewPending)
@@ -37,7 +38,7 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
   account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId]))
 const currentRoute = useRoute()
 const router = useRouter()
-const scrollMemory = new Map()
+const scrollMemory = new RouteScrollMemory()
 const removeScrollGuards = []
 let scrollActive = true, scrollGeneration = 0, scrollFrame, scrollTimer
 function cancelScrollRestore() {
@@ -47,26 +48,11 @@ function cancelScrollRestore() {
   scrollFrame = scrollTimer = undefined
 }
 watch(cacheScope, () => { cancelScrollRestore(); scrollMemory.clear() })
-function scrollSignature(el) {
-  return `${el.id || ''}::${el.className || ''}`
-}
 function rememberRouteScroll(fullPath) {
-  const root = document.querySelector('.route-view-shell')
-  if (!root) return
-  const items = [root, ...root.querySelectorAll('*')]
-    .filter((el) => el.scrollHeight > el.clientHeight + 40 && el.clientHeight > 40 && el.scrollTop > 0)
-    .map((el) => ({ sig: scrollSignature(el), top: el.scrollTop }))
-  if (items.length) scrollMemory.set(fullPath, items)
+  scrollMemory.remember(fullPath, document.querySelector('.route-view-shell'))
 }
 function restoreRouteScroll(fullPath) {
-  const items = scrollMemory.get(fullPath)
-  const root = document.querySelector('.route-view-shell')
-  if (!items?.length || !root) return
-  const nodes = [root, ...root.querySelectorAll('*')]
-  for (const item of items) {
-    const el = nodes.find((node) => scrollSignature(node) === item.sig)
-    if (el) el.scrollTop = item.top
-  }
+  scrollMemory.restore(fullPath, document.querySelector('.route-view-shell'))
 }
 let sessionProbeTimer = 0
 onMounted(() => {
