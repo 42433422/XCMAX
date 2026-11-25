@@ -110,6 +110,12 @@ def test_duplicate_event_and_forged_provenance_fail_closed() -> None:
     assert conflict is False
     assert repeated["_observation_history"] == stored["_observation_history"]
 
+    replay = _snapshot("8", instant)
+    replay["evidence"][0]["event_id"] = "forged-replay-provenance"
+    preserved, rejected = record_observation(json.dumps(stored), replay)
+    assert rejected is True
+    assert preserved == stored
+
     duplicated = {**stored, "_observation_history": stored["_observation_history"] * 2}
     with pytest.raises(ValueError, match="observation_duplicate_history_entry"):
         read_observations(json.dumps(duplicated), _SCOPE)
