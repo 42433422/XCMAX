@@ -388,10 +388,12 @@ class _NativeInventoryScreenState extends State<NativeInventoryScreen> {
                   onRefresh: _busy
                       ? () async {}
                       : () => _load(page: _page, reloadWarehouses: true),
-                  child: ListView(
+                  child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: [
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        sliver: SliverList.list(children: [
                       WorkspaceTransition(
                         child: KeyedSubtree(
                             key: ValueKey(_tab), child: _controls()),
@@ -421,20 +423,36 @@ class _NativeInventoryScreenState extends State<NativeInventoryScreen> {
                           _InventoryTab.alerts => '暂无库存预警',
                           _InventoryTab.movements => '暂无匹配的出入库流水',
                         }),
-                      for (final row in _rows)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: _tab == _InventoryTab.movements
-                              ? _movementCard(row)
-                              : _balanceCard(row),
+                        ]),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList.builder(
+                          itemCount: _rows.length,
+                          itemBuilder: (context, index) {
+                            final row = _rows[index];
+                            return Padding(
+                              key: ValueKey('${_tab.name}:${row['id'] ?? index}'),
+                              padding: const EdgeInsets.only(top: 8),
+                              child: _tab == _InventoryTab.movements
+                                  ? _movementCard(row)
+                                  : _balanceCard(row),
+                            );
+                          },
                         ),
+                      ),
                       if (_total > _pageSize)
-                        _InventoryPagination(
-                          page: _page,
-                          total: _total,
-                          pageSize: _pageSize,
-                          enabled: !_busy && !_loading && _error == null,
-                          onPage: (page) => _load(page: page),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          sliver: SliverToBoxAdapter(
+                            child: _InventoryPagination(
+                              page: _page,
+                              total: _total,
+                              pageSize: _pageSize,
+                              enabled: !_busy && !_loading && _error == null,
+                              onPage: (page) => _load(page: page),
+                            ),
+                          ),
                         ),
                     ],
                   ),
