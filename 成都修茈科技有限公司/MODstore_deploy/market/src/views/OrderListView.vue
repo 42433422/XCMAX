@@ -9,7 +9,7 @@
         <span class="order-list-toolbar__hint" title="隐藏已关闭/失败/已退款等，保留待付、已付、退款中">从列表隐藏终态</span>
       </div>
     </div>
-    <div v-if="err" class="err">{{ err }}</div>
+    <div v-if="err" class="err" role="alert">{{ err }} <button type="button" class="retry-btn" :disabled="loading" @click="load">重试</button></div>
     <div v-if="loading" class="loading">加载中…</div>
 
     <div v-else>
@@ -26,8 +26,8 @@
       </div>
 
       <div v-if="!orders.length" class="empty">暂无订单</div>
-      <div v-else class="order-list">
-        <div v-for="order in orders" :key="order.out_trade_no" class="order-card" @click="goDetail(order)">
+      <div v-else-if="!err" class="order-list">
+        <div v-for="order in orders" :key="order.out_trade_no" class="order-card" role="link" tabindex="0" :aria-label="`查看订单 ${order.out_trade_no}`" @click="goDetail(order)" @keydown.enter.self="goDetail(order)" @keydown.space.self.prevent="goDetail(order)">
           <div class="order-header">
             <span class="order-no">{{ order.out_trade_no }}</span>
             <span :class="['order-status', order.status]">{{ statusText(order.status) }}</span>
@@ -38,7 +38,7 @@
           </div>
           <div class="order-footer">
             <span class="order-time">{{ formatTime(order.created_at) }}</span>
-            <button v-if="order.status === 'pending'" type="button" class="btn-cancel" @click.stop="cancelOrder(order)">取消</button>
+            <button v-if="order.status === 'pending'" type="button" class="btn-cancel" :disabled="cancellingOrder === order.out_trade_no" @click.stop="cancelOrder(order)">{{ cancellingOrder === order.out_trade_no ? '取消中…' : '取消' }}</button>
             <button v-if="order.status === 'paid'" type="button" class="btn-refund" @click.stop="goRefund(order)">申请退款</button>
           </div>
         </div>
@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
 
@@ -64,6 +64,7 @@ const router = useRouter()
 const orders = ref<OrderRow[]>([])
 const loading = ref(true)
 const dismissing = ref(false)
+const cancellingOrder = ref('')
 const err = ref('')
 const currentFilter = ref('')
 
@@ -96,16 +97,21 @@ function formatTime(iso: string | undefined): string {
   }
 }
 
+let readSequence = 0
 async function load() {
+  const sequence = ++readSequence
   loading.value = true
   err.value = ''
   try {
     const res = await api.paymentOrders(currentFilter.value || undefined)
-    orders.value = res.orders || []
+    if (sequence !== readSequence) return
+    orders.value = Array.isArray(res.orders) ? res.orders : []
   } catch (e) {
+    if (sequence !== readSequence) return
+    orders.value = []
     err.value = (e as Error)?.message || String(e)
   } finally {
-    loading.value = false
+    if (sequence === readSequence) loading.value = false
   }
 }
 
@@ -142,16 +148,22 @@ function goRefund(order: OrderRow) {
 }
 
 async function cancelOrder(order: OrderRow) {
-  if (!confirm('确定取消该待支付订单？')) return
+  if (cancellingOrder.value || !confirm('确定取消该待支付订单？')) return
+  cancellingOrder.value = order.out_trade_no
+  err.value = ''
   try {
     await api.paymentCancelOrder(order.out_trade_no)
     await load()
   } catch (e) {
-    alert((e as Error)?.message || String(e))
+    err.value = `取消状态需要核对：${(e as Error)?.message || String(e)}`
+    await load()
+  } finally {
+    cancellingOrder.value = ''
   }
 }
 
 onMounted(() => void load())
+onBeforeUnmount(() => { ++readSequence })
 </script>
 
 <style scoped>
@@ -228,6 +240,9 @@ onMounted(() => void load())
 .order-card:hover {
   border-color: #3f3f46;
 }
+.order-card:focus-visible, .retry-btn:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+.retry-btn { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; cursor: pointer; padding: 4px 8px; }
+.btn-cancel:disabled { opacity: .55; cursor: wait; }
 .order-header {
   display: flex;
   justify-content: space-between;
