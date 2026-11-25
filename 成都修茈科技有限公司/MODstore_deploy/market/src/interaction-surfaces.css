@@ -85,3 +85,9 @@
     transform: none !important;
   }
 }
+
+/* Visible keyboard focus for the direct workbench composer in both themes. */
+#wb-home-input:focus-visible {
+  outline: var(--xc-token-focus-ring-width) solid var(--wb-accent-primary, var(--el-color-primary));
+  outline-offset: var(--xc-token-spacing-xs);
+}

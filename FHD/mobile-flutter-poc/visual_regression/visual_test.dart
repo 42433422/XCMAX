@@ -115,7 +115,10 @@ void main() {
         await tester.enterText(find.byType(TextField), '整理订单\n核对库存\n列出异常');
         FocusManager.instance.primaryFocus?.unfocus();
         await tester.pumpAndSettle();
-        expect(find.text('整理订单\n核对库存\n列出异常'), findsOneWidget);
+        // Verify the actual editable text, not the Text widget finder.
+        final field = tester.widget<TextField>(find.byType(TextField));
+        expect(field.maxLines, greaterThan(1));
+        expect(field.controller?.text, '整理订单\n核对库存\n列出异常');
         await capture(tester, 'chat-multiline-draft-$name');
         await tester.tap(find.byTooltip('更多工具'));
         await tester.pumpAndSettle();

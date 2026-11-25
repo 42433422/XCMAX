@@ -45,7 +45,7 @@ async function ready(page: Page) {
 // Two animation frames with the destination visible and not busy are a paint proxy.
 async function navigation(page: Page, destination: 'settings' | 'chat') {
   const button = destination === 'settings'
-    ? await page.locator('.sidebar-menu-bottom').getByRole('button', { name: '系统设置', exact: true }).elementHandle()
+    ? await page.locator('.top-bar-settings-btn').elementHandle()
     : null
   try {
     return await page.evaluate(({ destination, button }) => new Promise<number>((resolve, reject) => {
