@@ -13,6 +13,9 @@ name: FHD workspace preferences CAS
       - "FHD/tests/test_application/test_tenant_workspace_prefs.py"
       - "FHD/tests/test_routes/test_workspace_prefs_routes.py"
       - "FHD/tests/test_routes/test_mobile_workspace_prefs.py"
+      - "FHD/frontend/src/utils/workspacePrefsApi.ts"
+      - "FHD/frontend/src/utils/workspacePrefsApi.test.ts"
+      - "FHD/frontend/src/stores/accountProfile.ts"
       - ".github/workflows/fhd-workspace-prefs-cas.yml"
   workflow_dispatch:
 
@@ -60,3 +63,24 @@ jobs:
             tests/test_application/test_tenant_workspace_prefs.py \
             tests/test_routes/test_workspace_prefs_routes.py \
             tests/test_routes/test_mobile_workspace_prefs.py
+
+  frontend-cas-and-tenant-isolation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install frontend dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: npm ci
+      - name: Test workspace revision and conflict controls
+        run: npm run test -- src/utils/workspacePrefsApi.test.ts
+      - name: Verify frontend type contracts
+        run: npm run type-check:build
