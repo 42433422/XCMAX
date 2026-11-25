@@ -292,6 +292,51 @@ def test_conflicting_aliases_are_not_multiple_goal_proof(verifier):
     assert report["error_code"] == "goal_evidence_conflict" and not verifier.requests
 
 
+@pytest.mark.parametrize(
+    "missing", ["fingerprint", "receipt_run_id", "receipt_task_id", "receipt_type"]
+)
+def test_unbound_child_receipt_is_never_accepted_as_goal_evidence(verifier, missing):
+    row = verifier.rows[0]
+    if missing == "fingerprint":
+        row.pop("fingerprint")
+    elif missing == "receipt_run_id":
+        row["receipt"].pop("run_id")
+    elif missing == "receipt_task_id":
+        row["receipt"].pop("task_id")
+    else:
+        row["receipt"] = ["malformed"]
+
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    assert report["error_code"] == (
+        "goal_evidence_pending" if missing == "receipt_type" else "goal_evidence_conflict"
+    )
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["business_completed"] is False
+
+
+def test_claimed_verified_receipt_cannot_override_rejected_host_verification(verifier):
+    verifier.rows[0]["receipt"]["verification"] = {
+        "protocol": "xcagi.result-verification.v1",
+        "status": "inconclusive",
+        "accepted": False,
+    }
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+    report = verifier.verify()
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert "缺少独立核验" in report["feedback"]
+    assert verifier.classify(report)[1]["business_completed"] is False
+
+
+def test_unknown_effect_inside_completed_receipt_blocks_goal_success(verifier):
+    verifier.rows[0]["receipt"]["execution"] = {"outcome": "unknown", "committed": True}
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
+
+
 def test_one_write_receipt_cannot_complete_two_distinct_effects(verifier):
     verifier.run.message = "确认first，再确认second"
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
