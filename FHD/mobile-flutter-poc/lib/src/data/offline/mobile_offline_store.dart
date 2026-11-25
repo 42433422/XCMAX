@@ -27,6 +27,9 @@ class MobileOfflineStore {
   static const _databaseName = 'xcagi_mobile_cache';
   static const _maxMessagesPerConversation = 80;
   static const _maxQueuedAttempts = 5;
+  // A display-cache TTL may never evict a non-terminal local turn.
+  static const _unresolvedStatuses =
+      "('pending', 'queued', 'sending', 'unknown', 'failed')";
 
   static MobileOfflineStore? _shared;
 
@@ -84,7 +87,7 @@ class MobileOfflineStore {
     // Keep unresolved local turns for reconciliation even after history expires.
     final rows = await _db.customSelect(
       'SELECT * FROM chat_messages WHERE conversation_id = ? AND '
-      "((cached_at > ? AND cached_at <= ?) OR status IN ('pending', 'queued', 'sending')) "
+      "((cached_at > ? AND cached_at <= ?) OR status IN $_unresolvedStatuses) "
       'ORDER BY ts ASC, message_id ASC',
       variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
     ).get();
@@ -119,22 +122,37 @@ class MobileOfflineStore {
     String conversationId,
     List<Map<String, Object?>> rows,
   ) async {
-    await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ?',
-      variables: [Variable<String>(conversationId)],
-    );
-    final tail = rows.length > _maxMessagesPerConversation
-        ? rows.sublist(rows.length - _maxMessagesPerConversation)
-        : rows;
-    for (final row in tail) {
-      await appendMessage(conversationId, row);
-    }
+    await _db.transaction(() async {
+      final protected = await _db.customSelect(
+        'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
+        'AND status IN $_unresolvedStatuses',
+        variables: [Variable<String>(conversationId)],
+      ).get();
+      final protectedIds = protected
+          .map((row) => row.data['message_id'] as String? ?? '')
+          .toSet();
+      await _db.customUpdate(
+        'DELETE FROM chat_messages WHERE conversation_id = ? '
+        'AND status NOT IN $_unresolvedStatuses',
+        variables: [Variable<String>(conversationId)],
+      );
+      final tail = rows.length > _maxMessagesPerConversation
+          ? rows.sublist(rows.length - _maxMessagesPerConversation)
+          : rows;
+      for (final row in tail) {
+        // Only a verified receipt may supersede an unresolved local identity.
+        if (protectedIds.contains('${row['id'] ?? ''}')) continue;
+        await appendMessage(conversationId, row);
+      }
+      await _trimMessages(conversationId);
+    });
   }
-
   Future<void> _trimMessages(String conversationId) async {
     await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ? AND message_id NOT IN ('
+      'DELETE FROM chat_messages WHERE conversation_id = ? '
+      'AND status NOT IN $_unresolvedStatuses AND message_id NOT IN ('
       'SELECT message_id FROM chat_messages WHERE conversation_id = ? '
+      'AND status NOT IN $_unresolvedStatuses '
       'ORDER BY ts DESC, message_id DESC LIMIT $_maxMessagesPerConversation)',
       variables: [
         Variable<String>(conversationId),
@@ -142,13 +160,13 @@ class MobileOfflineStore {
       ],
     );
   }
-
   Future<void> removeMessageByTimestamp(
     String conversationId,
     int timestampMs,
   ) async {
     await _db.customUpdate(
-      'DELETE FROM chat_messages WHERE conversation_id = ? AND ts = ?',
+      'DELETE FROM chat_messages WHERE conversation_id = ? AND ts = ? '
+      'AND status NOT IN $_unresolvedStatuses',
       variables: [Variable<String>(conversationId), Variable<int>(timestampMs)],
     );
   }
@@ -378,42 +396,45 @@ class MobileOfflineStore {
     final text = body.trim();
     if (text.isEmpty) return 0;
     final key = idempotencyKey.trim();
-    final existing = await _db.customSelect(
-      'SELECT id FROM outbox_messages WHERE conversation_id = ? AND ${key.isEmpty ? 'body' : 'idempotency_key'} = ? '
-      "AND status IN ('pending', 'sending', 'unknown') LIMIT 1",
-      variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
-    ).get();
-    if (existing.isNotEmpty) {
-      final id = _asInt(existing.first.data['id']);
-      if (requiresReconciliation) {
-        // The request might have executed before its response was lost.
-        await _db.customUpdate(
-          "UPDATE outbox_messages SET status = 'unknown' WHERE id = ? AND status = 'pending'",
-          variables: [Variable<int>(id)],
-        );
+    // Serialize deduplication with insertion across concurrent reconnects.
+    return _db.transaction(() async {
+      final existing = await _db.customSelect(
+        'SELECT id FROM outbox_messages WHERE conversation_id = ? AND ${key.isEmpty ? 'body' : 'idempotency_key'} = ? '
+        "AND status IN ('pending', 'sending', 'unknown') LIMIT 1",
+        variables: [Variable<String>(conversationId), Variable<String>(key.isEmpty ? text : key)],
+      ).get();
+      if (existing.isNotEmpty) {
+        final id = _asInt(existing.first.data['id']);
+        if (requiresReconciliation) {
+          // The request might have executed before its response was lost.
+          await _db.customUpdate(
+            "UPDATE outbox_messages SET status = 'unknown' WHERE id = ? AND status = 'pending'",
+            variables: [Variable<int>(id)],
+          );
+        }
+        return id;
       }
-      return id;
-    }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return _db.customInsert(
-      'INSERT INTO outbox_messages '
-      '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
-      'last_error, created_at, updated_at) '
-      "VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?)",
-      variables: [
-        Variable<String>(conversationId),
-        Variable<String>(conversationType.name),
-        Variable<String>(title),
-        Variable<String>(text),
-        Variable<int>(authGeneration),
-        Variable<String>(idempotencyKey.trim().isEmpty
-            ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
-            : idempotencyKey.trim()),
-        Variable<String>(requiresReconciliation ? 'unknown' : 'pending'),
-        Variable<int>(now),
-        Variable<int>(now),
-      ],
-    );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      return _db.customInsert(
+        'INSERT INTO outbox_messages '
+        '(conversation_id, conversation_type, title, body, auth_generation, idempotency_key, status, attempts, '
+        'last_error, created_at, updated_at) '
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?)",
+        variables: [
+          Variable<String>(conversationId),
+          Variable<String>(conversationType.name),
+          Variable<String>(title),
+          Variable<String>(text),
+          Variable<int>(authGeneration),
+          Variable<String>(idempotencyKey.trim().isEmpty
+              ? 'mobile-outbox-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}'
+              : idempotencyKey.trim()),
+          Variable<String>(requiresReconciliation ? 'unknown' : 'pending'),
+          Variable<int>(now),
+          Variable<int>(now),
+        ],
+      );
+    });
   }
 
   Future<List<PendingOutboxMessage>> pendingMessages({int limit = 5}) async {
@@ -446,7 +467,22 @@ class MobileOfflineStore {
     return _asInt(rows.first.data['total']);
   }
 
-  Future<void> markSending(int id) => _updateOutbox(id, "status = 'sending'");
+  Future<void> markSending(int id) async {
+    await _db.customUpdate(
+      "UPDATE outbox_messages SET status = 'sending', updated_at = ? "
+      "WHERE id = ? AND status = 'pending'",
+      variables: [Variable<int>(_nowMs), Variable<int>(id)],
+    );
+  }
+
+  /// Read-only reconciliation is not a new dispatch attempt.
+  Future<void> markReconciliationRequired(int id) async {
+    await _db.customUpdate(
+      "UPDATE outbox_messages SET status = 'unknown', updated_at = ? "
+      "WHERE id = ? AND status IN ('pending', 'sending', 'unknown')",
+      variables: [Variable<int>(_nowMs), Variable<int>(id)],
+    );
+  }
 
   Future<void> markSent(int id) async {
     await _db.customUpdate(
@@ -472,7 +508,7 @@ class MobileOfflineStore {
 
   Future<void> removePendingByBody(String conversationId, String body) async {
     await _db.customUpdate(
-      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status IN ('pending', 'sending', 'unknown')",
+      "DELETE FROM outbox_messages WHERE conversation_id = ? AND body = ? AND status = 'pending' AND attempts = 0",
       variables: [
         Variable<String>(conversationId),
         Variable<String>(body.trim())
@@ -619,21 +655,31 @@ class _MobileOfflineDatabase extends GeneratedDatabase {
           );
         },
         onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.database.customStatement(
-                "ALTER TABLE chat_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
-            await m.database.customStatement(
-                "ALTER TABLE outbox_messages ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''");
-            await m.database.customStatement(
-                "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
-            await m.database.customStatement(
-                "UPDATE outbox_messages SET status = 'unknown' WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
-          }
-          if (from < 3) {
-            // Legacy history has no reliable cache acquisition time.
-            await m.database.customStatement(
-                'ALTER TABLE chat_messages ADD COLUMN cached_at INTEGER NOT NULL DEFAULT 0');
-          }
+          // SQLite DDL is transactional. A partial previous attempt with the
+          // same user_version also remains recoverable by checking the column.
+          await m.database.transaction(() async {
+            if (from < 2) {
+              await m.database.customStatement(
+                  "ALTER TABLE chat_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
+              await m.database.customStatement(
+                  "ALTER TABLE outbox_messages ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''");
+              await m.database.customStatement(
+                  "UPDATE outbox_messages SET idempotency_key = 'mobile-legacy-' || lower(hex(randomblob(16))) WHERE idempotency_key = ''");
+            }
+            if (from < 3) {
+              final columns = await m.database
+                  .customSelect('PRAGMA table_info(chat_messages)').get();
+              if (!columns.any((row) => row.data['name'] == 'cached_at')) {
+                await m.database.customStatement(
+                    'ALTER TABLE chat_messages ADD COLUMN cached_at INTEGER NOT NULL DEFAULT 0');
+              }
+              // v2 may be killed while sending. No transport error proves
+              // whether its business side effects were committed.
+              await m.database.customStatement(
+                  "UPDATE outbox_messages SET status = 'unknown' "
+                  "WHERE status = 'sending' OR (status = 'pending' AND attempts > 0)");
+            }
+          });
         },
       );
 
