@@ -92,6 +92,17 @@ Future<void> show(WidgetTester tester, Api api) async {
 }
 
 void main() {
+  test('employee task identity and step status use explicit assignment data', () {
+    final task = MobileTaskSummary.fromJson({
+      'task_id': 't-1', 'status': 'running', 'employee_ids': ['employee-one', 'employee-two'],
+      'employee_assignments': [{'employee_id': 'employee-one', 'status': 'completed'}, {'employee_id': 'employee-two', 'status': 'running'}],
+    });
+    expect(task.employeeIds, ['employee-one', 'employee-two']);
+    expect(task.employeeStatus('employee-one'), 'completed');
+    expect(task.employeeStatus('employee-two'), 'running');
+    final uncertain = MobileTaskSummary.fromJson({'status': 'completed', 'outcome_uncertain': true});
+    expect(uncertain.employeeStatus('employee-one'), 'unknown');
+  });
   testWidgets('native employee cards search without creating a WebView',
       (tester) async {
     final api = Api();

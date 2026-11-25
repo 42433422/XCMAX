@@ -41,6 +41,9 @@ class MobileTaskSummary {
     required this.conversationId,
     required this.updatedAt,
     this.activeModId = '',
+    this.employeeIds = const [],
+    this.employeeAssignments = const {},
+    this.outcomeUncertain = false,
   });
 
   final String taskId;
@@ -54,6 +57,23 @@ class MobileTaskSummary {
   final String conversationId;
   final String updatedAt;
   final String activeModId;
+  final List<String> employeeIds;
+  final Map<String, List<String>> employeeAssignments;
+  final bool outcomeUncertain;
+
+  String employeeStatus(String id) {
+    if (outcomeUncertain) return 'unknown';
+    if (const {'paused', 'cancelled', 'failed', 'blocked', 'rejected', 'timed_out'}.contains(status)) return status;
+    final own = employeeAssignments[id] ?? const <String>[];
+    if (own.isEmpty) return employeeIds.length > 1 ? 'unknown' : status;
+    if (own.any((state) => const {'running', 'claimed', 'retrying'}.contains(state))) return status == 'waiting_user' ? status : 'running';
+    for (final state in ['waiting_user', 'failed', 'blocked', 'pending']) {
+      if (own.contains(state)) return state;
+    }
+    if (own.every((state) => state == 'completed')) return 'completed';
+    if (own.every((state) => state == 'skipped')) return 'skipped';
+    return 'unknown';
+  }
 
   String get workspacePath => Uri(
         pathSegments: ['', 'workspaces', taskId],
@@ -63,7 +83,22 @@ class MobileTaskSummary {
       ).toString();
 
   factory MobileTaskSummary.fromJson(Map<String, Object?> json) {
+    final ids = json['employee_ids'];
+    final rows = json['employee_assignments'];
+    final assignments = <String, List<String>>{};
+    if (rows is List) {
+      for (final row in rows.whereType<Map>()) {
+        final id = row['employee_id'];
+        final status = row['status'];
+        if (id is String && id.isNotEmpty && status is String) {
+          (assignments[id] ??= []).add(status);
+        }
+      }
+    }
     return MobileTaskSummary(
+      employeeIds: {...assignments.keys, if (ids is List) ...ids.whereType<String>()}.toList(growable: false),
+      employeeAssignments: assignments,
+      outcomeUncertain: json['outcome_uncertain'] == true,
       taskId: _readString(json, const ['task_id']),
       activeModId: _readString(json, const ['active_mod_id']),
       title: _readString(json, const ['title']),
