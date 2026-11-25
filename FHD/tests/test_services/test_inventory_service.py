@@ -647,7 +647,9 @@ class TestInventoryCountUnconfirmed:
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_ledger
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [
+            mock_ledger
+        ]
         mock_db.query.return_value.filter.return_value.scalar.return_value = 0
         mock_get_db.return_value = mock_db
 
@@ -670,7 +672,7 @@ class TestInventoryCountUnconfirmed:
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         mock_get_db.return_value = mock_db
 
         svc = InventoryService()

@@ -83,11 +83,21 @@ class InventoryCountingMixin:
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 model = _facade().InventoryLedger
-                ledger = db.query(model).filter(
+                query = db.query(model).filter(
                     model.product_id == product_id,
                     model.warehouse_id == warehouse_id,
                     model.batch_no == batch_no,
-                ).first()
+                )
+                if location_id is not None:
+                    query = query.filter(model.location_id == location_id)
+                ledgers = query.limit(2).all()
+                if len(ledgers) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "同一产品批次存在多个库位，请明确选择盘点库位",
+                    }
+                ledger = ledgers[0] if ledgers else None
                 if ledger is None:
                     return {"success": False, "message": "库存台账记录不存在，请先入库"}
                 book = Decimal(str(ledger.quantity or 0))
@@ -159,8 +169,6 @@ class InventoryCountingMixin:
                     model.available_quantity: actual - reserved,
                     model.updated_at: now,
                 }
-                if location_id is not None:
-                    values[model.location_id] = location_id
                 changed = db.query(model).filter(
                     model.id == ledger.id,
                     model.tenant_id == ledger.tenant_id,

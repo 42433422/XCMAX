@@ -186,15 +186,32 @@ class InventoryMovementsMixin:
                 if warehouse_name and warehouse.name != warehouse_name:
                     return {"success": False, "message": "仓库编号与名称不符"}
                 product_id, warehouse_id = product.id, warehouse.id
-                ledger = (
+                if location_id is not None:
+                    location = db.query(_facade().StorageLocation).filter(
+                        _facade().StorageLocation.id == location_id,
+                        _facade().StorageLocation.warehouse_id == warehouse_id,
+                        _facade().StorageLocation.status == "active",
+                    ).first()
+                    if location is None:
+                        return {"success": False, "message": "入库库位不属于当前仓库或未启用"}
+                rows = (
                     db.query(_facade().InventoryLedger)
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
                         _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == location_id,
                     )
-                    .first()
+                    .limit(2)
+                    .all()
                 )
+                if len(rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "物理库存台账重复，需先核对历史记录",
+                    }
+                ledger = rows[0] if rows else None
                 now = datetime.now()
                 if ledger:
                     if not _move_available(db, ledger, Decimal(str(quantity)), now):
@@ -321,7 +338,14 @@ class InventoryMovementsMixin:
                     query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
                 if location_id:
                     query = query.filter(_facade().InventoryLedger.location_id == location_id)
-                ledger = query.first()
+                rows = query.limit(2).all()
+                if len(rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "多个批次或库位均可出库，请明确原库存归属",
+                    }
+                ledger = rows[0] if rows else None
                 if not ledger:
                     return {
                         "success": False,
@@ -442,7 +466,14 @@ class InventoryMovementsMixin:
                     source = source.filter(
                         _facade().InventoryLedger.location_id == from_location_id
                     )
-                from_ledger = source.first()
+                source_rows = source.limit(2).all()
+                if len(source_rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "调拨来源存在多个批次或库位，请明确选择",
+                    }
+                from_ledger = source_rows[0] if source_rows else None
                 if not from_ledger:
                     return {"success": False, "message": "源仓库库存不足"}
                 now = datetime.now()
@@ -469,7 +500,7 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(out_transaction)
-                to_ledger = (
+                target_rows = (
                     db.query(_facade().InventoryLedger)
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
@@ -477,8 +508,17 @@ class InventoryMovementsMixin:
                         _facade().InventoryLedger.batch_no == from_ledger.batch_no,
                         _facade().InventoryLedger.location_id == to_location_id,
                     )
-                    .first()
+                    .limit(2)
+                    .all()
                 )
+                if len(target_rows) > 1:
+                    db.rollback()
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "目标物理库存重复，原调出已回滚",
+                    }
+                to_ledger = target_rows[0] if target_rows else None
                 if to_ledger:
                     if not _move_available(db, to_ledger, Decimal(str(quantity)), now):
                         db.rollback()

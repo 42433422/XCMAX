@@ -39,8 +39,8 @@ def _supplier_credit(value: Any) -> Decimal:
 def _supplier_name_taken(db: Any, tenant_id: int, name: str, exclude_id: int | None = None) -> bool:
     query = db.query(Supplier.id).filter(
         Supplier.tenant_id == tenant_id,
-        func.lower(func.trim(Supplier.name)) == name.casefold(),
-        Supplier.status != "deleted",
+        func.lower(func.trim(Supplier.name)) == func.lower(func.trim(name)),
+        func.coalesce(Supplier.status, "") != "deleted",
     )
     if exclude_id is not None:
         query = query.filter(Supplier.id != exclude_id)
@@ -207,8 +207,8 @@ class PurchaseSupplierMixin:
                 supplier = db.query(Supplier).filter(
                     Supplier.id == supplier_id, Supplier.tenant_id == tid
                 ).with_for_update().first()
-                if supplier is None:
-                    return {"success": False, "message": "供应商不存在"}
+                if supplier is None or supplier.status == "deleted":
+                    return {"success": False, "message": "供应商不存在或已删除"}
                 name = str(data.get("name") or supplier.name).strip()
                 if _supplier_name_taken(db, tid, name, exclude_id=supplier.id):
                     return {"success": False, "message": "当前企业已有同名有效供应商"}
