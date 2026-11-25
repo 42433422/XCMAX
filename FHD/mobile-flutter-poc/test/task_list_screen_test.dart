@@ -8,6 +8,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/native_task_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
+import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
 
 MobileTaskSummary task({
   String id = 'task/a',
@@ -111,6 +112,55 @@ void main() {
     await repo.dispose();
     repo.api.dispose();
   });
+
+  for (final count in [1000, 10000]) {
+    testWidgets('task list lazily mounts rows for $count tasks', (tester) async {
+      final api = TaskApi();
+      final repo = Tasks(api)
+        ..load = () async => List.generate(
+              count,
+              (index) => MobileTaskSummary.fromJson({
+                'task_id': 'stress-$index',
+                'title': '压力任务 $index',
+                'status': 'completed',
+              }),
+            );
+      addTearDown(() async {
+        await repo.dispose();
+        api.dispose();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(home: TaskListScreen(repository: repo)),
+      );
+      await tester.pumpAndSettle();
+      final rows = find.byType(WeCell, skipOffstage: false);
+      expect(find.byKey(const ValueKey<String>('stress-0')), findsOneWidget);
+      expect(find.text('压力任务 ${count - 1}'), findsNothing);
+      expect(rows.evaluate().length, greaterThan(0));
+      expect(rows.evaluate().length, lessThan(100));
+
+      await tester.drag(
+        find.byType(CustomScrollView),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      final position =
+          tester.state<ScrollableState>(find.byType(Scrollable)).position;
+      final offset = position.pixels;
+      expect(offset, greaterThan(0));
+      expect(rows.evaluate().length, lessThan(100));
+
+      // A polling refresh with new model instances but the same task IDs
+      // must keep the viewport instead of recreating the whole list.
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(repo.loads, 2);
+      expect(position.pixels, closeTo(offset, 1));
+      expect(rows.evaluate().length, lessThan(100));
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('task list recovers by read-only polling after timeout', (
     tester,
