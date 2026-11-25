@@ -30,6 +30,9 @@ def _ledger_item_from_invoice(inv: dict[str, Any]) -> dict[str, Any]:
         "occurred_at": str(inv.get("issued_at") or inv.get("created_at") or ""),
         "label": str(inv.get("label") or inv.get("invoice_no") or "CRM 账单"),
         "market_user_id": inv.get("market_user_id"),
+        # An invoice is a source document, not a verified payment or profit.
+        "document_only": True,
+        "settlement_verified": False,
     }
 
 
@@ -101,6 +104,8 @@ def _items_from_db(
                     "occurred_at": row.transaction_date.isoformat() if row.transaction_date else "",
                     "label": str(row.description or row.transaction_type or ""),
                     "market_user_id": row.counterparty_id,
+                    "document_only": row.reference_type == "crm_invoice",
+                    "settlement_verified": False,
                 }
                 if track and entry["track"] != track:
                     continue
@@ -255,7 +260,21 @@ def archive_from_crm_invoice(
                 db.add(txn)
                 db.commit()
                 db.refresh(txn)
-                return {"archived": True, "transaction_id": txn.id, "idempotent": False}
+                transaction_id = txn.id
+            # Check in a fresh session. A successful commit alone is not an
+            # independent persisted readback of the source voucher identity.
+            with SessionLocal() as check_db:
+                verified = find_existing(check_db)
+            if (
+                not verified
+                or verified.get("archived") is not True
+                or verified.get("transaction_id") != transaction_id
+            ):
+                return {
+                    "archived": False,
+                    "reason_code": "invoice_archive_readback_failed",
+                }
+            return {"archived": True, "transaction_id": transaction_id, "idempotent": False}
         except IntegrityError:
             # A concurrent writer may have committed the same business reference.
             # The unique key protects it; only an exact readback counts as success.
@@ -269,33 +288,85 @@ def archive_from_crm_invoice(
 
 
 def rebuild_ledger_archive(*, market_user_id: int | None = None) -> dict[str, Any]:
+    """Rebuild only from an intact, duplicate-free paginated source listing.
+
+    Collect and verify all pages before writing any archive rows. The source
+    may still change between this read and the writes; callers must not treat
+    a successful archive as bank settlement or a point-in-time audit snapshot.
+    """
     from app.domain.shared_services.user_cs_crm_store import list_crm_invoices
 
-    data = list_crm_invoices(market_user_id=market_user_id, limit=500)
-    rows = data.get("items") if isinstance(data, dict) else None
-    total = data.get("total") if isinstance(data, dict) else None
-    if not isinstance(rows, list) or type(total) is not int or total < len(rows):
+    page_size = 500
+    max_source_rows = 100_000
+    offset = 0
+    total: int | None = None
+    rows: list[dict[str, Any]] = []
+    source_ids: set[int] = set()
+    pages_read = 0
+
+    def incomplete(reason: str) -> dict[str, Any]:
         return {
-            "rebuilt": 0, "rejected": 0, "complete": False,
-            "reason_code": "invoice_source_unavailable", "market_user_id": market_user_id,
+            "rebuilt": 0,
+            "rejected": 0,
+            "complete": False,
+            "reason_code": reason,
+            "market_user_id": market_user_id,
+            "source_total": total,
+            "pages_read": pages_read,
         }
-    rebuilt = rejected = 0
-    for inv in rows:
-        outcome = (
-            archive_from_crm_invoice(inv, market_user_id=market_user_id)
-            if isinstance(inv, dict)
-            else {"archived": False}
+
+    while total is None or offset < total:
+        data = list_crm_invoices(
+            market_user_id=market_user_id, limit=page_size, offset=offset
         )
-        rebuilt += outcome.get("archived") is True
-        rejected += outcome.get("archived") is not True
+        page_rows = data.get("items") if isinstance(data, dict) else None
+        page_total = data.get("total") if isinstance(data, dict) else None
+        if (
+            not isinstance(page_rows, list)
+            or type(page_total) is not int
+            or page_total < 0
+        ):
+            return incomplete("invoice_source_unavailable")
+        if total is None:
+            total = page_total
+        if page_total != total:
+            return incomplete("invoice_source_changed_during_pagination")
+        if total > max_source_rows:
+            return incomplete("invoice_source_exceeds_rebuild_limit")
+        if "offset" in data and data["offset"] != offset:
+            return incomplete("invoice_source_wrong_page")
+        expected = min(page_size, total - offset)
+        if len(page_rows) != expected:
+            return incomplete("invoice_source_truncated")
+        for inv in page_rows:
+            if (
+                not isinstance(inv, dict)
+                or type(inv.get("id")) is not int
+                or inv["id"] <= 0
+            ):
+                return incomplete("invoice_source_invalid_row")
+            if inv["id"] in source_ids:
+                return incomplete("invoice_source_duplicate")
+            source_ids.add(inv["id"])
+            rows.append(inv)
+        pages_read += 1
+        offset += len(page_rows)
+
+    rebuilt = rejected = already_archived = 0
+    for inv in rows:
+        outcome = archive_from_crm_invoice(inv, market_user_id=market_user_id)
+        if outcome.get("archived") is True:
+            rebuilt += 1
+            already_archived += outcome.get("idempotent") is True
+        else:
+            rejected += 1
     return {
         "rebuilt": rebuilt,
         "rejected": rejected,
-        "complete": total == len(rows) and rejected == 0,
-        "reason_code": (
-            "invoice_source_truncated"
-            if total != len(rows)
-            else ("invoice_archive_rejected" if rejected else None)
-        ),
+        "already_archived": already_archived,
+        "complete": rejected == 0,
+        "reason_code": "invoice_archive_rejected" if rejected else None,
         "market_user_id": market_user_id,
+        "source_total": total,
+        "pages_read": pages_read,
     }
