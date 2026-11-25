@@ -70,7 +70,7 @@ def test_concurrent_sqlite_bootstrap_seeds_one_consistent_permission_graph(tmp_p
             )
         for process in processes:
             assert process.stdin is not None
-            process.stdin.write("GO\\n")
+            process.stdin.write("GO\n")
             process.stdin.flush()
             process.stdin.close()
             process.stdin = None
