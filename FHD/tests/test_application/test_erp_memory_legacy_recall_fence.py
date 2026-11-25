@@ -8,13 +8,13 @@ from app.application.user_memory import projections, retrieve
 from app.application.user_memory.queries import MemoryQueries, QueryPorts
 from app.domain.user_memory.policy import is_erp_bound_memory
 
-
 OWNER = "personal-memory:v1:erp-recall-fence"
 
 
 def _rows():
     erp = {
         "memory_id": "erp-1",
+        "memory_type": "entity",
         "revision": 1,
         "status": "active",
         "eligible_for_planner": True,
@@ -26,6 +26,7 @@ def _rows():
     }
     plain = {
         "memory_id": "plain-1",
+        "memory_type": "preference",
         "revision": 1,
         "status": "active",
         "eligible_for_planner": True,
@@ -44,9 +45,14 @@ def test_legacy_and_vector_recall_exclude_erp_fact_without_actor_rbac(monkeypatc
     assert not is_erp_bound_memory(plain)
 
     class Authority:
-        def list_memories(self, owner, status=None):
-            assert owner == OWNER
-            return [erp, plain]
+        def list_memories(self, user_id, *, status=None, memory_type=None):
+            assert user_id == OWNER
+            return [
+                row
+                for row in (erp, plain)
+                if (status is None or row["status"] == status)
+                and (memory_type is None or row["memory_type"] == memory_type)
+            ]
 
     authority = Authority()
     rows = [
@@ -95,6 +101,8 @@ def test_legacy_and_vector_recall_exclude_erp_fact_without_actor_rbac(monkeypatc
     prompt = formatter.format_memory_v2_for_prompt(OWNER)
     assert "secret" not in prompt
     assert "简洁报告" in prompt
+    assert "secret" not in formatter.format_memory_v2_for_prompt(OWNER, memory_type="entity")
+    assert "简洁报告" in formatter.format_memory_v2_for_prompt(OWNER, memory_type="preference")
 
 
 def test_erp_bound_memory_is_removed_not_upserted_to_replicas(monkeypatch):
