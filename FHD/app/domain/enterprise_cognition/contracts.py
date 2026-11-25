@@ -50,6 +50,11 @@ class StateQuery(EmptyInput):
         return self
 
 
+class PerceptionInput(EmptyInput):
+    limit_per_source: int = Field(default=3, ge=1, le=5, strict=True)
+    force_refresh: bool = True
+
+
 class GoalQuery(EmptyInput):
     goal_id: str | None = Field(default=None, min_length=1, max_length=96)
 
@@ -67,13 +72,14 @@ class OutcomeRequest(EmptyInput):
 class CognitionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["catalog", "query", "goals", "bind_goal", "plan", "evaluate"]
+    action: Literal["catalog", "query", "perceive", "goals", "bind_goal", "plan", "evaluate"]
     params: dict[str, Any] = Field(default_factory=dict)
 
 
 INPUT_MODELS: dict[str, type[BaseModel]] = {
     "catalog": EmptyInput,
     "query": StateQuery,
+    "perceive": PerceptionInput,
     "goals": GoalQuery,
     "bind_goal": GoalDefinition,
     "plan": PlanRequest,
