@@ -39,7 +39,7 @@ class ReplayDelivery:
         claim: ReplayClaim,
         load: Callable[[str], DeadLetterEntry | None],
         ledger: ReplayLedger,
-        callbacks: list[Callable[[NeuroEvent], None]],
+        callbacks: list[Callable[[NeuroEvent], bool | None]],
         stats: dict[str, int],
         lock: threading.RLock,
         runtime: StorageRuntime,
@@ -77,10 +77,15 @@ class ReplayDelivery:
             # the storage mutex. Handlers may read, enqueue or schedule retry.
             for callback in self.callbacks:
                 try:
-                    callback(entry.original_event)
+                    accepted = callback(entry.original_event)
                 except BOUNDARY_ERRORS as error:
                     self.runtime.log().error("[DeadLetterQueue] 重播回调失败: %s", error)
                     raise
+                if accepted is False:
+                    self.runtime.log().warning(
+                        "[DeadLetterQueue] 重播发布被拒绝: %s", entry_id
+                    )
+                    return False, "publish_rejected"
             self.ledger.mark_replayed(entry_id, replay_count)
             with self.lock:
                 self.stats["replayed"] += 1
