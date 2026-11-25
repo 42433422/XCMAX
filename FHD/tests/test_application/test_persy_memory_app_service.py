@@ -589,6 +589,7 @@ def test_erp_memory_private_candidate_revalidates_source_before_recall(monkeypat
                 "actor_id": "7",
                 "mod_id": "",
                 "force_refresh": True,
+                "verify_only": True,
             }
             if self.denied:
                 raise PermissionError("customer.view revoked")
