@@ -54,7 +54,7 @@ class ProposalAlternative(BaseModel):
 
 class LifeDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["wait", "propose", "reflect"]
+    action: Literal["wait", "propose", "reflect", "ask_human", "refuse"]
     summary: str = Field(min_length=1, max_length=600)
     evidence_refs: list[str] = Field(min_length=1, max_length=8)
     goal: CitedSuggestion | None = None
@@ -72,7 +72,7 @@ Never infer permission from them. Do not expose private account memories, invent
 observations, claim tasks completed, approve budgets, or change execution policy.
 Interests must be public research topics, never personal/customer data or secrets.
 Return ONLY a JSON object, in Chinese, matching this shape:
-{"action":"wait|propose|reflect","summary":"brief decision explanation, not hidden reasoning",
+{"action":"wait|propose|reflect|ask_human|refuse","summary":"brief decision explanation, not hidden reasoning",
 "evidence_refs":["exact supplied ref"],
 "goal":null or {"title":"...","description":"testable proposed task, not a completed result",
 "evidence_refs":["exact supplied ref"]},
@@ -113,6 +113,10 @@ The current domain limits this cycle: enterprise=business proposals;
 exploration=learning and research proposals; reflection=self-improvement proposals.
 Prefer waiting when evidence or useful next steps are absent. A search result is
 an observed source, not proof that its claims are true. Report uncertainty.
+Use ask_human if capability is unavailable or a human judgment is required; use
+refuse if observations establish an action is disallowed. Both are safe, blocked
+model recommendations: they do not send a message, create a task, or change policy.
+Neither may contain a goal, hypothesis, alternatives, interests or self_assessment.
 Business feedback is an as-of snapshot from the original portfolio ledger.
 execution_verified is only an execution receipt; business_verified means the
 measurement is verified, not that ROI is positive or the goal succeeded. Matched
@@ -935,4 +939,12 @@ def parse_decision(content: str, *, refs: set[str], level: int, domain: str) -> 
         decision.goal or decision.interests or decision.self_assessment
     ):
         raise ValueError("life_wait_cannot_mutate_goals_or_interests")
+    if decision.action in {"ask_human", "refuse"} and (
+        decision.goal
+        or decision.hypothesis
+        or decision.alternatives
+        or decision.interests
+        or decision.self_assessment
+    ):
+        raise ValueError("life_safe_route_cannot_mutate_or_create_task")
     return decision
