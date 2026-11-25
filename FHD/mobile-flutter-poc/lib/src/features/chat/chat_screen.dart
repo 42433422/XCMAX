@@ -61,10 +61,12 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends _ChatStateActions {
+class _ChatScreenState extends _ChatStateActions
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _messages = [...widget.initialMessages];
     _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
@@ -99,7 +101,36 @@ class _ChatScreenState extends _ChatStateActions {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_chatForeground == foreground) return;
+    _chatForeground = foreground;
+    _chatEpoch++;
+    if (!foreground) {
+      _persistChatDraftSnapshot();
+      // Stop painting stale stream bytes without cancelling server execution.
+      final assistantId = _activeAssistantId;
+      if (assistantId != null && mounted) {
+        _stopRequested = true;
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == assistantId);
+          if (index >= 0) {
+            _replaceMessage(assistantId, body: _messages[index].body,
+                status: ChatDeliveryStatus.pending);
+          }
+          _sending = false;
+          _activeAssistantId = null;
+        });
+        _syncFlyerChat();
+      }
+    } else if (!_chatInvalidated) {
+      unawaited(_loadRemoteMessages());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _attachmentSessionSubscription?.cancel();
     _draftTimer?.cancel();
     _persistChatDraftSnapshot();
