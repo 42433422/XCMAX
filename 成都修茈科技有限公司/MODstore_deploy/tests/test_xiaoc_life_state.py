@@ -945,9 +945,7 @@ def test_experiences_api_keeps_lifecycle_audit_in_separate_state_feed(database):
     store.record_cycle_phase(claim, "observe")
     app = FastAPI()
     app.include_router(api.router)
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        id=7, is_admin=True
-    )
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=7, is_admin=True)
     with TestClient(app) as client:
         experiences = client.get("/life/experiences").json()
         status = client.get("/life").json()
