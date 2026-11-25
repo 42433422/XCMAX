@@ -7,6 +7,7 @@ import hmac
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.domain.shared_services.order_event_bridge import (
     PAID_EVENT_TYPE,
@@ -226,7 +227,7 @@ class TestEmitPaidEvent:
         from app.domain.shared_services.order_event_bridge import emit_paid_event
 
         bus = MagicMock()
-        bus.publish.side_effect = RuntimeError("bus down")
+        bus.publish.side_effect = RedisConnectionError("event bus Redis transport unavailable")
         with patch("app.neuro_bus.bus.get_neuro_bus", return_value=bus):
             assert emit_paid_event(_ENVELOPE["data"]) is False
 
@@ -251,6 +252,6 @@ class TestRecordReconciliation:
 
         with patch(
             "app.domain.shared_services.user_cs_pipeline.record_reconciliation",
-            side_effect=RuntimeError("x"),
+            side_effect=PermissionError("reconciliation file is not writable"),
         ):
             _record_reconciliation_if_user(_ENVELOPE["data"])  # 不应抛异常

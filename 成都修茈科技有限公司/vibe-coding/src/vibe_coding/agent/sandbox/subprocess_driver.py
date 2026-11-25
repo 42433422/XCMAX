@@ -26,9 +26,11 @@ Security hardening (vs. P0 baseline):
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import time
-from pathlib import Path
+from contextlib import suppress
 from typing import Any
 
 from ...runtime.sandbox import CodeSandbox
@@ -72,6 +74,7 @@ class SubprocessSandboxDriver:
             driver=self.name,
             error_type="ValueError",
             error_message=f"unknown job kind {job.kind!r}",
+            exit_code=2,
         )
 
     # ----------------------------------------------------------------- function
@@ -104,17 +107,21 @@ class SubprocessSandboxDriver:
                 driver=self.name,
                 error_type="ValueError",
                 error_message="command job requires non-empty `command`",
+                exit_code=2,
             )
         try:
             workspace = resolve_workspace(job.workspace_dir)
         except ValueError as exc:
-            return SandboxResult(success=False, driver=self.name, error_type="ValueError", error_message=str(exc))
+            return SandboxResult(
+                success=False, driver=self.name, error_type="ValueError", error_message=str(exc), exit_code=2
+            )
         if workspace is None:
             return SandboxResult(
                 success=False,
                 driver=self.name,
                 error_type="ValueError",
                 error_message="command job requires `workspace_dir`",
+                exit_code=2,
             )
 
         # Build a sanitised env: only the explicit allow-list (PATH and
@@ -139,15 +146,16 @@ class SubprocessSandboxDriver:
             run_kwargs["stdin"] = subprocess.DEVNULL
         t0 = time.perf_counter()
         try:
-            proc = subprocess.run(job.command, **run_kwargs)
+            proc = _run_command(job.command, run_kwargs)
         except subprocess.TimeoutExpired as exc:
             return SandboxResult(
                 success=False,
                 driver=self.name,
                 error_type="TimeoutError",
                 error_message=f"command timed out after {pol.timeout_s}s",
-                stdout=str(exc.stdout or ""),
-                stderr=str(exc.stderr or ""),
+                stdout=_truncate(_output_text(exc.stdout), pol.max_output_size),
+                stderr=_truncate(_output_text(exc.stderr), pol.max_output_size),
+                exit_code=124,
                 duration_ms=round((time.perf_counter() - t0) * 1000, 3),
             )
         except (FileNotFoundError, PermissionError, OSError) as exc:
@@ -156,6 +164,7 @@ class SubprocessSandboxDriver:
                 driver=self.name,
                 error_type=type(exc).__name__,
                 error_message=str(exc),
+                exit_code=127 if isinstance(exc, FileNotFoundError) else 126,
                 duration_ms=round((time.perf_counter() - t0) * 1000, 3),
             )
         return SandboxResult(
@@ -168,6 +177,43 @@ class SubprocessSandboxDriver:
         )
 
 
+def _run_command(command: list[str], options: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+    if os.name != "posix":
+        return subprocess.run(command, **options)
+    # Keep the existing stdlib backend. Each invocation owns a fresh session,
+    # so cleanup cannot signal the host or another invocation's process group.
+    kwargs = dict(options)
+    timeout = kwargs.pop("timeout")
+    stdin = kwargs.pop("input", None)
+    kwargs.pop("capture_output")
+    kwargs.pop("check")
+    if stdin is not None:
+        kwargs["stdin"] = subprocess.PIPE
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, **kwargs)
+    try:
+        stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
+        return subprocess.CompletedProcess(command, proc.wait(), stdout, stderr)
+    finally:
+        # Also clean up after success, failure, or caller interruption: the
+        # group can still contain descendants after the direct child exits.
+        with suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            proc.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            # A detached process may still own a pipe. Never let its inherited
+            # descriptor turn the command deadline into an unbounded wait.
+            proc.wait(timeout=1)
+        finally:
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    stream.close()
+
+
+def _output_text(value: str | bytes | None) -> str:
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+
+
 def _truncate(text: str, limit: int) -> str:
     if limit <= 0 or len(text) <= limit:
         return text
@@ -175,7 +221,3 @@ def _truncate(text: str, limit: int) -> str:
 
 
 __all__ = ["SubprocessSandboxDriver"]
-
-
-# --- Defensive trivial reference so type-checkers see Path as used ---------
-_ = Path

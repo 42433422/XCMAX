@@ -81,7 +81,7 @@ class TestChatCompletion:
         from app.infrastructure.llm.providers import registry
 
         provider = MagicMock()
-        provider.chat_completion = AsyncMock(side_effect=RuntimeError("private provider detail"))
+        provider.chat_completion = AsyncMock(side_effect=OSError("private provider detail"))
         monkeypatch.setattr(registry, "get_active_provider", lambda: provider)
         result = await _chat_completion([])
         assert "private provider detail" not in result["error"]

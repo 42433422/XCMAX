@@ -328,13 +328,136 @@ def validate(directory: Path, source_sha: str) -> None:
         require(bool((directory / name).read_text().strip()), f"Missing runtime identity: {name}")
 
 
+def validate_chat_soak(directory: Path, source_sha: str, days: int = 7) -> None:
+    """Validate native k6 evidence for synthetic staging chat only, never production SLO."""
+    require(bool(re.fullmatch(r"[0-9a-f]{40}", source_sha)), "An exact source commit is required")
+    require(type(days) is int and days >= 7, "A seven-day acceptance needs at least seven days")
+    summary = mapping(json.loads((directory / "k6-7d-summary.json").read_text()), "chat summary")
+    require(summary.get("source_sha") == source_sha, "Chat evidence has the wrong source identity")
+    require(summary.get("environment") == "staging", "Chat acceptance requires staging evidence")
+    require(summary.get("test_profile") == "chat-durable-turn/v1", "Wrong chat workload profile")
+    require(
+        summary.get("business_reconciliation") is False,
+        "Synthetic traffic cannot certify business reconciliation",
+    )
+    timestamp(summary.get("completed_at"), "Chat completion")
+    workload = mapping(summary.get("workload"), "Chat workload")
+    require(
+        workload.get("executor") == "constant-arrival-rate"
+        and workload.get("rate") == 30
+        and workload.get("timeUnit") in {"1m", "1m0s"},
+        "Chat arrival workload changed",
+    )
+    duration = number(summary["state"]["testRunDurationMs"], "Actual k6 duration")
+    required_ms = days * 86400 * 1000
+    metrics = mapping(summary.get("metrics"), "Chat metrics")
+    fixed = {
+        "checks": "rate==1",
+        "iterations": "count>0",
+        "dropped_iterations": "count==0",
+        "chat_turns_verified": "count>0",
+        "http_req_failed": "rate<0.01",
+        "http_req_duration": "p(95)<15000",
+    }
+    for name, threshold in fixed.items():
+        require(
+            metrics[name]["thresholds"][threshold].get("ok") is True,
+            f"{name}: required native k6 threshold is missing or failed",
+        )
+    for metric in metrics.values():
+        for outcome in mapping(metric.get("thresholds", {}), "Chat thresholds").values():
+            require(mapping(outcome, "Chat threshold").get("ok") is True, "A chat threshold failed")
+    iterations = number(metrics["iterations"]["values"]["count"], "Chat iterations", integer=True)
+    exact_number(
+        metrics["chat_turns_verified"]["values"]["count"], iterations, "Verified original turns"
+    )
+    exact_number(metrics["dropped_iterations"]["values"]["count"], 0, "Dropped chat work")
+    exact_number(metrics["checks"]["values"]["rate"], 1, "Chat check rate")
+    exact_number(metrics["http_req_failed"]["values"]["rate"], 0, "Chat HTTP failure rate")
+    counts = dict.fromkeys(
+        ("http_reqs", "checks", "http_req_failed", "chat_turns_verified", "http_req_duration"), 0
+    )
+    latencies = []
+    checks, endpoints = set(), set()
+    first = last = None
+    with (directory / "k6-7d-samples.jsonl").open() as handle:
+        for line in handle:
+            row = mapping(json.loads(line), "Chat raw record")
+            name = row.get("metric")
+            if row.get("type") != "Point" or name not in counts:
+                continue
+            data = mapping(row.get("data"), "Chat raw data")
+            timestamp(data.get("time"), "Chat raw observation")
+            observed = datetime.fromisoformat(data["time"])
+            first = min(first, observed) if first else observed
+            last = max(last, observed) if last else observed
+            tags = mapping(data.get("tags"), "Chat raw tags")
+            require(
+                tags.get("source_sha") == source_sha and tags.get("environment") == "staging",
+                "Chat raw sample identity mismatch",
+            )
+            if name == "http_req_duration":
+                latencies.append(number(data.get("value"), "Raw chat HTTP duration"))
+            else:
+                exact_number(
+                    data.get("value"), 0 if name == "http_req_failed" else 1, f"Raw {name}"
+                )
+            counts[name] += 1
+            if name == "checks":
+                checks.add(tags.get("check"))
+            elif name == "http_reqs":
+                require(tags.get("status") == "200", "Chat raw HTTP status failed")
+                endpoints.add(tags.get("name"))
+    require(first is not None and last is not None, "Chat raw observations are missing")
+    require(
+        checks
+        == {
+            "healthy tested build",
+            "login ok",
+            "chat stream HTTP contract",
+            "original durable turn completed",
+        }
+        and endpoints == {"health", "login", "chat_stream", "chat_readback"},
+        "Chat raw observations omit a required route or assertion",
+    )
+    for name, count in counts.items():
+        exact_number(
+            count,
+            iterations if name == "chat_turns_verified" else iterations * 4,
+            f"Raw {name} count",
+        )
+    exact_number(metrics["http_reqs"]["values"]["count"], counts["http_reqs"], "Chat HTTP count")
+    exact_number(metrics["checks"]["values"]["passes"], counts["checks"], "Chat checks passed")
+    exact_number(metrics["checks"]["values"]["fails"], 0, "Chat checks failed")
+    require(bool(latencies), "Chat latency observations are missing")
+    latencies.sort()
+    position = 0.95 * (len(latencies) - 1)
+    lower, upper = math.floor(position), math.ceil(position)
+    p95 = latencies[lower] + (latencies[upper] - latencies[lower]) * (position - lower)
+    require(p95 < 15000, "Raw chat latency exceeds its fixed budget")
+    equal_measurement(metrics["http_req_duration"]["values"]["p(95)"], p95, "Chat HTTP p95")
+    require(duration >= required_ms, "Actual k6 observation is shorter than the acceptance window")
+    require(iterations >= days * 86400 / 2, "Chat workload does not cover the observation window")
+    require(
+        (last - first).total_seconds() * 1000 >= required_ms - 5000,
+        "Chat raw samples do not span the acceptance window",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument(
+        "--chat-soak", action="store_true", help="Validate staging chat JSONL and native k6 summary"
+    )
+    parser.add_argument("--window-days", type=int, default=7)
     args = parser.parse_args()
     try:
-        validate(args.directory, args.source_sha)
+        if args.chat_soak:
+            validate_chat_soak(args.directory, args.source_sha, args.window_days)
+        else:
+            validate(args.directory, args.source_sha)
     except (OSError, KeyError, TypeError, ValueError) as error:
         print(f"Performance evidence rejected: {error}")
         return 1

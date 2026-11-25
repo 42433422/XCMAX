@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -107,7 +108,7 @@ class TestQueryShipments:
         with (
             patch(
                 "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                side_effect=RuntimeError("DB fail"),
+                side_effect=sqlite3.OperationalError("DB fail"),
             ),
             patch(
                 "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
@@ -153,7 +154,7 @@ class TestSearchShipments:
     def test_search_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=RuntimeError("err"),
+            side_effect=sqlite3.OperationalError("database unavailable"),
         ):
             result = query.search_shipments("test")
         assert result == []
@@ -171,7 +172,7 @@ class TestGetShipmentById:
     def test_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=RuntimeError("err"),
+            side_effect=sqlite3.OperationalError("database unavailable"),
         ):
             result = query.get_shipment_by_id("1")
         assert result is None
@@ -189,7 +190,7 @@ class TestGetLatestShipments:
     def test_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=RuntimeError("err"),
+            side_effect=sqlite3.OperationalError("database unavailable"),
         ):
             result = query.get_latest_shipments(5)
         assert result == []

@@ -91,6 +91,51 @@ class TestRetest:
         names = [c["name"] for c in receipt["checks"]]
         assert "app_health" in names and "scenario_retest" in names
 
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            None,
+            {},
+            {"module": "app.utils.operational_errors", "assertion": "importable"},
+            {"retest_url": " \t", "command": " \n"},
+        ],
+    )
+    def test_health_alone_cannot_complete_a_customer_retest(self, fake_app, scenario) -> None:
+        base_url, _ = fake_app
+        spec = {**_spec(), "scenario": scenario}
+        receipt = retest_mod.retest(spec, base_url, expect_version="1.0.0.4")
+        assert receipt["verdict"] == "fail"
+        missing = next(c for c in receipt["checks"] if c["name"] == "scenario_required")
+        assert missing["ok"] is False
+        assert missing["error"] == "no_executable_scenario"
+
+    @pytest.mark.parametrize("exit_code", [0, 1])
+    def test_command_only_retest_uses_real_process_exit(self, fake_app, exit_code) -> None:
+        base_url, _ = fake_app
+        spec = _spec("")
+        spec["scenario"]["command"] = f'"{sys.executable}" -c "raise SystemExit({exit_code})"'
+        receipt = retest_mod.retest(spec, base_url)
+        assert receipt["verdict"] == ("pass" if exit_code == 0 else "fail")
+        command = next(c for c in receipt["checks"] if c["name"] == "scenario_command")
+        assert command["exit_code"] == exit_code
+        assert not any(c["name"] == "scenario_required" for c in receipt["checks"])
+
+    def test_missing_scenario_persists_failure_without_knowledge(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_app
+    ) -> None:
+        base_url, _ = fake_app
+        out = tmp_path / "retest"
+        monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(out))
+        recorded = []
+        monkeypatch.setattr(retest_mod, "_record_knowledge", recorded.append)
+        spec_path = tmp_path / "needs-scenario.json"
+        spec_path.write_text(json.dumps({**_spec(), "scenario": None}), encoding="utf-8")
+        rc = retest_mod.main(["--spec", str(spec_path), "--base-url", base_url])
+        assert rc == 2
+        receipt = json.loads(next(out.glob("receipt-*.json")).read_text(encoding="utf-8"))
+        assert receipt["verdict"] == "fail"
+        assert recorded == []
+
     def test_fail_when_scenario_route_404(self, tmp_path: Path, monkeypatch, fake_app) -> None:
         base_url, _ = fake_app
         _FakeAppHandler.retest_status = 404

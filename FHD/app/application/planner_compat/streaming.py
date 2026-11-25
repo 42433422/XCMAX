@@ -106,7 +106,7 @@ class CompatStream:
         await self.persona.enrich(request, body)
         tier = ai_tier or self.resolve_tier(request)
         self.logger.info(
-            "chat dispatch decision: dispatch_path=llm_planner channel=compat_chat_stream_llm tier=%s",
+            "chat dispatch decision: dispatch_path=codex channel=compat_chat_stream_codex tier=%s",
             tier,
         )
         async with aclosing(self.backend(request, body, ai_tier=tier)) as stream:

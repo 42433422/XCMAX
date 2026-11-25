@@ -9,8 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.tools_execute import _capability_http_receipt
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
@@ -34,131 +33,81 @@ def _svc():
 
 
 def _products_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "products-route"
-    ).strip()
+    from app.fastapi_routes.tools_execute import user_id_from_tool_request
+
+    return user_id_from_tool_request(request, payload)
 
 
 def _run_products_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
+    *, request: Request, action: str, params: dict[str, Any], route_path: str
 ) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("products") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 products 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"products_{action}"
-    user_id = _products_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 products.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="products",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute products.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
-        metadata={"source": "product_route", "route": route_path},
+    payload, _ = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "products", "action": action, "params": dict(params)},
+        route_path=route_path,
     )
-    runtime_context = {
-        "source": "product_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_product_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Products {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "products-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
+    return payload
 
 
 @router.delete("/api/products/{product_id}")
 def products_delete(request: Request, product_id: int):
-    return _run_products_agent(
+    result = _run_products_agent(
         request=request,
         action="delete",
         params={"id": product_id},
         route_path="/api/products/{product_id}",
     )
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.post("/api/products/import/price-list-template")
 async def products_import_price_list_template(
+    request: Request,
     template_file: UploadFile | None = File(default=None),
 ):
-    try:
-        from app.infrastructure.documents.template_registry import fhd_repo_root
-    except RECOVERABLE_ERRORS:
-        logger.exception("template_registry import failed")
-        return JSONResponse({"success": False, "message": "模板服务暂不可用"}, status_code=500)
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    from app.utils.path_io.upload_helpers import stage_capability_upload
+
+    context = request_runtime_context(request)
 
     if template_file is None or not template_file.filename:
         return JSONResponse({"success": False, "message": "请上传 .docx 模板文件"}, status_code=400)
     if not str(template_file.filename).lower().endswith(".docx"):
         return JSONResponse({"success": False, "message": "只支持 .docx 格式"}, status_code=400)
     try:
-        body = await template_file.read()
+        body = await template_file.read(8 * 1024 * 1024 + 1)
     except RECOVERABLE_ERRORS:
         logger.exception("price list template read failed")
         return JSONResponse({"success": False, "message": "模板文件读取失败"}, status_code=500)
     if len(body) < 64:
         return JSONResponse({"success": False, "message": "文件过小或已损坏"}, status_code=400)
+    if len(body) > 8 * 1024 * 1024:
+        return JSONResponse({"success": False, "message": "模板文件不能超过 8 MB"}, status_code=413)
     if not body.startswith(b"PK"):
         return JSONResponse(
             {"success": False, "message": "不是有效的 Office Open XML（.docx）文件"},
             status_code=400,
         )
     try:
-        dest_dir = fhd_repo_root() / "424" / "document_templates"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / "price_list_default.docx"
-        dest.write_bytes(body)
-        rel = dest.relative_to(fhd_repo_root())
+        params = stage_capability_upload(
+            body,
+            template_file.filename,
+            context,
+            namespace="price-list-template",
+            suffixes=frozenset({".docx"}),
+        )
     except RECOVERABLE_ERRORS:
-        logger.exception("price list template write failed")
-        return JSONResponse({"success": False, "message": "保存失败"}, status_code=500)
-    return {
-        "success": True,
-        "message": f"已保存价目表 Word 模板（{rel.as_posix()}），导出 Word 价目表时将使用该文件。",
-    }
+        logger.exception("price list template staging failed")
+        return JSONResponse({"success": False, "message": "模板输入保存失败"}, status_code=500)
+    result = _run_products_agent(
+        request=request,
+        action="import_price_list_template",
+        params=params,
+        route_path="/api/products/import/price-list-template",
+    )
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.get("/api/products/export.xlsx")
@@ -215,12 +164,13 @@ def products_batch(request: Request, body: dict = Body(default_factory=dict)):
         return JSONResponse(
             {"success": False, "message": "products 必须为非空数组"}, status_code=400
         )
-    return _run_products_agent(
+    result = _run_products_agent(
         request=request,
         action="batch_create",
         params={"products": products},
         route_path="/api/products/batch",
     )
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.post("/api/products/{product_id}")
@@ -235,7 +185,7 @@ def products_update_post(
         params={"id": product_id, **dict(body or {})},
         route_path="/api/products/{product_id}",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.put("/api/products/{product_id}")
@@ -246,7 +196,7 @@ def products_put(request: Request, product_id: int, body: dict = Body(default_fa
         params={"id": product_id, **dict(body or {})},
         route_path="/api/products/{product_id}",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    return JSONResponse(*_capability_http_receipt(result))
 
 
 @router.patch("/api/products/{product_id}")
@@ -257,4 +207,4 @@ def products_patch(request: Request, product_id: int, body: dict = Body(default_
         params={"id": product_id, **dict(body or {})},
         route_path="/api/products/{product_id}",
     )
-    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    return JSONResponse(*_capability_http_receipt(result))

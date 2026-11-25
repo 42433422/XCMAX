@@ -20,7 +20,6 @@ from app.middleware.customer_mod_scope import CustomerModScopeMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.industry_context import IndustryContextMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -119,7 +118,8 @@ def _create_fastapi_app(
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
-    app.add_middleware(XSSSanitizerMiddleware)
+    # JSON is business data, not HTML. Preserve its original bytes and apply
+    # escaping/sanitization at the HTML rendering boundary.
 
     if enable_cors:
         _cors_regex = resolve_cors_allow_origin_regex()

@@ -117,16 +117,21 @@ jobs:
               }
               pending = retry;
             }
-            for (const snapshot of proven) {
+            // Conflicted new heads cannot start PR CI, so native concurrency may never cancel the old run.
+            for (const snapshot of [...proven, ...pending]) {
               if (!await livePRMatches()) return;
               const run = await readRun(snapshot.id);
-              if (!sameAttempt(snapshot, run) || await cancellationProof(run) !== true) continue;
+              if (!sameAttempt(snapshot, run)) continue;
+              const proof = await cancellationProof(run);
+              // Initiate ordinary cancellation only for original attempts; keep proven cleanup unchanged.
+              if (proof === null || (proof === false && run.run_attempt !== 1)) continue;
               if (!await livePRMatches()) return;
               if (!sameAttempt(snapshot, await readRun(snapshot.id))) continue;
               // GitHub has no attempt-specific conditional cancel. These final reads narrow that race.
               try {
-                await github.rest.actions.forceCancelWorkflowRun({...scope, run_id: snapshot.id});
-                core.info(`Requested completion of cancellation for run ${snapshot.id}, attempt ${snapshot.run_attempt}.`);
+                if (proof) await github.rest.actions.forceCancelWorkflowRun({...scope, run_id: snapshot.id});
+                else await github.rest.actions.cancelWorkflowRun({...scope, run_id: snapshot.id});
+                core.info(`Requested ${proof ? 'completion of cancellation' : 'cancellation'} for run ${snapshot.id}, attempt ${snapshot.run_attempt}.`);
               } catch (error) {
                 if (error.status !== 409) throw error;
                 const after = await readRun(snapshot.id);

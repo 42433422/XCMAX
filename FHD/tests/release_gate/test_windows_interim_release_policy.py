@@ -90,7 +90,9 @@ def test_unsigned_public_download_is_verified_over_public_http() -> None:
     assert 'test "$existing_sha" = "$expected_sha"' in text
     assert "curl --http1.1 -fsSI" in text
     assert 'public_sha="$(curl --http1.1 -fsSL --max-time 900' in text
-    assert 'test "$artifact_sha" = "$receipt_sha" && test "$artifact_sha" = "$sidecar_sha"' in text
+    assert 'test "$artifact_sha" = "$receipt_sha"\n' in text
+    assert 'test "$artifact_sha" = "$sidecar_sha"\n' in text
+    assert 'test "$artifact_sha" = "$receipt_sha" &&' not in text
     assert "sha256sum" in text
     assert "Published installer SHA256 mismatch" in text
     assert "download-windows-hotfix.json" in text

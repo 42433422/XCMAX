@@ -10,6 +10,35 @@ from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, 
 from app.infrastructure.kellai_client import KellaiRequestError, request_kellai
 
 
+def _connection(context: dict[str, Any], action: str) -> dict[str, Any]:
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    actor = _bound_actor(context)
+    spec = get_tool_action_spec("kellai", action)
+    scope = str((spec.policy if spec else {}).get("provider_scope") or "")
+    if not scope:
+        raise binding.KellaiAuthorizationError("客来来能力未登记")
+    return binding.scoped_connection(
+        actor=int(actor.id), tenant_id=str(context.get("tenant_id") or ""), scope=scope
+    )
+
+
+def connection_scope(context: dict[str, Any], action: str) -> dict[str, Any]:
+    """Stable approval identity, with no credential or provider endpoint disclosure."""
+    try:
+        connection = _connection(context, action)
+    except (AgentModAuthorizationError, binding.KellaiAuthorizationError):
+        return {"available": False}
+    return {
+        "available": True,
+        "connection_id": str(connection["connection_id"]),
+        "user_id": str(connection["xcmax_user_id"]),
+        "tenant_id": str(connection.get("xcmax_tenant_id") or ""),
+        "provider_actor_id": str((connection.get("authorized_by") or {}).get("id") or ""),
+        "scopes": sorted(connection.get("authorized_scopes") or []),
+    }
+
+
 def delivery_request_id(run_id: str, step_id: str) -> str:
     """Stable original action identity; this grants no permission to send."""
     return "agent_" + hashlib.sha256(f"{run_id}:{step_id}".encode()).hexdigest()[:48]
@@ -21,7 +50,11 @@ def _approved_request_id(
     connection: dict[str, Any] | None = None,
 ) -> str:
     """Revalidate the persisted approved action, never model-supplied approval flags."""
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        _params_hash,
+        approval_scope_matches,
+        execution_scope_claims,
+    )
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 
     run = get_agent_run_repository().get(str(context.get("run_id") or ""))
@@ -41,6 +74,11 @@ def _approved_request_id(
         or not receipt.get("approved_by")
         or not connection_digest
         or receipt.get("kellai_connection_sha256") != connection_digest
+        or not approval_scope_matches(run, step)
+        or any(
+            receipt.get(key) != value
+            for key, value in execution_scope_claims(context, "kellai", "send").items()
+        )
     ):
         raise PermissionError("发送内容或收件人与已批准任务不一致")
     if receipt.get("grant_id"):
@@ -99,17 +137,7 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
         }
     request_id = ""
     try:
-        actor = _bound_actor(context)
-        scope = {
-            "channels": "channels.read",
-            "customers": "customer_profiles.read",
-            "conversations": "customer_conversations.read",
-            "send": "messages.send",
-            "receipt": "messages.send",
-        }[action]
-        connection = binding.scoped_connection(
-            actor=int(actor.id), tenant_id=str(context.get("tenant_id") or ""), scope=scope
-        )
+        connection = _connection(context, action)
         body = None
         if action == "send":
             request_id = _approved_request_id(params, context, connection)
@@ -123,11 +151,15 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
             )
         elif action == "customers":
             path = f"customers?limit={params.get('limit', 50)}"
+        elif action == "data_status":
+            path = "data-status"
         else:
             path = "channels"
         result = request_kellai(path, connection, body)
         if action in {"send", "receipt"}:
-            data = result.get("data") or {}
+            data = result.get("data")
+            if not isinstance(data, dict):
+                raise KellaiRequestError("客来来回执无效，请查询原请求回执", 502)
             status = str(data.get("status"))
             provider_state = data.get("provider_state")
             visible_status = (
@@ -137,8 +169,17 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
                 and provider_state in {"sent", "delivered", "read", "failed"}
                 else status
             )
-            return {
-                "success": status in {"accepted", "delivered"} and visible_status != "failed",
+            accepted = status in {"accepted", "delivered"} and visible_status != "failed"
+            uncertain = status in {"sending", "unknown"} or bool(
+                data.get("reconciliation_required")
+                or data.get("requires_reconciliation")
+                or data.get("outcome") == "unknown"
+                or data.get("ok") is False
+                or accepted
+                and (data.get("error") or data.get("error_code"))
+            )
+            output = {
+                "success": accepted and action != "send" and not uncertain,
                 # Provider acceptance/delivery is a domain receipt, not an
                 # execution envelope. Keep the full original receipt for the
                 # host's independent readback; acceptance alone cannot pass it.
@@ -152,12 +193,20 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
                     "requires_desktop_execution": "此渠道需要在客来来桌面端执行，当前请求未外发",
                 }.get(visible_status, f"渠道状态：{status}"),
                 "retryable": False,
-                **(
-                    {"outcome": "unknown", "reconciliation_required": True}
-                    if status in {"sending", "unknown"}
-                    else {}
-                ),
+                **({"outcome": "unknown", "reconciliation_required": True} if uncertain else {}),
             }
+            if action == "send":
+                # Acknowledgement is only a pending original execution receipt.
+                # The host's frozen contract and independent GETs verify delivery.
+                output.update(
+                    execution_state="unknown" if uncertain else "pending" if accepted else "failed",
+                    request_id=request_id,
+                    connection_scope=connection_scope(context, action),
+                    provider_receipt=data,
+                )
+                if accepted and not uncertain:
+                    output["message"] = "渠道回执待独立核验；保留原请求，不重新发送。"
+            return output
         return result
     except AgentModAuthorizationError:
         return {
@@ -178,6 +227,8 @@ def execute_kellai(action: str, params: dict[str, Any], context: dict[str, Any])
             **(
                 {
                     "outcome": "unknown",
+                    "execution_state": "unknown",
+                    "request_id": request_id,
                     "reconciliation_required": True,
                     "data": {
                         "request_id": request_id,

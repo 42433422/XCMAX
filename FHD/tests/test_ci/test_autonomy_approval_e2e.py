@@ -84,14 +84,17 @@ class TestIngestToApproveE2E:
         assert pending["count"] >= 1
         assert any(item["action_id"] == action_id for item in pending["items"])
 
-        # 3. 管理端通过（defer_execution 避免 real executor）
+        # 3. 延迟执行必须绑定工作流审批；无审批标识不允许通过。
+        resume_url = f"/api/ops/autonomy/actions/{action_id}/resume"
+        approval = {"approver": "admin-e2e", "defer_execution": True}
+        unbound = e2e_client.post(resume_url, headers=_AUTH, json=approval)
+        assert unbound.status_code == 409
         resp = e2e_client.post(
-            f"/api/ops/autonomy/actions/{action_id}/resume",
-            headers=_AUTH,
-            json={"approver": "admin-e2e", "defer_execution": True},
+            resume_url, headers=_AUTH, json={**approval, "approval_id": "workflow-e2e"}
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["action"]["state"] == "approved"
+        assert resp.json()["action"]["approval_id"] == "workflow-e2e"
 
         # 4. pending 不再含该 action
         resp = e2e_client.get("/api/ops/autonomy/actions/pending", headers=_AUTH)

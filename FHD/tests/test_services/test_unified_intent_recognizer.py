@@ -242,8 +242,9 @@ class TestRecognizeHelpers:
         side_effect=RuntimeError("fail"),
     )
     def test_rule_recognize_error(self, mock_recognize, recognizer):
-        result = recognizer._recognize_rule("生成发货单")
-        assert result is None
+        with pytest.raises(RuntimeError, match="^fail$"):
+            recognizer._recognize_rule("生成发货单")
+        mock_recognize.assert_called_once_with("生成发货单")
 
     def test_distilled_no_recognizer(self, recognizer):
         recognizer._distilled_recognizer = None

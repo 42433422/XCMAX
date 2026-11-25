@@ -34,11 +34,11 @@ class _ModelSession(dict):
 def _active_session(session_id: str) -> dict | None:
     from app.db.models.user import Session
     from app.db.session import get_host_db
-    from app.utils.time import utc_now_naive
+    from app.infrastructure.session.session_manager import session_has_expired
 
     with get_host_db() as db:
         row = db.query(Session).filter(Session.session_id == session_id).first()
-        if row is None or row.expires_at <= utc_now_naive() or not row.user.is_active:
+        if row is None or session_has_expired(db, row) or not row.user.is_active:
             return None
         if row.user.tenant_id is None or row.impersonating_market_user_id is not None:
             return None

@@ -1,6 +1,6 @@
 """AIOPEN 开放平台路由（toA：面向外部 AI Agent）。
 
-由原 Qclaw龙虾生态（:mod:`app.fastapi_routes.ai_qclaw`）升级而来：
+业务能力复用统一契约、账号授权与任务执行链：
 
 - ``GET  /api/aiopen/manifest`` — 工具目录（公开，无需 Key）
 - ``GET  /api/aiopen/guide`` — 接入说明（公开；供其他 AI 阅读后自行配置 MCP）
@@ -11,8 +11,7 @@
 - ``GET  /api/aiopen/panel`` + ``POST /api/aiopen/whitelist|config|control`` — 控制台
 - ``WS   /api/aiopen/ws`` — 前端 screen 端（虚拟光标）连接
 
-旧 ``/api/ai/qclaw/*`` URL 全部保留（见 ai_qclaw.py），与本模块共享
-``AIOPEN_STATE`` 运行时状态。
+旧 Qclaw 调用方已迁移到本路由，旧路由实现已移除。
 """
 
 from __future__ import annotations
@@ -37,7 +36,6 @@ from fastapi import (
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.application.agent_orchestrator.chat_trace import (
-    attach_chat_trace_run,
     create_chat_trace_run,
 )
 from app.application.aiopen.catalog_builder import (
@@ -66,12 +64,10 @@ from app.application.aiopen.service import (
     invoke_tool,
     is_path_whitelisted,
     list_api_keys,
-    openclaw_chat_proxy,
     record_api_key_use,
     required_operation_scope,
     revoke_api_key,
     seed_capability_whitelist,
-    verify_api_key,
 )
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
@@ -145,6 +141,8 @@ def _trace_aiopen_tool_call(
     result: dict[str, Any],
     user_id: str = "",
 ) -> str:
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
     return trace_tool_call(
         route=route,
         channel=channel,
@@ -153,7 +151,7 @@ def _trace_aiopen_tool_call(
         result=result,
         create_trace_run=create_chat_trace_run,
         logger=logger,
-        user_id=user_id,
+        user_id=str(current_execution_context().get("user_id") or user_id),
     )
 
 
@@ -263,11 +261,13 @@ async def aiopen_invoke(
         x_aiopen_key,
         tool,
         channel="rest",
-        ok=status == 200,
+        ok=status == 200 and result.get("success") is True,
         duration_ms=(time.perf_counter() - started) * 1000,
     )
     payload = {"tool": tool, **result}
-    run_id = _trace_aiopen_tool_call(
+    run_id = str(
+        result.get("run_id") or result.get("agent_run_id") or ""
+    ) or _trace_aiopen_tool_call(
         route="/api/aiopen/invoke",
         channel="aiopen_invoke",
         tool=tool,
@@ -453,7 +453,12 @@ def _catalog_denied(key: str | None) -> JSONResponse | None:
 
 def _catalog_item(entry: dict[str, Any]) -> dict[str, Any]:
     path = str(entry.get("path") or "")
-    return {**entry, "whitelisted": is_path_whitelisted(path)}
+    return {
+        **entry,
+        "whitelisted": bool(entry.get("executable"))
+        if entry.get("kind") == "capability"
+        else is_path_whitelisted(path),
+    }
 
 
 @router.get("/api/aiopen/catalog/operations")
@@ -470,7 +475,9 @@ def aiopen_catalog_operations(
     denied = _catalog_denied(x_aiopen_key)
     if denied is not None:
         return denied
-    operations = list(get_catalog(request.app).get("operations") or [])
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    operations = list(get_catalog(request.app, current_execution_context()).get("operations") or [])
     keyword = str(q or "").strip().lower()
     if keyword:
         operations = [
@@ -508,7 +515,9 @@ def aiopen_catalog_operation(
     denied = _catalog_denied(x_aiopen_key)
     if denied is not None:
         return denied
-    entry = find_operation(get_catalog(request.app), operation_id)
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    entry = find_operation(get_catalog(request.app, current_execution_context()), operation_id)
     if entry is None:
         return JSONResponse(
             {"success": False, "code": "OPERATION_NOT_FOUND", "message": operation_id},
@@ -557,6 +566,7 @@ def aiopen_keys_list(_admin: Any = Depends(require_admin_user)):
 
 @router.post("/api/aiopen/keys")
 def aiopen_keys_create(
+    request: Request,
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
@@ -569,6 +579,8 @@ def aiopen_keys_create(
         scopes = None
     expires_in_days = _positive_int(body.get("expires_in_days"))
     expires_at = time.time() + expires_in_days * 86400 if expires_in_days else None
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+
     created = generate_api_key(
         str(body.get("label") or ""),
         principal=ScreenPrincipal.from_user(_admin),
@@ -576,6 +588,7 @@ def aiopen_keys_create(
         expires_at=expires_at,
         rate_limit_per_min=_positive_int(body.get("rate_limit_per_min")),
         daily_quota=_positive_int(body.get("daily_quota")),
+        execution_context=request_runtime_context(request),
     )
     return _trace_aiopen_control_result(
         {"success": True, **created},
@@ -616,7 +629,22 @@ def aiopen_keys_revoke(
     key = str(body.get("key") or "").strip()
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
-    ok = revoke_api_key(key)
+    try:
+        ok = revoke_api_key(key)
+    except OSError:
+        result = _trace_aiopen_control_result(
+            {
+                "success": False,
+                "revoked": False,
+                "error_code": "key_revocation_unavailable",
+                "message": "密钥撤销尚未保存，请重试并核对撤销结果",
+            },
+            route="/api/aiopen/keys",
+            action="keys_revoke",
+            body=body,
+            user_id=str(getattr(_admin, "id", "") or ""),
+        )
+        return JSONResponse(result, status_code=503)
     return _trace_aiopen_control_result(
         {"success": ok, "revoked": ok},
         route="/api/aiopen/keys",
@@ -677,7 +705,7 @@ def aiopen_whitelist_seed(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
-    """一键写入侧栏/业务全能力白名单，打通 MCP api_call 全调用闭环。"""
+    """更新侧栏资源展示范围；业务执行权限仍取自能力契约。"""
     enable = bool(body.get("enabled", True)) if "enabled" in body else True
     merge = bool(body.get("merge", True))
     payload = seed_capability_whitelist(enable=enable, merge=merge)
@@ -697,12 +725,11 @@ async def aiopen_loop_verify(
     x_aiopen_key: AiOpenKeyHeader = None,
 ):
     """全调用闭环自检（等同 MCP capability_loop 工具）。"""
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
-    result = await invoke_tool(
-        "capability_loop", body if isinstance(body, dict) else {}, request.app
+    return await aiopen_invoke(
+        request,
+        x_aiopen_key,
+        {"tool": "capability_loop", "args": body if isinstance(body, dict) else {}},
     )
-    return result
 
 
 @router.post("/api/aiopen/config")
@@ -710,12 +737,25 @@ def aiopen_config(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
-    base_url = str(body.get("base_url") or "").strip().rstrip("/")
-    if not base_url:
-        return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
-    AIOPEN_STATE["openclaw_base"] = base_url
+    updates: dict[str, Any] = {}
+    if "base_url" in body:
+        base_url = str(body.get("base_url") or "").strip().rstrip("/")
+        if not base_url:
+            return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
+        updates["openclaw_base"] = base_url
+    if "wechat_open" in body:
+        if type(body["wechat_open"]) is not bool:
+            return JSONResponse(
+                {"success": False, "message": "wechat_open 必须是布尔值"}, status_code=400
+            )
+        updates["wechat_open"] = body["wechat_open"]
+    if not updates:
+        return JSONResponse(
+            {"success": False, "message": "需要 base_url 或 wechat_open"}, status_code=400
+        )
+    AIOPEN_STATE.update(updates)
     return _trace_aiopen_control_result(
-        {"success": True, "openclaw_base": base_url},
+        {"success": True, **updates},
         route="/api/aiopen/config",
         action="openclaw_config_update",
         body=body,
@@ -737,35 +777,6 @@ def aiopen_control(
         body=body,
         user_id=str(getattr(_admin, "id", "") or ""),
     )
-
-
-@router.post("/api/aiopen/openclaw/chat")
-def aiopen_openclaw_chat(
-    body: dict = Body(default_factory=dict),
-    x_aiopen_key: AiOpenKeyHeader = None,
-):
-    if not verify_api_key(x_aiopen_key):
-        return _unauthorized()
-    message = str(body.get("message") or "").strip()
-    if not message:
-        return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
-    payload, status = openclaw_chat_proxy(message)
-    payload = attach_chat_trace_run(
-        payload,
-        message=message,
-        runtime_context={
-            "route": "/api/aiopen/openclaw/chat",
-            "source": "aiopen",
-            "external_gateway": "openclaw",
-        },
-        user_id="aiopen-api-key",
-        source="aiopen",
-        channel="aiopen_openclaw",
-        intent="external_openclaw_chat",
-    )
-    if status == 200:
-        return payload
-    return JSONResponse(payload, status_code=status)
 
 
 # ---------------------------------------------------------------------------

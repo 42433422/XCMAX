@@ -430,6 +430,107 @@ def test_timeout_closes_context_on_its_own_task_and_never_reconnects(monkeypatch
     assert len(entered) == 1 and entered == exited
 
 
+@pytest.mark.parametrize("phase", ["connection", "operation"])
+def test_persistent_call_keeps_parent_deadline_and_unknown_write_tombstone(monkeypatch, phase):
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    entered, exited, effects = [], [], []
+
+    async def connection(config, operation):
+        entered.append(asyncio.current_task())
+
+        class Session:
+            async def call_tool(self, name, arguments):
+                if name == "change":
+                    await asyncio.sleep(0.25)
+                    effects.append("late write")
+                return SimpleNamespace(content=[], isError=False)
+
+        try:
+            if phase == "connection":
+                await asyncio.sleep(0.25)
+            return await operation(Session())
+        finally:
+            exited.append(asyncio.current_task())
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    config = McpServerConfig(
+        name="inherited-deadline",
+        command="unused",
+        session_mode="persistent",
+        session_start_tools=("start",),
+        timeout_seconds=2,
+    )
+    if phase == "operation":
+        assert _call(config, "start")["success"] is True
+    with invocation_deadline(time.monotonic() + 0.03):
+        result = _call(config, "start" if phase == "connection" else "change")
+    assert result["success"] is False and result["error_code"] == "mcp_session_lost"
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["reconciliation_required"] is True
+    assert _call(config, "start", retry_safe=True)["error_code"] == "mcp_session_lost"
+    client.close_all_sessions()
+    assert len(entered) == 1 and entered == exited and effects == []
+
+
+def test_persistent_queue_wait_cannot_renew_the_parent_deadline(monkeypatch):
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    started, calls = threading.Event(), []
+
+    async def connection(config, operation):
+        class Session:
+            async def call_tool(self, name, arguments):
+                calls.append(name)
+                if name == "hold":
+                    started.set()
+                    await asyncio.Event().wait()
+                return SimpleNamespace(content=[], isError=False)
+
+        return await operation(Session())
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    config = McpServerConfig(
+        name="queued-deadline",
+        command="unused",
+        session_mode="persistent",
+        session_start_tools=("hold",),
+        timeout_seconds=1,
+    )
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(_call, config, "hold")
+        assert started.wait(timeout=1)
+        before = time.monotonic()
+        with invocation_deadline(before + 0.03):
+            result = _call(config, "queued_write")
+        assert time.monotonic() - before < 0.5
+        assert result["error_code"] == "mcp_session_lost"
+        assert first.result(timeout=1)["error_code"] == "mcp_session_lost"
+    assert calls == ["hold"]
+
+
+def test_expired_parent_deadline_never_starts_a_persistent_session(monkeypatch):
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    entered = []
+
+    async def connection(config, operation):
+        entered.append(config.name)
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    config = McpServerConfig(
+        name="expired-before-start",
+        command="unused",
+        session_mode="persistent",
+        session_start_tools=("start",),
+    )
+    with invocation_deadline(time.monotonic() - 1):
+        result = _call(config, "start")
+    assert result["error_code"] == "mcp_session_deadline_exceeded"
+    assert result["outcome"] == "not_started" and not result["reconciliation_required"]
+    assert entered == []
+
+
 def test_session_configuration_is_bounded_explicit_and_default_is_stateless():
     config = _server_config("old", {"command": "x"})
     assert config is not None and config.session_mode == "stateless"

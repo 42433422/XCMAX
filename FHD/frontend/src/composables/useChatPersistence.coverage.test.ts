@@ -1072,6 +1072,16 @@ describe('useChatPersistence — coverage ramp', () => {
         expect(result!.message_count).toBe(2)
       })
 
+      it('keeps local-only messages discoverable when the last server count is zero', () => {
+        localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([
+          { role: 'user', content: 'unconfirmed local question', persistence: { id: 'pending', status: 'failed' } },
+        ]))
+        localStorage.setItem('xcagi_chat_session_meta_s1', JSON.stringify({ message_count: 0, title: 'Pending conversation' }))
+        const { buildLocalHistorySession } = useChatHistoryPersistence(makeDeps())
+        expect(buildLocalHistorySession('s1')).toMatchObject({ message_count: 1, title: 'Pending conversation', is_local_only: true })
+        expect(JSON.parse(localStorage.getItem('xcagi_chat_session_meta_s1') || '{}').message_count).toBe(0)
+      })
+
       it('falls back to current ISO time when meta.updated_at missing', () => {
         localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'msg1' }]))
         const { buildLocalHistorySession } = useChatHistoryPersistence(makeDeps())

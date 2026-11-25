@@ -130,8 +130,9 @@ def approved_policy(row):
     return spec, effects
 
 
-def traffic_block_reason(db, row, effects):
+def traffic_block_reason(db, row, effects, *, historical=False):
     """Frozen approval proves scope; current authority and customer state permit traffic."""
+    # Historical sampling may read a rejected impact while authority checks stay current.
     if row.status in {
         "cancelled",
         "rejected",
@@ -139,7 +140,7 @@ def traffic_block_reason(db, row, effects):
         "customer_impact_rejected",
         "impact_recheck",
         "waiting_recovery",
-    }:
+    } and not (historical and row.status in {"customer_impact_rejected", "waiting_recovery"}):
         return "experiment_run_inactive"
     snapshot = json_loads(row.snapshot_json, {})
     acceptance = snapshot.get("approval") or {}
@@ -308,6 +309,9 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
     """Run under Retort's run lock; absent traffic/data never becomes an improvement."""
     progress = {}
     try:
+        from modstore_server.retort_training_candidates import (
+            verify_customer_training_release,
+        )
         from modstore_server.workflow_customer_feedback import (
             reconcile_customer_executions,
         )
@@ -367,6 +371,7 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
             if not experiments:
                 if reject:
                     return {"status": "withdrawn", "decision": "rollback"}
+                verify_customer_training_release(spec, effects, delivery)
                 _post_once(
                     client,
                     request_id,
@@ -385,6 +390,7 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
             progress["experiment_id"] = experiment_id
             path = f"experiments/{experiment_id}"
             if experiment["status"] == "draft" and not reject:
+                verify_customer_training_release(spec, effects, delivery)
                 _post_once(client, request_id, progress, "start", f"{path}/start", {})
                 return {"status": "awaiting_experiment_start", "decision": "hold"}
             started = parse_datetime(experiment["phases"][0]["dateStarted"])
@@ -401,6 +407,8 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
                 evaluation_at=ready.isoformat(),
             )
             if not reject and datetime.now(UTC) < ready and experiment["status"] == "running":
+                if datetime.now(UTC) < end:
+                    verify_customer_training_release(spec, effects, delivery)
                 progress["traffic"] = "experiment" if datetime.now(UTC) < end else "control"
                 progress["lease_until"] = min(
                     end, datetime.now(UTC) + timedelta(minutes=15)
@@ -453,6 +461,8 @@ def advance_experiment(request_id, delivery, *, state=None, reject=False):
                 progress.update(final_measurement=measured, final_snapshot_sha256=_digest(payload))
                 _save(request_id, progress)
             decision = "rollback" if reject else measured.get("evaluated_decision", "hold")
+            if decision == "promote":
+                verify_customer_training_release(spec, effects, delivery)
             chosen = 1 if decision == "promote" else 0
             variation_id = experiment["variations"][chosen]["variationId"]
             if experiment["status"] != "stopped":

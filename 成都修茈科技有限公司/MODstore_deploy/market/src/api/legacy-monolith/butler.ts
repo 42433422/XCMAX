@@ -21,6 +21,7 @@ export const butlerEndpoints = {
   agentButlerChat: (
     payload: {
       messages: unknown[]
+      request_id: string
       conversation_id?: number | null
       page_context?: string
     },
@@ -36,6 +37,7 @@ export const butlerEndpoints = {
   agentButlerChatStream: (
     payload: {
       messages: unknown[]
+      request_id: string
       conversation_id?: number | null
       page_context?: string
     },

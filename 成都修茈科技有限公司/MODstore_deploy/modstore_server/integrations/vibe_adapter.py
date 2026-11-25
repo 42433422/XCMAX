@@ -311,32 +311,81 @@ def _tenant_workspace_root(user_id: int) -> Path:
     2. ``MODSTORE_DATA_DIR/workspaces/{user_id}``
     3. ``./var/workspaces/{user_id}``
     """
+    tenant_id = str(int(user_id or 0))
     tpl = os.environ.get("MODSTORE_TENANT_WORKSPACE_ROOT", "").strip()
     if tpl:
         if "{user_id}" in tpl:
-            tpl = tpl.replace("{user_id}", str(user_id or 0))
+            tpl = tpl.replace("{user_id}", tenant_id)
         return Path(tpl)
     base = os.environ.get("MODSTORE_DATA_DIR") or str(Path.cwd() / "var")
-    return Path(base) / "workspaces" / str(user_id or 0)
+    return Path(base) / "workspaces" / tenant_id
 
 
-def ensure_within_workspace(root: str | Path, *, user_id: int) -> Path:
-    """校验 ``root`` 落在用户工作区内,否则抛 :class:`VibePathError`。
+def ensure_within_workspace(
+    root: str | Path,
+    *,
+    user_id: int,
+    within: Path | None = None,
+    must_exist: bool = True,
+) -> Path:
+    """Authorize the tenant boundary, then reuse the shared native-path resolver.
 
-    放到本模块里以便所有 handler / adapter 复用同一边界。
+    ``within`` is an already resolved project directory that narrows the tenant
+    boundary and anchors relative file names. New output paths may opt out of
+    the existence check only.
     """
+    from fastapi import HTTPException
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+    from app.infrastructure.workspace import resolve_safe_workspace_relpath
+
     if not root:
         raise VibePathError("缺少 root 参数")
-    target = Path(root).resolve()
-    workspace = _tenant_workspace_root(user_id).resolve()
-    workspace.mkdir(parents=True, exist_ok=True)
     try:
-        target.relative_to(workspace)
-    except ValueError as exc:
-        raise VibePathError(f"root={target!s} 不在用户工作区 {workspace!s} 下;拒绝执行") from exc
-    if not target.exists():
-        raise VibePathError(f"root={target!s} 不存在")
-    return target
+        configured = _tenant_workspace_root(user_id).absolute()
+        template = os.environ.get("MODSTORE_TENANT_WORKSPACE_ROOT", "").strip()
+        if not template or "{user_id}" in template:
+            from modstore_server.employee_change_request_verification import _guard_under_workspace
+
+            # Static administrator aliases remain allowed; an identity-derived
+            # tenant directory cannot redirect that identity to another tenant.
+            tenant = os.fspath(configured)
+            if template:
+                parts = Path(template).parts
+                index = next(i for i, part in enumerate(parts) if "{user_id}" in part)
+                tenant = str(Path(*parts[: index + 1])).replace("{user_id}", str(int(user_id or 0)))
+            if _guard_under_workspace(tenant, os.fspath(configured)) is None:
+                raise VibePathError("租户目录含符号链接或越界;拒绝执行")
+        boundary = configured.resolve()
+        if within is not None:
+            boundary = ensure_within_workspace(within, user_id=user_id)
+            configured = Path(os.path.abspath(within))
+            if boundary != configured:
+                raise VibePathError("选定的项目工作区已改变;拒绝执行")
+            if not boundary.is_dir():
+                raise VibePathError("指定工作区不是目录")
+        candidate = Path(root)
+        if within is not None and not candidate.is_absolute():
+            candidate = boundary / candidate
+        # These operations are lexical. The shared resolver checks parent
+        # components and symlinks only after the selected root is authorized.
+        candidate = candidate.absolute()
+        try:
+            relative = candidate.relative_to(boundary)
+        except ValueError:
+            relative = candidate.relative_to(configured)
+        target: Path = resolve_safe_workspace_relpath(relative.as_posix(), base=boundary)
+        if within is None:
+            boundary.mkdir(parents=True, exist_ok=True)
+        if must_exist and not target.exists():
+            raise VibePathError("root 不存在")
+        return target
+    except (HTTPException, OSError, TypeError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, VibePathError):
+            raise
+        raise VibePathError("root 无法在用户工作区内解析") from exc
 
 
 # ---------------------------------------------------------------------------

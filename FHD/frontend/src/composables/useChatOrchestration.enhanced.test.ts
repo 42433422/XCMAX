@@ -112,13 +112,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
   }),
 }))
 
-vi.mock('./useChatDbTokenGate', () => ({
-  useChatDbTokenGate: () => ({
-    handleChatRequiresToken: vi.fn(),
-    onDbWriteUnlockedForChatRetry: vi.fn(),
-    resolveChatDbTokensForPayload: vi.fn(() => ({})),
-  }),
-}))
 
 vi.mock('./useChatExcelContext', () => ({
   useChatExcelContext: () => ({
@@ -207,7 +200,6 @@ vi.mock('@/utils/shipmentMgmtPostPrint', () => ({
 }))
 vi.mock('@/workflow/coreWorkflowDispatcher', () => ({ dispatchCoreWorkflowModRun: vi.fn() }))
 vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () => false }))
-vi.mock('@/fhd/dbTokenHeaders', () => ({ FHD_DB_WRITE_UNLOCKED_EVENT: 'fhd:db-write-unlocked' }))
 
 import { useChatOrchestration } from './useChatOrchestration'
 import { extractLikelyProductQueryKeyword } from './useChatPersistence'
@@ -357,11 +349,12 @@ describe('useChatOrchestration – confirmTask', () => {
     await api.confirmTask()
   })
 
-  it('shows error when no api_url', async () => {
+  it('keeps an explicit not_started receipt when no capability contract exists', async () => {
     const api = createApi()
     api.currentTask.value = { type: 'other', api_url: '' }
     await api.confirmTask()
-    expect(api.currentTask.value).toBeNull()
+    expect(api.currentTask.value).toMatchObject({ completed: false, data: { execution_state: 'not_started' } })
+    expect(api.currentTask.value?.description).toContain('缺少有效能力契约')
   })
 })
 

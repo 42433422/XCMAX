@@ -7,9 +7,12 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from sqlalchemy.orm import Session
 
 from app.cli import brain
-from app.cli.brain_session import BrainError
+from app.cli.brain_client import BrainClient
+from app.cli.brain_session import BrainError, SessionStore
+from app.db.models.local_file import CodeEditProposal
 
 
 def run(client, *args):
@@ -137,6 +140,45 @@ def test_real_apply_conflict_preserves_external_change(brain_client, brain_serve
         run(brain_client, "apply", edit["edit_id"], "--confirm")
     assert (brain_server.workspace / "note.txt").read_text() == "external\n"
     assert run(brain_client, "diff", edit["edit_id"])["success"] is True
+
+
+@pytest.mark.parametrize("other_user,tenant", [("bob", 20), ("charlie", 10)])
+def test_editor_persistent_owner_scope_after_account_switch(
+    brain_client, brain_server, monkeypatch, other_user, tenant
+):
+    login(brain_client)
+    content = "  中文 draft\n\n"
+    monkeypatch.setattr("sys.stdin", io.StringIO(content))
+    edit_id = run(brain_client, "edit", "note.txt", "--stdin")["edit_id"]
+    with Session(brain_server.database) as db:
+        proposal = db.get(CodeEditProposal, edit_id)
+        assert proposal.user_id == 1
+        assert json.loads(proposal.scope_json) == {
+            "user_id": 1,
+            "tenant_id": 10,
+            "workspace_root": str(brain_server.workspace.resolve()),
+        }
+        assert proposal.state == "pending"
+        assert json.loads(proposal.payload_json)["new"] == content
+
+    brain_client.login(other_user, "fixture-password", "enterprise")
+    identity = brain_client.require_login()["data"]
+    assert identity["local_user_id"] != 1
+    assert identity["tenant_id"] == tenant
+    monkeypatch.setenv("XCAGI_BRAIN_P2_TOKEN", "fixture-p2-secret")
+    with pytest.raises(BrainError, match="404"):
+        run(brain_client, "diff", edit_id)
+    with pytest.raises(BrainError, match="404"):
+        run(brain_client, "apply", edit_id, "--confirm")
+    assert (brain_server.workspace / "note.txt").read_text(encoding="utf-8") == "before\n"
+
+    login(brain_client)
+    reloaded = BrainClient(SessionStore(brain_server.origin, brain_client.store.directory))
+    assert run(reloaded, "diff", edit_id)["success"] is True
+    assert run(reloaded, "apply", edit_id, "--confirm")["success"] is True
+    assert (brain_server.workspace / "note.txt").read_text(encoding="utf-8") == content
+    with Session(brain_server.database) as db:
+        assert db.get(CodeEditProposal, edit_id).state == "applied"
 
 
 def test_write_timeout_is_unknown_result_without_retry(brain_client, brain_server, monkeypatch):

@@ -695,7 +695,7 @@ class TestProviderMethods:
     async def test_get_available_providers_exception(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=RuntimeError("boom"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
         mock_client.is_closed = False
         adapter._client = mock_client
         result = await adapter.get_available_providers()
@@ -730,7 +730,7 @@ class TestProviderMethods:
     async def test_get_credential_status_exception(self):
         adapter = ModstorePlatformAdapter(platform_url="http://example.com")
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=RuntimeError("boom"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
         mock_client.is_closed = False
         adapter._client = mock_client
         result = await adapter.get_credential_status("openai")

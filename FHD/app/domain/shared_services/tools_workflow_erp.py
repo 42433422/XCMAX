@@ -27,12 +27,19 @@ def _resolve_target_candidates():
 def _registered_router_customers(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_customer_route":
-        from app.fastapi_routes.domains.customer import routes as customer_routes
+    if action == "import":
+        from io import BytesIO
 
-        return customer_routes._execute_customers_route_action(
-            action, dict(params or {}), runtime_context=runtime_context
+        from app.application import get_customer_app_service
+        from app.utils.path_io.upload_helpers import read_capability_upload
+
+        content = read_capability_upload(
+            params,
+            runtime_context,
+            namespace="customer-import",
+            suffixes=frozenset({".xlsx", ".xlsm"}),
         )
+        return dict(get_customer_app_service().import_from_excel(BytesIO(content)) or {})
     from app.application import get_customer_app_service
 
     svc = get_customer_app_service()
@@ -86,12 +93,14 @@ def _registered_router_customers(
         if customer_id <= 0:
             return {"success": False, "message": "缺少 id"}
         payload = {
-            "customer_name": unit_name,
-            "contact_person": params.get("contact_person", ""),
-            "contact_phone": params.get("contact_phone", ""),
-            "contact_address": params.get("contact_address", params.get("address", "")),
+            key: params[key]
+            for key in ("contact_person", "contact_phone", "contact_address")
+            if key in params and params[key] is not None
         }
-        payload = {k: v for k, v in payload.items() if v not in (None, "")}
+        if unit_name:
+            payload["customer_name"] = unit_name
+        if "contact_address" not in payload and params.get("address") is not None:
+            payload["contact_address"] = params["address"]
         if "expected_version" in params:
             payload["expected_version"] = params.get("expected_version")
         update_result = svc.update(customer_id, payload)
@@ -179,14 +188,36 @@ def _registered_router_customers(
 def _registered_router_inventory(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_inventory_route":
-        from app.fastapi_routes import inventory as inventory_route
+    if action == "setup_warehouse":
+        from app.application.inventory_default_warehouse import ensure_default_warehouse
+        from app.db.session import get_db
 
-        svc = inventory_route._svc()
-    else:
-        from app.application.inventory_app_service import InventoryAppService
+        tenant_id = runtime_context.get("tenant_id")
+        if not tenant_id:
+            return {
+                "success": False,
+                "error_code": "tool_permission_denied",
+                "http_status_code": 403,
+            }
+        with get_db() as db:
+            warehouse, created = ensure_default_warehouse(db, int(tenant_id))
+            data = {
+                "id": warehouse.id,
+                "code": warehouse.code,
+                "name": warehouse.name,
+                "status": warehouse.status,
+                "created": bool(created),
+            }
+        return {
+            "success": True,
+            "data": data,
+            "message": (
+                "已创建默认仓库，请先入库再销售发货" if created else "已有可用仓库，无需初始化"
+            ),
+        }
+    from app.application.inventory_app_service import InventoryAppService
 
-        svc = InventoryAppService()
+    svc = InventoryAppService()
 
     def _float_or_none(value: object) -> float | None:
         if value is None:
@@ -304,6 +335,8 @@ def _registered_router_inventory(
 def _registered_router_purchase(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    from app.application.facades.inventory_facade import PurchaseService
+
     if action in {"create_order", "create_inbound"} and runtime_context.get("run_id"):
         from app.domain.shared_services.purchase_service import purchase_execution_number
 
@@ -316,14 +349,8 @@ def _registered_router_purchase(
         if action == "create_inbound" and not params.get("order_id"):
             return {"success": False, "message": "自治采购入库需要原已审批订单"}
         params = {**params, "inbound_no" if action == "create_inbound" else "order_no": number}
-    if str(runtime_context.get("service_source") or "") == "fastapi_purchase_route":
-        from app.fastapi_routes import purchase as purchase_route
 
-        svc = purchase_route._svc()
-    else:
-        from app.application.facades.inventory_facade import PurchaseService
-
-        svc = PurchaseService()
+    svc = PurchaseService()
     if action in ("list_suppliers", "get_suppliers", "query_suppliers"):
         return cast(
             "dict[Any, Any]",
@@ -501,14 +528,9 @@ def _registered_router_reports(
 def _registered_router_finance(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_finance_route":
-        from app.fastapi_routes import finance as finance_route
+    from app.application.finance_app_service import FinanceAppService
 
-        svc = finance_route._svc()
-    else:
-        from app.application.finance_app_service import FinanceAppService
-
-        svc = FinanceAppService()
+    svc = FinanceAppService()
     if action in ("list_transactions", "list", "query", "get_transactions"):
         return cast(
             "dict[Any, Any]",

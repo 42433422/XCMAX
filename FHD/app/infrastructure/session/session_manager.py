@@ -17,6 +17,39 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 
+def session_has_expired(db, row: UserSession) -> bool:
+    """Check the account grant and its narrower verified session deadline."""
+    now = utc_now_naive()
+    if row.verified_trial_expires_at is not None:
+        row.expires_at = min(row.expires_at, row.verified_trial_expires_at)
+    if row.expires_at <= now:
+        return True
+    user = row.user
+    if (
+        user
+        and getattr(user, "account_tier", None) in {None, "normal"}
+        and getattr(user, "tier", None) == "enterprise"
+        and (user.role or "").lower() not in {"admin", "superadmin"}
+        and user.tenant_id
+    ):
+        from app.db.models.tenant import Tenant
+        from app.infrastructure.billing.saas_plans import plan_by_id
+
+        if isinstance(user.account_license_plan_id, str):
+            plan = plan_by_id(user.account_license_plan_id)
+            if plan and plan.get("license_type") == "trial":
+                if row.verified_trial_expires_at is None or user.account_license_expires_at is None:
+                    return True
+                row.expires_at = min(row.expires_at, user.account_license_expires_at)
+                return row.expires_at <= now
+        else:
+            tenant = db.get(Tenant, int(user.tenant_id))
+            plan = plan_by_id(str(tenant.plan_id or "")) if tenant else None
+            if plan and plan.get("license_type") == "trial":
+                return row.verified_trial_expires_at is None
+    return False
+
+
 class SessionManager:
     SESSION_EXPIRE_HOURS = int(os.environ.get("SESSION_EXPIRE_HOURS", "87600"))
 
@@ -99,7 +132,7 @@ class SessionManager:
             if not user_session:
                 return None
 
-            if user_session.expires_at < utc_now_naive():
+            if session_has_expired(db, user_session):
                 db.delete(user_session)
                 db.commit()
                 return None
@@ -118,7 +151,7 @@ class SessionManager:
             if not user_session:
                 return None
 
-            if user_session.expires_at < utc_now_naive():
+            if session_has_expired(db, user_session):
                 return None
 
             return {

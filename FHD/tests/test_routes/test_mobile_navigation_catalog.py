@@ -54,10 +54,14 @@ def test_personal_and_admin_roles_remain_distinct():
     assert "admin-entitlements" not in _menu([fake_admin])
 
 
-def test_employee_child_alias_uses_the_existing_workspace_entry():
-    menu = _menu([{"id": "office", "frontend_menu": [{"id": "workflow-employee-space"}]}])
+@pytest.mark.parametrize(
+    "child", ["employee-workbench", "workflow-employee-space", "workflow-employee-stitch-full"]
+)
+def test_employee_child_alias_keeps_the_shared_parent_entry_without_duplicate_slots(child):
+    menu = _menu([{"id": "office", "frontend_menu": [{"id": child}]}])
     assert menu["employee-workflow"]["path"] == "/employee-workbench"
-    assert "mod-workflow-employee-space" not in menu
+    assert f"mod-{child}" not in menu
+    assert len([row for row in menu.values() if row["path"] == "/employee-workbench"]) == 1
 
 
 def test_installed_bridge_menus_get_shared_keys_groups_and_browsable_templates():

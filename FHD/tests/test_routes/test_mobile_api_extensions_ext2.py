@@ -22,16 +22,7 @@ import pytest
 
 @_shared_scope_contextmanager
 def _shared_scope_case_0(case_value_1, case_value_2):
-    with (
-        patch(
-            case_value_1,
-            side_effect=RuntimeError(case_value_2),
-        ),
-        patch(
-            "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-            (RuntimeError,),
-        ),
-    ):
+    with patch(case_value_1, side_effect=ConnectionError(case_value_2)):
         yield None
 
 
@@ -396,11 +387,7 @@ class TestMobileHomeWithUser:
             ),
             patch(
                 "app.db.xcmax_sync.SyncDb",
-                side_effect=RuntimeError("sync db fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
+                side_effect=OSError("sync db fail"),
             ),
         ):
             result = await ext_mod.mobile_home(user=_mock_user())
@@ -532,11 +519,7 @@ class TestMobileSyncPushWithUser:
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync_db),
             patch(
                 "app.application.xcmax_sync_app.apply_inbox",
-                side_effect=RuntimeError("apply fail"),
-            ),
-            patch(
-                "app.fastapi_routes.mobile_api_extensions.RECOVERABLE_ERRORS",
-                (RuntimeError,),
+                side_effect=OSError("apply fail"),
             ),
         ):
             result = await ext_mod.mobile_sync_push(body=body, user=_mock_user())

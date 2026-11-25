@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from filelock import FileLock
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,6 @@ from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
-_LOCK = threading.RLock()
-
 
 def _utcnow() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -66,17 +65,30 @@ def _ledger_path(tenant_id: int | str) -> Path:
     return root / "batches.json"
 
 
+def _ledger_lock(tenant_id: int | str) -> FileLock:
+    # Different batches share one JSON file. Protect the entire read/modify/replace,
+    # including nested receipt reconciliation, across threads and worker processes.
+    return FileLock(
+        str(_ledger_path(tenant_id)) + ".lock", timeout=30, is_singleton=True, mode=0o600
+    )
+
+
 def _load_ledger(tenant_id: int | str) -> dict[str, Any]:
     path = _ledger_path(tenant_id)
     if not path.is_file():
         return {"batches": {}}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(raw, dict) and isinstance(raw.get("batches"), dict):
-            return raw
-    except RECOVERABLE_ERRORS:
+        if not isinstance(raw, dict) or not isinstance(raw.get("batches"), dict):
+            raise ValueError("invalid auto-ingest ledger")
+        return raw
+    except (OSError, ValueError) as exc:
         logger.warning("auto-ingest ledger load failed: %s", path, exc_info=True)
-    return {"batches": {}}
+        raise EltError(
+            "ELT_AUTO_INGEST_LEDGER_INVALID",
+            "入库记录无法读取，已停止写入以保留历史回执",
+            status_code=409,
+        ) from exc
 
 
 def _save_ledger(tenant_id: int | str, data: dict[str, Any]) -> None:
@@ -109,7 +121,7 @@ def _patch_batch(
     terminal_failure: bool = False,
     **fields: Any,
 ) -> dict[str, Any] | None:
-    with _LOCK:
+    with _ledger_lock(tenant_id):
         ledger = _load_ledger(tenant_id)
         batch = (ledger.get("batches") or {}).get(batch_id)
         if not isinstance(batch, dict):
@@ -537,7 +549,7 @@ class AutoIngestService:
             "business_progress": _progress("queued", 0, message="等待写入业务域"),
             "withdrawn_at": None,
         }
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             previous = ledger.get("batches", {}).get(batch_id, {})
             if previous.get("worker_protocol") == 1:
@@ -683,7 +695,7 @@ class AutoIngestService:
         except (
             BOUNDARY_ERRORS
         ) as exc:  # Never erase a successful knowledge receipt after a business failure.
-            with _LOCK:
+            with _ledger_lock(tenant_id):
                 saved = (_load_ledger(tenant_id).get("batches") or {}).get(batch_id) or {}
             kb_progress = (
                 saved.get("kb_progress")
@@ -817,7 +829,7 @@ class AutoIngestService:
             "prepared_plan": prepared_plan,
             "labels": list(labels or []),
         }
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             ledger.setdefault("batches", {})[batch_id] = batch
             _save_ledger(tenant_id, ledger)
@@ -825,33 +837,32 @@ class AutoIngestService:
 
     def release_approved_batch(self, *, batch_id: str, tenant_id: int) -> dict[str, Any]:
         """Start a write that the approval center has already authorized."""
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
                 raise EltError("ELT_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
-            batch = self._refresh_business(dict(batch))
-            status = str(batch.get("status") or "")
-            if status in {
-                "running",
-                "applied",
-                "partial",
-                "completed_empty",
-                "awaiting_confirmation",
-            }:
-                return {
-                    "success": True,
-                    "batch_id": batch_id,
-                    "status": status,
-                    "already_released": True,
-                }
-            if status != "awaiting_approval":
-                raise EltError(
-                    "ELT_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
-                )
-            guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
-            transferred = False
-            try:
+        batch = self._refresh_business(dict(batch))
+        status = str(batch.get("status") or "")
+        if status in {
+            "running",
+            "applied",
+            "partial",
+            "completed_empty",
+            "awaiting_confirmation",
+        }:
+            return {
+                "success": True,
+                "batch_id": batch_id,
+                "status": status,
+                "already_released": True,
+            }
+        if status != "awaiting_approval":
+            raise EltError("ELT_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409)
+        guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
+        transferred = False
+        try:
+            with _ledger_lock(tenant_id):
                 # A different process may have completed this batch since our first read.
                 # The worker lock protects dispatch only after it has been acquired.
                 expected = batch
@@ -888,9 +899,9 @@ class AutoIngestService:
                 stored = dict(batch)
                 stored["_worker_guard"] = guard
                 transferred = True
-            finally:
-                if not transferred:
-                    liveness.release(guard)
+        finally:
+            if not transferred:
+                liveness.release(guard)
         try:
             self._launch_worker(stored)
         finally:
@@ -903,7 +914,7 @@ class AutoIngestService:
         return public
 
     def cancel_unreleased_batch(self, *, batch_id: str, tenant_id: int) -> None:
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
@@ -961,7 +972,7 @@ class AutoIngestService:
             "prepared_plan": prepared_plan,
             "labels": list(labels or []),
         }
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
             transferred = False
             try:
@@ -987,7 +998,7 @@ class AutoIngestService:
         if batch.get("mod_id") != get_request_active_mod_id():
             return batch
         if liveness.orphaned(_ledger_path(batch["tenant_id"]), batch):
-            with _LOCK:
+            with _ledger_lock(batch["tenant_id"]):
                 ledger = _load_ledger(batch["tenant_id"])
                 latest = ledger.get("batches", {}).get(batch["batch_id"])
                 if latest != batch:
@@ -1080,7 +1091,7 @@ class AutoIngestService:
                     "failed",
                     _progress("outcome_unknown", 0, message="业务回执状态异常，请核对，勿重复提交"),
                 )
-            with _LOCK:
+            with _ledger_lock(batch["tenant_id"]):
                 ledger = _load_ledger(batch["tenant_id"])
                 latest = (ledger.get("batches") or {}).get(batch["batch_id"])
                 if not isinstance(latest, dict) or any(
@@ -1125,7 +1136,7 @@ class AutoIngestService:
     def list_batches(
         self, *, tenant_id: int, owner_user_id: int | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
         items = [
             b
@@ -1143,7 +1154,7 @@ class AutoIngestService:
     def get_batch(
         self, *, tenant_id: int, batch_id: str, owner_user_id: int | None = None
     ) -> dict[str, Any] | None:
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
         item = (ledger.get("batches") or {}).get(batch_id)
         if not isinstance(item, dict) or item.get("mod_id") != get_request_active_mod_id():
@@ -1186,7 +1197,7 @@ class AutoIngestService:
         owner_user_id: int,
         batch_id: str,
     ) -> dict[str, Any]:
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict):
@@ -1215,7 +1226,7 @@ class AutoIngestService:
         biz_rollback = self._withdraw_business(db, batch=batch, owner_user_id=owner_user_id)
         kb_rollback = self._withdraw_knowledge(batch)
 
-        with _LOCK:
+        with _ledger_lock(tenant_id):
             ledger = _load_ledger(tenant_id)
             current = (ledger.get("batches") or {}).get(batch_id) or batch
             current["status"] = "withdrawn"

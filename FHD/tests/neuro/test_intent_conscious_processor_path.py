@@ -74,7 +74,7 @@ def test_conscious_processor_fallback_to_unified():
     with (
         patch(
             "app.domain.neuro.processors.conscious.get_conscious_processor",
-            side_effect=RuntimeError("no processor"),
+            side_effect=ImportError("conscious processor unavailable"),
         ),
         patch(
             "app.neuro_bus.integrations.intent_integration.get_intent_domain",

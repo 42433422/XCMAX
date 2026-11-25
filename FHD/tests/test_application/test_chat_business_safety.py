@@ -13,11 +13,11 @@ import pytest
 from fastapi import Request
 
 from app.application import chat_business_safety as safety
-from app.application import chat_business_safety_attendance as attendance_safety
-from app.application import chat_business_safety_leave as leave_safety
-from app.application import chat_business_safety_output as output_safety
-from app.application import chat_business_safety_personnel as personnel_safety
 from app.application import planner_compat_service as planner_compat
+from app.domain.app_pure import chat_business_safety_attendance as attendance_safety
+from app.domain.app_pure import chat_business_safety_leave as leave_safety
+from app.domain.app_pure import chat_business_safety_output as output_safety
+from app.domain.app_pure import chat_business_safety_personnel as personnel_safety
 from app.domain.app_pure.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
@@ -950,7 +950,7 @@ def test_attendance_export_covers_query_empty_and_write_failures(
 @pytest.mark.parametrize(
     ("printers", "print_result", "reason"),
     [
-        (RuntimeError("offline"), None, "printer_status_failed:"),
+        (ConnectionError("offline"), None, "printer_status_failed:"),
         ([], None, "no_available_printer"),
         ({"success": False, "printers": []}, None, "no_available_printer"),
         ({"success": True, "printers": [{"name": "QA"}]}, None, "printer_rejected"),
@@ -1012,7 +1012,7 @@ def test_attendance_print_covers_query_empty_and_submit_exception(
         "_get_printer_service",
         lambda: _PrinterServiceResult(
             {"success": True, "count": 1, "printers": [{"name": "QA"}]},
-            RuntimeError("submit failed"),
+            OSError("submit failed"),
         ),
     )
     monkeypatch.setattr(

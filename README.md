@@ -49,3 +49,5 @@
 - **安装和使用**：[官方下载](https://xiu-ci.com/download) · [客户使用说明书](FHD/docs/XCAGI-客户使用说明书.md)
 - **查看源码**：[`FHD/`](FHD/) 为主要产品代码；移动端见 [`FHD/mobile-flutter-poc/`](FHD/mobile-flutter-poc/)。开发启动和仓库结构见[工程地图](docs/workmap.md)。
 - **确认版本与授权**：[版本说明](FHD/VERSION.md) · [商业授权](FHD/COMMERCIAL_LICENSE.md) · [联系修茈科技](https://xiu-ci.com/contact.html)
+
+代码编辑提案沿现有宿主数据库复用 [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) 2.0.51（MIT）及 [filelock](https://github.com/tox-dev/filelock) 4.2.4（Unlicense），保存账号、租户、工作区和原文件摘要，并协调同一文件的进程间编辑；先持久认领，再发布文件，最后消费提案，结果不确定时保留只读核对并拒绝重发。服务进程须共享数据库、工作区和数据目录。业务 JSON 保留原文，HTML 显示继续复用 [DOMPurify](https://github.com/cure53/DOMPurify) 3.4.18（Apache-2.0 或 MPL-2.0）及 Vue 文本转义。版本以现有锁文件为准。

@@ -109,10 +109,28 @@ def test_refresh_is_single_flight_and_failure_is_not_a_network_error():
     failed = RefreshSingleFlight()
 
     def deny() -> bool:
-        raise RuntimeError("refresh token rejected")
+        raise PermissionError("refresh token rejected")
 
     assert failed.run(deny) is False
     assert failure_payload("token_expired")["action"] == "relogin"
+
+
+def test_refresh_programming_error_remains_visible_at_thread_boundary(monkeypatch):
+    observed = threading.Event()
+    failures = []
+    error = RuntimeError("refresh implementation bug")
+
+    def capture_failure(args):
+        failures.append(args.exc_value)
+        observed.set()
+
+    def broken_refresh():
+        raise error
+
+    monkeypatch.setattr(threading, "excepthook", capture_failure)
+    assert RefreshSingleFlight().run(broken_refresh) is False
+    assert observed.wait(timeout=2)
+    assert failures == [error]
 
 
 def test_accelerated_sse_soak_bounds_reconnects_and_releases_connections():

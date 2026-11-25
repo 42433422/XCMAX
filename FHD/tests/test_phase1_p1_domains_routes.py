@@ -19,13 +19,18 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def system_client(trusted_actor) -> TestClient:
+def system_client(trusted_actor, request) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
     app = FastAPI()
     app.include_router(system_routes.router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(role="admin").headers
+        app,
+        raise_server_exceptions=False,
+        headers={
+            **trusted_actor(role="admin").headers,
+            "Idempotency-Key": request.node.name,
+        },
     )
 
 
@@ -56,12 +61,15 @@ def test_system_printer_post_empty(system_client: TestClient) -> None:
 
 
 @patch("app.application.facades.session_facade.get_system_service")
-def test_system_printer_post_ok(
+def test_system_printer_change_waits_for_approval(
     mock_get: MagicMock, system_client: TestClient, local_tools
 ) -> None:
     mock_get.return_value.set_default_printer.return_value = {"success": True}
     r = system_client.post("/api/system/printer", json={"printer_name": "HP"})
-    assert r.status_code == 200
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False
+    assert r.json()["approval_request_id"]
+    mock_get.return_value.set_default_printer.assert_not_called()
 
 
 @patch("app.application.facades.session_facade.get_system_service")
@@ -115,7 +123,10 @@ def test_products_search(mock_get: MagicMock, product_client: TestClient) -> Non
 
 @patch("app.bootstrap.get_products_service")
 def test_products_product_names(mock_get: MagicMock, product_client: TestClient) -> None:
-    mock_get.return_value.get_product_names.return_value = {"success": True, "data": ["A"]}
+    mock_get.return_value.get_product_names.return_value = {
+        "success": True,
+        "data": ["A"],
+    }
     r = product_client.get("/api/products/product_names")
     assert r.status_code == 200
 
@@ -127,25 +138,29 @@ def test_products_batch_empty(mock_get: MagicMock, product_client: TestClient) -
 
 
 @patch("app.bootstrap.get_products_service")
-def test_products_update(mock_get: MagicMock, product_client: TestClient, local_tools) -> None:
+def test_products_update_requires_session(
+    mock_get: MagicMock, product_client: TestClient, local_tools
+) -> None:
     mock_get.return_value.update_product.return_value = {"success": True}
     r = product_client.put("/api/products/1", json={"name": "N"})
-    assert r.status_code == 400
-    assert r.json()["success"] is False
-    assert r.json()["error_code"] == "result_verification_inconclusive"
-    assert r.json()["retryable"] is False
-    mock_get.return_value.update_product.assert_called_once_with(1, {"name": "N"})
+    assert r.status_code == 401
+    mock_get.return_value.update_product.assert_not_called()
 
 
 @patch("app.bootstrap.get_products_service")
-def test_products_delete(mock_get: MagicMock, product_client: TestClient) -> None:
+def test_products_delete_requires_session(mock_get: MagicMock, product_client: TestClient) -> None:
     mock_get.return_value.delete_product.return_value = {"success": True}
     r = product_client.delete("/api/products/9")
-    assert r.status_code == 200
+    assert r.status_code == 401
+    mock_get.return_value.delete_product.assert_not_called()
 
 
-def test_products_import_price_list_no_file(product_client: TestClient) -> None:
-    r = product_client.post("/api/products/import/price-list-template")
+def test_products_import_price_list_no_file(product_client: TestClient, trusted_actor) -> None:
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    actor = trusted_actor(role="admin", tier="admin", tenant_id=None)
+    with tenant_scope(None):
+        r = product_client.post("/api/products/import/price-list-template", headers=actor.headers)
     assert r.status_code == 400
 
 
@@ -336,7 +351,9 @@ def test_ai_config_approval_get(shipment_client: TestClient) -> None:
     assert "enabled" in r.json()
 
 
-def test_approval_router_mounts_tool_rules_used_by_rules_page(logged_in_session) -> None:
+def test_approval_router_mounts_tool_rules_used_by_rules_page(
+    logged_in_session,
+) -> None:
     from app.fastapi_routes.approval import router as approval_router
 
     app = FastAPI()
@@ -375,7 +392,12 @@ def test_ai_approval_is_tenant_scoped(shipment_client: TestClient, logged_in_ses
     logged_in_session.tenant_id = 1
     created = shipment_client.post(
         "/api/ai/approval/request",
-        json={"plan_id": "tenant-plan", "node_id": "n1", "tool_id": "t1", "action": "run"},
+        json={
+            "plan_id": "tenant-plan",
+            "node_id": "n1",
+            "tool_id": "t1",
+            "action": "run",
+        },
     )
     request_id = created.json()["data"]["request_id"]
 
@@ -393,7 +415,8 @@ def test_ai_approval_is_tenant_scoped(shipment_client: TestClient, logged_in_ses
 
 def test_ai_approval_requires_session(shipment_client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.infrastructure.auth.dependencies.resolve_session_user", lambda _request: None
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: None,
     )
     assert shipment_client.get("/api/ai/approval/pending").status_code == 401
     assert (
@@ -485,8 +508,8 @@ def test_system_test_db_status(mock_status: MagicMock, misc_client: TestClient) 
     assert r.status_code == 200
 
 
-@patch("app.domain.ai.tools_directory.get_tools_payload")
-def test_tools_directory(mock_tools: MagicMock, misc_client: TestClient) -> None:
+@patch("app.fastapi_routes.domains.misc.misc_routes.get_tools_payload")
+def test_tools_directory(mock_tools: MagicMock, misc_client: TestClient, trusted_actor) -> None:
     mock_tools.return_value = {"tools": []}
-    r = misc_client.get("/tools")
+    r = misc_client.get("/tools", headers=trusted_actor().headers)
     assert r.status_code == 200

@@ -37,7 +37,7 @@ def test_neuro_failure_does_not_replace_fixed_executor(event):
     with (
         patch(
             f"app.neuro_bus.application_neuro_bridge.neuro_notify_chat_{event}",
-            side_effect=RuntimeError("bus down"),
+            side_effect=ConnectionError("bus down"),
         ),
         patch(
             "app.application.agent_runtime.gateway.runtime_settings", return_value=RuntimeSettings()

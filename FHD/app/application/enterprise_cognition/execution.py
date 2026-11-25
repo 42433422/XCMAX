@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
@@ -15,6 +16,7 @@ from app.application.enterprise_cognition.goals import (
     get_goal_service,
     metric_value,
 )
+from app.domain.enterprise_cognition.world_observation import delivery_scenario, public_snapshot
 from app.infrastructure.auth.agent_mod_scope import validate_actor_context
 
 _ORDER_ACTIONS = frozenset({"confirm", "deliver", "invoice", "payment", "cancel", "credit_note"})
@@ -237,9 +239,26 @@ class EnterpriseExecutionService:
                 raise GoalBindingError("entity_projection_expired")
         except (KeyError, TypeError) as exc:
             raise GoalBindingError("entity_projection_time_invalid") from exc
+        # This conditional calculation does not prove stock, grant approval
+        # or execute a delivery; only the original task may perform writes.
+        world_scenario = {
+            "knowledge_kind": "unknown",
+            "reason_code": "goal_scenario_not_applicable",
+        }
+        if (
+            goal["entity_type"] == "order"
+            and goal["metric"] == "remaining_quantity"
+            and goal["direction"] == "decrease"
+        ):
+            current_quantity = metric_value(fresh, goal["metric"], goal["unit"])
+            target_quantity = Decimal(str(goal["target"]))
+            world_scenario = delivery_scenario(
+                public_snapshot(fresh), str(current_quantity - target_quantity)
+            )
         context["enterprise_cognition"] = {
             "goal": goal,
             "baseline": fresh,
+            "world_scenario": world_scenario,
             "bound_at": now,
             "request_sha256": digest,
         }
@@ -255,9 +274,18 @@ class EnterpriseExecutionService:
         self._identity(context, tenant_id, actor_id, mod_id)
         result = (self.runtime_gateway or run_runtime_task)(
             task=message,
-            system_prompt="围绕宿主绑定的经营目标观察原实体状态并选择下一步。只能操作该原订单的获准生命周期动作，每次写入必须由原任务审批；不得新建订单、转派或递归创建经营任务。",
+            system_prompt=(
+                "围绕宿主绑定的经营目标观察原实体状态并选择下一步。只能操作该原订单的获准生命周期动作，"
+                "每次写入必须由原任务审批；不得新建订单、转派或递归创建经营任务。"
+                "world_scenario 只是条件算术推演，不证明库存、可交付性、发生概率或批准；"
+                "不得将假设当作业务事实或执行回执。"
+            ),
             runtime_context=context,
-            input_data={"enterprise_goal": copy.deepcopy(goal), "baseline": copy.deepcopy(fresh)},
+            input_data={
+                "enterprise_goal": copy.deepcopy(goal),
+                "baseline": copy.deepcopy(fresh),
+                "world_scenario": copy.deepcopy(world_scenario),
+            },
             completion_mode="business",
             start_queued=True,
             _task_id=task_id,

@@ -349,6 +349,7 @@ export interface PersyMemoryEntity {
   name?: string
   type?: string
   role?: string
+  entity_id?: string
 }
 
 export interface PersyMemoryValue {
@@ -357,6 +358,8 @@ export interface PersyMemoryValue {
   object?: string
   statement?: string
   entities?: PersyMemoryEntity[]
+  relation_cardinality?: 'one' | 'many'
+  relation_validity?: { effective_from?: string; effective_until?: string }
   [key: string]: unknown
 }
 
@@ -383,6 +386,12 @@ export interface PersyMemoryRecord {
   last_recalled_at?: string
   recall_count?: number
   correction_count?: number
+  revision?: number
+  recorded_at_utc?: string
+  historical?: boolean
+  recorded_from?: string
+  recorded_until?: string | null
+  relation_path?: Array<Record<string, unknown>>
 }
 
 export interface PersyMemoryListResponse {
@@ -402,6 +411,15 @@ export interface PersyMemoryQueryResponse extends PersyMemoryListResponse {
   query?: string
   chunks: KnowledgeBaseChunk[]
   retriever?: string
+  as_of?: string | null
+  effective_at?: string | null
+  relation_conflicts?: Array<Record<string, unknown>>
+  relation_conflict_count?: number
+  revalidation_dropped?: number
+  historical_review_only?: boolean
+  temporal_unavailable_count?: number
+  coverage_complete?: boolean
+  relation_traversal_truncated?: boolean
 }
 
 export interface PersyMemoryMutationResponse {
@@ -720,6 +738,9 @@ export const knowledgeBaseApi = {
   async queryMemories(
     payload: Pick<KnowledgeBaseQueryPayload, 'datasetId' | 'query' | 'topK'> & {
       reinforce?: boolean
+      maxHops?: number
+      asOf?: string
+      effectiveAt?: string
     },
   ): Promise<PersyMemoryQueryResponse> {
     await primeCsrfCookie()
@@ -727,6 +748,9 @@ export const knowledgeBaseApi = {
       query: payload.query,
       top_k: Math.max(1, Math.min(Number(payload.topK) || 5, 20)),
       reinforce: payload.reinforce !== false,
+      ...(payload.maxHops === undefined ? {} : { max_hops: payload.maxHops }),
+      ...(payload.asOf === undefined ? {} : { as_of: payload.asOf }),
+      ...(payload.effectiveAt === undefined ? {} : { effective_at: payload.effectiveAt }),
     })
   },
 

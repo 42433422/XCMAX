@@ -4,6 +4,7 @@ FHD_TEST_PG_CONTAINER must be job.services.postgres.id, never a business service
 Only cloud transfer/config packaging are faked; PostgreSQL commands run natively.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -272,3 +273,96 @@ def test_different_valid_archive_is_rejected_before_restore(backup):
     assert "SHA256 不匹配" in restored.stderr
     calls = [json.loads(line) for line in Path(env["CLI_LOG"]).read_text().splitlines()]
     assert not any("pg_restore" in call or "CREATE DATABASE" in call[-1] for call in calls)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "dry-run",
+        "restore",
+        "missing-verifier",
+        "wrong-digest",
+        "uploads-fail",
+        "rsync-fail",
+        "config-fail",
+    ],
+)
+def test_cos_restore_verifies_before_restore_and_reports_partial_failure(tmp_path, case):
+    """Exercise CLI failure contracts only; these stubs are not a native restore drill."""
+    proxy = tmp_path / "bin"
+    proxy.mkdir()
+    for command in ("date", "mkdir", "cat", "sha256sum", "awk"):
+        (proxy / command).symlink_to(shutil.which(command))
+    if case != "missing-verifier":
+        (proxy / "python3").symlink_to(sys.executable)
+    archive = b"isolated archive fixture, not a PostgreSQL dump"
+    expected = hashlib.sha256(archive).hexdigest() if case != "wrong-digest" else "0" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps({"sha256": {"xcagi.dump": expected}}))
+    (tmp_path / "xcagi.dump").write_bytes(archive)
+    driver = proxy / "docker"
+    driver.write_text(
+        f"#!{sys.executable}\n"
+        + r"""
+import json, os, shutil, sys
+from pathlib import Path
+args = sys.argv[1:]
+name = Path(sys.argv[0]).name
+with open(os.environ['CLI_LOG'], 'a') as log:
+    log.write(json.dumps([name, *args]) + '\n')
+case = os.environ['TEST_CASE']
+if name == 'docker':
+    if 'pg_dump' in args:
+        sys.stdout.buffer.write(b'pre-restore snapshot fixture')
+    else:
+        sys.stdin.buffer.read()
+elif name == 'coscmd':
+    source, destination = args[-2:]
+    if destination in ('manifest.json', 'xcagi.dump'):
+        shutil.copyfile(Path(os.environ['TEST_SOURCE']) / destination, destination)
+    elif destination in ('uploads/', 'mods/'):
+        if destination == 'uploads/' and case == 'uploads-fail':
+            raise SystemExit(9)
+        Path(destination).mkdir()
+    else:
+        if case == 'config-fail':
+            raise SystemExit(9)
+        Path(destination).write_bytes(b'config fixture')
+elif name == 'rsync' and case == 'rsync-fail':
+    raise SystemExit(9)
+"""
+    )
+    driver.chmod(0o700)
+    for name in ("coscmd", "rsync"):
+        (proxy / name).symlink_to(driver)
+    log = tmp_path / "calls.jsonl"
+    env = {
+        **os.environ,
+        "PATH": str(proxy),
+        "CLI_LOG": str(log),
+        "TEST_CASE": case,
+        "TEST_SOURCE": str(tmp_path),
+        "FHD_RESTORE_ROOT": str(tmp_path / "restore"),
+        "FHD_PRE_RESTORE_SNAP": str(tmp_path / "pre-restore"),
+        "FHD_DEPLOY_ROOT": str(tmp_path / "deploy"),
+        "FHD_PG_CONTAINER": "isolated-cli-fixture",
+    }
+    args = [shutil.which("bash"), str(SCRIPTS / "fhd-restore-from-cos.sh"), "20261123-120000"]
+    if case in {"dry-run", "missing-verifier", "wrong-digest"}:
+        args.append("--dry-run")
+    result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    if case in {"missing-verifier", "wrong-digest"}:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert not any("pg_restore" in call for call in calls)
+    elif case in {"uploads-fail", "rsync-fail", "config-fail"}:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "恢复完成" not in result.stdout
+        assert str(tmp_path / "pre-restore") in result.stdout
+    elif case == "dry-run":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "sha256 OK" in result.stdout
+        assert not any("-d" in call for call in calls if "pg_restore" in call)
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        restore = next(call for call in calls if "pg_restore" in call and "-d" in call)
+        assert {"--exit-on-error", "--single-transaction"} <= set(restore)

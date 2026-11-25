@@ -210,3 +210,11 @@ def test_resumed_worker_resolves_only_the_authenticated_tasks_account(monkeypatc
     reader.return_value = ""
     with pytest.raises(RuntimeError, match="重新登录"):
         routing.restore_worker_llm_client(snapshot)
+    with routing.llm_client_factory_scope(lambda: routing.restore_worker_llm_client(snapshot)):
+        nested_snapshot = routing.capture_worker_llm_scope({"local_user_id": 18})
+    assert nested_snapshot == {"kind": "unavailable"}
+    with routing.llm_client_factory_scope(
+        lambda: routing.restore_worker_llm_client(nested_snapshot)
+    ):
+        with pytest.raises(RuntimeError, match="不能回退"):
+            routing.get_llm_client()

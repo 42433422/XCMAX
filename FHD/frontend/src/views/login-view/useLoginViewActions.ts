@@ -53,8 +53,9 @@ export function useLoginViewActions(
     await submitLogin()
   }
 
-  function switchLoginMode(mode: 'password' | 'qr') {
-    if (mode !== 'password' && mode !== 'qr') return
+  function switchLoginMode(mode: 'password' | 'qr' | 'offline') {
+    if (mode !== 'password' && mode !== 'qr' && mode !== 'offline') return
+    if (mode === 'offline' || loginMode.value === 'offline') password.value = ''
     loginMode.value = mode
     errorMessage.value = ''
     altLoginHint.value = ''
@@ -99,12 +100,13 @@ export function useLoginViewActions(
 
   let loginAttempt = 0
 
-  async function submitLogin(_event?: Event, offline = false) {
+  async function submitLogin(_event?: Event) {
     if (!canSubmit.value) {
       errorMessage.value = t('login.errNeedUsernamePassword')
       return
     }
     const attempt = ++loginAttempt
+    const offline = loginMode.value === 'offline'
     loading.value = true
     errorMessage.value = ''
     const invitation = invitationCode.value.trim()
@@ -126,12 +128,14 @@ export function useLoginViewActions(
         })
         return
       }
-      saveLoginPreferences({
-        rememberPassword: rememberPassword.value,
-        autoLogin: autoLogin.value,
-        username: username.value.trim(),
-        password: password.value,
-      })
+      if (!offline) {
+        saveLoginPreferences({
+          rememberPassword: rememberPassword.value,
+          autoLogin: autoLogin.value,
+          username: username.value.trim(),
+          password: password.value,
+        })
+      }
       await completeLoginSuccess(raw)
     } catch (error: unknown) {
       if (attempt !== loginAttempt) return
@@ -169,7 +173,6 @@ export function useLoginViewActions(
     formatLoginFailurePayload,
     selectAdminLogin,
     submitLogin,
-    submitOfflineLogin: () => submitLogin(undefined, true),
     startOidcLogin,
   }
 }

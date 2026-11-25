@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import os
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -47,8 +50,53 @@ from app.infrastructure.documents.sales_contract_excel import (
     read_excel_sales_contract_preview,
 )
 from app.infrastructure.documents.template_registry import (
+    fhd_repo_root,
     resolve_template_path_with_meta,
 )
+
+
+def _price_list_import_target() -> Path:
+    root = fhd_repo_root().resolve()
+    target = root / "424" / "document_templates" / "price_list_default.docx"
+    if any(path.is_symlink() for path in (target, *target.parents) if path != root):
+        raise PermissionError("价目表模板目录无效")
+    return target
+
+
+def save_price_list_docx_template(content: bytes) -> dict[str, Any]:
+    """Replace the existing fixed template atomically after capability approval."""
+    from docx import Document
+
+    if not 64 <= len(content) <= 8 * 1024 * 1024 or not content.startswith(b"PK"):
+        raise ValueError("不是有效的价目表 Word 模板")
+    # Parse the uploaded OOXML before touching the active template.
+    Document(BytesIO(content))
+    target = _price_list_import_target()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".tmp", delete=False) as stream:
+            staged = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(staged, target)
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+    return {
+        "success": True,
+        "message": "已保存价目表 Word 模板，导出 Word 价目表时将使用该文件。",
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
+def read_price_list_docx_template_digest() -> str:
+    """Read the active destination independently from the executor's receipt."""
+    target = _price_list_import_target()
+    if not target.is_file() or target.stat().st_size > 8 * 1024 * 1024:
+        raise ValueError("价目表模板文件不可核验")
+    return hashlib.sha256(target.read_bytes()).hexdigest()
 
 
 def build_sales_contract_template_preview_json(slug: str | None = None) -> dict:

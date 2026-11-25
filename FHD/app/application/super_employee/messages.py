@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+from filelock import Timeout
 
 from app.application.message_repository import MessageRepository
 
@@ -29,58 +32,101 @@ class MessageSynchronizer:
     def read_dispatch_receipt(
         self, *, user_id: int, request_id: str, task_id: str
     ) -> dict[str, Any] | None:
-        """Read one owned original dispatch without message backfills or execution."""
-        if not request_id:
+        """Read the owned original intent; a live sender never blocks its observer."""
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", request_id):
             return None
-        rows = [
-            row
-            for row in self._ports.read_rows()
-            if int(row.get("user_id") or 0) == int(user_id)
-            and row.get("dispatch_request_id") == request_id
-            and row.get("kind") == DISPATCHER_MESSAGE_KIND
-            and (not task_id or row.get("task_id") == task_id)
-        ]
-        if len(rows) > 1:
+        request = self._repository.read_dispatch_request(user_id, request_id)
+        receipt = request.get("dispatch_receipt") if request else None
+        if (
+            not request
+            or request.get("employee_id") != self._p.employee_id
+            or not isinstance(receipt, dict)
+            or receipt.get("request_id") != request_id
+            or (task_id and task_id != receipt.get("task_id"))
+        ):
             return None
-        original_id = str(rows[0].get("task_id") or "") if rows else ""
-        with self._repository.dispatch_lock(user_id, request_id):
-            request = self._repository.read_dispatch_request(user_id, request_id)
-            receipt = request.get("dispatch_receipt") if request else None
-            if request and isinstance(receipt, dict) and receipt.get("dispatcher") == "para_api":
-                if request.get("employee_id") != self._p.employee_id:
-                    return None
-                if receipt.get("pending_request_id") or receipt.get("status") in {
-                    "dispatching",
-                    "dispatch_unknown",
-                    "dispatch_pending",
-                }:
-                    receipt = self._ports.reconcile_dispatch(request)
-                original_id = str(receipt.get("task_id") or original_id)
-                if task_id and task_id != original_id:
-                    return None
-                if receipt.get("accepted") is not True:
-                    return {
-                        "dispatch": {
-                            "request_id": request_id,
-                            "task_id": original_id,
-                            "status": receipt.get("status", "dispatch_unknown"),
-                        },
-                        "assistant_message": {"body": self._ports.dispatch_reply(receipt)},
-                    }
+        if receipt.get("dispatcher") == "para_api":
+            api_url = str(receipt.get("api_url") or "")
+            if not api_url or api_url != self._ports.api_url():
+                return None
+            if receipt.get("pending_request_id") or receipt.get("status") in {
+                "dispatching",
+                "dispatch_unknown",
+                "dispatch_pending",
+            }:
+                try:
+                    with self._repository.dispatch_lock(user_id, request_id).acquire(timeout=0):
+                        current = self._repository.read_dispatch_request(user_id, request_id)
+                        latest = current.get("dispatch_receipt") if current else None
+                        if (
+                            not current
+                            or current.get("employee_id") != self._p.employee_id
+                            or not isinstance(latest, dict)
+                            or latest.get("request_id") != request_id
+                            or latest.get("api_url") != api_url
+                            or latest.get("dispatcher") != "para_api"
+                            or (task_id and task_id != latest.get("task_id"))
+                        ):
+                            return None
+                        # The existing reconciler validates the frozen plan, request
+                        # digest and device receipt; it never submits remaining work.
+                        receipt = self._ports.reconcile_dispatch(current)
+                except Timeout:
+                    # Atomic outbox replacement leaves a valid snapshot while the
+                    # sender owns the lock or waits for a remote acknowledgement.
+                    pass
+        original_id = str(receipt.get("task_id") or "")
+        if task_id and task_id != original_id:
+            return None
+        uncertain = bool(
+            receipt.get("reconciliation_required")
+            or receipt.get("pending_device_id")
+            or receipt.get("unexpected_task_id")
+            or receipt.get("status") in {"dispatching", "dispatch_unknown", "unknown"}
+        )
+        dispatch = {
+            key: receipt[key]
+            for key in (
+                "request_id",
+                "status",
+                "accepted",
+                "dispatcher",
+                "devices",
+                "pending_device_id",
+                "unexpected_task_id",
+            )
+            if key in receipt
+        }
+        dispatch.update(task_id=original_id, reconciliation_required=uncertain)
+        if uncertain:
+            dispatch["status"] = "dispatch_unknown"
         if not original_id:
+            return (
+                {
+                    "dispatch": dispatch,
+                    "assistant_message": {"body": self._ports.dispatch_reply(dispatch)},
+                }
+                if uncertain
+                else None
+            )
+        if receipt.get("dispatcher") != "para_api":
             return None
         task = self._ports.fetch_task(original_id)
         if not task or str(task.get("id") or task.get("task_id") or "") != original_id:
             return None
         state = str(task.get("status") or "unknown")
         state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
+        dispatch["task_status"] = state
+        complete_dispatch = receipt.get("accepted") is True and not uncertain
+        if complete_dispatch:
+            dispatch["status"] = state
         return {
-            "dispatch": {
-                "request_id": request_id,
-                "task_id": original_id,
-                "status": state,
+            "dispatch": dispatch,
+            "assistant_message": {
+                "body": self._ports.task_reply(task)
+                if complete_dispatch
+                else self._ports.dispatch_reply(dispatch)
             },
-            "assistant_message": {"body": self._ports.task_reply(task)},
         }
 
     def _reconcile_pending_dispatches(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:

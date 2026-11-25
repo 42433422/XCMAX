@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import create_engine, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -247,7 +248,9 @@ def test_export_limit_rejects_instead_of_silently_truncating(inventory_http, mon
 def test_export_failure_returns_no_workbook(inventory_http, monkeypatch):
     client, _factory, _engine = inventory_http
     service = MagicMock()
-    service.export_inventory.side_effect = RuntimeError("internal database unavailable")
+    service.export_inventory.side_effect = OperationalError(
+        None, None, ConnectionError("internal database unavailable")
+    )
     monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
     response = client.get("/api/inventory/export.xlsx")
     assert response.status_code == 500
@@ -383,7 +386,9 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
         )
     if kind == "failure":
         service = MagicMock()
-        service.export_inventory.side_effect = RuntimeError("private detail")
+        service.export_inventory.side_effect = OperationalError(
+            None, None, ConnectionError("private detail")
+        )
         monkeypatch.setattr(inventory_exports, "_svc", lambda: service)
     response = client.get("/api/inventory/export.csv", params=params)
     assert response.status_code == status

@@ -25,9 +25,11 @@ no ``--cov-fail-under`` at all. We now assert the *running root* file and the
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent  # MODstore_deploy
 COMPANY_ROOT = REPO_ROOT.parent  # 成都修茈科技有限公司
@@ -95,6 +97,38 @@ def test_published_source_workflow_enforces_coverage_floor():
     text = _read_required(CI_BACKEND_SOURCE)
     assert "--cov-fail-under" in text
     assert f"MODSTORE_PY_COVERAGE_FLOOR: '{EXPECTED_COVERAGE_FLOOR}'" in text
+
+
+@pytest.mark.parametrize("workflow", [CI_BACKEND_SOURCE, CI_BACKEND_RUNNING])
+def test_native_training_replay_ci_requires_the_supported_sandbox(workflow):
+    job = yaml.safe_load(_read_required(workflow))["jobs"]["modstore-backend-test"]
+    assert job["runs-on"] == "ubuntu-22.04"
+    install = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Install the pinned experiment evaluator"
+    )
+    assert "if" not in install and not install.get("continue-on-error", False)
+    command = install["run"]
+    assert "bubblewrap socat ripgrep" in command
+    assert "capability_trainer_deps/" in command and "--ignore-scripts" in command
+    assert (
+        "PROMPTFOO_SANDBOX_ENTRY=$RUNNER_TEMP/xcagi-promptfoo/node_modules/"
+        "@anthropic-ai/sandbox-runtime/dist/cli.js"
+    ) in command
+    runtime = XCMAX_ROOT / "FHD/scripts/autonomy/runtime_tools/capability_trainer_deps"
+    manifest = json.loads(_read_required(runtime / "package.json"))
+    lock = json.loads(_read_required(runtime / "package-lock.json"))
+    assert manifest["dependencies"]["@anthropic-ai/sandbox-runtime"] == "0.0.83"
+    assert lock["packages"]["node_modules/@anthropic-ai/sandbox-runtime"]["version"] == "0.0.83"
+    coverage = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Run tests with coverage (global floor — ratchet)"
+    )
+    assert "if" not in coverage and not coverage.get("continue-on-error", False)
+    assert "python -m pytest tests/" in coverage["run"]
+    assert "--cov-fail-under=${MODSTORE_PY_COVERAGE_FLOOR}" in coverage["run"]
 
 
 def test_ci_backend_workflow_runs_python_tests():

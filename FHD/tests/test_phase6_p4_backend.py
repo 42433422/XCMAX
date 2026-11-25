@@ -185,7 +185,7 @@ class TestResolveAiMode:
 
     def test_recoverable_error_falls_back_online(self) -> None:
         host = _IntentHost()
-        host.user_preference_service.get_preference.side_effect = RuntimeError("db down")
+        host.user_preference_service.get_preference.side_effect = OSError("db down")
         assert host._resolve_ai_mode("u1") == "online"
 
     def test_value_error_falls_back_online(self) -> None:

@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEPLOY = _REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
@@ -81,8 +83,13 @@ _INSTALL_WORKFLOWS = [
     (".github/workflows/customer-delivery-e2e.yml", "."),
     (".github/workflows/e2e-playwright-reusable.yml", "FHD"),
 ]
+_TEST_VERSIONS = {"pytest": "9.1.1", "pytest-cov": "7.1.0", "coverage": "7.15.1"}
+_VALID_LOCK = "".join(
+    f'[[package]]\nname = "{name}"\nversion = "{version}"\n'
+    for name, version in _TEST_VERSIONS.items()
+)
 _LOCK_CASES = {
-    "valid": '[[package]]\nname = "pytest"\nversion = "9.1.1"\n',
+    "valid": _VALID_LOCK,
     "missing": None,
     "malformed": "[broken",
     "absent": '[[package]]\nname = "other"\nversion = "1.0"\n',
@@ -91,6 +98,14 @@ _LOCK_CASES = {
     "invalid": '[[package]]\nname="pytest"\nversion="9.1.1; other"\n',
     "nonsensical": '[[package]]\nname="pytest"\nversion="9garbage"\n',
     "prerelease": '[[package]]\nname="pytest"\nversion="9.1.1rc1"\n',
+}
+_REPORT_LOCK_CASES = {
+    "missing_coverage": _VALID_LOCK.split('[[package]]\nname = "coverage"')[0],
+    "missing_pytest_cov": _VALID_LOCK.replace(
+        '[[package]]\nname = "pytest-cov"\nversion = "7.1.0"\n', ""
+    ),
+    "ambiguous_coverage": _VALID_LOCK + '[[package]]\nname="coverage"\nversion="7.17.5"\n',
+    "unsafe_coverage": _VALID_LOCK.replace("7.15.1", "7.15.1; other"),
 }
 
 
@@ -107,8 +122,42 @@ def test_pytest_pin_uses_canonical_lock_without_mutating_it() -> None:
     assert lock.read_bytes() == before
 
 
-@pytest.mark.parametrize("workflow,cwd", _INSTALL_WORKFLOWS)
-@pytest.mark.parametrize("lock_case", _LOCK_CASES)
+def test_report_toolchain_pins_use_the_same_unmodified_canonical_lock() -> None:
+    lock = _REPO_ROOT / "FHD/uv.lock"
+    before = lock.read_bytes()
+    packages = tomllib.loads(before.decode())["package"]
+    expected = [
+        f"{name}=={next(p['version'] for p in packages if p['name'] == name)}"
+        for name in _TEST_VERSIONS
+    ]
+    result = subprocess.check_output(
+        [sys.executable, str(_PIN_TOOL), "--test-toolchain-pins"], text=True
+    )
+    assert result.split() == expected
+    assert lock.read_bytes() == before
+
+
+@pytest.mark.parametrize("tool", _TEST_VERSIONS)
+def test_locked_report_tool_satisfies_development_declarations(tool: str) -> None:
+    fhd = _REPO_ROOT / "FHD"
+    packages = tomllib.loads((fhd / "uv.lock").read_text())["package"]
+    version = next(package["version"] for package in packages if package["name"] == tool)
+    for line in (fhd / "ops/deploy/requirements-dev.txt").read_text().splitlines():
+        declaration = line.partition("#")[0].strip()
+        if not declaration:
+            continue
+        requirement = Requirement(declaration)
+        if canonicalize_name(requirement.name) == tool:
+            assert version in requirement.specifier, (
+                f"{requirement} conflicts with the canonical uv.lock pin {tool}=={version}"
+            )
+
+
+@pytest.mark.parametrize(
+    "workflow,cwd,lock_case",
+    [(workflow, cwd, case) for workflow, cwd in _INSTALL_WORKFLOWS for case in _LOCK_CASES]
+    + [("FHD/.github/workflows/ci-cd.yml", "FHD", case) for case in _REPORT_LOCK_CASES],
+)
 def test_actual_ci_installs_use_pin_and_stop_before_pip_on_bad_lock(
     tmp_path: Path, workflow: str, cwd: str, lock_case: str
 ) -> None:
@@ -116,7 +165,7 @@ def test_actual_ci_installs_use_pin_and_stop_before_pip_on_bad_lock(
     tool = workspace / "FHD/scripts/dev/check_requirements_lock.py"
     tool.parent.mkdir(parents=True)
     tool.write_bytes(_PIN_TOOL.read_bytes())
-    payload = _LOCK_CASES[lock_case]
+    payload = {**_LOCK_CASES, **_REPORT_LOCK_CASES}[lock_case]
     if payload is not None:
         (workspace / "FHD/uv.lock").write_text(payload)
     workdir = workspace / cwd
@@ -155,7 +204,7 @@ if "--format=json" in sys.argv:
         step
         for job in jobs.values()
         for step in job.get("steps", [])
-        if "--pytest-pin" in step.get("run", "")
+        if any(flag in step.get("run", "") for flag in ("--pytest-pin", "--test-toolchain-pins"))
     ]
     assert len(installs) == (
         3 if workflow.endswith("/ci-cd.yml") else 2 if "ci-backend-python" in workflow else 1
@@ -182,6 +231,12 @@ if "--format=json" in sys.argv:
                 )
             ]
             assert test_installs and all("pytest==9.1.1" in args for args in test_installs)
+            if workflow.endswith("/ci-cd.yml"):
+                assert all(
+                    f"{name}=={version}" in args
+                    for args in test_installs
+                    for name, version in _TEST_VERSIONS.items()
+                )
             for args in test_installs:
                 if ".[server-api]" in args:
                     assert args[args.index("-r") + 1] == "requirements-server-api.txt"
@@ -228,15 +283,25 @@ def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpre
         }
         python = next(step for step in steps if step.get("uses") == "actions/setup-python@v7")
         assert "cache" not in python["with"]
-        command = next(step["run"] for step in steps if "--pytest-pin" in step.get("run", ""))
+        command = next(
+            step["run"]
+            for step in steps
+            if any(
+                flag in step.get("run", "") for flag in ("--pytest-pin", "--test-toolchain-pins")
+            )
+        )
         install = f"uv pip install {target}"
         check = f"uv pip check {target}"
+        pin_flag, pins = (
+            ("--test-toolchain-pins", '"${test_requirements[@]}"')
+            if workflow.endswith("/ci-cd.yml")
+            else ("--pytest-pin", '"$pytest_pin"')
+        )
         assert (
-            install
-            + ' -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt "$pytest_pin"'
+            install + f" -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt {pins}"
             in command
         )
-        assert command.index("--pytest-pin") < command.index(install) < command.index(check)
+        assert command.index(pin_flag) < command.index(install) < command.index(check)
         assert "--upgrade pip" not in command
 
 

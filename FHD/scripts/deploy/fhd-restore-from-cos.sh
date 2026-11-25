@@ -37,6 +37,7 @@ DEPLOY_ROOT="${FHD_DEPLOY_ROOT:-/opt/fhd-full}"
 mkdir -p "$RESTORE_ROOT" && cd "$RESTORE_ROOT"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+fail() { log "ERROR: $*；恢复未完成，预恢复快照位于 $PRE_SNAP"; exit 1; }
 
 # ========== 0. 恢复前快照（非 dry-run） ==========
 if [[ "$DRY_RUN" == "0" ]]; then
@@ -61,17 +62,21 @@ coscmd -r "$COS_REGION" -b "$COS_BUCKET" download \
 
 # ========== 3. 校验 sha256 ==========
 log "3/7 校验 sha256..."
-if ! command -v jq &>/dev/null; then
-  log "WARN: jq 未安装，跳过 sha256 校验"
-else
-  EXPECTED_SHA="$(jq -r '.sha256["xcagi.dump"]' manifest.json)"
-  ACTUAL_SHA="$(sha256sum xcagi.dump | awk '{print $1}')"
-  if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
-    log "ERROR: SHA256 不匹配 expected=$EXPECTED_SHA actual=$ACTUAL_SHA"
-    exit 1
-  fi
-  log "  sha256 OK: $ACTUAL_SHA"
-fi
+python3 - <<'PY'
+import hashlib
+import json
+from pathlib import Path
+
+expected = json.loads(Path("manifest.json").read_text())["sha256"]["xcagi.dump"]
+digest = hashlib.sha256()
+with Path("xcagi.dump").open("rb") as archive:
+    for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+        digest.update(chunk)
+actual = digest.hexdigest()
+if expected != actual:
+    raise SystemExit(f"ERROR: SHA256 不匹配 expected={expected} actual={actual}")
+print(f"sha256 OK: {actual}")
+PY
 
 # ========== 4. 校验 pg_restore 可读性 ==========
 log "4/7 校验 dump 可读性..."
@@ -87,26 +92,27 @@ fi
 
 # ========== 5. 恢复 PostgreSQL ==========
 log "5/7 恢复 PostgreSQL（--clean --if-exists）..."
-docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" -d xcagi --clean --if-exists < xcagi.dump || {
+docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" -d xcagi \
+  --clean --if-exists --exit-on-error --single-transaction < xcagi.dump || {
   log "ERROR: 恢复失败，预恢复快照位于 $PRE_SNAP"
   exit 1
 }
 
 # ========== 6. 恢复 uploads / mods ==========
 log "6/7 恢复 uploads / mods..."
-coscmd -r "$COS_REGION" -b "$COS_BUCKET" download -r "uploads/daily/$DATE_STAMP/" uploads/ || log "WARN: uploads 下载失败"
-coscmd -r "$COS_REGION" -b "$COS_BUCKET" download -r "mods/daily/$DATE_STAMP/" mods/ || log "WARN: mods 下载失败"
+coscmd -r "$COS_REGION" -b "$COS_BUCKET" download -r "uploads/daily/$DATE_STAMP/" uploads/ || fail "uploads 下载失败"
+coscmd -r "$COS_REGION" -b "$COS_BUCKET" download -r "mods/daily/$DATE_STAMP/" mods/ || fail "mods 下载失败"
 
 if [[ -d uploads ]]; then
-  rsync -a --delete uploads/ "$DEPLOY_ROOT/uploads/" || log "WARN: uploads rsync 失败"
+  rsync -a --delete uploads/ "$DEPLOY_ROOT/uploads/" || fail "uploads rsync 失败"
 fi
 if [[ -d mods ]]; then
-  rsync -a --delete mods/ "$DEPLOY_ROOT/mods/" || log "WARN: mods rsync 失败"
+  rsync -a --delete mods/ "$DEPLOY_ROOT/mods/" || fail "mods rsync 失败"
 fi
 
 # ========== 7. 恢复配置（仅警告，不自动覆盖） ==========
 log "7/7 配置恢复提示..."
-coscmd -r "$COS_REGION" -b "$COS_BUCKET" download "config/daily/$DATE_STAMP.tar.gz" config.tar.gz || true
+coscmd -r "$COS_REGION" -b "$COS_BUCKET" download "config/daily/$DATE_STAMP.tar.gz" config.tar.gz || fail "配置包下载失败"
 log "  配置包已下载到 $RESTORE_ROOT/config.tar.gz"
 log "  ⚠️  配置不会自动覆盖，请人工 diff 后决定是否应用"
 

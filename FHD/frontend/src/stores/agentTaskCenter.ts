@@ -6,6 +6,7 @@ import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentRun, AgentTaskRuntime, AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 import { taskEmployeeIds } from '@/utils/workflowEmployeeTaskState'
+import { taskStatusOf } from '@/utils/taskWorkspacePresentation'
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
 let sessionUnauthorizedBound = false
@@ -71,7 +72,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let snapshotRevision = 0
   let refreshInFlight: Promise<void> | null = null
 
-  const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length)
+  const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed', 'unknown'].includes(taskStatusOf(task))).length)
   const unreadCount = computed(() =>
     tasks.value.reduce(
       (total, task) => total + Math.max(0, Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0),

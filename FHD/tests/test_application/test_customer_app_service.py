@@ -7,10 +7,12 @@ and helper functions.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.customer_app_service import (
     CustomerApplicationService,
@@ -18,6 +20,11 @@ from app.application.customer_app_service import (
     get_customers_session,
     reset_customers_engine,
 )
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
+
 
 # ---------------------------------------------------------------------------
 # get_customers_session
@@ -98,7 +105,7 @@ class TestGetAll:
 
     def test_db_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("db fail")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("db fail")):
             result = svc.get_all()
             assert result["success"] is False
 
@@ -139,7 +146,7 @@ class TestGetById:
 
     def test_db_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("fail")):
             result = svc.get_by_id(1)
             assert result["success"] is False
 
@@ -191,7 +198,7 @@ class TestCreate:
 
     def test_db_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("fail")):
             result = svc.create({"customer_name": "X"})
             assert result["success"] is False
 
@@ -297,7 +304,7 @@ class TestBatchDelete:
         policy.assert_called_once_with(session, [1, 2], force=False, runtime_context=None)
         session.close.assert_called_once()
 
-    @pytest.mark.parametrize("error", [RuntimeError("storage failed"), PermissionError("denied")])
+    @pytest.mark.parametrize("error", [_db_error("storage failed"), PermissionError("denied")])
     def test_failed_policy_rolls_back_without_claiming_deletion(self, error):
         service, session = CustomerApplicationService(), MagicMock()
         with (
@@ -362,7 +369,7 @@ class TestImportData:
 
     def test_db_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("fail")):
             result = svc.import_data([{"customer_name": "X"}])
             assert result["success"] is False
 
@@ -429,7 +436,7 @@ class TestMatchPurchaseUnit:
 
     def test_db_error(self):
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=RuntimeError("fail")):
+        with patch.object(svc, "_get_session", side_effect=_db_error("fail")):
             result = svc.match_purchase_unit("X")
             assert result is None
 

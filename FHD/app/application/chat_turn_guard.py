@@ -127,7 +127,7 @@ def scope_snapshot(ctx: dict[str, Any]) -> tuple[int | None, int | None, str | N
         snapshots: list[tuple[int | None, str | None]] = []
         with get_db() as db:
             for tool, model in (("customers", PurchaseUnit), ("products", Product)):
-                if actor_tool_denial(tool, "query", ctx) is not None:
+                if actor_tool_denial("business_db", "read", ctx, {"entity": tool}) is not None:
                     snapshots.append((None, None))
                     continue
                 digest, count = hashlib.sha256(), 0

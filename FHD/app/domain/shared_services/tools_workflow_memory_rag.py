@@ -46,6 +46,7 @@ def _registered_router_dataset_rag(
         DATASET_READ_PERMISSION,
         DATASET_WRITE_PERMISSION,
         DatasetAccessContext,
+        get_agent_dataset_access_context,
         get_dataset_rag_app_service,
     )
 
@@ -86,49 +87,13 @@ def _registered_router_dataset_rag(
     def as_dict(value: Any) -> dict[str, Any]:
         return dict(value) if isinstance(value, dict) else {}
 
-    def parse_permissions(value: Any) -> set[str]:
-        if isinstance(value, str):
-            return {part.strip() for part in value.replace(";", ",").split(",") if part.strip()}
-        if isinstance(value, (list, tuple, set, frozenset)):
-            return {str(part).strip() for part in value if str(part).strip()}
-        return set()
+    bound_access = get_agent_dataset_access_context(runtime_context)
+    # An omitted tenant means the authenticated task's tenant. In particular,
+    # a dataset-admin grant must not turn an owned import into a global default.
+    params = {**params, "tenant_id": str(params.get("tenant_id") or bound_access.tenant_id)}
 
-    def access_context(_required_permission: str) -> DatasetAccessContext | None:
-        # Grants come only from the trusted runtime context, never from model-supplied params.
-        context_payload = as_dict(runtime_context.get("dataset_access_context"))
-        has_explicit_context = bool(context_payload)
-        tenant_id = str(
-            context_payload.get("tenant_id")
-            or runtime_context.get("dataset_tenant_id")
-            or runtime_context.get("tenant_id")
-            or runtime_context.get("workspace_id")
-            or ""
-        ).strip()
-        actor_id = str(
-            context_payload.get("actor_id")
-            or context_payload.get("user_id")
-            or runtime_context.get("user_id")
-            or ""
-        ).strip()
-        permissions = parse_permissions(context_payload.get("permissions"))
-        permissions.update(parse_permissions(runtime_context.get("dataset_permissions")))
-        is_admin = as_bool(
-            context_payload.get("is_admin", context_payload.get("admin")), default=False
-        ) or as_bool(runtime_context.get("dataset_admin"), default=False)
-        if not has_explicit_context and (not permissions) and (not is_admin):
-            if not tenant_id:
-                from app.application.dataset_rag.access_policy import ambient_tenant_id
-
-                tenant_id = ambient_tenant_id()
-            if not tenant_id:
-                return None
-            permissions = {_required_permission}
-        return DatasetAccessContext(
-            actor_id=actor_id,
-            tenant_id=tenant_id,
-            permissions=frozenset(permissions),
-            is_admin=is_admin,
-        )
+    def access_context(_required_permission: str) -> DatasetAccessContext:
+        return bound_access
 
     def finalize(result: dict[str, Any], **defaults: Any) -> dict[str, Any]:
         result.setdefault("success", bool(result.get("success", False)))
@@ -427,9 +392,9 @@ def _registered_router_memory_v2(
                 params.get("value"),
                 source=str(params.get("source") or "memory_v2_api"),
                 confidence=confidence,
-                evidence=params.get("evidence")
-                if isinstance(params.get("evidence"), list)
-                else None,
+                evidence=(
+                    params.get("evidence") if isinstance(params.get("evidence"), list) else None
+                ),
             )
         except ValueError as exc:
             return {"success": False, "message": str(exc)}

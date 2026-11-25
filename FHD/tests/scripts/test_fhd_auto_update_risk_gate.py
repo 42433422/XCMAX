@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "deploy" / "fhd-auto-update.sh"
@@ -95,6 +98,41 @@ def test_stable_auto_update_requires_human_approval(tmp_path: Path) -> None:
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
     assert "autonomy_guard 拒绝稳定通道发布" in log
     assert "artifact 不存在" not in log
+
+
+@pytest.mark.parametrize("changed_field", ["git_sha", "sha256"])
+def test_queued_staging_apply_rejects_changed_candidate_before_mutation(
+    tmp_path: Path, changed_field: str
+) -> None:
+    deploy_root, manifest, env = _runtime(tmp_path)
+    original = {
+        **_manifest(approved=False),
+        "channel": "staging",
+        "git_sha": "a" * 40,
+        "sha256": "b" * 64,
+    }
+    manifest.write_text(json.dumps(original), encoding="utf-8")
+    changed = {
+        **original,
+        changed_field: "c" * (40 if changed_field == "git_sha" else 64),
+    }
+    replacement = tmp_path / "queued-candidate.json"
+    replacement.write_text(json.dumps(changed), encoding="utf-8")
+    # Candidate publication advances while this updater waits for its deployment lock.
+    (tmp_path / "bin" / "flock").write_text(
+        f"#!/bin/sh\ncp {shlex.quote(str(replacement))} {shlex.quote(str(manifest))}\n",
+        encoding="utf-8",
+    )
+    identity = deploy_root / ".deploy-git-sha"
+    identity.write_text("previous-release", encoding="utf-8")
+    env.update(
+        FHD_EXPECTED_RELEASE_SHA=original["git_sha"],
+        FHD_EXPECTED_ARTIFACT_SHA256=original["sha256"],
+    )
+    result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
+    assert result.returncode == 78
+    assert "bound deployment target" in (tmp_path / "deploy.log").read_text(encoding="utf-8")
+    assert identity.read_text(encoding="utf-8") == "previous-release"
 
 
 def test_auto_update_trusts_only_ledger_approval_not_env_or_manifest() -> None:

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.elt import (
     mapping_assist,
@@ -594,7 +596,7 @@ class TestShipmentCompatParser:
 
     def test_preview_exception_returns_none(self, tmp_path, monkeypatch):
         def _boom(*a, **k):
-            raise RuntimeError("preview down")
+            raise OSError("preview down")
 
         monkeypatch.setattr(
             "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt", _boom
@@ -1138,9 +1140,9 @@ class TestShipmentPreviewFallback:
         mod = shipment_preview_fallback
 
         def _boom(*a, **k):
-            raise RuntimeError("db down")
+            raise OperationalError(None, None, sqlite3.OperationalError("db down"))
 
-        monkeypatch.setattr(mod, "get_db", lambda: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(mod, "get_db", _boom)
         monkeypatch.setattr(mod, "current_tenant_id", lambda: "123")
         monkeypatch.setattr(mod, "_preview_runs", _boom)
         out = mod.resolve_preview_product_candidate_outcome(
@@ -1506,9 +1508,9 @@ class TestShipmentPreviewFallback:
 
         # recoverable error
         def _boom(*a, **k):
-            raise RuntimeError("db down")
+            raise OperationalError(None, None, sqlite3.OperationalError("db down"))
 
-        monkeypatch.setattr(mod, "get_db", lambda: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(mod, "get_db", _boom)
         monkeypatch.setattr(mod, "_preview_runs", _boom)
         assert mod._find_preview_layout_record(owner_user_id=1, unit_name="甲") is None
 

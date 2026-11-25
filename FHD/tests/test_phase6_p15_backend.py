@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from contextlib import contextmanager as _shared_scope_contextmanager
 
 
@@ -18,7 +19,7 @@ def _shared_scope_iter_catalog_packages_market_0():
             "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
         ) as mock_get,
         patch(
-            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            "app.infrastructure.mods.catalog_visibility.is_public_catalog_row",
             return_value=True,
         ),
     ):
@@ -37,7 +38,7 @@ def _shared_scope_iter_catalog_packages_1(case_value_1_value, case_value_2_value
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+            "app.infrastructure.mods.catalog_visibility.is_public_catalog_row",
             return_value=True,
         ),
     ):
@@ -325,7 +326,7 @@ class TestMarketSaveSessionToken:
         assert ma._MARKET_SESSION_TOKENS == {}
 
     def test_db_persist_swallows_recoverable_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
 
@@ -361,7 +362,7 @@ class TestMarketClearSessionToken:
 
     def test_db_clear_swallows_recoverable_error(self) -> None:
         ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             ma.clear_session_market_token("sid1")
         assert "sid1" not in ma._MARKET_SESSION_TOKENS
 
@@ -403,7 +404,7 @@ class TestMarketSessionToken:
         assert result == ""
 
     def test_session_token_db_recoverable_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             result = ma.session_market_token("sid1")
         assert result == ""
 
@@ -431,11 +432,11 @@ class TestMarketLatestSessionToken:
     """Cover ``latest_session_market_token`` / ``latest_session_market_refresh_token``."""
 
     def test_latest_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             assert ma.latest_session_market_token() == ""
 
     def test_latest_refresh_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=sqlite3.OperationalError("db down")):
             assert ma.latest_session_market_refresh_token() == ""
 
     def test_latest_token_returns_first_non_empty(self) -> None:
@@ -2412,12 +2413,13 @@ class TestTWRMaterials:
     def test_materials_batch_delete(self) -> None:
         with patch("app.application.get_material_application_service") as mock_get:
             svc = MagicMock()
-            svc.batch_delete_materials.return_value = {"success": True}
+            svc.batch_delete_materials.return_value = {"success": True, "deleted_count": 1}
             mock_get.return_value = svc
             result = twr._registered_router_materials(
                 "batch_delete", {"ids": ["1", "2"]}, {}, "normal", ""
             )
             assert result["success"] is True
+            assert result["deleted_count"] == 1
 
     def test_materials_export(self) -> None:
         with patch("app.application.get_material_application_service") as mock_get:
@@ -2432,7 +2434,7 @@ class TestTWRShipmentRecords:
     """Cover ``_registered_router_shipment_records``."""
 
     def test_shipment_records_list(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.get_shipment_records.return_value = []
             mock_get.return_value = svc
@@ -2442,7 +2444,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_list_no_unit(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.get_shipment_records.return_value = []
             mock_get.return_value = svc
@@ -2450,7 +2452,7 @@ class TestTWRShipmentRecords:
             svc.get_shipment_records.assert_called_once_with(None)
 
     def test_shipment_records_update(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.update_shipment_record.return_value = {"success": True}
             mock_get.return_value = svc
@@ -2460,7 +2462,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_delete(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.delete_shipment_record.return_value = {"success": True}
             mock_get.return_value = svc
@@ -2470,7 +2472,7 @@ class TestTWRShipmentRecords:
             assert result["success"] is True
 
     def test_shipment_records_export(self) -> None:
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with patch("app.bootstrap.get_shipment_application_service_core") as mock_get:
             svc = MagicMock()
             svc.export_shipment_records.return_value = {"success": True}
             mock_get.return_value = svc
@@ -2940,7 +2942,7 @@ class TestMSAllRows:
 
     def test_all_rows_handles_exception(self) -> None:
         with patch("app.fastapi_routes.mod_store_routes.list_mod_items") as mock_list:
-            mock_list.side_effect = RuntimeError("fail")
+            mock_list.side_effect = OSError("fail")
             result = msr._all_rows()
             assert result == []
 
@@ -4032,7 +4034,7 @@ class TestCCIterCatalogPackages:
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_recoverable_error_falls_back(self) -> None:
         with _shared_scope_iter_catalog_packages_market_0() as (mock_fetch, mock_get):
-            mock_fetch.side_effect = RuntimeError("err")
+            mock_fetch.side_effect = FileNotFoundError("market catalog CA bundle unavailable")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
             async for row in cc.iter_catalog_packages():

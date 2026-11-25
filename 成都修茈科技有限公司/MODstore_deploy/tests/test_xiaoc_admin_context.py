@@ -7,8 +7,63 @@ from fastapi.testclient import TestClient
 
 from modstore_server import xiaoc_admin_context as bridge
 from tests.test_xiaoc_life_chat import life_database as life_database
+from tests.test_xiaoc_life_chat import state as state
 
 pytestmark = pytest.mark.usefixtures("life_database")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", [1, 2])
+async def test_capability_wrappers_preserve_level_and_single_tool_guards(monkeypatch, state, level):
+    from unittest.mock import AsyncMock
+
+    from modstore_server.agent_butler_api_merged import (
+        _butler_tools_with_capabilities,
+        _partition_with_capabilities,
+    )
+
+    state["level"] = level
+    catalog = AsyncMock(return_value=[])
+    execute = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(bridge, "capability_tools_for_user", catalog)
+    monkeypatch.setattr(bridge, "execute_capability_tool", execute)
+    user = SimpleNamespace(id=17, is_admin=True)
+    assert await _butler_tools_with_capabilities(user, []) == []
+    catalog.assert_not_awaited()
+    calls = [{"name": "execute_capability", "args": {}}]
+    if level == 2:
+        calls.append({"name": "navigate", "args": {"route": "/wallet"}})
+    page, brief = await _partition_with_capabilities(
+        calls, user=user, db=None, request_id="original-request"
+    )
+    assert page == [] and "未执行" in brief
+    execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_capability_execution_rechecks_level_after_catalog_read(monkeypatch, state):
+    from unittest.mock import AsyncMock
+
+    from modstore_server.agent_butler_api_merged import (
+        _butler_tools_with_capabilities,
+        _partition_with_capabilities,
+    )
+
+    state["level"] = 2
+    tool = {"type": "function", "function": {"name": "read_enterprise_state"}}
+    catalog = AsyncMock(return_value=[tool])
+    execute = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(bridge, "capability_tools_for_user", catalog)
+    monkeypatch.setattr(bridge, "execute_capability_tool", execute)
+    user = SimpleNamespace(id=17, is_admin=True)
+    messages = [SimpleNamespace(role="user", content="读取已授权数据")]
+    assert tool in await _butler_tools_with_capabilities(user, messages)
+    state["level"] = 1
+    page, brief = await _partition_with_capabilities(
+        [{"name": "read_enterprise_state", "args": {}}], user=user, db=None
+    )
+    assert page == [] and "未执行" in brief
+    execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -45,7 +100,10 @@ async def test_private_context_never_uses_ambient_proxy(monkeypatch, redirect):
                 await bridge._request(user, "list")
             assert error.value.status_code == 503
         else:
-            assert await bridge._request(user, "list") == {"success": True, "memories": []}
+            assert await bridge._request(user, "list") == {
+                "success": True,
+                "memories": [],
+            }
         assert len(sent) == 1
         proxy, request = sent[0]
         assert proxy is None
@@ -161,3 +219,134 @@ def test_admin_chat_uses_same_context_for_both_routes(monkeypatch, suffix):
         )
     assert response.status_code == 418
     assert seen == ["recall", "prompt"]
+
+
+@pytest.mark.asyncio
+async def test_capability_tool_schemas_project_the_scoped_host_catalog(monkeypatch):
+    rows = [
+        {
+            "tool_id": "business_db",
+            "action": "read",
+            "risk": "low",
+            "read_only": True,
+            "input_schema": {
+                "type": "object",
+                "properties": {"entity": {"enum": ["customers"]}},
+            },
+        },
+        {
+            "tool_id": "customers",
+            "action": "create",
+            "risk": "medium",
+            "read_only": False,
+            "input_schema": {"type": "object", "required": ["unit_name"]},
+        },
+    ]
+    calls = []
+
+    async def host(user, operation, **fields):
+        calls.append((user.id, operation, fields))
+        return {"success": True, "capabilities": rows}
+
+    monkeypatch.setattr(bridge, "_request", host)
+    assert await bridge.capability_tools_for_user(SimpleNamespace(id=17, is_admin=False)) == []
+    tools = await bridge.capability_tools_for_user(SimpleNamespace(id=17, is_admin=True))
+    by_name = {tool["function"]["name"]: tool["function"] for tool in tools}
+    read = by_name["read_enterprise_state"]
+    assert read["parameters"]["properties"]["tool_id"]["enum"] == ["business_db"]
+    assert '"enum":["customers"]' in read["description"]
+    assert '"action":"create"' not in read["description"]
+    assert by_name["execute_capability"]["parameters"]["properties"]["tool_id"]["enum"] == [
+        "business_db",
+        "customers",
+    ]
+    assert calls == [(17, "capabilities", {"limit": 500})]
+
+
+@pytest.mark.asyncio
+async def test_admin_capability_transport_uses_server_identity_and_original_request(
+    monkeypatch,
+):
+    from modstore_server.agent_butler_api_merged import _partition_with_capabilities
+
+    forwarded = []
+
+    def backend(request):
+        forwarded.append(bridge.json.loads(request.read()))
+        return httpx.Response(
+            200,
+            json={
+                "success": False,
+                "execution_state": "waiting_approval",
+                "task_id": "t1",
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(backend))
+    monkeypatch.setenv("XIAOC_ADMIN_CONTEXT_FHD_URL", "http://fhd.internal")
+    monkeypatch.setenv("XIAOC_ADMIN_CONTEXT_TOKEN", "bridge-key")
+    monkeypatch.setattr(bridge, "get_internal_client", lambda: client)
+    receipts = []
+    call = {
+        "id": "call1",
+        "name": "execute_capability",
+        "args": {
+            "tool_id": "customers",
+            "action": "create",
+            "params": {"unit_name": "A"},
+            "market_user_id": 99,
+            "request_id": "forged",
+            "host": "https://other.invalid",
+        },
+    }
+    user = SimpleNamespace(id=17, is_admin=True)
+    try:
+        page, text = await _partition_with_capabilities(
+            [call], user=user, db=None, receipts=receipts
+        )
+        assert not page and "task_identity_required" in text and not forwarded
+        receipts.clear()
+        page, text = await _partition_with_capabilities(
+            [call], user=user, db=None, request_id="user-turn", receipts=receipts
+        )
+        assert not page and "waiting_approval" in text
+        assert receipts[0]["result"]["task_id"] == "t1"
+        assert forwarded == [
+            {
+                "market_user_id": 17,
+                "operation": "execute_capability",
+                "tool_id": "customers",
+                "action": "create",
+                "params": {"unit_name": "A"},
+                "request_id": "admin-butler:user-turn:0",
+            }
+        ]
+        user.is_admin = False
+        page, text = await _partition_with_capabilities(
+            [call], user=user, db=None, request_id="user-turn"
+        )
+        assert not page and "管理员" in text and len(forwarded) == 1
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_capability_timeout_is_unknown_and_keeps_original_identity(monkeypatch):
+    def timeout(request):
+        raise httpx.ReadTimeout("interrupted", request=request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(timeout))
+    monkeypatch.setenv("XIAOC_ADMIN_CONTEXT_FHD_URL", "http://fhd.internal")
+    monkeypatch.setenv("XIAOC_ADMIN_CONTEXT_TOKEN", "bridge-key")
+    monkeypatch.setattr(bridge, "get_internal_client", lambda: client)
+    try:
+        result = await bridge._request(
+            SimpleNamespace(id=17, is_admin=True),
+            "execute_capability",
+            request_id="same-turn",
+        )
+        assert result["execution_state"] == "unknown"
+        assert result["request_id"] == "same-turn"
+        assert result["requires_reconciliation"] is True and result["retryable"] is False
+    finally:
+        await client.aclose()

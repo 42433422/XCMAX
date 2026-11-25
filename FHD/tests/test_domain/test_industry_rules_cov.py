@@ -508,7 +508,7 @@ class TestComputeSubsystemDerived:
 
     def test_fn_raises_recoverable_error_skips_target(self):
         def bad_op(args):
-            raise RuntimeError("transient failure")
+            raise ValueError("invalid input for derived field")
 
         register_derivation("cov_bad_op", bad_op)
         schema = {"rules": {"result": {"op": "cov_bad_op", "args": ["a"]}}}

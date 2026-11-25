@@ -285,7 +285,7 @@ class TestListFilesResponse:
 
     def test_list_recoverable_error(self, temp_root, monkeypatch) -> None:
         monkeypatch.setattr(
-            tmf, "resolve_safe_path", lambda p: (_ for _ in ()).throw(RuntimeError("boom"))
+            tmf, "resolve_safe_path", lambda p: (_ for _ in ()).throw(OSError("boom"))
         )
         result, status = tmf.list_files_response("")
         assert status == 500
@@ -390,7 +390,7 @@ class TestReadFileResponse:
         import openpyxl
 
         def fake_load(*args, **kwargs):
-            raise RuntimeError("load fail")
+            raise OSError("load fail")
 
         monkeypatch.setattr(openpyxl, "load_workbook", fake_load)
         result, status = tmf.read_file_response("file.xlsx")
@@ -398,7 +398,7 @@ class TestReadFileResponse:
 
     def test_read_recoverable_error(self, temp_root, monkeypatch) -> None:
         monkeypatch.setattr(
-            tmf, "resolve_safe_path", lambda p: (_ for _ in ()).throw(RuntimeError("boom"))
+            tmf, "resolve_safe_path", lambda p: (_ for _ in ()).throw(OSError("boom"))
         )
         result, status = tmf.read_file_response("file.txt")
         assert status == 500
@@ -510,7 +510,7 @@ class TestWatchdogLoop:
         monkeypatch.setattr(tmf, "_watchdog_running", True)
         # Force _build_snapshot to raise
         monkeypatch.setattr(
-            tmf, "_build_snapshot", lambda: (_ for _ in ()).throw(RuntimeError("snap fail"))
+            tmf, "_build_snapshot", lambda: (_ for _ in ()).throw(OSError("snap fail"))
         )
         # Should not raise
         tmf._watchdog_loop()

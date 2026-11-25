@@ -268,7 +268,8 @@ def test_browser_contract_rejects_missing_or_unexecuted_evidence(tmp_path, repor
         else (
             "test_form_receipt_upload_and_durable_download",
             "test_context_isolation_between_runs",
-            "test_screenshot_masks_embedded_frame_rectangle",
+            "test_screenshot_masks_embedded_frame_rectangle[agent]",
+            "test_screenshot_masks_embedded_frame_rectangle[computer]",
             "test_browser_executes_under_default_tool_worker_resource_limits",
         )
     )

@@ -14,7 +14,7 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict, empty token)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, httpx errors)
+- Exception paths (RECOVERABLE_ERRORS: ValueError, httpx errors)
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -551,8 +552,6 @@ class TestOutboxSendRoute:
         assert result["remote_id"] == 99
 
     async def test_forward_connect_error_returns_failure(self) -> None:
-        import httpx
-
         body = OutboxCreate(title="Test", priority="normal")
         mock_db = MagicMock()
         mock_req = MagicMock()
@@ -587,7 +586,7 @@ class TestOutboxSendRoute:
             return "test-instance"
 
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=RuntimeError("server boom"))
+        mock_client.post = AsyncMock(side_effect=httpx.ReadError("server boom"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -734,7 +733,7 @@ class TestSyncOutboxRoute:
         mock_db.query.return_value.filter.return_value.all.return_value = [mock_req]
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=RuntimeError("net down"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("net down"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -811,7 +810,7 @@ class TestPingMainRoute:
             patch("httpx.AsyncClient") as mock_client_cls,
         ):
             mock_client = AsyncMock()
-            mock_client.get = AsyncMock(side_effect=RuntimeError("unreachable"))
+            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("unreachable"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
@@ -1167,7 +1166,7 @@ class TestSyncModstoreLibraryToLocal:
         with (
             patch(
                 "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
-                side_effect=RuntimeError("net down"),
+                side_effect=ConnectionError("net down"),
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(

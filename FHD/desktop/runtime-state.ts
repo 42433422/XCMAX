@@ -1,6 +1,5 @@
 import type { BrowserWindow, Tray } from 'electron'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import type fs from 'node:fs'
 import type { AutonomyController } from './autonomy/controller'
 
 export type DesktopStartupMarks = {
@@ -23,8 +22,8 @@ export const desktopRuntime = {
   auxiliaryWindows: new Set<BrowserWindow>(),
   splashUrl: '',
   backendProcess: null as ChildProcessWithoutNullStreams | null,
+  backendMigrationProcess: null as ChildProcessWithoutNullStreams | null,
   verifiedBackendProcess: null as ChildProcessWithoutNullStreams | null,
-  backendLogStream: null as fs.WriteStream | null,
   tray: null as Tray | null,
   restartCount: 0,
   backendShutdownComplete: false,

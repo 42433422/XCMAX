@@ -21,7 +21,7 @@ from app.application.desktop_relay.protocols import (
     StopSignal,
     WorkerFactory,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
 @dataclass(frozen=True)
@@ -204,8 +204,10 @@ class RelayTaskDelivery:
                 # 兼容尚未生成密钥的旧执行端（服务端对其不强制加密）。
                 try:
                     result = self.ports.execute_task(task)
-                except RECOVERABLE_ERRORS:
-                    self.logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+                except BOUNDARY_ERRORS as exc:
+                    self.logger.warning(
+                        "mobile relay task %s failed: %s", task_id, type(exc).__name__
+                    )
                     return
                 self._safe_post(
                     task_id, relay_id, desktop_token, base_url, result, started, shared=None
@@ -215,8 +217,8 @@ class RelayTaskDelivery:
             try:
                 payload, shared = e2ee.open_envelope(envelope, private_key)
                 result = self.ports.execute_task({**task, "payload": payload})
-            except RECOVERABLE_ERRORS:
-                self.logger.warning("mobile relay task %s failed", task_id, exc_info=True)
+            except BOUNDARY_ERRORS as exc:
+                self.logger.warning("mobile relay task %s failed: %s", task_id, type(exc).__name__)
                 # 解密或执行失败时只回传错误标记，绝不把明文内容带到云端。
                 self._safe_post(
                     task_id,

@@ -293,7 +293,7 @@ class TestInvokeDispatch:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://example.com/hook")
         svc = _make_svc(
             tmp_path,
-            http_client_factory=_fake_http_factory(exc=RuntimeError("boom")),
+            http_client_factory=_fake_http_factory(exc=httpx.ReadTimeout("webhook timed out")),
         )
         result = svc.invoke(user_id=1, message="修复 bug")
         assert result["dispatch"]["queued"] is False
@@ -823,7 +823,6 @@ class TestCliReplyBody:
             assert svc._cli_reply_body("hi", {}) == ""
 
     def test_timeout_raises_explicit_failure(self, tmp_path):
-
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
@@ -838,7 +837,6 @@ class TestCliReplyBody:
         assert error.value.receipt["reconciliation_required"] is True
 
     def test_os_error_raises_explicit_failure(self, tmp_path):
-
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
@@ -850,6 +848,8 @@ class TestCliReplyBody:
             svc._cli_reply_body("hi", {})
         assert error.value.receipt["error_code"] == "cli_launch_failed"
         assert "no such" not in str(error.value)
+        assert "no such" not in error.value.body
+        assert "no such" not in str(error.value.event())
 
     def test_reads_output_file_when_exists(self, tmp_path):
         cli = tmp_path / "codex"
@@ -878,7 +878,6 @@ class TestCliReplyBody:
         assert "stdout answer" in result
 
     def test_returncode_nonzero_raises_explicit_failure(self, tmp_path):
-
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
@@ -895,6 +894,8 @@ class TestCliReplyBody:
         assert error.value.receipt["error_code"] == "cli_nonzero_exit"
         assert error.value.receipt["exit_code"] == 1
         assert "something bad" not in str(error.value)
+        assert "something bad" not in error.value.body
+        assert "something bad" not in str(error.value.event())
 
     def test_claude_profile_reads_stdout(self, tmp_path):
         import json as _json

@@ -19,7 +19,8 @@ let router: Router
 let fetchMock: ReturnType<typeof vi.fn>
 let failDetail: boolean
 let failGenerate: boolean
-let submitMode: 'submitted' | 'failed' | 'outcome_unknown' | 'network'
+let labelRequestId: string
+let submitMode: 'waiting_approval' | 'submitted' | 'failed' | 'outcome_unknown' | 'network'
 let savedTemplates: Array<Record<string, unknown>>
 const template = {
   id: 'db:42', name: '指定标签模板', category: 'label', fields: [],
@@ -38,6 +39,7 @@ async function chooseAndGenerate() {
 }
 beforeEach(async () => {
   failDetail = false; failGenerate = false; submitMode = 'submitted'
+  labelRequestId = `label-job-${crypto.randomUUID()}`
   savedTemplates = [template, { id: 'db:55', category: 'excel', name: '发货单' }]
   document.cookie = 'csrf_token=label-csrf; path=/'
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:label-file'), revokeObjectURL: vi.fn() }))
@@ -49,9 +51,10 @@ beforeEach(async () => {
     if (url.endsWith('/api/templates/db:42')) return failDetail ? response({ message: '模板载入失败' }, 503) : response({ success: true, template })
     if (url.endsWith('/api/print/label-jobs')) return failGenerate ? response({ message: '字段缺少产品绑定' }, 400) : response({ success: true, job: baseJob })
     if (url.endsWith('/file')) return new Response('%PDF-1.7 real generated test artifact', { headers: { 'Content-Type': 'application/pdf' } })
-    if (url.endsWith('/confirmation')) return response({ success: true, job: baseJob, confirm_token: 'confirmed-on-server-123456', confirm_prompt: '确认将 3 张 80 × 50 mm 标签提交到 LabelPrinter？' })
+    if (url.endsWith('/confirmation')) return response({ success: true, job: baseJob, confirm_token: 'confirmed-on-server-123456', request_id: labelRequestId, confirm_prompt: '确认将 3 张 80 × 50 mm 标签提交到 LabelPrinter？' })
     if (url.endsWith('/submit')) {
       if (submitMode === 'network') throw new Error('连接中断')
+      if (submitMode === 'waiting_approval') return response({ success: false, pending_approval: true, job: { ...baseJob, status: submitMode, task_id: 'label-task', run_id: 'label-run', message: '打印任务等待审批，尚未提交打印队列' } }, 202)
       return response({ success: true, job: { ...baseJob, status: submitMode, message: submitMode === 'submitted' ? '已提交打印队列；物理出纸仍需现场核对' : submitMode === 'failed' ? '打印服务拒绝任务' : '提交结果待确认，请检查打印队列' } })
     }
     throw new Error(`Unexpected ${init?.method} ${url}`)
@@ -240,8 +243,19 @@ describe('actual Mod label output flow', () => {
     await button('确认并提交打印').trigger('click'); await flushPromises()
     const submitted = fetchMock.mock.calls.find(call => call[0].endsWith('/submit'))!
     expect(JSON.parse(submitted[1].body)).toEqual({ confirm_token: 'confirmed-on-server-123456' })
+    expect(new Headers(submitted[1].headers).get('Idempotency-Key')).toBe(labelRequestId)
     expect(wrapper!.text()).toContain('已提交打印队列；物理出纸仍需现场核对')
     expect(button('准备打印').attributes('disabled')).toBeDefined()
+  })
+  it('keeps an approval-pending label attached to its original task without resubmitting', async () => {
+    submitMode = 'waiting_approval'
+    await chooseAndGenerate()
+    await button('准备打印').trigger('click'); await flushPromises()
+    await button('确认并提交打印').trigger('click'); await flushPromises()
+    expect(wrapper!.text()).toContain('等待审批，尚未提交打印队列')
+    expect(wrapper!.get('a[href="/workspaces/label-task"]').text()).toContain('查看执行与审批任务')
+    expect(button('准备打印').attributes('disabled')).toBeDefined()
+    expect(fetchMock.mock.calls.filter(call => call[0].endsWith('/submit'))).toHaveLength(1)
   })
   it('never substitutes a template when loading fails and permits retry', async () => {
     failDetail = true

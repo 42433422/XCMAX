@@ -69,6 +69,28 @@ def test_delete_messages_from_withdraws_user_turn_and_later_replies(
         store.delete_messages_from(session_id="recall-1", user_id=41, message_id=999)
 
 
+def test_history_total_comes_from_owned_session_across_paging_dedupe_and_recall(store):
+    scope = {"session_id": "counted-history", "user_id": 41}
+    ids = [
+        store.save_message(
+            **scope, role="user", content=f"message {index}", client_message_id=f"client-{index}"
+        )
+        for index in range(4)
+    ]
+    assert (
+        store.save_message(**scope, role="user", content="message 3", client_message_id="client-3")
+        == ids[-1]
+    )
+    latest = store.get_history(**scope, limit=2)
+    assert latest["message_count"] == 4 and len(latest["messages"]) == 2
+    earlier = store.get_history(**scope, limit=2, before_id=latest["next_before_id"])
+    assert earlier["message_count"] == 4 and earlier["has_more"] is False
+    assert store.get_history(session_id=scope["session_id"], user_id=42)["message_count"] == 0
+    assert store.delete_messages_from(**scope, message_id=ids[2]) == 2
+    recalled = store.get_history(**scope, limit=1)
+    assert recalled["message_count"] == 2 and recalled["revision"] > latest["revision"]
+
+
 @pytest.mark.parametrize("backend", ["memory", "sqlite"])
 def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, monkeypatch, backend):
     from types import SimpleNamespace

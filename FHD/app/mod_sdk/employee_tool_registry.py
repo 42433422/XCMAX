@@ -110,12 +110,6 @@ def _cached_tool_rows() -> tuple[dict[str, Any], ...]:
 
 def invalidate_employee_tool_cache() -> None:
     _cached_tool_rows.cache_clear()
-    try:
-        from app.mod_sdk.employee_planner_bridge import invalidate_employee_planner_registry
-
-        invalidate_employee_planner_registry()
-    except RECOVERABLE_ERRORS:
-        pass
     logger.debug("employee tool registry cache cleared")
 
 

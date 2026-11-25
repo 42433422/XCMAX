@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -129,8 +130,8 @@ class TestApiCallErrorBranches:
         import httpx
 
         mock_resp = MagicMock()
-        mock_resp.json.side_effect = RuntimeError("parse error")
         mock_resp.text = "plain text body"
+        mock_resp.json.side_effect = json.JSONDecodeError("Expecting value", mock_resp.text, 0)
         mock_resp.is_success = True
         mock_resp.status_code = 200
 

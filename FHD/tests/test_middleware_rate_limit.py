@@ -38,6 +38,7 @@ def rate_limit_app():
         return {"success": True}
 
     @app.post("/api/auth/login")
+    @app.post("/api/auth/offline-login")
     def login():
         return {"success": True}
 
@@ -54,7 +55,8 @@ def rate_limit_app():
     return app
 
 
-def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app):
+@pytest.mark.parametrize("path", ["/api/auth/login", "/api/auth/offline-login"])
+def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app, path):
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "1")
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT_MAX", "2")
     monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT_WINDOW", "60")
@@ -62,9 +64,9 @@ def test_auth_rate_limit_returns_429(monkeypatch, rate_limit_app):
     monkeypatch.setenv("CACHE_REDIS_URL", "")
     client = TestClient(rate_limit_app)
     for _ in range(2):
-        r = client.post("/api/auth/login", json={"username": "a", "password": "b"})
+        r = client.post(path, json={"username": "a", "password": "b"})
         assert r.status_code == 200
-    r3 = client.post("/api/auth/login", json={"username": "a", "password": "b"})
+    r3 = client.post(path, json={"username": "a", "password": "b"})
     assert r3.status_code == 429
     assert r3.headers.get("Retry-After")
     body = r3.json()
@@ -120,3 +122,28 @@ def test_global_rate_limit_skips_platform_shell(monkeypatch, rate_limit_app):
     client = TestClient(rate_limit_app)
     for _ in range(5):
         assert client.get("/api/platform-shell/deliverable-status").status_code == 200
+
+
+@pytest.mark.parametrize("auth", [True, False])
+@pytest.mark.parametrize("trusted", [True, False])
+def test_proxy_clients_share_only_their_own_rate_bucket(monkeypatch, rate_limit_app, auth, trusted):
+    monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
+    monkeypatch.setenv("LAN_TRUSTED_PROXIES", "10.20.0.0/24" if trusted else "192.0.2.1")
+    monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "1" if auth else "0")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT", "0" if auth else "1")
+    monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT_MAX", "1")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT_MAX", "1")
+    path = "/api/auth/login" if auth else "/api/other/ping"
+    method = "POST" if auth else "GET"
+    with TestClient(rate_limit_app, client=("10.20.0.2", 50000)) as client:
+
+        def call(forwarded):
+            return client.request(method, path, headers={"X-Forwarded-For": forwarded})
+
+        assert call("198.51.100.8").status_code == 200
+        assert call("198.51.100.9").status_code == (200 if trusted else 429)
+        exhausted = call("198.51.100.8")
+        assert exhausted.status_code == 429
+        assert int(exhausted.headers["Retry-After"]) >= 1
+        # A claimed leftmost address cannot evade the rightmost untrusted hop.
+        assert call("203.0.113.99, 198.51.100.8, 10.20.0.3").status_code == 429

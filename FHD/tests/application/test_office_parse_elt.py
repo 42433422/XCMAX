@@ -479,7 +479,7 @@ def test_office_tool_runs_through_agent_after_confirmation(
     def launch(self, batch):
         launched.append(batch)
         if decision == "lost_receipt":
-            raise RuntimeError("synthetic lost launch receipt")
+            raise OSError("synthetic lost launch receipt")
 
     monkeypatch.setattr(AutoIngestService, "_launch_worker", launch)
     with tenant_scope(actor.tenant_id):

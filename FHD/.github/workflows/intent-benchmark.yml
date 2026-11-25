@@ -10,7 +10,7 @@ name: Intent Accuracy Benchmark
 #    2) 运行前 LLM 真实调用预检（fail-closed）；
 #    3) 基准跑真实 LLM 链路（LLM_PROVIDER=xcauto，不跳过 LLM）；
 #    4) 报告必须存在（缺失即失败）、有效样本数必须与 golden set 一致且 > 0；
-#    5) 预设业务阈值硬门禁（TASK_BENCHMARK_MIN_PASS=0.2，只升不降，禁止为变绿降到 0）；
+#    5) 三次独立试验，预设业务阈值 0.4，只升不降；原始结果复核后才写 VERIFIED；
 #    6) 运行身份（run_id/sha/actor）写入验收标记。
 #  规则引擎报告不得替代 LLM 报告：acceptance 任务不运行规则引擎 intent_accuracy 作为验收证据。
 
@@ -67,7 +67,7 @@ jobs:
           TASK_BENCHMARK_RUN: "1"
           TASK_BENCHMARK_TRIALS: "1"
           # N03（2026-09-08）：业务成功率硬门禁。0.2 按规则引擎口径校准
-          # （2026-09-08 实测 pass^1=0.2273，5/22）；显式设 0 才是只报告模式。
+          # （2026-09-08 实测 pass^1=0.2273，5/22）；只报告须显式使用 observe 模式。
           # 棘轮只升不降：规则/模型能力提升后应同步上调此值。
           TASK_BENCHMARK_MIN_PASS: "0.2"
         run: |
@@ -128,9 +128,12 @@ jobs:
           fi
           # #1859：运行模式标记必须随 metrics 提交（NOT_RUN/UNVERIFIED 可审计）
           cp test_reports/benchmark_run_mode.json metrics/benchmark_run_mode.json
+          # The benchmark marker also changes the derived public claims SSOT.
+          python scripts/dev/gen_claimed_vs_actual.py
+          python scripts/dev/gen_claimed_vs_actual.py --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/
+          git add metrics/ docs/CLAIMED_VS_ACTUAL.md
           if git diff --staged --quiet; then
             echo "No intent report changes"
             exit 0
@@ -164,6 +167,8 @@ jobs:
     # 发布验收：仅显式 mode=acceptance 触发；必须真实 LLM 链路 + 硬门禁
     if: ${{ inputs.mode == 'acceptance' }}
     runs-on: ubuntu-latest
+    env:
+      TASK_BENCHMARK_MIN_PASS: "0.4"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -259,69 +264,25 @@ jobs:
           XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
           XCAGI_SKIP_INTENT_LLM: ""
           TASK_BENCHMARK_RUN: "1"
-          TASK_BENCHMARK_TRIALS: "1"
-          # N03（2026-09-08）：业务成功率硬门禁；显式设 0 才是只报告模式。
+          TASK_BENCHMARK_TRIALS: "3"
+          TASK_BENCHMARK_MODE: "gate"
+          # 业务成功率门禁不能用零阈值或 observation 模式替代。
           # 棘轮只升不降：规则/模型能力提升后应同步上调此值。
           # Task 6（2026-09-09）上调 0.2 → 0.4（实测 pass^1=0.4545，10/22，按 spec 下调约 5% 取整）。
-          TASK_BENCHMARK_MIN_PASS: "0.4"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
-      # 报告存在性 + 有效样本数 + 阈值复核（不信任 pytest 内部断言单独作证）
-      - name: Verify acceptance evidence (report exists, sample count, threshold, identity)
-        env:
-          GH_RUN_ID: ${{ github.run_id }}
-          GH_SHA: ${{ github.sha }}
-          GH_ACTOR: ${{ github.actor }}
+      - name: Verify acceptance source, dataset, raw trials and configured threshold
+        id: acceptance_evidence
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json, os
-          from datetime import datetime, timezone, timedelta
-
-          report_path = "test_reports/task_benchmark_report.json"
-          assert os.path.isfile(report_path), "验收失败：task_benchmark_report.json 不存在（缺失不等于通过）"
-          report = json.loads(open(report_path, encoding="utf-8").read())
-
-          golden = json.loads(open("tests/benchmarks/task_golden_set.json", encoding="utf-8").read())
-          total = int(report.get("total_tasks", 0))
-          assert total == len(golden["tasks"]) > 0, (
-              f"验收失败：有效样本数不符 report.total_tasks={total} golden={len(golden['tasks'])}"
-          )
-
-          floor = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "0.2") or "0")
-          assert floor > 0, "验收失败：阈值不得为 0（禁止为变绿降阈值）"
-          assert float(report["pass_k"]) >= floor, (
-              f"验收失败：pass^k={report['pass_k']} < {floor}"
-          )
-
-          marker = {
-              "mode": "acceptance",
-              "llm_verified": True,
-              "status": "VERIFIED",
-              "evidence": {
-                  "llm_preflight": "test_reports/llm_preflight_evidence.json",
-                  "report": report_path,
-                  "total_tasks": total,
-                  "pass_k": report["pass_k"],
-                  "min_pass": floor,
-                  "trials": report.get("trials"),
-              },
-              "run_id": os.environ.get("GH_RUN_ID", ""),
-              "sha": os.environ.get("GH_SHA", ""),
-              "actor": os.environ.get("GH_ACTOR", ""),
-              "observed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-          }
-          with open("test_reports/benchmark_run_mode.json", "w", encoding="utf-8") as f:
-              json.dump(marker, f, ensure_ascii=False, indent=2)
-          print(json.dumps(marker, ensure_ascii=False, indent=2))
-          PY
+          python scripts/dev/verify_task_benchmark_evidence.py --set golden --minimum "$TASK_BENCHMARK_MIN_PASS"
 
       # N04（2026-09-12）：main 受分支保护（11 项 required checks），直推必被 GH006
       # 拒绝（实证：run 34636879093，报告 commit 41e2688 从未落 main）。与
       # slo-metrics 同轨：automation 分支 + PR + auto-merge，证据经门禁回流主线。
       - name: Commit acceptance benchmark report
-        if: always()
+        if: steps.acceptance_evidence.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
           GH_RUN_ID: ${{ github.run_id }}
@@ -331,9 +292,12 @@ jobs:
           for f in task_benchmark_report.json benchmark_run_mode.json llm_preflight_evidence.json; do
             [ -f "test_reports/$f" ] && cp "test_reports/$f" "metrics/$f"
           done
+          # The benchmark marker also changes the derived public claims SSOT.
+          python scripts/dev/gen_claimed_vs_actual.py
+          python scripts/dev/gen_claimed_vs_actual.py --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/
+          git add metrics/ docs/CLAIMED_VS_ACTUAL.md
           if git diff --staged --quiet; then
             echo "No acceptance report changes"
             exit 0
@@ -360,6 +324,7 @@ jobs:
             FHD/test_reports/task_benchmark_report.json
             FHD/test_reports/benchmark_run_mode.json
             FHD/test_reports/llm_preflight_evidence.json
+            FHD/test_reports/task_benchmark_trial_*.jsonl
           # #1859：验收证据缺失必须让上传步骤红掉，不得 ignore
           if-no-files-found: error
 
@@ -476,20 +441,23 @@ jobs:
           TASK_BENCHMARK_RUN: "1"
           TASK_BENCHMARK_SET: "holdout"
           TASK_BENCHMARK_TRIALS: "3"
+          TASK_BENCHMARK_MODE: "observe"
+          XCAGI_SKIP_INTENT_LLM: "0"
           # 留出集只报告；先建立真实基线，再单独起棘轮。
           TASK_BENCHMARK_HOLDOUT_MIN_PASS: "0"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
-      - name: Verify holdout evidence (report exists, sample count)
+      - name: Verify holdout source, dataset and raw trial evidence
+        id: holdout_evidence
         if: steps.creds.outputs.available == 'true'
         run: |
           set -euo pipefail
-          python scripts/dev/verify_task_holdout_evidence.py
+          python scripts/dev/verify_task_benchmark_evidence.py --set holdout
 
       # main 受分支保护，证据经 automation 分支 + PR 回流。
       - name: Commit task holdout evidence
-        if: steps.creds.outputs.available == 'true' && always()
+        if: steps.creds.outputs.available == 'true' && steps.holdout_evidence.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
           GH_RUN_ID: ${{ github.run_id }}
@@ -527,4 +495,5 @@ jobs:
           path: |
             FHD/test_reports/task_holdout_report.json
             FHD/test_reports/task_holdout_run_mode.json
+            FHD/test_reports/task_benchmark_trial_*.jsonl
           if-no-files-found: error

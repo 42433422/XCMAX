@@ -8,6 +8,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.infrastructure.database import database_manager as dm
 
@@ -60,43 +61,41 @@ class TestDatabaseManagerInit:
             assert mgr.get_session_factory() is not None
 
 
+@pytest.fixture
+def transaction_manager(tmp_path):
+    manager = dm.DatabaseManager(database_url=f"sqlite:///{tmp_path / 'transaction.sqlite3'}")
+    with manager.get_engine().begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE entries (value TEXT)")
+    try:
+        yield manager
+    finally:
+        manager.dispose()
+
+
 class TestGetSession:
-    def test_session_commit_on_success(self):
-        with patch("app.infrastructure.database.database_manager.create_engine") as mock_create:
-            mock_create.return_value = MagicMock()
-            mgr = dm.DatabaseManager(database_url="sqlite:///./t.db")
-            mock_session = MagicMock()
-            mgr._session_factory = MagicMock(return_value=mock_session)
-            with mgr.get_session() as session:
-                assert session is mock_session
-            mock_session.commit.assert_called_once()
-            mock_session.close.assert_called_once()
+    def test_session_commit_on_success(self, transaction_manager):
+        with transaction_manager.get_session() as session:
+            session.execute(text("INSERT INTO entries VALUES ('committed')"))
+        with transaction_manager.get_engine().connect() as independent_reader:
+            assert independent_reader.execute(text("SELECT value FROM entries")).all() == [
+                ("committed",)
+            ]
+        assert session.in_transaction() is False
 
-    def test_session_rollback_on_recoverable_error(self):
-        with patch("app.infrastructure.database.database_manager.create_engine") as mock_create:
-            mock_create.return_value = MagicMock()
-            mgr = dm.DatabaseManager(database_url="sqlite:///./t.db")
-            mock_session = MagicMock()
-            mgr._session_factory = MagicMock(return_value=mock_session)
-            with pytest.raises(RuntimeError, match="boom"):
-                with mgr.get_session():
-                    raise RuntimeError("boom")
-            mock_session.rollback.assert_called_once()
-            mock_session.close.assert_called_once()
-
-    def test_session_close_on_unrecoverable_error(self):
-        # Programming errors (not in RECOVERABLE_ERRORS) still close the session
-        with patch("app.infrastructure.database.database_manager.create_engine") as mock_create:
-            mock_create.return_value = MagicMock()
-            mgr = dm.DatabaseManager(database_url="sqlite:///./t.db")
-            mock_session = MagicMock()
-            mgr._session_factory = MagicMock(return_value=mock_session)
-            with pytest.raises(AssertionError):
-                with mgr.get_session():
-                    raise AssertionError("bug")
-            # No rollback for non-recoverable, but session still closed
-            mock_session.rollback.assert_not_called()
-            mock_session.close.assert_called_once()
+    @pytest.mark.parametrize(
+        "failure",
+        [OSError, KeyError, IndexError, TypeError, AttributeError, RuntimeError, AssertionError],
+    )
+    def test_failure_rolls_back_and_propagates(self, transaction_manager, failure):
+        error = failure("injected failure after writing")
+        with pytest.raises(failure) as caught:
+            with transaction_manager.get_session() as session:
+                session.execute(text("INSERT INTO entries VALUES ('uncommitted')"))
+                raise error
+        assert caught.value is error
+        with transaction_manager.get_engine().connect() as independent_reader:
+            assert independent_reader.execute(text("SELECT count(*) FROM entries")).scalar() == 0
+        assert session.in_transaction() is False
 
 
 class TestDispose:

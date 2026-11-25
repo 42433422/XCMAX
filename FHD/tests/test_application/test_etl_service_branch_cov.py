@@ -152,7 +152,7 @@ class _FakeAdapter:
             if self.fail_for_value is not None and str((data or {}).get(self.fail_field)) == str(
                 self.fail_for_value
             ):
-                raise RuntimeError("boom")
+                raise EltError("ELT_ROW_FAILED", "boom")
             if self.fail_after is not None and self._exec_calls >= self.fail_after:
                 self._exec_calls += 1
                 raise RuntimeError("boom")
@@ -1822,7 +1822,7 @@ class TestServicePreview:
 
     def test_suggest_mappings_synonym_error(self, elt_db, svc, fake_adapter, monkeypatch):
         def _boom(*a, **k):
-            raise RuntimeError("boom")
+            raise OSError("boom")
 
         monkeypatch.setattr("app.domain.app_pure.excel_elt_kb.get_excel_elt_kb", _boom)
         ds = _FakeDataset()

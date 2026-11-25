@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 
 from modstore_server import inbound_webhook_api as inbound
 from modstore_server.api.csrf import CSRFMiddleware
-from modstore_server.api.xss_sanitizer import XSSSanitizerMiddleware
 from modstore_server.workflow_api import hooks
 
 SECRET = "synthetic-webhook-test-secret"
@@ -40,7 +39,6 @@ def boundary(monkeypatch):
     app.include_router(inbound.router)
     app.include_router(hooks.workflow_hooks_router)
     app.add_middleware(CSRFMiddleware)
-    app.add_middleware(XSSSanitizerMiddleware)
     app.dependency_overrides[hooks.get_db] = lambda: db
     with TestClient(app, headers={"Content-Type": "application/json"}) as client:
         yield client, trigger, enqueue, run
@@ -111,7 +109,7 @@ def test_signed_machine_request_works_but_browser_cookie_still_needs_csrf(bounda
     assert client.post(path, content=BODY, headers=headers).status_code == 200
     if provider == "workflow":
         assert run.call_args.kwargs["user_id"] == 7
-        assert run.call_args.kwargs["input_data"]["task_description"] == "synthetic 一 task"
+        assert run.call_args.kwargs["input_data"] == json.loads(BODY)
     enqueue.reset_mock()
     run.reset_mock()
     client.cookies.set("session", "ambient-browser-session")
@@ -161,6 +159,8 @@ def test_other_protocol_receivers_still_authenticate_without_cookies(
         headers = {"X-MODSTORE-TOKEN": SECRET}
     assert client.post(path, content=body, headers=headers).status_code == 200
     enqueue.assert_called_once()
+    if provider == "generic":
+        assert enqueue.call_args.kwargs["task_description"] == json.loads(BODY)["task_description"]
     enqueue.reset_mock()
     client.cookies.set("session", "ambient-browser-session")
     assert client.post(path, content=body, headers=headers).status_code == 403
@@ -228,17 +228,39 @@ def test_dingtalk_timestamp_window_boundaries(boundary, monkeypatch, offset, exp
 def test_workflow_default_secret_is_verified_before_execution(boundary, monkeypatch):
     client, _, _, run = boundary
     monkeypatch.setenv("WORKFLOW_WEBHOOK_DEFAULT_SECRET", SECRET)
+    raw = b" \n" + BODY + b"\n "
     headers = {
         "X-Hub-Signature-256": "sha256="
-        + hmac.new(SECRET.encode(), BODY, hashlib.sha256).hexdigest()
+        + hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
     }
+    assert (
+        client.post(
+            "/api/workflow-hooks/webhook/synthetic", content=raw, headers=headers
+        ).status_code
+        == 200
+    )
+    assert run.call_args.kwargs["input_data"] == json.loads(raw)
+    run.reset_mock()
     assert (
         client.post(
             "/api/workflow-hooks/webhook/synthetic", content=BODY, headers=headers
         ).status_code
-        == 200
+        == 403
     )
-    assert run.call_args.kwargs["input_data"]["task_description"] == "synthetic 一 task"
+    run.assert_not_called()
+
+
+def test_authenticated_feishu_challenge_preserves_literal_data(boundary, monkeypatch):
+    client, _, enqueue, _ = boundary
+    monkeypatch.setenv("MODSTORE_FEISHU_VERIFY_TOKEN", SECRET)
+    challenge = '<script>literal()</script> 中文 & "quotes" &lt;entity&gt;'
+    response = client.post(
+        "/api/inbound/webhooks/feishu",
+        json={"type": "url_verification", "token": SECRET, "challenge": challenge},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"challenge": challenge}
+    enqueue.assert_not_called()
 
 
 @pytest.mark.parametrize("provider", ["dingtalk", "workflow"])

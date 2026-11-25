@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -49,5 +50,5 @@ def test_write_audit_event_invalid_actor_still_writes():
 
 
 def test_write_audit_event_swallows_db_errors():
-    with patch("app.db.session.get_db", side_effect=RuntimeError("no db")):
+    with patch("app.db.session.get_db", side_effect=sqlite3.OperationalError("no db")):
         write_audit_event(actor=1, action="safe", payload={})

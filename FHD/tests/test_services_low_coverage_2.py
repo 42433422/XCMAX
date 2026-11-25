@@ -168,7 +168,7 @@ class TestFinalizeIntakeSubmission:
     def test_notify_wechat_failure(self, mock_sync, mock_save, mock_notice):
         mock_sync.side_effect = lambda d: d
         mock_save.side_effect = lambda d: d
-        mock_notice.side_effect = RuntimeError("send failed")
+        mock_notice.side_effect = ConnectionError("send failed")
         doc = {"intake_form": {"company": "测试公司"}}
         # Should not raise
         result_doc, meta = finalize_intake_submission(1, doc, notify_wechat=True)

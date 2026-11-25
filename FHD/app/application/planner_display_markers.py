@@ -45,3 +45,7 @@ def strip_planner_stream_markers(merged: str) -> tuple[str, str | None]:
     user_text = re.sub(r"\n{3,}", "\n\n", user_text).strip()
     thinking = "\n".join(lines) if lines else None
     return user_text, thinking
+
+
+def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
+    return strip_planner_stream_markers(merged)[1]

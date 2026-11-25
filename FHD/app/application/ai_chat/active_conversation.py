@@ -8,18 +8,39 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tempfile
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Mapping
 
+from cryptography.fernet import Fernet, InvalidToken
+
 from app.application.ai_chat.dialogue_memory import _lock, _memory_dir
+from app.application.group_chat.storage import GroupChatRepository
+from app.application.message_repository import MessageRepository
 from app.application.task_conversation_store import durable_user_id, task_conversation_store
 from app.domain.shared_services.conversation_service import (
     begin_conversation_write,
     lock_conversation_session,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_POINTER_ERRORS: tuple[type[Exception], ...] = (InvalidToken,) + RECOVERABLE_ERRORS
+
+
+def _pointer_cipher(*, create: bool) -> Fernet:
+    directory = _memory_dir()
+    with _lock("cipher"):
+        if not (
+            os.environ.get("SECRET_KEY", "").strip()
+            or os.environ.get("XCAGI_SECRET_KEY", "").strip()
+        ):
+            key_path = directory / GroupChatRepository._SECRET_FILE_NAME
+            existing = key_path.read_text(encoding="utf-8").strip() if key_path.exists() else ""
+            if not existing and not create:
+                raise ValueError("Active conversation key is unavailable")
+        return GroupChatRepository.message_cipher(data_dir=str(directory), require_persistent=True)
 
 
 def remember_active_conversation(
@@ -42,15 +63,23 @@ def remember_active_conversation(
                 user_id=int(payload["owner"]),
                 expected_revision=(context or {}).get("_conversation_revision"),
             )
+            cipher = _pointer_cipher(create=True)
+            if path.is_file():
+                stored = path.read_text(encoding="utf-8").strip()
+                prefix = GroupChatRepository._ENCRYPTED_MESSAGE_PREFIX
+                if stored.startswith(prefix):
+                    cipher.decrypt(stored.removeprefix(prefix).encode())
             # The temporary file must be private before its first byte is written.
             with tempfile.NamedTemporaryFile(
                 mode="w", encoding="utf-8", dir=path.parent, suffix="-active.json.tmp", delete=False
             ) as stream:
                 temporary = Path(stream.name)
-                json.dump(payload, stream, ensure_ascii=False)
+                stream.write(MessageRepository._encrypted_json_line(payload, cipher))
+                stream.flush()
+                os.fsync(stream.fileno())
             temporary.replace(path)
             db.commit()
-    except RECOVERABLE_ERRORS:
+    except _POINTER_ERRORS:
         return
     finally:
         if temporary is not None:
@@ -66,8 +95,12 @@ def active_conversation_for(owner: Any, *, tenant_id: str = "", mod_id: str = ""
     if not path.is_file():
         return ""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except RECOVERABLE_ERRORS:
+        raw = path.read_text(encoding="utf-8").strip()
+        prefix = GroupChatRepository._ENCRYPTED_MESSAGE_PREFIX
+        if raw.startswith(prefix):
+            raw = _pointer_cipher(create=False).decrypt(raw.removeprefix(prefix).encode()).decode()
+        data = json.loads(raw)
+    except _POINTER_ERRORS:
         return ""
     if not isinstance(data, dict):
         return ""

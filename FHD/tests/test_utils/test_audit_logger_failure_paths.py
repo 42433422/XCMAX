@@ -62,7 +62,7 @@ def test_audit_log_failure_path(monkeypatch: pytest.MonkeyPatch, caplog):
     from app.utils.logging.audit_logger import audit_log
 
     def boom(_):
-        raise RuntimeError("disk full")
+        raise OSError("disk full")
 
     with patch.object(audit_logger, "append_audit_event", side_effect=boom):
         with caplog.at_level(logging.INFO, logger="audit"):

@@ -133,7 +133,7 @@ def test_create_warehouse_success(svc: InventoryService) -> None:
 
 def test_create_warehouse_error(svc: InventoryService) -> None:
     s = _session()
-    s.commit.side_effect = RuntimeError("db down")
+    s.commit.side_effect = OSError("db down")
     with _patch_db(s):
         out = svc.create_warehouse({"code": "W3", "name": "X"})
     assert out["success"] is False
@@ -278,7 +278,7 @@ def test_inventory_in_error(svc: InventoryService) -> None:
     product = Product(id=1, name="苹果", unit="箱", model_number="A1")
     warehouse = Warehouse(id=1, code="W1", name="主仓", status="active")
     s = _session([_fluent(first=product), _fluent(first=warehouse), _fluent(first=None)])
-    s.commit.side_effect = RuntimeError("commit fail")
+    s.commit.side_effect = OSError("commit fail")
     with _patch_db(s):
         out = svc.inventory_in(product_id=1, warehouse_id=1, quantity=5)
     assert out["success"] is False

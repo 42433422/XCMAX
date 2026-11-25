@@ -7,8 +7,10 @@ downloads are inspected on disk, and a second origin detects leaked requests.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import importlib
+import io
 import json
 import multiprocessing
 import os
@@ -314,36 +316,71 @@ def test_context_isolation_between_runs(website, browser_executable, tmp_path):
     assert first["verified"] and second["verified"], (first, second)
 
 
-def test_screenshot_masks_embedded_frame_rectangle(website, browser_executable, tmp_path):
+@pytest.mark.parametrize("adapter", ["agent", "computer"])
+def test_screenshot_masks_embedded_frame_rectangle(website, browser_executable, tmp_path, adapter):
     from PIL import Image
 
     origin, _ = website
-    result = run(
-        {
-            "url": origin + "/embedded-private-form",
-            "screenshot": True,
-            "verify": [
-                {
-                    "kind": "value",
-                    "frame": "#private-frame",
-                    "locator": {"label": "API token"},
-                    "expected": "token-secret-123",
-                }
-            ],
-        },
-        tmp_path,
-        origin,
-        browser_executable,
-    )
-    assert result["success"] and result["verified"], result
-    screenshot = next(item for item in result["artifacts"] if item["mime_type"] == "image/png")
-    with Image.open(screenshot["path"]) as image:
+    plan = {
+        "url": origin + "/embedded-private-form",
+        "screenshot": True,
+        "verify": [
+            {
+                "kind": "value",
+                "frame": "#private-frame",
+                "locator": {"label": "API token"},
+                "expected": "token-secret-123",
+            }
+        ],
+    }
+    if adapter == "computer":
+        from app.desktop_automation.computer_browser import PlaywrightComputer
+
+        result = PlaywrightComputer((origin,), executable_path=browser_executable).execute(
+            [{"action": "navigate", "url": plan["url"]}],
+            {"kind": "url", "expected": plan["url"]},
+            lambda: False,
+        )
+        assert result["success"] and result["verified"], result
+        content = base64.b64decode(result["observation"]["data_url"].split(",", 1)[1])
+        source = io.BytesIO(content)
+    else:
+        result = run(plan, tmp_path, origin, browser_executable)
+        assert result["success"] and result["verified"], result
+        screenshot = next(item for item in result["artifacts"] if item["mime_type"] == "image/png")
+        source = screenshot["path"]
+    with Image.open(source) as image:
         pixels = image.convert("RGB")
         # Fixed CSS rectangles are fully covered, including all child-frame content.
         for rectangle in ((40, 20, 360, 44), (40, 60, 360, 200)):
-            crop = pixels.crop(rectangle)
-            assert crop.getcolors(maxcolors=2) == [(crop.width * crop.height, (255, 0, 255))]
-        assert pixels.getpixel((20, 80)) == (255, 255, 255)
+            if adapter == "computer":
+                # JPEG can ring at mask edges; inspect the interior color bounds.
+                left, top, right, bottom = rectangle
+                bounds = pixels.crop((left + 4, top + 4, right - 4, bottom - 4)).getextrema()
+                assert bounds[0][0] > 220 and bounds[1][1] < 40 and bounds[2][0] > 220
+            else:
+                crop = pixels.crop(rectangle)
+                assert crop.getcolors(maxcolors=2) == [(crop.width * crop.height, (255, 0, 255))]
+        assert all(channel >= 250 for channel in pixels.getpixel((20, 80)))
+
+
+def _computer_observation(origin, executable):
+    from app.desktop_automation.computer_browser import PlaywrightComputer
+
+    result = PlaywrightComputer((origin,), executable_path=executable).execute(
+        [{"action": "navigate", "url": origin + "/prefilled"}],
+        {
+            "kind": "visible",
+            "target": {"role": "button", "name": "Continue"},
+            "expected": True,
+        },
+        lambda: False,
+    )
+    assert result["success"] and result["verified"], json.dumps(
+        {key: result.get(key) for key in ("status", "error_code", "message", "steps_completed")},
+        ensure_ascii=False,
+    )
+    return result["observation"]
 
 
 def _browser_resource_worker(control, start, deadline, origin, executable, artifact_dir):
@@ -468,8 +505,18 @@ def test_browser_executes_under_default_tool_worker_resource_limits(
     assert len(state["submissions"]) == 1 and state["submissions"][0]["name"] == "Limited"
 
 
-@pytest.mark.parametrize("path", ["/redirect", "/external", "/observe-post"])
+@pytest.mark.parametrize(
+    "adapter,path",
+    [
+        ("agent", "/redirect"),
+        ("agent", "/external"),
+        ("agent", "/observe-post"),
+        ("computer", "/redirect"),
+        ("computer", "/external"),
+    ],
+)
 def test_network_policy_covers_redirect_resources_and_observation_writes(
+    adapter,
     path,
     website,
     browser_executable,
@@ -493,9 +540,21 @@ def test_network_policy_covers_redirect_resources_and_observation_writes(
     thread.start()
     try:
         state["other"] = f"http://127.0.0.1:{foreign.server_port}"
-        result = run({"url": origin + path, "observe": True}, tmp_path, origin, browser_executable)
+        if adapter == "computer":
+            from app.desktop_automation.computer_browser import PlaywrightComputer
+
+            result = PlaywrightComputer((origin,), executable_path=browser_executable).execute(
+                [{"action": "navigate", "url": origin + path}],
+                {"kind": "url", "expected": origin + path},
+                lambda: False,
+            )
+            assert result["error_code"] in {"computer_redirect_blocked", "computer_origin_denied"}
+        else:
+            result = run(
+                {"url": origin + path, "observe": True}, tmp_path, origin, browser_executable
+            )
+            assert result["error_code"] == "browser_policy_denied"
         assert not result["success"]
-        assert result["error_code"] == "browser_policy_denied"
         assert not foreign_requests and not state["submissions"]
     finally:
         foreign.shutdown()
@@ -597,15 +656,21 @@ def test_strict_locator_never_chooses_first_match(website, browser_executable, t
     assert result["error_code"] == "browser_execution_failed"
 
 
+@pytest.mark.parametrize("adapter", ["agent", "computer"])
 def test_observation_redacts_prefilled_form_and_contenteditable_values(
-    website, browser_executable, tmp_path
+    website, browser_executable, tmp_path, adapter
 ):
     origin, _ = website
-    result = run(
-        {"url": origin + "/prefilled", "observe": True}, tmp_path, origin, browser_executable
-    )
-    assert result["success"] and result["form_values_redacted"], result
-    snapshot = result["snapshot"]
+    if adapter == "computer":
+        observation = _computer_observation(origin, browser_executable)
+        assert observation["form_values_redacted"]
+        snapshot = observation["aria_snapshot"]
+    else:
+        result = run(
+            {"url": origin + "/prefilled", "observe": True}, tmp_path, origin, browser_executable
+        )
+        assert result["success"] and result["form_values_redacted"], result
+        snapshot = result["snapshot"]
     for value in (
         "token-secret-123",
         "textarea-secret-one",

@@ -11,6 +11,7 @@ from app.domain.shared_services.tools_workflow_common import (
     _normalize_business_db_entity,
     prepare_business_db_write_target,
 )
+from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -62,7 +63,7 @@ def _registered_router_business_db(
                     if record is not None
                     else []
                 )
-            return {"success": True, "data": data}
+            return {"success": True, "data": json_safe(data)}
         read_params = dict(params)
         read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
         if entity == "customers":

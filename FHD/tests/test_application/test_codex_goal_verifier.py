@@ -221,8 +221,12 @@ def test_all_original_goals_need_independent_receipts(verifier):
     assert not verifier.classify(None)[1]["ok"]
 
 
-def test_verified_report_binds_all_goals_and_uses_only_scoped_gateway(verifier):
-    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+@pytest.mark.parametrize(
+    "wrapper", ["{}", "```json\n{}\n```", "```\n{}\n```", " \n```JSON\n{}\n```\n "]
+)
+def test_verified_report_binds_all_goals_and_uses_only_scoped_gateway(verifier, wrapper):
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=wrapper.format(raw))]
     report = verifier.verify()
     state, result = verifier.classify(report)
     assert state == "completed" and result["business_completed"]
@@ -398,7 +402,8 @@ def test_refusal_tool_call_and_truncation_cannot_be_retried_into_acceptance(veri
 
 
 @pytest.mark.parametrize("nested", [False, True])
-def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested):
+@pytest.mark.parametrize("wrapper", ["{}", "```json\n{}\n```"])
+def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested, wrapper):
     raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
     raw = raw.replace(
         '"status": "satisfied"' if nested else '"violations": []',
@@ -407,11 +412,33 @@ def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested
         else '"violations": ["must reject"], "violations": []',
         1,
     )
-    verifier.replies = [response({}, text=raw), response({}, text=raw)]
+    verifier.replies = [response({}, text=wrapper.format(raw)) for _ in range(2)]
     report = verifier.verify()
     assert report["accepted"] is False and report["status"] == "unavailable"
     assert len(verifier.requests) == 2
     assert {item["state"] for item in report["attempts"]} == {"invalid_format"}
+
+
+@pytest.mark.parametrize(
+    "wrapper",
+    ["```json\n{}", "说明\n```json\n{}\n```", "```json\n{}\n```\n说明", "```jsonc\n{}\n```"],
+)
+def test_incomplete_or_annotated_code_fences_remain_invalid(verifier, wrapper):
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=wrapper.format(raw)) for _ in range(2)]
+    report = verifier.verify()
+    assert not report["accepted"] and report["status"] == "unavailable"
+    assert len(verifier.requests) == 2
+    assert {item["state"] for item in report["attempts"]} == {"invalid_format"}
+
+
+def test_fenced_review_still_requires_original_host_receipts(verifier):
+    verifier.rows = verifier.rows[:1]
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=f"```json\n{raw}\n```")]
+    report = verifier.verify()
+    assert not report["accepted"] and report["status"] == "needs_work"
+    assert verifier.classify(report)[0] == "blocked"
 
 
 def test_format_retry_requires_an_original_task_reservation(verifier):

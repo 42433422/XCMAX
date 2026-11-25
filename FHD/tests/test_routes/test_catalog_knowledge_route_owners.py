@@ -269,14 +269,12 @@ def test_mounted_overview_keeps_late_callback_identity(
     rag_enabled.assert_not_called()
 
 
-def test_mounted_upload_keeps_late_constructor_limits_and_path_provider(
-    knowledge_app: FastAPI, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_mounted_upload_keeps_late_constructor_and_limits(
+    knowledge_app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    directory = Mock(return_value=tmp_path)
     dispatch = Mock()
     uploader = Mock(ingest=AsyncMock(return_value=JSONResponse({"accepted": True})))
     constructor = Mock(return_value=uploader)
-    monkeypatch.setattr("app.utils.path_io.path_utils.get_upload_dir", directory)
     monkeypatch.setattr(knowledge_v1, "DocumentUpload", constructor)
     monkeypatch.setattr(knowledge_v1, "_run_dataset_rag_agent", dispatch)
     monkeypatch.setattr(knowledge_v1, "_DATASET_UPLOAD_MAX_BYTES", 17)
@@ -290,7 +288,6 @@ def test_mounted_upload_keeps_late_constructor_limits_and_path_provider(
     assert response.status_code == 200 and response.json() == {"accepted": True}
     constructor.assert_called_once_with(
         dispatch=dispatch,
-        directory=directory,
         extensions=frozenset({".txt"}),
         max_bytes=17,
         logger=knowledge_v1.logger,

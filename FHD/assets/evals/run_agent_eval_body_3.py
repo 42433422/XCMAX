@@ -307,12 +307,47 @@ def _check_step_errors(
 
 
 def _result(
-    task: dict[str, Any], checks: list[dict[str, Any]], details: dict[str, Any]
+    task: dict[str, Any],
+    checks: list[dict[str, Any]],
+    details: dict[str, Any],
+    *,
+    route_contract=None,
 ) -> dict[str, Any]:
+    if route_contract is not None:
+        checks.extend(route_contract.fixture_checks)
+        details["route_contract"] = route_contract.fixture_receipts
+    if task.get("coverage_scope") == "authorization_contract_only":
+        counts = details.get("service_calls") or {"dispatch": details.get("dispatch_count")}
+        _check_equal(
+            checks, "denied_request_dispatch_count", list(counts.values()), [0] * len(counts)
+        )
     run = details.get("run") or {}
     reports = [
         (call.get("metadata") or {}).get("verification") or {} for call in run.get("tool_calls", [])
     ]
+    expected = task.get("expected") or {}
+    if "recovery_state" in expected:
+        _check_equal(
+            checks,
+            "run.recovery_state",
+            (run.get("metadata", {}).get("recovery") or {}).get("state"),
+            expected["recovery_state"],
+        )
+    if "publish_call_count" in expected:
+        _check_equal(
+            checks,
+            "publish_call_count",
+            details.get("publish_call_count"),
+            expected["publish_call_count"],
+        )
+    expected_receipt = expected.get("receipt_contract")
+    if isinstance(expected_receipt, dict):
+        calls = run.get("tool_calls", [])
+        _check_equal(checks, "original_receipt.present", bool(calls), True)
+        for index, call in enumerate(calls):
+            output = call.get("output") or {}
+            for key, value in expected_receipt.items():
+                _check_equal(checks, f"original_receipt[{index}].{key}", output.get(key), value)
     expected_response = (task.get("expected") or {}).get("response_contract")
     if isinstance(expected_response, dict):
         response = details.get("response") or {}

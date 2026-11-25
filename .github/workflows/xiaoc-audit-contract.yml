@@ -1,0 +1,37 @@
+name: XiaoC D02 Independent Audit Contract
+on:
+  push:
+    branches: [codex/xiaoc-independent-evaluation-20261124]
+  pull_request:
+    branches: [codex/integrate-open-prs-20261121-36690872, main]
+    paths:
+      - "FHD/config/audit_benchmark_ssot.json"
+      - "FHD/docs/AUDIT_BENCHMARK_SSOT.md"
+      - "FHD/scripts/dev/audit_benchmark_ssot.py"
+      - "FHD/scripts/dev/xiaoc_independent_eval.py"
+      - "FHD/tests/test_scripts/test_xiaoc_independent_eval.py"
+      - ".github/workflows/xiaoc-audit-contract.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xiaoc-d04-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  independent-fixture-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install independent fixture-only test dependencies
+        run: python -m pip install pytest==9.0.2 pytest-asyncio==1.4.0
+      - name: Verify 18-domain 108-anchor catalog and generated view
+        run: python scripts/dev/audit_benchmark_ssot.py check
+      - name: Exercise non-self-certifying verdict and trend guards
+        run: python -m pytest --confcutdir=tests/test_scripts -q tests/test_scripts/test_xiaoc_independent_eval.py

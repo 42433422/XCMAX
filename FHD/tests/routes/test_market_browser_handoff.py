@@ -1,5 +1,6 @@
 """The local broker must never borrow another session's market identity."""
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -312,13 +313,13 @@ def test_market_session_errors_do_not_log_credentials(caplog):
     session_id = "test-session-value"
     token = "test-market-credential"
     repository = MagicMock()
-    repository.save.side_effect = RuntimeError(token)
-    repository.read.side_effect = RuntimeError(token)
-    repository.clear.side_effect = RuntimeError(token)
+    repository.save.side_effect = sqlite3.OperationalError(token)
+    repository.read.side_effect = sqlite3.OperationalError(token)
+    repository.clear.side_effect = sqlite3.OperationalError(token)
     store = SessionTokens({}, {}, repository, logging.getLogger(__name__))
     store.save(session_id, token)
     store.clear(session_id)
     assert store.read(session_id, "access") == ""
-    assert "RuntimeError" in caplog.text
+    assert "OperationalError" in caplog.text
     assert session_id not in caplog.text
     assert token not in caplog.text

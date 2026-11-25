@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 REPO = Path(__file__).resolve().parents[1]
 MOD_DIR = REPO / "mods" / "bridge" / "xcagi-planner-bridge"
 
@@ -37,10 +39,10 @@ def test_mod_sdk_planner_compat_exports():
     assert callable(chat) and callable(chat_batch) and callable(chat_stream)
 
 
-def test_list_planner_tools_registry():
+def test_list_planner_tools_registry(trusted_actor):
     from app.mod_sdk.planner_compat import list_planner_tools_registry
 
-    data = list_planner_tools_registry()
+    data = list_planner_tools_registry(trusted_actor(permissions=["customer.view"]).request)
     assert data.get("success") is True
     assert isinstance(data.get("tool_names"), list)
     assert len(data["tool_names"]) >= 1

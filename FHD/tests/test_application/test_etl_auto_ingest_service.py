@@ -650,3 +650,90 @@ def test_raw_auto_ingest_cannot_supply_upload_owner_or_prepared_plan(
             user=SimpleNamespace(id=7),
         )
     assert error.value.code == "ELT_AUTO_INGEST_PATH_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("role", "tier", "tenant_id"),
+    [("user", "enterprise", 42), ("admin", "enterprise", 42), ("admin", "admin", 42)],
+)
+def test_batch_list_cannot_drop_owner_filter(ledger_root, monkeypatch, role, tier, tenant_id):
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from app.fastapi_routes.elt_auto_ingest import list_auto_ingest_batches
+
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "mod")
+    monkeypatch.setattr(ais, "get_auto_ingest_service", AutoIngestService)
+    ais._save_ledger(
+        42,
+        {
+            "batches": {
+                str(owner): {
+                    "batch_id": str(owner),
+                    "tenant_id": 42,
+                    "owner_user_id": owner,
+                    "mod_id": "mod",
+                    "status": "applied",
+                }
+                for owner in (7, 8)
+            }
+        },
+    )
+    user = SimpleNamespace(id=7, role=role, tier=tier, tenant_id=tenant_id)
+    with tenant_scope(42):
+        own = list_auto_ingest_batches(limit=50, mine=True, user=user)
+        assert [row["owner_user_id"] for row in own["data"]] == [7]
+        with pytest.raises(HTTPException) as denied:
+            list_auto_ingest_batches(limit=50, mine=False, user=user)
+    assert denied.value.status_code == 403
+
+
+def test_platform_admin_batch_list_keeps_tenant_and_mod_scope(ledger_root, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.fastapi_routes.elt_auto_ingest import list_auto_ingest_batches
+
+    monkeypatch.setattr(ais, "get_request_active_mod_id", lambda: "mod")
+    monkeypatch.setattr(ais, "get_auto_ingest_service", AutoIngestService)
+    for tenant in (42, 43):
+        ais._save_ledger(
+            tenant,
+            {
+                "batches": {
+                    str(owner): {
+                        "batch_id": str(owner),
+                        "tenant_id": tenant,
+                        "owner_user_id": owner,
+                        "mod_id": "mod" if owner != 9 else "other",
+                        "status": "applied",
+                    }
+                    for owner in (7, 8, 9)
+                }
+            },
+        )
+    with tenant_scope(42):
+        result = list_auto_ingest_batches(
+            limit=50,
+            mine=False,
+            user=SimpleNamespace(id=1, role="admin", tier="admin", tenant_id=None),
+        )
+    assert {row["owner_user_id"] for row in result["data"]} == {7, 8}
+    assert {row["tenant_id"] for row in result["data"]} == {42}
+
+
+@pytest.mark.parametrize("damaged", ['{"batches":', "[]", '{"batches": []}'])
+def test_damaged_ledger_cannot_be_replaced_by_new_batch(ledger_root, monkeypatch, damaged):
+    from app.application.elt.errors import EltError
+
+    monkeypatch.setattr(ais, "_resolve_auto_ingest_source", lambda path, **_: Path(path))
+    path = ais._ledger_path(42)
+    path.write_text(damaged, encoding="utf-8")
+    with pytest.raises(EltError) as rejected:
+        AutoIngestService().queue_for_approval(
+            tenant_id=42,
+            owner_user_id=7,
+            source_path="input.csv",
+        )
+    assert rejected.value.code == "ELT_AUTO_INGEST_LEDGER_INVALID"
+    assert path.read_text(encoding="utf-8") == damaged

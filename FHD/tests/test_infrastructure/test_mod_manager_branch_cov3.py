@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1645,7 +1646,7 @@ class TestListAllModsBranches:
             ge.return_value = er
             with patch(
                 "app.enterprise.mod_entitlements.filter_mod_rows_for_enterprise",
-                side_effect=RuntimeError("boom"),
+                side_effect=sqlite3.OperationalError("boom"),
             ):
                 result = mm.list_all_mods()
                 assert result == []  # 权益未知不能返回未过滤列表
@@ -1663,7 +1664,7 @@ class TestGetRoutesBranches:
             patch.object(mm, "scan_mods", return_value=[meta]),
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=RuntimeError("boom"),
+                side_effect=sqlite3.OperationalError("boom"),
             ),
         ):
             result = mm.get_routes()
@@ -1790,7 +1791,7 @@ class TestLoadAllModsBranches:
             patch.object(mm, "scan_mods", return_value=[meta]),
             patch(
                 "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
-                side_effect=RuntimeError("boom"),
+                side_effect=sqlite3.OperationalError("boom"),
             ),
             patch.object(mm, "load_mod", return_value=True),
         ):

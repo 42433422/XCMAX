@@ -197,23 +197,17 @@ def monitored(name: str | None = None, slow_threshold_ms: float = 1000.0):
 
             start_time = time.perf_counter()
 
-            try:
-                with monitor.track(metric_name):
-                    result = func(*args, **kwargs)
+            with monitor.track(metric_name):
+                result = func(*args, **kwargs)
 
-                duration_ms = (time.perf_counter() - start_time) * 1000
+            duration_ms = (time.perf_counter() - start_time) * 1000
 
-                if duration_ms > slow_threshold_ms:
-                    logger.warning(
-                        f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"
-                    )
+            if duration_ms > slow_threshold_ms:
+                logger.warning(
+                    f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"
+                )
 
-                return result
-
-            except RECOVERABLE_ERRORS as e:
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                monitor.record_metric(metric_name, duration_ms, success=False, error=str(e)[:200])
-                raise
+            return result
 
         return wrapper
 

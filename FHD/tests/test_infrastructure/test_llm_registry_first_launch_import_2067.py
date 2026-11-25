@@ -14,6 +14,7 @@ import subprocess
 import sys
 import textwrap
 import types
+from importlib._bootstrap import _DeadlockError
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 
@@ -140,7 +141,9 @@ def test_import_lock_error_falls_back_instead_of_type_error(monkeypatch):
     sentinel = object()
 
     def _boom():
-        raise RuntimeError("deadlock detected by _ModuleLock('app.fastapi_routes.market_account')")
+        raise _DeadlockError(
+            "deadlock detected by _ModuleLock('app.fastapi_routes.market_account')"
+        )
 
     monkeypatch.setattr(
         "app.domain.shared_services.conversation.manager.get_ai_conversation_service_if_ready",

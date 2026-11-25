@@ -7,8 +7,9 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as agent_output
+from app.application.agent_orchestrator.trace_payloads import agent_node_output as agent_output
+
+__all__ = ["agent_output", "run_memory_v2_agent", "user_id_from_request"]
 
 
 def user_id_from_request(request: Request, params: dict[str, Any]) -> str:
@@ -43,79 +44,15 @@ def run_memory_v2_agent(
     route_path: str,
     failure_status: int,
 ) -> JSONResponse:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.tool_spec import validate_tool_call
-    from app.application.memory_v2_facade import get_memory_v2_action_meta
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
-    data = dict(params or {})
+    data = dict(params)
     user_id_from_request(request, data)
-    from app.infrastructure.auth.dependencies import get_logged_in_user
-
-    data["user_id"] = str(get_logged_in_user(request).id)
-    action_meta = get_memory_v2_action_meta(action)
-    if action_meta is None:
-        return JSONResponse(
-            {"success": False, "message": f"未注册的 Memory v2 动作: {action}"},
-            status_code=400,
-        )
-    validation = validate_tool_call("memory_v2", action, data)
-    if not validation.ok:
-        return JSONResponse(
-            {"success": False, "error_code": validation.error_code, "message": validation.message},
-            status_code=400,
-        )
-    node_id = f"memory_v2_{action}"
-    risk = normalize_workflow_risk(str(action_meta.get("risk") or "medium"))
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 memory_v2.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="memory_v2",
-                action=action,
-                params=data,
-                risk=risk,
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute memory_v2.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=risk,
-        metadata={"source": "memory_v2_route", "route": route_path},
+    for key in ("user_id", "userId"):
+        data.pop(key, None)
+    payload, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "memory_v2", "action": action, "params": data},
+        route_path=route_path,
     )
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
-    from app.infrastructure.auth.agent_principal import require_agent_principal
-
-    principal = require_agent_principal(request)
-    runtime_context = {
-        **authenticated_runtime_context({}, principal),
-        "source": "memory_v2_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "route_confirmed": True,
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=principal.user_id,
-        message=str(data.get("message") or f"Memory v2 {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=principal.user_id,
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    payload = agent_output(run, node_id)
-    status_code = 200 if payload.get("success") else failure_status
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
-        status_code = 202
-    return JSONResponse(payload, status_code=status_code)
+    return JSONResponse(payload, status_code=status)

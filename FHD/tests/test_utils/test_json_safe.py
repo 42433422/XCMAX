@@ -26,7 +26,7 @@ def test_json_safe_scalar_temporal_and_path_values(tmp_path: Path) -> None:
 def test_json_safe_bytes_success_and_recoverable_failure() -> None:
     class BadBytes(bytes):
         def decode(self, *_args: Any, **_kwargs: Any) -> str:
-            raise RuntimeError("decode failed")
+            raise UnicodeDecodeError("utf-8", self, 0, 1, "decode failed")
 
     assert json_safe("中文".encode()) == "中文"
     assert json_safe(BadBytes(b"broken")) == ""

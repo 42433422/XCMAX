@@ -378,7 +378,7 @@ class TestEmbedLocal:
     def test_local_encode_recoverable_error_returns_empty(self, monkeypatch: pytest.MonkeyPatch):
         """encode 抛 RECOVERABLE_ERRORS 时返回空列表。"""
         fake_model = MagicMock()
-        fake_model.encode.side_effect = RuntimeError("cuda OOM")
+        fake_model.encode.side_effect = ValueError("invalid model input")
         fake_module = types.ModuleType("sentence_transformers")
         fake_module.SentenceTransformer = MagicMock(return_value=fake_model)
         monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)

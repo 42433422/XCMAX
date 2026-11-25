@@ -345,9 +345,9 @@ export const butler = {
   }) => req('/api/agent/butler/corp-chat', { method: 'POST', body: JSON.stringify(payload) }),
   agentCorpIntakeFill: (payload: { message: string; current_draft?: Record<string, unknown>; page_summary?: string }) =>
     req('/api/agent/butler/corp-intake-fill', { method: 'POST', body: JSON.stringify(payload) }),
-  agentButlerChat: (payload: { messages: unknown[]; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
+  agentButlerChat: (payload: { messages: unknown[]; request_id: string; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
     req('/api/agent/butler/chat', { method: 'POST', body: JSON.stringify(payload), signal }),
-  agentButlerChatStream: (payload: { messages: unknown[]; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
+  agentButlerChatStream: (payload: { messages: unknown[]; request_id: string; conversation_id?: number | null; page_context?: string }, signal?: AbortSignal) =>
     requestStreamResponse('/api/agent/butler/chat/stream', {
       method: 'POST',
       signal,

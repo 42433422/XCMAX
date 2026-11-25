@@ -31,7 +31,7 @@ def _parse_time(value: Any) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
+        return None
     return parsed.astimezone(UTC)
 
 
@@ -115,6 +115,8 @@ def evaluate(
             continue
         try:
             report = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(report, dict) or not isinstance(report.get("findings"), list):
+                raise ValueError("normalized scanner report requires an explicit findings list")
         except (OSError, ValueError, TypeError):
             blockers.append(f"{scanner}:report_invalid")
             scanner_results[scanner] = {"available": False, "fresh": False, "blocking": 0}
@@ -132,11 +134,23 @@ def evaluate(
             blockers.append(f"{scanner}:release_sha_mismatch")
         if release_sha and str(report.get("source_sha") or "").lower() != release_sha.lower():
             blockers.append(f"{scanner}:source_sha_mismatch")
-        findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+        findings = report["findings"]
         blocking_ids: list[str] = []
         secret_ids: list[str] = []
-        for finding in findings:
-            if not isinstance(finding, dict):
+        for index, finding in enumerate(findings):
+            if (
+                not isinstance(finding, dict)
+                or not isinstance(finding.get("id"), str)
+                or not finding["id"].strip()
+                or str(finding.get("severity") or "").lower()
+                not in {"critical", "high", "medium", "low", "unknown"}
+                or str(finding.get("status", "open")).lower() not in {"open", "active", "closed"}
+                or any(
+                    key in finding and type(finding[key]) is not bool
+                    for key in ("secret", "applicable")
+                )
+            ):
+                blockers.append(f"{scanner}:finding_invalid:{index}")
                 continue
             if str(finding.get("status") or "open").lower() not in {"open", "active"}:
                 continue

@@ -305,7 +305,11 @@ def test_preview_uses_authorized_tenant_rows_not_caller_counts(monkeypatch):
     product_scope = scope_snapshot(ctx)[3]
     monkeypatch.setattr(
         "app.application.agent_orchestrator.tool_permission.actor_tool_denial",
-        lambda tool, *_: {} if tool == "customers" else None,
+        lambda tool, action, _ctx, params: (
+            {"reason": "permission_denied"}
+            if (tool, action, params) == ("business_db", "read", {"entity": "customers"})
+            else None
+        ),
     )
     assert scope_snapshot(ctx) == (None, 1, None, product_scope)
     monkeypatch.setattr(

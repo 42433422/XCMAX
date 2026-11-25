@@ -62,43 +62,8 @@ jobs:
           RELEASE_PROTECTION_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
         run: |
           set -euo pipefail
-          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
-          main_sha="$(gh api "repos/${GH_REPO}/commits/main" --jq .sha)"
-          test "$main_sha" = "$RELEASE_SHA" || {
-            echo "::error::release_sha is not the current origin/main SHA."
-            exit 1
-          }
-          protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?RELEASE_PROTECTION_TOKEN secret missing (needs a PAT with admin read on branch protection)}" gh api "repos/${GH_REPO}/branches/main/protection/required_status_checks")"
-          mapfile -t required < <(
-            jq -r '(.contexts[]?), (.checks[]?.context)' <<<"$protection" | sort -u
-          )
-          [ "${#required[@]}" -gt 0 ] || {
-            echo "::error::main has no readable required status checks; refusing release."
-            exit 1
-          }
-          checks="$(gh api --paginate --slurp \
-            "repos/${GH_REPO}/commits/${RELEASE_SHA}/check-runs?per_page=100")"
-          statuses="$(gh api --paginate --slurp \
-            "repos/${GH_REPO}/commits/${RELEASE_SHA}/statuses?per_page=100")"
-          failed=()
-          for context in "${required[@]}"; do
-            check="$(jq -r --arg context "$context" '
-              [.[].check_runs[] | select(.name == $context)]
-              | sort_by(.completed_at // .started_at // "") | last
-              | .conclusion // empty
-            ' <<<"$checks")"
-            status="$(jq -r --arg context "$context" '
-              [.[][] | select(.context == $context)]
-              | sort_by(.created_at // "") | last | .state // empty
-            ' <<<"$statuses")"
-            if [ "$check" != success ] && [ "$status" != success ]; then
-              failed+=("${context}:${check:-${status:-missing}}")
-            fi
-          done
-          if [ "${#failed[@]}" -gt 0 ]; then
-            printf '::error::Required checks are not successful: %s\n' "${failed[*]}"
-            exit 1
-          fi
+          python FHD/scripts/ci/measure_required_checks.py \
+            --repository "$GH_REPO" --release-sha "$RELEASE_SHA"
       - uses: actions/download-artifact@v8
         with:
           name: xcagi-security-release-reports
@@ -112,10 +77,15 @@ jobs:
           run-id: ${{ inputs.previous_security_scan_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Refuse stale, mismatched, incomplete, or nonzero evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python FHD/scripts/security/verify_security_scan_pair.py
           --previous-dir security-reports/previous
           --current-dir security-reports/current
+          --repository "${{ github.repository }}"
+          --current-run-id "${{ inputs.security_scan_run_id }}"
+          --previous-run-id "${{ inputs.previous_security_scan_run_id }}"
           --release-sha "${XCAGI_RELEASE_SHA}"
 
   verify-version-anchors:

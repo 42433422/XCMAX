@@ -543,13 +543,13 @@ class TestWarmup:
         # Cache should have some entries (worker ran)
         assert len(tts._TTS_CACHE) > 0
 
-    def test_warmup_exception_is_swallowed(self, monkeypatch) -> None:
-        """The warmup worker must continue past per-phrase errors."""
+    def test_warmup_upstream_io_error_is_swallowed(self, monkeypatch) -> None:
+        """The warmup worker must continue past per-phrase transport failures."""
         counter = {"n": 0}
 
         def _explode(**kw) -> dict:
             counter["n"] += 1
-            raise RuntimeError("synth fail")
+            raise OSError("synth transport unavailable")
 
         monkeypatch.setattr(tts, "synthesize_to_data_uri", _explode)
         tts._WARMUP_STARTED = False

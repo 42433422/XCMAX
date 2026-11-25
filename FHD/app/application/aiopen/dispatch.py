@@ -12,20 +12,6 @@ from .protocols import CursorHub, ToolCall
 from .runtime import RuntimeState
 
 
-def call_chat(app: ASGIApp, args: dict[str, Any], api_call: ToolCall) -> dict[str, Any]:
-    message = str(args.get("message") or "").strip()
-    if not message:
-        return {"success": False, "message": "message 不能为空"}
-    return api_call(
-        app,
-        {
-            "path": "/api/ai/unified_chat",
-            "method": "POST",
-            "body": {"message": message, "source": "aiopen"},
-        },
-    )
-
-
 class ToolDispatcher:
     def __init__(
         self,

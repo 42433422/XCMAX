@@ -47,7 +47,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         with (
             patch(
                 "app.utils.path_io.path_utils.get_resource_path",
-                side_effect=RuntimeError("no resource"),
+                side_effect=FileNotFoundError("no resource"),
             ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),

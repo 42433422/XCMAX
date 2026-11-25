@@ -21,7 +21,6 @@ _CN_DATE = re.compile(
 _ISO_LIKE = re.compile(
     r"(?P<year>\d{4})\s*[-/.年]\s*(?P<month>\d{1,2})\s*[-/.月]\s*(?P<day>\d{1,2})"
 )
-_YEAR_TOKEN = re.compile(r"(\d{2,4})\s*年")
 _NUMBER_NOISE = re.compile(r"[,\s¥￥$元人民币]")
 _DATE_HINT = re.compile(r"[-/.年月日号]")
 _DATE_NAME = re.compile(r"日期|时间|date|time|账期", re.IGNORECASE)
@@ -40,16 +39,13 @@ def _resolve_year(raw: str | None, default_year: int | None) -> int | None:
 
 
 def _year_from_text(text: str, *, month: int, match_start: int) -> int | None:
-    """区间文本（12月27-26年1月23）只在末尾写年份，起始月要回退一年。"""
-    tokens = [
-        (token.start(), year)
-        for token in _YEAR_TOKEN.finditer(text)
-        if (year := _resolve_year(token.group(1), None)) is not None
-    ]
-    if not tokens:
+    """区间只在末尾写年份时，仅起始月晚于结束月才回退一年。"""
+    later = [match for match in _CN_DATE.finditer(text) if match.group("year")]
+    if not later:
         return None
-    year = tokens[0][1]
-    if month >= 7 and match_start < tokens[0][0]:
+    dated = later[0]
+    year = _resolve_year(dated.group("year"), None)
+    if year is not None and match_start < dated.start() and month > int(dated.group("month")):
         year -= 1
     return year
 
@@ -74,6 +70,16 @@ def first_date(
     if not text:
         return None
     match = _CN_DATE.search(text)
+    iso_match = _ISO_LIKE.search(text)
+    if iso_match and (match is None or iso_match.start() < match.start()):
+        try:
+            return datetime(
+                int(iso_match.group("year")),
+                int(iso_match.group("month")),
+                int(iso_match.group("day")),
+            )
+        except ValueError:
+            return None
     if match:
         month = int(match.group("month"))
         day = int(match.group("day") or 1)
@@ -84,14 +90,6 @@ def first_date(
             year = default_year or datetime.now().year
         try:
             return datetime(year, month, day)
-        except ValueError:
-            return None
-    match = _ISO_LIKE.search(text)
-    if match:
-        try:
-            return datetime(
-                int(match.group("year")), int(match.group("month")), int(match.group("day"))
-            )
         except ValueError:
             return None
     if allow_serial and re.fullmatch(r"\d+(?:\.\d+)?", text):

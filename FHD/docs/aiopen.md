@@ -4,7 +4,7 @@
 > AI Agent（Cursor、Claude、OpenClaw、自研程序…）通过 **MCP** 或 **REST API**
 > 调用 XCAGI 的业务能力，并以 **虚拟光标** 真实操作 XCAGI 前端页面。
 >
-> 稳定产品版本：`1.0.0.0`。
+> 产品版本与发布身份以 [VERSION.md](../VERSION.md) 和实际部署回执为准。
 
 ## 端点总览
 
@@ -12,23 +12,23 @@
 |---|---|---|
 | `GET /api/aiopen/guide` | **接入说明**（供其他 AI 阅读后自行配置 MCP；`?format=markdown` 纯文本） | 公开 |
 | `GET /api/aiopen/install` | **MCP 安装包**（Cursor deep link / stdio / mcp-remote） | 公开 |
-| `GET /api/aiopen/manifest` | 工具目录（名称 / 描述 / inputSchema） | 公开 |
+| `GET /api/aiopen/manifest` | 协议工具说明（业务能力须按账号另行发现） | 公开 |
 | `POST /api/aiopen/mcp` | MCP Streamable HTTP（JSON-RPC 2.0） | `X-AIOPEN-Key` |
 | `POST /api/aiopen/invoke` | REST 通用工具调用 `{tool, args}` | `X-AIOPEN-Key` |
 | `GET /api/aiopen/catalog/operations` | **系统地图**：运行时能力目录（关键字/风险/工具集过滤、分页） | `X-AIOPEN-Key` |
 | `GET /api/aiopen/catalog/operations/{operation_id}` | 单个 operation 的语义卡片 | `X-AIOPEN-Key` |
 | `GET /api/aiopen/catalog/schema/{entity}` | 实体字段字典（来自 OpenAPI） | `X-AIOPEN-Key` |
 | `GET /api/aiopen/coverage` | 开放面覆盖度（规模、风险分布、语义覆盖率） | `X-AIOPEN-Key` |
-| `GET /api/aiopen/panel` 等 | 控制台（白名单 / Key / 会话 / 开关） | LAN 门禁内 |
-| `WS /api/aiopen/ws` | 前端 screen 端（虚拟光标）连接 | LAN 门禁内 |
+| `GET /api/aiopen/panel` 等 | 控制台（Key / 会话 / 开关） | LAN 门禁及管理身份 |
+| `WS /api/aiopen/ws` | 前端 screen 端（虚拟光标）连接 | 有效会话、来源及屏幕归属 |
 
-旧 `/api/ai/qclaw/*` 路由全部保留，与 AIOPEN 共享运行时状态。
+旧 `/api/ai/qclaw/*` 路由、`api_call` 工具和 OpenClaw 独立聊天代理入口已删除；客户端须使用本页统一契约。
 
 ## API Key
 
-- 环境变量：`AIOPEN_API_KEY=<密钥>`（生产必配）
-- 或在前端 **AI生态应用 → AIOPEN 开放智控** 面板「生成 Key」（运行时 Key，重启失效）
-- 未配置任何 Key 时为开发直通模式（仅靠 LAN 门禁兜底）
+- 在有效登录会话中，由管理员在 **AI生态应用 → AIOPEN 开放智控** 面板生成业务 Key；绑定真实账号、租户与当前会话授权，凭据记录沿用现有持久仓储。
+- 环境变量 `AIOPEN_API_KEY` 和历史未绑定身份的 Key 只认证传输，不授予业务或屏幕权限。业务调用须重新签发身份绑定的 Key。
+- 未配置 Key 时拒绝匿名调用。账号停用、会话过期/注销、权限变化和 Key 撤销都会在执行前重新检查。
 
 请求头：`X-AIOPEN-Key: <你的 Key>`。
 
@@ -98,20 +98,19 @@ curl http://localhost:5000/api/aiopen/manifest
 curl -X POST http://localhost:5000/api/aiopen/invoke \
   -H 'Content-Type: application/json' \
   -H 'X-AIOPEN-Key: <你的 API Key>' \
-  -d '{"tool": "chat", "args": {"message": "你好"}}'
+  -d '{"tool": "chat", "args": {"message": "查询我有权查看的任务", "request_id": "client-turn-001"}}'
 ```
 
 ## 工具清单
 
 | 工具 | 说明 |
 |---|---|
-| `api_catalog` | 列出白名单内可调用的业务 API 路由（精确 + 前缀子路径） |
+| `api_catalog` | 列出当前账号真正可用的能力与员工 |
 | `knowledge_search` | 在系统地图中按关键字检索 operation（含风险、scope、使用时机） |
 | `operation_describe` | 读取单个 operation 的完整语义卡片 |
-| `operation_call` | 按 operation_id 执行接口；危险操作拒绝执行，写操作需服务端开启 |
-| `api_call` | 调用白名单业务 API（GET/POST/PUT/PATCH/DELETE） |
-| `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
-| `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
+| `operation_call` | 按权威能力 ID 和 params 进入共享权限、审批、幂等与核验链 |
+| `chat` | 用稳定请求 ID 登记自然语言任务，由固定 Codex 运行时执行并沿原任务链核验 |
+| `capability_loop` | 发现并抽样执行当前账号可用的明确只读能力，核对原执行回执；不证明写入或 UI 完整就绪 |
 | `ui_sessions` | 列出在线虚拟光标 screen 会话 |
 | `ui_snapshot` | 可访问性树快照：每个节点分配稳定 `ref`，附角色 / 可访问名称 / 状态 / 位置；`selector` 仅作兼容回退 |
 | `ui_navigate` | 前端路由跳转（router.push） |
@@ -124,52 +123,39 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | `ui_screenshot` | DOM 重绘截图（html-to-image，MIT），返回 data_url 与尺寸；不含跨域 iframe/视频 |
 | `ui_scroll` | 滚动页面或将元素滚动到可见区域 |
 
-面板还可：`POST /api/aiopen/whitelist/seed` 一键开启侧栏全业务白名单；
-`POST /api/aiopen/loop/verify` 跑与 `capability_loop` 相同的闭环自检。
+`POST /api/aiopen/loop/verify` 运行与 `capability_loop` 相同的只读自检。历史白名单配置不会授予能力权限，也不会创建独立执行入口。
 
 ## 系统地图（知）
 
-能力目录在运行时从应用 OpenAPI 生成，不手工维护；内部管理端、运行时通道与
-AIOPEN 自身路由不进入目录。每条 operation 带 `risk`（read/write/danger）与
-`scope`（如 `read:products`），语义说明来自 `app/application/aiopen/overlay/operations.yaml`。
+可执行目录在运行时投影权威 `ToolActionSpecV2`，按当前账号有效授权筛选。
+每条能力带原始工具、动作、参数 schema、风险、幂等/只读属性与
+`scope=capability.<tool_id>.<action>`。OpenAPI 只补 HTTP 资源和字段说明；
+`app/application/aiopen/overlay/operations.yaml` 只补语义，不授予执行权限。
+这里的系统能力地图不是企业业务数据地图。
 
 MCP 只读资源：
 
 | URI | 内容 |
 |---|---|
-| `xcmax://catalog/operations` | 全部可开放 operation |
+| `xcmax://catalog/operations` | 当前账号可见的能力及非执行资源说明 |
 | `xcmax://catalog/operation/{operation_id}` | 单个 operation 语义卡片 |
 | `xcmax://catalog/schema/{entity}` | 实体字段字典（OpenAPI components.schemas） |
 
-推荐顺序：`knowledge_search` → `operation_describe` → `api_call`。
+推荐顺序：`knowledge_search` → `operation_describe` → `operation_call`。
 
-### 执行闸门（P1）
+### 统一能力执行契约
 
-`operation_call` 按目录中的风险等级执行，不靠 AI 自觉：
+ToolSpec 是工具、动作、Schema、权限与风险的唯一事实源。AIOPEN、Workflow 与小C读取同一目录；OpenAPI 路径只是 `http_resource` 元数据，不能据路径猜测能力或直接执行写入。
 
-| 风险 | 行为 |
-|---|---|
-| `read` | 直接执行，Key 需具备 `read:<domain>` 或以 `*` 全量授权 |
-| `write` | 默认返回 `WRITE_DISABLED`；服务端设置 `AIOPEN_ENABLE_WRITES=1` 后才执行 |
-| `danger` | 发起审批（复用审批中心）；通过后携带 `approval_id` 重试，审批单只能执行一次 |
+`api_catalog` / `knowledge_search` 按当前有效账号、租户、Mod、员工授权和 API Key scope 返回可用能力。执行用 `operation_call`：`operation_id=capability.<tool_id>.<action>`、`params`、稳定 `request_id`。REST 客户端使用 `POST /api/tools/execute` 的同一契约；原 `api_call` 工具与任意路径 HTTP 执行器已删除。
 
-审批流程：服务端设置 `AIOPEN_APPROVAL_FLOW_KEY`（默认 `aiopen_danger_operation`），
-并先在审批中心创建同名 `flow_key` 且配置启用节点；未配置时危险操作一律拒绝。
-幂等创建用 `python scripts/dev/ensure_aiopen_approval_flow.py --approver-id <用户ID>`
-（缺省自动取 admin/superadmin；找不到审批人时退出码 2，不会创建无人可批的空流程）。
-审批单记录 operation、参数指纹与申请人，执行时校验三者一致并写入消费时间防重放。
+业务 Key 在已登录会话签发时绑定原身份，权限降级、注销、过期或撤销后不能继续执行。旧无身份 Key 和环境 Key 只认证传输，不授予企业业务权限；在有效登录下重新签发。查询目录不是授权，执行仍复核权限。Key scope 使用 `capability.<tool_id>.<action>`，限制同时进入审批摘要和持久任务。
 
-生产前置顺序：先确保审批流程与启用节点存在，再设置 `AIOPEN_ENABLE_WRITES=1` 放行写操作；
-两者都完成前，写操作返回 `WRITE_DISABLED`，危险操作返回 `APPROVAL_FLOW_NOT_CONFIGURED`。
+原 AIOPEN 独立写开关、自动批准危险动作、审批消费实现和初始化脚本已删除。审批、幂等、队列与核验复用 AgentTask → AgentRun → AgentStep；同号改参数/授权范围冲突，审批通过只续原任务。REST/MCP 保留业务 run_id、task_id、approval_request_id，追踪不能覆盖它们。`chat` 同样要求 request_id，原子登记后由既有队列执行。
 
-`params` 传路径与查询参数（键名见 operation 卡片），`body` 传 JSON 请求体。
-`api_call` 命中目录条目时套用同一套读写/危险闸门，未命中目录的自定义路径保持原白名单行为。
+语义 overlay 仅补使用说明，不改变能力权限、Schema、风险或是否可执行。未取得独立业务证据的写入保持待核验；unknown 不自动重新提交。
 
-语义草稿由 `scripts/dev/aiopen_overlay_draft.py` 批量生成到 `overlay/drafts/`（运行时不加载），
-人工审核后移入 `overlay/generated/*.yaml|*.jsonl` 生效；大规模语义用 jsonl（每行一条）存储。
-
-默认白名单覆盖对话 / IM / 群聊 / 知识库 / 员工台 / 产品组织订单 / 出货打印 / Mod 等前缀；
-`api_call` 对已启用前缀的子路径自动放行（例如启用 `/api/products` 即可调 `/api/products/list`）。
+OpenClaw 聊天使用 `openclaw.chat` 能力，经原任务审批后只调用批准的当前网关；网络响应不能代替最终业务证据。客来来能力同样绑定当前账号连接及授权范围，重新配对或撤销后原审批失效。对原运行的核验使用 `GET /api/agent/runs/{run_id}/verification` 与 `POST /api/agent/runs/{run_id}/verify`，只读核对原业务结果，不重新发送副作用。
 
 ## 虚拟光标（AI 模拟操作）
 
@@ -344,15 +330,13 @@ export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
 真实浏览器门禁设置 `XCMAX_BROWSER_REQUIRE_REAL=1`，本地依赖缺失或 sandbox 启动失败时的 skip 不算通过。线上启用需另外核对安装版本、租户站点、真实模型任务、实际业务回执与生产 SHA；可先移除对应租户的站点配置以停止新外站任务，未知旧任务仍须回读核对。
 
 `test_codex_cli_receipts.py` 用实际子进程验证非零退出、stdout/输出文件部分内容、硬截止和流结束；失败只记录一次，不进入开发循环的验证、修复或发布。与既有 Codex/Claude/Cursor 和权限用例合计 916 项本地通过；这证明 Python CLI 适配的失败传播，不代表已连接真实模型或完成 Codex 原生 JSONL 工具事件的验收。
-
 ## 安全模型
 
-- 对外三端点（manifest/invoke/mcp）越过 LAN 门禁与订阅门禁，**安全完全由
-  `X-AIOPEN-Key` 承担**——生产必须配置 `AIOPEN_API_KEY`
-- `api_call` 仅放行白名单路由（面板可视化管理）
+- 公开 manifest 只描述协议；invoke/mcp 需要有效 Key，企业业务执行还要有仍有效的账号绑定、当前权限及契约 scope。
+- 任意 URL、请求体身份或白名单不能替代能力授权；不同传输最终进入同一执行链。
 - `ui_*` 受双重开关约束：服务端「远程操控总开关」+ 浏览器端「本页待命」开关
   （默认开启、静默待命；用户明确关闭后以 localStorage 持久化为准）
-- 面板与 keys 管理端点仍在 LAN 门禁内
+- 面板与 keys 管理端点同时核对管理身份；签发业务 Key 必须有真实会话。
 
 ## 技术方案
 
@@ -361,8 +345,8 @@ export XCAGI_AIOPEN_INTERNAL_URL='http://127.0.0.1:5000'
 
 ## 相关代码
 
-- 后端：`app/application/aiopen/service.py` · `app/fastapi_routes/ai_open.py` ·
-  `app/infrastructure/aiopen/cursor_hub.py` · 兼容层 `app/fastapi_routes/ai_qclaw.py`
+- 后端：`app/application/capability_catalog.py` · `app/application/tools/registered_capabilities.py` ·
+  `app/application/aiopen/service.py` · `app/fastapi_routes/ai_open.py` · `app/infrastructure/aiopen/cursor_hub.py`
 - 前端：`src/components/aiopen/AIOpenPanel.vue` ·
   `src/components/aiopen/VirtualCursorOverlay.vue` · `src/composables/useAiOpenCursor.ts`
 - 测试：`tests/test_aiopen.py`

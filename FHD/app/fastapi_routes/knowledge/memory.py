@@ -112,11 +112,19 @@ class MemoryReview:
         unsupported = self._dataset_error(dataset_id)
         if unsupported is not None:
             return unsupported
+        options: dict[str, Any] = {}
+        if req.max_hops != 2:
+            options["max_hops"] = req.max_hops
+        if req.as_of is not None:
+            options["as_of"] = req.as_of
+        if req.effective_at is not None:
+            options["effective_at"] = req.effective_at
         payload = self._service().query(
             access_context=self._access(request),
             query=req.query,
             top_k=req.top_k,
             reinforce=req.reinforce,
+            **options,
         )
         code = str(payload.get("error_code") or "")
         status_code = 200 if payload.get("success") else 400

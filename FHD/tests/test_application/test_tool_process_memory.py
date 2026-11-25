@@ -339,6 +339,7 @@ def test_reused_pid_is_not_read_as_the_previously_observed_child(monkeypatch):
 def test_short_lived_child_does_not_skip_remaining_siblings_during_reap(monkeypatch):
     process, root, vanished, sibling = Mock(pid=11), Mock(), Mock(), Mock()
     process.is_alive.return_value = False
+    root.status.return_value = psutil.STATUS_STOPPED
     root.children.return_value = [vanished, sibling]
     vanished.suspend.side_effect = psutil.NoSuchProcess(12)
     monkeypatch.setattr(tool_process, "_process_namespace_matches", lambda: True)

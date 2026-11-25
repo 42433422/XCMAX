@@ -560,11 +560,14 @@ def test_llm_assist_circuit_key(monkeypatch):
         assert llm_assist._circuit_key() == "owner:7"
     with patch("app.application.elt.llm_session_provider.current_elt_llm_owner", return_value=None):
         assert llm_assist._circuit_key() == "process"
-    with patch(
-        "app.application.elt.llm_session_provider.current_elt_llm_owner",
-        side_effect=RuntimeError("no ctx"),
+    with (
+        patch(
+            "app.application.elt.llm_session_provider.current_elt_llm_owner",
+            side_effect=RuntimeError("no ctx"),
+        ),
+        pytest.raises(RuntimeError, match="no ctx"),
     ):
-        assert llm_assist._circuit_key() == "process"
+        llm_assist._circuit_key()
 
 
 def test_llm_assist_circuit_crud(monkeypatch):
@@ -699,7 +702,7 @@ def test_llm_assist_active_software_llm(monkeypatch):
     # recoverable error
     with patch(
         "app.application.elt.llm_session_provider.current_owner_market_provider",
-        side_effect=RuntimeError("boom"),
+        side_effect=ConnectionError("provider unavailable"),
     ):
         assert llm_assist._active_software_llm() == (False, None, None)
 
@@ -1095,7 +1098,7 @@ def test_etl_row_adviser_provider_branches():
     from app.application.elt.adviser import EltRowAdviser
 
     # provider raises
-    adv = EltRowAdviser(provider=lambda row: (_ for _ in ()).throw(RuntimeError("boom")))
+    adv = EltRowAdviser(provider=lambda row: (_ for _ in ()).throw(ConnectionError("boom")))
     out = adv.suggest(
         deterministic_action="new",
         deterministic_reason="r",
@@ -1157,7 +1160,7 @@ def test_etl_row_adviser_suggest_many():
     assert outs2[0]["used_llm"] is True and outs2[0]["model"] == "m"
 
     # batch provider raises
-    adv3 = EltRowAdviser(batch_provider=lambda p: (_ for _ in ()).throw(RuntimeError("boom")))
+    adv3 = EltRowAdviser(batch_provider=lambda p: (_ for _ in ()).throw(ConnectionError("boom")))
     outs3 = adv3.suggest_many(rows)
     assert outs3[0]["degraded"] is True
 
@@ -1225,7 +1228,7 @@ def test_validate_compatibility_preset(monkeypatch):
         cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".csv")
     assert ex.value.code == "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
 
-    with patch("app.application.shipment_elt_profile.list_profiles", side_effect=RuntimeError("x")):
+    with patch("app.application.shipment_elt_profile.list_profiles", side_effect=OSError("x")):
         with pytest.raises(EltError) as ex:
             cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".xlsx")
         assert (

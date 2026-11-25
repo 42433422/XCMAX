@@ -28,6 +28,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
 from modstore_server.strategic_portfolio import digest
 from modstore_server.workflow_customer_delivery import (
+    COMPLETION_PROTOCOL,
     _event,
     _native_artifacts,
     _stored_contract,
@@ -56,6 +57,61 @@ def _utc(moment: datetime) -> datetime:
     return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
 
 
+def _legacy_completed_return(
+    db: Session, execution: Any, binding: dict, contract: dict, produced: dict
+) -> ReturnedCustomerWorkflow:
+    """Read the pre-graph-return terminal shape; never create or recover a terminal.
+
+    Original single-node completions already persisted the actual graph output.
+    Any version marker, native digest or returned event excludes this old format.
+    """
+    if (
+        execution.status != "completed"
+        or execution.completed_at is None
+        or execution.error_message not in (None, "")
+        or _event(db, f"{RETURNED_EVENT}:{execution.id}") is not None
+        or set(contract)
+        != {
+            "execution_id",
+            "workflow_id",
+            "user_id",
+            "node_id",
+            "employee_id",
+            "task",
+            "node_input",
+            "input_data",
+            "execution_binding",
+            "node_config_sha256",
+            "graph_fingerprint",
+            "execution_input_sha256",
+            "goal",
+            "policy",
+            "contract_sha256",
+        }
+        or set(produced)
+        != {
+            "execution_id",
+            "workflow_id",
+            "user_id",
+            "node_id",
+            "contract_sha256",
+            "artifacts",
+            "completed_at",
+        }
+    ):
+        raise ValueError("customer completion requires its original durable graph return")
+    return ReturnedCustomerWorkflow(
+        execution_id=execution.id,
+        workflow_id=execution.workflow_id,
+        user_id=execution.user_id,
+        started_at=execution.started_at,
+        input_json=execution.input_data,
+        graph_fingerprint=binding["graph_fingerprint"],
+        output_json=execution.output_data,
+        completed_at=execution.completed_at,
+    )
+
+
 def _original_delivery(
     db: Session, returned: ReturnedCustomerWorkflow, *, verify_files: bool = True
 ) -> Any:
@@ -72,6 +128,9 @@ def _original_delivery(
         raise ValueError("customer finalization does not own the original execution")
     produced = load_produced_delivery(db, contract, verify_files=verify_files)
     results = produced.get("nodes") or [produced]
+    legacy = not verify_files and len(results) == 1 and "native_result_sha256" not in results[0]
+    if legacy and _legacy_completed_return(db, execution, binding, contract, produced) != returned:
+        raise ValueError("legacy completion differs from its persisted original output")
     output = json.loads(returned.output_json)
     snapshots = output.get("nodes") if isinstance(output, dict) else None
     graph = db.scalars(
@@ -97,7 +156,10 @@ def _original_delivery(
         if (
             saved.get("employee_id") != delivery["employee_id"]
             or saved.get("task") != delivery["task"]
-            or digest(saved.get("employee_result")) != result.get("native_result_sha256")
+            or (
+                not legacy
+                and digest(saved.get("employee_result")) != result.get("native_result_sha256")
+            )
             or ("node_output" in result and saved != result["node_output"])
             or _native_artifacts(delivery, saved.get("employee_result"), verify_files=False)
             != [
@@ -116,7 +178,7 @@ def _returned_payload(db: Session, returned: ReturnedCustomerWorkflow) -> dict[s
         raise ValueError("customer finalization cannot replace an existing terminal")
     _execution, _binding, contract = _stored_contract(db, returned.execution_id)
     payload = {
-        "protocol": "workflow.customer.graph-return.v1",
+        "protocol": COMPLETION_PROTOCOL,
         "contract_sha256": contract["contract_sha256"],
         **asdict(returned),
         "started_at": _utc(returned.started_at).isoformat(),
@@ -148,7 +210,7 @@ def _load_return(db: Session, execution_id: int) -> ReturnedCustomerWorkflow:
     unsigned = {key: value for key, value in payload.items() if key != "receipt_sha256"}
     _execution, _binding, contract = _stored_contract(db, execution_id)
     if (
-        payload.get("protocol") != "workflow.customer.graph-return.v1"
+        payload.get("protocol") != COMPLETION_PROTOCOL
         or payload.get("receipt_sha256") != digest(unsigned)
         or payload.get("contract_sha256") != contract["contract_sha256"]
         or payload.get("execution_id") != execution_id

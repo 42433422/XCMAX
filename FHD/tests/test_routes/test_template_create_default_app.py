@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 
 pytestmark = pytest.mark.release_gate
 
@@ -80,12 +83,37 @@ def template_app(tmp_path, monkeypatch):
     client = TestClient(app)
     client.cookies.set("csrf_token", "label-test-csrf")
     client.headers["X-CSRF-Token"] = "label-test-csrf"
+    client.headers["Idempotency-Key"] = "template-acceptance"
     try:
         with tenant_scope(None):
             yield client, engine, repo
     finally:
         client.close()
         engine.dispose()
+
+
+def approved_template_client(client, repo, session="label-session-7"):
+    from starlette.requests import Request
+
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    headers = {"X-Session-ID": session}
+    request = Request({"type": "http", "headers": [(b"x-session-id", session.encode())]})
+    principal = require_agent_principal(request, x_user_id=None)
+    actor = SimpleNamespace(
+        user_id=principal.user_id,
+        principal=principal,
+        context=authenticated_runtime_context({}, principal),
+        headers=headers,
+    )
+    return ApprovedCapabilityClient(client, repo, actor)
+
+
+@pytest.fixture
+def approved_app(template_app):
+    client, engine, repo = template_app
+    return approved_template_client(client, repo), engine, repo
 
 
 def _label_payload():
@@ -175,9 +203,9 @@ def test_delete_requires_real_login_and_tenant(template_app, method, session_id,
 
 @pytest.mark.parametrize("method", ["POST", "DELETE"])
 def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
-    template_app, monkeypatch, method
+    approved_app, monkeypatch, method
 ):
-    client, engine, repo = template_app
+    client, engine, repo = approved_app
     monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
     with engine.begin() as db:
         for tid in (11, 22, None):
@@ -190,11 +218,13 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
             )
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
     for template_id in ("db:2", "db:3", "db:999"):
+        headers["Idempotency-Key"] = f"delete-unowned-{template_id}"
         response = client.request(
             method, "/api/templates/delete", headers=headers, json={"id": template_id}
         )
         assert response.status_code == 404, response.text
         assert response.json()["success"] is False
+    headers["Idempotency-Key"] = "delete-owned-db-1"
     for _repeat in range(2):
         response = client.request(
             method,
@@ -219,20 +249,14 @@ def test_delete_soft_deletes_only_owned_rows_with_agent_confirmation(
 
 
 def test_default_delete_refuses_builtin_without_reporting_success(
-    template_app, tmp_path, monkeypatch
+    approved_app, tmp_path, monkeypatch, local_tools
 ):
-    client, _engine, _repo = template_app
+    client, _engine, _repo = approved_app
     builtin = tmp_path / "resources/templates/standard.xlsx"
     builtin.parent.mkdir(parents=True)
     builtin.write_bytes(b"synthetic standard form")
-    monkeypatch.setattr(
-        "app.fastapi_routes.domains.system.system_routes.get_base_dir", lambda: str(tmp_path)
-    )
-    response = client.post(
-        "/api/templates/delete",
-        headers={"X-Session-ID": "label-session-7"},
-        json={"id": "fs:standard.xlsx"},
-    )
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_base_dir", lambda: str(tmp_path))
+    response = client.post("/api/templates/delete", json={"id": "fs:standard.xlsx"})
     assert response.status_code == 403, response.text
     assert response.json()["success"] is False
     assert builtin.read_bytes() == b"synthetic standard form"
@@ -241,8 +265,8 @@ def test_default_delete_refuses_builtin_without_reporting_success(
 @pytest.mark.parametrize(
     "folder, suffix", [("templates", ".xlsx"), ("document_templates", ".docx")]
 )
-def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, folder, suffix):
-    client, engine, _repo = template_app
+def test_db_delete_does_not_resurrect_as_scanned_file(approved_app, tmp_path, folder, suffix):
+    client, engine, _repo = approved_app
     own = tmp_path / "tenants/11" / folder / f"synthetic{suffix}"
     other = tmp_path / "tenants/22" / folder / own.name
     for path in (own, other):
@@ -294,8 +318,8 @@ def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, fo
     assert own.read_bytes() == other.read_bytes() == b"synthetic retained bytes"
 
 
-def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app, tmp_path):
-    client, _engine, _repo = template_app
+def test_default_fs_delete_commits_removal_without_destroying_bytes(approved_app, tmp_path):
+    client, _engine, _repo = approved_app
     target = tmp_path / "tenants/11/templates/synthetic-private.xlsx"
     target.parent.mkdir(parents=True)
     target.write_bytes(b"synthetic retained bytes")
@@ -316,13 +340,13 @@ def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app
     assert target.read_bytes() == b"synthetic retained bytes"
 
 
-def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app, tmp_path):
+def test_label_create_readback_uses_authenticated_owner_and_tenant(approved_app, tmp_path):
     from pypdf import PdfReader
 
     from app.application.label_job_service import LabelJobService
     from app.db.models.product import Product
 
-    client, engine, repo = template_app
+    client, engine, repo = approved_app
     body = {**_label_payload(), "user_id": 8, "userId": 8, "tenant_id": 22}
     headers = {"X-Session-ID": "label-session-7", "X-User-ID": "8", "X-Tenant-ID": "22"}
     response = client.post("/api/templates/create", headers=headers, json=body)
@@ -382,3 +406,16 @@ def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app,
     _, saved_job = service._read((11, 7), job["id"])
     assert saved_job["layout"]["fields"][0]["left"] == 50
     assert saved_job["layout"]["fields"][0]["top"] == 90
+
+
+def test_write_without_stable_request_identity_is_rejected_without_mutation(template_app):
+    client, engine, _repo = template_app
+    del client.headers["Idempotency-Key"]
+    response = client.post(
+        "/api/templates/create",
+        headers={"X-Session-ID": "label-session-7"},
+        json=_label_payload(),
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error_code"] == "task_identity_required"
+    assert _template_count(engine) == 0

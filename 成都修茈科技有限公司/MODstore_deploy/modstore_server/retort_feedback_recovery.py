@@ -94,6 +94,49 @@ def _read_recovery_receipt(payload):
     )
 
 
+def verify_persisted_recovery(request_id, state, effects):
+    """Validate the original persisted readback; never perform recovery or authorize it."""
+    try:
+        recovery = state.get("recovery") or {}
+        impact = state.get("impact") or {}
+        delivery = state.get("delivery") or {}
+        policy = (effects.get("customer_feedback") or effects.get("training_candidate") or {}).get(
+            "recovery"
+        ) or {}
+        if (
+            recovery != effects.get("recovery")
+            or recovery.get("status") != "rollback_verified"
+            or recovery.get("request_id") != request_id
+            or impact.get("status") != "customer_impact_rejected"
+            or delivery.get("status") != "deployment_verified"
+            or policy.get("mode") != "restore_previous_release"
+            or policy != (effects.get("plan") or {}).get("feedback_policy", {}).get("recovery")
+            or datetime.fromisoformat(recovery["verified_at"]).utcoffset() is None
+        ):
+            return False
+        reader = _immutable_recovery()
+        payload = reader.request_payload(
+            {
+                "request_id": f"retort:{request_id}:rollback",
+                "expected_identity": delivery.get("identity"),
+                "target_identity": policy.get("target"),
+                "reason": impact.get("reason"),
+            }
+        )
+        receipt = recovery["receipt"]
+        target = payload["target_identity"]
+        return (
+            delivery.get("release_sha") == payload["expected_identity"]["git_sha"]
+            and target["git_sha"] != payload["expected_identity"]["git_sha"]
+            and receipt.get("status") == "rollback_verified"
+            and reader.request_payload(receipt) == payload
+            and receipt.get("request_sha256") == reader._request_digest(payload)
+            and receipt.get("identity") == recovery.get("identity") == target
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
+
+
 def recover_release(request_id, state):
     """Called under Retort's cross-process run lock; unknown submissions are never replayed."""
     from modstore_server.integrations.repository_packages import load_repository_module

@@ -233,7 +233,7 @@ async def handle_mcp_message(
                 "instructions": (
                     f"{manifest_payload['tagline']}\n"
                     "先知后做：knowledge_search 检索能力 → operation_describe 读语义卡片 → "
-                    "api_call 执行业务；页面操作用 ui_sessions → ui_snapshot → ui_click/ui_type。"
+                    "operation_call 使用稳定 request_id 执行业务；页面操作用 ui_sessions → ui_snapshot → ui_click/ui_type。"
                 ),
             },
         )
@@ -265,7 +265,7 @@ async def handle_mcp_message(
             result = await invoke(tool, args, app)
         except RECOVERABLE_ERRORS:
             return jsonrpc_error(request_id, -32603, "tool execution failed")
-        trace_id = trace_call(
+        trace_id = str(result.get("run_id") or result.get("agent_run_id") or "") or trace_call(
             route="/api/aiopen/mcp",
             channel="aiopen_mcp",
             tool=tool,
@@ -274,10 +274,14 @@ async def handle_mcp_message(
         )
         mcp_result: dict[str, Any] = {
             "content": [{"type": "text", "text": format_result(tool, result)}],
+            "structuredContent": result,
             "isError": not bool(result.get("success", False)),
         }
         if trace_id:
             mcp_result["_meta"] = {"run_id": trace_id, "agent_run_id": trace_id}
+            for key in ("task_id", "request_id", "approval_request_id"):
+                if result.get(key):
+                    mcp_result["_meta"][key] = result[key]
         return jsonrpc_result(request_id, mcp_result)
     if is_notification:
         return None

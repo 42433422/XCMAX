@@ -44,7 +44,8 @@ def test_committed_delete_with_lost_receipt_keeps_ids_and_requires_reconciliatio
         }
         result = _registered_router_materials(action, {"ids": [1, 2]}, context, "admin", "")
 
-        assert db.execute("SELECT id FROM materials ORDER BY id LIMIT 2").fetchmany(2) == [(2,)]
+        assert db.execute("SELECT COUNT(*) FROM materials").fetchone() == (1,)
+        assert db.execute("SELECT id FROM materials ORDER BY id LIMIT 1").fetchone() == (2,)
         assert calls == [[1, 2]]
         assert result["success"] is False
         assert execution_result_outcome_unknown(result)
@@ -114,7 +115,7 @@ def test_confirmed_partial_delete_count_and_receipt_are_not_replaced(monkeypatch
                 "agent_status": "waiting_approval",
                 "run_id": "pending-run",
             },
-            200,
+            202,
         ),
     ],
 )
@@ -125,7 +126,7 @@ def test_material_batch_delete_http_preserves_execution_receipt(monkeypatch, rec
 
     def run(**kwargs):
         calls.append(kwargs)
-        return dict(receipt)
+        return dict(receipt), status
 
     monkeypatch.setattr(materials, "_run_materials_agent", run)
     app = FastAPI()

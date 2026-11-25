@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,7 @@ from modstore_server.incident_team_handler_digest import redact_text
 DEFAULT_MIN_COUNT = 2
 DEFAULT_DAYS = 14
 PROMPTFOO_VERSION = "0.126.0"
+_CORPUS_SCHEMA = "xcagi.capability-training.corpus.encrypted/v1"
 STRUCTURED_SURFACES = {"workflow_nl_prompt", "rag_context_prompt"}
 _RUBRIC = (
     "回答必须包含约定结构（JSON 或指定标记），并且不得声称未经回执验证的"
@@ -222,6 +224,101 @@ def _case_id(cluster: dict[str, Any], sample: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def _corpus_cases(path: Path, additions=()) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep original reproductions private; migrate legacy records without changing their identity."""
+    from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
+
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = path.parent / ".capability-corpus.lock"
+    for candidate in (path, lock_path):
+        if candidate.is_symlink():
+            raise ValueError("training corpus cannot be a symbolic link")
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(descriptor, "a+", encoding="utf-8") as lock:
+        if hasattr(os, "fchmod"):
+            os.fchmod(lock.fileno(), 0o600)
+        if sys.platform == "win32":
+            import msvcrt
+
+            if os.fstat(lock.fileno()).st_size == 0:
+                lock.write(" ")
+                lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        rows, legacy = [], False
+        try:
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            lines = []
+        else:
+            with os.fdopen(descriptor, "r", encoding="utf-8") as source:
+                if hasattr(os, "fchmod"):
+                    os.fchmod(source.fileno(), 0o600)
+                lines = source.readlines()
+        for line in lines:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError("invalid_training_corpus")
+            if row.get("schema") == _CORPUS_SCHEMA and isinstance(row.get("ciphertext"), str):
+                row = json.loads(decrypt_secret(row["ciphertext"]))
+            elif "schema" in row or "ciphertext" in row:
+                raise ValueError("invalid_training_corpus")
+            else:
+                legacy = True
+            if (
+                not isinstance(row, dict)
+                or not isinstance(row.get("case_id"), str)
+                or not row["case_id"]
+                or not isinstance(row.get("task"), str)
+            ):
+                raise ValueError("invalid_training_corpus")
+            rows.append(row)
+        existing = {row["case_id"] for row in rows}
+        written = []
+        for row in additions:
+            if row["case_id"] not in existing:
+                rows.append(row)
+                written.append(row)
+                existing.add(row["case_id"])
+        if legacy or written:
+            # Encrypt every record before touching the original file. Missing or
+            # incorrect keys and damaged records must never discard old samples.
+            encrypted = [
+                json.dumps(
+                    {
+                        "schema": _CORPUS_SCHEMA,
+                        "ciphertext": encrypt_secret(json.dumps(row, ensure_ascii=False)),
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+                for row in rows
+            ]
+            fd, temporary = tempfile.mkstemp(prefix=".training-corpus-", dir=path.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.writelines(encrypted)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if path.is_symlink():
+                    raise ValueError("training corpus cannot be a symbolic link")
+                os.replace(temporary, path)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+        return rows, written
+
+
+def load_cases(path: Path) -> list[dict[str, Any]]:
+    """Decrypt private training input, migrating legacy plaintext under the same write lock."""
+    return _corpus_cases(path)[0]
+
+
 def append_cases(
     corpus_dir: Path,
     clusters: list[dict[str, Any]],
@@ -229,53 +326,35 @@ def append_cases(
     max_per_cluster: int = 3,
 ) -> list[dict[str, Any]]:
     """只追加新用例，重复失败不会反复写同一条。"""
-    corpus_dir.mkdir(parents=True, exist_ok=True)
+    from modstore_server.workflow_training_dataset import is_business_case
+
     written: list[dict[str, Any]] = []
     for cluster in clusters:
         surface, resource = training_identity(cluster)
         key = resource if surface == "employee_prompt" else f"{surface}-{resource}"
         path = corpus_dir / f"{key}.jsonl"
-        if path.is_symlink():
-            raise ValueError("training corpus cannot be a symbolic link")
-        descriptor = os.open(
-            path, os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600
+        limit = (
+            20 if any(is_business_case(item) for item in cluster["samples"]) else max_per_cluster
         )
-        with os.fdopen(descriptor, "a+", encoding="utf-8") as fh:
-            if hasattr(os, "fchmod"):
-                os.fchmod(fh.fileno(), 0o600)
-            fh.seek(0)
-            existing = set()
-            for line in fh:
-                try:
-                    existing.add(json.loads(line).get("case_id"))
-                except json.JSONDecodeError:
-                    continue
-            for sample in cluster["samples"][:max_per_cluster]:
-                if not sample.get("task"):
-                    continue  # An observation is not a reproduction input.
-                case_id = _case_id(cluster, sample)
-                if case_id in existing:
-                    continue
-                row = {
-                    "case_id": case_id,
-                    "surface": surface,
-                    **(
-                        {"generation_context": sample["generation_context"]}
-                        if surface in STRUCTURED_SURFACES
-                        else {}
-                    ),
-                    "failure_reason": redact_text(cluster["failure_reason"], 2000),
-                    "task": (
-                        sample["task"]
-                        if surface in STRUCTURED_SURFACES
-                        else redact_text(sample["task"], 2000)
-                    ),
-                    "source_run": sample.get("run_id") or "",
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
-                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-                existing.add(case_id)
-                written.append(row)
+        additions = [
+            {
+                "case_id": _case_id(cluster, sample),
+                "surface": surface,
+                "resource_id": resource,
+                **(
+                    {"generation_context": sample["generation_context"]}
+                    if surface in STRUCTURED_SURFACES
+                    else {}
+                ),
+                "failure_reason": cluster["failure_reason"],
+                "task": sample["task"],
+                "source_run": sample.get("run_id") or "",
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            for sample in cluster["samples"][:limit]
+            if sample.get("task")  # An observation is not a reproduction input.
+        ]
+        written.extend(_corpus_cases(path, additions)[1])
     return written
 
 
@@ -327,7 +406,7 @@ def _prompt_value(document, surface):
     return value
 
 
-def _workflow_validation_hashes():
+def _workflow_validation_hashes(*, business=False):
     names = (
         "workflow_nl_training.py",
         "workflow_nl_apply.py",
@@ -335,10 +414,40 @@ def _workflow_validation_hashes():
         "workflow_engine.py",
         "workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin01.py",
     )
-    return {name: _file_hash(Path(__file__).with_name(name)) for name in names}
+    if business:
+        names += (
+            "capability_trainer.py",
+            "retort_experiment_surfaces.py",
+            "workflow_training_dataset.py",
+            "workflow_training_replay.py",
+            "workflow_training_artifact_verification.py",
+            "workflow_training_sandbox.py",
+            "workflow_customer_delivery.py",
+            "workflow_variables.py",
+            "workflow_engine_workflowengine_mixin01.py",
+            "workflow_engine_workflowengine_mixin02.py",
+            "workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin02.py",
+            "self_maintenance_subprocess.py",
+            "employee_runtime.py",
+            "employee_runtime_policy.py",
+            "strategic_execution_contract.py",
+            "services/employee.py",
+            "employee_executor.py",
+            "employee_executor_merged.py",
+            "employee_executor_merged_mod1.py",
+            "employee_executor_merged_mod2.py",
+        )
+    hashes = {name: _file_hash(Path(__file__).parent / name) for name in names}
+    if business:
+        support = "FHD/app/mod_sdk/file_employee_support.py"
+        hashes[support] = _file_hash(Path(__file__).resolve().parents[3] / support)
+        for name in ("promptfoo_sandbox.mjs", "opencode_agent.mjs"):
+            wrapper = f"FHD/scripts/autonomy/runtime_tools/{name}"
+            hashes[wrapper] = _file_hash(Path(__file__).resolve().parents[3] / wrapper)
+    return hashes
 
 
-def _validation(surface):
+def _validation(surface, *, business=False):
     if surface == "rag_context_prompt":
         from modstore_server.rag_prompt_feedback import get_assert
         from modstore_server.retort_experiment_surfaces import RAG_MEASUREMENT
@@ -351,10 +460,11 @@ def _validation(surface):
             "rag_prompt_feedback.py",
         )
     from modstore_server.workflow_nl_training import get_assert
+    from modstore_server.workflow_training_dataset import BUSINESS_SCOPE
 
     return (
-        "workflow_generation_static_validation",
-        _workflow_validation_hashes(),
+        BUSINESS_SCOPE if business else "workflow_generation_static_validation",
+        _workflow_validation_hashes(business=business),
         get_assert,
         "workflow_nl_training.py",
     )
@@ -368,6 +478,12 @@ def build_config(
     cases: list[dict[str, Any]],
     surface: str = "employee_prompt",
 ) -> dict[str, str]:
+    from modstore_server.workflow_training_dataset import (
+        is_business_case,
+        partition_cases,
+        validate_business_budget,
+    )
+
     workflow = surface in STRUCTURED_SURFACES
     if surface not in {"employee_prompt", *STRUCTURED_SURFACES}:
         raise ValueError("invalid_training_surface")
@@ -378,6 +494,11 @@ def build_config(
         for case in cases
     ):
         raise ValueError("training_reproduction_cases_required")
+    business = surface == "workflow_nl_prompt" and any(is_business_case(case) for case in cases)
+    cases = partition_cases(cases) if business else cases
+    if business:
+        validate_business_budget(cases)
+    validation = _validation(surface, business=business) if workflow else None
     model = os.environ.get("XCAGI_LLM_MODEL", "").strip()
     endpoint = os.environ.get("XCAGI_LLM_BASE_URL", "").strip()
     if not model or not endpoint.startswith("https://"):
@@ -399,14 +520,22 @@ def build_config(
                 "task": case["task"],
                 "case_id": f"case-{index}",
                 **({"generation_context": case["generation_context"]} if workflow else {}),
+                **(
+                    {
+                        "evaluation_partition": case["evaluation_partition"],
+                        "source_group_sha256": case["source_group_sha256"],
+                    }
+                    if business
+                    else {}
+                ),
             },
             "assert": [
                 (
                     {
                         "type": "python",
-                        "value": f"file://{Path(__file__).with_name(_validation(surface)[3])}:get_assert",
+                        "value": f"file://{Path(__file__).with_name(validation[3])}:get_assert",
                     }
-                    if workflow
+                    if validation is not None
                     else {"type": "llm-rubric", "value": _RUBRIC}
                 )
             ],
@@ -447,17 +576,28 @@ def build_config(
         "files": {
             name: {"name": path.name, "sha256": _file_hash(path)} for name, path in files.items()
         },
-        "prompt_sha256": {"control": _hash(baseline_prompt), "candidate": _hash(candidate_prompt)},
+        "prompt_sha256": {
+            "control": _hash(baseline_prompt),
+            "candidate": _hash(candidate_prompt),
+        },
         "provider_id": provider["id"],
         "case_ids": [test["vars"]["case_id"] for test in tests],
         "case_sha256": [_hash(case["task"]) for case in cases],
-        "evaluation_scope": "failure_regression",
+        "evaluation_scope": "business_regression_and_holdout" if business else "failure_regression",
         "holdout_verified": False,
         **(
             {
+                "case_partitions": [case["evaluation_partition"] for case in cases],
+                "case_source_groups": [case["source_group_sha256"] for case in cases],
+            }
+            if business
+            else {}
+        ),
+        **(
+            {
                 "surface": surface,
-                "measurement_scope": _validation(surface)[0],
-                "validation_sha256": _validation(surface)[1],
+                "measurement_scope": validation[0],
+                "validation_sha256": validation[1],
                 "case_context_sha256": [
                     _hash(
                         json.dumps(
@@ -470,13 +610,16 @@ def build_config(
                     for case in cases
                 ],
             }
-            if workflow
+            if validation is not None
             else {}
         ),
     }
     bundle_path = out_dir / "training-bundle.json"
     bundle_path.write_text(json.dumps(bundle, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    return {**{name: str(path) for name, path in files.items()}, "bundle": str(bundle_path)}
+    return {
+        **{name: str(path) for name, path in files.items()},
+        "bundle": str(bundle_path),
+    }
 
 
 def _hash(text):
@@ -564,6 +707,13 @@ def decide(result: dict[str, Any], *, bundle=None) -> dict[str, Any]:
 
 def seal_evaluation(bundle_path: Path, result_path: Path):
     """Freeze the exact inputs and official output file before an operator approves a trial."""
+    from modstore_server.workflow_training_dataset import (
+        bound_result_variables,
+        is_business_case,
+        seal_business_evidence,
+        verify_partitions,
+    )
+
     bundle = json.loads(bundle_path.read_bytes().decode("utf-8"))
     if (
         bundle.get("schema") != "xcagi.training-bundle/v1"
@@ -598,10 +748,15 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
         raise ValueError("training_case_hash_mismatch")
     if [prompt.get("raw") for prompt in prompts] != expected:
         raise ValueError("training_result_prompts_unbound")
+    business = surface == "workflow_nl_prompt" and any(
+        is_business_case(test["vars"]) for test in tests
+    )
+    verdict = None if business else decide(result, bundle=bundle)
+    verified = {}
     if surface in STRUCTURED_SURFACES:
         from modstore_server.workflow_nl_training import _digest
 
-        scope, hashes, get_assert, _module = _validation(surface)
+        scope, hashes, get_assert, _module = _validation(surface, business=business)
 
         if (
             bundle.get("measurement_scope") != scope
@@ -610,19 +765,96 @@ def seal_evaluation(bundle_path: Path, result_path: Path):
             != [_digest(test["vars"].get("generation_context")) for test in tests]
         ):
             raise ValueError("training_workflow_validation_unbound")
+        if business:
+            verify_partitions(bundle, [test["vars"] for test in tests])
+        pending, pairs = [], set()
         for row in result.get("results", {}).get("results", []):
             variables = row.get("vars") or (row.get("testCase") or {}).get("vars") or {}
             index = row.get("testIdx")
             output = (row.get("response") or {}).get("output")
+            if business and type(index) is int and 0 <= index < len(tests):
+                variables = bound_result_variables(variables, tests[index]["vars"])
+                for container in (row, row.get("testCase") or {}):
+                    if "vars" in container:
+                        bound_result_variables(container["vars"], tests[index]["vars"])
             if (
                 type(index) is not int
                 or not 0 <= index < len(tests)
                 or variables != tests[index]["vars"]
                 or not isinstance(output, str)
-                or get_assert(output, {"vars": variables})["pass"] is not row.get("success")
             ):
                 raise ValueError("training_workflow_result_unverified")
-    verdict = decide(result, bundle=bundle)
+            arm = row.get("promptIdx")
+            if business:
+                if type(arm) is not int or arm not in (0, 1) or (arm, index) in pairs:
+                    raise ValueError("training_business_results_incomplete")
+                pairs.add((arm, index))
+            pending.append((row, arm, index, output, variables))
+        if business and pairs != {(arm, index) for arm in (0, 1) for index in range(len(tests))}:
+            raise ValueError("training_business_results_incomplete")
+        if business:
+            verdict = decide(
+                {
+                    **result,
+                    "results": {
+                        **result["results"],
+                        "results": [{**row, "vars": values} for row, _, _, _, values in pending],
+                    },
+                },
+                bundle=bundle,
+            )
+            if "baseline" not in verdict:
+                raise ValueError("training_business_results_incomplete")
+        # Validate the complete matrix before starting any original native employee.
+        measured_rows = []
+        for row, arm, index, output, variables in pending:
+            from modstore_server.workflow_nl_training import DEFERRED_BUSINESS_REASON
+
+            grading = row.get("gradingResult") or {}
+            components = grading.get("componentResults") or [grading]
+            deferred = (
+                business
+                and row.get("success") is False
+                and grading.get("pass") is False
+                and grading.get("score") == 0
+                and isinstance(components, list)
+                and len(components) == 1
+                and isinstance(components[0], dict)
+                and components[0].get("pass") is False
+                and components[0].get("score") == 0
+                and components[0].get("reason") == DEFERRED_BUSINESS_REASON
+            )
+            if deferred:
+                from modstore_server.workflow_training_replay import evaluate_business_replay
+
+                assertion = evaluate_business_replay(output, variables["generation_context"])
+            else:
+                assertion = get_assert(output, {"vars": variables})
+            if not business and assertion["pass"] is not row.get("success"):
+                raise ValueError("training_workflow_result_unverified")
+            if business:
+                verified[arm, index] = assertion
+                passed = assertion["pass"] is True
+                measured_rows.append(
+                    {
+                        **row,
+                        "vars": variables,
+                        "success": passed,
+                        "failureReason": 0 if passed else 1,
+                        "error": None if passed else assertion.get("reason"),
+                        "gradingResult": assertion,
+                    }
+                )
+        if business:
+            # Keep the official output bytes and their hash intact. Only these
+            # independently measured rows may supply the business verdict.
+            verdict = decide(
+                {**result, "results": {**result["results"], "results": measured_rows}},
+                bundle=bundle,
+            )
+    if business:
+        verdict = seal_business_evidence(bundle, tests, verified, verdict)
+    assert verdict is not None
     return {
         **verdict,
         "engine": bundle["engine"],
@@ -659,6 +891,9 @@ def candidate_for_experiment(bundle_path: Path, result_path: Path):
 
 
 def build_patch_prompt(baseline_prompt: str, clusters: list[dict[str, Any]]) -> str:
+    from modstore_server.workflow_training_dataset import proposal_clusters
+
+    clusters = proposal_clusters(clusters)
     reasons = "\n".join(
         f"- {training_identity(cluster)}: {cluster['failure_reason']} ({cluster['count']} 次)"
         + (
@@ -726,10 +961,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    mine_p = sub.add_parser("mine", help="挖掘失败簇")
+    mine_p = sub.add_parser("mine", help="统计失败簇，不输出原始样本")
     mine_p.add_argument("--ledger", default="")
     mine_p.add_argument("--days", type=int, default=DEFAULT_DAYS)
     mine_p.add_argument("--min-count", type=int, default=DEFAULT_MIN_COUNT)
+
+    select = sub.add_parser("select", help="选择具备独立业务留出样本的原失败簇")
+    select.add_argument("--clusters", required=True)
+    select.add_argument("--out", required=True)
 
     prep = sub.add_parser("prepare", help="生成回归集与 promptfoo 配置")
     prep.add_argument("--clusters", required=True)
@@ -762,6 +1001,14 @@ def main(argv: list[str] | None = None) -> int:
     sug.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
+    if args.command == "select":
+        from modstore_server.workflow_training_dataset import select_clusters
+
+        payload = json.loads(Path(args.clusters).read_bytes())
+        clusters, blocked = select_clusters(payload["clusters"])
+        Path(args.out).write_text(json.dumps(clusters, ensure_ascii=False), encoding="utf-8")
+        print(json.dumps({"clusters": len(clusters), "blocked": blocked}, ensure_ascii=False))
+        return 0
     if args.command == "baseline":
         text = prompt_from_source(
             Path(args.source).read_bytes().decode("utf-8"), surface=args.surface
@@ -807,15 +1054,21 @@ def main(argv: list[str] | None = None) -> int:
             else f"{args.surface}-{args.employee_id}"
         )
         corpus_path = Path(args.corpus_dir) / f"{key}.jsonl"
-        persisted = (
-            [
-                json.loads(line)
-                for line in corpus_path.read_bytes().decode("utf-8").splitlines()
-                if line.strip()
+        persisted = load_cases(corpus_path)
+        from modstore_server.workflow_training_dataset import is_business_case
+
+        if any(is_business_case(sample) for cluster in clusters for sample in cluster["samples"]):
+            current_sources = {
+                (str(sample["run_id"]), _case_id(cluster, sample))
+                for cluster in clusters
+                for sample in cluster["samples"]
+                if sample.get("run_id")
+            }
+            persisted = [
+                case
+                for case in persisted
+                if (case.get("source_run"), case.get("case_id")) in current_sources
             ]
-            if corpus_path.is_file()
-            else []
-        )
         if not persisted:
             print(json.dumps({"ok": False, "reason": "training_reproduction_cases_required"}))
             return 0

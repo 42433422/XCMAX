@@ -20,6 +20,7 @@ from starlette.types import ASGIApp
 
 from app.application.aiopen import service
 from app.application.aiopen.capability_probe import CapabilityProbe
+from app.application.aiopen.openclaw import OpenClawProxy
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 
 
@@ -30,67 +31,8 @@ def isolated_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/products/../private",
-        "/api/products/%2e%2e/private",
-        "/api/products/..%2fprivate",
-        "/api/products/%252e%252e/private",
-    ],
-)
-def test_gateway_denies_paths_that_escape_the_allowed_prefix(path: str) -> None:
-    app = FastAPI()
-    private_calls: list[str] = []
-
-    @app.get("/api/private")
-    async def private_route() -> dict[str, bool]:
-        private_calls.append("private")
-        return {"private": True}
-
-    result = service._tool_api_call(app, {"path": path})
-
-    assert private_calls == []
-    assert result.get("code") == "ROUTE_NOT_WHITELISTED"
-    assert result["success"] is False
-
-
-def test_gateway_does_not_follow_redirect_outside_whitelist() -> None:
-    app = FastAPI()
-    private_calls: list[str] = []
-
-    @app.get("/api/products/redirect")
-    async def redirect() -> RedirectResponse:
-        return RedirectResponse("/api/private")
-
-    @app.get("/api/private")
-    async def private_route() -> dict[str, bool]:
-        private_calls.append("private")
-        return {"private": True}
-
-    result = service._tool_api_call(app, {"path": "/api/products/redirect"})
-
-    assert private_calls == []
-    assert result["status_code"] == 307
-
-
-@pytest.mark.parametrize("request_fails", [False, True])
-def test_gateway_closes_client_after_success_and_request_failure(request_fails: bool) -> None:
-    client = MagicMock()
-    client.get.return_value.status_code = 200
-    client.get.return_value.json.return_value = {"items": []}
-    if request_fails:
-        client.get.side_effect = RuntimeError("local transport failed")
-
-    with patch("starlette.testclient.TestClient", return_value=client):
-        result = service._tool_api_call(FastAPI(), {"path": "/api/products"})
-
-    assert result["success"] is not request_fails
-    client.close.assert_called_once_with()
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["api_call", "chat", "capability_loop"])
+@pytest.mark.parametrize("name", ["chat", "capability_loop"])
 async def test_blocking_tools_release_event_loop_and_preserve_context(
     name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -143,65 +85,65 @@ def test_non_ascii_api_key_is_rejected_without_crashing(monkeypatch: pytest.Monk
 def test_upstream_http_error_response_is_closed() -> None:
     response = BytesIO(b"upstream unavailable")
     error = HTTPError("http://local.invalid/api/chat", 503, "unavailable", Message(), response)
-    with patch("app.application.aiopen.service.urllib.request.urlopen", side_effect=error):
-        result, status = service.openclaw_chat_proxy("local message")
+    opener = MagicMock(side_effect=error)
+    result = OpenClawProxy(lambda: "http://local.invalid", opener).chat(
+        "local message", request_id="original-request", gateway_url="http://local.invalid"
+    )
 
-    assert status == 502
-    assert result["status_code"] == 503
+    assert result["success"] is False
+    assert result["upstream_status_code"] == 503
+    assert result["execution_state"] == "unknown"
+    assert result["retryable"] is False
     assert response.closed is True
 
 
-@pytest.mark.parametrize(
-    ("raw_path", "route_path", "value"),
-    [
-        ("/api/products/a/../list?value=one%20two", "/api/products/list", "one two"),
-        ("/api/%70roducts/na%6De/", "/api/products/name/", ""),
-        ("/api/products/分类%2F商品?value=a%2Fb", "/api/products/分类/商品", "a/b"),
-        ("/api/products/a%3Fb%23c?value=ok", "/api/products/a?b#c", "ok"),
-    ],
-)
-def test_gateway_sends_the_checked_path_without_restarting_host_lifespan(
-    raw_path: str, route_path: str, value: str
-) -> None:
-    lifecycle: list[str] = []
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        lifecycle.append("start")
-        yield
-        lifecycle.append("stop")
-
-    app = FastAPI(lifespan=lifespan)
-
-    async def endpoint(request: Request) -> dict[str, str]:
-        return {"path": request.scope["path"], "value": request.query_params.get("value", "")}
-
-    app.add_api_route(route_path, endpoint)
-
-    result = service._tool_api_call(app, {"path": raw_path})
-
-    assert result["status_code"] == 200
-    assert result["data"] == {"path": route_path, "value": value}
-    assert result["path"] == raw_path
-    assert lifecycle == []
+@pytest.mark.parametrize("raw", [b'{"reply":"accepted"}', b"", b"not-json"])
+def test_openclaw_http_response_is_not_business_completion(raw):
+    response = BytesIO(raw)
+    opener = MagicMock(return_value=response)
+    result = OpenClawProxy(lambda: "http://local.invalid", opener).chat(
+        "approved message", request_id="original-request", gateway_url="http://local.invalid"
+    )
+    assert result["transport_accepted"] is True
+    assert result["success"] is False
+    assert result["execution_state"] == "unknown"
+    assert result["reconciliation_required"] is True
+    assert result["retryable"] is False
+    assert response.closed
+    request = opener.call_args.args[0]
+    assert request.full_url == "http://local.invalid/api/chat"
+    assert request.get_header("Idempotency-key") == "original-request"
+    assert request.data == b'{"message": "approved message"}'
+    opener.assert_called_once()
 
 
 @pytest.mark.parametrize(
-    "path",
+    ("message", "request_id", "gateway_url"),
     [
-        "https://external.invalid/api/products",
-        "//external.invalid/api/products",
-        "/api/products\\..\\private",
-        "/api/products/%00/unused",
-        "/api/products/%FF",
+        ("", "key", "http://local.invalid"),
+        ("hi", "", "http://local.invalid"),
+        ("hi", "key", "http://other.invalid"),
     ],
 )
-def test_gateway_rejects_ambiguous_targets_before_creating_client(path: str) -> None:
-    with patch("starlette.testclient.TestClient") as factory:
-        result = service._tool_api_call(FastAPI(), {"path": path})
+def test_openclaw_changed_target_or_missing_identity_never_sends(message, request_id, gateway_url):
+    opener = MagicMock()
+    result = OpenClawProxy(lambda: "http://local.invalid", opener).chat(
+        message, request_id=request_id, gateway_url=gateway_url
+    )
+    assert result["success"] is False
+    assert result["execution_state"] == "not_started"
+    opener.assert_not_called()
 
-    assert result["code"] == "ROUTE_NOT_WHITELISTED"
-    factory.assert_not_called()
+
+def test_openclaw_network_exception_is_unknown_without_retry():
+    opener = MagicMock(side_effect=ConnectionError("private upstream error"))
+    result = OpenClawProxy(lambda: "http://local.invalid", opener).chat(
+        "hi", request_id="original-request", gateway_url="http://local.invalid"
+    )
+    assert result["execution_state"] == "unknown"
+    assert result["retryable"] is False
+    assert "private upstream" not in str(result)
+    opener.assert_called_once()
 
 
 def test_key_registry_owns_only_injected_state_and_key_sources() -> None:
@@ -243,86 +185,3 @@ def test_installation_resolves_replaced_builders_after_composition(
     assert bundle["methods"]["url"]["config"] is url_config
     assert bundle["mcp_config_template"]["mcpServers"][service.MCP_SERVER_NAME] is url_config
     assert bundle["methods"]["stdio"]["config"]["args"] == ["/tmp/local-bridge.py"]
-
-
-def test_chat_and_probe_resolve_replaced_callbacks_after_composition(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[dict[str, Any]] = []
-
-    def api_call(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-        calls.append(args)
-        return {"success": True, "status_code": 200}
-
-    monkeypatch.setattr(service, "_tool_api_call", api_call)
-    service._tool_chat(FastAPI(), {"message": "  local message  "})
-    assert calls == [
-        {
-            "path": "/api/ai/unified_chat",
-            "method": "POST",
-            "body": {"message": "local message", "source": "aiopen"},
-        }
-    ]
-
-    monkeypatch.setattr(service, "_tool_api_catalog", lambda: {"success": True, "routes": []})
-    monkeypatch.setattr(service, "_pick_probe_path", lambda routes, preferred: "/api/probe")
-    chat = MagicMock(return_value={"success": True, "status_code": 200})
-    monkeypatch.setattr(service, "_tool_chat", chat)
-    result = service._tool_capability_loop(FastAPI(), {"message": "probe message"})
-
-    assert calls[-1] == {"path": "/api/probe", "method": "GET"}
-    assert chat.call_args.args[1] == {"message": "probe message"}
-    assert result["closed_loop"] is True
-    assert result["steps"][0]["total_count"] == 0
-
-
-class LocalCursor:
-    def session_ids(self) -> list[str]:
-        return ["local"]
-
-    def sessions_info(self) -> list[dict[str, Any]]:
-        return [{"session_id": "local"}]
-
-    async def dispatch(
-        self,
-        action: str,
-        params: dict[str, Any] | None = None,
-        *,
-        session_id: str | None = None,
-        timeout: float = 10.0,
-    ) -> dict[str, Any]:
-        return {"success": True}
-
-
-def test_capability_probe_uses_only_its_ports_and_distinguishes_499_from_loop_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(service, "_tool_api_call", MagicMock(side_effect=AssertionError))
-    probe = CapabilityProbe(
-        RuntimeState({"remote_control_enabled": True}),
-        lambda: {
-            "success": True,
-            "routes": [
-                {"path": "/api/local", "enabled": True},
-                {"path": "/api/disabled", "enabled": False},
-                "invalid catalog entry",
-            ],
-        },
-        lambda routes, preferred: "/api/local",
-        lambda app, args: {"success": True, "status_code": 499},
-        lambda app, args: {"success": True, "status_code": 200},
-        LocalCursor,
-    )
-
-    result = probe.run(FastAPI(), {})
-
-    assert result["closed_loop"] is False
-    assert result["ui_loop_ready"] is True
-    assert result["steps"][0] == {
-        "step": "api_catalog",
-        "ok": True,
-        "enabled_count": 1,
-        "total_count": 2,
-    }
-    assert result["steps"][1]["ok"] is False
-    assert result["steps"][1]["status_code"] == 499

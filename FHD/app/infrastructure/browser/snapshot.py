@@ -15,6 +15,8 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 _MAX_RAW_CHARS = 120_000
 _MAX_VALUE_CHARS = 131_072
 _MAX_VALUES = 2_000
+EDITABLE_SELECTOR = "input, select, textarea, [contenteditable]"
+SCREENSHOT_MASK_SELECTOR = EDITABLE_SELECTOR + ", iframe, frame, object, embed"
 _EDITABLE_ROLE = re.compile(r"^(?:textbox|searchbox|combobox|spinbutton|slider)(?:\s|$)")
 _ROLE_PREFIX = re.compile(r"^[a-z][a-z0-9]*(?=\s|$)")
 _FORM_VALUES = """elements => {
@@ -119,23 +121,44 @@ def redact_snapshot(snapshot: str, values: list[str]) -> str:
         raise ValueError("browser_snapshot_privacy_invalid") from None
 
 
+def _frames(page: Any) -> list[Any]:
+    frames = page.frames
+    if not isinstance(frames, list) or len(frames) > 16:
+        raise ValueError("browser_snapshot_privacy_limit")
+    return frames
+
+
+def _collect_values(values: set[str], found: Any) -> None:
+    if not isinstance(found, list) or any(not isinstance(value, str) for value in found):
+        raise ValueError("browser_snapshot_privacy_invalid")
+    values.update(found)
+    if len(values) > _MAX_VALUES or sum(len(value) for value in values) > _MAX_VALUE_CHARS:
+        raise ValueError("browser_snapshot_privacy_limit")
+
+
+def redacted_page_snapshot_sync(page: Any, *, timeout: float) -> str:
+    """Use the same privacy boundary for the desktop's synchronous adapter."""
+    values: set[str] = set()
+
+    def collect() -> None:
+        for frame in _frames(page):
+            _collect_values(values, frame.locator(EDITABLE_SELECTOR).evaluate_all(_FORM_VALUES))
+
+    collect()
+    snapshot = page.locator("body").aria_snapshot(timeout=timeout)
+    collect()
+    return redact_snapshot(snapshot, list(values))
+
+
 async def redacted_page_snapshot(page: Any, *, timeout: float) -> str:
     """Inspect around capture; fail closed if any frame/value inspection fails."""
     values: set[str] = set()
 
     async def collect() -> None:
-        frames = page.frames
-        if len(frames) > 16:
-            raise ValueError("browser_snapshot_privacy_limit")
-        for frame in frames:
-            found = await frame.locator("input, select, textarea, [contenteditable]").evaluate_all(
-                _FORM_VALUES
+        for frame in _frames(page):
+            _collect_values(
+                values, await frame.locator(EDITABLE_SELECTOR).evaluate_all(_FORM_VALUES)
             )
-            if not isinstance(found, list) or any(not isinstance(value, str) for value in found):
-                raise ValueError("browser_snapshot_privacy_invalid")
-            values.update(found)
-            if len(values) > _MAX_VALUES or sum(len(value) for value in values) > _MAX_VALUE_CHARS:
-                raise ValueError("browser_snapshot_privacy_limit")
 
     await collect()
     snapshot = await page.locator("body").aria_snapshot(timeout=timeout)
