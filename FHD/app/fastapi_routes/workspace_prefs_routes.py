@@ -40,6 +40,7 @@ class WorkspacePrefsPatch(BaseModel):
     # Optional during the rolling client upgrade; clients that supply it get
     # explicit compare-and-swap protection against another device's changes.
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_owner_id: str | None = Field(default=None, min_length=1, max_length=160)
 
     selected_industry_id: str | None = Field(default=None, max_length=32)
     industry_mod_id: str | None = None
@@ -98,9 +99,14 @@ def _patch_local_prefs(body: WorkspacePrefsPatch, request: Request):
     owner_id = resolve_workspace_owner_id(request, user)
     if not owner_id:
         raise HTTPException(status_code=400, detail="无法解析工作区归属，请先完成企业登录")
+    if body.expected_owner_id is not None and body.expected_owner_id != owner_id:
+        raise HTTPException(
+            status_code=409,
+            detail={"error_code": "workspace_prefs_owner_changed"},
+        )
 
     partial: dict[str, Any] = body.model_dump(
-        exclude_none=True, exclude={"expected_revision"}
+        exclude_none=True, exclude={"expected_revision", "expected_owner_id"}
     )
     selected_industry_id = str(partial.get("selected_industry_id") or "").strip()
     if body.expected_revision is None:
