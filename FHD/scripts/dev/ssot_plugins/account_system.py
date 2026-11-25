@@ -221,6 +221,17 @@ def _check_budgets(errors: list[str]) -> None:
         errors.append("commercial_terms.customization_from_cents 应为 99900")
     if not isinstance(terms, dict) or terms.get("ai_billing") != "usage":
         errors.append("commercial_terms.ai_billing 必须保持按量收费")
+    # Release blocker: campaign fulfillment/eligibility/refunds are not implemented.
+    # Remove only with the approved end-to-end fulfillment contract and its tests.
+    campaign = terms.get("launch_campaign") if isinstance(terms, dict) else None
+    if (
+        not isinstance(campaign, dict)
+        or campaign.get("enabled") is not False
+        or campaign.get("starts_at") is not None
+        or campaign.get("ends_at") is not None
+        or campaign.get("benefits") != []
+    ):
+        errors.append("首发权益尚无正式履约证据，必须保持禁用、空日期及空权益")
     for mirror in COMMERCE_TERMS_MIRRORS:
         text = _read_text(mirror, errors)
         try:
