@@ -6,6 +6,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/approval/approval_screens.dart';
+import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
 
 class _ApprovalRepository extends MobileRepository {
   _ApprovalRepository(this.api) : super(client: api);
