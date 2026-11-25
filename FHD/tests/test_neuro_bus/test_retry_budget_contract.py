@@ -8,7 +8,11 @@ import pytest
 
 from app.neuro_bus.bus import NeuroBus
 from app.neuro_bus.bus_primitives import HandlerSubscription
-from app.neuro_bus.dead_letter_queue import DeadLetterQueue, DeadLetterReason, NeuroBusDLQIntegration
+from app.neuro_bus.dead_letter_queue import (
+    DeadLetterQueue,
+    DeadLetterReason,
+    NeuroBusDLQIntegration,
+)
 from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.retry_handler import NeuroRetryHandler, RetryConfig, RetryHandler
 
@@ -191,6 +195,55 @@ def test_sync_budget_expiry_drains_original_future_without_retry(monkeypatch):
         (entry,) = dlq.get_all_entries()
         assert started.is_set() and finished.is_set()
         assert calls == 1
+        assert entry.retry_count == 0
+        assert entry.reason == DeadLetterReason.TIMEOUT
+    finally:
+        bus._executor.shutdown(wait=True)
+
+
+def test_cancelled_backoff_does_not_count_scheduled_retry():
+    retry = RetryHandler(RetryConfig(max_retries=3, base_delay=10, jitter=False))
+    context = retry.new_context("operation")
+    calls = 0
+
+    async def operation():
+        nonlocal calls
+        calls += 1
+        raise ConnectionError("retryable")
+
+    async def run():
+        waiting = asyncio.Event()
+
+        def on_retry(error, number):
+            waiting.set()
+
+        task = asyncio.create_task(
+            retry.execute(operation, retry_context=context, on_retry=on_retry)
+        )
+        await asyncio.wait_for(waiting.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(run())
+    assert calls == context.get_report()["attempts"] == 1
+    assert context.retry_count == 0
+    assert not context.retry_exhausted
+
+
+def test_async_handler_cannot_report_success_after_budget(monkeypatch):
+    bus, dlq = make_bus(monkeypatch, budget=0.1)
+
+    async def handler(event):
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            return
+
+    try:
+        subscription = HandlerSubscription("test.event", handler)
+        assert not asyncio.run(bus._call_handler(subscription, NeuroEvent("test.event", {})))
+        (entry,) = dlq.get_all_entries()
         assert entry.retry_count == 0
         assert entry.reason == DeadLetterReason.TIMEOUT
     finally:
