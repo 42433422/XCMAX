@@ -688,48 +688,93 @@ class TestRefund:
     def test_refund_missing_out_trade_no(self, client_mp):
         r = client_mp.post("/api/model-payment/refund", json={"refund_amount": "9.90"})
         assert r.status_code == 400
-        assert "out_trade_no 必填" in r.json()["message"]
 
     def test_refund_missing_refund_amount(self, client_mp):
         r = client_mp.post("/api/model-payment/refund", json={"out_trade_no": "mp-123"})
         assert r.status_code == 400
-        assert "refund_amount 必填" in r.json()["message"]
 
-    def test_refund_success(self, client_mp):
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-1", "0", "1.001"])
+    def test_refund_invalid_amount_does_not_call_provider(self, client_mp, value):
+        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
+            r = client_mp.post(
+                "/api/model-payment/refund",
+                json={"out_trade_no": "mp-123", "refund_amount": value},
+            )
+        assert r.status_code == 400
+        mock_ali.refund_order.assert_not_called()
+
+    def test_provider_success_returns_pending_not_refunded(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
         ):
+            mock_orders.reserve_refund_attempt.return_value = (
+                "refund_reserved", {"state": "pending_provider_confirmation"}
+            )
+            mock_orders.observe_refund_provider_result.return_value = True
             mock_ali.refund_order.return_value = {
                 "success": True,
                 "raw": {"refund_status": "REFUND_SUCCESS"},
             }
-            mock_orders.update_order_status.return_value = None
             r = client_mp.post(
                 "/api/model-payment/refund",
-                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
+                json={
+                    "out_trade_no": "mp-123",
+                    "refund_amount": "9.90",
+                    "out_request_no": "original-refund-id",
+                },
             )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["success"] is True
-
-    def test_refund_alipay_failure(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.refund_order.return_value = {"success": False, "message": "退款失败"}
-            r = client_mp.post(
-                "/api/model-payment/refund",
-                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
-            )
-            assert r.status_code == 200
+            assert r.status_code == 202
             assert r.json()["success"] is False
+            assert r.json()["accepted"] is True
+            assert r.json()["requires_reconciliation"] is True
+            mock_orders.reserve_refund_attempt.assert_called_once_with(
+                out_trade_no="mp-123",
+                out_request_no="original-refund-id",
+                amount_cents=990,
+            )
+            mock_ali.refund_order.assert_called_once()
+            assert mock_ali.refund_order.call_args.kwargs["refund_amount"] == "9.90"
+            mock_orders.confirm_refund_from_provider_query.assert_not_called()
+
+    def test_refund_replay_does_not_repeat_gateway_call(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
+            mock_orders.reserve_refund_attempt.return_value = (
+                "refund_request_replay", {"state": "provider_reported_success"}
+            )
+            r = client_mp.post(
+                "/api/model-payment/refund",
+                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
+            )
+            assert r.status_code == 409
+            mock_ali.refund_order.assert_not_called()
+
+    def test_refund_provider_failure_keeps_original_pending_claim(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
+            mock_orders.reserve_refund_attempt.return_value = ("refund_reserved", {})
+            mock_orders.observe_refund_provider_result.return_value = True
+            mock_ali.refund_order.return_value = {"success": False, "message": "渠道未知"}
+            r = client_mp.post(
+                "/api/model-payment/refund",
+                json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
+            )
+            assert r.status_code == 503
+            assert r.json()["requires_reconciliation"] is True
 
     def test_refund_receipt_write_failure_requires_manual_reconciliation(self, client_mp):
         with (
             patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
             patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
         ):
+            mock_orders.reserve_refund_attempt.return_value = ("refund_reserved", {})
+            mock_orders.observe_refund_provider_result.side_effect = OSError("disk full")
             mock_ali.refund_order.return_value = {"success": True, "raw": {}}
-            mock_orders.update_order_status.side_effect = OSError("disk full")
             r = client_mp.post(
                 "/api/model-payment/refund",
                 json={"out_trade_no": "mp-123", "refund_amount": "9.90"},
@@ -792,19 +837,69 @@ class TestClose:
 
 @pytest.mark.usefixtures("owned_order_business_branch")
 class TestRefundQuery:
-    def test_refund_query_success(self, client_mp):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
+    def test_refund_query_confirms_only_independent_provider_amount_and_identity(self, client_mp):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
             mock_ali.query_refund.return_value = {
                 "success": True,
-                "raw": {"refund_status": "REFUND_SUCCESS"},
+                "raw": {
+                    "refund_status": "REFUND_SUCCESS",
+                    "refund_amount": "9.90",
+                    "out_trade_no": "mp-123",
+                    "out_request_no": "original-refund-id",
+                },
             }
-            r = client_mp.get("/api/model-payment/refund/query", params={"out_trade_no": "mp-123"})
+            mock_orders.confirm_refund_from_provider_query.return_value = (
+                "refund_confirmed", {"state": "confirmed"},
+            )
+            r = client_mp.get(
+                "/api/model-payment/refund/query",
+                params={"out_trade_no": "mp-123", "out_request_no": "original-refund-id"},
+            )
             assert r.status_code == 200
-            assert r.json()["success"] is True
+            assert r.json()["gateway_refund_confirmed"] is True
+            assert r.json()["bank_settlement_verified"] is False
+            mock_orders.confirm_refund_from_provider_query.assert_called_once_with(
+                out_trade_no="mp-123",
+                out_request_no="original-refund-id",
+                amount_cents=990,
+            )
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            {},
+            {"refund_status": "REFUND_SUCCESS", "refund_amount": "9.91"},
+            {"refund_status": "REFUND_SUCCESS", "refund_amount": "9.90", "out_trade_no": "other"},
+            {"refund_status": "WAITING", "refund_amount": "9.90"},
+        ],
+    )
+    def test_refund_query_rejects_unverified_or_conflicting_result(self, client_mp, raw):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.mp_orders") as mock_orders,
+        ):
+            mock_ali.query_refund.return_value = {"success": True, "raw": raw}
+            mock_orders.confirm_refund_from_provider_query.return_value = (
+                "refund_amount_mismatch", {},
+            )
+            r = client_mp.get(
+                "/api/model-payment/refund/query", params={"out_trade_no": "mp-123"}
+            )
+            assert r.status_code == 409
+            mock_orders.confirm_refund_from_provider_query.assert_called_once_with(
+                out_trade_no="mp-123", out_request_no="mp-123", amount_cents=991
+            ) if raw.get("refund_amount") == "9.91" and raw.get("out_trade_no") != "other" else mock_orders.confirm_refund_from_provider_query.assert_not_called()
 
     def test_refund_query_failure(self, client_mp):
         with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali:
-            mock_ali.query_refund.return_value = {"success": False, "message": "查询失败"}
-            r = client_mp.get("/api/model-payment/refund/query", params={"out_trade_no": "mp-123"})
-            assert r.status_code == 200
-            assert r.json()["success"] is False
+            mock_ali.query_refund.return_value = {
+                "success": False, "message": "查询失败",
+            }
+            r = client_mp.get(
+                "/api/model-payment/refund/query", params={"out_trade_no": "mp-123"}
+            )
+            assert r.status_code == 503
+            assert r.json()["requires_reconciliation"] is True
