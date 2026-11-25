@@ -122,7 +122,10 @@ def test_missing_receipt_survives_sql_restart_and_duplicate_submission(tmp_path)
     recovered_engine.dispose()
 
 
-def test_raw_success_without_independent_receipt_never_clears_open_effect(tmp_path):
+@pytest.mark.parametrize("receipt_variant", ["pending", "legacy", "missing"])
+def test_raw_success_without_independent_receipt_never_clears_open_effect(
+    tmp_path, receipt_variant
+):
     engine = create_engine(f"sqlite:///{tmp_path / 'unverified-receipt.db'}")
     queue = SQLAlchemyTaskExecutionRepository(session_factory=sessionmaker(bind=engine))
     run = AgentRun(user_id="owner", message="write completed before verification")
@@ -135,20 +138,23 @@ def test_raw_success_without_independent_receipt_never_clears_open_effect(tmp_pa
         output={"success": True},
     )
     run.steps.append(step)
-    run.tool_calls.append(
-        ToolCall(
-            step_id=step.step_id,
-            node_id=step.node_id,
-            tool_id=step.tool_id,
-            action=step.action,
-            status="completed",
-            output={"success": True},
-            metadata={
-                "verification_contract": {"protocol": "xcagi.result-verification.v1"},
-                "verification": {"status": "pending", "accepted": False},
-            },
+    if receipt_variant != "missing":
+        run.tool_calls.append(
+            ToolCall(
+                step_id=step.step_id,
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                status="completed",
+                output={"success": True},
+                metadata={
+                    "verification_contract": {"protocol": "xcagi.result-verification.v1"},
+                    "verification": {"status": "pending", "accepted": False},
+                }
+                if receipt_variant == "pending"
+                else {},
+            )
         )
-    )
     queue.enqueue(run)
     with queue.transaction() as db:
         book = SessionBook(db)
