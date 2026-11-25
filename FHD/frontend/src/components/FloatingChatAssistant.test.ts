@@ -237,6 +237,7 @@ describe('FloatingChatAssistant', () => {
     await input.setValue('中文草稿')
     for (const init of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }]) {
       const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init })
+      if ('keyCode' in init) Object.defineProperty(event, 'keyCode', { configurable: true, value: 229 })
       input.element.dispatchEvent(event)
       expect(event.defaultPrevented).toBe(false)
     }
