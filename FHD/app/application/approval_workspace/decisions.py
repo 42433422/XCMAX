@@ -40,7 +40,15 @@ from .repository import ApprovalRepository
 
 def _active_decision_actor(db: Session, req: ApprovalRequest, actor: int) -> bool:
     """An old reviewer list cannot reauthorize a deactivated or moved user."""
-    user = db.query(User).filter(User.id == actor, User.is_active.is_(True)).first()
+    # PostgreSQL holds the reviewer row until this decision commits.
+    # A concurrent revocation/tenant move must serialize before or after the
+    # approval, rather than slip between the permission read and the CAS.
+    user = (
+        db.query(User)
+        .filter(User.id == actor, User.is_active.is_(True))
+        .with_for_update(read=True)
+        .first()
+    )
     return user is not None and (
         req.tenant_id is None or user.tenant_id == req.tenant_id
     )
