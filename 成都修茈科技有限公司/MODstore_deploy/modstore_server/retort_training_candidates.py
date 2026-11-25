@@ -619,11 +619,15 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         if not isinstance(item, dict) or item.get("assignment_stage") != "approved_rollout":
             continue
         completed = aware(item.get("completed_at"))
-        if completed is None or completed.utcoffset() is None:
+        assigned = aware(item.get("assigned_at"))
+        if completed is None or assigned is None:
             unverified = True
             continue
         completed = completed.astimezone(UTC)
-        if not start <= completed <= now:
+        assigned = assigned.astimezone(UTC)
+        if not start <= assigned <= completed <= now:
+            if completed > now or assigned < start:
+                unverified = True
             continue
         if (
             item.get("request_id") != row.id
@@ -635,6 +639,8 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
             or type(item.get("success")) is not bool
             or not item.get("observation_id")
             or not item.get("subject_id")
+            or type(item.get("user_id")) is not int
+            or str(item["user_id"]) != str(item["subject_id"])
         ):
             unverified = True
             continue
@@ -677,6 +683,7 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         "source": "original_experiment_outbox",
         "experiment_id": progress.get("experiment_id"),
         "release_sha": progress.get("release_sha"),
+        "policy_digest": progress.get("policy_digest"),
         "window_start": start.isoformat(),
         "observed_through": now.isoformat(),
         "observations": sample_count,
