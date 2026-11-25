@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from modstore_server.api.deps import get_db
 from modstore_server.db.mac_control import MacControlTask
 from modstore_server.mac_control_api import router as admin_router
-from modstore_server.mac_control_dispatch_api import SERVICE_ACTOR, router
+from modstore_server.mac_control_dispatch_api import SERVICE_ACTOR, _issue_key, router
 from modstore_server.mac_control_store import accept
 from modstore_server.models import Base
 
@@ -55,6 +55,22 @@ def auth(token: str = TOKEN) -> dict:
 
 def body(**overrides) -> dict:
     return {"request_key": "gh-issue-2234-1", "message": "fix issue", **overrides}
+
+
+def issue_body(number: int, **overrides) -> dict:
+    return body(
+        **{
+            "request_key": _issue_key("owner/repo", number),
+            "github_issue": number,
+            "repository": "owner/repo",
+            "base_branch": "main",
+            "message": (
+                f"修复 GitHub issue #{number}（owner/repo）：t\n\n"
+                "基线分支：main。只做 issue 要求的最小改动，正文"
+            ),
+            **overrides,
+        }
+    )
 
 
 def test_rejects_missing_or_wrong_token(setup):
@@ -113,7 +129,7 @@ def test_creates_code_task_only_for_mac_with_service_actor(setup, tool):
     client, factory = setup
     response = client.post(
         "/api/service/mac-control/tasks",
-        json=body(github_issue=2234, mode="review", target="windows", tool=tool),
+        json=issue_body(2234, mode="review", target="windows", tool=tool),
         headers=auth(),
     )
     assert response.status_code == 202, response.text
@@ -349,3 +365,91 @@ def test_legacy_published_original_pr_remains_readback_only(setup, monkeypatch):
     assert len(reads) == 3
     with factory() as db:
         assert "strategic_request" not in json.loads(db.get(MacControlTask, task_id).snapshot_json)
+
+
+def test_stable_issue_lookup_and_immutable_scope(setup):
+    client, factory = setup
+    route = "/api/service/mac-control/tasks"
+    lookup = "/api/service/mac-control/issues/5/task"
+    scope = {"repository": "owner/repo", "base_branch": "main"}
+    assert client.get(lookup, params=scope).status_code == 401
+    assert client.get(lookup, params=scope, headers=auth()).json()["task"] is None
+    first = client.post(route, json=issue_body(5), headers=auth())
+    assert first.status_code == 202, first.text
+    task_id = first.json()["task"]["id"]
+    assert client.get(lookup, params=scope, headers=auth()).json()["task"]["id"] == task_id
+    assert client.post(route, json=issue_body(5), headers=auth()).json()["task"]["id"] == task_id
+    for change in ({"base_branch": "other"}, {"message": "changed"}, {"tool": "codex"}):
+        assert client.post(route, json=issue_body(5, **change), headers=auth()).status_code == 409
+    assert client.post(
+        route, json=issue_body(5, request_key="gh-issue-5-random"), headers=auth()
+    ).status_code == 409
+    with factory() as db:
+        assert db.query(MacControlTask).filter_by(actor=SERVICE_ACTOR).count() == 1
+
+
+def _legacy_body(run_id: int) -> dict:
+    payload = issue_body(5, request_key=f"gh-issue-5-run-{run_id}")
+    del payload["repository"], payload["base_branch"]
+    return payload
+
+
+def _seed_legacy(factory, run_id: int, *, state: str = "waiting_device") -> str:
+    payload = _legacy_body(run_id)
+    with factory() as db:
+        task = accept(
+            db,
+            actor=SERVICE_ACTOR,
+            key=payload["request_key"],
+            request={
+                "message": payload["message"],
+                "target": "mac",
+                "tool": "cursor",
+                "mode": "code",
+                "source_sha": "",
+                "ticket_id": None,
+                "customer_id": None,
+                "source": "github_issue_dispatch",
+                "github_issue": 5,
+            },
+        )
+        task.state = state
+        db.commit()
+        return task.id
+
+
+@pytest.mark.parametrize("state", ["waiting_device", "execution_completed", "failed", "cancelled"])
+def test_existing_legacy_task_recovered_even_without_github_receipt(setup, state):
+    client, factory = setup
+    task_id = _seed_legacy(factory, 100, state=state)
+    lookup = "/api/service/mac-control/issues/5/task"
+    scope = {"repository": "owner/repo", "base_branch": "main"}
+    found = client.get(lookup, params=scope, headers=auth())
+    assert found.status_code == 200
+    assert found.json()["task"]["id"] == task_id
+    assert found.json()["task"]["state"] == state
+    replay = client.post("/api/service/mac-control/tasks", json=_legacy_body(101), headers=auth())
+    assert replay.status_code == 202, replay.text
+    assert replay.json()["task"]["id"] == task_id
+    for mismatch in ({"base_branch": "other"}, {"repository": "other/repo"}):
+        assert client.get(
+            lookup, params={**scope, **mismatch}, headers=auth()
+        ).status_code == 409
+    with factory() as db:
+        assert db.query(MacControlTask).filter_by(actor=SERVICE_ACTOR).count() == 1
+
+
+def test_old_callers_are_canonicalized_and_duplicate_legacy_tasks_block(setup):
+    client, factory = setup
+    route = "/api/service/mac-control/tasks"
+    first = client.post(route, json=_legacy_body(1), headers=auth())
+    second = client.post(route, json=_legacy_body(2), headers=auth())
+    assert first.status_code == second.status_code == 202
+    assert first.json()["task"]["id"] == second.json()["task"]["id"]
+    _seed_legacy(factory, 3)
+    lookup = "/api/service/mac-control/issues/5/task"
+    scope = {"repository": "owner/repo", "base_branch": "main"}
+    assert client.get(lookup, params=scope, headers=auth()).status_code == 409
+    assert client.post(route, json=_legacy_body(4), headers=auth()).status_code == 409
+    with factory() as db:
+        assert db.query(MacControlTask).filter_by(actor=SERVICE_ACTOR).count() == 2
