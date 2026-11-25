@@ -146,8 +146,8 @@ def _dated_rows(value: dict, name: str, days: int, now: datetime) -> list[dict]:
         raise ValueError("daily evidence is missing, unordered or duplicate")
     if any((b - a).days != 1 for a, b in zip(dates, dates[1:])):
         raise ValueError("daily evidence has a gap")
-    if dates[-1] >= now.date():
-        raise ValueError("current incomplete day cannot count")
+    if dates[-1] >= now.date() or dates[-1] < now.date() - timedelta(days=2):
+        raise ValueError("daily window is incomplete or stale")
     return rows
 
 
@@ -237,6 +237,8 @@ def evaluate(root: Path, source_sha: str, trusted_key: bytes | None, *, now: dat
             path = root / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError(f"{kind}: artifact is absent or symlinked")
+            if path.stat().st_size > 16_000_000:
+                raise ValueError(f"{kind}: artifact exceeds size limit")
             content = path.read_bytes()
             if hashlib.sha256(content).hexdigest() != item["sha256"]:
                 raise ValueError(f"{kind}: raw artifact checksum mismatch")
