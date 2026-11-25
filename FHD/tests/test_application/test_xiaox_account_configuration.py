@@ -679,3 +679,62 @@ def test_turn_timeout_is_bounded_by_chat_budget(monkeypatch):
     assert configuration._turn_timeout_seconds() == 570
     monkeypatch.setenv("XCAGI_RUNTIME_TURN_TIMEOUT_SEC", "1")
     assert configuration._turn_timeout_seconds() == 60
+
+
+def test_upgrade_preserves_legacy_account_state_and_qualification(account, tmp_path):
+    first = configuration.get_account_runtime_settings("41")
+    assert first.runtime_root.parent == tmp_path / "codex-runtime"
+    original = first.qualification_file.read_bytes()
+    evidence = json.loads(original)
+    files = {Path(ref): Path(ref).read_bytes() for ref in evidence["evidence_refs"]}
+    resumed = configuration.get_account_runtime_settings("41")
+    assert resumed.runtime_root == first.runtime_root
+    assert resumed.qualification_file == first.qualification_file
+    assert resumed.qualification_file.read_bytes() == original
+    assert all(path.read_bytes() == data for path, data in files.items())
+    assert not (tmp_path / "xiaox-runtime").exists()
+    assert len(account.attempts) == 1
+
+
+def test_xiaox_only_account_directory_is_reused_without_copy(account, tmp_path):
+    settings, scope, _ = configuration._account_runtime_inputs("41")
+    renamed = tmp_path / "xiaox-runtime" / scope
+    renamed.mkdir(parents=True)
+    marker = renamed / "original-state"
+    marker.write_bytes(b"retain")
+    first = configuration.get_account_runtime_settings("41")
+    resumed = configuration.get_account_runtime_settings("41")
+    assert first.runtime_root == resumed.runtime_root == renamed
+    assert marker.read_bytes() == b"retain"
+    assert not settings.runtime_root.exists()
+    assert len(account.attempts) == 1
+
+
+def test_split_account_state_blocks_before_paid_probe(account, tmp_path):
+    settings, scope, _ = configuration._account_runtime_inputs("41")
+    settings.runtime_root.mkdir(parents=True)
+    renamed = tmp_path / "xiaox-runtime" / scope
+    renamed.mkdir(parents=True)
+    for path in (settings.runtime_root, renamed):
+        (path / "original-state").write_bytes(b"retain")
+    for check in (
+        configuration.get_account_runtime_status,
+        configuration.get_account_runtime_settings,
+    ):
+        with pytest.raises(configuration.RuntimeSetupError) as exc:
+            check("41")
+        assert exc.value.code == "runtime_storage_invalid"
+    assert account.attempts == []
+    for path in (settings.runtime_root, renamed):
+        assert (path / "original-state").read_bytes() == b"retain"
+
+
+def test_unselected_legacy_alias_symlink_blocks_account_setup(account, tmp_path):
+    target = tmp_path / "other-state"
+    target.mkdir()
+    (tmp_path / "codex-runtime").symlink_to(target, target_is_directory=True)
+    with pytest.raises(configuration.RuntimeSetupError) as exc:
+        configuration.get_account_runtime_settings("41")
+    assert exc.value.code == "runtime_storage_invalid"
+    assert account.attempts == []
+    assert not list(target.iterdir())
