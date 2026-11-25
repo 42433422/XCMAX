@@ -30,6 +30,8 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     assert inputs["release_sha"]["type"] == "string"
     assert inputs["version"]["required"] is True
     assert "default" not in inputs["version"]
+    assert inputs["build_number"]["required"] is True
+    assert "default" not in inputs["build_number"]
     assert inputs["submit_for_review"]["default"] is False
     assert inputs["distribute_to_testflight"]["default"] is False
 
@@ -48,8 +50,9 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
         assert required in guard["run"]
 
     version = next(step for step in steps if step.get("name") == "Resolve release version")
-    assert "config/download_release.json" in version["run"]
-    assert "catalog_version%.*" in version["run"]
+    assert "config/download_release.json" not in version["run"]
+    assert "catalog_version%.*" not in version["run"]
+    assert "GITHUB_RUN_NUMBER" not in version["run"]
     assert "marketing_version" in version["run"]
 
     signed = next(step for step in steps if step.get("name") == "Freeze signed IPA bytes and original build identity")
@@ -138,7 +141,7 @@ def test_app_review_requires_explicit_distribution_authorization(
 
 
 @pytest.mark.parametrize("path,_", WORKFLOWS, ids=["source", "published"])
-@pytest.mark.parametrize("scenario", ["valid", "default_build", "invalid_version", "invalid_build"])
+@pytest.mark.parametrize("scenario", ["valid", "missing_build", "invalid_version", "invalid_build"])
 def test_ios_release_version_treats_dispatch_inputs_as_data(
     path: Path, _: str, scenario: str, tmp_path: Path
 ) -> None:
@@ -151,11 +154,6 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
     assert "${{" not in step["run"]
     app = tmp_path / "mobile-flutter-poc"
     app.mkdir()
-    config = tmp_path / "config"
-    config.mkdir()
-    (config / "download_release.json").write_text(
-        '{"version_lock": "1.0.0.7"}', encoding="utf-8"
-    )
     output = tmp_path / "output"
     marker = app / "unexpected-execution"
     invalid = '$(touch unexpected-execution)'
@@ -164,9 +162,9 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
         cwd=app,
         env={
             **os.environ,
-            "REQUESTED_MARKETING_VERSION": invalid if scenario == "invalid_version" else "1.0.0",
+            "REQUESTED_MARKETING_VERSION": invalid if scenario == "invalid_version" else "1.2.3",
             "REQUESTED_BUILD_NUMBER": invalid if scenario == "invalid_build" else (
-                "" if scenario == "default_build" else "42"
+                "" if scenario == "missing_build" else "42"
             ),
             "GITHUB_RUN_NUMBER": "43",
             "GITHUB_OUTPUT": str(output),
@@ -176,12 +174,11 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
         check=False,
     )
     assert not marker.exists()
-    if scenario in {"invalid_version", "invalid_build"}:
+    if scenario in {"invalid_version", "invalid_build", "missing_build"}:
         assert result.returncode != 0
         assert not output.exists()
     else:
         assert result.returncode == 0, result.stderr
-        expected = "43" if scenario == "default_build" else "42"
         assert output.read_text(encoding="utf-8").splitlines() == [
-            "marketing_version=1.0.0", "product_version=1.0.0.7", f"build_number={expected}"
+            "marketing_version=1.2.3", "build_number=42"
         ]

@@ -11,12 +11,12 @@ on:
         required: true
         type: string
       version:
-        description: Apple three-component version from the frozen product catalog
+        description: Explicit App Store Connect marketing version (x.y.z); not derived from desktop
         required: true
         type: string
       build_number:
-        description: iOS build number; empty uses the Actions run number
-        required: false
+        description: Explicit App Store Connect build number; no automatic fallback
+        required: true
         type: string
       bootstrap_match:
         description: One-time import of the existing certificate/profile into match
@@ -94,15 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           marketing_version="$REQUESTED_MARKETING_VERSION"
-          catalog_version="$(python3 -c 'import json; from pathlib import Path; print(json.loads(Path("../config/download_release.json").read_text())["version_lock"])')"
-          if [[ ! "$catalog_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ || "$marketing_version" != "${catalog_version%.*}" ]]; then
-            echo "::error::iOS marketing version must match the selected source product catalog"
-            exit 2
-          fi
           build_number="$REQUESTED_BUILD_NUMBER"
-          if [[ -z "${build_number}" ]]; then
-            build_number="$GITHUB_RUN_NUMBER"
-          fi
           if [[ ! "${marketing_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::version must use x.y.z format"
             exit 2
@@ -112,7 +104,6 @@ jobs:
             exit 2
           fi
           echo "marketing_version=${marketing_version}" >> "${GITHUB_OUTPUT}"
-          echo "product_version=${catalog_version}" >> "${GITHUB_OUTPUT}"
           echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
 
       - uses: subosito/flutter-action@v2
@@ -214,7 +205,6 @@ jobs:
       - name: Freeze signed IPA bytes and original build identity
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
-          PRODUCT_VERSION: ${{ steps.version.outputs.product_version }}
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: |
@@ -233,7 +223,6 @@ jobs:
           receipt = {
               'schema': 'xcagi.ios_candidate_build_identity/v1',
               'source_sha': os.environ['RELEASE_SHA'],
-              'product_version': os.environ['PRODUCT_VERSION'],
               'marketing_version': os.environ['IOS_MARKETING_VERSION'],
               'build_number': os.environ['IOS_BUILD_NUMBER'],
               'ipa_filename': archive.name,

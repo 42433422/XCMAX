@@ -1,5 +1,7 @@
 ## Unreleased
 
+- iOS App Store 版本号与构建号均改为显式必填，不从桌面四段版本或 Actions run number 推导；个人版身份仍须由 App Store Connect 核对，现有 enterprise Bundle ID 不得冒充个人版验收。
+
 - 修复 iOS 发布版本输入直接进入 Shell 源码的问题；版本与构建号通过环境变量传递后校验，新增无副作用负控及默认构建号回归，保留原签名和分发授权门禁。
 
 - 修复 iOS 正式发布工作流：仅接受当前 main 的完整源码 SHA，校验四段产品版本到 Apple 三段版本映射，冻结签名 IPA SHA-256 与构建身份回执；明确区分构建成功和真机商业验收，默认不分发 TestFlight、不提交商店审核。
