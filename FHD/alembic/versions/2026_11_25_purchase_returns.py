@@ -18,6 +18,7 @@ def upgrade() -> None:
     required = (
         "purchase_inbounds", "purchase_inbound_items", "approval_requests",
         "journal_entries", "products", "suppliers", "warehouses",
+        "storage_locations",
     )
     missing = [name for name in required if not inspector.has_table(name)]
     if missing:
