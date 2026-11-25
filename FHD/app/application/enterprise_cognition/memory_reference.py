@@ -22,31 +22,60 @@ _FACT_TOKEN = re.compile(r"^erp:[0-9a-f]{64}$")
 _ALLOWED_ERP_FIELDS: dict[str, frozenset[str]] = {
     "order": frozenset(
         {
-            "order_no", "customer_id", "state", "status", "invoice_status",
-            "payment_state", "total_amount", "paid_amount", "currency",
-            "ordered_quantity", "delivered_quantity", "returned_quantity",
-            "remaining_quantity", "quantity_unit",
+            "order_no",
+            "customer_id",
+            "state",
+            "status",
+            "invoice_status",
+            "payment_state",
+            "total_amount",
+            "paid_amount",
+            "currency",
+            "ordered_quantity",
+            "delivered_quantity",
+            "returned_quantity",
+            "remaining_quantity",
+            "quantity_unit",
         }
     ),
     "inventory": frozenset(
         {
-            "product_id", "warehouse_id", "transaction_type", "quantity",
-            "before_quantity", "after_quantity", "transaction_date",
+            "product_id",
+            "warehouse_id",
+            "transaction_type",
+            "quantity",
+            "before_quantity",
+            "after_quantity",
+            "transaction_date",
             "sales_order_id",
         }
     ),
     "fund": frozenset(
         {
-            "transaction_type", "amount", "currency", "reference_type",
-            "reference_id", "journal_entry_id", "status", "due_date",
+            "transaction_type",
+            "amount",
+            "currency",
+            "reference_type",
+            "reference_id",
+            "journal_entry_id",
+            "status",
+            "due_date",
             "transaction_date",
         }
     ),
     "journal_entry": frozenset(
         {
-            "entry_no", "journal_date", "status", "reference_type",
-            "reference_id", "debit_total", "credit_total", "reversed_of_id",
-            "reversed_at", "credit_note_of_id", "is_credit_note",
+            "entry_no",
+            "journal_date",
+            "status",
+            "reference_type",
+            "reference_id",
+            "debit_total",
+            "credit_total",
+            "reversed_of_id",
+            "reversed_at",
+            "credit_note_of_id",
+            "is_credit_note",
         }
     ),
     "customer": frozenset(
