@@ -258,3 +258,97 @@ async def test_cancel_at_idle_limiter_checkpoint_does_not_leak_token(monkeypatch
     async with asyncio.timeout(5):
         result = await patch_workspace_prefs_endpoint(WorkspacePrefsPatch(), MagicMock())
     assert result["success"] is True
+
+
+def test_workspace_revision_is_shared_across_clients_and_stale_patch_gets_409(monkeypatch):
+    from app.fastapi_routes import workspace_prefs_routes as routes
+
+    user = SimpleNamespace(id=7, tenant_id=42)
+    monkeypatch.setattr(routes, "resolve_session_user", lambda _request: user)
+    monkeypatch.setattr(routes, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(
+        routes, "resolve_workspace_owner_id", lambda _request, _user: "tenant:42"
+    )
+    monkeypatch.setattr(routes, "session_id_from_request", lambda _request: "sid-42")
+
+    rows = {}
+
+    class PreferenceStore:
+        def get_preference(self, owner, key):
+            return rows.get((owner, key))
+
+        def mutate_preference(self, owner, key, transform):
+            value = transform(rows.get((owner, key)))
+            rows[(owner, key)] = value
+            return value
+
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
+        lambda: PreferenceStore(),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as desktop, TestClient(app) as mobile:
+        start_desktop = desktop.get("/api/workspace/prefs").json()
+        start_mobile = mobile.get("/api/workspace/prefs").json()
+        assert start_desktop["revision"] == start_mobile["revision"] == 0
+
+        first = desktop.patch(
+            "/api/workspace/prefs",
+            json={"host_pack_acknowledged": True, "expected_revision": 0},
+        )
+        assert first.status_code == 200
+        assert first.json()["revision"] == 1
+        assert first.json()["data"]["_revision"] == 1
+
+        stale = mobile.patch(
+            "/api/workspace/prefs",
+            json={"host_pack_acknowledged": False, "expected_revision": 0},
+        )
+        assert stale.status_code == 409
+        assert stale.json()["detail"]["error_code"] == "workspace_prefs_version_conflict"
+        assert desktop.get("/api/workspace/prefs").json()["revision"] == 1
+
+        newer = mobile.get("/api/workspace/prefs").json()
+        assert newer["data"]["host_pack_acknowledged"] is True
+        second = mobile.patch(
+            "/api/workspace/prefs",
+            json={"product_flow_completed": True, "expected_revision": newer["revision"]},
+        )
+        assert second.status_code == 200
+        assert second.json()["revision"] == 2
+        assert desktop.get("/api/workspace/prefs").json()["data"][
+            "product_flow_completed"
+        ] is True
+
+        invalid = mobile.patch(
+            "/api/workspace/prefs",
+            json={"product_flow_completed": False, "expected_revision": True},
+        )
+        assert invalid.status_code == 422
+
+
+def test_workspace_stale_industry_update_rejected_before_binding(monkeypatch):
+    from app.fastapi_routes import workspace_prefs_routes as routes
+    from app.application.tenant_workspace_prefs import WorkspacePrefsVersionConflict
+
+    user = SimpleNamespace(id=7)
+    bind = MagicMock()
+    monkeypatch.setattr(routes, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(routes, "resolve_workspace_owner_id", lambda *_: "tenant:42")
+    monkeypatch.setattr(routes, "bind_selected_industry_for_user", bind)
+
+    def conflict(_owner, _partial, *, expected_revision):
+        assert expected_revision == 0
+        raise WorkspacePrefsVersionConflict("workspace_prefs_version_conflict")
+
+    monkeypatch.setattr(routes, "patch_workspace_prefs", conflict)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        denied = client.patch(
+            "/api/workspace/prefs",
+            json={"selected_industry_id": "涂料", "expected_revision": 0},
+        )
+    assert denied.status_code == 409
+    bind.assert_not_called()
