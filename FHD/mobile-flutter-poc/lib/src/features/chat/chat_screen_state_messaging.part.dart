@@ -34,6 +34,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
   void _revokeChatView() {
     if (!mounted || _chatInvalidated) return;
+    _streamTokenBatcher.clear();
     _chatInvalidated = true;
     _chatEpoch++;
     _draftTimer?.cancel();
@@ -111,7 +112,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         onToken: (token) {
           if (!mounted) return;
           if (_stopRequested || _activeAssistantId != assistantId) return;
-          setState(() => _appendMessageBody(assistantId, token));
+          _queueStreamToken(assistantId, token);
         },
         onStatus: (progress) {
           if (!mounted) return;
@@ -146,6 +147,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         _activeRelayProgress = null;
       });
     } finally {
+      _streamTokenBatcher.clearFor(assistantId);
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
@@ -305,7 +307,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
                 if (mounted &&
                     !_stopRequested &&
                     _activeAssistantId == assistantId) {
-                  setState(() => _appendMessageBody(assistantId, token));
+                  _queueStreamToken(assistantId, token);
                 }
               })
           : await repository.streamMessage(
@@ -319,7 +321,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               onToken: (token) {
                 if (!mounted) return;
                 if (_stopRequested || _activeAssistantId != assistantId) return;
-                setState(() => _appendMessageBody(assistantId, token));
+                _queueStreamToken(assistantId, token);
               },
               onStatus: (progress) {
                 if (!mounted) return;
@@ -376,6 +378,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         _activeRelayProgress = null;
       });
     } finally {
+      _streamTokenBatcher.clearFor(assistantId);
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
@@ -388,6 +391,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   void _clearChat() {
+    _streamTokenBatcher.clear();
     setState(() {
       _messages.clear();
       _attachments.clear();
@@ -404,6 +408,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   void _stopChat() {
     final assistantId = _activeAssistantId;
     if (assistantId == null) return;
+    _streamTokenBatcher.flushFor(assistantId);
     final progress = _activeRelayProgress;
     setState(() {
       _stopRequested = true;
