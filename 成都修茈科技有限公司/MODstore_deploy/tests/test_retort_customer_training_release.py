@@ -196,7 +196,13 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(relea
 
 @pytest.mark.parametrize(
     "tamper",
-    ["no_outbox_regression", "no_outbox_source_fault", "release_changed", "snapshot_changed"],
+    [
+        "no_outbox_regression",
+        "no_outbox_source_fault",
+        "release_changed",
+        "snapshot_changed",
+        "clock_changed",
+    ],
 )
 def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
     released_customer_training, tamper
@@ -215,11 +221,11 @@ def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
             "source": "original_experiment_outbox",
             "reason": (
                 "workflow_postpromotion_source_unverified"
-                if tamper == "no_outbox_source_fault"
+                if tamper in {"no_outbox_source_fault", "clock_changed"}
                 else "workflow_execution_stop_loss"
             ),
             "request_id": run["id"],
-            "promoted_at": progress["closed_at"],
+            "promoted_at": None if tamper == "clock_changed" else progress["closed_at"],
             "release_sha": (
                 "f" * 40 if tamper == "release_changed" else progress["release_sha"]
             ),
@@ -399,7 +405,13 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
 
 @pytest.mark.parametrize(
     "closed_at",
-    [None, "not-a-timestamp", "2026-01-01T00:00:00", "9999-01-01T00:00:00+00:00"],
+    [
+        None,
+        123,
+        "not-a-timestamp",
+        "2026-01-01T00:00:00",
+        "9999-01-01T00:00:00+00:00",
+    ],
 )
 def test_promoted_training_blocks_traffic_without_valid_rollout_clock(
     released_customer_training, closed_at
@@ -431,6 +443,22 @@ def test_promoted_training_blocks_traffic_without_valid_rollout_clock(
         workflow_id=run["workflows"][owner],
         default_value=run["spec"]["lifecycle"]["treatment_prompt"],
     ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+    # The same persisted clock fault must survive switching local traffic to
+    # control; otherwise the next impact tick never verifies remote withdrawal.
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    assert first["experiment"]["status"] == "awaiting_rollout_readback"
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "workflow_postpromotion_source_unverified"
+    assert second["experiment"]["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])

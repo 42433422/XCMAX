@@ -489,6 +489,22 @@ def training_plan(request_id):
     )
 
 
+def _recheck_clock_bound(recheck, progress):
+    # The absence of a promotion clock can itself be the source fault. Bind
+    # that absence to the persisted value; do not accept a caller's omission.
+    if "promoted_at" not in recheck:
+        return False
+    clock = recheck["promoted_at"]
+    stored = progress.get("closed_at")
+    if recheck.get("reason") == "workflow_postpromotion_source_unverified":
+        if type(clock) is type(stored) and clock == stored:
+            return True
+        # Preserve the original valid clock during a withdrawal/readback.
+        if progress.get("traffic") != "control" or progress.get("decision") != "rollback":
+            return False
+    return isinstance(clock, str) and bool(clock)
+
+
 def read_training_impact(request_id, state):
     from modstore_server.retort_feedback_experiments import approved_policy
     from modstore_server.retort_workflow_metrics import (
@@ -520,8 +536,7 @@ def read_training_impact(request_id, state):
                     and recheck.get("final_snapshot_sha256")
                     == progress.get("final_snapshot_sha256")
                     and bool(recheck.get("final_snapshot_sha256"))
-                    and isinstance(recheck.get("promoted_at"), str)
-                    and bool(recheck["promoted_at"])
+                    and _recheck_clock_bound(recheck, progress)
                     and policy == source["growthbook"]
                     and (
                         (
@@ -609,9 +624,23 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         and recheck.get("source") == "original_experiment_outbox"
         and recheck.get("reason")
         in {"workflow_execution_stop_loss", "workflow_postpromotion_source_unverified"}
-        and bool(recheck.get("promoted_at"))
+        and _recheck_clock_bound(recheck, progress)
     )
     start = aware(recheck["promoted_at"] if recheck_bound else progress.get("closed_at"))
+    if (
+        recheck_bound
+        and recheck["reason"] == "workflow_postpromotion_source_unverified"
+        and progress.get("rollout_verified") is True
+        and observed_at.tzinfo is not None
+        and (start is None or start > observed_at)
+    ):
+        # The source fault remains actionable after local traffic is switched
+        # to control but before GrowthBook withdrawal is read back.
+        return {
+            "status": "source_unverified",
+            "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+            "reason": "invalid_original_rollout_clock",
+        }
     if (
         start is None
         or observed_at.tzinfo is None
