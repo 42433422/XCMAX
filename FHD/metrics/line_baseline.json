@@ -1,5 +1,5 @@
 {
-  "lines": 2733296,
+  "lines": 2733522,
   "updated": "2026-11-25",
-  "note": "#P0 RBAC：角色权限修改/旧会话撤销归并为单次数据库事务，拒绝跨租户角色与租户平台管理员提权；净增源码 8 行、回归 152 行、CHANGELOG 2 行（含分组空行）。仅显式抬升代码维护基线，不调整覆盖率/安全门禁，须通过最新 SHA CI 复核。"
+  "note": "#3617: web JWT live-session revocation and cross-process PostgreSQL negative control; no security gate changed. Real PG execution and CI evidence pending."
 }

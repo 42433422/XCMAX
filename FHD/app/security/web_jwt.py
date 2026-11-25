@@ -110,6 +110,35 @@ def verify_web_jwt(token: str) -> dict[str, Any] | None:
         return None
 
 
+def _live_token_session_user(db: Any, payload: dict[str, Any]) -> Any | None:
+    """Always check the host-session authority, never cached JWT claims.
+
+    Role changes delete the original session row in the same transaction.
+    A signed access/refresh token without a surviving matching session must
+    not remain usable on another process after revocation.
+    """
+    session_id = payload.get("session_id")
+    user_id = payload.get("user_id")
+    if (
+        type(session_id) is not str
+        or not session_id
+        or type(user_id) is not int
+        or user_id <= 0
+    ):
+        return None
+    from app.db.models.user import Session as UserSession
+    from app.infrastructure.session.session_manager import session_has_expired
+
+    row = (
+        db.query(UserSession)
+        .filter(UserSession.session_id == session_id, UserSession.user_id == user_id)
+        .first()
+    )
+    if row is None or row.user is None or not row.user.is_active or session_has_expired(db, row):
+        return None
+    return row.user
+
+
 def _consume_refresh_jti(db: Any, jti: str, expires_at: int, now: int) -> bool:
     """Caller must commit before releasing replacement tokens to the client."""
     if (
@@ -167,6 +196,8 @@ def refresh_web_access_token(refresh_token: str) -> dict[str, str] | None:
         from app.db.session import get_host_db
 
         with get_host_db() as db:
+            if web_jwt_auth_enabled() and _live_token_session_user(db, payload) is None:
+                return None
             consumed = _consume_refresh_jti(db, jti, expires_at, int(time.time()))
         return rotated if consumed else None
     except (SQLAlchemyError, RuntimeError):
@@ -184,12 +215,11 @@ def resolve_user_from_web_jwt(token: str) -> Any | None:
     if type(uid) is not int or uid <= 0:
         return None
     try:
-        from app.db.models.user import User
         from app.db.session import get_host_db
 
         with get_host_db() as db:
-            user = db.get(User, uid)
-            if user is None or not getattr(user, "is_active", True):
+            user = _live_token_session_user(db, payload)
+            if user is None:
                 return None
             _ = (user.id, user.tier, user.industry_id, user.tenant_id, user.role)
             db.expunge(user)
