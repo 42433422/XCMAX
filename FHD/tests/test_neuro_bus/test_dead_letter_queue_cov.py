@@ -1056,6 +1056,10 @@ class TestNeuroBusDLQIntegration:
 
 
 class TestGlobalHelpers:
+    @pytest.fixture(autouse=True)
+    def _isolated_dlq_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCAGI_NEURO_BUS_DLQ_PATH", str(tmp_path / "global.sqlite3"))
+
     def setup_method(self) -> None:
         import app.neuro_bus.dead_letter_queue as mod
 
@@ -1064,6 +1068,8 @@ class TestGlobalHelpers:
     def teardown_method(self) -> None:
         import app.neuro_bus.dead_letter_queue as mod
 
+        if mod._dlq_instance is not None:
+            mod._dlq_instance.close()
         mod._dlq_instance = None
 
     def test_get_dead_letter_queue_creates_instance(self) -> None:
