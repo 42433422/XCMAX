@@ -1,4 +1,5 @@
-import { ref, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onActivated, onDeactivated, onBeforeUnmount, computed, type Ref } from 'vue'
+import { createLatestBusinessRead, requireBusinessSuccess } from '@/utils/businessPageLifecycle'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useModsStore } from '@/stores/mods'
@@ -170,6 +171,13 @@ export function useMaterials() {
   const categories = ref<string[]>([])
   const searchQuery = ref('')
   const selectedCategory = ref('')
+  const saving = ref(false)
+  type ListName = 'materials' | 'warehouses' | 'locations' | 'transactions' | 'suppliers'
+  const listLoading = reactive<Record<ListName, boolean>>({ materials: false, warehouses: false, locations: false, transactions: false, suppliers: false })
+  const listErrors = reactive<Record<ListName, string>>({ materials: '', warehouses: '', locations: '', transactions: '', suppliers: '' })
+  const reads = { materials: createLatestBusinessRead(), warehouses: createLatestBusinessRead(), locations: createLatestBusinessRead(), transactions: createLatestBusinessRead(), suppliers: createLatestBusinessRead() }
+  let searchTimer: ReturnType<typeof setTimeout> | undefined
+  let materialQueryKey: string | null = null
 
   const showMaterialModal = ref(false)
   const isEditMaterial = ref(false)
@@ -192,46 +200,60 @@ export function useMaterials() {
   const isEditSupplier = ref(false)
   const supplierForm = ref<SupplierForm>({ id: null, code: '', name: '', contact_person: '', contact_phone: '', rating: 3 })
 
-  const loadMaterials = async () => {
+  async function readList<T>(name: ListName, target: Ref<T[]>, url: string, params: Record<string, unknown> = {}, onData?: (response: ApiListResponse<T>) => void) {
+    const read = reads[name].begin()
+    listLoading[name] = true
+    listErrors[name] = ''
     try {
-      const params: Record<string, unknown> = {}
-      if (searchQuery.value) params.search = searchQuery.value
-      if (selectedCategory.value) params.category = selectedCategory.value
-      const res = await get<ApiListResponse<Material>>('/api/materials', params)
-      if (res.success) {
-        materials.value = res.data || []
-        if (res.categories) categories.value = res.categories
+      const response = await get<ApiListResponse<T>>(url, params, { signal: read.signal, timeoutMs: 8000, retry: false })
+      if (!read.isCurrent()) return
+      requireBusinessSuccess(response, '读取失败，请重试')
+      target.value = Array.isArray(response.data) ? response.data : []
+      onData?.(response)
+    } catch (error) {
+      if (!read.isCurrent()) return
+      const status = Number((error as { status?: number })?.status || 0)
+      if (status === 401 || status === 403) {
+        target.value = []
+        listErrors[name] = '无权限读取数据'
+      } else {
+        listErrors[name] = error instanceof Error ? error.message : '读取失败，请重试'
       }
-    } catch (e) { console.error(e) }
+    } finally {
+      if (read.isCurrent()) listLoading[name] = false
+      read.finish()
+    }
   }
 
-  const loadWarehouses = async () => {
-    try {
-      const res = await get<ApiListResponse<Warehouse>>('/api/inventory/warehouses')
-      if (res.success) warehouses.value = res.data || []
-    } catch (e) { console.error(e) }
+  const loadMaterials = async () => {
+    if (searchTimer !== undefined) clearTimeout(searchTimer)
+    searchTimer = undefined
+    const keyword = searchQuery.value.trim()
+    const category = selectedCategory.value
+    const key = JSON.stringify([keyword, category])
+    if (key !== materialQueryKey) {
+      materials.value = []
+      materialQueryKey = key
+    }
+    await readList('materials', materials, '/api/materials', {
+      ...(keyword ? { search: keyword } : {}),
+      ...(category ? { category } : {}),
+    }, response => { if (response.categories) categories.value = response.categories })
   }
 
-  const loadLocations = async (warehouseId: number | string) => {
-    try {
-      const res = await get<ApiListResponse<Location>>('/api/inventory/locations', { warehouse_id: warehouseId })
-      if (res.success) locations.value = res.data || []
-    } catch (e) { console.error(e) }
+  const scheduleMaterialsSearch = () => {
+    if (searchTimer !== undefined) clearTimeout(searchTimer)
+    reads.materials.cancel()
+    materials.value = []
+    listErrors.materials = ''
+    listLoading.materials = true
+    searchTimer = setTimeout(() => { void loadMaterials() }, 280)
   }
 
-  const loadTransactions = async () => {
-    try {
-      const res = await get<ApiListResponse<Transaction>>('/api/inventory/transactions', { per_page: 100 })
-      if (res.success) transactions.value = res.data || []
-    } catch (e) { console.error(e) }
-  }
-
-  const loadSuppliers = async () => {
-    try {
-      const res = await get<ApiListResponse<Supplier>>('/api/purchase/suppliers')
-      if (res.success) suppliers.value = res.data || []
-    } catch (e) { console.error(e) }
-  }
+  const loadWarehouses = () => readList('warehouses', warehouses, '/api/inventory/warehouses')
+  const loadLocations = (warehouseId: number | string) => readList('locations', locations, '/api/inventory/locations', { warehouse_id: warehouseId })
+  const loadTransactions = () => readList('transactions', transactions, '/api/inventory/transactions', { per_page: 100 })
+  const loadSuppliers = () => readList('suppliers', suppliers, '/api/purchase/suppliers')
 
   const showAddModal = () => {
     isEditMaterial.value = false
@@ -246,23 +268,27 @@ export function useMaterials() {
   }
 
   const saveMaterial = async () => {
+    if (saving.value) return
     if (!materialForm.value.name) { await appAlert('请输入名称'); return }
+    saving.value = true
     try {
       const res = isEditMaterial.value
         ? await api.put<ApiWriteResponse>(`/api/materials/${materialForm.value.id}`, materialForm.value)
         : await post<ApiWriteResponse>('/api/materials', materialForm.value)
-      if (res.success) { showMaterialModal.value = false; loadMaterials() }
+      if (res.success) { showMaterialModal.value = false; await loadMaterials() }
       else await appAlert(res.message || '保存失败')
-    } catch (e) { await appAlert('保存失败') }
+    } catch (e) { await appAlert('保存失败') } finally { saving.value = false }
   }
 
   const deleteMaterial = async (item: Material) => {
-    if (!(await appConfirm('确认删除？', { danger: true }))) return
+    if (saving.value) return
+    saving.value = true
     try {
+      if (!(await appConfirm('确认删除？', { danger: true }))) return
       const res = await api.delete<ApiWriteResponse>(`/api/materials/${item.id}`)
-      if (res.success) loadMaterials()
+      if (res.success) await loadMaterials()
       else await appAlert(res.message || '删除失败')
-    } catch (e) { await appAlert('删除失败') }
+    } catch (e) { await appAlert('删除失败') } finally { saving.value = false }
   }
 
   const showWarehouseModal = () => {
@@ -278,19 +304,22 @@ export function useMaterials() {
   }
 
   const saveWarehouse = async () => {
+    if (saving.value) return
     if (!warehouseForm.value.code || !warehouseForm.value.name) { await appAlert('请填写必填项'); return }
+    saving.value = true
     try {
       const res = isEditWarehouse.value
         ? await api.put<ApiWriteResponse>(`/api/inventory/warehouses/${warehouseForm.value.id}`, warehouseForm.value)
         : await post<ApiWriteResponse>('/api/inventory/warehouses', warehouseForm.value)
-      if (res.success) { showWarehouseModalFlag.value = false; loadWarehouses() }
+      if (res.success) { showWarehouseModalFlag.value = false; await loadWarehouses() }
       else await appAlert(res.message || '保存失败')
-    } catch (e) { await appAlert('保存失败') }
+    } catch (e) { await appAlert('保存失败') } finally { saving.value = false }
   }
 
   const manageLocations = (w: Warehouse) => {
+    if (selectedWarehouse.value?.id !== w.id) locations.value = []
     selectedWarehouse.value = w
-    loadLocations(w.id)
+    void loadLocations(w.id)
   }
 
   const showLocationModal = () => {
@@ -306,14 +335,16 @@ export function useMaterials() {
   }
 
   const saveLocation = async () => {
+    if (saving.value) return
     if (!locationForm.value.code) { await appAlert('请输入编码'); return }
+    saving.value = true
     try {
       const res = isEditLocation.value
         ? await api.put<ApiWriteResponse>(`/api/inventory/locations/${locationForm.value.id}`, locationForm.value)
         : await post<ApiWriteResponse>('/api/inventory/locations', locationForm.value)
-      if (res.success) { showLocationModalFlag.value = false; loadLocations(selectedWarehouse.value!.id) }
+      if (res.success) { showLocationModalFlag.value = false; if (selectedWarehouse.value) await loadLocations(selectedWarehouse.value.id) }
       else await appAlert(res.message || '保存失败')
-    } catch (e) { await appAlert('保存失败') }
+    } catch (e) { await appAlert('保存失败') } finally { saving.value = false }
   }
 
   const showInModal = () => {
@@ -327,25 +358,29 @@ export function useMaterials() {
   }
 
   const doIn = async () => {
-    if (!inoutForm.value.product_id || !inoutForm.value.warehouse_id || !inoutForm.value.quantity) {
+    if (saving.value) return
+    if (!inoutForm.value.product_id || !inoutForm.value.warehouse_id || (!Number.isFinite(inoutForm.value.quantity) || inoutForm.value.quantity <= 0)) {
       await appAlert('请填写必填项'); return
     }
+    saving.value = true
     try {
       const res = await post<ApiWriteResponse>('/api/inventory/in', inoutForm.value)
-      if (res.success) { await appAlert('入库成功'); showInModalFlag.value = false; loadTransactions() }
+      if (res.success) { showInModalFlag.value = false; await Promise.all([loadTransactions(), loadMaterials(), ...(selectedWarehouse.value ? [loadLocations(selectedWarehouse.value.id)] : [])]); await appAlert('入库成功') }
       else await appAlert(res.message || '入库失败')
-    } catch (e) { await appAlert('入库失败') }
+    } catch (e) { await appAlert('入库失败') } finally { saving.value = false }
   }
 
   const doOut = async () => {
-    if (!inoutForm.value.product_id || !inoutForm.value.warehouse_id || !inoutForm.value.quantity) {
+    if (saving.value) return
+    if (!inoutForm.value.product_id || !inoutForm.value.warehouse_id || (!Number.isFinite(inoutForm.value.quantity) || inoutForm.value.quantity <= 0)) {
       await appAlert('请填写必填项'); return
     }
+    saving.value = true
     try {
       const res = await post<ApiWriteResponse>('/api/inventory/out', inoutForm.value)
-      if (res.success) { await appAlert('出库成功'); showOutModalFlag.value = false; loadTransactions() }
+      if (res.success) { showOutModalFlag.value = false; await Promise.all([loadTransactions(), loadMaterials(), ...(selectedWarehouse.value ? [loadLocations(selectedWarehouse.value.id)] : [])]); await appAlert('出库成功') }
       else await appAlert(res.message || '出库失败')
-    } catch (e) { await appAlert('出库失败') }
+    } catch (e) { await appAlert('出库失败') } finally { saving.value = false }
   }
 
   const showSupplierModal = () => {
@@ -361,14 +396,16 @@ export function useMaterials() {
   }
 
   const saveSupplier = async () => {
+    if (saving.value) return
     if (!supplierForm.value.code || !supplierForm.value.name) { await appAlert('请填写必填项'); return }
+    saving.value = true
     try {
       const res = isEditSupplier.value
         ? await api.put<ApiWriteResponse>(`/api/purchase/suppliers/${supplierForm.value.id}`, supplierForm.value)
         : await post<ApiWriteResponse>('/api/purchase/suppliers', supplierForm.value)
-      if (res.success) { showSupplierModalFlag.value = false; loadSuppliers() }
+      if (res.success) { showSupplierModalFlag.value = false; await loadSuppliers() }
       else await appAlert(res.message || '保存失败')
-    } catch (e) { await appAlert('保存失败') }
+    } catch (e) { await appAlert('保存失败') } finally { saving.value = false }
   }
 
   const exportData = async () => {
@@ -393,11 +430,29 @@ export function useMaterials() {
     }
   }
 
-  onMounted(() => {
-    loadMaterials()
-    loadWarehouses()
-    loadTransactions()
-  })
+  let active = false
+  function activate() {
+    if (active) return
+    active = true
+    void loadMaterials()
+    void loadWarehouses()
+    void loadTransactions()
+    if (activeTab.value === 'supplier') void loadSuppliers()
+    if (selectedWarehouse.value) void loadLocations(selectedWarehouse.value.id)
+  }
+  function deactivate() {
+    active = false
+    if (searchTimer !== undefined) clearTimeout(searchTimer)
+    searchTimer = undefined
+    for (const name of Object.keys(reads) as ListName[]) {
+      reads[name].cancel()
+      listLoading[name] = false
+    }
+  }
+  onMounted(activate)
+  onActivated(activate)
+  onDeactivated(deactivate)
+  onBeforeUnmount(deactivate)
 
   return {
     materialsPageTitle,
@@ -432,6 +487,13 @@ export function useMaterials() {
     isEditSupplier,
     supplierForm,
     loadMaterials,
+    scheduleMaterialsSearch,
+    loadWarehouses,
+    loadLocations,
+    loadTransactions,
+    listLoading,
+    listErrors,
+    saving,
     loadSuppliers,
     showAddModal,
     editMaterial,
