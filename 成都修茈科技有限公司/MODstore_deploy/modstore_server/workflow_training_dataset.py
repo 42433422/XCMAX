@@ -204,15 +204,13 @@ def seal_business_evidence(bundle, tests, verified, verdict):
             if not isinstance(evidence, dict):
                 raise ValueError("training_business_evidence_missing")
             output = evidence.get("output_sha256")
+            references = identity.get("expected_reference_sha256")
             source_bound = (
                 all(
                     evidence.get(key) == identity.get(key)
-                    for key in (
-                        "manifest_sha256",
-                        "source_group_sha256",
-                        "expected_reference_sha256",
-                    )
+                    for key in ("manifest_sha256", "source_group_sha256")
                 )
+                and evidence.get("expected_reference_sha256") == references
                 and all(
                     evidence.get(key) == replay.get(key)
                     for key in ("contract_sha256", "source_evidence_sha256")
@@ -223,20 +221,29 @@ def seal_business_evidence(bundle, tests, verified, verdict):
                     for key in (
                         "manifest_sha256",
                         "source_group_sha256",
-                        "expected_reference_sha256",
                         "contract_sha256",
                         "source_evidence_sha256",
                     )
                 )
-                and isinstance(output, dict)
+                and isinstance(references, dict)
+                and bool(references)
                 and all(
                     isinstance(path, str)
                     and bool(path)
                     and isinstance(sha, str)
                     and re.fullmatch(r"[0-9a-f]{64}", sha)
-                    for path, sha in output.items()
+                    for path, sha in references.items()
                 )
-                and (verified[arm, index]["pass"] is False or bool(output))
+                and isinstance(output, dict)
+                and set(output).issubset(references)
+                and all(
+                    isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha)
+                    for sha in output.values()
+                )
+                and (
+                    verified[arm, index]["pass"] is False
+                    or set(output) == set(references)
+                )
             )
             if not source_bound:
                 return {
