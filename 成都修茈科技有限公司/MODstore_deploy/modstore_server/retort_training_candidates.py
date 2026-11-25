@@ -565,18 +565,26 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
     the temporary rollout starts there is no concurrent control arm, so the
     post-rollout stream may only establish absolute observed outcomes.
     """
-    from datetime import UTC
+    from datetime import UTC, datetime
 
-    from modstore_server.customer_value_classification import parse_datetime
     from modstore_server.models import OutboxEvent
     from modstore_server.retort_experiment_surfaces import (
         RAG_MEASUREMENT,
         WORKFLOW_CUSTOMER_MEASUREMENT,
     )
 
+    def aware(value):
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.utcoffset() is not None else None
+
     progress = effects.get("experiment") or {}
     life = policy.get("lifecycle") or {}
-    start = parse_datetime(progress.get("closed_at"))
+    start = aware(progress.get("closed_at"))
     if (
         start is None
         or start.utcoffset() is None
@@ -610,7 +618,7 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
         item = json_loads(event.payload_json, {})
         if not isinstance(item, dict) or item.get("assignment_stage") != "approved_rollout":
             continue
-        completed = parse_datetime(item.get("completed_at"))
+        completed = aware(item.get("completed_at"))
         if completed is None or completed.utcoffset() is None:
             unverified = True
             continue
@@ -661,7 +669,11 @@ def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
             "source_unverified" if unverified else "observational_only" if sample_count else "unknown"
         ),
         "scope": "postpromotion_absolute_outcomes_not_causal_lift",
-        "reason": "invalid_original_receipts" if unverified else "no_control_arm_after_rollout",
+        "reason": (
+            "invalid_original_receipts"
+            if unverified
+            else "no_control_arm_after_rollout" if sample_count else "no_verified_postpromotion_outcomes"
+        ),
         "source": "original_experiment_outbox",
         "experiment_id": progress.get("experiment_id"),
         "release_sha": progress.get("release_sha"),
@@ -682,8 +694,9 @@ def request_postpromotion_regression_rechecks():
     """Reopen the original Retort impact/recovery tail after a late live stop-loss.
 
     The existing product outbox decides whether treatment traffic regressed.
-    A compare-and-swap claim prevents duplicate graph re-entry; it never
-    resubmits a customer write or creates a second experiment.
+    Keep a bounded daily cumulative observation history without claiming causal
+    uplift after GrowthBook's randomized window. A compare-and-swap claim
+    prevents duplicate graph re-entry; no business write is replayed.
     """
     from datetime import UTC, datetime
 
@@ -721,8 +734,50 @@ def request_postpromotion_regression_rechecks():
                 if (
                     verified.get("training_candidate") != source
                     or policy != source.get("growthbook")
-                    or traffic_block_reason(db, row, verified) != "workflow_execution_stop_loss"
                 ):
+                    continue
+                block = traffic_block_reason(db, row, verified)
+                if not block:
+                    # One cumulative as-of snapshot per UTC day; never a causal
+                    # uplift claim, nor fabricated control-group observations.
+                    observed_at = datetime.now(UTC)
+                    existing = effects.get("training_online_observations") or {}
+                    history = existing.get("snapshots") if isinstance(existing, dict) else None
+                    if history is None:
+                        history = []
+                    if (
+                        not isinstance(history, list)
+                        or any(not isinstance(item, dict) for item in history)
+                    ):
+                        continue
+                    snapshot_date = observed_at.date().isoformat()
+                    if not any(item.get("snapshot_date") == snapshot_date for item in history):
+                        snapshot = postpromotion_effect_snapshot(
+                            db, row, policy, effects, observed_at=observed_at
+                        )
+                        if snapshot is not None:
+                            effects["training_online_observations"] = {
+                                "source": "original_experiment_outbox",
+                                "scope": "cumulative_absolute_observation_not_causal_lift",
+                                "snapshots": [
+                                    *history[-29:],
+                                    {**snapshot, "snapshot_date": snapshot_date},
+                                ],
+                            }
+                            db.execute(
+                                update(RetortEvolutionRun)
+                                .where(
+                                    RetortEvolutionRun.id == row.id,
+                                    RetortEvolutionRun.status == "completed",
+                                    RetortEvolutionRun.effects_json == original,
+                                )
+                                .values(
+                                    effects_json=json_dumps(effects),
+                                    updated_at=observed_at,
+                                )
+                            )
+                    continue
+                if block != "workflow_execution_stop_loss":
                     continue
                 effects["training_regression_recheck"] = {
                     "source": "original_experiment_outbox",
