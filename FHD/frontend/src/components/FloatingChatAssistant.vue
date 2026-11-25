@@ -212,11 +212,13 @@
 
       <form v-if="!callOpen" class="floating-chat-input-row" @submit.prevent="submitMessage">
         <textarea
-          v-model.trim="draft"
+          v-model="draft"
           class="floating-chat-input"
           rows="2"
           placeholder="输入消息..."
           :disabled="activeIsLoading"
+          @compositionstart="composerIme.compositionStart"
+          @compositionend="composerIme.compositionEnd"
           @keydown.enter.exact="handleComposerEnter"
         ></textarea>
         <button class="floating-chat-send" type="submit" :disabled="!draft || activeIsLoading">发送</button>
@@ -235,6 +237,7 @@ import { saveVoiceTurnSettings, voiceTurnSettings } from '@/composables/voiceTur
 import { publicAssetUrl } from '@/utils/publicAssetUrl'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
+import { createChatComposerImeGuard } from '@/utils/chatComposerIme'
 import MessageBody from '@/components/chat/MessageBody.vue'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 
@@ -274,6 +277,7 @@ const desktop = props.desktopWindow ? window.xcagiDesktopAssistant : undefined
 const isOpen = ref(false)
 const externallyHidden = ref(false)
 const draft = ref('')
+const composerIme = createChatComposerImeGuard()
 const messageListRef = ref<HTMLElement | null>(null)
 const followingLatest = ref(true)
 const rootRef = ref<HTMLElement | null>(null)
@@ -445,7 +449,7 @@ const ensurePanelInViewport = async () => {
 }
 
 const handleComposerEnter = (event: KeyboardEvent) => {
-  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  if (composerIme.shouldSuppressEnter(event)) return
   event.preventDefault()
   void submitMessage()
 }
@@ -547,6 +551,7 @@ const onDragEnd = (event: PointerEvent) => {
 }
 
 const submitMessage = async () => {
+  if (composerIme.composing) return
   const text = draft.value.trim()
   if (!text || activeIsLoading.value) return
   draft.value = ''

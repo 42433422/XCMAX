@@ -1217,6 +1217,23 @@ describe('ChatView interactions', () => {
     expect((wrapper.vm as any).messageInput).toBe('正在输入中文')
   })
 
+  it('输入法结束组合输入后紧随的回车仍不会误发送', async () => {
+    const wrapper = await mountChatView()
+    const input = wrapper.get('#messageInput')
+    await input.setValue('候选词已确认')
+    input.element.dispatchEvent(new Event('compositionstart', { bubbles: true }))
+    const candidate = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(candidate)
+    expect(candidate.defaultPrevented).toBe(false)
+    input.element.dispatchEvent(new Event('compositionend', { bubbles: true }))
+    const delayedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(delayedEnter)
+    expect(delayedEnter.defaultPrevented).toBe(true)
+    await flushPromises()
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).messageInput).toBe('候选词已确认')
+  })
+
   it('回车发送与输入内容联动', async () => {
     const wrapper = await mountChatView()
     await wrapper.get('#messageInput').setValue('补发这批订单')

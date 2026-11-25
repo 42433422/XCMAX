@@ -245,6 +245,22 @@ describe('FloatingChatAssistant', () => {
     expect((input.element as HTMLTextAreaElement).value).toBe('中文草稿')
   })
 
+  it('does not submit the IME candidate Enter immediately after compositionend', async () => {
+    const wrapper = await openAssistant()
+    const input = wrapper.get('.floating-chat-input')
+    await input.setValue('已确认的拼音')
+    input.element.dispatchEvent(new Event('compositionstart', { bubbles: true }))
+    const composingEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(composingEnter)
+    expect(composingEnter.defaultPrevented).toBe(false)
+    input.element.dispatchEvent(new Event('compositionend', { bubbles: true }))
+    const committedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.element.dispatchEvent(committedEnter)
+    expect(committedEnter.defaultPrevented).toBe(true)
+    expect(sendMessageMock).not.toHaveBeenCalled()
+    expect((input.element as HTMLTextAreaElement).value).toBe('已确认的拼音')
+  })
+
   it('Enter key submits message', async () => {
     sendMessageMock.mockResolvedValue(undefined)
     const wrapper = await openAssistant()

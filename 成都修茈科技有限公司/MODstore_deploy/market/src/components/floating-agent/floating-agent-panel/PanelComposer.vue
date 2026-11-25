@@ -34,6 +34,11 @@ const emit = defineEmits<{
 const agentStore = useAgentStore()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+let composing = false
+let compositionEndedAt = Number.NEGATIVE_INFINITY
+const COMPOSITION_ENTER_GUARD_MS = 160
+function onCompositionStart() { composing = true; compositionEndedAt = Number.NEGATIVE_INFINITY }
+function onCompositionEnd() { composing = false; compositionEndedAt = performance.now() }
 const canSend = computed(() => Boolean(props.draft.trim() || props.hasPendingImage) && !agentStore.isLoading && !props.imagePicking)
 
 function stopReply() {
@@ -43,11 +48,16 @@ function stopReply() {
 }
 
 function send() {
-  if (canSend.value) emit('send')
+  if (!composing && canSend.value) emit('send')
 }
 
 function handleComposerEnter(event: KeyboardEvent) {
-  if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  if (composing || event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+  // The candidate-commit Enter may arrive after compositionend with isComposing=false.
+  if (performance.now() - compositionEndedAt < COMPOSITION_ENTER_GUARD_MS) {
+    event.preventDefault()
+    return
+  }
   event.preventDefault()
   send()
 }
@@ -109,6 +119,8 @@ defineExpose({ autoResize })
           placeholder="说点什么…"
           rows="1"
           aria-label="发送消息"
+          @compositionstart="onCompositionStart"
+          @compositionend="onCompositionEnd"
           @keydown.enter.exact="handleComposerEnter"
           @input="onDraftInput"
         />

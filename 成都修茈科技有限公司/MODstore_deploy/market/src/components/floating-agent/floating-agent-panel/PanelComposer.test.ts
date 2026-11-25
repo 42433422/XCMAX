@@ -82,4 +82,28 @@ describe.each([true, false])('PanelComposer corpMode=%s', (corpMode) => {
       wrapper.unmount()
     }
   })
+
+  it('ignores Enter immediately after IME compositionend without losing the draft', async () => {
+    const wrapper = shallowMount(PanelComposer, {
+      props: {
+        corpMode, isLightTheme: true, draft: '候选中文', hasPendingImage: false,
+        imagePicking: false, voiceState: 'idle', isSupported: false, error: '',
+      },
+    })
+    try {
+      const input = wrapper.get('textarea')
+      input.element.dispatchEvent(new Event('compositionstart', { bubbles: true }))
+      const composingEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      input.element.dispatchEvent(composingEnter)
+      expect(composingEnter.defaultPrevented).toBe(false)
+      input.element.dispatchEvent(new Event('compositionend', { bubbles: true }))
+      const committedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      input.element.dispatchEvent(committedEnter)
+      expect(committedEnter.defaultPrevented).toBe(true)
+      expect(wrapper.emitted('send')).toBeUndefined()
+      expect((input.element as HTMLTextAreaElement).value).toBe('候选中文')
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })

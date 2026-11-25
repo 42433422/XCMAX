@@ -240,6 +240,8 @@
           :placeholder="inputPlaceholder"
           v-model="messageInput"
           aria-describedby="chat-composer-status"
+          @compositionstart="composerIme.compositionStart"
+          @compositionend="composerIme.compositionEnd"
           @keydown="handleKeyDown"
         ></textarea>
         <div class="composer-voice-stack">
@@ -362,6 +364,7 @@ import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
 import { readChatComposerDraft, writeChatComposerDraft } from '@/utils/chatComposerDraft'
+import { createChatComposerImeGuard } from '@/utils/chatComposerIme'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
@@ -923,8 +926,9 @@ const composerStatusText = computed(() => {
   return ''
 })
 
+const composerIme = createChatComposerImeGuard()
 const sendMessage = async () => {
-  if (isRecalling.value) return
+  if (isRecalling.value || composerIme.composing) return
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
@@ -986,8 +990,8 @@ const sendQuick = (text: string) => {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  // Enter may confirm an IME candidate instead of submitting a message.
-  if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return
+  // Safari and some desktop IMEs send a normal-looking Enter just after compositionend.
+  if (composerIme.shouldSuppressEnter(e)) return
   if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault()
     void sendMessage()
