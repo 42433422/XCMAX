@@ -22,8 +22,8 @@
   padding: var(--xc-token-spacing-sm) var(--xc-token-spacing-md);
   border: 1px solid var(--xc-color-danger);
   border-radius: var(--xc-token-radius-small);
-  background: var(--xc-color-danger-bg);
-  color: var(--xc-color-danger);
+  background: var(--xc-color-surface);
+  color: var(--xc-color-text);
 }
 
 .admin-business-customers-summary {
@@ -130,15 +130,15 @@
   align-items: center;
   padding: var(--xc-token-spacing-xs) var(--xc-token-spacing-sm);
   border-radius: var(--xc-radius-full);
-  background: var(--xc-color-info-bg);
-  color: var(--xc-color-info);
+  background: var(--xc-color-surface-2);
+  color: var(--xc-color-text);
+  border: 1px solid var(--xc-color-info);
   font-size: var(--xc-token-typography-label-small-size);
   white-space: nowrap;
 }
 
 .admin-business-source--erp {
-  background: var(--xc-color-success-bg);
-  color: var(--xc-color-success);
+  border-color: var(--xc-color-success);
 }
 
 .admin-business-customers-empty {
