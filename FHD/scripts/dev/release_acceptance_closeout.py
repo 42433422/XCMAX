@@ -104,10 +104,37 @@ def _business_receipts_complete(
         or not stages["customer_confirmation"].get("confirmed_at")
     ):
         return False
+    # An installation verdict and a syntactically complete set of stages are
+    # not sufficient. Explicit source provenance, committed stock/accounting
+    # readbacks, downloadable XLSX and independent reconciliation are required.
+    # These fields are claims from the authenticated market endpoint: they do
+    # not replace its independent verification of originals and transactions.
+    source = stages["source"]
+    approval = stages["approval"]
+    execution = stages["execution"]
+    database = stages["database"]
+    artifact = stages["artifact"]
+    confirmation = stages["customer_confirmation"]
     oracle = stages["independent_reconciliation"]
+    if (
+        source.get("source_kind") != "authorized_customer_original"
+        or source.get("synthetic") is not False
+        or not approval.get("approved_by")
+        or approval["approved_by"] == execution.get("executed_by")
+        or database.get("inventory_committed") is not True
+        or database.get("finance_committed") is not True
+        or database.get("readback_verified") is not True
+        or not _valid_digest(database.get("inventory_readback_sha256"))
+        or not _valid_digest(database.get("finance_readback_sha256"))
+        or artifact.get("format") != "xlsx"
+        or artifact.get("download_hash_verified") is not True
+        or confirmation.get("confirmed_by") == execution.get("executed_by")
+        or not _valid_digest(oracle.get("reconciliation_sha256"))
+    ):
+        return False
     return (
         bool(oracle.get("verifier_id"))
-        and oracle["verifier_id"] != stages["execution"].get("executed_by")
+        and oracle["verifier_id"] != execution.get("executed_by")
         and oracle.get("original_to_database") is True
         and oracle.get("database_to_artifact") is True
         and oracle.get("inventory_and_accounting") is True
