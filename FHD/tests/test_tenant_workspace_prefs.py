@@ -165,3 +165,216 @@ def test_workspace_prefs_atomic_sqlite_writers(tmp_path, monkeypatch):
         assert service.get_preference(owner, "workspace_prefs") == "not-json"
     finally:
         engine.dispose()
+
+
+def test_workspace_revision_rejects_stale_cross_device_write(monkeypatch):
+    import pytest
+
+    from app.application.tenant_workspace_prefs import (
+        WorkspacePrefsVersionConflict,
+        workspace_prefs_revision,
+    )
+
+    store = {}
+
+    class Prefs:
+        def get_preference(self, owner, key):
+            return store.get((owner, key))
+
+        def mutate_preference(self, owner, key, transform):
+            value = transform(store.get((owner, key)))
+            store[(owner, key)] = value
+            return value
+
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
+        lambda: Prefs(),
+    )
+    owner = "tenant:42"
+    assert workspace_prefs_revision({}) == 0
+    first = patch_workspace_prefs(
+        owner, {"host_pack_acknowledged": True}, expected_revision=0
+    )
+    assert first["_revision"] == 1
+    second = patch_workspace_prefs(
+        owner, {"onboarding_seed_done": True}, expected_revision=1
+    )
+    assert second["_revision"] == 2
+    with pytest.raises(WorkspacePrefsVersionConflict, match="expected=1 actual=2"):
+        patch_workspace_prefs(
+            owner, {"host_pack_acknowledged": False}, expected_revision=1
+        )
+    assert get_workspace_prefs(owner) == second
+    with pytest.raises(ValueError, match="Invalid expected"):
+        patch_workspace_prefs(owner, {}, expected_revision=True)
+    with pytest.raises(ValueError, match="Invalid persisted"):
+        store[(owner, "workspace_prefs")] = '{"_revision": "bad"}'
+        patch_workspace_prefs(owner, {"host_pack_acknowledged": False})
+
+
+def _process_workspace_writer(db_url, employee, barrier, results):
+    """Independent interpreter with its own SQLAlchemy engine and connection."""
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.tenant_workspace_prefs import patch_workspace_prefs
+    from app.domain.shared_services import user_preference_service as services
+
+    engine = create_engine(db_url, connect_args={"timeout": 20})
+    sessions = sessionmaker(bind=engine)
+
+    @contextmanager
+    def db_scope():
+        with sessions.begin() as db:
+            yield db
+
+    services.get_db = db_scope
+    instance = services.UserPreferenceService()
+    services.get_user_preference_service = lambda: instance
+    try:
+        barrier.wait(timeout=15)
+        saved = patch_workspace_prefs(
+            "tenant:42", {"workflow_ai_employees": {employee: True}}
+        )
+        results.put((employee, saved["_revision"], None))
+    except Exception as exc:
+        results.put((employee, None, repr(exc)))
+        raise
+    finally:
+        engine.dispose()
+
+
+def test_workspace_prefs_independent_process_writers_and_readback(tmp_path):
+    from multiprocessing import get_context
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.models import UserPreference
+
+    db_url = f"sqlite:///{tmp_path / 'prefs-multiprocess.db'}"
+    engine = create_engine(db_url)
+    UserPreference.__table__.create(engine)
+    engine.dispose()
+
+    ctx = get_context("spawn")
+    barrier = ctx.Barrier(2)
+    results = ctx.Queue()
+    processes = [
+        ctx.Process(
+            target=_process_workspace_writer,
+            args=(db_url, employee, barrier, results),
+        )
+        for employee in ("desktop", "mobile")
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=30)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+    assert [process.exitcode for process in processes] == [0, 0]
+    observations = [results.get(timeout=5) for _ in processes]
+    assert all(error is None for _, _, error in observations)
+    assert {rev for _, rev, _ in observations} == {1, 2}
+
+    reader_engine = create_engine(db_url)
+    sessions = sessionmaker(bind=reader_engine)
+    try:
+        with sessions() as first_device, sessions() as second_device:
+            first = first_device.scalars(select(UserPreference)).all()
+            second = second_device.scalars(select(UserPreference)).all()
+            assert len(first) == len(second) == 1
+            current = json.loads(first[0].preference_value)
+            assert current == json.loads(second[0].preference_value)
+            assert current["_revision"] == 2
+            assert current["workflow_ai_employees"] == {
+                "desktop": True,
+                "mobile": True,
+            }
+    finally:
+        reader_engine.dispose()
+
+
+def _run_preference_uniqueness_migration(connection):
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/2026_11_25_workspace_prefs_unique.py"
+    )
+    spec = importlib.util.spec_from_file_location("workspace_prefs_unique_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(migration)
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+
+def test_legacy_preference_duplicates_migrate_without_discarding_conflicts(tmp_path):
+    import pytest
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import IntegrityError
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-prefs.db'}")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "CREATE TABLE user_preferences "
+                "(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL, "
+                "preference_key TEXT NOT NULL, preference_value TEXT)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO user_preferences "
+                "(id, user_id, preference_key, preference_value) VALUES "
+                "(1, 'tenant:42', 'workspace_prefs', '{\"ok\":true}'), "
+                "(2, 'tenant:42', 'workspace_prefs', '{\"ok\":true}'), "
+                "(3, 'tenant:42', 'other', 'safe')"
+            )
+        )
+        _run_preference_uniqueness_migration(db)
+        rows = db.execute(
+            text("SELECT id, preference_value FROM user_preferences ORDER BY id")
+        ).all()
+        assert rows == [(1, '{"ok":true}'), (3, "safe")]
+        with pytest.raises(IntegrityError):
+            with db.begin_nested():
+                db.execute(
+                    text(
+                        "INSERT INTO user_preferences "
+                        "(user_id, preference_key, preference_value) "
+                        "VALUES ('tenant:42', 'workspace_prefs', 'overwritten')"
+                    )
+                )
+    engine.dispose()
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'conflicting-prefs.db'}")
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "CREATE TABLE user_preferences "
+                "(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL, "
+                "preference_key TEXT NOT NULL, preference_value TEXT)"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO user_preferences "
+                "(id, user_id, preference_key, preference_value) VALUES "
+                "(1, 'tenant:42', 'workspace_prefs', 'A'), "
+                "(2, 'tenant:42', 'workspace_prefs', 'B')"
+            )
+        )
+        with pytest.raises(RuntimeError, match="requires_reconciliation"):
+            _run_preference_uniqueness_migration(db)
+        assert db.execute(text("SELECT COUNT(*) FROM user_preferences")).scalar() == 2
+    engine.dispose()
