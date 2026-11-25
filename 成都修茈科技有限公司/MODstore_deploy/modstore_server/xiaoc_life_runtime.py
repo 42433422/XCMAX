@@ -634,9 +634,7 @@ class CyclePorts:
                 self.details["experience_reuse"] = {
                     "status": "advisory_citation_in_unapproved_proposal",
                     "review_refs": sorted(row["ref"] for row in prior_cases),
-                    "original_candidate_refs": sorted(
-                        row["candidate_ref"] for row in prior_cases
-                    ),
+                    "original_candidate_refs": sorted(row["candidate_ref"] for row in prior_cases),
                     "measurement": hypothesis,
                     "effect": "unknown_requires_independent_outcome_comparison",
                 }
