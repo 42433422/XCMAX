@@ -123,6 +123,14 @@ def propose_portfolio(
     )
 
 
+@router.get("/quality")
+def get_decision_quality(admin: User = Depends(require_admin)) -> dict[str, Any]:
+    """Read only this authenticated administrator's scored original decisions."""
+    from modstore_server.business_decision_review import decision_quality_report
+
+    return _call(decision_quality_report, owner_user_id=int(admin.id))
+
+
 @router.get("/{decision_id}")
 def get_portfolio(decision_id: str, admin: User = Depends(require_admin)) -> dict[str, Any]:
     return _call(portfolio_status, decision_id, owner_user_id=int(admin.id))
