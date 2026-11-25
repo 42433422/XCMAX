@@ -250,7 +250,7 @@ def bind_selected_industry_for_user(
                 init_entitled_industries_for_user,
             )
 
-            with get_db() as db:
+            with _workspace_base_db_scope(), get_db() as db:
                 db_user = db.query(User).filter(User.id == uid).first()
                 if db_user is not None:
                     db_user.industry_id = iid
@@ -289,7 +289,7 @@ def bind_selected_industry_for_username(
         from app.db.models.user import User
         from app.db.session import get_db
 
-        with get_db() as db:
+        with _workspace_base_db_scope(), get_db() as db:
             user = db.query(User).filter(User.username == uname).first()
             if user is None:
                 return {}
