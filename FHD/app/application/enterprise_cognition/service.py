@@ -156,18 +156,37 @@ def _goal_gap(
     }
 
 
-def verify_source_reference(snapshot: dict[str, Any], expected_version: str) -> dict[str, Any]:
+def make_fact_reference(snapshot: dict[str, Any]) -> dict[str, str] | None:
+    """Opaque, content-bound identity for the original scoped ERP record."""
+    fields = ("tenant_id", "mod_id", "source", "entity_type", "entity_id", "source_version")
+    if snapshot.get("knowledge_kind") != "fact" or any(
+        snapshot.get(key) is None for key in fields
+    ):
+        return None
+    version = snapshot["source_version"]
+    if not isinstance(version, str) or not version.startswith("sha256:"):
+        return None
+    values = [str(snapshot[key]) for key in fields]
+    return {
+        **{key: str(snapshot[key]) for key in fields},
+        "fact_token": "erp:" + canonical_hash(values),
+    }
+
+
+def verify_source_reference(
+    snapshot: dict[str, Any], expected_version: str, expected_token: str
+) -> dict[str, Any]:
     """Reconcile a memory/world reference against a fresh, authorized ERP SELECT.
 
     This is a read-only freshness fence, not authorization to execute an ERP
     write. An unavailable source cannot validate a remembered version.
     """
+    reference = make_fact_reference(snapshot)
     authoritative = (
         snapshot.get("freshness") == "fresh"
-        and snapshot.get("knowledge_kind") == "fact"
         and snapshot.get("retrieved_from") == "authority"
         and bool(snapshot.get("evidence"))
-        and isinstance(snapshot.get("source_version"), str)
+        and reference is not None
     )
     if not authoritative:
         return {
@@ -175,19 +194,35 @@ def verify_source_reference(snapshot: dict[str, Any], expected_version: str) -> 
             "knowledge_kind": "unknown",
             "reason_code": snapshot.get("reason_code") or "fresh_authority_not_verified",
             "expected_source_version": expected_version,
+            "expected_fact_token": expected_token,
             "current_source_version": None,
+            "current_fact_token": None,
             "memory_reuse_allowed": False,
             "requires_reconciliation": True,
             "business_data_written": False,
         }
+    assert reference is not None
     current_version = snapshot["source_version"]
-    matches = current_version == expected_version
+    matches = (
+        current_version == expected_version
+        and reference["fact_token"] == expected_token
+    )
     return {
         "status": "current" if matches else "superseded",
         "knowledge_kind": "fact" if matches else "unknown",
-        "reason_code": None if matches else "erp_source_version_changed",
+        "reason_code": (
+            None
+            if matches
+            else (
+                "fact_reference_scope_or_entity_mismatch"
+                if current_version == expected_version
+                else "erp_source_version_changed"
+            )
+        ),
         "expected_source_version": expected_version,
+        "expected_fact_token": expected_token,
         "current_source_version": current_version,
+        "current_fact_token": reference["fact_token"],
         "source": snapshot["source"],
         "entity_type": snapshot["entity_type"],
         "entity_id": snapshot["entity_id"],
@@ -225,6 +260,7 @@ class EnterpriseCognitionService:
     def query(self, params: dict, **scope) -> dict[str, Any]:
         entity_type, entity_id = params["entity_type"], params.get("entity_id")
         expected_version = params.get("expected_source_version")
+        expected_token = params.get("expected_fact_token")
         if params.get("as_of") is not None:
             observation = self.projections.get(
                 entity_type, entity_id, as_of=params["as_of"], **scope
@@ -250,10 +286,15 @@ class EnterpriseCognitionService:
             for ref in references["refs"]
         ]
         fact_verification = (
-            verify_source_reference(snapshots[0], expected_version)
+            verify_source_reference(snapshots[0], expected_version, expected_token or "")
             if expected_version is not None and snapshots
             else None
         )
+        fact_references = [
+            reference
+            for snapshot in snapshots
+            if (reference := make_fact_reference(snapshot)) is not None
+        ]
         ids = {snapshot["entity_id"] for snapshot in snapshots}
         goals = self.goals.list(entity_type=entity_type, entity_ids=ids, **scope) if ids else []
         states = {row["entity_id"]: row for row in snapshots}
@@ -267,12 +308,12 @@ class EnterpriseCognitionService:
             else [
                 candidate
                 for goal, measured in zip(goals, progress, strict=True)
-                if (candidate := _goal_gap(goal, states[goal["entity_id"]], measured))
-                is not None
+                if (candidate := _goal_gap(goal, states[goal["entity_id"]], measured)) is not None
             ]
         )
         return {
             "snapshots": snapshots,
+            "fact_references": fact_references,
             "fact_verification": fact_verification,
             "remembered_fact_current": (
                 fact_verification["status"] == "current"
