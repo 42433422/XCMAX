@@ -249,17 +249,17 @@ async def run_billed_responses(
             slot_held = False
             concurrency.release(db, lease)
 
+    dispatch = False
     try:
         outcome, row = ledger.begin(db, uid, key, digest, timeout)
-    except BaseException:
-        release_slot()
-        raise
-    if outcome == "replay":
-        release_slot()
-        return _replay(row)
-    if outcome != "run":
-        release_slot()
-        raise _error("CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome)
+        if outcome == "replay":
+            return _replay(row)
+        if outcome != "run":
+            raise _error("CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome)
+        dispatch = True
+    finally:
+        if not dispatch:
+            release_slot()
     request_id = ledger.attempt_request_id(uid, key, row.attempts)
     hold = WalletHold(f"byok-{request_id}", Decimal("0"), False)
     transport = None
