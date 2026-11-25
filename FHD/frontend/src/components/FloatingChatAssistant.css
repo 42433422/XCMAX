@@ -566,3 +566,26 @@
   background: #8797bd;
   box-shadow: 0 0 1px white;
 }
+
+/* Compact shared Markdown presentation: MessageBody owns rendering and code-copy behavior. */
+.floating-chat-bubble :deep(.msg-body) {
+  max-width: 100%;
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.58;
+}
+.floating-chat-bubble :deep(.md-p) { margin: 0.35em 0; }
+.floating-chat-bubble :deep(.md-h) { margin: 0.65em 0 0.35em; }
+.floating-chat-bubble :deep(.md-code),
+.floating-chat-bubble :deep(.md-table-wrap),
+.floating-chat-bubble :deep(.md-mermaid) { min-width: 0; max-width: 100%; }
+.floating-chat-bubble :deep(.md-code__body),
+.floating-chat-bubble :deep(.md-table-wrap) { overflow-x: auto; }
+.floating-chat-bubble :deep(.md-quote) {
+  padding: 7px 10px;
+  border-left: 2px solid var(--xc-color-primary, #2563eb);
+  border-radius: 0 6px 6px 0;
+  background: rgba(15, 23, 42, .04);
+  color: #334155;
+}
+.floating-chat-bubble :deep(.md-link) { color: var(--xc-color-primary, #1d4ed8); }
