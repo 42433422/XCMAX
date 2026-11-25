@@ -60,7 +60,7 @@
             </svg>
           </button>
           <button class="btn btn-primary" data-tutorial-id="customer-create" @click="openAddModal">+ 新建{{ entityName }}</button>
-          <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
+          <button v-if="selectedIds.length > 0" class="btn btn-danger" :disabled="saving || loading || !!loadError" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
         </div>
       </div>
       <div class="stat-cards">
@@ -81,6 +81,8 @@
           :selectable="true"
           :selected-ids="selectedIds"
           :has-more="hasMore"
+          :error="loadError"
+          @retry="retryLoadCustomers"
           row-key="id"
           :highlight-id="focusId"
           :empty-text="`暂无${entityName}数据`"
@@ -103,6 +105,7 @@
             <button
               class="btn btn-primary"
               style="padding: 6px 10px; font-size: 12px; margin-right: 5px;"
+              :disabled="saving || loading || !!loadError"
               @click="openEditModal(row)"
             >
               编辑
@@ -110,6 +113,7 @@
             <button
               class="btn btn-danger"
               style="padding: 6px 10px; font-size: 12px;"
+              :disabled="saving || loading || !!loadError"
               @click="handleDelete(row)"
             >
               删除
@@ -163,7 +167,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeAddModal">取消</button>
-          <button class="btn btn-primary" data-tutorial-id="customer-save" @click="saveAdd" :disabled="loading">创建</button>
+          <button class="btn btn-primary" data-tutorial-id="customer-save" @click="saveAdd" :disabled="saving">{{ saving ? '提交中…' : '创建' }}</button>
         </div>
       </div>
     </div>
@@ -194,7 +198,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeEditModal">取消</button>
-          <button class="btn btn-primary" @click="saveEdit">保存</button>
+          <button class="btn btn-primary" :disabled="saving || loading || !!loadError" @click="saveEdit">{{ saving ? '提交中…' : '保存' }}</button>
         </div>
       </div>
     </div>
@@ -210,7 +214,7 @@ import { useCustomers } from './customers/useCustomers'
 
 const {
   pageNavTitle, entityName, productsNavLabel, shipmentNavLabel,
-  customers, focusId, purchaseUnitOptions, selectedPurchaseUnit, loading, loadError, retryLoadCustomers, selectedIds,
+  customers, focusId, purchaseUnitOptions, selectedPurchaseUnit, loading, saving, loadError, retryLoadCustomers, selectedIds,
   totalCustomers, hasMore, importFileInput,
   showEditModal, showDeleteConfirm, showBatchDeleteConfirm, showAddModal,
   addForm, itemToDelete, templateOptions, selectedTemplateId, loadingTemplateOptions,
