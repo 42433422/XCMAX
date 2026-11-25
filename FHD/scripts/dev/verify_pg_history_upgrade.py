@@ -97,7 +97,7 @@ def main() -> None:
                 [
                     User(
                         username="migration-history-proof",
-                        password="migration-test-not-an-account",
+                        password="!" + os.urandom(32).hex(),
                         tenant_id=421,
                     ),
                     UserPreference(
@@ -182,8 +182,12 @@ def main() -> None:
             drift_detected = True
         else:
             drift_detected = False
+        finally:
+            with engine.begin() as db:
+                db.execute(sa.text("ALTER TABLE user_preferences DROP COLUMN xcmax_schema_drift_probe"))
         if not drift_detected:
             raise AssertionError("postgresql_schema_drift_negative_control_failed")
+        command.check(config)
         print(
             f"[pg-history-upgrade] PASS baseline={BASELINE} heads={sorted(expected)} "
             f"sha256={after_digest} domain_rows={counts} "
