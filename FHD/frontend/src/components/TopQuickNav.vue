@@ -121,7 +121,8 @@ const modsStore = useModsStore()
 const recordScope = computed(() => productReadScopeKey(String(modsStore.activeModId || '')))
 
 const desktopEnabled = isDesktopShell()
-const macPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '')
+const macPlatform = window.xcagiDesktop?.platform === 'darwin' ||
+  (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || ''))
 const shortcutLabel = computed(() => shortcutForDisplay(preferences.value.shortcuts.palette).replace('⌘', 'Meta').replace('Ctrl', 'Control'))
 const storageKey = ref('')
 const preferences = ref(readWorkspaceCommandPreferences(''))
@@ -344,6 +345,16 @@ function loadCommands() {
   shortcutError.value = ''
 }
 
+function onWorkspaceNavVisited(event) {
+  if (!desktopEnabled) return
+  const key = String(event?.detail?.key || '')
+  if (!(visibleNavItems.value || []).some((nav) => nav.key === key)) return
+  const recent = nextRecentNavKeys(preferences.value.recent, key)
+  if (recent.join('|') === preferences.value.recent.join('|')) return
+  preferences.value = { ...preferences.value, recent }
+  persistCommands()
+}
+
 function onCommandStorageChange(event) {
   if (storageKey.value && event.key === storageKey.value && event.storageArea === localStorage) {
     preferences.value = readWorkspaceCommandPreferences(storageKey.value)
@@ -473,6 +484,7 @@ onMounted(() => {
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
   window.addEventListener('storage', onCommandStorageChange)
+  if (desktopEnabled) window.addEventListener('xcagi:workspace-nav-visited', onWorkspaceNavVisited)
   if (desktopEnabled) window.addEventListener('keydown', onGlobalKeydown)
 })
 
@@ -482,6 +494,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
   window.removeEventListener('storage', onCommandStorageChange)
+  window.removeEventListener('xcagi:workspace-nav-visited', onWorkspaceNavVisited)
   window.removeEventListener('keydown', onGlobalKeydown)
   cancelBlur()
   restoreTarget = null
