@@ -175,7 +175,11 @@ def observe_enterprise(
                 sources.append({
                     "source": name,
                     "status": "unavailable",
-                    "reason_code": refs.get("reason_code") if isinstance(refs, dict) else "invalid_source_response",
+                    "reason_code": (
+                        refs.get("reason_code")
+                        if isinstance(refs, dict)
+                        else "invalid_source_response"
+                    ),
                     "samples": [],
                 })
                 source_statuses[name] = "unavailable"
@@ -200,7 +204,11 @@ def observe_enterprise(
                 except PermissionError:
                     samples.append({"status": "permission_denied"})
                     continue
-                if not isinstance(snapshot, dict) or snapshot.get("entity_id") != entity_id or snapshot.get("entity_type") != entity_type:
+                if (
+                    not isinstance(snapshot, dict)
+                    or snapshot.get("entity_id") != entity_id
+                    or snapshot.get("entity_type") != entity_type
+                ):
                     samples.append({"status": "unknown", "reason_code": "source_identity_mismatch"})
                     continue
                 health = _snapshot_health(
@@ -234,7 +242,9 @@ def observe_enterprise(
                 status = "stale"
             elif "permission_denied" not in flags and not samples:
                 status = "no_visible_records"
-            elif "permission_denied" not in flags and (refs["has_more"] or len(refs["refs"]) > limit_per_source):
+            elif "permission_denied" not in flags and (
+                refs["has_more"] or len(refs["refs"]) > limit_per_source
+            ):
                 status = "partial_sample"
             elif "permission_denied" not in flags:
                 status = "fresh_sample"
