@@ -60,12 +60,17 @@ void main() {
   test('uncertain approvals persist until original server terminal is reconciled',
       () async {
     expect(await store.hasUnknownApprovalOutcome(42), isFalse);
-    await store.markUnknownApprovalOutcome(42);
+    final claims = await Future.wait([
+      store.markUnknownApprovalOutcome(42),
+      store.markUnknownApprovalOutcome(42),
+    ]);
+    expect(claims.where((claimed) => claimed), hasLength(1));
     expect(await store.hasUnknownApprovalOutcome(42), isTrue);
     // Merely reading or reopening the screen must not release the guard.
     expect(await store.hasUnknownApprovalOutcome(42), isTrue);
     await store.clearUnknownApprovalOutcome(42);
     expect(await store.hasUnknownApprovalOutcome(42), isFalse);
+    expect(await store.markUnknownApprovalOutcome(42), isTrue);
   });
 
   test('composer drafts recover text but no authorization or upload credentials',

@@ -273,15 +273,17 @@ class MobileOfflineStore {
   // server's terminal approval state can release a blocked decision.
   String _approvalOutcomeKey(int approvalId) => 'approval-outcome:$approvalId';
 
-  Future<void> markUnknownApprovalOutcome(int approvalId) async {
+  Future<bool> markUnknownApprovalOutcome(int approvalId) async {
     if (approvalId <= 0) throw ArgumentError.value(approvalId, 'approvalId');
-    await _db.customUpdate(
-      'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+    // A second screen/process must not acquire an already claimed approval.
+    final inserted = await _db.customUpdate(
+      'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)',
       variables: [
         Variable<String>(_approvalOutcomeKey(approvalId)),
         const Variable<String>('unknown'),
       ],
     );
+    return inserted == 1;
   }
 
   Future<bool> hasUnknownApprovalOutcome(int approvalId) async {

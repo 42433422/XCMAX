@@ -17,12 +17,13 @@ class _ApprovalRepository extends MobileRepository {
   bool pending = true;
   bool loseWriteReceipt = false;
   bool unknownApprovalOutcome = false;
+  String? serverStatus;
 
   ApprovalDetail get detail => ApprovalDetail(
         id: 42,
         requestNo: 'REQ-42',
         title: '跨端库存审批',
-        status: pending ? 'pending' : 'approved',
+        status: serverStatus ?? (pending ? 'pending' : 'approved'),
         applicantName: '提交人',
         flowName: '库存审批',
         currentNodeName: '审批节点',
@@ -40,6 +41,7 @@ class _ApprovalRepository extends MobileRepository {
   @override
   Future<bool> markUnknownApprovalOutcome(int id) async {
     expect(id, 42);
+    if (unknownApprovalOutcome) return false;
     unknownApprovalOutcome = true;
     return true;
   }
@@ -110,6 +112,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('跨端库存审批'), findsNothing);
     expect(find.text('账号已切换，请重新打开审批'), findsOneWidget);
+    expect(repo.writes, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('unrecognized approval state does not clear unknown receipt',
+      (tester) async {
+    repo.unknownApprovalOutcome = true;
+    repo.serverStatus = 'unknown';
+    await tester.pumpWidget(MaterialApp(
+      home: ApprovalDetailScreen(id: 42, repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(repo.unknownApprovalOutcome, isTrue);
     expect(repo.writes, 0);
     await tester.pumpWidget(const SizedBox());
   });

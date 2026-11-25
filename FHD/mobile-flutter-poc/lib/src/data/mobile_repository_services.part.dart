@@ -305,8 +305,8 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     if (scope.isEmpty) return false;
     final store = await openOfflineStore(expectedScope: scope);
     if (store == null || scope != await _offlineScope()) return false;
-    await store.markUnknownApprovalOutcome(id);
-    return scope == await _offlineScope();
+    final claimed = await store.markUnknownApprovalOutcome(id);
+    return claimed && scope == await _offlineScope();
   }
 
   Future<bool> hasUnknownApprovalOutcome(int id) async {
@@ -327,11 +327,17 @@ abstract class _RepoServicesBase extends _RepoChatBase {
   }
 
   Future<void> approveApproval(int id, String opinion) async {
-    await _client.approveApproval(id: id, approverId: 0, opinion: opinion);
+    final result = await _client.approveApproval(id: id, approverId: 0, opinion: opinion);
+    if (result['success'] != true) {
+      throw const MobileRepositoryException('审批提交结果未确认，请核对原审批');
+    }
   }
 
   Future<void> rejectApproval(int id, String reason) async {
-    await _client.rejectApproval(id: id, approverId: 0, reason: reason);
+    final result = await _client.rejectApproval(id: id, approverId: 0, reason: reason);
+    if (result['success'] != true) {
+      throw const MobileRepositoryException('审批驳回结果未确认，请核对原审批');
+    }
   }
 
   Future<List<EmployeePendingQuestion>> loadEmployeePendingQuestions({

@@ -379,6 +379,11 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     );
   }
 
+  bool _isTerminalApproval(ApprovalDetail detail) =>
+      detail.id == widget.id &&
+      const {'approved', 'rejected', 'cancelled', 'canceled'}
+          .contains(detail.status.trim().toLowerCase());
+
   Future<ApprovalDetail> _load() async {
     if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
@@ -388,10 +393,10 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     if (_revoked || _repository.client.authGeneration != _generation) {
       throw StateError('账号已切换，请重新打开审批');
     }
-    if (unresolved && detail.canAct) {
+    if (unresolved && !_isTerminalApproval(detail)) {
       _needsReconciliation = true;
       _status = '原审批回执仍待核对，禁止重复提交。';
-    } else if (unresolved && !detail.canAct) {
+    } else if (unresolved) {
       // Only a terminal server snapshot can release a previously uncertain
       // local decision, including after force-stop or process restart.
       await _repository.clearUnknownApprovalOutcome(widget.id);
@@ -426,7 +431,10 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       // Persist BEFORE sending the POST. If the app crashes or times out,
       // its next instance can only query server state, not repeat the write.
       if (!await _repository.markUnknownApprovalOutcome(widget.id)) {
-        throw StateError('本机核验账本不可用，已阻止审批提交');
+        throw StateError('原审批已被领取或本机核验账本不可用，已阻止审批提交');
+      }
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
       }
       final opinion = _opinionController.text.trim();
       _needsReconciliation = true;
@@ -449,7 +457,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
           if (!mounted) return;
           setState(() {
             _future = Future.value(latest);
-            if (!latest.canAct) {
+            if (_isTerminalApproval(latest)) {
               _needsReconciliation = false;
               _status = '审批状态已由服务端更新，请查看最新结果';
             }
