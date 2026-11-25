@@ -19,6 +19,10 @@ vi.mock('@/api/employeeDirectory', () => ({ fetchEmployeeDirectory }))
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates }, templatePreviewApi: { listTemplates } }))
 const modsStore = reactive({ activeModId: 'mod-a' })
 vi.mock('@/stores/mods', () => ({ useModsStore: () => modsStore }))
+const scopedTasks = reactive({ tasks: [] as any[] })
+vi.mock('@/stores/agentTaskCenter', () => ({
+  useAgentTaskCenterStore: () => scopedTasks,
+}))
 
 const navItems = vi.hoisted(() => [
   { key: 'chat', name: '智能对话', routeName: 'chat', source: 'core', iconClass: 'fa-comments-o' },
@@ -49,7 +53,10 @@ let activeRouter: ReturnType<typeof createRouter>
 async function mountNav() {
   activeRouter = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+    routes: [
+      { path: '/workspaces/:taskId', name: 'task-workspace', component: { template: '<div />' } },
+      { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+    ],
   })
   await activeRouter.push('/')
   await activeRouter.isReady()
@@ -384,6 +391,73 @@ describe('TopQuickNav', () => {
         else Reflect.deleteProperty(window, 'xcagiDesktop')
       }
     })
+  })
+
+
+  it('opens task records from the existing read-only task snapshot without executing a tool', async () => {
+    const savedDesktop = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
+    scopedTasks.tasks = [{
+      task_id: 'task-101', title: '核对考勤表', status: 'running',
+      conversation_id: 'conv-101', attempt: 1, run_count: 1,
+    }]
+    const wrapper = await mountNav()
+    try {
+      await wrapper.find('input').setValue('核对考勤表')
+      const task = [...document.querySelectorAll('.top-quick-nav__option')].find((node) => node.textContent?.includes('核对考勤表'))
+      expect(task).toBeTruthy()
+      task?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+      expect(activeRouter.currentRoute.value.name).toBe('task-workspace')
+      expect(activeRouter.currentRoute.value.params.taskId).toBe('task-101')
+      expect(activeRouter.currentRoute.value.query.conversation).toBe('conv-101')
+      expect(wrapper.emitted('command')).toBeFalsy()
+    } finally {
+      wrapper.unmount()
+      scopedTasks.tasks = []
+      if (savedDesktop) Object.defineProperty(window, 'xcagiDesktop', savedDesktop)
+      else Reflect.deleteProperty(window, 'xcagiDesktop')
+    }
+  })
+
+  it('provides a keyboard focus-trapped command panel, editable shortcuts and safe commands', async () => {
+    const savedDesktop = Object.getOwnPropertyDescriptor(window, 'xcagiDesktop')
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: {} })
+    const wrapper = await mountNav()
+    try {
+      const input = wrapper.find('input').element as HTMLInputElement
+      const key = new KeyboardEvent('keydown', { key: 'k', ctrlKey: !/Mac/i.test(navigator.platform),
+        metaKey: /Mac/i.test(navigator.platform), bubbles: true, cancelable: true })
+      document.activeElement?.dispatchEvent(key)
+      await wrapper.vm.$nextTick()
+      expect(key.defaultPrevented).toBe(true)
+      expect(document.querySelector('.top-quick-nav--palette')).toBeTruthy()
+      const settings = [...document.querySelectorAll('.top-quick-nav__footer button')]
+        .find((button) => button.textContent?.includes('快捷键设置')) as HTMLButtonElement
+      settings.click()
+      await wrapper.vm.$nextTick()
+      const chatShortcut = document.querySelector('select[aria-label="打开智能对话快捷键"]') as HTMLSelectElement
+      expect(chatShortcut).toBeTruthy()
+      chatShortcut.value = 'Mod+K'
+      chatShortcut.dispatchEvent(new Event('change', { bubbles: true }))
+      await wrapper.vm.$nextTick()
+      expect(document.querySelector('.top-quick-nav__settings [role="alert"]')?.textContent).toContain('已分配')
+      expect(chatShortcut.value).toBe('Mod+Alt+J')
+      const reset = [...document.querySelectorAll('.top-quick-nav__settings button')]
+        .find((button) => button.textContent?.includes('恢复默认')) as HTMLButtonElement
+      reset.click()
+      await wrapper.vm.$nextTick()
+      expect(document.querySelector('.top-quick-nav__settings [role="alert"]')).toBeNull()
+      input.focus()
+      await wrapper.find('input').setValue('打开智能对话')
+      await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+      expect(wrapper.emitted('command')).toContainEqual(['chat'])
+      expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
+    } finally {
+      wrapper.unmount()
+      if (savedDesktop) Object.defineProperty(window, 'xcagiDesktop', savedDesktop)
+      else Reflect.deleteProperty(window, 'xcagiDesktop')
+    }
   })
 
 })
