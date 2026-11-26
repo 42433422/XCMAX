@@ -142,7 +142,8 @@ def list_events(
             except (ValueError, TypeError, AttributeError):
                 continue
         current = dict(row)
-        audit = audit_by_target.get(row.get("event_id"))
+        event_id = row.get("event_id")
+        audit = audit_by_target.get(event_id) if isinstance(event_id, str) else None
         if audit is not None:
             current["owner_audit"] = audit
         out.append(current)

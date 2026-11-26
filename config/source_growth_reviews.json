@@ -1,6 +1,18 @@
 {
   "schema_version": 1,
   "reviews": {
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_training_candidates.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_training_candidates.py",
+      "base_blob": "608669cbec586db4817ae321d1021d9f9256d5d4",
+      "head_blob": "070f130ffd1abb886fa6ef05fa1a482c8cbfcfaa",
+      "before_lines": 523,
+      "after_lines": 891,
+      "reason": "Request architecture review for postpromotion Outbox evidence validation, independent observational metrics and the existing Retort stop/recheck recovery path; the file grows by 368 lines.",
+      "boundary": "Reuse the existing training candidate, Retort SQL, Outbox and GrowthBook paths. Do not expand permissions or treat observation as causal gain; no new execution authority.",
+      "validation": "Review scope: independent evidence admission, malformed receipt rejection, stop/recheck and recovery regressions. Latest CI is not fully green; native holdout, customer and production evidence remain BLOCKED.",
+      "follow_up": "Repository owner must review the exact blobs and module boundaries; consider extracting a cohesive read-only evidence projection with regression coverage after review. This request is not approval.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
       "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
       "base_blob": "65b106cd2bd2cbd21d2129bfbba002f0607caaf0",

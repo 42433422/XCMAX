@@ -195,3 +195,16 @@ def test_same_audit_is_idempotent_across_processes(tmp_ledger):
     assert rows[1]["event_type"] == "owner_audit_recorded"
     assert rows[1]["audit_target_event_id"] == original["event_id"]
     assert list_events()[0]["owner_audit"]["verdict"] == "approved"
+
+
+def test_list_events_handles_legacy_invalid_event_ids(tmp_ledger):
+    valid = append_event({"event_type": "signal_detected"})
+    assert mark_audited(valid["event_id"], "approved") is True
+    with tmp_ledger.open("a", encoding="utf-8") as fh:
+        for event_id in (None, [], {"id": "invalid"}):
+            fh.write(json.dumps({"event_type": "legacy", "event_id": event_id}) + "\n")
+
+    events = list_events()
+    assert events[0]["owner_audit"]["verdict"] == "approved"
+    assert [event["event_id"] for event in events[1:]] == [None, [], {"id": "invalid"}]
+    assert all("owner_audit" not in event for event in events[1:])
