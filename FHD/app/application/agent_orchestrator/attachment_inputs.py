@@ -257,6 +257,13 @@ def resolve_attachment_context(context: dict[str, Any]):
     return {
         **context,
         "file_context": {
-            "verified_uploads": [{"name": item["name"], **item["preview"]} for item in artifacts]
+            "verified_uploads": [
+                {
+                    "name": item["name"],
+                    "upload_id": item["metadata"]["upload_id"],
+                    **item["preview"],
+                }
+                for item in artifacts
+            ]
         },
     }, artifacts

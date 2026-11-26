@@ -13,8 +13,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
 from typing import Any
 
-from sqlalchemy import or_
-
 from app.application.agent_orchestrator.artifact_files import (
     RUN_FILE_MIME_TYPES,
     artifact_path,
@@ -97,7 +95,7 @@ def _staging_root() -> Path:
 
 
 def _fresh_upload_cutoff():
-    """同名文件只接受最近上传的那份，默认 24 小时内（可用环境变量调整）。"""
+    """未绑定的展示名仅在最近上传范围内解析，默认 24 小时内。"""
     try:
         hours = float(os.environ.get("XCAGI_ELT_UPLOAD_FRESH_HOURS", "") or 24)
     except ValueError:
@@ -117,69 +115,132 @@ def _upload_basename_candidates(value: str) -> list[str]:
     return candidates
 
 
-def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
-    """把用户可见的文件名换成当前账号自己的上传存储路径。
+def _unique_upload(rows: list[EltUpload]) -> EltUpload | None:
+    if len(rows) > 1:
+        raise PermissionError("存在多个同名上传文件，请明确选择 upload_id")
+    return rows[0] if rows else None
 
-    后续轮次只说「导入」时，模型只能看到「宗南.xlsx」这类展示名；
-    直接按展示名查库会命中不到归属记录，这里仅在当前账号与租户范围内解析。
-    """
+
+def _fresh_named_upload(upload: EltUpload) -> EltUpload:
+    if (
+        not upload.storage_path
+        or upload.expires_at is None
+        or upload.expires_at.replace(tzinfo=None) <= utc_now_naive()
+        or upload.created_at is None
+        or upload.created_at.replace(tzinfo=None) <= _fresh_upload_cutoff()
+    ):
+        raise PermissionError("指定附件已过期或不在文件名引用有效期内，请重新确认附件")
+    return upload
+
+
+def _resolve_owned_upload(
+    db: Any, value: str, context: dict[str, Any], owner_user_id: int
+) -> EltUpload | None:
+    """Resolve one identity inside the original account/tenant boundary."""
+    query = db.query(EltUpload).filter(
+        EltUpload.owner_user_id == owner_user_id,
+        EltUpload.tenant_id == tenant_id_for_write(),
+    )
+    analysis = excel_analysis_from_runtime(context) or {}
+    reference = analysis.get("upload_id")
+    previous_path = str(analysis.get("file_path") or "").strip()
+    ids = context.get("attachment_upload_ids")
+    bound: list[EltUpload] = []
+    if ids is not None:
+        if (
+            not isinstance(ids, list)
+            or not 1 <= len(ids) <= 4
+            or any(not isinstance(item, str) or not item or len(item) > 80 for item in ids)
+            or len(set(ids)) != len(ids)
+        ):
+            raise PermissionError("附件引用无效，请明确选择 upload_id")
+        # Resolve the entire set first; a missing bound attachment must not silently
+        # turn into a different upload, even if only one remaining name matches.
+        bound = query.filter(EltUpload.id.in_(ids)).all()
+        if len(bound) != len(ids):
+            raise PermissionError("指定附件不存在或不属于当前账号与租户")
+        if any(
+            row.expires_at is None or row.expires_at.replace(tzinfo=None) <= utc_now_naive()
+            for row in bound
+        ):
+            raise PermissionError("指定附件已过期，请重新确认附件")
+    # Explicit IDs are authoritative only within the existing selected attachment set.
+    exact = query.filter(EltUpload.id == value).one_or_none()
+    if exact is not None:
+        if bound and all(row.id != exact.id for row in bound):
+            raise PermissionError("文件与会话附件身份冲突，请明确选择 upload_id")
+        return exact
+    exact = _unique_upload(query.filter(EltUpload.storage_path == value).limit(2).all())
+    if exact is not None:
+        if (
+            previous_path
+            and value == previous_path
+            and isinstance(reference, str)
+            and reference
+            and exact.id != reference
+        ) or (bound and all(row.id != exact.id for row in bound)) or any(
+            row.id != exact.id and row.file_name == exact.file_name for row in bound
+        ):
+            raise PermissionError("文件路径与会话附件身份冲突，请明确选择 upload_id")
+        return exact
+
+    candidates = _upload_basename_candidates(value)
+    if bound:
+        match = _unique_upload([row for row in bound if row.file_name in candidates])
+        if match is not None:
+            if (
+                value == previous_path
+                and isinstance(reference, str)
+                and reference
+                and reference != match.id
+                and Path(value).name != value
+            ):
+                raise PermissionError("原会话引用与当前附件身份冲突，请明确选择 upload_id")
+            return _fresh_named_upload(match)
+        # Do not search other uploads by name while a current attachment set exists.
+        return None
+
+    if isinstance(reference, str) and reference:
+        previous = query.filter(EltUpload.id == reference).one_or_none()
+        # Compare the ORIGINAL reference, before any basename-to-storage rewrite.
+        if previous_path and value == previous_path:
+            if previous is None:
+                raise PermissionError("原会话附件不可用，请重新确认附件")
+            return previous
+        if Path(value).name == value and (
+            (previous is not None and previous.file_name in candidates)
+            or (previous_path and value in _upload_basename_candidates(previous_path))
+        ):
+            if previous is None:
+                raise PermissionError("原会话附件不可用，请重新确认附件")
+            return _fresh_named_upload(previous)
+
+    # An unregistered path (including a legacy random-prefixed path) is not an
+    # identity. Only a bare display name may fall back to a unique fresh record.
+    if bound or Path(value).name != value or "\\" in value:
+        return None
+    return _unique_upload(
+        query.filter(
+            EltUpload.file_name.in_(candidates),
+            EltUpload.storage_path != "",
+            EltUpload.expires_at > utc_now_naive(),
+            EltUpload.created_at > _fresh_upload_cutoff(),
+        )
+        .limit(2)
+        .all()
+    )
+
+
+def resolve_owned_upload_path(file_path: str, context: dict[str, Any]) -> str:
+    """Resolve a display name without silently replacing a bound upload."""
     value = str(file_path or "").strip()
     if not value:
         return value
-    selected = context.get("attachment_upload_ids")
-    if selected is not None:
-        if (
-            not isinstance(selected, list)
-            or not 1 <= len(selected) <= 4
-            or any(not isinstance(item, str) or not item or len(item) > 80 for item in selected)
-            or len(set(selected)) != len(selected)
-        ):
-            raise PermissionError("附件引用无效，请重新上传")
-        actor = _bound_actor(context)
-        with get_db() as db:
-            uploads = db.query(EltUpload).filter(
-                EltUpload.id.in_(selected),
-                EltUpload.owner_user_id == actor.id,
-                EltUpload.tenant_id == tenant_id_for_write(),
-                EltUpload.expires_at > utc_now_naive(),
-            ).all()
-            if len(uploads) != len(selected):
-                raise PermissionError("选中的附件不可用，请重新上传")
-            for upload in uploads:
-                if value in {upload.id, upload.storage_path}:
-                    return str(upload.storage_path or upload.id)
-            candidates = _upload_basename_candidates(value)
-            matches = [upload for upload in uploads if upload.file_name in candidates]
-            if len(matches) != 1:
-                raise PermissionError("无法唯一匹配选中的附件，请使用上传凭据")
-            return str(matches[0].storage_path or matches[0].id)
-    try:
-        actor = _bound_actor(context)
-        with get_db() as db:
-            query = db.query(EltUpload).filter(
-                EltUpload.owner_user_id == actor.id,
-                EltUpload.tenant_id == tenant_id_for_write(),
-            )
-            exact = query.filter(
-                or_(EltUpload.id == value, EltUpload.storage_path == value)
-            ).first()
-            if exact is not None:
-                return str(exact.storage_path or exact.id)
-            by_name = (
-                query.filter(
-                    EltUpload.file_name.in_(_upload_basename_candidates(value)),
-                    EltUpload.storage_path != "",
-                    EltUpload.expires_at > utc_now_naive(),
-                    # 只认刚上传的文件：历史同名文件不能被静默当成本次输入。
-                    EltUpload.created_at > _fresh_upload_cutoff(),
-                )
-                .order_by(EltUpload.created_at.desc())
-                .first()
-            )
-            if by_name is not None:
-                return str(by_name.storage_path)
-    except (PermissionError, ValueError):
-        return value
+    actor = _bound_actor(context)
+    with get_db() as db:
+        upload = _resolve_owned_upload(db, value, context, actor.id)
+        if upload is not None:
+            return str(upload.storage_path or upload.id)
     return value
 
 
@@ -194,29 +255,11 @@ def workflow_file_snapshot(file_path: str, context: dict[str, Any]) -> Iterator[
     if prior is not None:
         content, suffix = prior
     else:
-        file_path = resolve_owned_upload_path(file_path, context)
-        analysis = excel_analysis_from_runtime(context) or {}
-        reference = analysis.get("upload_id")
-        if (
-            "attachment_upload_ids" not in context
-            and isinstance(reference, str)
-            and reference
-            and file_path == analysis.get("file_path")
-        ):
-            file_path = reference
         with get_db() as db:
-            upload_id = (
-                db.query(EltUpload.id)
-                .filter(
-                    EltUpload.owner_user_id == actor.id,
-                    EltUpload.tenant_id == tenant_id_for_write(),
-                    or_(EltUpload.id == file_path, EltUpload.storage_path == file_path),
-                )
-                .scalar()
-            )
-            if upload_id is None:
-                raise PermissionError("文件不属于当前账号或当前任务")
-            upload = get_elt_service()._owned_upload(db, upload_id, actor.id)
+            selected = _resolve_owned_upload(db, str(file_path or "").strip(), context, actor.id)
+            if selected is None:
+                raise PermissionError("文件不属于当前账号或当前任务，请明确选择 upload_id")
+            upload = get_elt_service()._owned_upload(db, selected.id, actor.id)
             suffix = Path(upload.file_name).suffix.lower()
             with open_elt_input_file(upload.storage_path, owner_user_id=actor.id) as source:
                 content = source.read(upload.size_bytes + 1)
