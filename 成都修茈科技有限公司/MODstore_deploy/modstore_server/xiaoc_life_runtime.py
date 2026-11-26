@@ -20,6 +20,7 @@ from modstore_server.xiaoc_goal_management import (
     discover_goal_candidate,
     portfolio_goal_closed,
     project_goal_steps,
+    resumable_operating_candidate,
 )
 from modstore_server.xiaoc_life_cognition import (
     CognitionContextError,
@@ -322,9 +323,14 @@ class CyclePorts:
 
         context = await self.write_in_thread(collect_context)
         if self.domain == "enterprise":
-            candidate = discover_goal_candidate(
-                context, self.state, self.claim["owner_user_id"], now=datetime.now(UTC)
+            now = datetime.now(UTC)
+            candidate = resumable_operating_candidate(
+                context, self.state, self.claim["owner_user_id"], now=now
             )
+            if candidate is None:
+                candidate = discover_goal_candidate(
+                    context, self.state, self.claim["owner_user_id"], now=now
+                )
             if candidate is not None:
                 goal, fact = candidate
                 self.evidence = [fact["ref"]]
@@ -673,10 +679,102 @@ class CyclePorts:
                 "summary": "已将原改进批准接入公司工程预算提案，等待原审批。",
             }
         if state.get("discovered_goals"):
+            goal = dict(state["discovered_goals"][0])
+            policy = self.state.get("policy", {})
+            limits = policy.get("portfolio_limits")
+            employee = policy.get("employee_id")
+            if not limits or not employee:
+                goal["blocked_reason"] = "awaiting_existing_portfolio_policy"
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "已创建有来源的经营候选；等待原企业预算及员工授权。",
+                }
+            from modstore_server.strategic_portfolio import (
+                PortfolioError,
+                create_portfolio_proposal,
+                digest,
+            )
+            from modstore_server.strategy_business_context import customer_value_context
+            from modstore_server.xiaoc_goal_management import (
+                ORIGIN,
+                compile_autonomous_review_plan,
+            )
+            from modstore_server.xiaoc_life_policy import LifePolicyError
+            from modstore_server.xiaoc_self_model import employee_preflight
+
+            current_value = await self.write_in_thread(customer_value_context)
+            self.active()
+            try:
+                opportunities, bindings = compile_autonomous_review_plan(
+                    goal,
+                    owner=self.claim["owner_user_id"],
+                    policy=policy,
+                    goals=[*self.state.get("goals", []), goal],
+                    current_value=current_value,
+                    now=datetime.now(UTC),
+                )
+            except LifePolicyError as exc:
+                goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "经营候选已记录，但原调查授权或实时来源不满足条件。",
+                }
+            preflight = await self.write_in_thread(
+                employee_preflight, employee, self.claim["owner_user_id"]
+            )
+            self.active()
+            self.details["operating_employee_preflight"] = preflight
+            if preflight["status"] != "registered_unverified":
+                goal["blocked_reason"] = preflight["reason"]
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "经营候选已记录，但尚无符合原执行入口的员工。",
+                }
+            try:
+                proposal = await self.write_in_thread(
+                    create_portfolio_proposal,
+                    owner_user_id=self.claim["owner_user_id"],
+                    goal=goal["title"],
+                    period="xiaoc-life:" + goal["id"][:45],
+                    limits=limits,
+                    opportunities=opportunities,
+                    idempotency_key="xiaoc-life:" + digest([goal["id"], ORIGIN]),
+                )
+            except PortfolioError as exc:
+                goal["blocked_reason"] = str(exc)
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "原预算优化或提案约束不满足；保留未授权经营候选。",
+                }
+            self.active()
+            if not proposal.get("decision"):
+                goal["blocked_reason"] = "awaiting_feasible_review_option"
+                goal["next_review_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+                return {
+                    "goals": [goal],
+                    "status": "completed",
+                    "summary": "原资源约束没有可行的调查提案；未获得执行授权。",
+                }
+            goal.update(
+                status="awaiting_approval",
+                decision_id=proposal["decision"]["decision_id"],
+                step_bindings=bindings,
+                subgoals_status="bound_to_original_portfolio",
+            )
+            self.details.setdefault("created_proposals", []).append(
+                {"goal_id": goal["id"], "decision_id": goal["decision_id"]}
+            )
             return {
-                "goals": state["discovered_goals"],
+                "goals": [goal],
                 "status": "completed",
-                "summary": "已从原客户价值账本形成待审核经营候选，未生成或执行员工任务。",
+                "summary": "已自动创建两步经营调查提案，仍待原预算审批；没有派工或业务写入。",
             }
         decision = state["decision"]
         if decision["action"] == "wait":

@@ -380,6 +380,9 @@ def read_state() -> dict[str, Any]:
             else None
         )
         data["blockers"] = blockers
+        from modstore_server.xiaoc_goal_governance import project_goal_governance
+
+        data["goal_governance"] = project_goal_governance(data, now=utcnow())
         data["state_version"] = row.version
         data["updated_at"] = row.updated_at.replace(tzinfo=UTC).isoformat()
         if data["budget"]["date"] != _day() and not active and not data.get("unknown_usage"):
@@ -545,6 +548,114 @@ def update_settings(body: LifeUpdate, *, actor_user_id: int) -> dict[str, Any]:
         )
 
     _mutate(change)
+    return read_state()
+
+
+def manage_operating_goal(
+    goal_id: str,
+    *,
+    action: str,
+    expected_revision: int,
+    actor_user_id: int,
+    reason: str,
+    review_note: str | None = None,
+    review_deadline: str | None = None,
+) -> dict[str, Any]:
+    """CAS + immutable events for UNBOUND review candidates.
+
+    Bound tasks must be stopped through the original portfolio stop/approval API;
+    changing only the life-side status cannot cancel their business effects.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate, review_milestones
+    from modstore_server.xiaoc_goal_management import ORIGIN, candidate_gate
+
+    if action not in {"pause", "resume", "cancel", "adjust"}:
+        raise LifePolicyError("未知目标管理操作")
+    if not reason.strip() or len(reason) > 500:
+        raise LifePolicyError("目标调整必须提供有效原因")
+
+    def apply(data: dict[str, Any], session: Session) -> None:
+        now = utcnow()
+        if not _active_principal(session, actor_user_id):
+            raise LifePolicyError("需要有效管理员身份")
+        if data["revision"] != expected_revision or data.get("owner_user_id") != actor_user_id:
+            raise LifePolicyError("原目标或企业授权已变动，请重新读取")
+        goal = next((row for row in data.get("goals", []) if row.get("id") == goal_id), None)
+        if goal is None or goal.get("candidate_origin") != ORIGIN:
+            raise LifePolicyError("仅允许管理原客户价值缺口候选")
+        if goal.get("candidate_owner_user_id") != actor_user_id:
+            raise LifePolicyError("目标归属与管理员不一致")
+        if goal.get("decision_id") or goal.get("step_bindings") or goal.get("retort_request_id"):
+            raise LifePolicyError("目标已关联原审批/执行组合，请通过原组合流程停止或变更")
+        previous = {
+            "status": goal.get("status"),
+            "review_note": goal.get("review_note"),
+            "review_deadline": goal.get("review_deadline"),
+        }
+        if action == "pause":
+            if goal.get("status") != "proposed":
+                raise LifePolicyError("仅待审目标允许暂停")
+            goal["status"] = "paused"
+        elif action == "resume":
+            if goal.get("status") != "paused":
+                raise LifePolicyError("仅暂停目标允许恢复")
+            from modstore_server.strategy_business_context import customer_value_context
+
+            observation = customer_value_context()
+            if candidate_gate(goal, actor_user_id, observation, now=now)["status"] != "eligible":
+                raise LifePolicyError("当前来源、期限或经营缺口未重新验证")
+            if governance_gate(goal, data["goals"], now=now)["status"] != "reviewable":
+                raise LifePolicyError("目标存在冲突或前置目标未完成")
+            goal["status"] = "proposed"
+        elif action == "cancel":
+            if goal.get("status") not in {"proposed", "paused"}:
+                raise LifePolicyError("原目标已终止或进入审批，不能仅更改候选状态")
+            goal["status"] = "cancelled"
+        elif action == "adjust":
+            if goal.get("status") not in {"proposed", "paused"}:
+                raise LifePolicyError("仅未绑定候选可以调整复核说明或缩短期限")
+            if review_note is None and review_deadline is None:
+                raise LifePolicyError("没有可审计的目标调整")
+            if review_note is not None:
+                goal["review_note"] = review_note.strip()
+            if review_deadline is not None:
+                try:
+                    changed = parse_time(review_deadline)
+                    original = parse_time(goal["review_deadline"])
+                except (TypeError, ValueError, AttributeError) as exc:
+                    raise LifePolicyError("复核期限需要包含时区") from exc
+                if not now < changed <= original:
+                    raise LifePolicyError("只能缩短期限，不能延长原证据的有效期")
+                goal["review_deadline"] = changed.isoformat()
+                goal["milestones"] = review_milestones(now=now, deadline=changed)
+        data["revision"] += 1
+        data["next_wake_at"] = now.isoformat()
+        _event(
+            session,
+            f"goal-manage:{goal_id}:{data['revision']}",
+            kind="goal_management",
+            status=action,
+            summary=f"经营目标 {goal_id} 已进行 {action} 管理",
+            evidence_refs=[
+                *goal.get("evidence_refs", [])[:29],
+                f"admin:{actor_user_id}",
+                f"goal:{goal_id}",
+            ],
+            details={
+                "actor_user_id": actor_user_id,
+                "goal_id": goal_id,
+                "reason": reason.strip(),
+                "previous": previous,
+                "current": {
+                    "status": goal.get("status"),
+                    "review_note": goal.get("review_note"),
+                    "review_deadline": goal.get("review_deadline"),
+                },
+                "revision": data["revision"],
+            },
+        )
+
+    _mutate(apply)
     return read_state()
 
 
@@ -1329,16 +1440,20 @@ def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict
 
 def require_operating_goal_admission(decision_id: str, proposal: dict[str, Any]) -> None:
     """Require a fresh same-goal observation before the original SQL task claim."""
+    from modstore_server.xiaoc_goal_governance import governance_gate
     from modstore_server.xiaoc_goal_management import ORIGIN
 
     if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
         return
+    life = read_state()
     binding = next(
-        (goal for goal in read_state()["goals"] if goal.get("decision_id") == decision_id),
+        (goal for goal in life["goals"] if goal.get("decision_id") == decision_id),
         None,
     )
     if not binding or binding.get("candidate_origin") != ORIGIN:
         return  # The original portfolio life guard still owns generic life work.
+    if governance_gate(binding, life["goals"], now=utcnow())["status"] != "reviewable":
+        raise LifePolicyError("目标存在冲突或未满足真实前置依赖，禁止派工")
     claim = _CLAIM.get()
     admission = (claim or {}).get("operating_goal_admission") or {}
     gate = admission.get("gate") or {}
