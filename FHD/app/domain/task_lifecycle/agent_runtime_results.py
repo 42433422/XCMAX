@@ -5,8 +5,13 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal
 
-from app.domain.task_lifecycle.agent_runtime_contract import goal_answers, goal_report_coverage
+from app.domain.task_lifecycle.agent_runtime_contract import (
+    canonical_digest,
+    goal_answers,
+    goal_report_coverage,
+)
 from app.domain.task_lifecycle.results import (
+    execution_result_error,
     execution_result_outcome_unknown,
     execution_result_proven_not_executed,
 )
@@ -53,13 +58,50 @@ def withhold_runtime_output(result: dict[str, Any], *, status: str, error: str) 
 
 
 def receipt_state(row: dict[str, Any]) -> str:
-    receipt = row.get("receipt") or {}
-    if execution_result_outcome_unknown(receipt, include_execution=True) or row.get("state") in {
-        "claimed",
-        "unknown",
-    }:
+    """Require the durable child state and its latest receipt to agree.
+
+    A late success from a timed-out, cancelled or replaced attempt cannot
+    overwrite the original unknown effect or license a second dispatch.
+    """
+    receipt = row.get("receipt")
+    if not isinstance(receipt, dict) or not receipt:
         return "unknown"
-    return str(receipt.get("status") or row.get("state") or "unknown")
+    state = str(row.get("state") or "").strip()
+    reported = str(receipt.get("status") or "").strip()
+    if (
+        not state
+        or not reported
+        or state != reported
+        or state in {"claimed", "unknown", "interrupted", "partial", "timed_out"}
+        or execution_result_outcome_unknown(receipt, include_execution=True)
+    ):
+        return "unknown"
+    return state
+
+
+def receipt_verified(row: dict[str, Any]) -> bool:
+    """Only host-backed, settled receipts can be presented as verified operations."""
+    receipt = row.get("receipt")
+    if not isinstance(receipt, dict):
+        return False
+    try:
+        fingerprint = canonical_digest(
+            {key: row.get(key) for key in ("tool_id", "action", "params")}
+        )
+    except (TypeError, ValueError):
+        return False
+    return (
+        row.get("state") == "completed"
+        and bool(row.get("child_run_id"))
+        and bool(row.get("child_task_id"))
+        and row.get("fingerprint") == fingerprint
+        and receipt.get("run_id") == row["child_run_id"]
+        and receipt.get("task_id") == row["child_task_id"]
+        and receipt_state(row) == "completed"
+        and receipt.get("success") is True
+        and receipt.get("verified") is True
+        and not execution_result_error(receipt)
+    )
 
 
 def model_unsettled(metadata: dict[str, Any]) -> bool:
@@ -124,17 +166,28 @@ def classify_runtime_result(
             "task_id": row.get("child_task_id"),
             "success": receipt_state(row) == "completed"
             and (row.get("receipt") or {}).get("success") is True,
-            "verified": (row.get("receipt") or {}).get("verified") is True,
+            "verified": receipt_verified(row),
             "execution_state": receipt_state(row),
         }
         for row in rows
     ]
     states = {receipt_state(row) for row in rows}
-    if "unknown" in states or model_unsettled(metadata):
+    # A successful write claim without host identity/verification may have
+    # committed. Do not promote it to a confirmed effect or allow a replay.
+    unbound_write = any(
+        receipt_state(row) == "completed"
+        and row.get("read_only") is not True
+        and row["receipt"].get("success") is True
+        and not receipt_verified(row)
+        for row in rows
+    )
+    if "unknown" in states or unbound_write or model_unsettled(metadata):
         result.update(
             exit_status="unknown",
             execution_state="unknown",
             reconciliation_required=True,
+            needs_verification=True,
+            retryable=False,
             error="执行或模型计量结果尚未确定，请核对原任务回执",
             output="执行或模型计量结果尚未确定，请核对原任务回执。",
         )
@@ -183,13 +236,7 @@ def classify_runtime_result(
             output=question,
         )
         return "waiting_user"
-    verified_rows = [
-        row
-        for row in rows
-        if receipt_state(row) == "completed"
-        and (row.get("receipt") or {}).get("success") is True
-        and (row.get("receipt") or {}).get("verified") is True
-    ]
+    verified_rows = [row for row in rows if receipt_verified(row)]
     report = metadata.get("goal_verification")
     if not isinstance(report, dict):
         report = {}

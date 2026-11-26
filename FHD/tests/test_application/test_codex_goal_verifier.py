@@ -292,6 +292,55 @@ def test_conflicting_aliases_are_not_multiple_goal_proof(verifier):
     assert report["error_code"] == "goal_evidence_conflict" and not verifier.requests
 
 
+@pytest.mark.parametrize(
+    "missing", ["fingerprint", "receipt_run_id", "receipt_task_id", "receipt_type"]
+)
+def test_unbound_child_receipt_is_never_accepted_as_goal_evidence(verifier, missing):
+    row = verifier.rows[0]
+    if missing == "fingerprint":
+        row.pop("fingerprint")
+    elif missing == "receipt_run_id":
+        row["receipt"].pop("run_id")
+    elif missing == "receipt_task_id":
+        row["receipt"].pop("task_id")
+    else:
+        row["receipt"] = ["malformed"]
+
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    assert report["error_code"] == (
+        "goal_evidence_pending" if missing == "receipt_type" else "goal_evidence_conflict"
+    )
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["business_completed"] is False
+
+
+def test_claimed_verified_receipt_cannot_override_rejected_host_verification(verifier):
+    verifier.rows[0]["receipt"]["verification"] = {
+        "protocol": "xcagi.result-verification.v1",
+        "status": "inconclusive",
+        "accepted": False,
+    }
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+    report = verifier.verify()
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert "缺少独立核验" in report["feedback"]
+    status, result = verifier.classify(report)
+    assert status == "blocked" and not result["business_completed"]
+    assert result["tool_calls"][0]["success"] is True
+    assert result["tool_calls"][0]["verified"] is False
+    assert result["verified_operations"] is False
+
+
+def test_unknown_effect_inside_completed_receipt_blocks_goal_success(verifier):
+    verifier.rows[0]["receipt"]["execution"] = {"outcome": "unknown", "committed": True}
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
+
+
 def test_one_write_receipt_cannot_complete_two_distinct_effects(verifier):
     verifier.run.message = "确认first，再确认second"
     verifier.run.metadata["runtime_goal_contract"] = build_goal_contract(verifier.run)
@@ -867,3 +916,57 @@ def test_optional_reply_branches_are_one_goal_not_two_required_operations(verifi
     assert report["accepted"] and report["mode"] == "reply"
     payload = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])
     assert any("二选一" in rule and "任一" in rule for rule in payload["rules"])
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "receipt_missing",
+        "late_success_after_timeout",
+        "late_success_after_cancel",
+        "contradictory_terminal",
+        "state_missing",
+    ],
+)
+def test_terminal_receipt_negative_controls_never_mark_completed(verifier, failure):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state, receipt_verified
+
+    row = verifier.rows[0]
+    if failure == "receipt_missing":
+        row.pop("receipt")
+    elif failure == "late_success_after_timeout":
+        row["state"] = "timed_out"
+    elif failure == "late_success_after_cancel":
+        row["state"] = "cancelled"
+    elif failure == "contradictory_terminal":
+        row["receipt"]["status"] = "failed"
+    else:
+        row.pop("state")
+    assert receipt_state(row) == "unknown"
+    assert receipt_verified(row) is False
+
+    # Even if another child is genuinely complete, the parent must preserve
+    # the original uncertain side effect rather than resubmit either action.
+    state, result = verifier.classify(None)
+    assert state == "blocked"
+    assert result["execution_state"] == "unknown"
+    assert result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
+    assert result["needs_verification"] is True
+    assert result["retryable"] is False
+    assert result["business_completed"] is False
+    assert result["verified_operations"] is False
+    assert result["ok"] is False
+
+
+def test_late_success_cannot_overwrite_an_older_unknown_execution_receipt(verifier):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state
+
+    original = verifier.rows[0]
+    original["state"] = "unknown"
+    original["receipt"]["status"] = "completed"
+    original["receipt"]["success"] = True
+    original["receipt"]["verified"] = True
+    assert receipt_state(original) == "unknown"
+    assert verifier.classify(None)[0] == "blocked"
+

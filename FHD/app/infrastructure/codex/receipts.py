@@ -32,9 +32,10 @@ def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
     known = {call.call_id for call in run.tool_calls}
     for row in rows:
         child_id = str(row.get("child_run_id") or "")
-        if not child_id:
+        receipt = row.get("receipt")
+        if not child_id or not isinstance(receipt, dict):
             continue
-        for raw in (row.get("receipt") or {}).get("tool_calls") or []:
+        for raw in receipt.get("tool_calls") or []:
             if not isinstance(raw, dict) or not raw.get("call_id"):
                 continue
             projection_id = (

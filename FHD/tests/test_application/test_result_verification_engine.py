@@ -17,155 +17,16 @@ from app.application.agent_orchestrator.result_verification import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-from app.application.agent_orchestrator.step_execution import StepExecution
-from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, ToolValidationResult
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.result_verification import (
+    _adapter,
+    _approval_for,
+    _passed,
+    _paused_preview,
+    _receipt,
+    _runtime,
+)
 from tests.test_application.test_agent_user_decision_pause import native_preview as native_preview
-
-
-def _receipt(
-    *, read_only=False, output=None, tool_id="custom_business", action="create", params=None
-):
-    context = {"tenant_id": "7", "actor_id": "9", "user_id": "9", "task_id": "task-original"}
-    step = AgentStep(
-        node_id="write",
-        tool_id=tool_id,
-        action=action,
-        params=copy.deepcopy({"name": "A"} if params is None else params),
-    )
-    step.attempt_count, step.status = 1, "completed"
-    step.output = copy.deepcopy(output if output is not None else {"success": True, "id": 1})
-    run = AgentRun(user_id="9", message="Create A", status="running", steps=[step])
-    run.metadata["runtime_context"] = copy.deepcopy(context)
-    call = ToolCall(
-        step_id=step.step_id,
-        node_id=step.node_id,
-        tool_id=step.tool_id,
-        action=step.action,
-        params=copy.deepcopy(step.params),
-        status="completed",
-        output=copy.deepcopy(step.output),
-        metadata={"attempt_count": 1},
-    )
-    run.tool_calls.append(call)
-    spec = ToolActionSpecV2(
-        tool_id=step.tool_id,
-        action=step.action,
-        read_only=read_only,
-        output_schema={
-            "type": "object",
-            "required": ["success"],
-            "properties": {"success": {"type": "boolean"}},
-        },
-    )
-    freeze_verification_contract(run, step, call, spec, context)
-    bind_execution_receipt(call)
-    return run, step, call, context
-
-
-def _passed():
-    return {
-        "status": "verified",
-        "code": "source_matches",
-        "checks": [
-            {
-                "check_id": "row",
-                "status": "passed",
-                "source": "separate_database_connection",
-                "evidence": {"row_id": 1},
-            }
-        ],
-    }
-
-
-def _adapter(monkeypatch, function):
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.verification_readback.verify_independent_result",
-        function,
-    )
-
-
-def _paused_preview(actor, native_preview, *, resume=None):
-    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
-
-    output = native_preview(actor)
-    if resume is not None:
-        output["resume_params"] = copy.deepcopy(resume)
-    step = AgentStep(
-        node_id="preview",
-        tool_id="elt_import",
-        action="preview",
-        params={"file_path": "@uploads/宗南.xlsx"},
-        risk="medium",
-        idempotent=False,
-        attempt_count=1,
-        status="waiting_user",
-        output=copy.deepcopy(output),
-    )
-    call = ToolCall(
-        step_id=step.step_id,
-        node_id=step.node_id,
-        tool_id=step.tool_id,
-        action=step.action,
-        params=copy.deepcopy(step.params),
-        status="completed",
-        output=copy.deepcopy(output),
-        metadata={"attempt_count": 1},
-    )
-    plan = PlanGraph(
-        plan_id="bound-preview",
-        intent="elt_import",
-        nodes=[
-            WorkflowNode(
-                step.node_id,
-                step.tool_id,
-                step.action,
-                params=copy.deepcopy(step.params),
-                risk=step.risk,
-                idempotent=step.idempotent,
-            )
-        ],
-    )
-    run = AgentRun(
-        user_id=str(actor.user_id),
-        message="Confirm the original preview",
-        status="waiting_user",
-        plan_id=plan.plan_id,
-        steps=[step],
-        tool_calls=[call],
-    )
-    context = {
-        **actor.context,
-        "run_id": run.run_id,
-        "step_id": step.step_id,
-        "node_id": step.node_id,
-    }
-    run.metadata.update(runtime_context=copy.deepcopy(context), plan=plan_to_dict(plan))
-    freeze_verification_contract(
-        run, step, call, get_tool_action_spec(step.tool_id, step.action), context
-    )
-    bind_execution_receipt(call)
-    verify_step_result(run=run, step=step, call=call, context=context)
-    return run, step, call, context
-
-
-def _approval_for(run, step):
-    from app.application.agent_orchestrator.approval_grant import (
-        approval_receipt_claims,
-        consume_approval_grant,
-        issue_approval_grant,
-    )
-
-    grant = issue_approval_grant(run, principal_id=run.user_id)
-    assert grant is not None
-    claims = consume_approval_grant(grant["grant"], run=run, principal_id=run.user_id)
-    return {
-        "step_id": step.step_id,
-        "tool_id": step.tool_id,
-        "action": step.action,
-        **approval_receipt_claims(run, step, claims=claims),
-    }
 
 
 def test_pending_preview_binding_does_not_itself_authorize_continuation(
@@ -545,59 +406,6 @@ def test_output_contract_and_explicit_failures_precede_readback(monkeypatch, bod
     run, step, call, context = _receipt(output=body)
     assert not verify_step_result(run=run, step=step, call=call, context=context)["accepted"]
     assert calls == []
-
-
-def _runtime(tmp_path, monkeypatch):
-    database = tmp_path / "actual-effect.sqlite3"
-    with sqlite3.connect(database) as db:
-        db.execute("CREATE TABLE effects (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
-    dispatches, charges = [], []
-
-    def dispatch(_step, *, runtime_context):
-        dispatches.append(runtime_context["idempotency_key"])
-        with sqlite3.connect(database) as db:
-            db.execute("INSERT INTO effects(id,name) VALUES(1,'A')")
-        return {"success": True, "id": 1}
-
-    def readback(**_):
-        with sqlite3.connect(database) as db:
-            row = db.execute("SELECT id,name FROM effects WHERE id=1").fetchone()
-        assert row == (1, "A")
-        return _passed()
-
-    _adapter(monkeypatch, readback)
-    spec = ToolActionSpecV2(tool_id="custom_business", action="create", risk="high")
-    dependencies = SimpleNamespace(
-        action_spec=lambda *_: spec,
-        validate=lambda *_: ToolValidationResult(
-            ok=True, tool_id=spec.tool_id, action=spec.action, spec=spec
-        ),
-    )
-    usage = SimpleNamespace(
-        refresh_run_cost_metadata=lambda run: run.metadata.update(
-            cost_units_total=0, ai_cost_units_total=0
-        ),
-        record_tool_usage_entry=lambda *_: charges.append(1) or True,
-        record_tool_usage_refund=lambda *_args, **_kwargs: pytest.fail(
-            "Executed effect cannot be refunded by verification"
-        ),
-    )
-    repo = InMemoryAgentRunRepository()
-    runner = StepExecution(
-        repo,
-        SimpleNamespace(execute=dispatch),
-        usage,
-        dependencies,
-        attach_artifacts=lambda *_args, **_kwargs: None,
-        observe=lambda *_args, **_kwargs: {},
-    )
-    step = AgentStep(
-        node_id="write", tool_id=spec.tool_id, action=spec.action, params={"name": "A"}
-    )
-    run = AgentRun(user_id="9", message="Create A", steps=[step], status="running")
-    context = {"tenant_id": "7", "user_id": "9", "actor_id": "9"}
-    run.metadata["runtime_context"] = context
-    return repo, runner, run, step, context, readback, dispatches, charges
 
 
 def test_verifier_timeout_only_rechecks_original_committed_effect(tmp_path, monkeypatch):
@@ -981,3 +789,154 @@ def test_pending_step_keeps_acknowledgement_and_never_dispatches_twice(tmp_path,
     assert recovered.tool_calls[0].output == original
     assert len(dispatches) == len(charges) == 1
     assert recovered.steps[0].attempt_count == 1
+
+
+def test_terminal_evidence_rechecks_actual_sqlite_row_before_claiming_success(
+    tmp_path, monkeypatch
+):
+    """The child readback, not a successful transport envelope, governs the parent."""
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_verified
+
+    repo, runner, run, step, context, _readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    database = tmp_path / "actual-effect.sqlite3"
+
+    def read_database(**_kwargs):
+        # This is a second SQLite connection, not the dispatcher's return value.
+        with sqlite3.connect(database) as db:
+            actual = db.execute("SELECT id,name FROM effects WHERE id=1").fetchone()
+        return (
+            _passed()
+            if actual == (1, "A")
+            else {"status": "inconclusive", "code": "database_row_missing", "checks": []}
+        )
+
+    _adapter(monkeypatch, read_database)
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    assert summarize_verification(run)["accepted"] is True
+    call = run.tool_calls[0]
+
+    def original_child_row():
+        report = call.metadata["verification"]
+        operation = {"tool_id": step.tool_id, "action": step.action, "params": step.params}
+        return {
+            **operation,
+            "fingerprint": canonical_digest(operation),
+            "child_run_id": run.run_id,
+            "child_task_id": "original-child-task",
+            "state": "completed",
+            "read_only": False,
+            "receipt": {
+                "run_id": run.run_id,
+                "task_id": "original-child-task",
+                "status": "completed",
+                "success": report["accepted"],
+                "verified": report["accepted"],
+                "verification": report,
+            },
+        }
+
+    assert receipt_verified(original_child_row()) is True
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='tampered' WHERE id=1")
+
+    negative = verify_step_result(run=run, step=step, call=call, context=context)
+    assert negative["accepted"] is False
+    assert summarize_verification(run)["accepted"] is False
+    assert receipt_verified(original_child_row()) is False
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='A' WHERE id=1")
+    recovered = verify_step_result(run=run, step=step, call=call, context=context)
+    assert recovered["accepted"] is True
+    assert receipt_verified(original_child_row()) is True
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+
+def test_terminal_evidence_reads_real_xlsx_and_rejects_corrupt_original(
+    tmp_path, monkeypatch, trusted_actor
+):
+    """A genuine export is read back from disk; tampering revokes its verification."""
+    from app.application.agent_orchestrator.artifact_files import artifact_path
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
+
+    actor = trusted_actor(role="admin")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.artifact_files.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    step = AgentStep(
+        node_id="export",
+        tool_id="reports",
+        action="export",
+        params={"report_type": "sales", "data": [{"product": "A", "quantity": 2}]},
+        status="completed",
+        attempt_count=1,
+    )
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message="Export approved rows",
+        status="blocked",
+        steps=[step],
+        metadata={"runtime_context": copy.deepcopy(actor.context)},
+    )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=copy.deepcopy(step.params),
+        status="completed",
+        metadata={"attempt_count": 1},
+    )
+    run.tool_calls.append(call)
+    freeze_verification_contract(
+        run, step, call, get_tool_action_spec("reports", "export"), actor.context
+    )
+    step.output = _registered_router_reports(
+        step.action, step.params,
+        {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(step.params),
+        },
+        "shared",
+        run.message,
+    )
+    assert step.output["success"] is True
+    call.output = copy.deepcopy(step.output)
+    bind_execution_receipt(call)
+    readback_context = {
+        **actor.context,
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+    }
+    verified = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
+    assert verified["accepted"] is True
+    assert any(item["source"] in {"run_artifact", "report_data", "report_export", "report_sql"}
+               for item in verified["checks"])
+
+    artifact = step.output["artifacts"][0]
+    path = artifact_path(run.run_id, artifact["artifact_id"])
+    with path.open("ab") as output:
+        output.write(b"tampered-after-export")
+
+    rejected = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
+    assert rejected["accepted"] is False
+    assert rejected["status"] in {"failed", "inconclusive"}
+    assert summarize_verification(run)["accepted"] is False
+    # The original producer must never be invoked just to verify a file.
+    assert step.attempt_count == len(run.tool_calls) == 1
