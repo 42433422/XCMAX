@@ -239,7 +239,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     assert shard["runs-on"] == "ubuntu-latest"
     assert shard["strategy"] == {
         "fail-fast": False,
-        "max-parallel": 8,
+        "max-parallel": 64,
         "matrix": "${{ fromJSON(needs.guard-temp-scripts.outputs.backend_matrix) }}",
     }
     assert set(gate["needs"]) == prerequisites | {
