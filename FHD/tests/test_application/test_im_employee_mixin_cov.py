@@ -243,7 +243,7 @@ class TestEnsureEmployeeUser:
         assert row.display_name == "NewName"
         db.flush.assert_called_once()
 
-    def test_existing_user_inactive_gets_reactivated(self) -> None:
+    def test_existing_user_inactive_remains_stopped(self) -> None:
         row = _make_user(
             user_id=13,
             display_name="Bob",
@@ -260,10 +260,10 @@ class TestEnsureEmployeeUser:
 
         svc.ensure_employee_user("emp1", display_name="Bob")
 
-        assert row.is_active is True
-        db.flush.assert_called_once()
+        assert row.is_active is False
+        db.flush.assert_not_called()
 
-    def test_existing_user_both_changes_trigger_single_flush(self) -> None:
+    def test_existing_user_name_refresh_does_not_reactivate(self) -> None:
         row = _make_user(
             user_id=14,
             display_name="Old",
@@ -281,8 +281,8 @@ class TestEnsureEmployeeUser:
         svc.ensure_employee_user("emp1", display_name="New")
 
         assert row.display_name == "New"
-        assert row.is_active is True
-        # only one flush call despite both fields changing
+        assert row.is_active is False
+        # Only the display name changes.
         db.flush.assert_called_once()
 
     def test_existing_profile_no_owner_update_when_owner_zero(self) -> None:

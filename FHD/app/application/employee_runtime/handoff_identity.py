@@ -53,11 +53,12 @@ def load_identity_card(
         or not str(tenant).strip()
     ):
         return None, "handoff_identity_unverified"
+    flags = ("available", "timeout", "crash", "unrecoverable")
+    # JSON strings, numbers and containers must not become truthy availability.
+    if any(key in loaded and type(loaded[key]) is not bool for key in flags):
+        return None, "handoff_identity_unverified"
     return {
         "employee_id": identity.strip(),
         "tenant_id": str(tenant).strip(),
-        **{
-            key: bool(loaded.get(key, key == "available"))
-            for key in ("available", "timeout", "crash", "unrecoverable")
-        },
+        **{key: loaded.get(key, key == "available") for key in flags},
     }, ""

@@ -73,9 +73,7 @@ class ImEmployeeMixin:
             if str(row.display_name or "").strip() != name:
                 row.display_name = name
                 changed = True
-            if not bool(row.is_active):
-                row.is_active = True
-                changed = True
+            # Refreshing IM metadata must never undo an explicit account stop.
             if changed:
                 self._db.flush()
 

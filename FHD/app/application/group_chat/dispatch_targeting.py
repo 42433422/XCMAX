@@ -29,22 +29,47 @@ class DispatchTargeting:
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             return ([], "")
-        valid_ids = {str(m.get("employee_id") or "") for m in candidates}
+        if not isinstance(data, dict):
+            return ([], "")
+        valid_ids = {
+            member["employee_id"]
+            for member in DispatchTargeting.unique_dispatch_members(candidates)
+        }
         raw_ids = data.get("target_employee_ids")
         if not isinstance(raw_ids, list):
             raw_ids = data.get("targets")
-        target_ids = [
-            str(item).strip()
-            for item in (raw_ids if isinstance(raw_ids, list) else [])
-            if str(item).strip() in valid_ids
-        ]
+        target_ids: list[str] = []
+        for item in raw_ids if isinstance(raw_ids, list) else []:
+            if type(item) is not str:
+                continue
+            employee_id = item.strip()
+            if employee_id in valid_ids and employee_id not in target_ids:
+                target_ids.append(employee_id)
+            if len(target_ids) >= MAX_RESPONDERS:
+                break
         rationale = str(data.get("rationale") or data.get("reason") or "").strip()
-        return (target_ids[:MAX_RESPONDERS], rationale[:500])
+        return (target_ids, rationale[:500])
+
+    @staticmethod
+    def unique_dispatch_members(members: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One execution candidate per registered ID, preserving roster order."""
+        seen: set[str] = set()
+        result: list[dict[str, Any]] = []
+        for member in members:
+            if not isinstance(member, dict) or type(member.get("employee_id")) is not str:
+                continue
+            employee_id = member["employee_id"].strip()
+            if not employee_id or employee_id in seen:
+                continue
+            seen.add(employee_id)
+            result.append(member)
+        return result
 
     @staticmethod
     def heuristic_dispatch_targets(
         candidates: list[dict[str, Any]], task: str
     ) -> list[dict[str, Any]]:
+        candidates = DispatchTargeting.unique_dispatch_members(candidates)
         by_id = {str(m.get("employee_id") or ""): m for m in candidates}
         text = (task or "").lower()
         if DispatchTargeting.dispatch_difficulty(task) == "simple":
@@ -147,6 +172,7 @@ class DispatchTargeting:
     def preferred_single_dispatch_target(
         candidates: list[dict[str, Any]], task: str
     ) -> dict[str, Any] | None:
+        candidates = DispatchTargeting.unique_dispatch_members(candidates)
         if not candidates:
             return None
         by_id = {str(m.get("employee_id") or ""): m for m in candidates}
@@ -229,6 +255,7 @@ class DispatchTargeting:
     def build_dispatch_assignments(
         task: str, members: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
+        members = DispatchTargeting.unique_dispatch_members(members)[:MAX_RESPONDERS]
         if not members:
             return []
         super_members = [
@@ -280,6 +307,7 @@ class DispatchTargeting:
     def pick_responders(
         members: list[dict[str, Any]], text: str, mentions: list[str] | None
     ) -> list[dict[str, Any]]:
+        members = DispatchTargeting.unique_dispatch_members(members)
         if not members:
             return []
         if DispatchTargeting.is_broadcast_mention(text):
@@ -297,7 +325,9 @@ class DispatchTargeting:
         self, members: list[dict[str, Any]], text: str, mentions: list[str] | None
     ) -> list[dict[str, Any]]:
         work_capable = [
-            m for m in members if not _is_required_group_member(str(m.get("employee_id") or ""))
+            m
+            for m in DispatchTargeting.unique_dispatch_members(members)
+            if not _is_required_group_member(str(m.get("employee_id") or ""))
         ]
         if self.mode != "admin":
             work_capable = [
