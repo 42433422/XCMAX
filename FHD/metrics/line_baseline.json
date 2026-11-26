@@ -1,5 +1,5 @@
 {
-  "lines": 2733514,
+  "lines": 2733551,
   "updated": "2026-11-26",
-  "note": "M07 持续运行可验证：监控回执可验证证据与失败告警重试（main #3593 净 +113 行）；A08/M07 NeuroBus 准入与终态计数及回归测试（#3595 净 +267 行）。合并累计增量 +380 行，保留原 SLO、调度、质量门禁；待新 SHA 正式计数和 CI 核验。"
+  "note": "恢复真实模型验收入口：修正 llm_adapter 导入路径（迁至 domain.shared_services），基准运行器改用真实 Engine 绑定会话工厂，并新增 SQLite 真实文件库多 mapper 写入/独立回读回归（python 测试 +29 行、CHANGELOG +2、文档 1 行，合计 +37 行）。"
 }
