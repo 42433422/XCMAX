@@ -339,22 +339,45 @@ def _run_formula_writes(
         stats["formulas_written"] += 1
 
 
-_REF_ROW_RE = re.compile(r"(?<![A-Za-z$])(\$?)([A-Za-z]{1,3})(\$?)(\d+)")
+_REF_ROW_RE = re.compile(r"(\$?[A-Za-z]{1,3}\$?)([1-9][0-9]*)")
 
 
-def _shift_ref_rows(token: str, insert_row: int, count: int) -> str:
+def _shift_ref_rows(
+    token: str, insert_row: int, count: int, *, formula_sheet: str, target_sheet: str
+) -> str:
+    from openpyxl.utils.cell import column_index_from_string
+
     prefix, sep, body = token.rpartition("!")
+    reference_sheet = prefix if sep else formula_sheet
+    if reference_sheet.startswith("'") and reference_sheet.endswith("'"):
+        reference_sheet = reference_sheet[1:-1].replace("''", "'")
+    if reference_sheet.casefold() != target_sheet.casefold():
+        return token
+    parts = body.split(":")
+    cells = [_REF_ROW_RE.fullmatch(part) for part in parts]
+    whole_rows = len(parts) == 2 and all(re.fullmatch(r"\$?[1-9][0-9]*", p) for p in parts)
+    if len(parts) > 2 or not (all(cells) or whole_rows):
+        return token  # 名称、结构化引用、整列引用不能按单元格地址替换。
+    shifted = []
+    for part, cell in zip(parts, cells):
+        label, number = (
+            cell.groups() if cell else ("$" if part.startswith("$") else "", part.lstrip("$"))
+        )
+        row = int(number)
+        if row > XLSX_MAX_ROW or (
+            cell and column_index_from_string(label.replace("$", "")) > XLSX_MAX_COL
+        ):
+            return token
+        row += count if row >= insert_row else 0
+        if row > XLSX_MAX_ROW:
+            raise PlanError("insert_rows 会使公式引用超出工作表行数上限。")
+        shifted.append(f"{label}{row}")
+    return f"{prefix}{sep}{':'.join(shifted)}"
 
-    def repl(match: "re.Match[str]") -> str:
-        row = int(match.group(4))
-        if row >= insert_row:
-            row += count
-        return f"{match.group(1)}{match.group(2)}{match.group(3)}{row}"
 
-    return f"{prefix}{sep}{_REF_ROW_RE.sub(repl, body)}"
-
-
-def _shift_formula_rows(formula: str, insert_row: int, count: int) -> str:
+def _shift_formula_rows(
+    formula: str, insert_row: int, count: int, *, formula_sheet: str, target_sheet: str
+) -> str:
     """插入行时按 Excel 语义改写公式中的行引用（绝对引用同样随行移动）。"""
     from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
 
@@ -362,13 +385,15 @@ def _shift_formula_rows(formula: str, insert_row: int, count: int) -> str:
         tokens = Tokenizer(formula).items
     except TokenizerError:
         return formula
-    body = "".join(
-        _shift_ref_rows(tok.value, insert_row, count)
-        if tok.type == "OPERAND" and tok.subtype == "RANGE"
-        else tok.value
-        for tok in tokens
-    )
-    return "=" + body if formula.startswith("=") else body
+    changed = False
+    for tok in tokens:
+        if tok.type == "OPERAND" and tok.subtype == "RANGE":
+            shifted = _shift_ref_rows(
+                tok.value, insert_row, count, formula_sheet=formula_sheet, target_sheet=target_sheet
+            )
+            changed |= shifted != tok.value
+            tok.value = shifted
+    return "=" + "".join(tok.value for tok in tokens) if changed else formula
 
 
 def _sheet_of(phase: Dict[str, Any], kind: str) -> str:
@@ -398,37 +423,57 @@ def _run_insert_rows(
     if not 1 <= count <= 10000:
         raise PlanError(f"insert_rows 的 count 必须在 1..10000：{count}")
     ws = wb[sheet]
+    last_row = max(ws.max_row, max(ws.row_dimensions, default=0))
+    if last_row >= row and last_row + count > XLSX_MAX_ROW:
+        raise PlanError("insert_rows 会使现有单元格超出工作表行数上限。")
     # openpyxl 只移动单元格，不迁移合并区、行高与公式引用，这里逐项补齐。
     formulas = [
-        (r, cell.column, cell.value)
-        for r, cells in enumerate(ws.iter_rows(min_row=row), start=row)
-        for cell in cells
+        (
+            source,
+            cell.row + (count if source is ws and cell.row >= row else 0),
+            cell.column,
+            _shift_formula_rows(
+                cell.value, row, count, formula_sheet=source.title, target_sheet=sheet
+            ),
+        )
+        for source in wb.worksheets
+        for cell in source._cells.values()
         if isinstance(cell.value, str) and cell.value.startswith("=")
     ]
     merges = [
-        (rng.min_row, rng.min_col, rng.max_row, rng.max_col) for rng in ws.merged_cells.ranges
+        (rng.min_row, rng.min_col, rng.max_row, rng.max_col)
+        for rng in ws.merged_cells.ranges
+        if rng.max_row >= row
     ]
+    merge_styles = {
+        (r + (count if r >= row else 0), c): copy(ws.cell(r, c)._style)
+        for top, left, bottom, right in merges
+        for r in range(top, bottom + 1)
+        for c in range(left, right + 1)
+        if ws.cell(r, c).has_style
+    }
     dimensions = {idx: copy(dim) for idx, dim in ws.row_dimensions.items() if idx >= row}
-
-    ws.insert_rows(row, count)
-
+    # 必须先解除原坐标的合并，否则 unmerge 会删除已经移动到该坐标的原始数据。
     for rng in list(ws.merged_cells.ranges):
-        ws.unmerge_cells(str(rng))
+        if rng.max_row >= row:
+            ws.unmerge_cells(str(rng))
+    ws.insert_rows(row, count)
     for min_row, min_col, max_row, max_col in merges:
         if min_row >= row:
             min_row += count
             max_row += count
         elif max_row >= row:
             max_row += count
-        ws.merge_cells(
-            start_row=min_row, start_column=min_col, end_row=max_row, end_column=max_col
-        )
+        ws.merge_cells(start_row=min_row, start_column=min_col, end_row=max_row, end_column=max_col)
+    for (r, col), style in merge_styles.items():
+        ws.cell(r, col)._style = style
     for idx in dimensions:
         del ws.row_dimensions[idx]
     for idx, dimension in dimensions.items():
-        ws.row_dimensions[idx + count] = copy(dimension)
-    for r, col, formula in formulas:
-        ws.cell(r + count, col).value = _shift_formula_rows(formula, row, count)
+        dimension.index = idx + count
+        ws.row_dimensions[idx + count] = dimension
+    for source, r, col, formula in formulas:
+        source.cell(r, col).value = formula
 
     protected.shift_rows(sheet, row, count)
     stats["rows_inserted"] += count
