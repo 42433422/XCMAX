@@ -1,5 +1,5 @@
 {
-  "lines": 2733185,
-  "updated": "2026-11-25",
-  "note": "T12 聊天登录上传同一 upload ID 的读/写/HTTP 下载及独立 QC；补鉴权失败负控，新增净 51 行；不调整测试门槛。"
+  "lines": 2733573,
+  "updated": "2026-11-26",
+  "note": "#3596/#3556 unified upload-ID roundtrip, authenticated downloads, original-file/QC and legacy-name ownership regression. Combine original +51 and +388 reviewed candidate line deltas against 21c7225; no threshold relaxation beyond those source PR registrations. Full repository line count, caller evidence for legacy basename compatibility and exact-SHA CI remain required."
 }
