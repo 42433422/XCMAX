@@ -1,5 +1,5 @@
 {
-  "lines": 2733273,
+  "lines": 2733540,
   "updated": "2026-11-26",
-  "note": "M07 持续运行可验证：监控回执改为可验证证据并对失败告警重试（净 +113 行），属运维验收链路补强。 #3559（+26 行 xcmax-grok-box-smoke.yml）。"
+  "note": "新增专属 self-hosted Runner 真实接单冒烟工作流（仅 main 保护分支与 workflow_dispatch 触发，打印 run/runner 身份用于独立核验），单个 yml +26 行，属运维可验证性修复。"
 }
