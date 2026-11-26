@@ -80,6 +80,7 @@ jobs:
             tests/test_neuro_bus/test_dead_letter_durable_storage.py \
             tests/test_neuro_bus/test_dead_letter_replay_publish_contract.py \
             tests/test_neuro_bus/test_dead_letter_queue_cov.py \
+            tests/test_neuro_bus/test_dead_letter_queue_maintenance.py \
             tests/test_neuro_bus/test_dead_letter_queue_coverage.py \
             -q -o addopts= --junitxml=neurobus-redis-results.xml
           python - <<'PY'

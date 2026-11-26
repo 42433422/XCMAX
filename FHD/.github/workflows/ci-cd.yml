@@ -162,6 +162,7 @@ jobs:
             tests/test_application/test_agent_loop.py \
             tests/application/test_employee_runtime_write_approval.py \
             tests/test_application/test_native_task_recovery.py \
+            tests/test_application/test_native_task_recovery_receipts.py \
             tests/test_application/test_approval_session_renewal.py \
             tests/test_application/test_cross_module_execution_transactions.py \
             tests/test_application/test_approval_persistence.py::test_guarded_delete_serializes_concurrent_writes \
@@ -213,6 +214,7 @@ jobs:
             tests/test_infrastructure/test_payment_order_store_replay_fence.py \
             tests/test_routes/test_payment_order_authorization.py \
             tests/test_routes/test_model_payment_routes.py \
+            tests/test_routes/test_model_payment_order_routes.py \
             -q -o addopts= --junitxml=payment-p0-results.xml
           uv run --no-sync python - <<'PY'
           import xml.etree.ElementTree as ET

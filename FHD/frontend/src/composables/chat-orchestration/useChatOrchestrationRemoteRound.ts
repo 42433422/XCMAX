@@ -1,6 +1,5 @@
 import type { Ref } from 'vue'
 import { chatPayloadFromRun, extractAgentRunId, waitForAgentRunTerminal, type useAgentRunEventSync } from '../useAgentRunEvents'
-import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'

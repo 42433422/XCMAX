@@ -83,9 +83,10 @@ def _upgrade_proposals(engine, starting_revision, *intermediate):
     with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
         outbox.module.upgrade()
     command.stamp(config, starting_revision)
-    for revision in (*intermediate, "head", "head"):
+    target = "2026_11_25_notification_read"
+    for revision in (*intermediate, target, target):
         command.upgrade(config, revision)
-    return scripts.get_current_head()
+    return target
 
 
 @pytest.mark.parametrize("legacy_schema", [True, False])

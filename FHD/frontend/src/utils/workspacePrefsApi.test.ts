@@ -3,6 +3,7 @@ import {
   applyWorkspacePrefsToLocalCache,
   hydrateWorkspacePrefsFromServer,
   queueWorkspacePrefsSync,
+  flushWorkspacePrefsSync,
   fetchWorkspacePrefs,
   patchWorkspacePrefs,
   resetWorkspacePrefsSyncState,
@@ -133,6 +134,27 @@ describe('workspacePrefsApi', () => {
     await expect(patchWorkspacePrefs({ host_pack_acknowledged: true }))
       .rejects.toBeInstanceOf(WorkspacePrefsConflictError)
     expect(apiFetch).toHaveBeenCalledTimes(2) // hydration GET, verification GET, no PATCH
+  })
+
+  it('drains queued employee settings in order using each confirmed account revision', async () => {
+    let revision = 4
+    const writes: object[] = []
+    vi.mocked(apiFetch).mockImplementation(async (_path, options) => {
+      if (options?.method === 'PATCH') {
+        const payload = JSON.parse(String(options.body))
+        expect(payload.expected_revision).toBe(revision)
+        expect(payload.expected_owner_id).toBe('tenant:42')
+        writes.push(payload.workflow_ai_employees)
+        revision += 1
+      }
+      return { ok: true, json: async () => ({ success: true, owner_id: 'tenant:42', revision }) } as Response
+    })
+    queueWorkspacePrefsSync({ workflow_ai_employees: { one: true } })
+    const first = flushWorkspacePrefsSync()
+    queueWorkspacePrefsSync({ workflow_ai_employees: { two: false } })
+    await Promise.all([first, flushWorkspacePrefsSync()])
+    expect(writes).toEqual([{ one: true }, { two: false }])
+    expect(revision).toBe(6)
   })
 
   it('surfaces a server 409 and never resubmits the same intent', async () => {
