@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey, defaultWorkflowBuiltinEnabled } from './workflowAiEmployees'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 describe('workflowAiEmployees store', () => {
   beforeEach(() => {
@@ -118,5 +119,21 @@ describe('workflowAiEmployees store', () => {
     store.reloadForTenantScope('tenant:2')
     expect(store.enabled.label_print).toBe(false)
     expect(store.enabled.shipment_mgmt).toBe(true)
+  })
+
+  it('keeps confirmed preferences out of browser storage and retires them on account change', () => {
+    const store = useWorkflowAiEmployeesStore()
+    const key = workflowAiEmployeesStorageKey('tenant:1')
+    store.acceptConfirmedPreferences({ label_print: true })
+    store.persistAndNotify(false)
+    store.reloadFromLocalStorage()
+    expect(store.enabled.label_print).toBe(true)
+    expect(localStorage.getItem(key)).toBeNull()
+
+    productReadAccountEpoch.value++
+    store.reloadForTenantScope('tenant:1')
+    expect(store.confirmedEnabled).toEqual({})
+    expect(store.enabled.label_print).toBeUndefined()
+    expect(store.prefsReady).toBe(false)
   })
 })

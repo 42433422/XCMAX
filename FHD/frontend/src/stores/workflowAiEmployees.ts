@@ -80,7 +80,15 @@ function mergeModWorkflowIds(cur: Record<string, boolean>, mods: ModWithWorkflow
 }
 
 export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', () => {
-  const enabled = ref<Record<string, boolean>>(defaultWorkflowBuiltinEnabled())
+  const localEnabled = ref(defaultWorkflowBuiltinEnabled())
+  const serverEnabled = ref<Record<string, boolean> | null>(null)
+  const enabled = computed({
+    get: () => serverEnabled.value ?? localEnabled.value,
+    set: (values: Record<string, boolean>) => {
+      if (serverEnabled.value === null) localEnabled.value = values
+      else serverEnabled.value = values
+    },
+  })
   const registryEntries = ref<WorkflowEmployeeRegistryEntry[]>([])
   const registryLoaded = ref(false)
   let registryLoadGeneration = 0
@@ -94,19 +102,25 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
   const registeredIds = computed(() => new Set(registryEntries.value.map((e) => e.id)))
 
   function persistAndNotify(sync = true) {
-    try {
-      localStorage.setItem(workflowAiEmployeesStorageKey(), JSON.stringify(enabled.value))
-    } catch {
-      /* quota / private mode */
+    if (serverEnabled.value === null) {
+      try {
+        localStorage.setItem(workflowAiEmployeesStorageKey(), JSON.stringify(localEnabled.value))
+      } catch {
+        /* quota / private mode */
+      }
     }
-    if (sync) void import('@/utils/workspacePrefsApi')
-      .then(({ queueWorkspacePrefsSync }) => {
-        queueWorkspacePrefsSync({ workflow_ai_employees: { ...enabled.value } })
-      })
-      .catch(() => {})
+    const snapshot = { ...enabled.value }
+    if (sync) {
+      const scope = prefsScope()
+      void import('@/utils/workspacePrefsApi')
+        .then(({ queueWorkspacePrefsSync }) => {
+          if (scope === prefsScope()) queueWorkspacePrefsSync({ workflow_ai_employees: snapshot })
+        })
+        .catch(() => {})
+    }
     window.dispatchEvent(
       new CustomEvent('xcagi:workflow-ai-employees-changed', {
-        detail: { enabled: { ...enabled.value } },
+        detail: { enabled: snapshot },
       }),
     )
   }
@@ -115,7 +129,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
 
   function acceptConfirmedPreferences(values: Record<string, boolean>) {
     confirmedEnabled.value = { ...values }
-    enabled.value = { ...Object.fromEntries(registryEntries.value.map(entry => [entry.id, false])), ...values }
+    serverEnabled.value = { ...Object.fromEntries(registryEntries.value.map(entry => [entry.id, false])), ...values }
     prefsReady.value = true
     prefsError.value = ''
     persistAndNotify(false)
@@ -254,7 +268,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
   }
 
   function reloadFromLocalStorage() {
-    enabled.value = readWorkflowEnabledFromLocalStorage()
+    if (serverEnabled.value === null) localEnabled.value = readWorkflowEnabledFromLocalStorage()
   }
 
   function reloadForTenantScope(scope?: string) {
@@ -264,6 +278,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
       registryOwner = owner
       prefsVersion++
       confirmedEnabled.value = {}
+      serverEnabled.value = null
       prefsReady.value = false
       prefsSaving.value = ''
       prefsError.value = ''
@@ -271,7 +286,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
       registryEntries.value = []
       registryLoaded.value = false
     }
-    enabled.value = readWorkflowEnabledFromLocalStorage(activeTenantScope)
+    reloadFromLocalStorage()
   }
 
   reloadForTenantScope(resolveTenantStorageScopeFromRuntime(true))
@@ -354,6 +369,7 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     prefsReady,
     prefsSaving,
     prefsError,
+    acceptConfirmedPreferences,
     refreshConfirmedPreferences,
     setEmployeeEnabledConfirmed,
     loadRegistry,

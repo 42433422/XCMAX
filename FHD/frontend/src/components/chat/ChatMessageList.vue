@@ -33,7 +33,7 @@
           <div
             v-else-if="shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
             class="message-html message-html--streaming-long"
-          >{{ aiMarkdownSourceFromContent(msg.content) }}</div>
+          >{{ streamingPreviewText(msg.content) }}</div>
           <div v-else class="message-html" v-html="messageHtml(msg)"></div>
         </MessageFold>
         <template v-else>
@@ -128,7 +128,7 @@
           <div
             v-if="(msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)) && shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
             class="message-html message-html--streaming-long"
-          >{{ aiMarkdownSourceFromContent(msg.content) }}</div>
+          >{{ streamingPreviewText(msg.content) }}</div>
           <div
             v-else-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
             class="message-html"
@@ -171,7 +171,7 @@
             <i class="fa fa-undo" aria-hidden="true"></i>
           </button>
           <button
-            v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg) && receiptStatus(msg) === 'failed' && originalRequest(idx)"
+            v-if="msg.role === 'ai' && !msg.streamingShell && receiptStatus(msg) === 'failed' && isFailedChatReply(msg) && originalRequest(idx)"
             type="button"
             class="message-recovery-btn"
             data-testid="chat-retry-model"
@@ -223,7 +223,7 @@
         <div v-if="msg.role === 'ai' && !msg.streamingShell && ['unknown', 'blocked'].includes(msg.workflowAction || '')" class="message-recovery" data-testid="chat-unknown-recovery">
           <p class="message-recovery__text">本轮结果未知，请先核对。</p>
         </div>
-        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg) && !hasIncompleteToolReceipt(msg)" class="message-recovery" data-testid="chat-error-recovery">
+        <div v-else-if="msg.role === 'ai' && !isMessageStreaming(msg) && !msg.streamingShell && isFailedChatReply(msg) && !hasIncompleteToolReceipt(msg)" class="message-recovery" data-testid="chat-error-recovery">
           <p class="message-recovery__text">{{ recoveryText(msg) }}</p>
         </div>
         <div v-else-if="msg.role === 'ai' && !msg.streamingShell && canConfirmPreview(msg)" class="message-recovery" data-testid="chat-destructive-preview">
@@ -261,7 +261,7 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
-import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
+import { aiMarkdownSourceFromContent, stripPlannerDisplayMarkers, stripToolInvocationLeaks } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 import ChatTurnTrace from '@/components/chat/ChatTurnTrace.vue'
@@ -630,8 +630,14 @@ function executionMarker(status: string): string {
 
 function shouldCondenseOrchestrationBody(message: ChatMessage): boolean {
   if (!hasOrchestrationTrace(message)) return false
-  const body = aiMarkdownSourceFromContent(message.content)
+  const body = isMessageStreaming(message)
+    ? streamingPreviewText(message.content)
+    : aiMarkdownSourceFromContent(message.content)
   return /(动态工作流计划|工作编排|工具探测概览|执行编排|节点图|风险判断|需要审批后执行|requires human risk approval)/i.test(body)
+}
+
+function streamingPreviewText(content: string): string {
+  return stripPlannerDisplayMarkers(stripToolInvocationLeaks(content))
 }
 
 function approvalTraceFor(message: ChatMessage): AgentRunTraceData | null {

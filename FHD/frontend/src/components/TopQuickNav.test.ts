@@ -1,6 +1,6 @@
 import { computed, reactive, ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
@@ -359,7 +359,7 @@ describe('TopQuickNav', () => {
         expect(document.activeElement).toBe(input)
         expect(input.getAttribute('aria-expanded')).toBe('true')
         expect(input.getAttribute('aria-activedescendant')).toBe('top-quick-nav-option-0')
-        await wrapper.find('input').trigger('keydown', { key: 'Escape' })
+        await new DOMWrapper(input).trigger('keydown', { key: 'Escape' })
         expect(document.activeElement).toBe(origin)
         expect(document.querySelector('.top-quick-nav__list')).toBeNull()
         wrapper.unmount()
@@ -519,7 +519,8 @@ describe('TopQuickNav', () => {
       await wrapper.vm.$nextTick()
       expect(document.querySelector('.top-quick-nav--palette')).toBeTruthy()
       expect(document.querySelector('.top-quick-nav__scrim')).toBeTruthy()
-      await wrapper.find('input').setValue(query)
+      const input = document.querySelector<HTMLInputElement>('.top-quick-nav--palette input')!
+      await new DOMWrapper(input).setValue(query)
       await vi.waitFor(() => expect(optionNames().join()).toContain(query))
       const record = [...document.querySelectorAll('.top-quick-nav__option')]
         .find(node => node.textContent?.includes(query))
@@ -568,8 +569,9 @@ describe('TopQuickNav', () => {
       await wrapper.vm.$nextTick()
       expect(document.querySelector('.top-quick-nav__settings [role="alert"]')).toBeNull()
       input.focus()
-      await wrapper.find('input').setValue('打开智能对话')
-      await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+      const paletteInput = new DOMWrapper(input)
+      await paletteInput.setValue('打开智能对话')
+      await paletteInput.trigger('keydown', { key: 'Enter' })
       expect(wrapper.emitted('command')).toContainEqual(['chat'])
       expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
     } finally {

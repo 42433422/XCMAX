@@ -1613,12 +1613,13 @@ describe('SSE rendering work bounds', () => {
     const { round, messages, deps } = setup({ tts: false })
     const changes = vi.fn()
     const stop = watch(() => messages.value[0]?.liveSteps, changes, { flush: 'sync' })
-    const chunks = Array.from({ length: 160 }, () => ({ type: 'token' as const, text: '字' }))
+    const chunks = Array.from({ length: 160 }, (_, index) => ({ type: 'token' as const, text: `第${index + 1}字` }))
+    const response = chunks.map(chunk => chunk.text).join('')
     feed([
       { type: 'tool_call', phase: 'started', node_id: 'lookup', tool_id: 'crm', action: 'query' },
       ...chunks,
       { type: 'tool_call', phase: 'finished', node_id: 'lookup', tool_id: 'crm', action: 'query', success: true },
-      { type: 'done', result: { success: true, response: '字'.repeat(160) } },
+      { type: 'done', result: { success: true, response } },
     ])
     try {
       await round.executeRemoteChatRound(['查询客户'], undefined, scope())
@@ -1629,7 +1630,7 @@ describe('SSE rendering work bounds', () => {
       const textUpdates = deps.chatRequest.setLoadingProgress.mock.calls
         .filter(([text]) => text === '正在生成回复…')
       expect(textUpdates).toHaveLength(1)
-      expect(messages.value[0].content).toBe('字'.repeat(160))
+      expect(messages.value[0].content).toBe(response)
     } finally {
       stop()
     }

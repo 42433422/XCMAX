@@ -192,7 +192,9 @@ def test_expired_cursor_must_not_replay_an_incomplete_suffix(monkeypatch, backen
     replay.append("gap", {"type": "token", "text": "c"}, owner="7", tenant="2")
     with pytest.raises(replay.ReplayBackendUnavailable):
         replay.events_after("gap", first, owner="7", tenant="2")
-    assert [row["payload"]["text"] for row in replay.events_after("gap", second, owner="7", tenant="2")] == ["c"]
+    assert [
+        row["payload"]["text"] for row in replay.events_after("gap", second, owner="7", tenant="2")
+    ] == ["c"]
 
 
 def test_local_finish_status_and_lease_liveness():

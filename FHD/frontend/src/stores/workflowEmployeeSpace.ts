@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
 import { shortNameFromPanelTitle } from '@/utils/workflowEmployeeDisplayName'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
@@ -435,8 +435,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
 
   /**
    * 跟踪副窗一键托管开关：开 → markEnabled，关 → markDisabled。
-   * 通过 pinia $subscribe 与开关 store 解耦——卡片 UI 只调 wfEmp.toggle，
-   * 工时累计在这里集中处理，避免分散到每个调用点。
+   * 订阅生效的托管状态，统一记录工时。
    */
   const wfEmp = useWorkflowAiEmployeesStore()
   let lastEnabled: Record<string, boolean> = { ...wfEmp.enabled }
@@ -444,8 +443,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   for (const id of Object.keys(lastEnabled)) {
     if (lastEnabled[id]) markEnabled(id)
   }
-  wfEmp.$subscribe((_mutation, state) => {
-    const cur = state.enabled as Record<string, boolean>
+  watch(() => wfEmp.enabled, cur => {
     const allIds = new Set([...Object.keys(lastEnabled), ...Object.keys(cur)])
     for (const id of allIds) {
       const wasOn = lastEnabled[id] === true
@@ -454,7 +452,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
       else if (wasOn && !isOn) markDisabled(id)
     }
     lastEnabled = { ...cur }
-  })
+  }, { deep: true })
 
   return {
     snapshots,

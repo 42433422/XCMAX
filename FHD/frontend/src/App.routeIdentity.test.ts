@@ -81,16 +81,17 @@ it('stops pending scroll restoration and router observation when the app unmount
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/page/:id', component: { template: '<section>page</section>' } }] })
   await router.push('/page/one')
   const wrapper = mount(App, { attachTo: document.body, global: { plugins: [router] } })
-  const query = vi.spyOn(document, 'querySelector')
+  const query = vi.spyOn(document, 'querySelectorAll')
+  const scrollRoots = '.route-view-shell[data-route-scroll-key]'
   try {
     await router.push('/page/two'); await flushPromises()
-    expect(query).toHaveBeenCalledWith('.route-view-shell')
+    expect(query).toHaveBeenCalledWith(scrollRoots)
     wrapper.unmount()
     query.mockClear()
     await vi.advanceTimersByTimeAsync(100)
     await router.push('/page/three'); await flushPromises()
     await vi.advanceTimersByTimeAsync(100)
-    expect(query).not.toHaveBeenCalledWith('.route-view-shell')
+    expect(query).not.toHaveBeenCalledWith(scrollRoots)
   } finally {
     if (wrapper.exists()) wrapper.unmount()
     query.mockRestore(); vi.useRealTimers()

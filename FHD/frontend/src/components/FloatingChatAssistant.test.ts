@@ -25,12 +25,6 @@ vi.mock('@/composables/useChatView', () => ({
   },
 }))
 
-vi.mock('@/utils/sanitizeHtml', () => ({
-  sanitizeChatBubbleHtml: vi.fn((html: string) => html),
-  sanitizeChatBubbleMarkdown: vi.fn((source: string) => source.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')),
-  plainTextFromChatHtml: vi.fn((html: string) => html),
-}))
-
 vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
   ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: vi.fn(() => 'test-session-id'),

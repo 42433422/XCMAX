@@ -1,5 +1,7 @@
 ## Unreleased
 
+- 长回复在收到终态后再渲染 Markdown，避免流式阶段重复解析。服务端确认的员工托管状态保留在当前会话。Market 收起遮挡自主任务按钮的余额提醒，并把设置弹层显示在小 C 助理面板上方。移动端门禁按共享 Token 校验。
+
 - iOS 发布摘要不再将申请提交当作已送审：单独记录个人身份门禁、IPA 签名核验、分发步骤实际结果及真机仍缺证据，避免失败时显示“已送审”。
 - iOS 个人版签名前新增 fail-closed 身份核验：个人版须在产品目录解冻并启用，App Store 原始 App ID / Bundle ID 与 Fastlane、Matchfile、Xcode 工程一致；IPA 内 Info.plist 版本/包名和 Apple codesign 签名团队经原包回读核对，缺任一证据阻断分发。
 - iOS App Store 版本号与构建号均改为显式必填，不从桌面四段版本或 Actions run number 推导；个人版身份仍须由 App Store Connect 核对，现有 enterprise Bundle ID 不得冒充个人版验收。

@@ -216,12 +216,19 @@ class DeviceRoutes:
 
             # A relay fallback or a historical outbox row without a verified
             # recipient binding is not proof of the current tenant's identity.
-            return notification_recipient_scope(user) if isinstance(user, User) and user.is_active else ""
+            return (
+                notification_recipient_scope(user)
+                if isinstance(user, User) and user.is_active
+                else ""
+            )
 
         def _notification_payload(row) -> dict:
             return {
-                "id": row.id, "title": row.title, "body": row.body,
-                "route": row.route, "channel": row.channel,
+                "id": row.id,
+                "title": row.title,
+                "body": row.body,
+                "route": row.route,
+                "channel": row.channel,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "read_at": row.read_at.isoformat() if row.read_at else None,
                 "is_read": row.read_at is not None,
@@ -237,7 +244,9 @@ class DeviceRoutes:
 
             scope = _inbox_scope(user)
             if user is None or not scope:
-                return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+                return JSONResponse(
+                    format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+                )
             ports.ensure_outbox_table()
             with ports.database() as db:
                 query = db.query(MobileNotificationOutbox).filter(
@@ -248,7 +257,12 @@ class DeviceRoutes:
                     query = query.filter(MobileNotificationOutbox.id < before_id)
                 rows = query.order_by(MobileNotificationOutbox.id.desc()).limit(limit + 1).all()
                 items = [_notification_payload(row) for row in rows[:limit]]
-            return format_mobile_response(data={"notifications": items, "next_before_id": items[-1]["id"] if len(rows) > limit else None})
+            return format_mobile_response(
+                data={
+                    "notifications": items,
+                    "next_before_id": items[-1]["id"] if len(rows) > limit else None,
+                }
+            )
 
         @router.post("/notifications/{notification_id}/read", response_model=None)
         async def mark_notification_read(
@@ -259,7 +273,9 @@ class DeviceRoutes:
 
             scope = _inbox_scope(user)
             if user is None or not scope:
-                return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+                return JSONResponse(
+                    format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+                )
             ports.ensure_outbox_table()
             with ports.database() as db:
                 query = db.query(MobileNotificationOutbox).filter(
@@ -272,6 +288,11 @@ class DeviceRoutes:
                 )
                 row = query.one_or_none()
                 if row is None:
-                    return JSONResponse(format_mobile_response(None, "通知不存在或无权查看", success=False, code=404), status_code=404)
+                    return JSONResponse(
+                        format_mobile_response(
+                            None, "通知不存在或无权查看", success=False, code=404
+                        ),
+                        status_code=404,
+                    )
                 item = _notification_payload(row)
             return format_mobile_response(data=item)

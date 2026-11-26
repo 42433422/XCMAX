@@ -12,10 +12,6 @@ vi.mock('@/utils/apiBase', () => ({
   DEFAULT_MOD_API_TIMEOUT_MS: 5000,
 }))
 
-vi.mock('@/stores/workflowAiEmployees', () => ({
-  workflowAiEmployeesStorageKey: () => 'xcagi_workflow_ai_employees',
-}))
-
 import { apiFetch } from '@/utils/apiBase'
 
 describe('workspacePrefsApi', () => {
@@ -33,8 +29,8 @@ describe('workspacePrefsApi', () => {
     })
     expect(localStorage.getItem('xcagi_product_flow_completed')).toBe('1')
     expect(localStorage.getItem('xcagi_product_flow_host_ack')).toBe('0')
-    const emp = JSON.parse(localStorage.getItem('xcagi_workflow_ai_employees') || '{}')
-    expect(emp.label_print).toBe(true)
+    expect(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+      .some(key => key?.startsWith('xcagi_workflow_ai_employees'))).toBe(false)
   })
 
   it('applyWorkspacePrefsToLocalCache writes tenant-scoped flags', () => {
@@ -56,17 +52,19 @@ describe('workspacePrefsApi', () => {
   })
 
   it('hydrateWorkspacePrefsFromServer applies cache when owner_id present', async () => {
+    const onOwnedPreferences = vi.fn()
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
       json: async () => ({
         success: true,
         owner_id: 'u1',
-        data: { product_flow_completed: true },
+        data: { product_flow_completed: true, workflow_ai_employees: { label_print: true } },
       }),
     } as Response)
-    const prefs = await hydrateWorkspacePrefsFromServer()
+    const prefs = await hydrateWorkspacePrefsFromServer(undefined, undefined, onOwnedPreferences)
     expect(prefs?.product_flow_completed).toBe(true)
     expect(localStorage.getItem('xcagi_product_flow_completed')).toBe('1')
+    expect(onOwnedPreferences).toHaveBeenCalledExactlyOnceWith(prefs)
   })
 
   it('hydrateWorkspacePrefsFromServer completes when prefs data is empty and owner_id is null', async () => {
@@ -82,8 +80,10 @@ describe('workspacePrefsApi', () => {
       ok: true,
       json: async () => ({ success: true, owner_id: 'u1', data: { product_flow_completed: true } }),
     } as Response)
-    await hydrateWorkspacePrefsFromServer('tenant:10', () => false)
+    const onOwnedPreferences = vi.fn()
+    await hydrateWorkspacePrefsFromServer('tenant:10', () => false, onOwnedPreferences)
     expect(localStorage.getItem('xcagi_product_flow_completed:tenant:10')).toBeNull()
+    expect(onOwnedPreferences).not.toHaveBeenCalled()
   })
 
   it('hydrateWorkspacePrefsFromServer returns null on failure', async () => {

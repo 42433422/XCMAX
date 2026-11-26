@@ -285,17 +285,16 @@ describe('ProductsView.coverage', () => {
     })
 
     it('reset=false 时追加列表（loadMore 场景）', async () => {
-      mockFetchProducts.mockResolvedValue({
-        success: true,
-        data: [{ id: 2, name: 'P2' }],
-        total: 1,
-      })
+      const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `P${index + 1}` }))
+      const lastProduct = { id: 101, name: 'P101' }
+      mockFetchProducts
+        .mockResolvedValueOnce({ success: true, data: firstPage, total: 101 })
+        .mockResolvedValueOnce({ success: true, data: [lastProduct], total: 101 })
       const wrapper = await mountProducts()
       const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'products', [{ id: 1, name: 'P1' }])
       await state.loadProducts(false)
-      await flushPromises()
-      expect(getSetupRefValue(wrapper, 'products')).toHaveLength(2)
+      expect(mockFetchProducts).toHaveBeenLastCalledWith({ page: 2, per_page: 100 }, { append: true })
+      expect(getSetupRefValue(wrapper, 'products')).toEqual([...firstPage, lastProduct])
     })
 
     it('带搜索关键字和单位时传递参数', async () => {

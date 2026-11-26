@@ -1,6 +1,5 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
 import { productReadScopeKey } from '@/utils/productReadAccountScope'
-import { workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
 import { resolveTenantStorageScopeFromRuntime, writeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
 const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
@@ -61,38 +60,22 @@ export function applyWorkspacePrefsToLocalCache(prefs: WorkspacePrefs, scope?: s
         localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, prefs.host_pack_acknowledged ? '1' : '0')
       }
     }
-    if (prefs.workflow_ai_employees && typeof prefs.workflow_ai_employees === 'object') {
-      const key = workflowAiEmployeesStorageKey(scope)
-      const raw = localStorage.getItem(key)
-      let cur: Record<string, boolean> = {}
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as Record<string, unknown>
-          if (parsed && typeof parsed === 'object') {
-            for (const [k, v] of Object.entries(parsed)) {
-              if (typeof v === 'boolean') cur[k] = v
-            }
-          }
-        } catch {
-          cur = {}
-        }
-      }
-      for (const [k, v] of Object.entries(prefs.workflow_ai_employees)) {
-        if (typeof v === 'boolean') cur[k] = v
-      }
-      localStorage.setItem(key, JSON.stringify(cur))
-    }
   } catch {
     /* quota / private mode */
   }
 }
 
-export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent: () => boolean = () => true): Promise<WorkspacePrefs | null> {
+export async function hydrateWorkspacePrefsFromServer(
+  scope?: string,
+  isCurrent: () => boolean = () => true,
+  onOwnedPreferences?: (preferences: WorkspacePrefs) => void,
+): Promise<WorkspacePrefs | null> {
   try {
     const resp = await fetchWorkspacePrefs()
     const prefs = resp.data || {}
     if (resp.owner_id && isCurrent()) {
       applyWorkspacePrefsToLocalCache(prefs, scope)
+      if (resp.success === true) onOwnedPreferences?.(prefs)
     }
     return prefs
   } catch {

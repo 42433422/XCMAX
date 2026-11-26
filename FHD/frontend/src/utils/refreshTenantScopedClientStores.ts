@@ -29,7 +29,11 @@ export async function refreshTenantScopedClientStores(input?: TenantStorageScope
   const scope = resolveTenantStorageScope(input)
   setTenantStorageScopeCache(scope)
   reloadScopedStore(() => useWorkflowAiEmployeesStore().reloadForTenantScope(scope))
-  if (hydrate) await hydrateWorkspacePrefsFromServer(scope, () => epoch === productReadAccountEpoch.value)
+  if (hydrate) {
+    await hydrateWorkspacePrefsFromServer(scope, () => epoch === productReadAccountEpoch.value, prefs => {
+      reloadScopedStore(() => useWorkflowAiEmployeesStore().acceptConfirmedPreferences(prefs.workflow_ai_employees || {}))
+    })
+  }
   // A later login owns the active scope. Never restore the older input or publish its stores.
   if (epoch !== productReadAccountEpoch.value) return
   // Workspace preferences can write tenant-scoped localStorage in this same

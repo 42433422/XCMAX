@@ -1,4 +1,5 @@
 """Host-side regression of emulator smoke control flow (mock adb, not device evidence)."""
+
 import os
 import subprocess
 from pathlib import Path
@@ -24,9 +25,9 @@ def test_emulator_smoke_rejects_false_positive(tmp_path, mode, expected):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     commands = {
-        "git": '#!/bin/bash\necho aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n',
-        "sleep": '#!/bin/bash\nexit 0\n',
-        "adb": '''#!/bin/bash
+        "git": "#!/bin/bash\necho aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+        "sleep": "#!/bin/bash\nexit 0\n",
+        "adb": """#!/bin/bash
 set -eu
 printf '%s\\n' "$*" >> "$TEST_TRACE"
 case "$*" in
@@ -42,18 +43,25 @@ case "$*" in
   'logcat -d -t 400') echo FATAL ;;
   *) exit 3 ;;
 esac
-''',
+""",
     }
     for name, content in commands.items():
         executable = bin_dir / name
         executable.write_text(content)
         executable.chmod(0o755)
     trace = tmp_path / "trace"
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", APP_PACKAGE="test.app",
-               GITHUB_SHA=("b" if mode == "sha_mismatch" else "a") * 40,
-               TEST_MODE=mode, TEST_STATE=str(tmp_path), TEST_TRACE=str(trace))
-    result = subprocess.run(["bash", str(script)], cwd=tmp_path, env=env,
-                            capture_output=True, text=True, timeout=10)
+    env = dict(
+        os.environ,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        APP_PACKAGE="test.app",
+        GITHUB_SHA=("b" if mode == "sha_mismatch" else "a") * 40,
+        TEST_MODE=mode,
+        TEST_STATE=str(tmp_path),
+        TEST_TRACE=str(trace),
+    )
+    result = subprocess.run(
+        ["bash", str(script)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10
+    )
     assert result.returncode == expected, result.stdout + result.stderr
     assert screen.exists() is (mode == "ok")
     if mode == "ok":

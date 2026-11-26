@@ -481,16 +481,19 @@ describe('MainLayout.vue – sidebar timers', () => {
     wrapper.unmount()
   })
 
-  it('keeps desktop navigation visible in the installed Electron shell', async () => {
+  it('keeps open desktop navigation visible without undoing manual collapse', async () => {
     document.documentElement.classList.add('xcagi-electron')
     try {
       const { wrapper } = await mountMainLayout()
-      wrapper.vm.sidebarCollapsed = true
+      wrapper.vm.sidebarCollapsed = false
       wrapper.vm.isSidebarFeatureEnabled = true
       wrapper.vm.scheduleSidebarAutoCollapse()
 
       expect(wrapper.vm.sidebarCollapsed).toBe(false)
       expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
+      wrapper.vm.sidebarCollapsed = true
+      wrapper.vm.scheduleSidebarAutoCollapse()
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
       wrapper.unmount()
     } finally {
       document.documentElement.classList.remove('xcagi-electron')

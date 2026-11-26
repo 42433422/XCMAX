@@ -24,21 +24,37 @@ def test_notification_read_is_independent_of_delivery_and_scoped(tmp_path):
             yield db
 
     with database() as db:
-        db.add_all([
-            MobileNotificationOutbox(id=1, user_id=7, recipient_scope="tenant:2", title="original", delivered=True),
-            MobileNotificationOutbox(id=2, user_id=7, recipient_scope="tenant:3", title="other tenant"),
-            MobileNotificationOutbox(id=3, user_id=8, recipient_scope="tenant:2", title="other user"),
-            MobileNotificationOutbox(id=4, user_id=7, recipient_scope="", title="unbound legacy"),
-            MobileNotificationOutbox(id=5, user_id=7, recipient_scope="tenant:2", title="undelivered"),
-        ])
+        db.add_all(
+            [
+                MobileNotificationOutbox(
+                    id=1, user_id=7, recipient_scope="tenant:2", title="original", delivered=True
+                ),
+                MobileNotificationOutbox(
+                    id=2, user_id=7, recipient_scope="tenant:3", title="other tenant"
+                ),
+                MobileNotificationOutbox(
+                    id=3, user_id=8, recipient_scope="tenant:2", title="other user"
+                ),
+                MobileNotificationOutbox(
+                    id=4, user_id=7, recipient_scope="", title="unbound legacy"
+                ),
+                MobileNotificationOutbox(
+                    id=5, user_id=7, recipient_scope="tenant:2", title="undelivered"
+                ),
+            ]
+        )
 
     async def get_user():
         return principal
 
     app = FastAPI()
-    ports = DeviceRoutesPorts(database=database, warning=lambda *_: None,
-                              ensure_mobile_device_table=lambda: None,
-                              now=lambda: now, ensure_outbox_table=lambda: None)
+    ports = DeviceRoutesPorts(
+        database=database,
+        warning=lambda *_: None,
+        ensure_mobile_device_table=lambda: None,
+        now=lambda: now,
+        ensure_outbox_table=lambda: None,
+    )
     app.include_router(DeviceRoutes(ports, get_user).router)
     desktop = TestClient(app)
     mobile = TestClient(app)

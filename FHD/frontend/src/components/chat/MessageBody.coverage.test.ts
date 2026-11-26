@@ -366,15 +366,15 @@ describe('MessageBody flushMermaid', () => {
   })
 })
 
-// ─── bindCopyButtons ───────────────────────────────────────────
-describe('MessageBody bindCopyButtons', () => {
+// ─── Delegated Markdown copy ──────────────────────────────────
+describe('MessageBody code copy', () => {
   it('无复制按钮时正常执行', async () => {
     mocks.sanitizeChatBubbleMarkdown.mockImplementation(() => '<p>no code</p>')
     mount(MessageBody, { props: { content: 'test' } })
     await waitForFlush()
   })
 
-  it('绑定复制按钮并成功复制', async () => {
+  it('点击代码块按钮后复制', async () => {
     mocks.sanitizeChatBubbleMarkdown.mockImplementation(
       () =>
         '<div class="md-code"><div class="md-code__head"><button class="md-code__copy">复制</button></div><pre><code class="md-code__body">console.log(1)</code></pre></div>',
@@ -383,7 +383,6 @@ describe('MessageBody bindCopyButtons', () => {
     const wrapper = mount(MessageBody, { props: { content: 'test' } })
     await waitForFlush()
     const btn = wrapper.find('.md-code__copy')
-    expect(btn.element.dataset.bound).toBe('1')
     await btn.trigger('click')
     await nextTick()
     await nextTick()
@@ -408,7 +407,7 @@ describe('MessageBody bindCopyButtons', () => {
     expect(btn.text()).toBe('复制失败')
   })
 
-  it('已绑定的按钮不重复绑定', async () => {
+  it('流式状态切换后单击只复制一次', async () => {
     mocks.sanitizeChatBubbleMarkdown.mockImplementation(
       () =>
         '<div class="md-code"><div class="md-code__head"><button class="md-code__copy">复制</button></div><pre><code class="md-code__body">x</code></pre></div>',
@@ -419,8 +418,9 @@ describe('MessageBody bindCopyButtons', () => {
     await wrapper.setProps({ streaming: true })
     await wrapper.setProps({ streaming: false })
     await waitForFlush()
-    const btn = wrapper.find('.md-code__copy')
-    expect(btn.element.dataset.bound).toBe('1')
+    clipboardWriteText.mockClear()
+    await wrapper.get('.md-code__copy').trigger('click')
+    expect(clipboardWriteText).toHaveBeenCalledExactlyOnceWith('x')
   })
 
   it('复制成功后 1400ms 恢复原文本', async () => {

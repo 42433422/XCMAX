@@ -46,8 +46,12 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
 
     guard = next(step for step in steps if step.get("name", "").startswith("Reject an unfrozen"))
     assert guard["env"]["RELEASE_SHA"] == "${{ inputs.release_sha }}"
-    for required in ("git rev-parse HEAD", "git merge-base --is-ancestor",
-                     "refs/remotes/origin/main", "test \"$(git rev-parse refs/remotes/origin/main)\""):
+    for required in (
+        "git rev-parse HEAD",
+        "git merge-base --is-ancestor",
+        "refs/remotes/origin/main",
+        'test "$(git rev-parse refs/remotes/origin/main)"',
+    ):
         assert required in guard["run"]
 
     version = next(step for step in steps if step.get("name") == "Resolve release version")
@@ -56,15 +60,29 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     assert "GITHUB_RUN_NUMBER" not in version["run"]
     assert "marketing_version" in version["run"]
 
-    signed = next(step for step in steps if step.get("name") == "Freeze signed IPA bytes and original build identity")
+    signed = next(
+        step
+        for step in steps
+        if step.get("name") == "Freeze signed IPA bytes and original build identity"
+    )
     assert "hashlib.file_digest" in signed["run"]
     assert "with archive.open('rb')" in signed["run"]
     assert "'verification_scope': 'build_artifact_not_physical_device'" in signed["run"]
     assert "xcagi-ios-build-info.json" in signed["run"]
-    for proof in ("CFBundleIdentifier", "CFBundleShortVersionString", "CFBundleVersion",
-                  "codesign", "TeamIdentifier", "'sku': 'personal'"):
+    for proof in (
+        "CFBundleIdentifier",
+        "CFBundleShortVersionString",
+        "CFBundleVersion",
+        "codesign",
+        "TeamIdentifier",
+        "'sku': 'personal'",
+    ):
         assert proof in signed["run"]
-    personal = next(step for step in steps if step.get("name") == "Reject unverified personal iOS App Store identity")
+    personal = next(
+        step
+        for step in steps
+        if step.get("name") == "Reject unverified personal iOS App Store identity"
+    )
     assert personal["id"] == "personal_identity"
     assert signed["id"] == "ipa_provenance"
     summary = next(step for step in steps if step.get("name") == "Release summary")
@@ -77,10 +95,14 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     upload = next(step for step in steps if step.get("name") == "Upload IPA artifact")
     assert upload["with"]["path"] == artifact_path
     assert upload["with"]["if-no-files-found"] == "error"
-    distribution = next(step for step in steps if step.get("name") == "Upload to TestFlight or submit for review")
+    distribution = next(
+        step for step in steps if step.get("name") == "Upload to TestFlight or submit for review"
+    )
     assert distribution["if"] == "inputs.distribute_to_testflight"
     assert distribution["id"] == "store_distribution"
-    decode_key = next(step for step in steps if step.get("name") == "Decode App Store Connect API key")
+    decode_key = next(
+        step for step in steps if step.get("name") == "Decode App Store Connect API key"
+    )
     assert decode_key["if"] == "inputs.distribute_to_testflight"
 
 
@@ -94,7 +116,8 @@ def test_ios_release_sha_guard_checks_actual_git_state(
     path: Path, _: str, scenario: str, tmp_path: Path
 ) -> None:
     step = next(
-        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        row
+        for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
         if row.get("name", "").startswith("Reject an unfrozen")
     )
     _git(tmp_path, "init", "-q")
@@ -138,7 +161,8 @@ def test_app_review_requires_explicit_distribution_authorization(
     path: Path, _: str, distribute: str, submit: str, allowed: bool
 ) -> None:
     step = next(
-        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        row
+        for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
         if row.get("name") == "Require explicit distribution approval for App Review"
     )
     result = subprocess.run(
@@ -161,7 +185,8 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
     path: Path, _: str, scenario: str, tmp_path: Path
 ) -> None:
     step = next(
-        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        row
+        for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
         if row.get("name") == "Resolve release version"
     )
     assert step["env"]["REQUESTED_MARKETING_VERSION"] == "${{ inputs.version }}"
@@ -171,16 +196,16 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
     app.mkdir()
     output = tmp_path / "output"
     marker = app / "unexpected-execution"
-    invalid = '$(touch unexpected-execution)'
+    invalid = "$(touch unexpected-execution)"
     result = subprocess.run(
         ["bash", "-e", "-c", step["run"]],
         cwd=app,
         env={
             **os.environ,
             "REQUESTED_MARKETING_VERSION": invalid if scenario == "invalid_version" else "1.2.3",
-            "REQUESTED_BUILD_NUMBER": invalid if scenario == "invalid_build" else (
-                "" if scenario == "missing_build" else "42"
-            ),
+            "REQUESTED_BUILD_NUMBER": invalid
+            if scenario == "invalid_build"
+            else ("" if scenario == "missing_build" else "42"),
             "GITHUB_RUN_NUMBER": "43",
             "GITHUB_OUTPUT": str(output),
         },
@@ -195,19 +220,30 @@ def test_ios_release_version_treats_dispatch_inputs_as_data(
     else:
         assert result.returncode == 0, result.stderr
         assert output.read_text(encoding="utf-8").splitlines() == [
-            "marketing_version=1.2.3", "build_number=42"
+            "marketing_version=1.2.3",
+            "build_number=42",
         ]
 
+
 @pytest.mark.parametrize("path,_", WORKFLOWS, ids=["source", "published"])
-@pytest.mark.parametrize("scenario", [
-    "valid", "frozen", "inactive", "bundle_mismatch", "store_mismatch", "missing_bundle",
-])
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "valid",
+        "frozen",
+        "inactive",
+        "bundle_mismatch",
+        "store_mismatch",
+        "missing_bundle",
+    ],
+)
 def test_personal_ios_identity_gate_fail_closed(
     path: Path, _: str, scenario: str, tmp_path: Path
 ) -> None:
     """Personal target must be active and all release identity sources must agree."""
     step = next(
-        row for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
+        row
+        for row in _workflow(path)["jobs"]["build-and-distribute"]["steps"]
         if row.get("name") == "Reject unverified personal iOS App Store identity"
     )
     mobile = tmp_path / "mobile-flutter-poc"
@@ -220,11 +256,9 @@ def test_personal_ios_identity_gate_fail_closed(
     (ios / "fastlane/Fastfile").write_text(
         f'APP_IDENTIFIER = "{bundle}"\nAPP_STORE_ID = "{store_id}"\n', encoding="utf-8"
     )
-    (ios / "fastlane/Matchfile").write_text(
-        f'app_identifier("{bundle}")\n', encoding="utf-8"
-    )
+    (ios / "fastlane/Matchfile").write_text(f'app_identifier("{bundle}")\n', encoding="utf-8")
     (ios / "Runner.xcodeproj/project.pbxproj").write_text(
-        f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};\n', encoding="utf-8"
+        f"PRODUCT_BUNDLE_IDENTIFIER = {bundle};\n", encoding="utf-8"
     )
     active = ["enterprise"] if scenario == "inactive" else ["enterprise", "personal"]
     frozen = ["personal"] if scenario == "frozen" else []
@@ -237,11 +271,13 @@ def test_personal_ios_identity_gate_fail_closed(
         cwd=mobile,
         env={
             **os.environ,
-            "PERSONAL_BUNDLE_ID": "" if scenario == "missing_bundle" else (
-                "com.example.other" if scenario == "bundle_mismatch" else bundle
-            ),
+            "PERSONAL_BUNDLE_ID": ""
+            if scenario == "missing_bundle"
+            else ("com.example.other" if scenario == "bundle_mismatch" else bundle),
             "PERSONAL_APP_STORE_ID": "999999999" if scenario == "store_mismatch" else store_id,
         },
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert (result.returncode == 0) == (scenario == "valid"), result.stderr

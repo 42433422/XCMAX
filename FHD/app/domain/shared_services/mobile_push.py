@@ -120,7 +120,11 @@ def enqueue_outbox(
     try:
         with get_host_db() as host_db:
             recipient = host_db.get(User, int(user_id))
-            scope = notification_recipient_scope(recipient) if recipient is not None and recipient.is_active else ""
+            scope = (
+                notification_recipient_scope(recipient)
+                if recipient is not None and recipient.is_active
+                else ""
+            )
         with get_db() as db:
             bind = db.get_bind()
             if not sa_inspect(bind).has_table(MobileNotificationOutbox.__tablename__):

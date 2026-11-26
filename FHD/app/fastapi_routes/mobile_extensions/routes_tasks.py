@@ -68,13 +68,20 @@ def task_summary(task: Any) -> dict[str, Any]:
     if not employee_ids:
         raw_ids = metadata.get("employee_ids")
         if isinstance(raw_ids, list):
-            employee_ids = list(dict.fromkeys(value for value in raw_ids if isinstance(value, str) and value))
-    if not employee_ids and isinstance(metadata.get("employee_id"), str) and metadata["employee_id"]:
+            employee_ids = list(
+                dict.fromkeys(value for value in raw_ids if isinstance(value, str) and value)
+            )
+    if (
+        not employee_ids
+        and isinstance(metadata.get("employee_id"), str)
+        and metadata["employee_id"]
+    ):
         employee_ids = [metadata["employee_id"]]
     return {
         "employee_ids": employee_ids,
         "employee_assignments": employee_assignments,
-        "outcome_uncertain": metadata.get("reconciliation_required") is True or payload.get("status") == "unknown",
+        "outcome_uncertain": metadata.get("reconciliation_required") is True
+        or payload.get("status") == "unknown",
         "task_id": str(payload.get("task_id") or ""),
         "active_run_id": str(payload.get("active_run_id") or ""),
         "attempt": payload.get("attempt"),

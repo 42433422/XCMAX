@@ -45,6 +45,7 @@ const popoverAttrs = computed(() => ({
   offset: 10,
   showArrow: false,
   teleported: true,
+  zIndex: 11060,
   persistent: true,
   role: 'dialog' as const,
   transition: 'xiaoc-autonomy-motion',

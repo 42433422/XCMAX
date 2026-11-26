@@ -4,7 +4,7 @@
     <AgentPermissionDialog v-if="showPermissionDialog" @agree="agentStore.grantConsent()" @dismiss="agentStore.dismissLater()" />
 
     <!-- 主动建议气泡 -->
-    <AgentSuggestionToast :suggestion="currentSuggestion" @dismiss="dismiss" @open-panel="agentStore.openPanel()" />
+    <AgentSuggestionToast :suggestion="isOpen ? null : currentSuggestion" @dismiss="dismiss" @open-panel="agentStore.openPanel()" />
 
     <!-- 悬浮球 -->
     <FloatingAgentBall :is-speaking="isSpeaking" :male-avatar="props.maleAvatar" />
