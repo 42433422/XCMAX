@@ -51,9 +51,10 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     final relayId = _relayIdFromBindingData(response.data);
     final previous = await _client.loadSession();
     _requireAuthGeneration(generation);
+    int? committedGeneration;
     try {
       // exchangePairing validated this complete URI; keep it for later requests.
-      await _client.persistPairingSession(
+      committedGeneration = await _client.persistPairingSession(
         {...?response.data, 'local_base_url': baseUrl},
         hostWithPort: hostWithPort,
         clearRelayDesktop: true,
@@ -61,13 +62,22 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
         preserveActiveAuth: true,
         authGeneration: generation,
       );
+      if (committedGeneration == null) {
+        throw const MobileRepositoryException('登录状态已变更，请重试');
+      }
+      _requireAuthGeneration(committedGeneration);
       if (relayId.isNotEmpty) {
         final relay = _objectMap(response.data?['relay']);
         await _bindRelay(relayId, _stringField(relay, 'pairing_code'),
-            authGeneration: generation);
+            authGeneration: committedGeneration);
       }
     } catch (_) {
-      await _client.saveSession(previous, authGeneration: generation);
+      // Roll back only the exact epoch published by this pairing. Never adopt
+      // the latest epoch: another login or backend switch may own it now.
+      if (committedGeneration != null) {
+        await _client.saveSession(previous,
+            authGeneration: committedGeneration);
+      }
       rethrow;
     }
   }

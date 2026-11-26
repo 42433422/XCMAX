@@ -31,7 +31,7 @@
           <option value="">全部仓库</option>
           <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
         </select>
-        <input v-model="searchQuery" type="text" maxlength="200" placeholder="搜索产品名称或型号..." @input="applyInventoryFilters">
+        <input v-model="searchQuery" type="text" maxlength="200" placeholder="搜索产品名称或型号..." @input="scheduleInventorySearch">
       </div>
       <p v-if="inventoryError" role="alert" class="text-danger">
         {{ inventoryError }} <button class="btn btn-secondary" @click="loadInventory">重试</button>
@@ -149,8 +149,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showInDialog = false">取消</button>
-          <button class="btn btn-primary" @click="doInventoryIn">确认入库</button>
+          <button class="btn btn-secondary" :disabled="stockMutationBusy" @click="showInDialog = false">取消</button>
+          <button class="btn btn-primary" :disabled="stockMutationBusy" @click="doInventoryIn">{{ stockMutationBusy ? '处理中…' : '确认入库' }}</button>
         </div>
       </div>
     </div>
@@ -183,8 +183,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showOutDialog = false">取消</button>
-          <button class="btn btn-primary" @click="doInventoryOut">确认出库</button>
+          <button class="btn btn-secondary" :disabled="stockMutationBusy" @click="showOutDialog = false">取消</button>
+          <button class="btn btn-primary" :disabled="stockMutationBusy" @click="doInventoryOut">{{ stockMutationBusy ? '处理中…' : '确认出库' }}</button>
         </div>
       </div>
     </div>
@@ -192,7 +192,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onActivated, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, onBeforeUnmount, computed } from 'vue'
 import { get, post } from '@/api'
 import productsApi from '@/api/products'
 import { appAlert } from '@/utils/appDialog'
@@ -213,6 +213,7 @@ export default {
     const products = ref([])
     const lowStockList = ref([])
     const loading = ref(false)
+    const stockMutationBusy = ref(false)
     const inventoryError = ref('')
     const selectedWarehouse = ref('')
     const searchQuery = ref('')
@@ -319,11 +320,22 @@ export default {
       }
     }
 
+    let searchTimer = null
+    const cancelPendingSearch = () => {
+      if (searchTimer !== null) clearTimeout(searchTimer)
+      searchTimer = null
+    }
     const applyInventoryFilters = () => {
+      cancelPendingSearch()
       page.value = 1
       exportMessage.value = ''
       exportError.value = ''
       void loadInventory()
+    }
+    const scheduleInventorySearch = () => {
+      ++inventoryRequestId // retire any earlier response when the search term changes
+      cancelPendingSearch()
+      searchTimer = setTimeout(applyInventoryFilters, 280)
     }
 
     const loadLowStock = async () => {
@@ -359,45 +371,31 @@ export default {
       showOutDialog.value = true
     }
 
-    const doInventoryIn = async () => {
-      if (!inForm.value.product_id || !inForm.value.warehouse_id || !inForm.value.quantity) {
-        await appAlert('请填写必填项')
+    const stockWrite = async (endpoint, form, closeDialog, label) => {
+      if (stockMutationBusy.value) return
+      const quantity = Number(form.value.quantity)
+      if (!form.value.product_id || !form.value.warehouse_id || !Number.isFinite(quantity) || quantity <= 0) {
+        await appAlert('请选择产品、仓库并填写有效的正数数量')
         return
       }
+      stockMutationBusy.value = true
       try {
-        const res = await post('/api/inventory/in', inForm.value)
-        if (res.success) {
-          await appAlert('入库成功')
-          showInDialog.value = false
-          loadInventory()
-          loadLowStock()
-        } else {
-          await appAlert('入库失败: ' + res.message)
-        }
+        const res = await post(endpoint, form.value)
+        if (!res.success) throw new Error(res.message || `${label}失败`)
+        closeDialog.value = false
+        await Promise.all([loadInventory(), loadLowStock()])
+        await appAlert(`${label}成功`)
       } catch (e) {
-        await appAlert('入库失败')
+        // The server may have committed despite a timeout; display a verification warning.
+        await loadInventory()
+        await appAlert(`${label}结果需要核对: ${e instanceof Error ? e.message : '请求失败'}`)
+      } finally {
+        stockMutationBusy.value = false
       }
     }
 
-    const doInventoryOut = async () => {
-      if (!outForm.value.product_id || !outForm.value.warehouse_id || !outForm.value.quantity) {
-        await appAlert('请填写必填项')
-        return
-      }
-      try {
-        const res = await post('/api/inventory/out', outForm.value)
-        if (res.success) {
-          await appAlert('出库成功')
-          showOutDialog.value = false
-          loadInventory()
-          loadLowStock()
-        } else {
-          await appAlert('出库失败: ' + res.message)
-        }
-      } catch (e) {
-        await appAlert('出库失败')
-      }
-    }
+    const doInventoryIn = () => stockWrite('/api/inventory/in', inForm, showInDialog, '入库')
+    const doInventoryOut = () => stockWrite('/api/inventory/out', outForm, showOutDialog, '出库')
 
     const prevPage = () => {
       if (page.value > 1) {
@@ -420,11 +418,17 @@ export default {
       loadLowStock()
     }
 
+    let firstActivation = true
     onMounted(() => {
       refreshInventoryView()
       void tutorialStore.loadCourses().catch(() => undefined)
     })
-    onActivated(refreshInventoryView)
+    onActivated(() => {
+      if (firstActivation) { firstActivation = false; return }
+      refreshInventoryView()
+    })
+    onDeactivated(() => { cancelPendingSearch(); ++inventoryRequestId; loading.value = false })
+    onBeforeUnmount(() => { cancelPendingSearch(); ++inventoryRequestId })
 
     return {
       inventoryList,
@@ -436,6 +440,7 @@ export default {
       products,
       lowStockList,
       loading,
+      stockMutationBusy,
       inventoryError,
       exporting,
       exportMessage,
@@ -452,6 +457,7 @@ export default {
       totalPages,
       loadInventory,
       applyInventoryFilters,
+      scheduleInventorySearch,
       showInModal,
       showOutModal,
       doInventoryIn,

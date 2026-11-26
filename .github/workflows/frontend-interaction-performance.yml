@@ -1,0 +1,122 @@
+name: Frontend interaction performance evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'FHD/frontend/**'
+      - '.github/workflows/frontend-interaction-performance.yml'
+      - 'FHD/scripts/dev/compare_frontend_interaction_perf.py'
+permissions:
+  contents: read
+concurrency:
+  group: frontend-interaction-performance-${{ github.event.pull_request.number }}
+  # Keep the currently running paired measurement stable while other frontend
+  # workers push commits into the integration PR. GitHub coalesces pending runs.
+  cancel-in-progress: false
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      TZ: Asia/Shanghai
+      BASELINE_SHA: ${{ github.event.pull_request.number == 3605 && 'b0f9b3ba9ad4d856248fe7c792a43e99e0b12f03' || github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASELINE_SHA }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.2'
+      - name: Prepare identical measurement fixture and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ui-perf/baseline" "$RUNNER_TEMP/ui-perf/candidate"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          cp candidate/FHD/frontend/playwright.interaction-perf.config.ts baseline/FHD/frontend/
+          cp candidate/FHD/frontend/playwright.long-list-perf.config.ts baseline/FHD/frontend/
+          mkdir -p baseline/FHD/frontend/list-perf
+          cp -R candidate/FHD/frontend/list-perf/. baseline/FHD/frontend/list-perf/
+          mkdir -p baseline/FHD/frontend/interaction-perf
+          cp -R candidate/FHD/frontend/interaction-perf/. baseline/FHD/frontend/interaction-perf/
+          cp candidate/FHD/frontend/e2e/startup-readiness-fixture.ts baseline/FHD/frontend/e2e/
+          cp candidate/FHD/frontend/e2e/performance-budget.ts baseline/FHD/frontend/e2e/
+          for side in baseline candidate; do
+            (cd "$side/FHD/frontend" && npm ci --no-audit --no-fund && npx playwright --version > "$RUNNER_TEMP/ui-perf/$side/playwright-version.txt")
+          done
+          cmp "$RUNNER_TEMP/ui-perf/baseline/playwright-version.txt" "$RUNNER_TEMP/ui-perf/candidate/playwright-version.txt"
+          (cd candidate/FHD/frontend && npx playwright install --with-deps chromium)
+          lscpu > "$RUNNER_TEMP/ui-perf/runner-cpu.txt"
+          uname -a > "$RUNNER_TEMP/ui-perf/runner-os.txt"
+          node --version > "$RUNNER_TEMP/ui-perf/node-version.txt"
+      - name: Validate comparison logic with negative controls
+        shell: bash
+        run: python3 candidate/FHD/scripts/dev/compare_frontend_interaction_perf.py --self-test
+      - name: Measure both production builds on the same runner
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          for side in baseline candidate; do
+            (
+              set -e
+              sha="$(git -C "$side" rev-parse HEAD)"
+              cd "$side/FHD/frontend"
+              export SOURCE_SHA="$sha" VITE_XCAGI_GIT_SHA="$sha" VITE_CHAT_STREAM=1 VITE_CHAT_STREAM_PATH=/api/ai/chat/stream
+              export UI_PERF_OUTPUT_DIR="$RUNNER_TEMP/ui-perf/$side/results"
+              npm run build
+              npx playwright test --config playwright.interaction-perf.config.ts
+            ) > "$RUNNER_TEMP/ui-perf/$side/runner.log" 2>&1 || status=1
+            cat "$RUNNER_TEMP/ui-perf/$side/runner.log"
+          done
+          exit "$status"
+      - name: Measure long-list DOM and Chromium heap on identical dev fixtures
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          for side in baseline candidate; do
+            (
+              set -e
+              sha="$(git -C "$side" rev-parse HEAD)"
+              cd "$side/FHD/frontend"
+              export SOURCE_SHA="$sha"
+              export UI_PERF_OUTPUT_DIR="$RUNNER_TEMP/ui-perf/$side/long-list"
+              if [[ "$side" == candidate ]]; then export LIST_PERF_ASSERT_BOUNDED=1; else export LIST_PERF_ASSERT_BOUNDED=0; fi
+              npx playwright test --config playwright.long-list-perf.config.ts
+            ) > "$RUNNER_TEMP/ui-perf/$side/long-list.log" 2>&1 || status=1
+            cat "$RUNNER_TEMP/ui-perf/$side/long-list.log"
+          done
+          exit "$status"
+      - name: Compare SHA-bound browser measurements
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 candidate/FHD/scripts/dev/compare_frontend_interaction_perf.py \
+            --root "$RUNNER_TEMP/ui-perf" \
+            --baseline-sha "$BASELINE_SHA" \
+            --candidate-sha "$CANDIDATE_SHA"
+      - name: Compare measured heap and DOM on source-pinned data
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node candidate/FHD/frontend/list-perf/compare-memory.mjs "$RUNNER_TEMP/ui-perf"
+      - name: Upload raw measurements and execution logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-interaction-perf-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ui-perf/
+          if-no-files-found: error
+          retention-days: 14

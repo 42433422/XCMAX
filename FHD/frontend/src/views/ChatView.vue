@@ -242,6 +242,8 @@
           :placeholder="inputPlaceholder"
           v-model="messageInput"
           aria-describedby="chat-composer-status"
+          @compositionstart="composerIme.compositionStart"
+          @compositionend="composerIme.compositionEnd"
           @keydown="handleKeyDown"
         ></textarea>
         <div class="composer-voice-stack">
@@ -363,6 +365,8 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { readChatComposerDraft, writeChatComposerDraft } from '@/utils/chatComposerDraft'
+import { createChatComposerImeGuard } from '@/utils/chatComposerIme'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
@@ -540,6 +544,65 @@ const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList
     markTaskRead: taskCenterStore.markTaskRead,
   })
 
+// Workspace commands are UI intents, not agent or business execution routes.
+// Ignore deactivated keep-alive instances and routed task workspaces.
+let workspaceChatActive = true
+function isActiveWorkspaceChat() {
+  return workspaceChatActive && !workspaceMode.value && router.currentRoute.value.name === 'chat'
+}
+async function onWorkspaceNewConversation() {
+  if (!isActiveWorkspaceChat()) return
+  if (isLoading.value || isStreamingReply.value || isExecuting.value || attachmentUploading.value) {
+    showAppToast('当前对话或附件仍在处理中，请结束后再新建会话', 'warning')
+    return
+  }
+  try {
+    await Promise.resolve(newConversation())
+    await nextTick()
+    if (isActiveWorkspaceChat()) document.getElementById('messageInput')?.focus({ preventScroll: true })
+  } catch {
+    showAppToast('新建会话失败，请保留当前内容并重试', 'error')
+  }
+}
+async function onWorkspaceNewTask() {
+  if (!isActiveWorkspaceChat()) return
+  if (isLoading.value || isStreamingReply.value || isExecuting.value || attachmentUploading.value) {
+    showAppToast('当前任务仍在执行或上传中，无法新建任务', 'warning')
+    return
+  }
+  if (messageInput.value.trim() || artifactStaging.value.length || multimodalStaging.value.length ||
+    unsupportedStaging.value.length) {
+    showAppToast('当前草稿或附件尚未发送，请先处理后再新建任务', 'warning')
+    document.getElementById('messageInput')?.focus({ preventScroll: true })
+    return
+  }
+  try {
+    await Promise.resolve(newConversation())
+    await nextTick()
+    if (!isActiveWorkspaceChat()) return
+    document.getElementById('messageInput')?.focus({ preventScroll: true })
+    showAppToast('请描述任务目标并发送；执行仍按原授权与审批流程进行', 'info')
+  } catch {
+    showAppToast('新建任务草稿失败，未创建业务任务', 'error')
+  }
+}
+function onWorkspaceOpenSessions() {
+  if (!isActiveWorkspaceChat()) return
+  showHistoryPanel()
+}
+onMounted(() => {
+  window.addEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.addEventListener('xcagi:workspace-new-task', onWorkspaceNewTask)
+  window.addEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('xcagi:workspace-new-conversation', onWorkspaceNewConversation)
+  window.removeEventListener('xcagi:workspace-new-task', onWorkspaceNewTask)
+  window.removeEventListener('xcagi:workspace-open-sessions', onWorkspaceOpenSessions)
+})
+onDeactivated(() => { workspaceChatActive = false })
+onActivated(() => { workspaceChatActive = true })
+
 async function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
   await taskCenterStore.controlTask(workspaceTaskId.value, action)
   if (taskCenterStore.error) showAppToast(taskCenterStore.error, 'error', { duration: 8000 })
@@ -550,6 +613,34 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
+// Compose text is scoped to the same account, Mod, and original conversation.
+// Never persist file bytes, upload handles, or approval grants with a draft.
+const composerDraftKey = computed(() => isDurableChatScope(chatScope.value)
+  ? buildChatScopedKey('xcagi_chat_composer_draft_', currentSessionId.value,
+    modsStore.activeModId, chatScope.value)
+  : '')
+let composerDraftTimer: ReturnType<typeof setTimeout> | undefined
+const flushComposerDraft = () => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  composerDraftTimer = undefined
+  writeChatComposerDraft(composerDraftKey.value, messageInput.value)
+}
+watch(messageInput, (text) => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  const key = composerDraftKey.value
+  composerDraftTimer = setTimeout(() => writeChatComposerDraft(key, text), 250)
+})
+watch(composerDraftKey, (key, previous) => {
+  if (composerDraftTimer !== undefined) clearTimeout(composerDraftTimer)
+  composerDraftTimer = undefined
+  if (previous) writeChatComposerDraft(previous, messageInput.value)
+  messageInput.value = readChatComposerDraft(key)
+}, { flush: 'sync' })
+onMounted(() => {
+  if (!messageInput.value) messageInput.value = readChatComposerDraft(composerDraftKey.value)
+})
+onBeforeUnmount(flushComposerDraft)
+onDeactivated(flushComposerDraft)
 async function recallMessage(index: number) {
   if (isRecalling.value || !window.confirm('撤回这条消息及后续对话，同时撤销可核实的业务操作？原消息将放回输入框。')) return
   const result = await chatViewApi.recallUserMessage(index)
@@ -839,8 +930,9 @@ const composerStatusText = computed(() => {
   return ''
 })
 
+const composerIme = createChatComposerImeGuard()
 const sendMessage = async () => {
-  if (isRecalling.value) return
+  if (isRecalling.value || composerIme.composing) return
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
@@ -902,7 +994,9 @@ const sendQuick = (text: string) => {
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // Safari and some desktop IMEs send a normal-looking Enter just after compositionend.
+  if (composerIme.shouldSuppressEnter(e)) return
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault()
     void sendMessage()
   }

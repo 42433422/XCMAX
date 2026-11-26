@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 let api: typeof import('./serviceWorker')
 let sw: EventTarget & { controller: { postMessage: ReturnType<typeof vi.fn> } | null; register: ReturnType<typeof vi.fn>; getRegistrations: ReturnType<typeof vi.fn> }
 let worker: EventTarget & { state: string }
-let registration: EventTarget & { installing: typeof worker | null; update: ReturnType<typeof vi.fn>; unregister: ReturnType<typeof vi.fn> }
+let registration: EventTarget & { installing: typeof worker | null; waiting?: NonNullable<typeof sw.controller>; update: ReturnType<typeof vi.fn>; unregister: ReturnType<typeof vi.fn> }
 let channel: { port1: { onmessage: ((event: { data: object }) => void) | null }; port2: object }
 const reload = vi.fn()
 const originalLocation = Object.getOwnPropertyDescriptor(window, 'location')!
@@ -50,7 +50,7 @@ describe('service worker public lifecycle', () => {
     const status = await api.initServiceWorker()
     expect(status).toMatchObject({ registered: true, supported: true, controller: true })
     expect(status.lastUpdate).toBe(Date.now())
-    expect(sw.register).toHaveBeenCalledWith('/sw.js', { scope: '/', updateViaCache: 'all' })
+    expect(sw.register).toHaveBeenCalledWith('/sw.js', { scope: '/', updateViaCache: 'none' })
     status.registered = false
     expect(api.swManager.status.registered).toBe(true)
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ registered: true }))
@@ -135,13 +135,21 @@ describe('service worker public lifecycle', () => {
     expect(listener).not.toHaveBeenCalled()
   })
   it('waits for controller replacement before reloading', async () => {
+    await api.initServiceWorker()
+    const oldController = sw.controller!
+    const candidate = { postMessage: vi.fn() }
+    registration.waiting = candidate
     const pending = api.swManager.activateUpdate()
-    expect(sw.controller!.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
+    expect(candidate.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'SKIP_WAITING' })
+    expect(oldController.postMessage).not.toHaveBeenCalled()
+    sw.dispatchEvent(new Event('controllerchange'))
     expect(reload).not.toHaveBeenCalled()
+    sw.controller = candidate
     sw.dispatchEvent(new Event('controllerchange'))
     await pending
     expect(reload).toHaveBeenCalledOnce()
     reload.mockClear()
+    registration.waiting = undefined
     sw.controller = null
     await api.swManager.activateUpdate()
     expect(reload).not.toHaveBeenCalled()

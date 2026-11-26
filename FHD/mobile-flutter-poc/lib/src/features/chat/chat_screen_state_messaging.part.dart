@@ -4,21 +4,84 @@ part of 'chat_screen.dart';
 abstract class _ChatStateMessaging extends _ChatStateHelpers {
   Future<void> _loadRemoteMessages() async {
     final repository = _repository;
-    if (repository == null) return;
+    if (repository == null || !_chatScopeCurrent) return;
+    final epoch = _chatEpoch;
+    final generation = _chatGeneration;
 
     try {
       final remoteMessages = await repository.loadInitialMessages(
         widget.conversation,
       );
-      if (!mounted) return;
-      if (remoteMessages.isNotEmpty) {
+      if (!mounted || _chatInvalidated || epoch != _chatEpoch ||
+          generation != repository.client.authGeneration) {
+        return;
+      }
+      if (remoteMessages.isNotEmpty && !_sending) {
         setState(() => _messages = remoteMessages);
         _syncFlyerChat();
       }
-    } catch (_) {
-      // Keep the mobile empty state when auth/network is unavailable.
+    } catch (error) {
+      if (error is MobileApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        _revokeChatView();
+        return;
+      }
+      // Keep a scoped, read-only cached view on transport failure.
     }
-    await _resumeInflightRelayIfNeeded();
+    if (!_chatInvalidated && _chatForeground) {
+      await _resumeInflightRelayIfNeeded();
+      await _resumePendingChatTurnsIfNeeded();
+    }
+  }
+
+  void _revokeChatView() {
+    if (!mounted || _chatInvalidated) return;
+    _streamTokenBatcher.clear();
+    _chatInvalidated = true;
+    _chatEpoch++;
+    _draftTimer?.cancel();
+    setState(() {
+      _messages.clear();
+      _attachments.clear();
+      _failedAttachments.clear();
+      _recoveredAttachmentNames.clear();
+      _sending = false;
+      _activeAssistantId = null;
+      _lastSentAttachments = const [];
+      _attachmentScope = null;
+      _replyTo = null;
+      _activeRelayProgress = null;
+      _employeeProfile = null;
+      _userAvatarSource = '';
+      _userId = 0;
+      _controller.clear();
+    });
+    _syncFlyerChat();
+  }
+
+  /// Read only the original turn receipt; never replay an uncertain POST.
+  Future<void> _resumePendingChatTurnsIfNeeded() async {
+    if (_resumingPendingChat || _sending || _chatInvalidated ||
+        !_chatForeground) {
+      return;
+    }
+    _resumingPendingChat = true;
+    try {
+      final pending = _messages.where((message) =>
+          message.role == ChatRole.assistant &&
+          message.turnId.isNotEmpty &&
+          const [
+            ChatDeliveryStatus.pending,
+            ChatDeliveryStatus.sending,
+            ChatDeliveryStatus.queued,
+          ].contains(message.status)).toList(growable: false);
+      for (final message in pending) {
+        if (!mounted || _chatInvalidated || !_chatForeground || _sending) break;
+        await _readOriginalChatTurn(message);
+      }
+    } finally {
+      _resumingPendingChat = false;
+    }
   }
 
   Future<void> _resumeInflightRelayIfNeeded() async {
@@ -31,7 +94,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     final hasInflight = await repository.hasInflightRelay(
       widget.conversation.id,
     );
-    if (!mounted || !hasInflight) return;
+    if (!mounted || !_chatScopeCurrent || !hasInflight) return;
 
     final assistantId =
         'assistant-resume-${DateTime.now().microsecondsSinceEpoch}';
@@ -60,7 +123,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         onToken: (token) {
           if (!mounted) return;
           if (_stopRequested || _activeAssistantId != assistantId) return;
-          setState(() => _appendMessageBody(assistantId, token));
+          _queueStreamToken(assistantId, token);
         },
         onStatus: (progress) {
           if (!mounted) return;
@@ -95,6 +158,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         _activeRelayProgress = null;
       });
     } finally {
+      _streamTokenBatcher.clearFor(assistantId);
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
@@ -112,13 +176,13 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
     try {
       final me = await repository.loadMe();
-      if (!mounted) return;
+      if (!mounted || !_chatScopeCurrent) return;
       setState(() {
         _userAvatarSource = me.avatarSource;
         _userId = me.user?.id ?? 0;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || !_chatScopeCurrent) return;
       final fallback = MobileMeData.adminFallback();
       setState(() {
         _userAvatarSource = fallback.avatarSource;
@@ -134,7 +198,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
     try {
       final employees = await repository.loadAiEmployees();
-      if (!mounted) return;
+      if (!mounted || !_chatScopeCurrent) return;
       setState(() {
         _employeeProfile = _findEmployeeProfile(employees, ref);
       });
@@ -144,7 +208,21 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   Future<void> _send([String? overrideText]) async {
+    // A tap on Send while the platform IME has an active candidate must not
+    // send a stale pre-composition draft or clear the user's input.
+    if (overrideText == null &&
+        _controller.value.composing.isValid &&
+        !_controller.value.composing.isCollapsed) {
+      return;
+    }
     final text = (overrideText ?? _controller.text).trim();
+    if (!_chatScopeCurrent || !_chatForeground) {
+      return;
+    }
+    if (_recoveredAttachmentNames.isNotEmpty) {
+      _showMessage('请重新选择或移除上次的附件后再发送');
+      return;
+    }
     if (text.isEmpty ||
         _sending ||
         _uploading ||
@@ -248,7 +326,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
                 if (mounted &&
                     !_stopRequested &&
                     _activeAssistantId == assistantId) {
-                  setState(() => _appendMessageBody(assistantId, token));
+                  _queueStreamToken(assistantId, token);
                 }
               })
           : await repository.streamMessage(
@@ -262,7 +340,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               onToken: (token) {
                 if (!mounted) return;
                 if (_stopRequested || _activeAssistantId != assistantId) return;
-                setState(() => _appendMessageBody(assistantId, token));
+                _queueStreamToken(assistantId, token);
               },
               onStatus: (progress) {
                 if (!mounted) return;
@@ -272,9 +350,10 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
               isCancelled: () =>
                   _stopRequested || _activeAssistantId != assistantId,
             );
-      if (!mounted) return;
+      if (!mounted || !_chatScopeCurrent) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
       await repository.removeQueuedMessage(widget.conversation.id, outgoing, idempotencyKey: idempotencyKey);
+      if (!mounted || !_chatScopeCurrent || _activeAssistantId != assistantId) return;
       setState(() {
         _replaceMessage(
           assistantId,
@@ -287,32 +366,40 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
+      if (error is MobileApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        _revokeChatView();
+        return;
+      }
+      if (!_chatScopeCurrent) return;
       final pending = error is MobileApiException && error.errorCode == 'CHAT_RECEIPT_PENDING';
       final offline = !pending && isOfflineError(error);
-      final queuedId = offline && attachments.isEmpty
+      final queuedId = offline && !resumeOnly && attachments.isEmpty
           ? await repository.enqueuePendingMessage(
               conversation: widget.conversation,
               body: outgoing,
               idempotencyKey: idempotencyKey,
             )
           : 0;
-      if (!mounted) return;
+      if (!mounted || !_chatScopeCurrent || _activeAssistantId != assistantId) return;
       setState(() {
         _replaceMessage(
           assistantId,
           body: queuedId > 0
-              ? '网络不可用，消息已加入待发送队列，恢复连接后会自动发送。'
+              ? '网络不可用，原任务结果尚未确认。恢复连接后仅核对原回执，不会自动重复发送。'
               : mobileProductErrorMessage(
                   mobileErrorText(error),
                   '当前离线同步不可用，请连接电脑或稍后重试。',
                 ),
           status: queuedId > 0
               ? ChatDeliveryStatus.queued
-              : pending ? ChatDeliveryStatus.pending : ChatDeliveryStatus.failed,
+              : (pending || (resumeOnly && offline))
+                  ? ChatDeliveryStatus.pending : ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
     } finally {
+      _streamTokenBatcher.clearFor(assistantId);
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
@@ -325,10 +412,12 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   void _clearChat() {
+    _streamTokenBatcher.clear();
     setState(() {
       _messages.clear();
       _attachments.clear();
       _failedAttachments.clear();
+      _recoveredAttachmentNames.clear();
       _lastSentAttachments = const [];
       _showToolPanel = false;
       _replyTo = null;
@@ -340,6 +429,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   void _stopChat() {
     final assistantId = _activeAssistantId;
     if (assistantId == null) return;
+    _streamTokenBatcher.flushFor(assistantId);
     final progress = _activeRelayProgress;
     setState(() {
       _stopRequested = true;
@@ -370,7 +460,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
   Future<void> _cancelRelayTask(String taskId) async {
     final repository = _repository;
-    if (repository == null || taskId.isEmpty) return;
+    if (repository == null || !_chatScopeCurrent || taskId.isEmpty) return;
     setState(() => _cancellingRelay = true);
     try {
       await repository.cancelRelayTask(taskId);
@@ -382,7 +472,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   Future<void> _readOriginalChatTurn(ChatMessage message) async {
-    if (_sending) return;
+    if (_sending || !_chatScopeCurrent) return;
     if (message.turnId.isEmpty && widget.conversation.type.superTool == null) {
       setState(() => _replaceMessage(message.id,
           body: '这条历史消息缺少原任务标识，请在任务工作区核对结果，勿重复提交。',
@@ -407,7 +497,7 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   }
 
   void _deleteMessageAt(int index) {
-    if (index < 0 || index >= _messages.length) return;
+    if (!_chatScopeCurrent || index < 0 || index >= _messages.length) return;
     late final ChatMessage removed;
     setState(() {
       removed = _messages[index];

@@ -74,7 +74,8 @@ export const useProductsStore = defineStore('products', () => {
     const scope = captureProductsScope()
     const sequence = ++readSequence
     activeRead = sequence
-    lastQuery = { ...params }
+    // A mutation refresh must restart the active filter from page one, not the last appended page.
+    lastQuery = { ...params, page: 1 }
     loading.value = true; fresh.value = false; error.value = null
     const current = () => isProductsScopeCurrent(scope) && sequence === readSequence
     try {

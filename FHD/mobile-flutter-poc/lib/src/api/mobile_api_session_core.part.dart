@@ -38,6 +38,8 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     MobileSessionData? Function(MobileSessionData current) update, {
     int? authGeneration,
     bool passwordIsPlaintext = false,
+    bool invalidateConnectionScope = true,
+    void Function(int generation)? onCommitted,
   }) {
     final generation = authGeneration ?? _authGeneration;
     final write = _sessionWrites.then((_) async {
@@ -68,11 +70,49 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
       if (generation != _authGeneration) return;
       await _sessionStore.save(stored);
       final visible = await _decodeSavedCredential(stored);
-      if (generation == _authGeneration) _rememberSession(visible);
+      if (generation == _authGeneration) {
+        // The same login can change enterprise or backend. Fence the old
+        // view and all outstanding calls before publishing the new session.
+        // Login/pairing that replaces credentials already starts an epoch.
+        if (invalidateConnectionScope &&
+            _credentialIdentity(current) == _credentialIdentity(stored) &&
+            _connectionIdentity(current) != _connectionIdentity(stored)) {
+          _beginAuthChange();
+        }
+        onCommitted?.call(_authGeneration);
+        _rememberSession(visible);
+      }
     });
     // Keep later logout/login writes ordered even when an earlier write fails.
     _sessionWrites = write.catchError((Object _) {});
     return write;
+  }
+
+  Object _credentialIdentity(MobileSessionData session) => (
+        session.userId,
+        session.accessToken,
+        session.sessionId,
+        session.marketAccessToken,
+      );
+
+  Object _connectionIdentity(MobileSessionData session) {
+    final host = session.fhdHost.trim();
+    final localBase = session.localBaseUrl.trim();
+    final mode = session.serverMode.trim().toLowerCase();
+    // A legacy unset mode with no LAN destination already uses the configured
+    // cloud backend. Persisting the default must not revoke the request that
+    // triggered normalization (including a login or token refresh).
+    final effectiveMode =
+        mode.isEmpty && host.isEmpty && localBase.isEmpty ? 'cloud' : mode;
+    return (
+      session.accountKind,
+      session.relayAccountId,
+      session.relayTenantId,
+      effectiveMode,
+      host,
+      localBase,
+      session.relayBaseUrl.trim(),
+    );
   }
 
   int _beginAuthChange() {

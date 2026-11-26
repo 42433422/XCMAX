@@ -224,10 +224,14 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   function setLoadingProgress(step: string, targetSessionId?: string) {
     const key = progressKey(targetSessionId)
-    progressBySession.value = {
-      ...progressBySession.value,
-      [key]: String(step || '').trim() || '处理中...',
-    }
+    const text = String(step || '').trim() || '处理中...'
+    if (progressBySession.value[key] === text) return
+    const next = { ...progressBySession.value }
+    // LRU-ish cap: a long-lived desktop shell must not retain every task label.
+    delete next[key]
+    next[key] = text
+    while (Object.keys(next).length > 24) delete next[Object.keys(next)[0]]
+    progressBySession.value = next
   }
 
   function updateWaitProgress() {
@@ -274,7 +278,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       updateWaitProgress()
       syncWaitProgressTicker()
     })
-    onBeforeUnmount(pauseWaitProgress)
+    onBeforeUnmount(() => {
+      pauseWaitProgress()
+      cancelPendingChatBatch()
+      waitingSince.clear()
+      artifactBatches.clear()
+      progressBySession.value = {}
+    })
   }
 
   async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {

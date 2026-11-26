@@ -116,8 +116,9 @@ export const chatApi = {
     })
   },
 
-  resumeChatStream(turnId: string, signal?: AbortSignal): Promise<Response> {
+  resumeChatStream(turnId: string, signal?: AbortSignal, after?: string): Promise<Response> {
     const query = new URLSearchParams({ turn_id: turnId })
+    if (after) query.set('after', after)
     return fetch(`${buildFullApiUrl('/api/ai/chat/stream/resume')}?${query}`, {
       method: 'GET',
       credentials: 'include',

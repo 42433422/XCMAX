@@ -12,6 +12,7 @@ import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
 import chatApi from '@/api/chat'
 import { useAiSdkChatRound } from './useAiSdkChatRound'
+import type { XcagiUIMessage } from './xcagiChatTransport'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useModsStore } from '@/stores/mods'
@@ -503,12 +504,43 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let replaying = false
       let plannerEventHandler: ((event: PlannerSseEvent) => void) | null = null
       let handlePlannerEventRef: ((event: PlannerSseEvent) => void) | null = null
+      // The AI SDK emits a fresh UIMessage for every text delta. Projecting all
+      // tool parts on each delta caused an extra reactive message-list update per
+      // token despite the separate rAF text batch. Tool receipts drive projection.
+      let toolProjectionDirty = false
+      let latestToolParts: XcagiUIMessage['parts'] | null = null
+      let toolProjectionFrame = 0
+      let textProgressNotified = false
+      const flushToolProjection = () => {
+        if (toolProjectionFrame) window.cancelAnimationFrame(toolProjectionFrame)
+        toolProjectionFrame = 0
+        const parts = latestToolParts
+        latestToolParts = null
+        if (!toolProjectionDirty || !parts) return
+        toolProjectionDirty = false
+        if (canUpdateStream() && streamMessage) {
+          const projected = stepsFromAiParts(parts)
+          // Cursor replay may contain only the suffix; never drop earlier tools.
+          if (replaying) {
+            const byId = new Map((streamMessage.liveSteps || []).map(step => [step.id, step]))
+            for (const step of projected) byId.set(step.id, { ...byId.get(step.id), ...step })
+            streamMessage.liveSteps = [...byId.values()]
+          } else streamMessage.liveSteps = projected
+        }
+      }
       const aiChatRound = useAiSdkChatRound({
-        onEvent: (event) => plannerEventHandler?.(event),
+        onEvent: (event) => {
+          if (event.type === 'tool_call') toolProjectionDirty = true
+          if (event.type === 'tool_call' || event.type === 'tool_progress'
+            || (event.type === 'token' && event.ephemeral)) textProgressNotified = false
+          plannerEventHandler?.(event)
+        },
         onMessage: (message) => {
           if (!canUpdateStream() || !streamMessage) return
-          streamMessage.streamStatus = 'streaming'
-          streamMessage.liveSteps = stepsFromAiParts(message.parts)
+          if (streamMessage.streamStatus !== 'streaming') streamMessage.streamStatus = 'streaming'
+          if (!toolProjectionDirty) return
+          latestToolParts = message.parts
+          if (!toolProjectionFrame) toolProjectionFrame = window.requestAnimationFrame(flushToolProjection)
         },
         // 附件工件取数轨迹：累积到当前 assistant 消息，气泡「附件读取」按需展开。
         onTrace: (items) => {
@@ -520,8 +552,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           streamPlain = value
           if (!canUpdateStream()) return
           scheduleStreamFrame()
-          if (streamMessage) delete streamMessage.waitingHint
-          setLoadingProgress('正在生成回复…', requestScope.sessionId)
+          if (streamMessage?.waitingHint) delete streamMessage.waitingHint
+          if (!textProgressNotified) {
+            textProgressNotified = true
+            setLoadingProgress('正在生成回复…', requestScope.sessionId)
+          }
         },
       })
       let doneResult: unknown = null
@@ -723,6 +758,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         plannerEventHandler = handlePlannerEventRef
         const roundResult = await aiChatRound.send(submittedBody, controller.signal)
+        // Read the final receipt even when the event stream finishes before rAF.
+        flushToolProjection()
         plannerEventHandler = null
         streamTextFromAi = false
         if (!isOwnerCurrent()) return
@@ -853,18 +890,18 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       } finally {
         plannerEventHandler = null
         streamTextFromAi = false
+        flushToolProjection()
         cancelStreamFrame()
         if (streamMessage) streamMessage.streamStatus = streamMessage.workflowAction === 'failed' ? 'error' : 'ready'
         if (canUpdateStream() && streamMessage) delete streamMessage.waitingHint
         if (!doneApplied && canUpdateStream() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
           const unfinished = leftover
-            ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`
-            : '处理失败：本轮回复已结束，但没有收到正文。请重试。'
+            ? `${leftover}\n\n[回复未完成] 原任务回执待核对，请勿重复提交。`
+            : '回复已中断，原任务执行结果未知，请到任务工作区核对回执，勿重复提交。'
           applyStreamText(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          observeModelOutcome(unfinished, failureExecution ? { execution: failureExecution } : undefined)
-          streamMessage.workflowAction = 'failed'
-          round.setStatus('error')
+          streamMessage.workflowAction = 'unknown'
+          round.setStatus('review')
           delete streamMessage.streamingShell
           delete streamMessage.waitingHint
         }

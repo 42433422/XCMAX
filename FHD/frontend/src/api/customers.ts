@@ -1,4 +1,4 @@
-import { api } from './core'
+import { api, type RequestOptions } from './core'
 import type { ApiResponse } from '@/types/api'
 import type { Customer, CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
 import { resolveErpApiBase } from '@/utils/erpDomainPaths'
@@ -8,8 +8,8 @@ function erpBase(): string {
 }
 
 export const customersApi = {
-  getCustomers(params: Record<string, unknown> = {}): Promise<ApiResponse<Customer[]>> {
-    return api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params)
+  getCustomers(params: Record<string, unknown> = {}, options?: RequestOptions): Promise<ApiResponse<Customer[]>> {
+    return options ? api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params, options) : api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params)
   },
 
   getCustomer(id: number | string): Promise<ApiResponse<Customer>> {

@@ -3,7 +3,7 @@ const headersHook = vi.hoisted(() => vi.fn())
 vi.mock('electron', () => ({ session: { defaultSession: { webRequest: { onHeadersReceived: headersHook } } } }))
 vi.mock('./desktop-config', () => ({ DEFAULT_PORT: 17500 }))
 
-import { installDesktopCspDefenseInDepth } from './session-security'
+import { installDesktopCspDefenseInDepth, isAllowedDesktopMedia } from './session-security'
 
 const origin = 'http://127.0.0.1:17500'
 
@@ -29,4 +29,22 @@ describe('desktop CSP response preservation', () => {
       expect(receive(headers)['Content-Security-Policy']).toEqual([expect.stringContaining("default-src 'self'")])
     },
   )
+})
+
+
+describe('least privilege desktop media policy', () => {
+  const input = { permission: 'media', topUrl: origin, requestUrl: origin }
+  it('allows explicit audio-only request and check details', () => {
+    expect(isAllowedDesktopMedia({ ...input, details: { mediaTypes: ['audio'] } })).toBe(true)
+    expect(isAllowedDesktopMedia({ ...input, details: { mediaType: 'audio' } })).toBe(true)
+  })
+  it.each([{}, { mediaTypes: [] }, { mediaTypes: ['video'] }, { mediaTypes: ['audio', 'video'] }, { mediaType: 'unknown' }, { mediaType: 'audio', isMainFrame: false }])('rejects ambiguous, video or subframe details %j', details => {
+    expect(isAllowedDesktopMedia({ ...input, details })).toBe(false)
+  })
+  it('requires a trusted requester and top-level document', () => {
+    const details = { mediaType: 'audio' }
+    expect(isAllowedDesktopMedia({ ...input, details, topUrl: 'https://outside.example' })).toBe(false)
+    expect(isAllowedDesktopMedia({ ...input, details, requestUrl: 'https://outside.example' })).toBe(false)
+    expect(isAllowedDesktopMedia({ ...input, details, permission: 'geolocation' })).toBe(false)
+  })
 })

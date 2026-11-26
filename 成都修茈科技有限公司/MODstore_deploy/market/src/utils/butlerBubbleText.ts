@@ -27,35 +27,32 @@ function anchor(href: string, label: string): string {
   return `<a class="bubble-link" href="${escapeHtml(href)}"${extra}>${label}</a>`
 }
 
-/** 将已转义文本中的 markdown 链接、裸 URL、站内路径变成 <a> */
+/** Render links in one pass; generated anchors must never be re-linkified. */
+function renderInline(content: string): string {
+  const escaped = escapeHtml(content).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  const link = /\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<&]+)|(^|[\s：:（(>【\d.]|[^\w/"';])(\/[A-Za-z0-9][A-Za-z0-9_\-./%?#=&]{0,160})(?=$|[\s，。；;）)\]】\n])/gm
+  return escaped.replace(link, (full, label: string | undefined, rawHref: string | undefined, bare: string | undefined, prefix: string | undefined, path: string | undefined) => {
+    if (rawHref !== undefined) {
+      const href = rawHref.replace(/&amp;/g, '&')
+      return isSafeHref(href) ? anchor(href, label || '') : (label || '')
+    }
+    if (bare !== undefined) {
+      const url = bare.replace(/[.,;!?）]+$/, '')
+      return isSafeHref(url.replace(/&amp;/g, '&')) ? anchor(url.replace(/&amp;/g, '&'), url) + bare.slice(url.length) : full
+    }
+    if (path !== undefined && isSafeHref(path.replace(/&amp;/g, '&'))) {
+      return (prefix || '') + anchor(path.replace(/&amp;/g, '&'), path)
+    }
+    return full
+  }).replace(/\n/g, '<br>')
+}
+
+/** Escaped compact Markdown; fenced code never executes or linkifies URLs. */
 export function renderButlerBubbleHtml(content: string): string {
-  let html = escapeHtml(content)
-
-  // [文案](url) —— 仅还原查询串所需的 ampersand，不将引号/尖括号二次解码。
-  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, rawHref: string) => {
-    const href = rawHref.replace(/&amp;/g, '&')
-    if (!isSafeHref(href)) return label
-    return anchor(href, label)
-  })
-
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-
-  // 裸 https?://
-  html = html.replace(/(https?:\/\/[^\s<&]+)/gi, (url) => {
-    if (!isSafeHref(url)) return url
-    return anchor(url, url)
-  })
-
-  // 站内路径：/market/ /contact.html …
-  // 跳过 href 属性及实体结束后的斜杠，避免把 &lt;/tag&gt; 当作站内路径。
-  html = html.replace(
-    /(^|[\s：:（(>【\d.]|[^\w/"';])(\/[A-Za-z0-9][A-Za-z0-9_\-./%?#=&]{0,160})(?=$|[\s，。；;）)\]】\n])/gm,
-    (full, pre: string, path: string) => {
-      if (/href=["']$/.test(pre) || pre.endsWith('="') || pre.endsWith("='")) return full
-      if (!isSafeHref(path)) return full
-      return `${pre}${anchor(path, path)}`
-    },
-  )
-
-  return html.replace(/\n/g, '<br>')
+  const fenced = /(```[^\n`]*\r?\n[\s\S]*?```)/g
+  return String(content || '').split(fenced).map((part) => {
+    const code = /^```[^\n`]*\r?\n([\s\S]*?)```$/.exec(part)
+    if (code) return '<pre class="bubble-code"><code>' + escapeHtml(code[1]) + '</code></pre>'
+    return renderInline(part)
+  }).join('')
 }

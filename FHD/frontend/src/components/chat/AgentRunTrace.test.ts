@@ -4,6 +4,7 @@ import AgentRunTrace from './AgentRunTrace.vue'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import { clearToolPermission, setToolPermission } from '@/utils/toolPermissionCache'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 const mermaidRender = vi.fn(async () => ({ svg: '<svg data-testid="rendered-plan"></svg>' }))
 
@@ -67,6 +68,7 @@ describe('AgentRunTrace', () => {
 
   afterEach(() => {
     clearToolPermission('browser_search')
+    setRuntimeTenantStorageScopeInput(null)
     mermaidRender.mockClear()
   })
 
@@ -102,6 +104,7 @@ describe('AgentRunTrace', () => {
   })
 
   it('renders failure, retry, observation and remembered-permission details', async () => {
+    setRuntimeTenantStorageScopeInput({ localUserId: 42 })
     setToolPermission('browser_search', 'persistent')
     const trace: AgentRunTraceData = {
       run_id: 'run_complex_failure_9876543210',

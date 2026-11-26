@@ -96,11 +96,26 @@ export function resolveWorkbenchTheme(theme: 'dark' | 'light' | 'auto'): 'dark' 
   return 'dark'
 }
 
+let systemThemeQuery: MediaQueryList | undefined
+
+function syncSystemTheme(): void {
+  if (systemThemeQuery && typeof document !== 'undefined') {
+    document.documentElement.dataset.workbenchTheme = systemThemeQuery.matches ? 'light' : 'dark'
+  }
+}
+
 export function applyThemeToDocument(theme: 'dark' | 'light' | 'auto'): void {
   if (typeof document === 'undefined') return
   const html = document.documentElement
   if (!html) return
+  systemThemeQuery?.removeEventListener?.('change', syncSystemTheme)
+  systemThemeQuery = undefined
   html.dataset.workbenchTheme = resolveWorkbenchTheme(theme)
+  if (theme === 'auto' && typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    systemThemeQuery = window.matchMedia('(prefers-color-scheme: light)')
+    syncSystemTheme()
+    systemThemeQuery.addEventListener?.('change', syncSystemTheme)
+  }
 }
 
 /** 首屏前应用主题，避免侧栏导航在 CSS 变量就绪前闪紫色。 */

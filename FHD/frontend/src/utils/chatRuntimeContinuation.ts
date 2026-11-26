@@ -3,6 +3,7 @@ import type { ChatPlannerPayload } from '@/types/chat'
 import { asRecord, asString } from '@/utils/typeGuards'
 
 const WAITING = new Set(['waiting_user', 'waiting_approval'])
+const RUNTIMES = new Set(['codex', 'xiaox'])
 /** Queued work keeps its run id for event following, but never blocks a new turn. */
 const FOLLOWING = new Set(['queued'])
 
@@ -22,8 +23,9 @@ export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuatio
 
 /** Historical wire labels identify the same runtime, not another executor. */
 export function isFixedRuntimePayload(payload: ChatPlannerPayload): boolean {
-  const envelope = asRecord(payload.data)
-  return [payload.runtime, envelope.runtime].some(label => label === 'codex' || label === 'xiaox')
+  const outer = asString(payload.runtime).trim()
+  const inner = asString(asRecord(payload.data).runtime).trim()
+  return Boolean(outer || inner) && (!outer || RUNTIMES.has(outer)) && (!inner || RUNTIMES.has(inner))
 }
 
 export function runtimeContinuationFromPayload(payload: ChatPlannerPayload): ChatRuntimeContinuation | undefined {

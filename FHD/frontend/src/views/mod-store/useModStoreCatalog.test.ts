@@ -50,7 +50,9 @@ describe('market catalog tab selection boundary', () => {
       if (catalog.isMarketCollectionTab(id)) {
         const key = buildMarketCatalogCacheKey(id)
         expect(readMarketCatalogCache(key)?.tab).toBe(id)
-        const stored = JSON.parse(sessionStorage.getItem(`xcagi_market_catalog_v1:catalog-tab-test:${key}`)!)
+        const storedKey = persistedCatalogKeys().find(value => decodeURIComponent(value).includes(JSON.stringify(key)))
+        expect(storedKey).toBeDefined()
+        const stored = JSON.parse(sessionStorage.getItem(storedKey!)!)
         expect(stored).toEqual({ items: [], fetchedAt: expect.any(Number) })
         expect(stored).not.toHaveProperty('tab')
       }

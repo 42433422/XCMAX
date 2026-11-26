@@ -52,6 +52,7 @@ import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_assets.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
+import 'package:xcagi_flutter_poc/src/theme/design_tokens.generated.dart';
 import 'package:xcagi_flutter_poc/src/widgets/app_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/group_grid_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
@@ -123,51 +124,51 @@ void main() {
     const lightExtra = XcagiThemeColors.light;
     const darkExtra = XcagiThemeColors.dark;
 
-    expect(light.colorScheme.primary, const Color(0xFF6366F1));
-    expect(light.colorScheme.primaryContainer, const Color(0xFFEAEBFE));
-    expect(light.colorScheme.onPrimaryContainer, const Color(0xFF312E81));
-    expect(light.colorScheme.secondary, const Color(0xFF10B981));
-    expect(light.colorScheme.secondaryContainer, const Color(0xFFE7FAF3));
-    expect(light.colorScheme.onSecondaryContainer, const Color(0xFF064E3B));
-    expect(light.colorScheme.surface, const Color(0xFFFFFFFF));
-    expect(light.colorScheme.onSurface, const Color(0xFF1F2329));
-    expect(light.colorScheme.surfaceContainerHighest, const Color(0xFFE8E9EB));
-    expect(light.colorScheme.outlineVariant, const Color(0xFFDEE0E3));
-    expect(light.colorScheme.error, const Color(0xFFEF4444));
-    expect(light.colorScheme.errorContainer, const Color(0xFFFFECEC));
-    expect(light.scaffoldBackgroundColor, const Color(0xFFF5F6FA));
-    expect(lightExtra.brandGradientEnd, const Color(0xFF7C3AED));
-    expect(lightExtra.weChatOnline, const Color(0xFF10B981));
-    expect(lightExtra.chatUserBubble, const Color(0xFF6366F1));
-    expect(lightExtra.chatUserBubbleText, const Color(0xFFFFFFFF));
-    expect(lightExtra.momentAccent, const Color(0xFF5145CD));
-    expect(lightExtra.momentChipBg, const Color(0xFFECEDFE));
-    expect(lightExtra.replyBoxBg, const Color(0xFFF4F5F7));
-    expect(lightExtra.textSecondary, const Color(0xFF646A73));
-    expect(lightExtra.textTertiary, const Color(0xFF8F959E));
+    expect(light.colorScheme.primary, DesignTokens.semanticLightPrimary);
+    expect(light.colorScheme.primaryContainer, DesignTokens.colorsBrandPrimaryContainer);
+    expect(light.colorScheme.onPrimaryContainer, DesignTokens.mobileColorsLightOnBrandContainer);
+    expect(light.colorScheme.secondary, DesignTokens.colorsStatusSuccess);
+    expect(light.colorScheme.secondaryContainer, DesignTokens.colorsStatusSuccessContainer);
+    expect(light.colorScheme.onSecondaryContainer, DesignTokens.mobileColorsLightOnSuccessContainer);
+    expect(light.colorScheme.surface, DesignTokens.semanticLightSurface);
+    expect(light.colorScheme.onSurface, DesignTokens.semanticLightTextPrimary);
+    expect(light.colorScheme.surfaceContainerHighest, DesignTokens.semanticLightSurfaceHigh);
+    expect(light.colorScheme.outlineVariant, DesignTokens.semanticLightBorder);
+    expect(light.colorScheme.error, DesignTokens.colorsStatusDanger);
+    expect(light.colorScheme.errorContainer, DesignTokens.mobileColorsLightErrorContainer);
+    expect(light.scaffoldBackgroundColor, DesignTokens.semanticLightPage);
+    expect(lightExtra.brandGradientEnd, DesignTokens.colorsBrandGradientEnd);
+    expect(lightExtra.weChatOnline, DesignTokens.colorsStatusSuccess);
+    expect(lightExtra.chatUserBubble, DesignTokens.semanticLightPrimary);
+    expect(lightExtra.chatUserBubbleText, DesignTokens.semanticLightSurface);
+    expect(lightExtra.momentAccent, DesignTokens.colorsMomentAccentLight);
+    expect(lightExtra.momentChipBg, DesignTokens.colorsMomentChipBgLight);
+    expect(lightExtra.replyBoxBg, DesignTokens.colorsMomentReplyBgLight);
+    expect(lightExtra.textSecondary, DesignTokens.semanticLightTextSecondary);
+    expect(lightExtra.textTertiary, DesignTokens.colorsNeutralLightN500);
 
-    expect(dark.colorScheme.primary, const Color(0xFF818CF8));
-    expect(dark.colorScheme.primaryContainer, const Color(0xFF1A3A80));
-    expect(dark.colorScheme.onPrimaryContainer, const Color(0xFFB8CCFF));
-    expect(dark.colorScheme.secondary, const Color(0xFF10B981));
-    expect(dark.colorScheme.secondaryContainer, const Color(0xFF005B3F));
-    expect(dark.colorScheme.onSecondaryContainer, const Color(0xFF34D399));
-    expect(dark.colorScheme.surface, const Color(0xFF161719));
-    expect(dark.colorScheme.onSurface, const Color(0xFFF2F3F5));
-    expect(dark.colorScheme.surfaceContainerHighest, const Color(0xFF1F2124));
-    expect(dark.colorScheme.outlineVariant, const Color(0xFF1F2124));
-    expect(dark.colorScheme.error, const Color(0xFFEF4444));
-    expect(dark.colorScheme.errorContainer, const Color(0xFF5C1A1A));
-    expect(dark.scaffoldBackgroundColor, const Color(0xFF0E0F11));
-    expect(darkExtra.brandGradientEnd, const Color(0xFF3F6FD8));
-    expect(darkExtra.weChatOnline, const Color(0xFF34D399));
-    expect(darkExtra.chatUserBubble, const Color(0xFF4F46E5));
-    expect(darkExtra.chatUserBubbleText, const Color(0xFFEEF0FF));
-    expect(darkExtra.momentAccent, const Color(0xFFA5B0FF));
-    expect(darkExtra.momentChipBg, const Color(0xFF2A2A3D));
-    expect(darkExtra.replyBoxBg, const Color(0xFF26262E));
-    expect(darkExtra.textSecondary, const Color(0xFF9AA0A6));
-    expect(darkExtra.textTertiary, const Color(0xFF7A7F87));
+    expect(dark.colorScheme.primary, DesignTokens.colorsBrandPrimaryLight);
+    expect(dark.colorScheme.primaryContainer, DesignTokens.mobileColorsDarkBrandContainer);
+    expect(dark.colorScheme.onPrimaryContainer, DesignTokens.mobileColorsDarkOnBrandContainer);
+    expect(dark.colorScheme.secondary, DesignTokens.colorsStatusSuccess);
+    expect(dark.colorScheme.secondaryContainer, DesignTokens.mobileColorsDarkSuccessContainer);
+    expect(dark.colorScheme.onSecondaryContainer, DesignTokens.colorsStatusSuccessLight);
+    expect(dark.colorScheme.surface, DesignTokens.mobileColorsDarkSurface);
+    expect(dark.colorScheme.onSurface, DesignTokens.mobileColorsDarkTextPrimary);
+    expect(dark.colorScheme.surfaceContainerHighest, DesignTokens.mobileColorsDarkSurfaceHigh);
+    expect(dark.colorScheme.outlineVariant, DesignTokens.mobileColorsDarkSurfaceHigh);
+    expect(dark.colorScheme.error, DesignTokens.colorsStatusDanger);
+    expect(dark.colorScheme.errorContainer, DesignTokens.mobileColorsDarkErrorContainer);
+    expect(dark.scaffoldBackgroundColor, DesignTokens.mobileColorsDarkPage);
+    expect(darkExtra.brandGradientEnd, DesignTokens.mobileColorsDarkBrandGradientEnd);
+    expect(darkExtra.weChatOnline, DesignTokens.colorsStatusSuccessLight);
+    expect(darkExtra.chatUserBubble, DesignTokens.colorsBrandPrimaryDark);
+    expect(darkExtra.chatUserBubbleText, DesignTokens.colorsChatUserTextDark);
+    expect(darkExtra.momentAccent, DesignTokens.colorsMomentAccentDark);
+    expect(darkExtra.momentChipBg, DesignTokens.colorsMomentChipBgDark);
+    expect(darkExtra.replyBoxBg, DesignTokens.colorsMomentReplyBgDark);
+    expect(darkExtra.textSecondary, DesignTokens.mobileColorsDarkTextSecondary);
+    expect(darkExtra.textTertiary, DesignTokens.mobileColorsDarkTextTertiary);
   });
 
   testWidgets('message list renders Flutter-first department groups', (
@@ -3020,26 +3021,31 @@ void main() {
     expect(find.text('采购审批'), findsOneWidget);
     expect(find.text('张三'), findsOneWidget);
 
+    const detail = ApprovalDetail(
+      id: 7,
+      requestNo: 'AP-7',
+      title: '采购审批',
+      status: 'pending',
+      applicantName: '张三',
+      flowName: '采购流程',
+      currentNodeName: '主管审批',
+      submittedAt: '2026-06-30',
+      description: '采购一批物料',
+    );
+    final detailRepository = _FakeApprovalDetailRepository(detail);
+    addTearDown(detailRepository.dispose);
+    addTearDown(detailRepository.client.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const ApprovalDetailScreen(
+        home: ApprovalDetailScreen(
           id: 7,
-          initialDetail: ApprovalDetail(
-            id: 7,
-            requestNo: 'AP-7',
-            title: '采购审批',
-            status: 'pending',
-            applicantName: '张三',
-            flowName: '采购流程',
-            currentNodeName: '主管审批',
-            submittedAt: '2026-06-30',
-            description: '采购一批物料',
-          ),
+          repository: detailRepository,
+          initialDetail: detail,
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('审批信息'), findsOneWidget);
     expect(find.text('单号'), findsOneWidget);
@@ -5431,7 +5437,7 @@ void main() {
     expect(find.text('电脑工具已完成任务。'), findsOneWidget);
   });
 
-  testWidgets('chat detail failed assistant bubble can resend like Flutter', (
+  testWidgets('chat detail unconfirmed assistant bubble reads only the original receipt', (
     WidgetTester tester,
   ) async {
     final repository = _FakeFailThenStreamingRepository();
@@ -5452,7 +5458,10 @@ void main() {
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 
-    expect(find.text('发送失败'), findsOneWidget);
+    expect(find.text('结果未确认'), findsOneWidget);
+    expect(find.text('发送失败'), findsNothing);
+    expect(repository.calls, ['继续']);
+    expect(repository.resumeFlags, [false]);
     expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
     expect(find.text('核对结果'), findsOneWidget);
@@ -5465,7 +5474,8 @@ void main() {
     expect(repository.turnKeys[0], isNotEmpty);
     expect(repository.turnKeys[1], repository.turnKeys[0]);
     expect(find.text('原任务核对完成'), findsOneWidget);
-    expect(find.text('发送失败'), findsNothing);
+    expect(find.text('结果未确认'), findsNothing);
+    expect(find.text('核对结果'), findsNothing);
     expect(find.text('继续'), findsOneWidget);
   });
 
@@ -6340,7 +6350,23 @@ class _FakeCircleRepository extends MobileRepository {
   }
 }
 
+class _FakeApprovalDetailRepository extends MobileRepository {
+  _FakeApprovalDetailRepository(this._detail);
+
+  final ApprovalDetail _detail;
+
+  @override
+  Future<ApprovalDetail> loadApprovalDetail(int id) async => _detail;
+
+  @override
+  Future<bool> hasUnknownApprovalOutcome(int id) async => false;
+}
+
 class _FakeNotificationRepository extends MobileRepository {
+  @override
+  Future<List<PendingNotification>> loadNotificationInbox() =>
+      loadPendingNotifications();
+
   @override
   Future<List<PendingNotification>> loadPendingNotifications() async {
     return const [
@@ -6356,6 +6382,10 @@ class _FakeNotificationRepository extends MobileRepository {
 }
 
 class _EmptyNotificationRepository extends MobileRepository {
+  @override
+  Future<List<PendingNotification>> loadNotificationInbox() =>
+      loadPendingNotifications();
+
   @override
   Future<List<PendingNotification>> loadPendingNotifications() async {
     return const [];

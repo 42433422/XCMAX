@@ -30,6 +30,7 @@
       </div>
 
       <div v-if="activeTab === 'orders'" class="card">
+        <p v-if="orderListError" role="alert" class="text-danger">订单读取失败：{{ orderListError }} <button type="button" class="btn btn-secondary" @click="loadOrders">重试</button></p>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
@@ -44,7 +45,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="order in orders" :key="order.id">
+              <tr v-for="order in orderLoading || orderListError ? [] : orders" :key="order.id">
                 <td>{{ order.order_no }}</td>
                 <td>{{ order.supplier_name }}</td>
                 <td>{{ order.order_date }}</td>
@@ -56,13 +57,12 @@
                 <td>
                   <button class="btn btn-sm btn-secondary" @click="viewOrder(order)">查看</button>
                   <button v-if="order.status === 'draft'" class="btn btn-sm btn-primary" @click="editOrder(order)">编辑</button>
-                  <button v-if="order.status === 'draft'" class="btn btn-sm btn-success" @click="approveOrder(order)">审核</button>
+                  <button v-if="order.status === 'draft'" class="btn btn-sm btn-success" :disabled="approvingOrderId !== null || orderSaving" @click="approveOrder(order)">{{ approvingOrderId === order.id ? '审核中…' : '审核' }}</button>
                   <button v-if="['approved', 'partial'].includes(order.status)" class="btn btn-sm btn-success" @click="receiveOrder(order)">确认收货</button>
                 </td>
               </tr>
-              <tr v-if="orders.length === 0">
-                <td colspan="7" class="text-center">暂无订单数据</td>
-              </tr>
+              <tr v-if="orderLoading"><td colspan="7" class="text-center">加载采购订单中…</td></tr>
+              <tr v-else-if="!orderListError && orders.length === 0"><td colspan="7" class="text-center">暂无订单数据</td></tr>
             </tbody>
           </table>
         </div>
@@ -195,8 +195,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showOrderModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveOrder">{{ receiving ? '确认入库' : '保存' }}</button>
+          <button class="btn btn-secondary" :disabled="orderSaving" @click="showOrderModalFlag = false">取消</button>
+          <button class="btn btn-primary" :disabled="orderSaving" @click="saveOrder">{{ orderSaving ? '提交中…' : receiving ? '确认入库' : '保存' }}</button>
         </div>
       </div>
     </div>
@@ -245,8 +245,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showSupplierModalFlag = false">取消</button>
-          <button class="btn btn-primary" @click="saveSupplier">保存</button>
+          <button class="btn btn-secondary" :disabled="supplierSaving" @click="showSupplierModalFlag = false">取消</button>
+          <button class="btn btn-primary" :disabled="supplierSaving" @click="saveSupplier">{{ supplierSaving ? '提交中…' : '保存' }}</button>
         </div>
       </div>
     </div>

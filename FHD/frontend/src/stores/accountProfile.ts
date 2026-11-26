@@ -8,6 +8,7 @@ import { resetWorkspacePrefsSyncState } from '@/utils/workspacePrefsApi'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { clearSessionPermissions } from '@/utils/toolPermissionCache'
 
 const SCOPE_MOVED = '登录工作空间已改变，请重试'
 
@@ -99,6 +100,8 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   })
 
   function applySessionFields(data: Record<string, unknown>, keepVisible = false): Promise<void> {
+    const previousIdentity = [tenantId.value, marketUserId.value, localUserId.value, impersonatingMarketUserId.value]
+    const previousAuthorization = JSON.stringify([permissions.value.slice().sort(), tenantIsOwner.value, isAdminAccount.value])
     sessionCheckUnavailable.value = false
     const epoch = ++hydrationEpoch
     if (!(keepVisible && workspaceHydrationReady.value && workspaceEpoch.value === productReadAccountEpoch.value)) {
@@ -142,8 +145,15 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
     const mmt = data.market_membership_tier
     marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
+    const identityChanged = [tenantId.value, marketUserId.value, localUserId.value, impersonatingMarketUserId.value]
+      .some((value, index) => value !== previousIdentity[index])
     if (Array.isArray(data.permissions)) permissions.value = (data.permissions as unknown[]).map(String)
+    else if (identityChanged || 'permissions' in data) permissions.value = []
     if ('tenant_is_owner' in data) tenantIsOwner.value = data.tenant_is_owner === true
+    else if (identityChanged) tenantIsOwner.value = false
+    if (identityChanged || previousAuthorization !== JSON.stringify([permissions.value.slice().sort(), tenantIsOwner.value, isAdminAccount.value])) {
+      clearSessionPermissions()
+    }
     const nestedUser = data.user
     userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
       ? String((nestedUser as Record<string, unknown>).role || '') : ''
@@ -277,6 +287,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   function clear(hydrate = true) {
+    clearSessionPermissions()
     hydrationEpoch++
     clearedEpoch++
     latestHydration = null

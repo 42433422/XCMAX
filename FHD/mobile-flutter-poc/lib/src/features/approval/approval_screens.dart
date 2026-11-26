@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../../api/mobile_session_store.dart' show MobileSessionData;
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
@@ -17,9 +19,15 @@ class ApprovalListScreen extends StatefulWidget {
   State<ApprovalListScreen> createState() => _ApprovalListScreenState();
 }
 
-class _ApprovalListScreenState extends State<ApprovalListScreen> {
+class _ApprovalListScreenState extends State<ApprovalListScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   late Future<List<ApprovalRequest>> _future;
+  late final int _generation;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
+  Timer? _poll;
+  bool _refreshing = false;
+  bool get _revoked => _generation != _repository.client.authGeneration;
 
   @override
   void initState() {
@@ -28,7 +36,41 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
       context,
       explicit: widget.repository,
     );
+    _generation = _repository.client.authGeneration;
+    _sessionSubscription = _repository.client.sessionChanges.listen((_) {
+      if (mounted && _revoked) setState(() {});
+    });
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    if (widget.initialItems != null) return;
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted && !_revoked && ModalRoute.of(context)?.isCurrent != false) {
+        unawaited(_refresh());
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refresh());
+      _startPolling();
+    } else {
+      _poll?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_sessionSubscription?.cancel());
+    super.dispose();
   }
 
   @override
@@ -37,7 +79,6 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
     return Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             WeTopBar(
@@ -73,17 +114,27 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
               child: FutureBuilder<List<ApprovalRequest>>(
                 future: _future,
                 builder: (context, snapshot) {
+                  if (_revoked) {
+                    return const Center(child: Text('账号已切换，请重新打开审批'));
+                  }
                   final items = snapshot.data ?? const <ApprovalRequest>[];
                   if (snapshot.hasError) {
                     return Center(
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(mobileErrorText(snapshot.error)),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(mobileErrorText(snapshot.error)),
+                      ),
                       TextButton(onPressed: _refresh, child: const Text('重试')),
                     ]));
                   }
                   if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        semanticsLabel: '正在加载待办审批',
+                      ),
+                    );
                   }
                   if (snapshot.connectionState == ConnectionState.done &&
                       items.isEmpty) {
@@ -151,16 +202,25 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
   }
 
   Future<List<ApprovalRequest>> _load() async {
+    if (_revoked) throw StateError('账号已切换，请重新打开审批');
     if (widget.initialItems != null) return widget.initialItems!;
-    return _repository.loadApprovals();
+    final items = await _repository.loadApprovals();
+    if (_revoked) throw StateError('账号已切换，请重新打开审批');
+    return items;
   }
 
   Future<void> _refresh() async {
+    if (!mounted || _revoked || _refreshing) return;
+    _refreshing = true;
     final future = _load();
     setState(() {
       _future = future;
     });
-    await future.catchError((Object _) => <ApprovalRequest>[]);
+    try {
+      await future.catchError((Object _) => <ApprovalRequest>[]);
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> _openDetail(ApprovalRequest item) async {
@@ -191,12 +251,19 @@ class ApprovalDetailScreen extends StatefulWidget {
   State<ApprovalDetailScreen> createState() => _ApprovalDetailScreenState();
 }
 
-class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
+class _ApprovalDetailScreenState extends State<ApprovalDetailScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   late Future<ApprovalDetail> _future;
   final _opinionController = TextEditingController();
   var _working = false;
+  var _needsReconciliation = false;
   var _status = '';
+  late final int _generation;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
+  bool _revoked = false;
+  bool _refreshing = false;
+  Timer? _poll;
 
   @override
   void initState() {
@@ -205,11 +272,64 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
       context,
       explicit: widget.repository,
     );
+    _generation = _repository.client.authGeneration;
+    _sessionSubscription = _repository.client.sessionChanges.listen((_) {
+      if (_generation != _repository.client.authGeneration && !_revoked) {
+        _revoked = true;
+        _needsReconciliation = true;
+        if (mounted) setState(() => _status = '账号已切换，请重新打开审批');
+      }
+    });
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent != false) {
+        unawaited(_refreshFromServer());
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshFromServer());
+      _startPolling();
+    } else {
+      _poll?.cancel();
+    }
+  }
+
+  Future<void> _refreshFromServer() async {
+    if (!mounted || _working || _refreshing || _revoked ||
+        _repository.client.authGeneration != _generation) {
+      return;
+    }
+    _refreshing = true;
+    final future = _load();
+    // setState must return void synchronously, never a Future from _load().
+    setState(() {
+      _future = future;
+    });
+    try {
+      await future;
+    } catch (_) {
+      // FutureBuilder displays the failure; never authorize from a stale read.
+    } finally {
+      _refreshing = false;
+      if (mounted) setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_sessionSubscription?.cancel());
     _opinionController.dispose();
     super.dispose();
   }
@@ -219,34 +339,49 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     return FutureBuilder<ApprovalDetail>(
       future: _future,
       builder: (context, snapshot) {
-        final detail = snapshot.data ?? widget.initialDetail;
+        final revoked = _revoked || _repository.client.authGeneration != _generation;
+        // Never display an earlier tenant's approval title after revocation.
+        final detail = revoked || snapshot.hasError ? null : snapshot.data ?? widget.initialDetail;
         final colors = AppTheme.colors(context);
         return Scaffold(
           backgroundColor: colors.page,
           body: SafeArea(
-            bottom: false,
             child: Column(
               children: [
                 WeTopBar(
                   title: detail?.title ?? '审批详情',
                   showBack: true,
                   onBack: () => Navigator.of(context).maybePop(),
+                  actions: [
+                    IconButton(
+                      onPressed: revoked || _working || _refreshing
+                          ? null : _refreshFromServer,
+                      icon: const Icon(Icons.refresh),
+                      tooltip: '刷新审批状态',
+                    ),
+                  ],
                 ),
                 Expanded(
-                  child: snapshot.hasError
+                  child: revoked
+                       ? const Center(child: Text('账号已切换，请重新打开审批'))
+                       : snapshot.hasError
                       ? Center(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text(mobileErrorText(snapshot.error)),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(mobileErrorText(snapshot.error)),
+                          ),
                           TextButton(
-                              onPressed: () =>
-                                  setState(() => _future = _load()),
+                              onPressed: _refreshFromServer,
                               child: const Text('重试')),
                         ]))
                       : detail == null
                           ? Center(
                               child: CircularProgressIndicator(
-                                  color: colors.brand),
+                                color: colors.brand,
+                                semanticsLabel: '正在加载审批详情',
+                              ),
                             )
                           : ListView(
                               padding: const EdgeInsets.only(bottom: 96),
@@ -317,7 +452,7 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                         maxLines: 4,
                                         decoration: const InputDecoration(
                                           border: InputBorder.none,
-                                          hintText: '输入审批意见（可选）',
+                                          labelText: '审批意见（可选）',
                                         ),
                                       ),
                                     ),
@@ -327,13 +462,17 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                                 WeBlockButton(
                                   text: '通过',
                                   onPressed: () => _confirm(true),
-                                  enabled: detail.canAct && !_working,
+                                  enabled: detail.canAct && !_working && !_refreshing && !_needsReconciliation &&
+                                       !revoked &&
+                                      !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                                 const SizedBox(height: 8),
                                 WeBlockOutlinedButton(
                                   text: '驳回',
                                   onPressed: () => _confirm(false),
-                                  enabled: detail.canAct && !_working,
+                                  enabled: detail.canAct && !_working && !_refreshing && !_needsReconciliation &&
+                                       !revoked &&
+                                      !snapshot.hasError && snapshot.connectionState == ConnectionState.done,
                                 ),
                               ],
                             ),
@@ -346,9 +485,37 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
     );
   }
 
+  bool _isTerminalApproval(ApprovalDetail detail) =>
+      detail.id == widget.id &&
+      const {'approved', 'rejected', 'cancelled', 'canceled'}
+          .contains(detail.status.trim().toLowerCase());
+
   Future<ApprovalDetail> _load() async {
-    if (widget.initialDetail != null) return widget.initialDetail!;
-    return _repository.loadApprovalDetail(widget.id);
+    if (_revoked || _repository.client.authGeneration != _generation) {
+      throw StateError('账号已切换，请重新打开审批');
+    }
+    final detail = await _repository.loadApprovalDetail(widget.id);
+    if (detail.id != widget.id) {
+      throw StateError('审批编号不匹配，请重新打开审批');
+    }
+    final unresolved = await _repository.hasUnknownApprovalOutcome(widget.id);
+    if (_revoked || _repository.client.authGeneration != _generation) {
+      throw StateError('账号已切换，请重新打开审批');
+    }
+    if (unresolved && !_isTerminalApproval(detail)) {
+      _needsReconciliation = true;
+      _status = '原审批回执仍待核对，请勿重复操作（禁止重复提交）。';
+    } else if (unresolved) {
+      // Only a terminal server snapshot can release a previously uncertain
+      // local decision, including after force-stop or process restart.
+      await _repository.clearUnknownApprovalOutcome(widget.id);
+      if (_revoked || _repository.client.authGeneration != _generation) {
+        throw StateError('账号已切换，请重新打开审批');
+      }
+      _needsReconciliation = false;
+      _status = '审批状态已由服务端更新，请查看最新结果';
+    }
+    return detail;
   }
 
   Future<void> _confirm(bool approve) async {
@@ -363,20 +530,77 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
         onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
-    if (accepted != true) return;
+    if (accepted != true || !mounted || _working || _refreshing || _needsReconciliation) return;
     setState(() => _working = true);
     try {
+      // The displayed initial detail is not a write authorization.
+      final before = await _load();
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
+      }
+      if (!before.canAct) {
+        setState(() {
+          _status = '原审批已变更或无权操作，请刷新';
+          _future = Future.value(before);
+        });
+        return;
+      }
+      if (_needsReconciliation) {
+        throw StateError('原审批回执待核对，请勿重复提交');
+      }
+      // Persist BEFORE sending the POST. If the app crashes or times out,
+      // its next instance can only query server state, not repeat the write.
+      if (!await _repository.markUnknownApprovalOutcome(widget.id)) {
+        throw StateError('原审批已被领取或本机核验账本不可用，已阻止审批提交');
+      }
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
+      }
       final opinion = _opinionController.text.trim();
+      _needsReconciliation = true;
       if (approve) {
         await _repository.approveApproval(widget.id, opinion);
       } else {
         await _repository.rejectApproval(widget.id, opinion);
       }
-      if (!mounted) return;
-      setState(() => _status = approve ? '审批已通过' : '审批已驳回');
+      if (!mounted || _repository.client.authGeneration != _generation) return;
+      // A successful transport response is not a terminal approval snapshot.
+      final after = await _load();
+      if (!mounted || _revoked || _repository.client.authGeneration != _generation) {
+        return;
+      }
+      if (!_isTerminalApproval(after) || _needsReconciliation) {
+        setState(() {
+          _future = Future.value(after);
+          _status = '原审批回执仍待核对，请勿重复操作（禁止重复提交）。';
+        });
+        return;
+      }
+      setState(() => _status = '审批状态已由服务端更新，请查看最新结果');
       Navigator.of(context).maybePop();
     } catch (error) {
-      if (mounted) setState(() => _status = mobileErrorText(error));
+      if (!mounted) return;
+      if (_needsReconciliation) {
+        setState(() => _status = '审批提交结果待核对，请勿重复操作。');
+        try {
+          final latest = await _load();
+          if (!mounted) return;
+          setState(() {
+            _future = Future.value(latest);
+            if (_isTerminalApproval(latest)) {
+              _needsReconciliation = false;
+              _status = '审批状态已由服务端更新，请查看最新结果';
+            }
+          });
+        } catch (_) {
+          // A failed receipt read must not enable the original write again.
+        }
+      } else {
+        setState(() {
+          _status = mobileErrorText(error);
+          _future = _load();
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -400,7 +624,7 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         text.ifEmpty('待处理'),
         style: TextStyle(
-          color: colors.brand,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
           fontSize: 11,
           height: 1.27,
           letterSpacing: 0,
@@ -418,20 +642,23 @@ class _StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.brandContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: colors.brand,
-          fontSize: 13,
-          height: 1.38,
-          letterSpacing: 0,
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: colors.brandContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+            fontSize: 13,
+            height: 1.38,
+            letterSpacing: 0,
+          ),
         ),
       ),
     );

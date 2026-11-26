@@ -25,6 +25,7 @@ import { ensureGlobModRoutes, registerModRoutes } from './router/registerModRout
 
 bindTutorialRouter(router)
 import { fetchModRoutesPayloadShared } from './utils/modRoutesSharedFetch'
+import { captureAuthSession } from '@/utils/authSessionCache'
 import { CLIENT_MODS_UI_OFF_KEY } from '@/stores/mods'
 import { applySidebarThemeFromStorage } from './utils/sidebarTheme'
 import { installClientConsoleBridge } from './utils/clientDebugLog'
@@ -46,6 +47,7 @@ import './styles/css/components/ui-components.css'
 import './styles/css/animations/transitions.css'
 import './styles/css/animations/ui-effects.css'
 import './styles/css/office-theme.css'
+import './styles/css/interaction-surfaces.css'
 import 'font-awesome/css/font-awesome.min.css'
 
 // Window globals are kept for backward compatibility; prefer using the Pinia appShell store.
@@ -243,9 +245,12 @@ async function bootstrap() {
   void (async () => {
     if (readVanillaNoModUi()) return
     try {
+      const sessionCurrent = captureAuthSession()
       const entries = await fetchModRoutesPayloadShared()
-      if (entries?.length) {
-        await registerModRoutes(router, entries)
+      if (entries && sessionCurrent()) {
+        // An authoritative empty response revokes previous runtime routes, but
+        // an older account's late response must never revoke the new account.
+        await registerModRoutes(router, entries, { reconcileRuntime: true, sessionCurrent })
         scheduleRouterAddressSync('api')
       }
     } catch (e) {

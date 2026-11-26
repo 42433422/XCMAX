@@ -181,6 +181,22 @@ def test_local_cursor_only_returns_newer_events():
     assert [row["payload"]["text"] for row in rows] == ["b"]
 
 
+@pytest.mark.parametrize("backend", ["local", "redis"])
+def test_expired_cursor_must_not_replay_an_incomplete_suffix(monkeypatch, backend):
+    monkeypatch.setattr(replay, "REPLAY_MAX_EVENTS", 2)
+    if backend == "redis":
+        _use_redis(_FakeRedis())
+    assert replay.claim_runner("gap", owner="7", tenant="2")
+    first = replay.append("gap", {"type": "token", "text": "a"}, owner="7", tenant="2")
+    second = replay.append("gap", {"type": "token", "text": "b"}, owner="7", tenant="2")
+    replay.append("gap", {"type": "token", "text": "c"}, owner="7", tenant="2")
+    with pytest.raises(replay.ReplayBackendUnavailable):
+        replay.events_after("gap", first, owner="7", tenant="2")
+    assert [
+        row["payload"]["text"] for row in replay.events_after("gap", second, owner="7", tenant="2")
+    ] == ["c"]
+
+
 def test_local_finish_status_and_lease_liveness():
     replay.claim_runner("turn-4", owner="7")
     assert replay.lease_alive("turn-4", owner="7") is True

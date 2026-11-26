@@ -7,6 +7,7 @@ import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useModsStore } from '@/stores/mods'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
+import NotificationInbox from './NotificationInbox.vue'
 import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
@@ -15,6 +16,7 @@ const account = useAccountProfileStore()
 const mods = useModsStore()
 const router = useRouter()
 const { tasks, drawerOpen, loading, connected, error, runtime, unreadCount, approvalCount, activeCount } = storeToRefs(store)
+const notificationsOpen = ref(false)
 const filter = ref<'all' | 'active' | 'unread' | 'approval'>('all')
 const filters = [
   { value: 'all', label: '全部' },
@@ -33,6 +35,14 @@ const filteredTasks = computed(() =>
     return true
   }),
 )
+
+// Keep the existing server task scope; do not duplicate the stream scheduler.
+const TASK_PAGE_SIZE = 60
+const taskPage = ref(0)
+const taskPageCount = computed(() => Math.max(1, Math.ceil(filteredTasks.value.length / TASK_PAGE_SIZE)))
+const visibleTasks = computed(() => filteredTasks.value.slice(taskPage.value * TASK_PAGE_SIZE, (taskPage.value + 1) * TASK_PAGE_SIZE))
+watch(filter, () => { taskPage.value = 0 })
+watch(taskPageCount, (count) => { taskPage.value = Math.min(taskPage.value, count - 1) })
 
 const tutorialScopeKey = computed(() => {
   const run = tutorialStore.currentRun
@@ -96,11 +106,18 @@ onMounted(() => {
   // 登录成功会先写入账号再回到工作台，组件挂上时 id 已经有值，watcher 不会再触发。
   // 启动遮罩还在、或 ready 标记还没写上时，先不拉 200 条任务，避免堵住当前页。
   if (shellReadyForTaskPolling()) resumeIfSignedIn()
-  else window.addEventListener('xcagi:startup-ready', () => resumeIfSignedIn(), { once: true })
+  else window.addEventListener('xcagi:startup-ready', resumeIfSignedIn, { once: true })
 })
-onBeforeUnmount(() => store.stop())
+onBeforeUnmount(() => {
+  window.removeEventListener('xcagi:startup-ready', resumeIfSignedIn)
+  store.stop()
+})
 watch(tutorialScopeKey, (next, previous) => {
-  if (next !== previous) store.restartForScope()
+  if (next !== previous) {
+    taskPage.value = 0
+    notificationsOpen.value = false
+    store.restartForScope()
+  }
 }, { flush: 'sync' })
 </script>
 
@@ -130,6 +147,12 @@ watch(tutorialScopeKey, (next, previous) => {
             <button class="task-center-close" type="button" aria-label="关闭" @click="store.closeDrawer()">×</button>
           </header>
 
+          <nav v-if="account.localUserId" class="task-center-filters" aria-label="工作区与通知">
+            <button type="button" :aria-pressed="!notificationsOpen" @click="notificationsOpen = false">工作区</button>
+            <button type="button" :aria-pressed="notificationsOpen" @click="notificationsOpen = true">通知</button>
+          </nav>
+          <NotificationInbox v-if="notificationsOpen && account.localUserId" :scope-key="tutorialScopeKey" />
+          <template v-else>
           <div v-if="error" class="task-center-error">
             <span>{{ error }}</span
             ><button type="button" @click="store.refresh()">重试</button>
@@ -173,7 +196,7 @@ watch(tutorialScopeKey, (next, previous) => {
 
           <div class="task-center-list" data-tutorial-id="task-workspace-list">
             <button
-              v-for="task in filteredTasks"
+              v-for="task in visibleTasks"
               :key="task.task_id"
               class="task-center-item"
               type="button"
@@ -217,10 +240,16 @@ watch(tutorialScopeKey, (next, previous) => {
                 <span>进入独立对话 →</span>
               </span>
             </button>
+            <nav v-if="taskPageCount > 1" class="task-center-filters" aria-label="工作区分页">
+              <button type="button" :disabled="taskPage === 0" @click="taskPage--">上一页</button>
+              <span aria-live="polite">{{ taskPage + 1 }} / {{ taskPageCount }}</span>
+              <button type="button" :disabled="taskPage + 1 >= taskPageCount" @click="taskPage++">下一页</button>
+            </nav>
             <div v-if="!filteredTasks.length" class="task-center-empty">
               {{ loading ? '正在同步工作区…' : '这里暂时没有工作区' }}
             </div>
           </div>
+          </template>
         </aside>
       </div>
     </Transition>

@@ -83,3 +83,32 @@ it('requests durable verification after mount and keeps the page usable when rec
   expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   wrapper.unmount()
 })
+
+
+it('isolates a throwing cleanup and reloads on a permission projection change', async () => {
+  const cleanup = vi.fn(() => { throw new Error('broken plugin cleanup') })
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.mocked(loadRuntimeMod).mockResolvedValueOnce({ mount(element) { element.textContent = 'Old permission'; return cleanup } })
+  vi.mocked(loadRuntimeMod).mockResolvedValueOnce({ mount(element) { element.textContent = 'New permission'; return () => element.remove() } })
+  const { wrapper, account } = await setup()
+  try {
+    account.permissions = ['mod.read']
+    await flushPromises()
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('Old permission')
+    expect(wrapper.text()).toContain('New permission')
+  } finally { wrapper.unmount(); warn.mockRestore() }
+})
+
+it('does not import a stale metadata response after account switch', async () => {
+  let resolveOld!: (value: Response) => void
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+  vi.mocked(loadRuntimeMod).mockResolvedValue({ mount(element) { element.textContent = 'Current'; return () => element.remove() } })
+  const { wrapper, account } = await setup()
+  account.localUserId = 2
+  await flushPromises()
+  resolveOld(new Response(JSON.stringify({ success: true, data: metadata() })))
+  await flushPromises()
+  expect(loadRuntimeMod).toHaveBeenCalledOnce()
+  wrapper.unmount()
+})

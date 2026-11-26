@@ -144,6 +144,26 @@ void main() {
     });
   }
 
+  test('default cloud normalization does not revoke a protected request',
+      () async {
+    final fixture = await _fixture();
+    final generation = fixture.api.authGeneration;
+    final base = await fixture.api.resolveSessionBaseUrl();
+    var requests = 0;
+    final subscription = fixture.server.listen((request) async {
+      requests++;
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer access-A');
+      await _reply(request, 200, {'owner': 'A'});
+    });
+    addTearDown(subscription.cancel);
+    await fixture.api.getJson('protected');
+    expect(requests, 1);
+    expect(fixture.api.authGeneration, generation);
+    expect(await fixture.api.resolveSessionBaseUrl(), base);
+    expect((await fixture.store.load()).serverMode, 'cloud');
+  });
+
   test('late forced reload cannot replace a refreshed memory snapshot',
       () async {
     final store = _SlowReadStore();

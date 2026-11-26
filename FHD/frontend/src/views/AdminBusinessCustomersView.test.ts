@@ -108,6 +108,29 @@ describe('AdminBusinessCustomersView', () => {
     wrapper.unmount()
   })
 
+  it('limits DOM rows on large merged customer lists and resets paging after search', async () => {
+    mockListUsers.mockResolvedValue({ users: Array.from({ length: 205 }, (_, index) => ({
+      id: index + 1,
+      username: `business-${index}`,
+      company: `分页客户${index}`,
+    })) })
+    mockApiGet.mockResolvedValue({ data: [] })
+    const wrapper = mount(AdminBusinessCustomersView)
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(100)
+    const pager = wrapper.get('nav[aria-label="已加载客户分页"]')
+    expect(pager.text()).toContain('1 / 3')
+    await pager.find('button:last-child').trigger('click')
+    expect(pager.text()).toContain('2 / 3')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(100)
+    await wrapper.get('.admin-business-customers-search').setValue('分页客户204')
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('分页客户204')
+    expect(wrapper.text()).toContain('1 / 已加载 205')
+    wrapper.unmount()
+  })
+
   it('renders alternate customer identifiers, tiers, and missing or invalid balances', async () => {
     mockListUsers.mockResolvedValue({ data: { users: [
       { user_id: 2, name: '管理员', is_admin: true, plan_tier: 'vip', mobile: '123' },

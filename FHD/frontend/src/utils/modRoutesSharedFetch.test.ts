@@ -1,6 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fetchModRoutesPayloadShared } from './modRoutesSharedFetch'
 
+const session = vi.hoisted(() => ({ epoch: 0 }))
+vi.mock('@/utils/authSessionCache', () => ({
+  captureAuthSession: () => {
+    const epoch = session.epoch
+    return () => session.epoch === epoch
+  },
+}))
+
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn(),
 }))
@@ -40,4 +48,49 @@ describe('modRoutesSharedFetch', () => {
     expect(b).toEqual([])
     expect(apiFetch).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('never shares or publishes a previous account route response', async () => {
+  vi.mocked(apiFetch).mockReset()
+  let resolveOld!: (value: Response) => void
+  let resolveNew!: (value: Response) => void
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+    .mockImplementationOnce(() => new Promise(resolve => { resolveNew = resolve }))
+  const old = fetchModRoutesPayloadShared()
+  session.epoch++
+  const next = fetchModRoutesPayloadShared()
+  resolveOld({ ok: true, json: async () => ({ success: true, data: [{ mod_id: 'old', routes_path: '' }] }) } as Response)
+  await expect(old).resolves.toBeNull()
+  expect(fetchModRoutesPayloadShared()).toBe(next)
+  resolveNew({ ok: true, json: async () => ({ success: true, data: [{ mod_id: 'new', routes_path: '' }] }) } as Response)
+  await expect(next).resolves.toEqual([{ mod_id: 'new', routes_path: '' }])
+  expect(apiFetch).toHaveBeenCalledTimes(2)
+})
+
+
+it('discards a response when the account changes while decoding JSON', async () => {
+  vi.mocked(apiFetch).mockReset()
+  let finishJson!: (value: unknown) => void
+  vi.mocked(apiFetch).mockResolvedValue({
+    ok: true,
+    json: () => new Promise(resolve => { finishJson = resolve }),
+  } as unknown as Response)
+  const pending = fetchModRoutesPayloadShared()
+  await Promise.resolve()
+  session.epoch++
+  finishJson({ success: true, data: [{ mod_id: 'old-account', routes_path: '' }] })
+  await expect(pending).resolves.toBeNull()
+})
+
+it('permits recovery after a failed route request without reusing its failure', async () => {
+  vi.mocked(apiFetch).mockReset()
+  vi.mocked(apiFetch).mockRejectedValueOnce(new Error('temporary network failure'))
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [{ mod_id: 'fresh', routes_path: '' }] }),
+    } as Response)
+  await expect(fetchModRoutesPayloadShared()).resolves.toBeNull()
+  await expect(fetchModRoutesPayloadShared()).resolves.toEqual([{ mod_id: 'fresh', routes_path: '' }])
+  expect(apiFetch).toHaveBeenCalledTimes(2)
 })

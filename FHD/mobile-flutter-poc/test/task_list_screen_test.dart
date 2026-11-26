@@ -8,6 +8,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/native_task_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
+import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
 
 MobileTaskSummary task({
   String id = 'task/a',
@@ -26,6 +27,9 @@ class TaskApi extends MobileApiClient {
       : super(sessionStore: MemoryMobileSessionStore(MobileSessionData.empty));
   final requested = <String>[];
   bool denied = false;
+  bool offline = false;
+  String status = 'completed';
+  Completer<void>? delayedRead;
   @override
   Future<Map<String, Object?>> workspaceRequest(
     String path, {
@@ -37,17 +41,22 @@ class TaskApi extends MobileApiClient {
     String activeModId = '',
   }) async {
     requested.add(path);
+    if (offline) throw TimeoutException('network timeout');
     if (denied) {
       throw const MobileApiException(
           statusCode: 403, message: '没有权限', body: {});
     }
+    final responseStatus = status;
+    final gate = delayedRead;
+    delayedRead = null;
+    if (gate != null) await gate.future;
     return {
       'success': true,
       'data': {
         'task_id': 'task/a',
         'title': '整理考勤',
-        'status': 'completed',
-        'capabilities': <String, bool>{}
+        'status': responseStatus,
+        'capabilities': <String, bool>{'pause': responseStatus == 'running'}
       }
     };
   }
@@ -90,10 +99,16 @@ void main() {
   ) async {
     final pending = Completer<List<MobileTaskSummary>>();
     final repo = Tasks(TaskApi())..load = () => pending.future;
+    addTearDown(() async {
+      await repo.dispose();
+      repo.api.dispose();
+    });
     await tester.pumpWidget(
       MaterialApp(home: TaskListScreen(repository: repo)),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump();
+    expect(repo.loads, 1);
     pending.completeError(const MobileRepositoryException('任务列表加载失败'));
     await tester.pumpAndSettle();
     expect(find.text('下拉刷新，或点击重试'), findsOneWidget);
@@ -104,6 +119,184 @@ void main() {
     expect(repo.loads, 2);
     expect(find.text('暂无任务'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final count in [1000, 10000]) {
+    testWidgets('task list lazily mounts rows for $count tasks', (tester) async {
+      final api = TaskApi();
+      final repo = Tasks(api)
+        ..load = () async => List.generate(
+              count,
+              (index) => MobileTaskSummary.fromJson({
+                'task_id': 'stress-$index',
+                'title': '压力任务 $index',
+                'status': 'completed',
+              }),
+            );
+      addTearDown(() async {
+        await repo.dispose();
+        api.dispose();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(home: TaskListScreen(repository: repo)),
+      );
+      await tester.pumpAndSettle();
+      final rows = find.byType(WeCell, skipOffstage: false);
+      expect(find.byKey(const ValueKey<String>('stress-0')), findsOneWidget);
+      expect(find.text('压力任务 ${count - 1}'), findsNothing);
+      expect(rows.evaluate().length, greaterThan(0));
+      expect(rows.evaluate().length, lessThan(100));
+
+      await tester.drag(
+        find.byType(CustomScrollView),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      final position =
+          tester.state<ScrollableState>(find.byType(Scrollable)).position;
+      final offset = position.pixels;
+      expect(offset, greaterThan(0));
+      expect(rows.evaluate().length, lessThan(100));
+
+      // A polling refresh with new model instances but the same task IDs
+      // must keep the viewport instead of recreating the whole list.
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(repo.loads, 2);
+      expect(position.pixels, closeTo(offset, 1));
+      expect(rows.evaluate().length, lessThan(100));
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('task list recovers by read-only polling after timeout', (
+    tester,
+  ) async {
+    final api = TaskApi();
+    final repo = Tasks(api)..load = () async => [task()];
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(home: TaskListScreen(repository: repo)));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 1);
+    expect(find.text('整理考勤'), findsOneWidget);
+
+    repo.load = () async => throw TimeoutException('network timeout');
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 2);
+    expect(find.text('整理考勤'), findsNothing);
+    expect(find.text('暂无任务'), findsNothing);
+
+    // First failure waits five seconds, without another parallel request.
+    await tester.pump(const Duration(seconds: 4));
+    expect(repo.loads, 2);
+    repo.load = () async => [task()];
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(repo.loads, 3);
+    expect(find.text('整理考勤'), findsOneWidget);
+    expect(api.requested, isEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 60));
+    expect(repo.loads, 3);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(repo.loads, 4);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('workspace reconciles original task and hides revoked snapshot', (
+    tester,
+  ) async {
+    final api = TaskApi()..status = 'running';
+    final repo = Tasks(api);
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: NativeTaskWorkspaceScreen(taskId: 'task/a', repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('状态：正在处理'), findsOneWidget);
+    expect(api.requested.length, 1);
+
+    api.offline = true;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsOneWidget);
+    final pause = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '暂停'),
+    );
+    expect(pause.onPressed, isNull);
+    expect(api.requested.length, 2);
+
+    api.offline = false;
+    api.status = 'completed';
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('状态：已完成'), findsOneWidget);
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsNothing);
+    expect(api.requested.length, 3);
+
+    api.denied = true;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.text('整理考勤'), findsNothing);
+    expect(find.textContaining('权限'), findsOneWidget);
+    expect(api.requested.length, 4);
+    expect(
+      api.requested.toSet(),
+      {'api/mobile/v1/workspace/agent/tasks/task%2Fa'},
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('resume discards pre-suspension response and reconciles immediately',
+      (tester) async {
+    final api = TaskApi()..status = 'running';
+    final repo = Tasks(api);
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: NativeTaskWorkspaceScreen(taskId: 'task/a', repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(api.requested.length, 1);
+    expect(find.text('状态：正在处理'), findsOneWidget);
+
+    final gate = Completer<void>();
+    api.delayedRead = gate;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(api.requested.length, 2);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsOneWidget);
+
+    api.status = 'completed';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(api.requested.length, 3);
+    expect(find.text('状态：已完成'), findsOneWidget);
+    expect(find.text('状态：正在处理'), findsNothing);
+    expect(find.text('状态待同步，暂不可执行任务操作'), findsNothing);
+    expect(api.requested.toSet(), {
+      'api/mobile/v1/workspace/agent/tasks/task%2Fa',
+    });
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(

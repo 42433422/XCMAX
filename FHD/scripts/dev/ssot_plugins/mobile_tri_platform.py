@@ -29,6 +29,7 @@ FLUTTER_API = ROOT / "mobile-flutter-poc/lib/src/api/mobile_api.dart"
 FLUTTER_MODELS = ROOT / "mobile-flutter-poc/lib/src/api/mobile_models.dart"
 FLUTTER_REPOSITORY = ROOT / "mobile-flutter-poc/lib/src/data/mobile_repository.dart"
 FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
+FLUTTER_TOKENS = FLUTTER_THEME.with_name("design_tokens.generated.dart")
 
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
@@ -43,7 +44,6 @@ REQUIRED_DOC_SNIPPETS = (
 )
 
 EXPECTED_COLOR_VALUES = {
-    ("colors", "brand", "primary"): "#6366F1",
     ("colors", "brand", "primary_light"): "#818CF8",
     ("colors", "brand", "primary_dark"): "#4F46E5",
     ("colors", "status", "success"): "#10B981",
@@ -137,6 +137,7 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
         "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
         "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
+        "FHD/mobile-flutter-poc/lib/src/theme/design_tokens.generated.dart",
     ):
         if rel not in derived:
             errors.append(f"mobile-tri-platform.derived 缺少 {rel}")
@@ -173,8 +174,8 @@ def _check_unified_stack(errors: list[str]) -> None:
     if flutter_repository and "class MobileRepository" not in flutter_repository:
         errors.append("Flutter mobile_repository.dart 缺少 MobileRepository")
     flutter_theme = _read_text(FLUTTER_THEME, errors)
-    if flutter_theme and "Color(0xFF6366F1)" not in flutter_theme:
-        errors.append("Flutter app_theme.dart 未保留 token primary #6366F1")
+    if flutter_theme and "brand = DesignTokens.semanticLightPrimary;" not in flutter_theme:
+        errors.append("Flutter app_theme.dart 未使用生成的 light primary token")
 
     openapi = _load_json(OPENAPI_CONTRACT, errors)
     paths = openapi.get("paths") if isinstance(openapi, dict) else None
@@ -246,6 +247,13 @@ def _check_tokens(errors: list[str]) -> None:
     data = _load_json(TOKENS, errors)
     if not data:
         return
+
+    primary = _nested_get(data, ("colors", "brand", "primary"))
+    generated = _read_text(FLUTTER_TOKENS, errors)
+    if not isinstance(primary, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", primary):
+        errors.append("mobile_design_tokens.json colors.brand.primary 必须是六位十六进制颜色")
+    elif generated and f"colorsBrandPrimary = Color(0xFF{primary[1:].upper()});" not in generated:
+        errors.append("Flutter 生成的 brand primary 与 mobile_design_tokens.json 不一致")
 
     for path, expected in EXPECTED_COLOR_VALUES.items():
         got = _nested_get(data, path)

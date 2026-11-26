@@ -79,6 +79,21 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return response.data?.items ?? const <AiCirclePost>[];
   }
 
+  Future<List<PendingNotification>> loadNotificationInbox() async {
+    final response = await _client.notificationInbox();
+    if (!response.success || response.data == null) {
+      throw MobileRepositoryException(response.message.ifEmpty('通知加载失败'));
+    }
+    return response.data!.notifications;
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    final response = await _client.markNotificationRead(id);
+    if (!response.success || response.data?.id != id || response.data?.isRead != true) {
+      throw MobileRepositoryException(response.message.ifEmpty('未收到原通知的已读回执'));
+    }
+  }
+
   Future<List<PendingNotification>> loadPendingNotifications() async {
     final response = await _client.pendingNotifications();
     if (!response.success) {
@@ -298,12 +313,46 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     return ApprovalDetail.fromJson(row, fallbackId: id);
   }
 
+  /// Fail closed: without an account-scoped durable marker, a crashed client
+  /// cannot distinguish a submitted approval from an unsent local action.
+  Future<bool> markUnknownApprovalOutcome(int id) async {
+    final scope = await _offlineScope();
+    if (scope.isEmpty) return false;
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return false;
+    final claimed = await store.markUnknownApprovalOutcome(id);
+    return claimed && scope == await _offlineScope();
+  }
+
+  Future<bool> hasUnknownApprovalOutcome(int id) async {
+    final scope = await _offlineScope();
+    if (scope.isEmpty) return true;
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return true;
+    final pending = await store.hasUnknownApprovalOutcome(id);
+    return scope != await _offlineScope() || pending;
+  }
+
+  Future<void> clearUnknownApprovalOutcome(int id) async {
+    final scope = await _offlineScope();
+    if (scope.isEmpty) return;
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null || scope != await _offlineScope()) return;
+    await store.clearUnknownApprovalOutcome(id);
+  }
+
   Future<void> approveApproval(int id, String opinion) async {
-    await _client.approveApproval(id: id, approverId: 0, opinion: opinion);
+    final result = await _client.approveApproval(id: id, approverId: 0, opinion: opinion);
+    if (result['success'] != true) {
+      throw const MobileRepositoryException('审批提交结果未确认，请核对原审批');
+    }
   }
 
   Future<void> rejectApproval(int id, String reason) async {
-    await _client.rejectApproval(id: id, approverId: 0, reason: reason);
+    final result = await _client.rejectApproval(id: id, approverId: 0, reason: reason);
+    if (result['success'] != true) {
+      throw const MobileRepositoryException('审批驳回结果未确认，请核对原审批');
+    }
   }
 
   Future<List<EmployeePendingQuestion>> loadEmployeePendingQuestions({

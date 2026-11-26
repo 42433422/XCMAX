@@ -69,7 +69,9 @@ describe('marketCatalogCache – writeMarketCatalogCache + readMarketCatalogCach
       artifact: 'sha-artifact',
     }] as never[]
     writeMarketCatalogCache(key, 'office', items)
-    const raw = sessionStorage.getItem(`xcagi_market_catalog_v1:test-tenant:${key}`)
+    const storedKey = sessionStorage.key(0)!
+    expect(storedKey).toMatch(/^xcagi_market_catalog_v1:v3:/)
+    const raw = sessionStorage.getItem(storedKey)
     expect(raw).toBeTruthy()
     const stored = JSON.parse(String(raw)) as Record<string, unknown>
     expect(stored).not.toHaveProperty('tab')

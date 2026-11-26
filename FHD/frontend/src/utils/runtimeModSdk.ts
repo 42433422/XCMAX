@@ -51,16 +51,21 @@ export function createRuntimeModSdk(
   navigate: (path: string) => Promise<unknown>,
 ): RuntimeModSdk {
   const base = `/api/mod/${metadata.mod_id}`
+  function assertActive(): void {
+    if (signal.aborted) throw new DOMException('扩展会话已失效', 'AbortError')
+  }
   return Object.freeze({
     version: 1 as const,
     modId: metadata.mod_id,
     route: Object.freeze({ path: route.path, query: Object.freeze({ ...route.query }) }),
     signal,
     request(path: string, init: RequestInit = {}) {
+      assertActive()
       if (!path.startsWith('/') || path.startsWith('//') || path.includes('..') || path.includes('\\') || /%(?:2e|2f|5c)/i.test(path.split('?')[0] || '')) throw new Error('扩展请求路径无效')
       return apiFetch(`${base}${path}`, { ...init, signal })
     },
     navigate(path: string) {
+      assertActive()
       if (!path.startsWith(`/mod/${metadata.mod_id}/`) || path.includes('..') || path.includes('\\') || /%(?:2e|2f|5c)/i.test(path.split('?')[0] || '')) throw new Error('扩展导航路径无效')
       return navigate(path)
     },

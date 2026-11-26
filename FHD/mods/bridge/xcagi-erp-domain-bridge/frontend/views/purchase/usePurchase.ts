@@ -83,6 +83,12 @@ export function usePurchase() {
     const isEditOrder = ref(false)
     const isEditSupplier = ref(false)
     const receiving = ref(false)
+    const orderSaving = ref(false)
+    const supplierSaving = ref(false)
+    const approvingOrderId = ref<number | null>(null)
+    const orderLoading = ref(false)
+    const orderListError = ref('')
+    let orderReadSequence = 0
     const warehouses = ref<{ id: number; name: string }[]>([])
     const receiveWarehouse = ref<number | ''>('')
 
@@ -116,7 +122,24 @@ export function usePurchase() {
         console.error(`加载 ${url} 失败`, e)
       }
     }
-    const loadOrders = () => loadList('/api/purchase/orders', orders, { ...(filterStatus.value ? { status: filterStatus.value } : {}), ...(selectedSupplier.value ? { supplier_id: selectedSupplier.value } : {}) })
+    const loadOrders = async () => {
+      const sequence = ++orderReadSequence
+      const params = { ...(filterStatus.value ? { status: filterStatus.value } : {}), ...(selectedSupplier.value ? { supplier_id: selectedSupplier.value } : {}) }
+      orderLoading.value = true
+      orderListError.value = ''
+      try {
+        const response = await get<ApiListResponse<PurchaseOrder>>('/api/purchase/orders', params)
+        if (sequence !== orderReadSequence) return
+        if (!response.success) throw new Error(response.message || '采购订单读取失败')
+        orders.value = Array.isArray(response.data) ? response.data : []
+      } catch (e) {
+        if (sequence !== orderReadSequence) return
+        orders.value = []
+        orderListError.value = e instanceof Error ? e.message : '采购订单读取失败'
+      } finally {
+        if (sequence === orderReadSequence) orderLoading.value = false
+      }
+    }
     const loadInbounds = () => loadList('/api/purchase/inbounds', inbounds)
     const loadSuppliers = () => loadList('/api/purchase/suppliers', suppliers)
 
@@ -217,6 +240,7 @@ export function usePurchase() {
     }
 
     const saveOrder = async () => {
+      if (orderSaving.value) return
       if (receiving.value && (!receiveWarehouse.value || orderForm.value.items.some(item => !(item.quantity > 0) || item.quantity > (item.remaining_quantity || 0)))) {
         await appAlert('请选择收货仓库，数量不得超过订单待收数量'); return
       }
@@ -233,6 +257,12 @@ export function usePurchase() {
         await appAlert(`第 ${missing + 1} 行明细未选择产品`)
         return
       }
+      const invalidQuantity = orderForm.value.items.findIndex(item =>
+        !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
+        !Number.isFinite(Number(item.unit_price)) || Number(item.unit_price) < 0
+      )
+      if (invalidQuantity >= 0) { await appAlert(`第 ${invalidQuantity + 1} 行数量或单价无效`); return }
+      orderSaving.value = true
       try {
         const res = receiving.value
           ? await post<ApiWriteResponse>('/api/purchase/inbounds', { order_id: orderForm.value.id, supplier_id: orderForm.value.supplier_id, warehouse_id: receiveWarehouse.value, items: orderForm.value.items, remark: orderForm.value.remark })
@@ -240,30 +270,36 @@ export function usePurchase() {
           ? await post<ApiWriteResponse>(`/api/purchase/orders/${orderForm.value.id}`, orderForm.value)
           : await post<ApiWriteResponse>('/api/purchase/orders', orderForm.value)
         if (res.success) {
-          await appAlert('保存成功')
-          showOrderModalFlag.value = false
-          loadOrders()
+          await loadOrders()
           if (receiving.value) { await loadInbounds(); activeTab.value = 'inbounds' }
+          showOrderModalFlag.value = false
+          await appAlert(orderListError.value ? '已保存，但采购订单重新读取失败，请刷新确认。' : '保存成功')
         } else {
-          await appAlert('保存失败: ' + res.message)
+          await appAlert('保存失败: ' + (res.message || '服务端未确认'))
         }
       } catch (e) {
-        await appAlert('保存失败')
+        await appAlert(`保存结果需要核对：${e instanceof Error ? e.message : '请求失败'}`)
+      } finally {
+        orderSaving.value = false
       }
     }
 
     const approveOrder = async (order: PurchaseOrder) => {
-      if (!(await appConfirm('确认审核该订单？'))) return
+      if (approvingOrderId.value !== null) return
+      approvingOrderId.value = order.id
       try {
+        if (!(await appConfirm('确认审核该订单？'))) return
         const res = await post<ApiWriteResponse>(`/api/purchase/orders/${order.id}/approve`)
         if (res.success) {
-          await appAlert('审核成功')
-          loadOrders()
+          await loadOrders()
+          await appAlert(orderListError.value ? '已审核，但订单列表刷新失败，请核对。' : '审核成功')
         } else {
-          await appAlert('审核失败: ' + res.message)
+          await appAlert('审核失败: ' + (res.message || '服务端未确认'))
         }
       } catch (e) {
-        await appAlert('审核失败')
+        await appAlert(`审核结果需要核对：${e instanceof Error ? e.message : '请求失败'}`)
+      } finally {
+        approvingOrderId.value = null
       }
     }
 
@@ -290,23 +326,27 @@ export function usePurchase() {
     }
 
     const saveSupplier = async () => {
+      if (supplierSaving.value) return
       if (!supplierForm.value.code || !supplierForm.value.name) {
         await appAlert('请填写必填项')
         return
       }
+      supplierSaving.value = true
       try {
         const res = isEditSupplier.value
           ? await post<ApiWriteResponse>(`/api/purchase/suppliers/${supplierForm.value.id}`, supplierForm.value)
           : await post<ApiWriteResponse>('/api/purchase/suppliers', supplierForm.value)
         if (res.success) {
-          await appAlert('保存成功')
+          await loadSuppliers()
           showSupplierModalFlag.value = false
-          loadSuppliers()
+          await appAlert('保存成功')
         } else {
-          await appAlert('保存失败: ' + res.message)
+          await appAlert('保存失败: ' + (res.message || '服务端未确认'))
         }
       } catch (e) {
-        await appAlert('保存失败')
+        await appAlert(`供应商保存结果需要核对：${e instanceof Error ? e.message : '请求失败'}`)
+      } finally {
+        supplierSaving.value = false
       }
     }
 
@@ -327,6 +367,11 @@ export function usePurchase() {
     return {
       activeTab,
       orders,
+      orderLoading,
+      orderListError,
+      orderSaving,
+      supplierSaving,
+      approvingOrderId,
       inbounds,
       suppliers,
       products,

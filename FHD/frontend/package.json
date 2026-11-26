@@ -25,7 +25,10 @@
     "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "test:smoke:5001": "playwright test e2e/smoke.spec.ts",
     "lint": "eslint src/",
-    "gen:types": "bash scripts/gen-types.sh"
+    "gen:types": "bash scripts/gen-types.sh",
+    "tokens:generate": "node ../scripts/design/generate-design-tokens.mjs",
+    "tokens:check": "node ../scripts/design/generate-design-tokens.mjs --check",
+    "pretest": "npm run tokens:check"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.9",

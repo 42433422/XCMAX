@@ -7,11 +7,11 @@
       <div class="excel-container">
         <table v-if="hasGridData" class="real-grid-table">
           <tbody>
-            <tr v-for="(row, rowIndex) in gridRows" :key="'real-row-' + rowIndex">
-              <td class="real-row-num">{{ rowIndex + 1 }}</td>
+            <tr v-for="(row, rowIndex) in visibleGridRows" :key="'real-row-' + (gridPageStart + rowIndex)">
+              <td class="real-row-num">{{ gridPageStart + rowIndex + 1 }}</td>
               <td
                 v-for="cell in row"
-                :key="'real-cell-' + rowIndex + '-' + cell.col"
+                 :key="'real-cell-' + (gridPageStart + rowIndex) + '-' + cell.col"
                 class="real-grid-cell"
                 :class="{
                   'has-content': cell.text,
@@ -27,26 +27,36 @@
         </table>
         <div class="excel-headers" v-show="!hasGridData">
           <div class="row-num-header"></div>
-          <div v-for="(col, index) in displayColumns" :key="'header-' + index" class="col-header">
-            {{ getColumnHeader(index) }}
+          <div v-for="(col, index) in visibleColumnCount" :key="'header-' + (displayColumnStart + index)" class="col-header">
+            {{ getColumnHeader(displayColumnStart + index) }}
           </div>
         </div>
         <div class="excel-body" v-show="!hasGridData">
-          <div v-for="(row, rowIndex) in displayRows" :key="'row-' + rowIndex" class="excel-row">
-            <div class="row-num">{{ rowIndex + 1 }}</div>
+          <div v-for="(row, rowIndex) in visibleRowCount" :key="'row-' + (displayRowStart + rowIndex)" class="excel-row">
+            <div class="row-num">{{ displayRowStart + rowIndex + 1 }}</div>
             <div
-              v-for="(col, colIndex) in displayColumns"
-              :key="'cell-' + rowIndex + '-' + colIndex"
+              v-for="(col, colIndex) in visibleColumnCount"
+               :key="'cell-' + (displayRowStart + rowIndex) + '-' + (displayColumnStart + colIndex)"
               class="excel-cell"
-              :class="{ 'has-content': getCellContent(rowIndex, colIndex) }"
+              :class="{ 'has-content': getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex) }"
             >
-              <span v-if="getCellContent(rowIndex, colIndex)" class="cell-text">
-                {{ getCellContent(rowIndex, colIndex) }}
+              <span v-if="getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex)" class="cell-text">
+                {{ getCellContent(displayRowStart + rowIndex, displayColumnStart + colIndex) }}
               </span>
             </div>
           </div>
         </div>
       </div>
+      <nav v-if="rowPageCount > 1" class="excel-pagination" aria-label="Excel 行分页">
+        <button type="button" :disabled="rowPage === 0" @click="changeRowPage(-1)">上一页</button>
+        <span aria-live="polite">{{ rowPage + 1 }} / {{ rowPageCount }} · {{ hasGridData ? gridRows.length : displayRows }} 行</span>
+        <button type="button" :disabled="rowPage + 1 >= rowPageCount" @click="changeRowPage(1)">下一页</button>
+      </nav>
+      <nav v-if="!hasGridData && columnPageCount > 1" class="excel-pagination" aria-label="Excel 列分页">
+        <button type="button" :disabled="columnPage === 0" @click="columnPage--">上一组列</button>
+        <span aria-live="polite">{{ columnPage + 1 }} / {{ columnPageCount }} · {{ displayColumns }} 列</span>
+        <button type="button" :disabled="columnPage + 1 >= columnPageCount" @click="columnPage++">下一组列</button>
+      </nav>
     </div>
   </div>
 </template>
@@ -80,6 +90,14 @@ export default {
       default: null,
     },
   },
+  data() {
+    return { gridPage: 0, displayPage: 0, columnPage: 0 }
+  },
+  watch: {
+    gridData() { this.gridPage = 0 },
+    sampleRows() { this.displayPage = 0 },
+    fields() { this.columnPage = 0 },
+  },
   computed: {
     hasGridData() {
       return Boolean(this.gridData && Array.isArray(this.gridData.rows) && this.gridData.rows.length > 0)
@@ -88,6 +106,43 @@ export default {
       if (!this.hasGridData) return []
       return this.gridData.rows
     },
+    // Page boundaries advance over the end of any merged cell. A grid
+    // page cannot split a rowspan without changing the preview's meaning.
+    gridPageBounds() {
+      const rows = this.gridRows
+      const bounds = [0]
+      let start = 0
+      while (start < rows.length) {
+        let end = Math.min(rows.length, start + 100)
+        for (let index = start; index < end; index++) {
+          for (const cell of Array.isArray(rows[index]) ? rows[index] : []) {
+            const span = Number(cell?.rowspan || 1)
+            if (Number.isFinite(span) && span > 1) end = Math.min(rows.length, Math.max(end, index + span))
+          }
+        }
+        bounds.push(end)
+        start = end
+      }
+      return bounds
+    },
+    gridPageStart() {
+      return this.gridPageBounds[Math.min(this.gridPage, this.gridPageBounds.length - 2)] || 0
+    },
+    visibleGridRows() {
+      if (!this.hasGridData) return []
+      const start = this.gridPageStart
+      return this.gridRows.slice(start, this.gridPageBounds[this.gridPage + 1] || this.gridRows.length)
+    },
+    rowPage() { return this.hasGridData ? this.gridPage : this.displayPage },
+    rowPageCount() {
+      return this.hasGridData ? Math.max(1, this.gridPageBounds.length - 1)
+        : Math.max(1, Math.ceil(this.displayRows / 100))
+    },
+    displayRowStart() { return this.displayPage * 100 },
+    visibleRowCount() { return Math.max(0, Math.min(100, this.displayRows - this.displayRowStart)) },
+    columnPageCount() { return Math.max(1, Math.ceil(this.displayColumns / 24)) },
+    displayColumnStart() { return this.columnPage * 24 },
+    visibleColumnCount() { return Math.max(0, Math.min(24, this.displayColumns - this.displayColumnStart)) },
     displayRows() {
       if (this.sampleRows && this.sampleRows.length > 0) {
         return Math.max(this.rows, this.sampleRows.length)
@@ -108,6 +163,11 @@ export default {
     },
   },
   methods: {
+    changeRowPage(direction) {
+      const target = Math.max(0, Math.min(this.rowPageCount - 1, this.rowPage + direction))
+      if (this.hasGridData) this.gridPage = target
+      else this.displayPage = target
+    },
     getColumnHeader(index) {
       if (this.columnHeaders && this.columnHeaders[index]) {
         return this.columnHeaders[index]
@@ -172,6 +232,16 @@ export default {
 .excel-container {
   overflow-x: auto;
 }
+.excel-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px;
+  font-size: 12px;
+}
+.excel-pagination button:disabled { opacity: .5; cursor: default; }
 
 .real-grid-table {
   border-collapse: collapse;

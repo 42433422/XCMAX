@@ -9,7 +9,7 @@
         </div>
       </div>
       <div class="search-box">
-        <input v-model.trim="searchQuery" type="text" placeholder="搜索客户名/单号..." @input="doSearch">
+        <input v-model.trim="searchQuery" type="text" placeholder="搜索客户名/单号..." @input="scheduleSearch">
       </div>
       <section v-if="tutorialSalesEvidence" class="tutorial-business-proof" data-tutorial-id="tutorial-order-proof">
         <strong>教学销售订单 · 服务端核验</strong>
@@ -22,10 +22,11 @@
           :columns="columns"
           :data="store.orders"
           :loading="store.loading"
-          :show-loading-row="false"
+          :error="store.error || ''"
           :selectable="false"
-          row-key="id"
+          row-key="order_number"
           empty-text="暂无出货记录"
+          @retry="doSearch"
         >
           <template #cell-order_number="{ value }">
             {{ value || '-' }}
@@ -67,7 +68,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onActivated, watch } from 'vue';
+import { computed, ref, onMounted, onActivated, onDeactivated, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
@@ -99,11 +100,11 @@ const showClearConfirm = ref(false);
 const canClearAll = computed(() => !store.loading && !store.error && store.orders.length > 0);
 
 const columns = [
-  { key: 'order_number', label: '单号' },
-  { key: 'customer_name', label: '客户' },
-  { key: 'date', label: '日期' },
-  { key: 'total_amount', label: '金额' },
-  { key: 'status', label: '状态' }
+  { key: 'order_number', label: '单号', sortable: true, minWidth: 145 },
+  { key: 'customer_name', label: '客户', sortable: true, minWidth: 160 },
+  { key: 'date', label: '日期', sortable: true, minWidth: 110 },
+  { key: 'total_amount', label: '金额', sortable: true, minWidth: 110, align: 'right' },
+  { key: 'status', label: '状态', minWidth: 100 }
 ];
 
 function formatAmount(value) {
@@ -117,17 +118,25 @@ async function loadOrders() {
 }
 
 async function doSearch() {
-  if (!searchQuery.value) {
-    await loadOrders();
-    return;
-  }
-  await store.searchOrders(searchQuery.value);
+  if (!searchQuery.value) return loadOrders();
+  return store.searchOrders(searchQuery.value);
+}
+
+let searchTimer = null;
+function cancelSearch() {
+  if (searchTimer !== null) clearTimeout(searchTimer);
+  searchTimer = null;
+}
+function scheduleSearch() {
+  cancelSearch();
+  searchTimer = setTimeout(() => { void doSearch(); }, 280);
 }
 
 async function handleDelete(orderNumber) {
   if (!orderNumber) return;
   if (!(await appConfirm(`确定要删除订单 ${orderNumber} 吗？`, { danger: true }))) return;
-  await store.deleteOrder(orderNumber);
+  const result = await store.deleteOrder(orderNumber);
+  if (result.success) await doSearch();
 }
 
 async function handleClearAll() {
@@ -137,10 +146,17 @@ async function handleClearAll() {
 
 async function confirmClearAll() {
   if (!canClearAll.value) return;
-  await store.clearAllOrders();
+  const result = await store.clearAllOrders();
+  if (result.success) await loadOrders();
 }
 
-onActivated(doSearch);
+let firstActivation = true;
+onActivated(() => {
+  if (firstActivation) { firstActivation = false; return; }
+  void doSearch();
+});
+onDeactivated(cancelSearch);
+onBeforeUnmount(cancelSearch);
 
 watch(routeKeyword, (keyword) => {
   searchQuery.value = String(keyword || '').trim();

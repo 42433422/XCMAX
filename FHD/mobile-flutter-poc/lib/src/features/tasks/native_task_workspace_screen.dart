@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -29,6 +30,14 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     with WidgetsBindingObserver {
   late final NativeWorkspaceSession _session;
   Timer? _timer;
+  bool _foreground = true;
+  int _lifecycleEpoch = 0;
+
+  bool _isCurrent(int epoch) => mounted &&
+      _session.active &&
+      _foreground &&
+      epoch == _lifecycleEpoch;
+  int _readFailures = 0;
   Map<String, Object?>? _task;
   String? _error, _message, _answeredContext;
   bool _loading = false, _busy = false, _stale = true, _reading = false;
@@ -43,27 +52,44 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         activeModId: widget.activeModId)
       ..addListener(_invalidate);
     unawaited(_load());
-    _startPolling();
   }
 
   void _startPolling() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!_busy && !_loading && _session.active) unawaited(_load());
+    if (!mounted || !_foreground || !_session.active) return;
+    const delays = [5, 10, 20, 40, 60];
+    final seconds = _readFailures == 0 ? 15 : delays[_readFailures - 1];
+    _timer = Timer(Duration(seconds: seconds), () {
+      if (!mounted || !_foreground || !_session.active) return;
+      if (!_busy && !_loading && ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_load());
+      } else {
+        _startPolling();
+      }
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    _lifecycleEpoch++;
+    _timer?.cancel();
+    if (!_foreground) {
+      if (mounted) setState(() { _stale = true; });
+      return;
+    }
+    if (!_busy && !_loading) {
       unawaited(_load());
-      _startPolling();
     } else {
-      _timer?.cancel();
+      _startPolling();
     }
   }
 
   void _invalidate() {
+    _lifecycleEpoch++;
+    _timer?.cancel();
     if (mounted) {
       setState(() {
         _task = null;
@@ -82,7 +108,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   }
 
   Future<Map<String, Object?>?> _load() async {
-    if (_loading || !_session.active) return null;
+    if (!mounted || _loading || !_session.active || !_foreground) return null;
+    _timer?.cancel();
+    final epoch = _lifecycleEpoch;
     setState(() {
       _loading = true;
     });
@@ -90,16 +118,19 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final result = await _session.request(_path);
       final task = _map(result['data']);
       if (task['task_id'] != widget.taskId) throw StateError('任务不存在或无权查看');
-      if (!mounted || !_session.active) return null;
+      // A response from before suspension cannot re-enable write controls.
+      if (!_isCurrent(epoch)) return null;
+      _readFailures = 0;
       setState(() {
         _task = task;
-        _stale = false;
+        _stale = !_foreground;
         _error = null;
       });
       if (task['attention_state'] == 'result_unread' && !_reading) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted &&
-              _session.active &&
+          if (_isCurrent(epoch) &&
+              identical(_task, task) &&
+              !_stale &&
               ModalRoute.of(context)?.isCurrent == true) {
             unawaited(_markRead());
           }
@@ -107,9 +138,21 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       }
       return task;
     } catch (error) {
+      if (!_isCurrent(epoch)) return null;
+      if (_readFailures < 5) _readFailures++;
       if (mounted && _session.active) {
+        // Only transport failures retain a read-only snapshot. Revoked access,
+        // missing tasks and unknown server responses must not expose old data.
+        final transient = error is SocketException ||
+            error is TimeoutException ||
+            error is HttpException ||
+            (error is MobileApiException &&
+                (error.statusCode == 429 || error.statusCode >= 500));
         setState(() {
-          _error = mobileErrorText(error);
+          if (!transient) _task = null;
+          _error = transient && _task != null
+              ? '连接中断，显示上次同步结果。恢复连接后自动核对。'
+              : mobileErrorText(error);
           _stale = true;
         });
       }
@@ -119,24 +162,35 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         setState(() {
           _loading = false;
         });
+        // A resume may have occurred while the discarded read was in flight.
+        // Reconcile immediately rather than waiting for the next poll interval.
+        if (_foreground && _session.active && epoch != _lifecycleEpoch) {
+          unawaited(_load());
+        } else {
+          _startPolling();
+        }
       }
     }
   }
 
   Future<void> _markRead() async {
-    if (_reading || _task?['attention_state'] != 'result_unread') return;
+    if (_reading || _stale || !_foreground || !_session.active ||
+        _task?['attention_state'] != 'result_unread') {
+      return;
+    }
     _reading = true;
+    final epoch = _lifecycleEpoch;
     final displayed = _task;
     try {
       await _session.request('$_path/read', method: 'POST', body: {});
-      if (mounted && _session.active && identical(_task, displayed)) {
+      if (_isCurrent(epoch) && identical(_task, displayed)) {
         setState(() {
           _task = {...?_task, 'attention_state': ''};
           if (_message?.startsWith('已读状态未同步') == true) _message = null;
         });
       }
     } catch (error) {
-      if (mounted && _session.active) {
+      if (_isCurrent(epoch)) {
         setState(() {
           _message = '已读状态未同步，请刷新重试：${mobileErrorText(error)}';
         });
@@ -156,10 +210,11 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       ]);
 
   Future<void> _clarify() async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     setState(() {
       _busy = true;
     });
+    final epoch = _lifecycleEpoch;
     final answers = <String, String>{};
     try {
       final task = await _load();
@@ -188,7 +243,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
       final signature = _clarificationContext(task),
           form = GlobalKey<FormState>();
       if (_answeredContext == signature) throw StateError('已提交此问题，请等待任务状态更新');
-      if (!mounted || !_session.active) return;
+      if (!mounted || !_isCurrent(epoch)) return;
       final parameters = await showDialog<Map<String, Object?>>(
           context: context,
           builder: (context) => AlertDialog(
@@ -244,9 +299,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                       child: const Text('补充信息并继续')),
                 ],
               ));
-      if (parameters == null || !mounted || !_session.active) return;
+      if (parameters == null || !_isCurrent(epoch)) return;
       final current = await _load();
-      if (current == null ||
+      if (!_isCurrent(epoch) || current == null ||
           _clarificationContext(current) != signature ||
           _map(current['capabilities'])['approve'] != true) {
         throw StateError('待回答问题已变化，请重新打开填写');
@@ -275,11 +330,12 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   }
 
   Future<void> _action(String action) async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     setState(() {
       _busy = true;
       _message = null;
     });
+    final epoch = _lifecycleEpoch;
     try {
       final task = await _load();
       if (task == null || _map(task['capabilities'])[action] != true) {
@@ -315,7 +371,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         }
         step = matches.single;
       }
-      if (!mounted || !_session.active) return;
+      if (!mounted || !_isCurrent(epoch)) return;
       if (['cancel', 'retry', 'approve'].contains(action)) {
         final yes = await showDialog<bool>(
           context: context,
@@ -350,16 +406,18 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
             ],
           ),
         );
-        if (yes != true || !mounted || !_session.active) return;
+        if (yes != true || !_isCurrent(epoch)) return;
         final current = await _load();
         final currentRun =
             '${current?['active_run_id'] ?? _map(current?['active_run'])['run_id'] ?? ''}';
-        if (current == null ||
+        if (!_isCurrent(epoch) || current == null ||
             currentRun != runId ||
             _map(current['capabilities'])[action] != true) {
           throw StateError('任务状态已变化，请重新核对并确认');
         }
       }
+      // Do not carry a confirmation across a background/foreground boundary.
+      if (!_isCurrent(epoch)) return;
       if (action == 'approve') {
         // The server binds this exact pre-confirmation grant to run, step and
         // parameters. Never replace a rejected grant using an earlier click.
@@ -401,17 +459,18 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
 
   Future<void> _download(
       Map<String, Object?> run, Map<String, Object?> file) async {
-    if (_busy || _stale || !_session.active) return;
+    if (_busy || _loading || _stale || !_foreground || !_session.active) return;
     final runId = '${run['run_id'] ?? ''}', id = '${file['artifact_id'] ?? ''}';
     if (runId.isEmpty || id.isEmpty) return;
     setState(() {
       _busy = true;
     });
+    final epoch = _lifecycleEpoch;
     try {
       final bytes = await _session.download(
           '$_base/runs/${Uri.encodeComponent(runId)}/artifacts/${Uri.encodeComponent(id)}');
       await shareWorkspaceFile('${file['name'] ?? '任务结果'}', bytes,
-          isCurrent: () => mounted && _session.active);
+          isCurrent: () => _isCurrent(epoch));
     } catch (error) {
       if (mounted && _session.active) {
         setState(() {
@@ -469,6 +528,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 12),
                           Text('状态：${_status(task['status'])}'),
+                          if (_stale)
+                            const Text('状态待同步，暂不可执行任务操作'),
                           if (percent != null)
                             Padding(
                                 padding:
@@ -544,7 +605,9 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                   ? IconButton(
                       tooltip: '保存或分享文件',
                       onPressed:
-                          _busy || _stale ? null : () => _download(run, file),
+                          _busy || _loading || _stale
+                              ? null
+                              : () => _download(run, file),
                       icon: const Icon(Icons.download_outlined))
                   : null),
         if (_maps(run['events']).isNotEmpty)

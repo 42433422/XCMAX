@@ -68,7 +68,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
             next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
       );
-    }, authGeneration: generation);
+    }, authGeneration: generation, invalidateConnectionScope: false);
     if (generation == _authGeneration) await registerDeviceTokenIfNeeded();
     return generation == _authGeneration ? generation : null;
   }
@@ -138,7 +138,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
     );
   }
 
-  Future<void> persistPairingSession(
+  Future<int?> persistPairingSession(
     Map<String, Object?>? data, {
     String hostWithPort = '',
     bool clearRelayDesktop = false,
@@ -156,6 +156,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
           _hostPortFromPairingData(payload),
         );
     var shouldRegisterDevice = false;
+    int? committedGeneration;
     await _updateSession((stored) {
       final current = !preserveActiveAuth && access.isNotEmpty
           ? _withoutActiveAuth(stored).copyWith(
@@ -233,10 +234,14 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
       }
       shouldRegisterDevice = next.hasAuth;
       return next;
-    }, authGeneration: generation);
-    if (generation == _authGeneration && shouldRegisterDevice) {
+    },
+        authGeneration: generation,
+        invalidateConnectionScope: preserveActiveAuth || access.isEmpty,
+        onCommitted: (value) => committedGeneration = value);
+    if (committedGeneration == _authGeneration && shouldRegisterDevice) {
       await registerDeviceTokenIfNeeded();
     }
+    return committedGeneration == _authGeneration ? committedGeneration : null;
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> registerDevice(

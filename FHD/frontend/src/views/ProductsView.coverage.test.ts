@@ -254,6 +254,21 @@ describe('ProductsView.coverage', () => {
     })
   })
 
+  it('debounces ordinary product keyword search instead of issuing a request per character', async () => {
+    const wrapper = await mountProducts()
+    mockFetchProducts.mockClear()
+    const input = wrapper.find('.search-box input[type="text"]')
+    await input.setValue('A')
+    await input.setValue('AB')
+    await input.setValue('ABC')
+    expect(mockFetchProducts).not.toHaveBeenCalled()
+    await new Promise((resolve) => setTimeout(resolve, 330))
+    await flushPromises()
+    expect(mockFetchProducts).toHaveBeenCalledTimes(1)
+    expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, keyword: 'ABC', per_page: 100 }), { append: false })
+    wrapper.unmount()
+  })
+
   // ===== loadProducts 产品加载 =====
   describe('loadProducts 加载产品列表', () => {
     it('reset=true 时重置分页并替换列表', async () => {
@@ -266,21 +281,20 @@ describe('ProductsView.coverage', () => {
       const state = getSetupState(wrapper)
       await state.loadProducts(true)
       await flushPromises()
-      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 1000 }), { append: false })
+      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 100 }), { append: false })
     })
 
     it('reset=false 时追加列表（loadMore 场景）', async () => {
-      mockFetchProducts.mockResolvedValue({
-        success: true,
-        data: [{ id: 2, name: 'P2' }],
-        total: 1,
-      })
+      const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `P${index + 1}` }))
+      const lastProduct = { id: 101, name: 'P101' }
+      mockFetchProducts
+        .mockResolvedValueOnce({ success: true, data: firstPage, total: 101 })
+        .mockResolvedValueOnce({ success: true, data: [lastProduct], total: 101 })
       const wrapper = await mountProducts()
       const state = getSetupState(wrapper)
-      setSetupValue(wrapper, 'products', [{ id: 1, name: 'P1' }])
       await state.loadProducts(false)
-      await flushPromises()
-      expect(getSetupRefValue(wrapper, 'products')).toHaveLength(2)
+      expect(mockFetchProducts).toHaveBeenLastCalledWith({ page: 2, per_page: 100 }, { append: true })
+      expect(getSetupRefValue(wrapper, 'products')).toEqual([...firstPage, lastProduct])
     })
 
     it('带搜索关键字和单位时传递参数', async () => {

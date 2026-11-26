@@ -1,8 +1,13 @@
 import type { ModCatalogItemUi } from '@/types/modCatalog'
 import { resolveTenantStorageScopeFromRuntime } from '@/utils/tenantStorageScope'
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 const STORAGE_PREFIX = 'xcagi_market_catalog_v1:'
 const DEFAULT_TTL_MS = 30 * 60 * 1000
+export const MARKET_CACHE_MAX_ENTRIES = 24
+// Limit both memory and persisted serialized payloads without silently
+// truncating a business result. Oversized results are fetched again.
+const MAX_ENTRY_CHARS = 256 * 1024
 
 export interface MarketCatalogCacheEntry {
   items: ModCatalogItemUi[]
@@ -12,8 +17,50 @@ export interface MarketCatalogCacheEntry {
 
 const memory = new Map<string, MarketCatalogCacheEntry>()
 
+function remember(key: string, entry: MarketCatalogCacheEntry): void {
+  memory.delete(key)
+  memory.set(key, entry)
+  while (memory.size > MARKET_CACHE_MAX_ENTRIES) {
+    const oldest = memory.keys().next().value
+    if (oldest === undefined) break
+    memory.delete(oldest)
+  }
+}
+
+function pruneStorage(currentKey: string): void {
+  const entries: { key: string; fetchedAt: number }[] = []
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i)
+    if (!key?.startsWith(STORAGE_PREFIX) || key === currentKey) continue
+    try {
+      const raw = sessionStorage.getItem(key) || ''
+      const parsed = raw.length <= MAX_ENTRY_CHARS ? JSON.parse(raw) : null
+      entries.push({ key, fetchedAt: Number(parsed?.fetchedAt) || 0 })
+    } catch {
+      entries.push({ key, fetchedAt: 0 })
+    }
+  }
+  entries.sort((a, b) => b.fetchedAt - a.fetchedAt)
+  for (const entry of entries.slice(MARKET_CACHE_MAX_ENTRIES - 1)) sessionStorage.removeItem(entry.key)
+}
+
 function storageKey(key: string): string {
-  return `${STORAGE_PREFIX}${resolveTenantStorageScopeFromRuntime()}:${key}`
+  const account = getRuntimeTenantStorageScopeInput()
+  // A tenant can contain multiple accounts. Keep their catalog projections separate,
+  // and bypass the short-lived scope memo when accessing account-specific data.
+  const scope = resolveTenantStorageScopeFromRuntime(true)
+  const principal = [account?.marketUserId ?? null, account?.localUserId ?? null,
+    account?.marketUsername ?? '', account?.accountKind ?? '']
+  return `${STORAGE_PREFIX}v3:${encodeURIComponent(JSON.stringify([scope, principal, key]))}`
+}
+
+function validTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Date.now()
+}
+
+// Cache entries are snapshots, not writable view state.
+function copyEntry(entry: MarketCatalogCacheEntry): MarketCatalogCacheEntry {
+  return JSON.parse(JSON.stringify(entry)) as MarketCatalogCacheEntry
 }
 
 export function buildMarketCatalogCacheKey(tab: string, q = ''): string {
@@ -23,31 +70,44 @@ export function buildMarketCatalogCacheKey(tab: string, q = ''): string {
 
 export function readMarketCatalogCache(key: string, ttlMs = DEFAULT_TTL_MS): MarketCatalogCacheEntry | null {
   const scopedKey = storageKey(key)
-  const mem = memory.get(scopedKey)
+  let mem = memory.get(scopedKey)
+  if (mem && !validTimestamp(mem.fetchedAt)) {
+    memory.delete(scopedKey)
+    mem = undefined
+  }
   if (mem && Date.now() - mem.fetchedAt <= ttlMs) {
-    return mem
+    remember(scopedKey, mem)
+    return copyEntry(mem)
   }
 
+  // Preserve explicit stale-while-revalidate behavior for nonempty public catalog
+  // snapshots, but never present an invalid clock or corrupted entry as fresh.
+  const stale = () => mem?.items.length ? copyEntry(mem) : null
   try {
     const raw = sessionStorage.getItem(scopedKey)
-    if (!raw) return mem && mem.items.length ? mem : null
+    if (!raw) return stale()
+    if (raw.length > MAX_ENTRY_CHARS) {
+      sessionStorage.removeItem(scopedKey)
+      return stale()
+    }
     const parsed = JSON.parse(raw) as MarketCatalogCacheEntry
-    if (!parsed || !Array.isArray(parsed.items) || typeof parsed.fetchedAt !== 'number') {
-      return mem && mem.items.length ? mem : null
+    if (!parsed || !Array.isArray(parsed.items) || !validTimestamp(parsed.fetchedAt)) {
+      sessionStorage.removeItem(scopedKey)
+      return stale()
     }
     parsed.tab = key.split(':')[1] || ''
-    memory.set(scopedKey, parsed)
-    if (Date.now() - parsed.fetchedAt > ttlMs) {
-      return parsed.items.length ? parsed : null
-    }
-    return parsed
+    // An older persisted snapshot cannot overwrite a newer in-memory one.
+    const entry = mem && mem.fetchedAt >= parsed.fetchedAt ? mem : parsed
+    remember(scopedKey, entry)
+    if (Date.now() - entry.fetchedAt > ttlMs && !entry.items.length) return null
+    return copyEntry(entry)
   } catch {
-    return mem && mem.items.length ? mem : null
+    return stale()
   }
 }
 
 export function isMarketCatalogCacheFresh(entry: MarketCatalogCacheEntry | null, ttlMs = DEFAULT_TTL_MS): boolean {
-  if (!entry?.items?.length) return false
+  if (!entry?.items?.length || !validTimestamp(entry.fetchedAt)) return false
   return Date.now() - entry.fetchedAt <= ttlMs
 }
 
@@ -69,16 +129,36 @@ function persistableItems(items: ModCatalogItemUi[]): ModCatalogItemUi[] {
 export function writeMarketCatalogCache(key: string, tab: string, items: ModCatalogItemUi[]): void {
   const scopedKey = storageKey(key)
   const entry: MarketCatalogCacheEntry = {
-    items,
+    items: items.map(item => {
+      const snapshot = { ...item }
+      delete snapshot.installationInProgress
+      delete snapshot.uninstallationInProgress
+      delete snapshot.updateInProgress
+      return snapshot
+    }),
     fetchedAt: Date.now(),
     tab,
   }
-  memory.set(scopedKey, entry)
+  // Bound the full in-memory entry as well as the public storage projection.
+  let serialized: string
   try {
-    sessionStorage.setItem(
-      scopedKey,
-      JSON.stringify({ items: persistableItems(items), fetchedAt: entry.fetchedAt }),
-    )
+    if (JSON.stringify(entry).length > MAX_ENTRY_CHARS) {
+      clearMarketCatalogCache(key)
+      return
+    }
+    serialized = JSON.stringify({ items: persistableItems(entry.items), fetchedAt: entry.fetchedAt })
+    if (serialized.length > MAX_ENTRY_CHARS) {
+      clearMarketCatalogCache(key)
+      return
+    }
+  } catch {
+    clearMarketCatalogCache(key)
+    return
+  }
+  remember(scopedKey, copyEntry(entry))
+  try {
+    pruneStorage(scopedKey)
+    sessionStorage.setItem(scopedKey, serialized)
   } catch {
     /* quota or private mode */
   }

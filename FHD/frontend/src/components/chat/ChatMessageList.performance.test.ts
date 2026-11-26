@@ -64,6 +64,27 @@ describe('bounded chat history and derived content', () => {
     expect(sanitize.mock.calls.length).toBeGreaterThan(80)
   })
 
+  it('does not reparse huge Markdown during streaming and formats after the terminal receipt', async () => {
+    const f = fixture()
+    await nextTick()
+    const message = f.messages.value[499]
+    message.streamStatus = 'streaming'
+    const xssPayload = ['<img src=x ', 'on', 'error=bad()>'].join('')
+    message.content = '# 报告\n' + '长消息正文\n'.repeat(3500) + xssPayload
+    const sanitize = vi.spyOn(DOMPurify, 'sanitize')
+    await nextTick()
+    const body = f.wrapper.get('[data-message-index="499"] .message-html')
+    expect(body.classes()).toContain('message-html--streaming-long')
+    expect(body.text()).toContain(xssPayload)
+    expect(body.find('img').exists()).toBe(false)
+    expect(sanitize).not.toHaveBeenCalled()
+    message.streamStatus = undefined
+    await nextTick()
+    expect(f.wrapper.get('[data-message-index="499"] .message-html').classes()).not.toContain('message-html--streaming-long')
+    expect(sanitize).toHaveBeenCalled()
+    expect(f.wrapper.get('[data-message-index="499"] .message-html').find('[onerror]').exists()).toBe(false)
+  })
+
   it('can traverse every old and new message while never mounting more than 80 rows', async () => {
     const f = fixture()
     const visited = new Set(f.indexes())
@@ -81,6 +102,39 @@ describe('bounded chat history and derived content', () => {
     expect(visited.size).toBe(500)
     expect(f.indexes()[79]).toBe(499)
     expect(f.wrapper.get('[data-message-index="499"]').attributes('aria-posinset')).toBe('500')
+  })
+
+  it.each([1000, 10000])('bounds mounted history for %i messages', async (count) => {
+    const f = fixture(count)
+    await nextTick()
+    expect(f.indexes()).toHaveLength(80)
+    expect(f.indexes()[0]).toBe(count - 80)
+    await f.button('更早消息').trigger('click')
+    expect(f.indexes()).toHaveLength(80)
+    expect(f.indexes()[0]).toBe(count - 140)
+  })
+
+  it('retains stable message identities and scroll offset when earlier pages are prepended', async () => {
+    const f = fixture()
+    await nextTick()
+    await f.button('更早消息').trigger('click')
+    const el = f.host.value!
+    Object.defineProperties(el, {
+      scrollHeight: { configurable: true, value: 5000 },
+      clientHeight: { configurable: true, value: 500 },
+    })
+    el.scrollTop = 123
+    el.dispatchEvent(new Event('scroll'))
+    const keys = () => f.wrapper.findAll('[data-message-key]').map(row => row.attributes('data-message-key'))
+    const before = keys()
+    f.messages.value = [
+      ...Array.from({ length: 40 }, (_, i): ChatMessage => ({ role: 'ai', content: `更早 ${i}`, time: '11:00' })),
+      ...f.messages.value,
+    ]
+    await nextTick()
+    expect(keys()).toEqual(before)
+    expect(f.indexes()[0]).toBe(400)
+    expect(el.scrollTop).toBe(123)
   })
 
   it('moves the history pager into the quick-actions header slot when present', async () => {

@@ -1,12 +1,6 @@
 <template>
   <div class="page-view" id="view-workflow-employee-space">
     <div class="page-content">
-      <header class="ews-page-head">
-        <div class="ews-page-head-text">
-          <h2 class="ews-page-title">员工工作空间</h2>
-        </div>
-      </header>
-
       <EmployeeWorkspaceScene />
     </div>
   </div>
@@ -15,22 +9,3 @@
 <script setup lang="ts">
 import EmployeeWorkspaceScene from '@/components/workflow/EmployeeWorkspaceScene.vue'
 </script>
-
-<style scoped>
-.ews-page-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.ews-page-title {
-  margin: 0 0 6px;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-</style>

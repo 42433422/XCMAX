@@ -8,6 +8,7 @@ import {
   buildChatSessionMetaKey,
   buildChatScopedKey,
   extractSessionIdForActiveMod,
+  isChatOwnerUnresolved,
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
@@ -49,6 +50,7 @@ export type PersistedTaskPanelState = {
 export type LinkedExcelSheet = { sheet_name: string; sheet_index: number }
 
 export function readPersistedExcelAnalysisContext(sessionKey: string): Record<string, unknown> | null {
+  if (isChatOwnerUnresolved()) return null
   if (typeof sessionStorage === 'undefined') return null
   try {
     const raw = sessionStorage.getItem(buildChatScopedKey(EXCEL_ANALYSIS_STORAGE_PREFIX, sessionKey))
@@ -61,6 +63,7 @@ export function readPersistedExcelAnalysisContext(sessionKey: string): Record<st
 }
 
 export function persistExcelAnalysisContext(sessionKey: string, ctx: Record<string, unknown> | null) {
+  if (isChatOwnerUnresolved()) return
   if (typeof sessionStorage === 'undefined') return
   try {
     const key = buildChatScopedKey(EXCEL_ANALYSIS_STORAGE_PREFIX, sessionKey)
@@ -290,7 +293,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
 
   function readLocalMessagesBySession(targetSessionId: string): ChatMessage[] {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || typeof localStorage === 'undefined') return []
+    if (isChatOwnerUnresolved() || !sid || typeof localStorage === 'undefined') return []
     try {
       const raw = localStorage.getItem(buildChatMessagesKey(sid, getActiveModId()))
       if (!raw) return []
@@ -314,7 +317,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
 
   function readLocalSessionMeta(targetSessionId: string): Record<string, unknown> | null {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || typeof localStorage === 'undefined') return null
+    if (isChatOwnerUnresolved() || !sid || typeof localStorage === 'undefined') return null
     try {
       const raw = localStorage.getItem(buildChatSessionMetaKey(sid, getActiveModId()))
       if (!raw) return null
@@ -440,7 +443,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
 
   function removeLocalSessionCache(targetSessionId: string): void {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || typeof localStorage === 'undefined') return
+    if (isChatOwnerUnresolved() || !sid || typeof localStorage === 'undefined') return
     const mod = getActiveModId()
     localStorage.removeItem(buildChatMessagesKey(sid, mod))
     localStorage.removeItem(buildChatSessionMetaKey(sid, mod))

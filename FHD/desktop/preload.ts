@@ -36,6 +36,15 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   consumeReleaseNotes: () => ipcRenderer.invoke('xcagi:consume-release-notes'),
   captureScreenshot: () => ipcRenderer.invoke('xcagi:capture-screenshot'),
   openWindow: (url?: string) => ipcRenderer.invoke('xcagi:open-window', { url }),
+  /** Trusted native-menu requests. Renderer still applies the current account and route guards. */
+  onWorkspaceCommand: (callback: (command: 'palette' | 'chat' | 'new-chat' | 'new-task' | 'sessions' | 'tasks') => void) => {
+    const allowed = new Set(['palette', 'chat', 'new-chat', 'new-task', 'sessions', 'tasks'])
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (typeof value === 'string' && allowed.has(value)) callback(value as 'palette' | 'chat' | 'new-chat' | 'new-task' | 'sessions' | 'tasks')
+    }
+    ipcRenderer.on('xcagi:workspace-command', listener)
+    return () => ipcRenderer.removeListener('xcagi:workspace-command', listener)
+  },
   onDeepLink: (callback: (url: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url)
     ipcRenderer.on('xcagi:deep-link', listener)

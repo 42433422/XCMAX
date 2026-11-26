@@ -141,7 +141,7 @@ describe('EmployeeWorkspaceView', () => {
       },
     })
     expect(wrapper.find('#view-workflow-employee-space').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作空间')
+    expect(wrapper.find('.ews-page-title').exists()).toBe(false)
     expect(wrapper.find('.ews-page-sub').exists()).toBe(false)
     expect(wrapper.find('.stub-scene').exists()).toBe(true)
     wrapper.unmount()
@@ -166,7 +166,7 @@ describe('EmployeeWorkspaceView', () => {
     } } })
     expect(wrapper.find('.stub-loop-console').exists()).toBe(false)
     expect(wrapper.find('.stub-scene').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作空间')
+    expect(wrapper.find('.ews-page-title').exists()).toBe(false)
     wrapper.unmount()
   })
 })

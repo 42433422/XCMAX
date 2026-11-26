@@ -4,7 +4,7 @@
     <AgentPermissionDialog v-if="showPermissionDialog" @agree="agentStore.grantConsent()" @dismiss="agentStore.dismissLater()" />
 
     <!-- 主动建议气泡 -->
-    <AgentSuggestionToast :suggestion="currentSuggestion" @dismiss="dismiss" @open-panel="agentStore.openPanel()" />
+    <AgentSuggestionToast :suggestion="isOpen ? null : currentSuggestion" @dismiss="dismiss" @open-panel="agentStore.openPanel()" />
 
     <!-- 悬浮球 -->
     <FloatingAgentBall :is-speaking="isSpeaking" :male-avatar="props.maleAvatar" />
@@ -111,18 +111,24 @@ function onOrchestrationRollback() {
   pointer-events: auto;
 }
 
-/* panel 弹出动画 */
+/* Light, non-spring entrance. Animation timing comes from the design SSOT. */
 .panel-pop-enter-active {
-  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity var(--xc-token-motion-standard-ms) ease-out,
+    transform var(--xc-token-motion-standard-ms) ease-out;
 }
-
 .panel-pop-leave-active {
-  transition: all 0.18s ease;
+  transition: opacity var(--xc-token-motion-feedback-ms) ease-in,
+    transform var(--xc-token-motion-feedback-ms) ease-in;
 }
-
 .panel-pop-enter-from,
 .panel-pop-leave-to {
   opacity: 0;
-  transform: scale(0.92) translateY(8px);
+  transform: translateY(4px) scale(.985);
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-pop-enter-active,
+  .panel-pop-leave-active { transition: none; }
+  .panel-pop-enter-from,
+  .panel-pop-leave-to { transform: none; }
 }
 </style>

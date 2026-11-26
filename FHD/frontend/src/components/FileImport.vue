@@ -58,7 +58,7 @@
             <button class="clear-btn" @click="clearFiles" v-if="!uploading"><i class="fas fa-trash"></i> 清空</button>
           </div>
           <div class="file-items">
-            <div class="file-item" v-for="(file, index) in selectedFiles" :key="index">
+            <div class="file-item" v-for="(file, index) in visibleSelectedFiles" :key="`${file.name}-${filePage * FILE_PAGE_SIZE + index}`">
               <i :class="getFileIcon(file.type)" class="file-icon"></i>
               <div class="file-info">
                 <span class="file-name">{{ file.name }}</span>
@@ -67,6 +67,11 @@
               <span class="file-type-tag">{{ file.fileType }}</span>
             </div>
           </div>
+          <nav v-if="filePageCount > 1" class="file-preview-pagination" aria-label="待上传文件分页">
+            <button type="button" :disabled="filePage === 0" @click="filePage--">上一页</button>
+            <span aria-live="polite">{{ filePage + 1 }} / {{ filePageCount }} · 共 {{ selectedFiles.length }} 个文件</span>
+            <button type="button" :disabled="filePage + 1 >= filePageCount" @click="filePage++">下一页</button>
+          </nav>
         </div>
       </div>
 
@@ -123,6 +128,13 @@ const emit = defineEmits(['update:modelValue', 'uploaded', 'error', 'progress', 
 const fileInputRef = ref(null)
 const isDragOver = ref(false)
 const selectedFiles = ref([])
+const FILE_PAGE_SIZE = 60
+const filePage = ref(0)
+const filePageCount = computed(() => Math.max(1, Math.ceil(selectedFiles.value.length / FILE_PAGE_SIZE)))
+const visibleSelectedFiles = computed(() => selectedFiles.value.slice(
+  filePage.value * FILE_PAGE_SIZE, (filePage.value + 1) * FILE_PAGE_SIZE,
+))
+watch(filePageCount, count => { filePage.value = Math.min(filePage.value, count - 1) })
 
 const { uploading, progress, progressText, status, detectFileType, resetState, uploadFile, uploadMultipleFiles } = useFileImport()
 
@@ -233,6 +245,7 @@ function handleFiles(fileList) {
 
 function clearFiles() {
   selectedFiles.value = []
+  filePage.value = 0
   resetState()
 }
 
@@ -287,6 +300,7 @@ function handleClose() {
   if (!uploading.value) {
     emit('update:modelValue', false)
     selectedFiles.value = []
+    filePage.value = 0
     resetState()
   }
 }
@@ -296,10 +310,16 @@ watch(
   (newVal) => {
     if (!newVal) {
       selectedFiles.value = []
+      filePage.value = 0
       resetState()
     }
   },
 )
 </script>
+
+<style scoped>
+.file-preview-pagination { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px; flex-wrap: wrap; font-size: 12px; }
+.file-preview-pagination button:disabled { opacity: .5; cursor: default; }
+</style>
 
 <style scoped src="./FileImport.css"></style>

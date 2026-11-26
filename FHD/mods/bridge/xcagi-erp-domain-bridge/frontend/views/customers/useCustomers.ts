@@ -1,4 +1,5 @@
-import { computed, ref, onMounted, onActivated, watch } from 'vue'
+import { computed, ref, onMounted, onActivated, onDeactivated, onBeforeUnmount, watch } from 'vue'
+import { createLatestBusinessRead, requireBusinessSuccess } from '@/utils/businessPageLifecycle'
 import { useRecordFocusQuery } from '@/composables/useRecordFocusQuery'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
@@ -77,6 +78,9 @@ export function useCustomers() {
   const selectedPurchaseUnit = ref('');
   const loading = ref(false);
   const loadError = ref('');
+  const saving = ref(false);
+  const reads = createLatestBusinessRead();
+  let queryKey: string | null = null;
   let customersLoaded = false;
   let templatesAttempted = false;
   const CUSTOMER_LOAD_TIMEOUT_MS = 8000;
@@ -104,10 +108,10 @@ export function useCustomers() {
   });
 
   const columns = computed(() => [
-    { key: 'customer_name', label: `${entityName.value}名称` },
-    { key: 'contact_person', label: '联系人' },
-    { key: 'contact_phone', label: '电话' },
-    { key: 'contact_address', label: '地址' }
+    { key: 'customer_name', label: `${entityName.value}名称`, sortable: true, minWidth: 150 },
+    { key: 'contact_person', label: '联系人', sortable: true, minWidth: 120 },
+    { key: 'contact_phone', label: '电话', minWidth: 130 },
+    { key: 'contact_address', label: '地址', minWidth: 180 }
   ]);
 
   function normalizeUnitsPayload(data: UnitsPayload) {
@@ -166,72 +170,78 @@ export function useCustomers() {
     if (/failed to fetch|network|连接|offline|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION/i.test(message)) return '网络连接异常，请重试';
     if (/timeout|超时|AbortError|ERR_TIMED_OUT/i.test(message)) return '加载超时，请重试';
     const status = Number((error as { status?: number } | null)?.status || 0);
+    if (status === 401 || status === 403) return '无权限读取客户数据';
     if (status >= 500) return '客户列表加载失败，请重试';
     return message || '客户列表加载失败，请重试';
   }
 
   const { keyword: routeKeyword, focusId } = useRecordFocusQuery()
-  let pendingKeywordReload = false
-
   const loadCustomers = async ({ reset = true, background = false }: { reset?: boolean; background?: boolean } = {}) => {
-    if (loading.value) {
-      if (reset) pendingKeywordReload = true
-      return
+    if (!reset && (reads.isPending() || !hasMore.value || loadError.value)) return;
+    const pu = String(selectedPurchaseUnit.value || '').trim();
+    const keyword = String(routeKeyword.value || '').trim();
+    const nextKey = JSON.stringify([pu, keyword]);
+    if (reset && queryKey !== nextKey) {
+      queryKey = nextKey;
+      customers.value = [];
+      selectedIds.value = [];
+      totalCustomers.value = 0;
+      hasMore.value = false;
+      page.value = 1;
+      customersLoaded = false;
+      showDeleteConfirm.value = false;
+      showBatchDeleteConfirm.value = false;
+      showEditModal.value = false;
+      itemToDelete.value = null;
     }
+    const read = reads.begin();
     const quiet = background && customersLoaded;
-    if (!quiet) {
-      loading.value = true;
-      loadError.value = '';
-    }
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    loading.value = !quiet;
+    loadError.value = '';
     try {
       const nextPage = reset ? 1 : page.value;
-      const pu = String(selectedPurchaseUnit.value || '').trim();
-      const data: CustomersListResponse = await Promise.race([
-        customersApi.getCustomers({
-          page: nextPage,
-          per_page: perPage,
-          ...(pu ? { purchase_unit: pu } : {}),
-          ...(routeKeyword.value ? { keyword: routeKeyword.value } : {}),
-        }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('加载超时，请重试')), CUSTOMER_LOAD_TIMEOUT_MS);
-        }),
-      ]);
-      if (data.success) {
-        const incoming = data.data ?? data.customers ?? [];
-        const total = Number(data.total ?? incoming.length);
-        totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
-
-        if (reset) {
-          customers.value = incoming;
-        } else {
-          customers.value = mergeCustomers(customers.value, incoming);
-        }
-
-        page.value = nextPage + 1;
-        hasMore.value = customers.value.length < totalCustomers.value;
-        customersLoaded = true;
-        loadError.value = '';
-      } else {
-        loadError.value = data.message || '客户列表加载失败，请重试';
-      }
+      const data: CustomersListResponse = await customersApi.getCustomers({
+        page: nextPage,
+        per_page: perPage,
+        ...(pu ? { purchase_unit: pu } : {}),
+        ...(keyword ? { keyword } : {}),
+      }, { signal: read.signal, timeoutMs: CUSTOMER_LOAD_TIMEOUT_MS, retry: false });
+      if (!read.isCurrent()) return;
+      requireBusinessSuccess(data, '客户列表加载失败，请重试');
+      const incoming = data.data ?? data.customers ?? [];
+      const total = Number(data.total ?? incoming.length);
+      totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
+      customers.value = reset ? incoming : mergeCustomers(customers.value, incoming);
+      page.value = nextPage + 1;
+      hasMore.value = incoming.length > 0 && customers.value.length < totalCustomers.value;
+      customersLoaded = true;
     } catch (e) {
+      if (!read.isCurrent()) return;
       console.error('加载客户失败:', e);
       loadError.value = customerLoadErrorMessage(e);
-    } finally {
-      if (timer) clearTimeout(timer);
-      loading.value = false;
-      if (pendingKeywordReload) {
-        pendingKeywordReload = false
-        void loadCustomers({ reset: true })
+      if ([401, 403].includes(Number((e as { status?: number } | null)?.status))) {
+        customers.value = [];
+        selectedIds.value = [];
+        totalCustomers.value = 0;
+        hasMore.value = false;
+        showEditModal.value = false;
+        showDeleteConfirm.value = false;
+        showBatchDeleteConfirm.value = false;
+        itemToDelete.value = null;
       }
+    } finally {
+      if (read.isCurrent()) loading.value = false;
+      read.finish();
     }
   };
 
-  watch(routeKeyword, () => {
-    void loadCustomers({ reset: true })
-  })
+  watch(routeKeyword, () => { void loadCustomers({ reset: true }) }, { flush: 'sync' });
+  function retireCustomerReads() {
+    reads.cancel();
+    loading.value = false;
+  }
+  onDeactivated(retireCustomerReads);
+  onBeforeUnmount(retireCustomerReads);
 
   const retryLoadCustomers = () => loadCustomers({ reset: true });
 
@@ -260,7 +270,8 @@ export function useCustomers() {
   }
 
   const confirmDelete = async () => {
-    if (!itemToDelete.value?.id) return;
+    if (!itemToDelete.value?.id || saving.value || loading.value || loadError.value) return;
+    saving.value = true;
     try {
       const outcome = await customersApi.deleteCustomer(itemToDelete.value.id, true);
       requireCommittedCustomerWrite(outcome, '客户删除');
@@ -268,7 +279,7 @@ export function useCustomers() {
     } catch (e) {
       console.error('删除客户失败:', e);
       await appAlert('删除失败: ' + ((e as { message?: string })?.message || '未知错误'));
-    }
+    } finally { saving.value = false; }
     itemToDelete.value = null;
   };
 
@@ -277,14 +288,21 @@ export function useCustomers() {
   };
 
   const confirmBatchDelete = async () => {
+    if (saving.value || loading.value || loadError.value || !selectedIds.value.length) return;
+    saving.value = true;
     try {
-      const outcome = await customersApi.batchDeleteCustomers(selectedIds.value);
+      const outcome = await customersApi.batchDeleteCustomers([...selectedIds.value]);
       requireCommittedCustomerWrite(outcome, '批量删除');
       selectedIds.value = [];
-      await loadCustomers({ reset: true });
     } catch (e) {
       console.error('批量删除失败:', e);
-      await appAlert('批量删除失败: ' + (e as { message?: string }).message || '未知错误');
+      await appAlert('批量删除失败或结果未确认: ' + ((e as { message?: string })?.message || '未知错误'));
+    } finally {
+      // Even a partial failure may have changed durable records; reload before enabling actions.
+      await loadCustomers({ reset: true });
+      const remaining = new Set(customers.value.map(row => String(row.id)));
+      selectedIds.value = loadError.value ? [] : selectedIds.value.filter(id => remaining.has(String(id)));
+      saving.value = false;
     }
   };
 
@@ -315,10 +333,12 @@ export function useCustomers() {
   };
 
   const saveAdd = async () => {
+    if (saving.value) return;
     if (!addForm.value.customer_name?.trim()) {
       await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
+    saving.value = true;
     try {
       const outcome = await customersApi.createCustomer({
         customer_name: addForm.value.customer_name,
@@ -332,15 +352,16 @@ export function useCustomers() {
       await loadCustomers({ reset: true });
     } catch (e) {
       await appAlert('创建失败: ' + ((e as { message?: string })?.message || '未知错误'));
-    }
+    } finally { saving.value = false; }
   };
 
   const saveEdit = async () => {
-    if (!editForm.value.id) return;
+    if (!editForm.value.id || saving.value || loading.value || loadError.value) return;
     if (!editForm.value.customer_name?.trim()) {
       await appAlert(`${entityName.value}名称不能为空`);
       return;
     }
+    saving.value = true;
     try {
       const outcome = await customersApi.updateCustomer(editForm.value.id, {
         customer_name: editForm.value.customer_name,
@@ -356,7 +377,7 @@ export function useCustomers() {
     } catch (e) {
       console.error('保存失败:', e);
       await appAlert('保存失败: ' + ((e as { message?: string })?.message || '未知错误'));
-    }
+    } finally { saving.value = false; }
   };
 
   const exportCustomers = async () => {
@@ -456,6 +477,7 @@ export function useCustomers() {
     purchaseUnitOptions,
     selectedPurchaseUnit,
     loading,
+    saving,
     loadError,
     retryLoadCustomers,
     selectedIds,

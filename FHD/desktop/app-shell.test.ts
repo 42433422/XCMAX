@@ -43,8 +43,9 @@ vi.mock('./updater', () => ({ readLocalProductVersion: vi.fn(() => '1.0.0.1'), r
 vi.mock('./desktop-navigation', () => ({ parseDesktopDeepLink: vi.fn(() => null) }))
 
 import { execFile } from 'node:child_process'
-import { clipboard, Menu } from 'electron'
-import { openKellaiDesktop, captureFullScreenScreenshot, createMenu, createTray } from './app-shell'
+import { BrowserWindow, clipboard, Menu } from 'electron'
+import { openKellaiDesktop, captureFullScreenScreenshot, createMenu, createTray, dispatchWorkspaceMenuCommand } from './app-shell'
+import { desktopRuntime } from './runtime-state'
 import { showMainWindow } from './window-manager'
 
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
@@ -61,6 +62,67 @@ it.each(['win32', 'darwin'])('installs the standard quit action with an explicit
     expect(Menu.setApplicationMenu).toHaveBeenCalledWith(trayHarness.menu)
   } finally {
     Object.defineProperty(process, 'platform', { value: original, configurable: true })
+  }
+})
+
+it('routes native workspace commands only to the live main window, including minimized restore', () => {
+  const win = {
+    isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => true),
+    restore: vi.fn(), show: vi.fn(), focus: vi.fn(),
+    webContents: { send: vi.fn() },
+  }
+  const original = desktopRuntime.mainWindow
+  try {
+    desktopRuntime.mainWindow = win as unknown as typeof desktopRuntime.mainWindow
+    createMenu()
+    const [template] = vi.mocked(Menu.buildFromTemplate).mock.calls.at(-1)!
+    const workspaceMenu = template.find((item) => item.label === '工作空间')!
+    expect(workspaceMenu).toBeTruthy()
+    const submenu = workspaceMenu.submenu as Array<{ label: string; click: () => boolean }>
+    expect(submenu.map((item) => item.label)).toContain('打开命令面板')
+    submenu.find((item) => item.label === '打开命令面板')!.click()
+    expect(win.restore).toHaveBeenCalledOnce()
+    expect(win.show).toHaveBeenCalledOnce()
+    expect(win.focus).toHaveBeenCalledOnce()
+    expect(win.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'palette')
+    expect(dispatchWorkspaceMenuCommand('new-chat')).toBe(true)
+    expect(win.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'new-chat')
+    win.isDestroyed.mockReturnValue(true)
+    expect(dispatchWorkspaceMenuCommand('palette')).toBe(false)
+    expect(win.webContents.send).toHaveBeenCalledTimes(2)
+  } finally {
+    desktopRuntime.mainWindow = original
+  }
+})
+
+it('targets the focused auxiliary shell window but never an unowned surface', () => {
+  const main = {
+    isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => false),
+    show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() },
+  }
+  const auxiliary = {
+    isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => false),
+    show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() },
+  }
+  const original = desktopRuntime.mainWindow
+  const originalAuxiliaryWindows = [...desktopRuntime.auxiliaryWindows]
+  try {
+    desktopRuntime.mainWindow = main as unknown as typeof desktopRuntime.mainWindow
+    const aux = auxiliary as unknown as Electron.BrowserWindow
+    desktopRuntime.auxiliaryWindows.add(aux)
+    vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(aux)
+    expect(dispatchWorkspaceMenuCommand('sessions')).toBe(true)
+    expect(auxiliary.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'sessions')
+    expect(main.webContents.send).not.toHaveBeenCalled()
+    desktopRuntime.auxiliaryWindows.delete(aux)
+    expect(dispatchWorkspaceMenuCommand('tasks')).toBe(true)
+    expect(main.webContents.send).toHaveBeenCalledWith('xcagi:workspace-command', 'tasks')
+    expect(auxiliary.webContents.send).toHaveBeenCalledTimes(1)
+  } finally {
+    desktopRuntime.auxiliaryWindows.clear()
+    for (const window of originalAuxiliaryWindows) desktopRuntime.auxiliaryWindows.add(window)
+    desktopRuntime.mainWindow = original
+    vi.mocked(BrowserWindow.getFocusedWindow).mockReturnValue(null)
   }
 })
 

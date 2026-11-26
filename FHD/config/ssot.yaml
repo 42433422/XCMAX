@@ -293,6 +293,7 @@ domains:
       - FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart
       - FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart
       - FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart
+      - FHD/mobile-flutter-poc/lib/src/theme/design_tokens.generated.dart
     mode: lint
     check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
     sync: null

@@ -15,6 +15,7 @@
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
         :data-message-index="idx"
+        :data-message-key="presentation(msg).key"
         role="listitem"
         :aria-posinset="idx + 1"
         :aria-setsize="messages.length"
@@ -29,6 +30,10 @@
             v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)"
             class="message-html"
           >{{ receiptSummary(msg) }}</div>
+          <div
+            v-else-if="shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
+            class="message-html message-html--streaming-long"
+          >{{ streamingPreviewText(msg.content) }}</div>
           <div v-else class="message-html" v-html="messageHtml(msg)"></div>
         </MessageFold>
         <template v-else>
@@ -121,7 +126,11 @@
             </TraceLine>
           </Trace>
           <div
-            v-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
+            v-if="(msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)) && shouldDeferMarkdownWhileStreaming(msg.content, isMessageStreaming(msg))"
+            class="message-html message-html--streaming-long"
+          >{{ streamingPreviewText(msg.content) }}</div>
+          <div
+            v-else-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
             class="message-html"
             v-html="messageHtml(msg)"
           ></div>
@@ -162,7 +171,7 @@
             <i class="fa fa-undo" aria-hidden="true"></i>
           </button>
           <button
-            v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg) && receiptStatus(msg) === 'failed' && originalRequest(idx)"
+            v-if="msg.role === 'ai' && !msg.streamingShell && receiptStatus(msg) === 'failed' && isFailedChatReply(msg) && originalRequest(idx)"
             type="button"
             class="message-recovery-btn"
             data-testid="chat-retry-model"
@@ -214,7 +223,7 @@
         <div v-if="msg.role === 'ai' && !msg.streamingShell && ['unknown', 'blocked'].includes(msg.workflowAction || '')" class="message-recovery" data-testid="chat-unknown-recovery">
           <p class="message-recovery__text">本轮结果未知，请先核对。</p>
         </div>
-        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg) && !hasIncompleteToolReceipt(msg)" class="message-recovery" data-testid="chat-error-recovery">
+        <div v-else-if="msg.role === 'ai' && !isMessageStreaming(msg) && !msg.streamingShell && isFailedChatReply(msg) && !hasIncompleteToolReceipt(msg)" class="message-recovery" data-testid="chat-error-recovery">
           <p class="message-recovery__text">{{ recoveryText(msg) }}</p>
         </div>
         <div v-else-if="msg.role === 'ai' && !msg.streamingShell && canConfirmPreview(msg)" class="message-recovery" data-testid="chat-destructive-preview">
@@ -256,7 +265,7 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
-import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
+import { aiMarkdownSourceFromContent, stripPlannerDisplayMarkers, stripToolInvocationLeaks } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 import ChatTurnTrace from '@/components/chat/ChatTurnTrace.vue'
@@ -271,6 +280,7 @@ import { approvalCardId } from '@/utils/chatApprovalCard'
 import { formatBusinessResultSummary } from '@/utils/businessResultSummary'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
+import { shouldDeferMarkdownWhileStreaming } from '@/utils/chatMarkdownStreaming'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
@@ -533,6 +543,9 @@ function messageHtml(message: ChatMessage): string {
     ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content)) : sanitizeChatBubbleHtml(message.content)
 }
 function messageCanSpeak(message: ChatMessage): boolean {
+  // Speech preparation parses the full Markdown document. Do it after the
+  // terminal receipt, not once per streamed token/frame.
+  if (isMessageStreaming(message)) return false
   return presentation(message).canSpeak ??= props.canSpeakMessage(message)
 }
 function canCollapseMessageOf(message: ChatMessage): boolean {
@@ -551,9 +564,16 @@ watch(
   },
   { flush: 'sync' },
 )
-watch(visibleMessages, (rows) => {
+watch(visibleMessages, (rows, previousRows) => {
   const visible = new Set(rows.map(({ msg }) => msg))
   for (const message of copyLabels.value.keys()) if (!visible.has(message)) copyLabels.value.delete(message)
+  // Message objects are retained by history even when offscreen. WeakMap alone
+  // therefore does not bound the derived HTML or computed trace cache.
+  for (const { msg } of previousRows || []) {
+    if (visible.has(msg)) continue
+    presentations.delete(msg)
+    stepChainCache.delete(msg)
+  }
 })
 function visibleBodyText(root: HTMLElement): string {
   const blocks = new Set(['P', 'DIV', 'LI', 'PRE', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TR'])
@@ -627,8 +647,14 @@ function executionMarker(status: string): string {
 
 function shouldCondenseOrchestrationBody(message: ChatMessage): boolean {
   if (!hasOrchestrationTrace(message)) return false
-  const body = aiMarkdownSourceFromContent(message.content)
+  const body = isMessageStreaming(message)
+    ? streamingPreviewText(message.content)
+    : aiMarkdownSourceFromContent(message.content)
   return /(动态工作流计划|工作编排|工具探测概览|执行编排|节点图|风险判断|需要审批后执行|requires human risk approval)/i.test(body)
+}
+
+function streamingPreviewText(content: string): string {
+  return stripPlannerDisplayMarkers(stripToolInvocationLeaks(content))
 }
 
 function approvalTraceFor(message: ChatMessage): AgentRunTraceData | null {

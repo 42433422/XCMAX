@@ -25,6 +25,70 @@ String _formatBubbleTimeText(String rawText) {
   return '${parsed.month}/${parsed.day} $hour:$minute';
 }
 
+// Long model answers use the existing native text widgets; only fenced code
+// receives a scrollable monospace surface, never an HTML or WebView renderer.
+class _ChatRichBody extends StatelessWidget {
+  const _ChatRichBody({
+    required this.text,
+    required this.style,
+    required this.codeBackground,
+  });
+
+  final String text;
+  final TextStyle style;
+  final Color codeBackground;
+
+  static final RegExp _fencedCode = RegExp(r'```[^\r\n`]*\r?\n([\s\S]*?)```');
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = _fencedCode.allMatches(text).toList();
+    if (matches.isEmpty) return Text(text, style: style);
+
+    final blocks = <Widget>[];
+    var cursor = 0;
+    for (final match in matches) {
+      if (match.start > cursor) {
+        blocks.add(Text(text.substring(cursor, match.start), style: style));
+      }
+      final source = match.group(1) ?? '';
+      blocks.add(
+        Container(
+          constraints: BoxConstraints(
+            maxWidth: min(520.0, MediaQuery.sizeOf(context).width * 0.76),
+          ),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: codeBackground,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SelectableText(
+              source,
+              style: style.copyWith(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ),
+      );
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      blocks.add(Text(text.substring(cursor), style: style));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: blocks,
+    );
+  }
+}
+
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
@@ -136,12 +200,16 @@ class MessageBubble extends StatelessWidget {
                   onReply: onReply,
                   onDelete: onDelete,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
+                    constraints: BoxConstraints(
+                      maxWidth: min(
+                        isUser ? 420.0 : 620.0,
+                        MediaQuery.sizeOf(context).width * (isUser ? 0.84 : 0.92),
+                      ),
+                    ),
                     child: Material(
                       key: ValueKey('chat_bubble_${message.id}'),
                       color: bubbleColor,
-                      elevation: 1,
-                      shadowColor: Colors.black.withValues(alpha: 0.08),
+                      elevation: 0,
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(isUser ? 12 : 4),
                         topRight: Radius.circular(isUser ? 4 : 12),
@@ -199,8 +267,23 @@ class MessageBubble extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                             ],
-                            Text(
-                              visibleBody,
+                            // Parsing fenced blocks on each new frame scales with
+                            // the full reply length. Defer rich formatting for huge
+                            // in-flight replies, then restore it on the final status.
+                            if (message.status == ChatDeliveryStatus.sending &&
+                                message.body.length > 16384)
+                              Text(
+                                visibleBody,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 15,
+                                  height: 1.4,
+                                  letterSpacing: 0,
+                                ),
+                              )
+                            else _ChatRichBody(
+                              text: visibleBody,
+                              codeBackground: colors.surfaceHigh,
                               style: TextStyle(
                                 color: textColor,
                                 fontSize: 15,
@@ -230,30 +313,32 @@ class MessageBubble extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if ([ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(message.status)) ...[
-                          Text(
-                            message.status == ChatDeliveryStatus.pending ? '结果待核对' : '发送失败',
-                            style: TextStyle(
-                              color: colors.danger,
-                              fontSize: 11,
-                              height: 1.27,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0,
+                          Semantics(
+                            liveRegion: true,
+                            excludeSemantics: true,
+                            label: '原任务回执未核实，请先核对真实状态，不要重复提交',
+                            child: Text(
+                              message.status == ChatDeliveryStatus.pending ? '结果待核对' : '结果未确认',
+                              style: TextStyle(
+                                color: colors.danger,
+                                fontSize: 12,
+                                height: 1.27,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0,
+                              ),
                             ),
                           ),
                           if (onResend != null) ...[
                             const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: onResend,
-                              child: Text(
-                                '核对结果',
-                                style: TextStyle(
-                                  color: colors.brand,
-                                  fontSize: 11,
-                                  height: 1.27,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                ),
+                            TextButton(
+                              onPressed: onResend,
+                              style: TextButton.styleFrom(
+                                foregroundColor: colors.brand,
+                                minimumSize: const Size(48, 44),
+                                tapTargetSize: MaterialTapTargetSize.padded,
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
                               ),
+                              child: const Text('核对结果'),
                             ),
                           ],
                         ] else

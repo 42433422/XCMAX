@@ -19,6 +19,16 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   StreamSubscription<MobileSessionData>? _attachmentSessionSubscription;
   final _attachments = <MobileChatAttachment>[];
   final _failedAttachments = <XFile>[];
+  // An old upload receipt is not a reusable capability after restart.
+  final _recoveredAttachmentNames = <String>[];
+  Timer? _draftTimer;
+  bool _restoringDraft = false;
+  bool _draftTouched = false;
+  bool _chatInvalidated = false;
+  bool _chatForeground = true;
+  bool _resumingPendingChat = false;
+  int _chatEpoch = 0;
+  int _chatGeneration = 0;
   List<MobileChatAttachment> _lastSentAttachments = const [];
   var _runningGitOp = false;
   String? _selectedGitBranch;
@@ -33,6 +43,82 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   AiEmployeeProfile? _employeeProfile;
   RelayTaskProgress? _activeRelayProgress;
   bool _cancellingRelay = false;
+
+  /// Frame-bounded chat text; the Flyer controller updates only the affected
+  /// bubble, avoiding a full conversation setMessages() on every token.
+  late final ChatStreamFrameBatcher _streamTokenBatcher = ChatStreamFrameBatcher(
+    (messageId, text) {
+      if (!mounted || _chatInvalidated || !_chatForeground ||
+          _stopRequested || _activeAssistantId != messageId) {
+        return;
+      }
+      _appendMessageBody(messageId, text);
+    },
+  );
+
+  void _queueStreamToken(String assistantId, String text) {
+    if (!mounted || _chatInvalidated || !_chatForeground ||
+        _stopRequested || _activeAssistantId != assistantId) {
+      return;
+    }
+    _streamTokenBatcher.append(assistantId, text);
+  }
+
+  bool get _chatScopeCurrent => !_chatInvalidated &&
+      (_repository?.client.authGeneration ?? 0) == _chatGeneration;
+
+  Future<void> _restoreChatDraft() async {
+    final repository = _repository;
+    if (repository == null) return;
+    final generation = _chatGeneration;
+    try {
+      final draft = await repository.loadChatComposerDraft(widget.conversation.id);
+      if (!mounted || _chatInvalidated || _draftTouched ||
+          generation != repository.client.authGeneration) {
+        return;
+      }
+      final text = draft['text'] is String ? draft['text'] as String : '';
+      final rawNames = draft['attachment_names'];
+      final names = rawNames is List
+          ? rawNames.whereType<String>().take(4).toList()
+          : <String>[];
+      _restoringDraft = true;
+      try {
+        if (_controller.text.isEmpty && text.isNotEmpty) {
+          _controller.value = TextEditingValue(
+              text: text, selection: TextSelection.collapsed(offset: text.length));
+        }
+        if (names.isNotEmpty) {
+          setState(() => _recoveredAttachmentNames.addAll(names));
+        }
+      } finally {
+        _restoringDraft = false;
+      }
+    } catch (_) {
+      // A corrupt or inaccessible local draft cannot grant execution rights.
+    }
+  }
+
+  void _scheduleChatDraftSave() {
+    if (_restoringDraft || !_chatScopeCurrent) return;
+    _draftTouched = true;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 300),
+        _persistChatDraftSnapshot);
+  }
+
+  void _persistChatDraftSnapshot() {
+    final repository = _repository;
+    if (repository == null || !_chatScopeCurrent) return;
+    final text = _controller.text;
+    final attachmentNames = <String>{
+      ..._attachments.map((attachment) => attachment.name),
+      ..._failedAttachments.map((file) => file.name),
+      ..._recoveredAttachmentNames,
+    }.take(4).toList(growable: false);
+    unawaited(repository.saveChatComposerDraft(widget.conversation.id, text,
+        attachmentNames: attachmentNames).catchError((_) {}));
+  }
 
   String get _resolvedTitle {
     final employee = _employeeProfile;
@@ -110,9 +196,9 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
 
   void _appendMessageBody(String messageId, String token) {
     final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
+    if (index < 0 || token.isEmpty) return;
     final current = _messages[index];
-    _messages[index] = ChatMessage(
+    final updated = ChatMessage(
       id: current.id,
       conversationId: current.conversationId,
       role: current.role,
@@ -126,6 +212,15 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
       cacheTimestampMs: current.cacheTimestampMs,
       turnId: current.turnId,
     );
+    _messages[index] = updated;
+    // flutter_chat_core supports a single-row controller update. Keep the
+    // full-list fallback only for a message not yet inserted into the controller.
+    for (final previous in _flyerChatController.messages) {
+      if (previous.id != messageId) continue;
+      unawaited(_flyerChatController.updateMessage(
+        previous, _toFlyerMessage(updated)));
+      return;
+    }
     _syncFlyerChat();
   }
 

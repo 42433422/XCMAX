@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAccountProfileStore } from './accountProfile'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
+import { clearSessionPermissions } from '@/utils/toolPermissionCache'
+
+vi.mock('@/utils/toolPermissionCache', () => ({ clearSessionPermissions: vi.fn() }))
 
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -287,4 +290,34 @@ it('keeps a loaded outage unknown until the authoritative retry finishes', async
   finish(false); await refreshing
   expect(store.loaded).toBe(false)
   expect(store.sessionCheckUnavailable).toBe(false)
+})
+
+
+it('does not inherit a previous account permission or owner projection when identities change', async () => {
+  setActivePinia(createPinia())
+  const store = useAccountProfileStore()
+  await store.applyFromMeData({ tenant_id: 10, local_user_id: 1, market_user_id: 1, tenant_is_owner: true, permissions: ['tenant.manage_roles'] })
+  await store.applyFromMeData({ tenant_id: 10, local_user_id: 2, market_user_id: 2 })
+  expect(store.permissions).toEqual([])
+  expect(store.tenantIsOwner).toBe(false)
+  await store.applyFromMeData({ tenant_id: 10, local_user_id: 2, market_user_id: 2, permissions: ['tenant.read'] })
+  await store.applyFromMeData({ tenant_id: 10, local_user_id: 2, market_user_id: 2, permissions: [] })
+  expect(store.permissions).toEqual([])
+})
+
+
+it('retires local grant hints on server permission or owner revocation, not on an unchanged projection', async () => {
+  setActivePinia(createPinia())
+  const store = useAccountProfileStore()
+  const profile = { tenant_id: 9, local_user_id: 1, market_user_id: 1, tenant_is_owner: true, permissions: ['read', 'write'] }
+  await store.applyFromMeData(profile)
+  vi.mocked(clearSessionPermissions).mockClear()
+  await store.applyFromMeData({ ...profile, permissions: ['write', 'read'] })
+  expect(clearSessionPermissions).not.toHaveBeenCalled()
+  await store.applyFromMeData({ ...profile, tenant_is_owner: false, permissions: ['read'] })
+  expect(clearSessionPermissions).toHaveBeenCalledOnce()
+  expect(store.permissions).toEqual(['read'])
+  expect(store.tenantIsOwner).toBe(false)
+  store.clear()
+  expect(clearSessionPermissions).toHaveBeenCalledTimes(2)
 })

@@ -21,6 +21,18 @@ describe('window state', () => {
     expect(readWindowState(file)).toEqual(bounds)
   })
 
+  it('round-trips maximized window state without breaking legacy bounds-only files', () => {
+    const file = path.join(os.tmpdir(), `xcagi-window-max-${Date.now()}-${Math.random()}.json`)
+    files.push(file)
+    const bounds = { x: 52, y: 46, width: 1210, height: 810, maximized: true }
+    writeWindowState(file, bounds)
+    expect(readWindowState(file)).toEqual(bounds)
+    expect(clampWindowBounds(readWindowState(file), { x: 0, y: 0, width: 1500, height: 950 }))
+      .toEqual({ x: 52, y: 46, width: 1210, height: 810 })
+    fs.writeFileSync(file, JSON.stringify({ ...bounds, maximized: 'spoofed' }))
+    expect(readWindowState(file)).toEqual({ x: 52, y: 46, width: 1210, height: 810 })
+  })
+
   it('rejects corrupted and implausibly small state', () => {
     const file = path.join(os.tmpdir(), `xcagi-window-bad-${Date.now()}-${Math.random()}.json`)
     files.push(file)

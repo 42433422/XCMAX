@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_models.dart';
@@ -8,6 +10,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../approval/approval_screens.dart';
+import '../workspace/native_workspace_session.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key, this.repository});
@@ -18,10 +21,16 @@ class TaskListScreen extends StatefulWidget {
   State<TaskListScreen> createState() => _TaskListScreenState();
 }
 
-class _TaskListScreenState extends State<TaskListScreen> {
+class _TaskListScreenState extends State<TaskListScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   late Future<List<MobileTaskSummary>> _tasksFuture;
   late Future<List<MobileDesktopDevice>> _devicesFuture;
+  late final NativeWorkspaceSession _session;
+  Timer? _poll;
+  bool _foreground = true;
+  bool _refreshing = false;
+  int _failures = 0;
 
   @override
   void initState() {
@@ -30,10 +39,79 @@ class _TaskListScreenState extends State<TaskListScreen> {
       context,
       explicit: widget.repository,
     );
-    _tasksFuture = _repository.loadTasks();
-    _devicesFuture = _repository.loadDesktopDevices().catchError(
-          (_) => const <MobileDesktopDevice>[],
-        );
+    WidgetsBinding.instance.addObserver(this);
+    _session = NativeWorkspaceSession(_repository.client)
+      ..addListener(_invalidate);
+    _tasksFuture = _loadScoped(_repository.loadTasks);
+    _devicesFuture = _loadScoped(_repository.loadDesktopDevices)
+        .catchError((_) => const <MobileDesktopDevice>[]);
+    unawaited(_observeRefresh());
+  }
+
+  Future<T> _loadScoped<T>(Future<T> Function() load) async {
+    await _session.ready;
+    if (!_session.active ||
+        _session.generation != _repository.client.authGeneration) {
+      throw StateError('账号或连接已切换，请重新打开任务');
+    }
+    final value = await load();
+    final base = await _repository.client.resolveSessionBaseUrl();
+    if (!_session.active ||
+        _session.generation != _repository.client.authGeneration ||
+        base != _session.base) {
+      throw StateError('账号或连接已切换，请重新打开任务');
+    }
+    return value;
+  }
+
+  void _invalidate() {
+    _poll?.cancel();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _observeRefresh() async {
+    _refreshing = true;
+    try {
+      await Future.wait([_tasksFuture, _devicesFuture]);
+      _failures = 0;
+    } catch (_) {
+      if (_failures < 5) _failures++;
+    } finally {
+      _refreshing = false;
+      _schedulePoll();
+    }
+  }
+
+  void _schedulePoll() {
+    _poll?.cancel();
+    if (!mounted || !_foreground || !_session.active) return;
+    const delays = [5, 10, 20, 40, 60];
+    final seconds = _failures == 0 ? 15 : delays[_failures - 1];
+    _poll = Timer(Duration(seconds: seconds), () {
+      if (!mounted || !_foreground || !_session.active) return;
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_refresh());
+      } else {
+        _schedulePoll();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _poll?.cancel();
+    if (_foreground && ModalRoute.of(context)?.isCurrent == true) {
+      unawaited(_refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _poll?.cancel();
+    _session.dispose();
+    super.dispose();
   }
 
   @override
@@ -49,64 +127,141 @@ class _TaskListScreenState extends State<TaskListScreen> {
               title: '任务',
               onBack: () => Navigator.of(context).maybePop(),
             ),
-            Expanded(
+            if (!_session.active)
+              const Expanded(
+                child: Center(child: Text('账号或连接已切换，请返回后重新打开任务')),
+              )
+            else
+              Expanded(
               child: FutureBuilder<List<MobileTaskSummary>>(
                 future: _tasksFuture,
                 builder: (context, snapshot) {
                   final tasks = snapshot.data ?? const <MobileTaskSummary>[];
-                  if (snapshot.connectionState != ConnectionState.done) {
+                  final refreshing =
+                      snapshot.connectionState != ConnectionState.done;
+                  if (refreshing && tasks.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  final pendingApprovals =
-                      tasks.where((task) => task.approvalRequired).length;
+                  var pendingApprovals = 0;
+                  final taskIndexById = <String, int>{};
+                  for (var i = 0; i < tasks.length; i++) {
+                    final task = tasks[i];
+                    if (task.approvalRequired) pendingApprovals++;
+                    if (task.taskId.isNotEmpty) {
+                      taskIndexById.putIfAbsent(task.taskId, () => i);
+                    }
+                  }
+                  const radius = Radius.circular(XcagiShapeTokens.large);
                   return RefreshIndicator(
                     color: colors.brand,
                     onRefresh: _refresh,
-                    child: ListView(
+                    child: CustomScrollView(
+                      key: const PageStorageKey<String>('mobile-task-list'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: [
+                      slivers: [
+                        if (refreshing)
+                          const SliverToBoxAdapter(
+                            child: LinearProgressIndicator(),
+                          ),
                         if (snapshot.hasError || tasks.isEmpty)
-                          ListTile(
-                            title: Text(
-                              snapshot.hasError
-                                  ? mobileErrorText(snapshot.error)
-                                  : '暂无任务',
+                          SliverToBoxAdapter(
+                            child: ListTile(
+                              title: Text(
+                                snapshot.hasError
+                                    ? mobileErrorText(snapshot.error)
+                                    : '暂无任务',
+                              ),
+                              subtitle: const Text('下拉刷新，或点击重试'),
+                              trailing: const Icon(Icons.refresh),
+                              onTap: _refresh,
                             ),
-                            subtitle: const Text('下拉刷新，或点击重试'),
-                            trailing: const Icon(Icons.refresh),
-                            onTap: _refresh,
                           ),
-                        if (pendingApprovals > 0) ...[
-                          WeCellGroup(
-                            children: [
-                              WeCell(
-                                title: '待审批',
-                                subtitle: '$pendingApprovals 项任务需要你确认',
-                                icon: Icons.fact_check_outlined,
-                                iconColor: colors.brand,
-                                iconBg: colors.brandContainer,
-                                showDivider: false,
-                                onTap: _openApprovals,
+                        if (pendingApprovals > 0)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: WeCellGroup(
+                                children: [
+                                  WeCell(
+                                    title: '待审批',
+                                    subtitle: '$pendingApprovals 项任务需要你确认',
+                                    icon: Icons.fact_check_outlined,
+                                    iconColor: colors.brand,
+                                    iconBg: colors.brandContainer,
+                                    showDivider: false,
+                                    onTap: refreshing ? null : _openApprovals,
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                        ],
-                        WeCellGroup(
-                          children: [
-                            for (var i = 0; i < tasks.length; i += 1)
-                              _TaskCell(
-                                task: tasks[i],
-                                onTap: tasks[i].taskId.isEmpty
-                                    ? null
-                                    : () => _openTask(tasks[i]),
-                                showDivider: i != tasks.length - 1,
+                        if (tasks.isNotEmpty)
+                          SliverPadding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            sliver: DecoratedSliver(
+                              decoration: BoxDecoration(
+                                color: colors.surface,
+                                borderRadius: const BorderRadius.all(radius),
+                                border: Border.all(
+                                  color: colors.divider.withValues(alpha: 0.45),
+                                ),
                               ),
-                          ],
+                              sliver: SliverPadding(
+                                padding: const EdgeInsets.all(1),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      final task = tasks[index];
+                                      final isFirst = index == 0;
+                                      final isLast = index == tasks.length - 1;
+                                      final cell = _TaskCell(
+                                        task: task,
+                                        onTap: refreshing || task.taskId.isEmpty
+                                            ? null
+                                            : () => _openTask(task),
+                                        showDivider: !isLast,
+                                      );
+                                      // Valid unique identities survive reorder.
+                                      // Malformed duplicate or empty IDs cannot
+                                      // provide stable identity; use a local key.
+                                      final key = taskIndexById[task.taskId] == index
+                                          ? ValueKey<String>(task.taskId)
+                                          : ValueKey<int>(index);
+                                      return KeyedSubtree(
+                                        key: key,
+                                        child: isFirst || isLast
+                                            ? ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.vertical(
+                                                  top: isFirst
+                                                      ? radius
+                                                      : Radius.zero,
+                                                  bottom: isLast
+                                                      ? radius
+                                                      : Radius.zero,
+                                                ),
+                                                child: cell,
+                                              )
+                                            : cell,
+                                      );
+                                    },
+                                    childCount: tasks.length,
+                                    addAutomaticKeepAlives: false,
+                                    findChildIndexCallback: (key) =>
+                                        key is ValueKey<String>
+                                            ? taskIndexById[key.value]
+                                            : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 24),
+                            child: _DesktopStatusLine(future: _devicesFuture),
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        _DesktopStatusLine(future: _devicesFuture),
                       ],
                     ),
                   );
@@ -120,22 +275,18 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   Future<void> _refresh() async {
-    final tasksFuture = _repository.loadTasks();
-    final devicesFuture = _repository.loadDesktopDevices().catchError(
-          (_) => const <MobileDesktopDevice>[],
-        );
+    if (!mounted || !_session.active || _refreshing) return;
+    _poll?.cancel();
     setState(() {
-      _tasksFuture = tasksFuture;
-      _devicesFuture = devicesFuture;
+      _tasksFuture = _loadScoped(_repository.loadTasks);
+      _devicesFuture = _loadScoped(_repository.loadDesktopDevices)
+          .catchError((_) => const <MobileDesktopDevice>[]);
     });
-    // FutureBuilder owns the error state, including failed pull-to-refresh.
-    await Future.wait([
-      tasksFuture,
-      devicesFuture,
-    ]).then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    await _observeRefresh();
   }
 
   Future<void> _openTask(MobileTaskSummary task) async {
+    if (!_session.active || _refreshing) return;
     await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => NativeTaskWorkspaceScreen(
             taskId: task.taskId,
@@ -145,6 +296,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   void _openApprovals() {
+    if (!_session.active || _refreshing) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ApprovalListScreen(repository: _repository),

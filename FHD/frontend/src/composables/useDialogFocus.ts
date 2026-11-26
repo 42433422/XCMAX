@@ -43,8 +43,15 @@ export function useDialogFocus(panel: Ref<HTMLElement | null>, visible: () => bo
     const first = items.find(el => el.hasAttribute('data-dialog-initial-focus') || el.hasAttribute('autofocus')) || items[0] || opened
     first?.focus({ preventScroll: true })
   }
+  // Focus can legitimately leave a dialog panel for its teleported select,
+  // popover or context menu. Its owning library handles that portal's Escape.
+  function isFloatingTarget(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false
+    const portal = target.closest('.el-popper, [data-reka-popper-content-wrapper]')
+    return portal !== null && !portal.closest('[inert], [aria-hidden="true"]')
+  }
   function keydown(event: KeyboardEvent) {
-    if (!isTop()) return
+    if (!isTop() || event.defaultPrevented || event.isComposing || isFloatingTarget(event.target)) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -60,7 +67,7 @@ export function useDialogFocus(panel: Ref<HTMLElement | null>, visible: () => bo
     }
   }
   function focusin(event: FocusEvent) {
-    if (isTop() && !opened?.contains(event.target as Node)) focusFirst()
+    if (isTop() && !opened?.contains(event.target as Node) && !isFloatingTarget(event.target)) focusFirst()
   }
   function release() {
     const restore = isTop()

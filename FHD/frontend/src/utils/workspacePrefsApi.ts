@@ -1,5 +1,4 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
-import { workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
 import { resolveTenantStorageScopeFromRuntime, writeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
 const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
@@ -24,6 +23,7 @@ export interface WorkspacePrefsResponse {
 let syncTimer: ReturnType<typeof setTimeout> | null = null
 let pendingPatch: WorkspacePrefs = {}
 let pendingScope: string | null = null
+let writeChain: Promise<void> = Promise.resolve()
 let observedSnapshot: { scope: string; owner: string; revision: number } | null = null
 
 export class WorkspacePrefsConflictError extends Error {
@@ -119,33 +119,16 @@ export function applyWorkspacePrefsToLocalCache(prefs: WorkspacePrefs, scope?: s
         localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, prefs.host_pack_acknowledged ? '1' : '0')
       }
     }
-    if (prefs.workflow_ai_employees && typeof prefs.workflow_ai_employees === 'object') {
-      const key = workflowAiEmployeesStorageKey(scope)
-      const raw = localStorage.getItem(key)
-      let cur: Record<string, boolean> = {}
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as Record<string, unknown>
-          if (parsed && typeof parsed === 'object') {
-            for (const [k, v] of Object.entries(parsed)) {
-              if (typeof v === 'boolean') cur[k] = v
-            }
-          }
-        } catch {
-          cur = {}
-        }
-      }
-      for (const [k, v] of Object.entries(prefs.workflow_ai_employees)) {
-        if (typeof v === 'boolean') cur[k] = v
-      }
-      localStorage.setItem(key, JSON.stringify(cur))
-    }
   } catch {
     /* quota / private mode */
   }
 }
 
-export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent: () => boolean = () => true): Promise<WorkspacePrefs | null> {
+export async function hydrateWorkspacePrefsFromServer(
+  scope?: string,
+  isCurrent: () => boolean = () => true,
+  onOwnedPreferences?: (preferences: WorkspacePrefs) => void,
+): Promise<WorkspacePrefs | null> {
   try {
     const startedScope = scope || resolveTenantStorageScopeFromRuntime(true)
     const resp = await fetchWorkspacePrefs()
@@ -163,11 +146,29 @@ export async function hydrateWorkspacePrefsFromServer(scope?: string, isCurrent:
         observedSnapshot = null
       }
       applyWorkspacePrefsToLocalCache(prefs, scope)
+      if (resp.success === true) onOwnedPreferences?.(prefs)
     }
     return prefs
   } catch {
     return null
   }
+}
+
+/** Drain account-owned legacy writes before explicit reads or mutations. */
+export function flushWorkspacePrefsSync(): Promise<void> {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = null
+  const payload = pendingPatch
+  const scope = pendingScope
+  pendingPatch = {}
+  pendingScope = null
+  if (scope === null || !Object.keys(payload).length) return writeChain.catch(() => {})
+  writeChain = writeChain.catch(() => {}).then(async () => {
+    assertScopeUnchanged(scope)
+    const response = await patchWorkspacePrefs(payload, scope)
+    if (response.success !== true) throw new Error('工作区配置同步失败')
+  })
+  return writeChain
 }
 
 /** Queue only for the originating account scope; unknown outcomes never auto-replay. */
@@ -185,17 +186,7 @@ export function queueWorkspacePrefsSync(partial: WorkspacePrefs, delayMs = 400):
   pendingPatch = { ...pendingPatch, ...partial }
   if (partial.workflow_ai_employees) pendingPatch.workflow_ai_employees = employees
   if (syncTimer) clearTimeout(syncTimer)
-  syncTimer = setTimeout(() => {
-    const payload = { ...pendingPatch }
-    pendingPatch = {}
-    pendingScope = null
-    syncTimer = null
-    if (resolveTenantStorageScopeFromRuntime(true) !== scope) {
-      notifyWorkspaceSyncFailed(new Error('workspace_prefs_account_changed'))
-      return
-    }
-    void patchWorkspacePrefs(payload, scope).catch(notifyWorkspaceSyncFailed)
-  }, delayMs)
+  syncTimer = setTimeout(() => { void flushWorkspacePrefsSync().catch(notifyWorkspaceSyncFailed) }, delayMs)
 }
 
 

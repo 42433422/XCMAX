@@ -105,6 +105,22 @@ describe('MessageBody', () => {
     expect(wrapper.find('.msg-body').exists()).toBe(true)
   })
 
+  it('renders a long active stream as escaped selectable text, then formats Markdown on completion', async () => {
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    const xssPayload = ['<img src=x ', 'on', 'error=bad()>'].join('')
+    const longMarkdown = '# 标题\n' + '一行超长 Markdown\n'.repeat(1500) + xssPayload
+    const wrapper = mountBody({ content: longMarkdown, streaming: true })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.msg-body--streaming-plain').exists()).toBe(true)
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.find('.msg-body').text()).toContain(xssPayload)
+    expect(sanitizeChatBubbleMarkdown).not.toHaveBeenCalled()
+    await wrapper.setProps({ streaming: false })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.msg-body--streaming-plain').exists()).toBe(false)
+    expect(sanitizeChatBubbleMarkdown).toHaveBeenCalledOnce()
+  })
+
   it('handles long content strings', async () => {
     const longContent = 'A'.repeat(10000)
     const wrapper = mountBody({ content: longContent })
@@ -210,5 +226,29 @@ describe('MessageBody', () => {
     const wrapper = mountBody({ content: '$x^2$' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('math')
+  })
+  it('delegates copy without leaking detached feedback timers', async () => {
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue(
+      '<div class="md-code"><div class="md-code__head"><button type="button" class="md-code__copy">复制</button></div><code class="md-code__body">const x = 1</code></div>',
+    )
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountBody({ content: 'code fixture' })
+      await wrapper.get('.md-code__copy').trigger('click')
+      await Promise.resolve()
+      expect(writeText).toHaveBeenCalledWith('const x = 1')
+      expect(wrapper.get('.md-code__copy').text()).toBe('已复制')
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
+      wrapper.unmount()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+      else Reflect.deleteProperty(navigator, 'clipboard')
+    }
   })
 })

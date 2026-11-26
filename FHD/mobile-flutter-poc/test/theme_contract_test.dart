@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
+import 'package:xcagi_flutter_poc/src/theme/design_tokens.generated.dart';
 import 'package:xcagi_flutter_poc/src/theme/message_avatar_layout.dart';
 
 int _argb(String value) => int.parse('FF${value.substring(1)}', radix: 16);
@@ -48,6 +50,128 @@ void main() {
       'large': XcagiShapeTokens.large,
       'extra_large': XcagiShapeTokens.extraLarge,
     });
+  });
+
+  test('typography, motion and dark overrides use the shared contract', () {
+    final body = (tokens['typography'] as Map)['body_medium'] as Map;
+    final mobile = (tokens['platform_overrides'] as Map)['mobile'] as Map;
+    final dark = mobile['colors'] as Map;
+    expect(AppTheme.light().textTheme.bodyMedium!.fontSize, body['size']);
+    expect(AppTheme.light().textTheme.bodyMedium!.height, body['line_height'] / body['size']);
+    expect(AppTheme.dark().scaffoldBackgroundColor.toARGB32(), _argb(dark['dark_page'] as String));
+    expect(XcagiThemeColors.dark.surface.toARGB32(), _argb(dark['dark_surface'] as String));
+    expect(DesignTokens.motionStandardMs, (tokens['motion'] as Map)['standard_ms']);
+    expect(DesignTokens.motionReducedMs, 0);
+    expect(AppTheme.light().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
+    expect(AppTheme.dark().focusColor.a, closeTo(DesignTokens.focusRingAlpha, 0.01));
+  });
+
+  test('Material component geometry is identical in light and dark themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      final style = theme.filledButtonTheme.style!;
+      expect(style.minimumSize!.resolve(<WidgetState>{})!.height,
+          DesignTokens.mobileGeometryButtonMinHeight);
+      final shape = style.shape!.resolve(<WidgetState>{}) as RoundedRectangleBorder;
+      expect(shape.borderRadius,
+          BorderRadius.circular(DesignTokens.mobileGeometryButtonRadius));
+      expect(style.textStyle!.resolve(<WidgetState>{})!.fontSize,
+          DesignTokens.componentsButtonLabelSize);
+      expect(style.textStyle!.resolve(<WidgetState>{})!.fontWeight,
+          DesignTokens.componentsButtonWeight);
+      expect(theme.cardTheme.elevation, DesignTokens.componentsCardElevation);
+      expect((theme.cardTheme.shape! as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(DesignTokens.componentsCardRadius));
+      expect(theme.inputDecorationTheme.contentPadding, const EdgeInsets.symmetric(
+        horizontal: DesignTokens.mobileGeometryInputPaddingX,
+        vertical: DesignTokens.componentsInputPaddingY,
+      ));
+    }
+    expect(AppTheme.light().cardTheme.color, XcagiThemeColors.light.surface);
+    expect(AppTheme.dark().cardTheme.color, XcagiThemeColors.dark.surface);
+  });
+
+  test('Material overlays and slider share tokens in both themes', () {
+    for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+      final surface = theme.colorScheme.surface;
+      final border = theme.brightness == Brightness.light
+          ? AppTheme.divider
+          : DesignTokens.mobileColorsDarkDivider;
+      expect(theme.dialogTheme.backgroundColor, surface);
+      expect(theme.dialogTheme.elevation, DesignTokens.elevationLevel2);
+      expect((theme.dialogTheme.shape! as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(DesignTokens.radiusLarge));
+      expect(theme.bottomSheetTheme.modalBackgroundColor, surface);
+      expect(theme.bottomSheetTheme.showDragHandle, isTrue);
+      expect(theme.bottomSheetTheme.dragHandleColor, border);
+      expect(theme.bottomSheetTheme.modalElevation, DesignTokens.elevationLevel3);
+      expect((theme.bottomSheetTheme.shape! as RoundedRectangleBorder).borderRadius,
+          const BorderRadius.vertical(top: Radius.circular(DesignTokens.radiusLarge)));
+      expect(theme.popupMenuTheme.color, surface);
+      expect(theme.popupMenuTheme.elevation, DesignTokens.elevationLevel2);
+      expect(theme.sliderTheme.trackHeight, DesignTokens.spacingXs);
+      expect(theme.sliderTheme.inactiveTrackColor, border);
+      expect(theme.sliderTheme.activeTrackColor, theme.colorScheme.primary);
+    }
+  });
+
+  testWidgets('system reduced motion disables optional micro-interactions', (tester) async {
+    Duration? duration;
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(disableAnimations: true),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionReducedMs));
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(accessibleNavigation: true),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionReducedMs));
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(),
+      child: Builder(builder: (context) {
+        duration = AppTheme.motionDuration(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(duration, const Duration(milliseconds: DesignTokens.motionStandardMs));
+  });
+
+  testWidgets('Material bottom sheet preserves modal barrier and touch dismissal',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(
+        body: Builder(builder: (context) {
+          return Center(
+            child: FilledButton(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                useSafeArea: true,
+                isScrollControlled: true,
+                builder: (_) => const SafeArea(
+                  child: SizedBox(height: 160, child: Center(child: Text('任务操作'))),
+                ),
+              ),
+              child: const Text('打开操作表单'),
+            ),
+          );
+        }),
+      ),
+    ));
+    await tester.tap(find.text('打开操作表单'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('任务操作'), findsOneWidget);
+    expect(find.byType(ModalBarrier), findsWidgets);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    expect(find.text('任务操作'), findsNothing);
   });
 
   test('message avatar layout keeps stable Flutter geometry', () {

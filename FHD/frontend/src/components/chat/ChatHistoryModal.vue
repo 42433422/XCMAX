@@ -40,7 +40,7 @@
         </div>
         <template v-if="historySessions.length">
           <button
-            v-for="session in historySessions"
+            v-for="session in visibleSessions"
             :key="session.session_id"
             type="button"
             class="task-card history-session-item"
@@ -62,6 +62,11 @@
               <span v-if="session.is_local_only">{{ $t('chat.localOnly') }}</span>
             </div>
           </button>
+          <nav v-if="sessionPageCount > 1" class="history-pagination" aria-label="已加载会话分页">
+            <button type="button" :disabled="sessionPage === 0" @click="sessionPage--">上一页</button>
+            <span aria-live="polite">{{ sessionPage + 1 }} / {{ sessionPageCount }} · {{ historySessions.length }} 条已加载会话</span>
+            <button type="button" :disabled="sessionPage + 1 >= sessionPageCount" @click="sessionPage++">下一页</button>
+          </nav>
           <button v-if="historyHasMore" type="button" class="btn btn-secondary btn-sm" :disabled="historyLoadingMore" @click="$emit('load-more')">{{ historyLoadingMore ? '正在加载…' : '加载更早的会话' }}</button>
           <p v-else-if="!historyError" class="history-empty-tip">已显示全部可用会话</p>
         </template>
@@ -72,13 +77,14 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { computed, ref, watch } from 'vue'
 import { formatHistoryTime } from '@/utils/chatTaskLabels'
 import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
 import { isChatConversationBusy } from '@/composables/useChatSessionActivity'
 
 useI18n()
 
-defineProps<{
+const props = defineProps<{
   show: boolean
   historySessions: HistorySessionItem[]
   historyLoading: boolean
@@ -87,6 +93,15 @@ defineProps<{
   historyError: string
   currentSessionId: string
 }>()
+
+const SESSION_PAGE_SIZE = 60
+const sessionPage = ref(0)
+const sessionPageCount = computed(() => Math.max(1, Math.ceil(props.historySessions.length / SESSION_PAGE_SIZE)))
+const visibleSessions = computed(() =>
+  props.historySessions.slice(sessionPage.value * SESSION_PAGE_SIZE, (sessionPage.value + 1) * SESSION_PAGE_SIZE),
+)
+watch(sessionPageCount, count => { sessionPage.value = Math.min(sessionPage.value, count - 1) })
+watch(() => props.show, show => { if (show) sessionPage.value = 0 })
 
 defineEmits<{
   close: []
@@ -166,6 +181,17 @@ defineEmits<{
   font-size: 12px;
   color: #6b7280;
 }
+
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px;
+  font-size: 12px;
+}
+.history-pagination button:disabled { opacity: .5; cursor: default; }
 
 .history-session-item {
   width: 100%;
