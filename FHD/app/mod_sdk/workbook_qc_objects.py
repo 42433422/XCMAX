@@ -12,6 +12,8 @@ def check_native_table(ws, phase: Dict[str, Any], f: Any, targets: set) -> None:
     from openpyxl.utils.cell import get_column_letter, range_boundaries
 
     left, top, right, bottom = range_boundaries(phase["range"].upper())
+    if left is None or top is None or right is None or bottom is None:
+        raise ValueError("原生表格必须使用有界单元格范围")
     columns = [ws.cell(top, col).value for col in range(left, right + 1)]
     heading, formula = phase["sum_column"], phase["calculated_formula"]
     table = ws.tables.get(phase["name"])
