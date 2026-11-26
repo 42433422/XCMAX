@@ -204,7 +204,7 @@ onBeforeUnmount(() => { ++readSequence })
   line-height: 1.3;
 }
 .err {
-  color: #f87171;
+  color: var(--xc-token-market-dark-wb-status-danger);
   margin-bottom: 12px;
 }
 .loading {
@@ -283,7 +283,7 @@ html[data-workbench-theme='light'] .retry-btn:focus-visible {
   font-weight: 600;
 }
 .order-amount {
-  color: #a5b4fc;
+  color: var(--xc-token-market-dark-wb-accent-primary);
   font-weight: 600;
 }
 .order-footer {
@@ -308,8 +308,8 @@ html[data-workbench-theme='light'] .retry-btn:focus-visible {
   cursor: pointer;
 }
 .btn-refund {
-  border-color: #6366f1;
-  color: #c7d2fe;
+  border-color: var(--xc-token-market-dark-wb-accent-primary);
+  color: var(--xc-token-market-dark-wb-accent-primary);
 }
 .empty {
   color: var(--xc-token-market-dark-wb-text-muted);
@@ -346,7 +346,7 @@ html[data-workbench-theme='light'] .order-list-toolbar__hint {
   color: var(--xc-token-market-light-wb-text-muted);
 }
 html[data-workbench-theme='light'] .err {
-  color: #d32f2f;
+  color: var(--xc-token-market-light-wb-status-danger);
 }
 html[data-workbench-theme='light'] .loading {
   color: var(--xc-token-market-light-wb-text-muted);
@@ -382,7 +382,7 @@ html[data-workbench-theme='light'] .order-status.pending {
   background: var(--xc-token-market-light-warn-dim);
 }
 html[data-workbench-theme='light'] .order-amount {
-  color: #0071e3;
+  color: var(--xc-token-market-light-wb-accent-primary);
 }
 html[data-workbench-theme='light'] .order-time {
   color: var(--xc-token-market-light-wb-text-muted);
@@ -393,8 +393,8 @@ html[data-workbench-theme='light'] .btn-refund {
   color: #1d1d1f;
 }
 html[data-workbench-theme='light'] .btn-refund {
-  border-color: #0071e3;
-  color: #0071e3;
+  border-color: var(--xc-token-market-light-wb-accent-primary);
+  color: var(--xc-token-market-light-wb-accent-primary);
 }
 html[data-workbench-theme='light'] .empty {
   color: var(--xc-token-market-light-wb-text-muted);

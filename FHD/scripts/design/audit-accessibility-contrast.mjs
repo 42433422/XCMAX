@@ -240,7 +240,8 @@ for (const [state, block] of [['default', officeSuccessDefault], ['hover', offic
 const marketOrders = readFileSync(new URL('../成都修茈科技有限公司/MODstore_deploy/market/src/views/OrderListView.vue', root), 'utf8');
 function orderStyle(selector) {
   const marker = '\n' + selector + ' {';
-  const start = marketOrders.indexOf(marker);
+  // Refund has a shared cancel/refund rule followed by its own color override.
+  const start = selector.endsWith('.btn-refund') ? marketOrders.lastIndexOf(marker) : marketOrders.indexOf(marker);
   if (start < 0) throw Error('Missing order-list selector: ' + selector);
   const end = marketOrders.indexOf('}', start);
   if (end < 0) throw Error('Unterminated order-list selector: ' + selector);
@@ -273,6 +274,18 @@ function orderTokenColor(selector, property, backdrop) {
   return resolveColor(value, [], marketGeneratedCss, backdrop);
 }
 const orderLight = "html[data-workbench-theme='light'] ";
+for (const mode of ['dark', 'light']) {
+  const prefix = mode === 'light' ? orderLight : '';
+  for (const [selector, surface] of [
+    ['.err', '.order-list-page'],
+    ['.order-amount', '.order-card'],
+    ['.btn-refund', '.order-card'],
+  ]) {
+    pair('Market order list ' + mode + ' ' + selector,
+      () => orderTokenColor(prefix + selector, 'color'),
+      () => marketDeclaration(orderStyle(prefix + surface), 'background'));
+  }
+}
 pair('Market order list light active filter',
   () => orderTokenColor(orderLight + '.filter-btn.active', 'color'),
   () => orderTokenColor(orderLight + '.filter-btn.active', 'background',
