@@ -537,8 +537,7 @@ def evaluate_review(
     cost = expected.get("expected_accrued_cost_cents")
     if (
         any(
-            number is not None
-            and (type(number) not in (int, float) or not math.isfinite(number))
+            number is not None and (type(number) not in (int, float) or not math.isfinite(number))
             for number in (p, value, cost)
         )
         or (p is not None and not 0 <= p <= 1)
