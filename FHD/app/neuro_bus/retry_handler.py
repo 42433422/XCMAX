@@ -67,6 +67,10 @@ class RetryContext:
         """Number of invocations started after the initial invocation."""
         return max(0, self._started_attempts - 1)
 
+    @property
+    def remaining_attempts(self) -> int:
+        return max(0, self._config.max_retries - self._attempt) + 1
+
     def record_attempt(self) -> None:
         self._started_attempts += 1
         self.retry_exhausted = False
@@ -152,7 +156,7 @@ class RetryHandler:
         context = retry_context or self.new_context(name if isinstance(name, str) else "operation")
         loop = asyncio.get_running_loop()
         async with asyncio.timeout_at(deadline):
-            while True:
+            for _ in range(context.remaining_attempts):
                 if deadline is not None and loop.time() >= deadline:
                     raise TimeoutError("Retry execution budget exhausted")
                 context.record_attempt()
@@ -197,6 +201,7 @@ class RetryHandler:
                             operation_name,
                         )
                     return result
+        raise RuntimeError("Retry context exceeded its attempt budget")
 
     def execute_sync(
         self,
@@ -211,7 +216,7 @@ class RetryHandler:
         """
         context = RetryContext(self._config, operation_name or operation.__name__)
 
-        while True:
+        for _ in range(context.remaining_attempts):
             context.record_attempt()
             try:
                 result = operation(*args, **kwargs)
@@ -237,6 +242,7 @@ class RetryHandler:
                     time.sleep(delay)
                 finally:
                     context.record_backoff(time.monotonic() - started)
+        raise RuntimeError("Retry context exceeded its attempt budget")
 
 
 class NeuroRetryHandler:

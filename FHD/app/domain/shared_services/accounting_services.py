@@ -128,6 +128,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     if not isinstance(lines_data, list) or not lines_data:
         return {"success": False, "message": "缺少 lines 分录行"}
 
+    status = data.get("status") or "posted"
     parsed_lines = []
     debit_total = Decimal("0")
     credit_total = Decimal("0")
@@ -135,7 +136,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
         if not isinstance(item, dict):
             return {"success": False, "message": "分录行格式无效"}
         account_id = item.get("account_id")
-        account_code = item.get("account_code")
+        account_code = str(item.get("account_code") or "").strip() or None
         account = None
         if account_id:
             account = _find_account(db, account_id)
@@ -155,6 +156,8 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
             return {"success": False, "message": "会计金额必须是非负、最多两位小数的有限数"}
         if (debit > 0) == (credit > 0):
             return {"success": False, "message": "分录行必须且只能有一侧借贷金额"}
+        if status == "posted" and not (account_code or account):
+            return {"success": False, "message": "过账分录必须指定会计科目"}
         debit_total += debit
         credit_total += credit
         parsed_lines.append(
@@ -180,7 +183,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     entry = JournalEntry(
         entry_no=entry_no,
         journal_date=data.get("journal_date") or date.today(),
-        status=data.get("status") or "posted",
+        status=status,
         description=data.get("description"),
         reference_type=data.get("reference_type"),
         reference_id=data.get("reference_id"),

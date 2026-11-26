@@ -204,12 +204,8 @@ def test_journal_reverse_once_creates_exact_opposite_entry(tmp_path, monkeypatch
     @contextmanager
     def session():
         with Session(engine) as db:
-            try:
-                yield db
-                db.commit()
-            except BaseException:
-                db.rollback()
-                raise
+            yield db
+            db.commit()
 
     monkeypatch.setattr(accounting_services, "get_db", session)
     first = accounting_services.journal_entry_reverse(original_id)
@@ -465,7 +461,7 @@ def test_purchase_cross_table_reconciliation_checks_batch_and_payable(tmp_path, 
             assert verified["bank_settlement_verified"] is False
             assert verified["inventory_posting_count"] == 1
 
-        with Session(engine) as db:
+        with tenant_scope(3), Session(engine) as db:
             posting = (
                 db.query(InventoryTransaction)
                 .filter(InventoryTransaction.reference_id == receipt_id)

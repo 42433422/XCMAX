@@ -24,6 +24,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
+from http.client import HTTPException
 from pathlib import Path
 
 BASE = "http://127.0.0.1:5199"
@@ -42,6 +43,9 @@ OUT = FHD / "docs" / "evidence" / "audit-benchmark" / "e3-20261124"
 MOD_KEY_DIR = E3 / "keys"
 MOD_PRIVATE_KEY = MOD_KEY_DIR / "e3_mod_ed25519.pem"
 MOD_PUBLIC_KEY = MOD_KEY_DIR / "e3_mod_ed25519.pub.pem"
+# Each domain is an independent measurement boundary. Unexpected failures must
+# leave an UNRATED receipt and must not prevent the remaining domains from running.
+DOMAIN_MEASUREMENT_ERRORS = (Exception,)
 
 
 def now() -> str:
@@ -65,7 +69,7 @@ def git_sha() -> str:
         return subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd="/Users/Shared/XCMAX", capture_output=True, text=True
         ).stdout.strip()
-    except Exception:
+    except (OSError, ValueError, subprocess.SubprocessError):
         return ""
 
 
@@ -150,17 +154,15 @@ class Client:
         except urllib.error.HTTPError as exc:
             status = exc.code
             text = exc.read().decode("utf-8", "replace")
-            try:
+            if exc.headers is not None:
                 self._save_cookies(exc.headers)
-            except Exception:
-                pass
-        except Exception as exc:
+        except (OSError, HTTPException, ValueError) as exc:
             status = 0
             text = f"TRANSPORT_ERROR: {type(exc).__name__}: {exc}"
         elapsed = int((time.time() - t0) * 1000)
         try:
             parsed = json.loads(text) if text else None
-        except Exception:
+        except (json.JSONDecodeError, RecursionError):
             parsed = None
         rec = {
             "step_id": step_id,
@@ -205,7 +207,7 @@ def http_get(path: str, timeout: int = 4) -> tuple[int, str]:
             return r.status, r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", "replace")
-    except Exception as exc:
+    except (OSError, HTTPException, ValueError) as exc:
         return 0, f"{type(exc).__name__}: {exc}"
 
 
@@ -248,7 +250,7 @@ def find_pids() -> list[int]:
             ["lsof", "-ti", "tcp:5199"], capture_output=True, text=True
         ).stdout.split()
         return sorted({int(x) for x in out if x.strip()})
-    except Exception:
+    except (OSError, ValueError, subprocess.SubprocessError):
         return []
 
 
@@ -850,7 +852,7 @@ def run_02(c: Client) -> dict:
         if isinstance(parsed, str):
             try:
                 parsed = json.loads(parsed)
-            except Exception:
+            except (json.JSONDecodeError, RecursionError):
                 return ""
         if isinstance(parsed, dict):
             return str(parsed.get("order_number") or "")
@@ -1216,7 +1218,7 @@ def run_07(c: Client) -> dict:
         ensure_mod_keys()
         pkg = build_test_mod(workdir, mod_id=mod_id, version=run_version)
         build_ok = True
-    except Exception as exc:
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         build_ok = False
         build_err = f"{type(exc).__name__}: {exc}"
     A("07.build", "用真实 build_mod.py --sign 产出签名包", build_ok, build_err)
@@ -1424,7 +1426,7 @@ def main() -> int:
         print(f"== running domain {d}")
         try:
             doc = fn(c)
-        except Exception as exc:
+        except DOMAIN_MEASUREMENT_ERRORS as exc:
             import traceback
 
             traceback.print_exc()

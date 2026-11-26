@@ -122,21 +122,25 @@ class TestGetSupplier:
 
 
 class TestCreateSupplier:
-    def test_creates_supplier_successfully(self, svc):
+    @pytest.fixture
+    def mock_db(self):
         mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        return mock_db
+
+    def test_creates_supplier_successfully(self, svc, mock_db):
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "测试供应商"})
         assert result["success"] is True
 
-    def test_returns_failure_on_db_error(self, svc):
-        mock_db = MagicMock()
+    def test_returns_failure_on_db_error(self, svc, mock_db):
         mock_db.add.side_effect = OSError("db error")
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "测试供应商"})
         assert result["success"] is False
+        mock_db.rollback.assert_called_once()
 
-    def test_uses_default_values(self, svc):
-        mock_db = MagicMock()
+    def test_uses_default_values(self, svc, mock_db):
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             svc.create_supplier({"name": "默认值供应商"})
         call_args = mock_db.add.call_args[0][0]
@@ -152,10 +156,9 @@ class TestCreateSupplier:
         assert result == {"success": False, "message": "供应商名称不能为空"}
         mock_db.add.assert_not_called()
 
-    def test_duplicate_code_is_business_error(self, svc):
+    def test_duplicate_code_is_business_error(self, svc, mock_db):
         from sqlalchemy.exc import IntegrityError
 
-        mock_db = MagicMock()
         mock_db.commit.side_effect = IntegrityError("INSERT", {}, Exception("UNIQUE"))
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_supplier({"code": "S001", "name": "重复"})
@@ -167,7 +170,9 @@ class TestUpdateSupplier:
     def test_updates_existing_supplier(self, svc):
         mock_supplier = _make_mock_model(id=1, name="旧名称")
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
+        filtered = mock_db.query.return_value.filter.return_value
+        filtered.first.return_value = mock_supplier
+        filtered.filter.return_value.first.return_value = None
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_supplier(1, {"name": "新名称"})
         assert result["success"] is True
@@ -182,18 +187,21 @@ class TestUpdateSupplier:
     def test_returns_failure_on_db_error(self, svc):
         mock_supplier = MagicMock()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
+        filtered = mock_db.query.return_value.filter.return_value
+        filtered.first.return_value = mock_supplier
+        filtered.filter.return_value.first.return_value = None
         mock_db.commit.side_effect = OSError("db error")
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.update_supplier(1, {"name": "新名称"})
         assert result["success"] is False
+        mock_db.rollback.assert_called_once()
 
 
 class TestDeleteSupplier:
     def test_soft_deletes_supplier(self, svc):
         mock_supplier = MagicMock()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
+        mock_db.query.return_value.filter.return_value.first.side_effect = [mock_supplier, None]
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.delete_supplier(1)
         assert result["success"] is True
@@ -209,11 +217,12 @@ class TestDeleteSupplier:
     def test_returns_failure_on_db_error(self, svc):
         mock_supplier = MagicMock()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_supplier
+        mock_db.query.return_value.filter.return_value.first.side_effect = [mock_supplier, None]
         mock_db.commit.side_effect = OSError("db error")
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.delete_supplier(1)
         assert result["success"] is False
+        mock_db.rollback.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +474,7 @@ class TestUpdatePurchaseOrder:
 
 class TestApprovePurchaseOrder:
     def test_approves_draft_order(self, svc):
-        mock_item = MagicMock(quantity=10, unit_price=10)
+        mock_item = MagicMock(quantity=10, unit_price=10, amount=100)
         mock_order = _make_mock_model(
             id=1, status="draft", total_amount=100, supplier_id=1, tenant_id=7
         )
@@ -503,11 +512,11 @@ class TestApprovePurchaseOrder:
 
 class TestCancelPurchaseOrder:
     def test_cancels_draft_order(self, svc):
-        mock_item = MagicMock()
-        mock_order = _make_mock_model(id=1, status="draft")
+        mock_item = MagicMock(received_quantity=0, invoiced_quantity=0)
+        mock_order = _make_mock_model(id=1, status="draft", tenant_id=7, paid_amount=0)
         mock_order.items = [mock_item]
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_order
+        mock_db.query.return_value.filter.return_value.first.side_effect = [mock_order, None]
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(1)
         assert result["success"] is True
@@ -522,7 +531,7 @@ class TestCancelPurchaseOrder:
         with patch("app.domain.shared_services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.cancel_purchase_order(1)
         assert result["success"] is False
-        assert "无法取消" in result["message"]
+        assert "不可取消" in result["message"]
 
     def test_rejects_cancelling_already_cancelled_order(self, svc):
         mock_order = MagicMock()
@@ -715,37 +724,19 @@ class TestCreatePurchaseInbound:
 
 
 class TestUpdateOrderReceivedQuantity:
-    def test_marks_item_completed_when_fully_received(self, svc):
+    @pytest.mark.parametrize("quantity,state", [(10, "completed"), (5, "partial")])
+    def test_marks_item_status_from_completed_receipts(self, svc, quantity, state):
         mock_db = MagicMock()
-        mock_order = MagicMock()
-        mock_item = MagicMock()
-        mock_item.id = 1
-        mock_item.quantity = 10
-        mock_item.received_quantity = 0
-        mock_order.items = [mock_item]
-        mock_inbound_item = MagicMock()
-        mock_inbound_item.quantity = 10
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        mock_db.query.return_value.filter.return_value.all.return_value = [mock_inbound_item]
+        mock_item = MagicMock(id=1, quantity=10, received_quantity=0)
+        mock_order = MagicMock(id=1, tenant_id=3, items=[mock_item], status="approved")
+        query = mock_db.query.return_value
+        query.filter.return_value.first.return_value = mock_order
+        joined = query.join.return_value
+        joined.filter.return_value.all.return_value = [MagicMock(quantity=quantity)]
+        joined.join.return_value.filter.return_value.all.return_value = []
         svc._update_order_received_quantity(mock_db, 1)
-        assert mock_item.status == "completed"
-        assert mock_order.status == "completed"
-
-    def test_marks_item_partial_when_partially_received(self, svc):
-        mock_db = MagicMock()
-        mock_order = MagicMock()
-        mock_item = MagicMock()
-        mock_item.id = 1
-        mock_item.quantity = 10
-        mock_item.received_quantity = 0
-        mock_order.items = [mock_item]
-        mock_inbound_item = MagicMock()
-        mock_inbound_item.quantity = 5
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_order
-        mock_db.query.return_value.filter.return_value.all.return_value = [mock_inbound_item]
-        svc._update_order_received_quantity(mock_db, 1)
-        assert mock_item.status == "partial"
-        assert mock_order.status == "partial"
+        assert mock_item.received_quantity == Decimal(quantity)
+        assert mock_item.status == mock_order.status == state
 
     def test_skips_when_order_not_found(self, svc):
         mock_db = MagicMock()
