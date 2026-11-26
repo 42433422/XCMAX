@@ -111,9 +111,9 @@ def test_post_hoc_prediction_is_not_scored_and_frozen_values_are_checked():
     }
 
     simultaneous_proposal, simultaneous_state, _ = _example()
-    simultaneous_proposal["decision_review"]["frozen_at"] = simultaneous_state[
-        "authorization"
-    ]["approved_at"]
+    simultaneous_proposal["decision_review"]["frozen_at"] = simultaneous_state["authorization"][
+        "approved_at"
+    ]
     simultaneous_proposal["proposal_sha256"] = digest(
         review.proposal_content(simultaneous_proposal)
     )
@@ -180,15 +180,13 @@ def test_quality_audit_deduplicates_sources_and_does_not_score_unknowns(database
     assert result["invalid_or_late_count"] == 1
     assert result["mean_brier"] == pytest.approx(0.5625)
     assert result["mean_absolute_accrued_cost_error_cents"] == 5
-    assert result["mean_absolute_metric_error_by_metric"]["slo_availability"] == pytest.approx(
-        0.2
-    )
+    assert result["mean_absolute_metric_error_by_metric"]["slo_availability"] == pytest.approx(0.2)
     assert result["status"] == "unknown_insufficient_real_scored_predictions"
     assert len(result["original_snapshot_refs"]) == 2
     assert review.decision_quality_report(8, as_of=as_of)["reviewed_count"] == 0
-    assert review.decision_quality_report(7, as_of=as_of - timedelta(days=365))[
-        "reviewed_count"
-    ] == 0
+    assert (
+        review.decision_quality_report(7, as_of=as_of - timedelta(days=365))["reviewed_count"] == 0
+    )
 
 
 def test_owner_scoped_quality_route_uses_authenticated_identity(monkeypatch):
@@ -213,7 +211,6 @@ def test_owner_scoped_quality_route_uses_authenticated_identity(monkeypatch):
         assert response.status_code == 200
         assert response.json() == {"owner_user_id": 7}
     assert calls == [7]
-
 
 
 def test_due_time_does_not_score_future_business_measurement():
