@@ -593,6 +593,63 @@
         "evidence/n31.json"
       ],
       "attestation_sha256": "dfd367d5174d9b788e2a215016d9d1fb6448d36017098811019fe45ba4cfc309"
+    },
+    {
+      "n": 32,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 23,
+      "commit_sha": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2",
+      "author": "dot-agent:root",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T20:48:44Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|d33f2f938e3f3bcbd4df49baf74fa5ace88796b2|23",
+      "closed": true,
+      "evidence": "Exact squash-commit occurrence of the public model SHA256 already reviewed in n29; source Git blob unchanged, anonymous immutable upstream digest independently matched, and separate AI review confirms integrity-only use. See evidence/n32.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n32.json"
+      ],
+      "attestation_sha256": "9108c94ba76ab99e3a8b8ab8bc47ea3c55c0aee7c1db175508353ee4489b8c0f"
+    },
+    {
+      "n": 33,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 24,
+      "commit_sha": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2",
+      "author": "dot-agent:root",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T20:48:44Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|d33f2f938e3f3bcbd4df49baf74fa5ace88796b2|24",
+      "closed": true,
+      "evidence": "Exact squash-commit occurrence of the public model SHA256 already reviewed in n30; source Git blob unchanged, anonymous immutable upstream digest independently matched, and separate AI review confirms integrity-only use. See evidence/n33.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n33.json"
+      ],
+      "attestation_sha256": "5f3daa61bf57507d7c2479bad0239fccc0a41c8fc1249c8a5a02749fbadc84f6"
+    },
+    {
+      "n": 34,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 25,
+      "commit_sha": "d33f2f938e3f3bcbd4df49baf74fa5ace88796b2",
+      "author": "dot-agent:root",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T20:48:44Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|d33f2f938e3f3bcbd4df49baf74fa5ace88796b2|25",
+      "closed": true,
+      "evidence": "Exact squash-commit occurrence of the public model SHA256 already reviewed in n31; source Git blob unchanged, anonymous immutable upstream digest independently matched, and separate AI review confirms integrity-only use. See evidence/n34.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n34.json"
+      ],
+      "attestation_sha256": "06362fc3a01c29e4cfb06a83859d6a64da8550e0abd63a8f227d5d6c2c79a21d"
     }
   ]
 }

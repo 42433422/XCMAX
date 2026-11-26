@@ -72,12 +72,6 @@ for (const [width, height] of [[1440, 900], [375, 812]]) {
     await expect(thumb).toHaveAttribute('aria-valuenow', '4')
     await thumb.click({ trial: true })
     await capture(page, 'autonomy-open-' + width)
-    if (process.env.VISUAL_CAPTURE_SIDE === 'baseline') {
-      await thumb.focus()
-      await page.keyboard.press('ArrowRight')
-      await capture(page, 'autonomy-preview-' + width)
-      return
-    }
     const value = popup.locator('.xiaoc-life-control__value')
     await expect(value).toHaveText('L4 · 自治运营')
     await expect(popup.getByRole('button')).toHaveCount(0)
