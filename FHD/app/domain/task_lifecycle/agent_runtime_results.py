@@ -156,7 +156,16 @@ def classify_runtime_result(
         for row in rows
     ]
     states = {receipt_state(row) for row in rows}
-    if "unknown" in states or model_unsettled(metadata):
+    # A successful write claim without host identity/verification may have
+    # committed. Do not promote it to a confirmed effect or allow a replay.
+    unbound_write = any(
+        receipt_state(row) == "completed"
+        and row.get("read_only") is not True
+        and row["receipt"].get("success") is True
+        and not receipt_verified(row)
+        for row in rows
+    )
+    if "unknown" in states or unbound_write or model_unsettled(metadata):
         result.update(
             exit_status="unknown",
             execution_state="unknown",
