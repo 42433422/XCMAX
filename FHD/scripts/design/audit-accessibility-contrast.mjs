@@ -1,6 +1,6 @@
-// Static WCAG 2.2 contrast audit for explicitly paired, opaque source colors.
-// Not a rendered-page audit: gradients, alpha blending and component states
-// require browser/device measurements. Unresolved pairs fail closed.
+// Static WCAG 2.2 contrast audit for explicitly paired source colors.
+// Not a rendered-page audit: only registered pairs, including explicit
+// single-layer alpha backgrounds, are checked. Unresolved pairs fail closed.
 import { readFileSync } from 'node:fs';
 
 const root = new URL('../../', import.meta.url);
@@ -25,9 +25,17 @@ for (const [fragment, expected] of [
     throw Error('Theme contract mismatch: ' + fragment);
 }
 
-function resolveColor(value, seen = [], sheet = generatedCss) {
+function resolveColor(value, seen = [], sheet = generatedCss, backdrop) {
   if (value === 'white') return '#FFFFFF';
   if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+  const rgba = /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d*\.?\d+)\s*\)$/i.exec(value ?? '');
+  if (rgba) {
+    if (!/^#[0-9a-f]{6}$/i.test(backdrop ?? '')) throw Error('Alpha background requires explicit opaque backdrop: ' + value);
+    const channels = rgba.slice(1, 4).map(Number), alpha = Number(rgba[4]);
+    if (channels.some(channel => channel > 255) || alpha > 1) throw Error('Invalid rgba color: ' + value);
+    const base = backdrop.slice(1).match(/../g).map(channel => parseInt(channel, 16));
+    return '#' + channels.map((channel, i) => Math.round(channel * alpha + base[i] * (1 - alpha)).toString(16).padStart(2, '0')).join('');
+  }
   const reference = /^var\(\s*(--[a-z0-9-]+)\s*(?:,\s*(#[0-9a-f]{6}))?\s*\)$/i.exec(value ?? '');
   if (!reference) throw Error('Unsupported color expression: ' + value);
   const key = reference[1];
@@ -36,7 +44,7 @@ function resolveColor(value, seen = [], sheet = generatedCss) {
   const declaration = sheet.split('\n').find(line => line.trim().startsWith(key + ':'));
   if (!declaration) throw Error('Missing generated CSS token: ' + key);
   const raw = declaration.slice(declaration.indexOf(':') + 1).replace(/;\s*$/, '').trim();
-  return resolveColor(raw, [...seen, key], sheet);
+  return resolveColor(raw, [...seen, key], sheet, backdrop);
 }
 
 
@@ -257,5 +265,26 @@ for (const mode of ['dark', 'light']) {
   }
 }
 
-console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
+// The active filter and light status badges have translucent backgrounds.
+// Composite against the component's explicit page/card surface, not white by assumption.
+function orderTokenColor(selector, property, backdrop) {
+  const value = new RegExp('(?:^|;)\\s*' + property + '\\s*:\\s*([^;]+);').exec(orderStyle(selector))?.[1]?.trim();
+  if (!value?.startsWith('var(--xc-token-')) throw Error('Order-list style must use a generated token: ' + selector + ' ' + property);
+  return resolveColor(value, [], marketGeneratedCss, backdrop);
+}
+const orderLight = "html[data-workbench-theme='light'] ";
+pair('Market order list light active filter',
+  () => orderTokenColor(orderLight + '.filter-btn.active', 'color'),
+  () => orderTokenColor(orderLight + '.filter-btn.active', 'background',
+    marketDeclaration(orderStyle(orderLight + '.order-list-page'), 'background')));
+for (const status of ['paid', 'pending']) {
+  pair('Market order list light badge ' + status,
+    () => orderTokenColor(orderLight + '.order-status.' + status, 'color'),
+    () => orderTokenColor(orderLight + '.order-status.' + status, 'background',
+      marketDeclaration(orderStyle(orderLight + '.order-card'), 'background')));
+  pair('Market order list dark badge ' + status,
+    () => orderTokenColor('.order-status.' + status, 'color'),
+    () => marketDeclaration(orderStyle('.order-status'), 'background'));
+}
+console.log(JSON.stringify({ scope: 'static source pairs only (explicit alpha backgrounds included)', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

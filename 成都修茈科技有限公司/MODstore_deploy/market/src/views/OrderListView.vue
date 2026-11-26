@@ -262,10 +262,10 @@ onBeforeUnmount(() => { ++readSequence })
   background: #27272a;
 }
 .order-status.paid {
-  color: #86efac;
+  color: var(--xc-token-market-dark-wb-status-success);
 }
 .order-status.pending {
-  color: #fde047;
+  color: var(--xc-token-market-dark-wb-status-warning);
 }
 .order-body {
   display: flex;
@@ -368,10 +368,12 @@ html[data-workbench-theme='light'] .order-status {
   background: rgba(0, 0, 0, 0.05);
 }
 html[data-workbench-theme='light'] .order-status.paid {
-  color: #248a3d;
+  color: var(--xc-token-colors-neutral-light-n600);
+  background: var(--xc-token-market-light-success-dim);
 }
 html[data-workbench-theme='light'] .order-status.pending {
-  color: #c47f17;
+  color: var(--xc-token-colors-neutral-light-n600);
+  background: var(--xc-token-market-light-warn-dim);
 }
 html[data-workbench-theme='light'] .order-amount {
   color: #0071e3;
