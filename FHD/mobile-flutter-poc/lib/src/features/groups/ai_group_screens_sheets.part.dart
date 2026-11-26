@@ -24,7 +24,7 @@ class _AiGroupActionSheet extends StatelessWidget {
     final colors = AppTheme.colors(context);
     return SafeArea(
       top: false,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,

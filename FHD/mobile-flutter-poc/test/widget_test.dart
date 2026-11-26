@@ -3021,26 +3021,31 @@ void main() {
     expect(find.text('采购审批'), findsOneWidget);
     expect(find.text('张三'), findsOneWidget);
 
+    const detail = ApprovalDetail(
+      id: 7,
+      requestNo: 'AP-7',
+      title: '采购审批',
+      status: 'pending',
+      applicantName: '张三',
+      flowName: '采购流程',
+      currentNodeName: '主管审批',
+      submittedAt: '2026-06-30',
+      description: '采购一批物料',
+    );
+    final detailRepository = _FakeApprovalDetailRepository(detail);
+    addTearDown(detailRepository.dispose);
+    addTearDown(detailRepository.client.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const ApprovalDetailScreen(
+        home: ApprovalDetailScreen(
           id: 7,
-          initialDetail: ApprovalDetail(
-            id: 7,
-            requestNo: 'AP-7',
-            title: '采购审批',
-            status: 'pending',
-            applicantName: '张三',
-            flowName: '采购流程',
-            currentNodeName: '主管审批',
-            submittedAt: '2026-06-30',
-            description: '采购一批物料',
-          ),
+          repository: detailRepository,
+          initialDetail: detail,
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('审批信息'), findsOneWidget);
     expect(find.text('单号'), findsOneWidget);
@@ -6345,7 +6350,23 @@ class _FakeCircleRepository extends MobileRepository {
   }
 }
 
+class _FakeApprovalDetailRepository extends MobileRepository {
+  _FakeApprovalDetailRepository(this._detail);
+
+  final ApprovalDetail _detail;
+
+  @override
+  Future<ApprovalDetail> loadApprovalDetail(int id) async => _detail;
+
+  @override
+  Future<bool> hasUnknownApprovalOutcome(int id) async => false;
+}
+
 class _FakeNotificationRepository extends MobileRepository {
+  @override
+  Future<List<PendingNotification>> loadNotificationInbox() =>
+      loadPendingNotifications();
+
   @override
   Future<List<PendingNotification>> loadPendingNotifications() async {
     return const [
@@ -6361,6 +6382,10 @@ class _FakeNotificationRepository extends MobileRepository {
 }
 
 class _EmptyNotificationRepository extends MobileRepository {
+  @override
+  Future<List<PendingNotification>> loadNotificationInbox() =>
+      loadPendingNotifications();
+
   @override
   Future<List<PendingNotification>> loadPendingNotifications() async {
     return const [];

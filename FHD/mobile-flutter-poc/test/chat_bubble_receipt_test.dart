@@ -20,24 +20,26 @@ Widget _bubble(
     MaterialApp(
       theme: AppTheme.light(),
       home: Scaffold(
-        body: MessageBubble(
-          message: ChatMessage(
-            id: 'pending-turn',
-            conversationId: 'pinned:assistant',
-            role: ChatRole.assistant,
-            body: body,
-            timeText: '',
-            status: status,
+        body: SingleChildScrollView(
+          child: MessageBubble(
+            message: ChatMessage(
+              id: 'pending-turn',
+              conversationId: 'pinned:assistant',
+              role: ChatRole.assistant,
+              body: body,
+              timeText: '',
+              status: status,
+            ),
+            conversation: _conversation,
+            showAvatar: false,
+            userAvatarUrl: '',
+            aiAvatarUrl: null,
+            aiContentDescription: '小C',
+            hasEmployeeProfile: false,
+            onReply: () {},
+            onDelete: () {},
+            onResend: onRead,
           ),
-          conversation: _conversation,
-          showAvatar: false,
-          userAvatarUrl: '',
-          aiAvatarUrl: null,
-          aiContentDescription: '小C',
-          hasEmployeeProfile: false,
-          onReply: () {},
-          onDelete: () {},
-          onResend: onRead,
         ),
       ),
     );

@@ -27,7 +27,7 @@ class _ConversationActionSheet extends StatelessWidget {
     final textTheme = theme.textTheme;
     return SafeArea(
       top: false,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.only(bottom: XcagiSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,

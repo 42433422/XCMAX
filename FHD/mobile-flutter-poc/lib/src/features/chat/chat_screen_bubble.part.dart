@@ -315,6 +315,7 @@ class MessageBubble extends StatelessWidget {
                         if ([ChatDeliveryStatus.failed, ChatDeliveryStatus.pending].contains(message.status)) ...[
                           Semantics(
                             liveRegion: true,
+                            excludeSemantics: true,
                             label: '原任务回执未核实，请先核对真实状态，不要重复提交',
                             child: Text(
                               message.status == ChatDeliveryStatus.pending ? '结果待核对' : '结果未确认',
