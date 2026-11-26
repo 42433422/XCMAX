@@ -1,5 +1,5 @@
 {
-  "lines": 2733249,
+  "lines": 2733516,
   "updated": "2026-11-26",
-  "note": "安全发布门禁：清除 clear-text logging 高危（CLI 仅输出 status/evidence_ref/reason）并将 zod 升至已修复 4.6.6（净 +4 行），属发布必需修复。"
+  "note": "安全发布门禁必需修复：CLI 仅输出 status/evidence_ref/reason 清除 clear-text logging 高危，zod 升至 4.6.6（净 +2 行），不新增业务能力。"
 }
