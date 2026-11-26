@@ -30,6 +30,13 @@ from app.infrastructure.xiaox.binding import (
 def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
     """Display child receipts while retaining their original verification owner."""
     known = {call.call_id for call in run.tool_calls}
+    # Historical display records remain immutable; only exact child provenance
+    # can identify a pre-rename projection of the same persisted receipt.
+    legacy = {
+        (call.call_id, call.metadata.get("child_run_id"), call.metadata.get("child_call_id"))
+        for call in run.tool_calls
+        if (call.metadata or {}).get("source") == "codex_child_receipt"
+    }
     for row in rows:
         child_id = str(row.get("child_run_id") or "")
         receipt = row.get("receipt")
@@ -38,10 +45,9 @@ def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
         for raw in receipt.get("tool_calls") or []:
             if not isinstance(raw, dict) or not raw.get("call_id"):
                 continue
-            projection_id = (
-                "codex_" + hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
-            )
-            if projection_id in known:
+            suffix = hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
+            projection_id = "xiaox_" + suffix
+            if projection_id in known or ("codex_" + suffix, child_id, raw["call_id"]) in legacy:
                 continue
             payload = copy.deepcopy(raw)
             payload["call_id"] = projection_id
@@ -52,7 +58,7 @@ def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
                     for key, value in child_metadata.items()
                     if not key.startswith("verification")
                 },
-                "source": "codex_child_receipt",
+                "source": "xiaox_child_receipt",
                 "child_run_id": child_id,
                 "child_call_id": raw["call_id"],
                 # The redacted display payload is not the original child's
@@ -73,7 +79,7 @@ def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
 
 
 def resume_error(
-    store: CodexBindingStore, binding: CodexBinding, rows: list[dict[str, Any]]
+    store: XiaoxBindingStore, binding: XiaoxBinding, rows: list[dict[str, Any]]
 ) -> str:
     if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
         return error
