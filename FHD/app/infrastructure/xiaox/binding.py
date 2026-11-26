@@ -52,7 +52,15 @@ def has_legacy_runtime_binding(run: AgentRun) -> bool:
         run.intent == "codex.runtime"
         or run.metadata.get("runtime_type") == "codex"
         or "codex_runtime" in run.metadata
-        or "_codex_queued_request" in run.metadata
+        or any(
+            key in run.metadata
+            for key in (
+                "_codex_queued_request",
+                "_codex_system_prompt",
+                "_codex_input_data",
+                "_codex_history",
+            )
+        )
         or "codex_result" in run.final_output
     )
 

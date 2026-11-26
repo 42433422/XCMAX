@@ -331,7 +331,10 @@ def test_parent_queue_claim_does_not_authorize_forged_or_foreign_children(runtim
         )
 
 
-@pytest.mark.parametrize("marker", ["intent", "runtime_type", "ledger", "queue", "result"])
+@pytest.mark.parametrize(
+    "marker",
+    ["intent", "runtime_type", "ledger", "queue", "result", "prompt", "input", "history"],
+)
 def test_legacy_queue_never_enters_generic_executor(runtime_entry, marker):
     state = runtime_entry
     run_id = create(state)
@@ -344,6 +347,12 @@ def test_legacy_queue_never_enters_generic_executor(runtime_entry, marker):
         saved.metadata["codex_runtime"] = {"calls": {"old": {"state": "unknown"}}}
     elif marker == "queue":
         saved.metadata["_codex_queued_request"] = {"state": "queued"}
+    elif marker == "prompt":
+        saved.metadata["_codex_system_prompt"] = ""
+    elif marker == "input":
+        saved.metadata["_codex_input_data"] = None
+    elif marker == "history":
+        saved.metadata["_codex_history"] = []
     else:
         saved.final_output["codex_result"] = {"output": "original receipt"}
     state.repository.save(saved)
