@@ -243,8 +243,11 @@ class RedisStreamsBridge:
     def ack(self, msg_id: str) -> bool:
         if self._redis is None:
             return False
+        # Execute the fixed Redis Lua script on the server, not Python eval.
         acknowledged = bool(
-            self._redis.eval(_ACK, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id)
+            self._redis.execute_command(
+                "EVAL", _ACK, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id
+            )
         )
         if acknowledged:
             self.trim_acknowledged()
@@ -261,24 +264,37 @@ class RedisStreamsBridge:
         from redis.exceptions import RedisError
 
         try:
-            return int(self._redis.eval(_SAFE_TRIM, 1, STREAM_KEY, MAXLEN, TRIM_BATCH))
+            return int(
+                self._redis.execute_command("EVAL", _SAFE_TRIM, 1, STREAM_KEY, MAXLEN, TRIM_BATCH)
+            )
         except RedisError:
             logger.warning("safe stream trim failed; retaining backlog", exc_info=True)
             return 0
 
     def _renew(self, msg_id: str) -> bool:
-        return bool(self._redis.eval(
-            _RENEW, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id
-        ))
+        return bool(
+            self._redis.execute_command(
+                "EVAL", _RENEW, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id
+            )
+        )
 
     def send_to_dlq(self, event_dict: dict[str, Any], original_msg_id: str) -> bool:
         if self._redis is None:
             return False
         # Preserve atomic DLQ insertion and fenced XACK; trim after success.
-        acknowledged = bool(self._redis.eval(
-            _DEAD_LETTER, 2, STREAM_KEY, DLQ_KEY, CONSUMER_GROUP,
-            original_msg_id, self._consumer_id, json.dumps(event_dict, ensure_ascii=False),
-        ))
+        acknowledged = bool(
+            self._redis.execute_command(
+                "EVAL",
+                _DEAD_LETTER,
+                2,
+                STREAM_KEY,
+                DLQ_KEY,
+                CONSUMER_GROUP,
+                original_msg_id,
+                self._consumer_id,
+                json.dumps(event_dict, ensure_ascii=False),
+            )
+        )
         if acknowledged:
             self.trim_acknowledged()
         return acknowledged

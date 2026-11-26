@@ -30,27 +30,33 @@ def test_consume_reads_group_but_never_auto_acks():
     assert messages[0]["_msg_id"] == "1234567890-0"
     client.xreadgroup.assert_called_once()
     client.xack.assert_not_called()
-    client.eval.assert_not_called()
+    client.execute_command.assert_not_called()
 
 
 def test_stale_owner_cannot_ack_or_trigger_trimming():
     client = MagicMock()
-    client.eval.return_value = 0
+    client.execute_command.return_value = 0
     bridge = streams.RedisStreamsBridge(bus=MagicMock(), redis_client=client, consumer_id="old")
     assert not bridge.ack("1-0")
-    client.eval.assert_called_once_with(streams._ACK, 1, streams.STREAM_KEY, streams.CONSUMER_GROUP, "1-0", "old")
+    client.execute_command.assert_called_once_with(
+        "EVAL", streams._ACK, 1, streams.STREAM_KEY, streams.CONSUMER_GROUP, "1-0", "old"
+    )
     client.xack.assert_not_called()
     client.xtrim.assert_not_called()
 
 
 def test_successful_fenced_ack_trims_fail_closed():
     client = MagicMock()
-    client.eval.side_effect = [1, ResponseError("NOPERM")]
+    client.execute_command.side_effect = [1, ResponseError("NOPERM")]
     bridge = streams.RedisStreamsBridge(bus=MagicMock(), redis_client=client, consumer_id="owner")
     assert bridge.ack("1-0")
-    assert client.eval.call_count == 2
-    client.eval.assert_any_call(streams._ACK, 1, streams.STREAM_KEY, streams.CONSUMER_GROUP, "1-0", "owner")
-    client.eval.assert_any_call(streams._SAFE_TRIM, 1, streams.STREAM_KEY, streams.MAXLEN, streams.TRIM_BATCH)
+    assert client.execute_command.call_count == 2
+    client.execute_command.assert_any_call(
+        "EVAL", streams._ACK, 1, streams.STREAM_KEY, streams.CONSUMER_GROUP, "1-0", "owner"
+    )
+    client.execute_command.assert_any_call(
+        "EVAL", streams._SAFE_TRIM, 1, streams.STREAM_KEY, streams.MAXLEN, streams.TRIM_BATCH
+    )
     client.xack.assert_not_called()
     client.xtrim.assert_not_called()
     client.xdel.assert_not_called()
@@ -58,21 +64,31 @@ def test_successful_fenced_ack_trims_fail_closed():
 
 def test_dead_letter_and_ack_remain_atomically_owner_fenced():
     client = MagicMock()
-    client.eval.side_effect = [1, 0]
+    client.execute_command.side_effect = [1, 0]
     bridge = streams.RedisStreamsBridge(bus=MagicMock(), redis_client=client, consumer_id="owner")
     assert bridge.send_to_dlq({"reason": "invalid"}, "1-0")
-    args, _ = client.eval.call_args_list[0]
-    assert args[:6] == (streams._DEAD_LETTER, 2, streams.STREAM_KEY, streams.DLQ_KEY, streams.CONSUMER_GROUP, "1-0")
-    assert args[6] == "owner"
-    client.eval.assert_any_call(streams._SAFE_TRIM, 1, streams.STREAM_KEY, streams.MAXLEN, streams.TRIM_BATCH)
+    args, _ = client.execute_command.call_args_list[0]
+    assert args[:7] == (
+        "EVAL",
+        streams._DEAD_LETTER,
+        2,
+        streams.STREAM_KEY,
+        streams.DLQ_KEY,
+        streams.CONSUMER_GROUP,
+        "1-0",
+    )
+    assert args[7] == "owner"
+    client.execute_command.assert_any_call(
+        "EVAL", streams._SAFE_TRIM, 1, streams.STREAM_KEY, streams.MAXLEN, streams.TRIM_BATCH
+    )
     client.xadd.assert_not_called()
     client.xack.assert_not_called()
 
 
 def test_failed_dead_letter_does_not_trigger_trim_or_ack():
     client = MagicMock()
-    client.eval.return_value = 0
+    client.execute_command.return_value = 0
     bridge = streams.RedisStreamsBridge(bus=MagicMock(), redis_client=client, consumer_id="stale")
     assert not bridge.send_to_dlq({"reason": "poison"}, "1-0")
-    assert client.eval.call_count == 1
+    assert client.execute_command.call_count == 1
     client.xack.assert_not_called()
