@@ -9,5 +9,3 @@
 <script setup lang="ts">
 import EmployeeWorkspaceScene from '@/components/workflow/EmployeeWorkspaceScene.vue'
 </script>
-
-
