@@ -109,7 +109,10 @@ def enqueue_outbox(
     user_id: int, title: str, body: str, data: Optional[Dict[str, Any]] = None
 ) -> bool:
     """写入自建推送离线队列。客户端 /api/notifications/pending 轮询拉取(WorkManager 后台通道)。"""
-    from app.db.models.mobile_notification import MobileNotificationOutbox, notification_recipient_scope
+    from app.db.models.mobile_notification import (
+        MobileNotificationOutbox,
+        notification_recipient_scope,
+    )
     from app.db.models.user import User
     from app.db.session import get_db, get_host_db
 
