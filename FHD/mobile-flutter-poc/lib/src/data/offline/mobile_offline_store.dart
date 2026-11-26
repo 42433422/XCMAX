@@ -86,7 +86,8 @@ class MobileOfflineStore {
     final now = _nowMs;
     // Keep unresolved local turns for reconciliation even after history expires.
     final rows = await _db.customSelect(
-      'SELECT * FROM chat_messages WHERE conversation_id = ? AND '
+      'SELECT message_id, conversation_id, role, body, time_text, ts, '
+      'has_employee_profile, status, turn_id FROM chat_messages WHERE conversation_id = ? AND '
       '((cached_at > ? AND cached_at <= ?) OR status IN $_unresolvedStatuses) '
       'ORDER BY ts ASC, message_id ASC',
       variables: [Variable<String>(conversationId), Variable<int>(_cacheCutoff(now)), Variable<int>(now)],
