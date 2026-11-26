@@ -59,6 +59,7 @@ BLOCKED_SUMMARIES = {
     "research_returned_no_sources": "本轮研究没有返回可用来源，未据此生成新结论。",
     "no_observed_context": "本轮没有可用的企业观察来源，未调用模型。",
     "model_returned_no_usable_result": "模型未返回可用结果，已保存实际调用用量。",
+    "experience_reuse_scope_unverified": "历史经验的指标、阈值、方向或观察窗与当前提案不同，禁止把经验作为新方案依据。",
 }
 
 
@@ -604,6 +605,39 @@ class CyclePorts:
             level=self.state["level"],
             domain=self.domain,
         )
+        # Reusing a human-confirmed case is a scoped citation in a NEW proposal,
+        # not a task approval, a causal result or an executable strategy.
+        if decision.goal is not None:
+            from modstore_server.xiaoc_life_experience_review import (
+                experience_scope_matches,
+            )
+
+            cited = set(decision.goal.evidence_refs)
+            prior_cases = [
+                row
+                for row in state["facts"]
+                if row.get("ref") in cited
+                and isinstance(row.get("reviewed_experience"), dict)
+                and isinstance(row.get("learning_assessment"), dict)
+            ]
+            if prior_cases:
+                hypothesis = decision.hypothesis.model_dump() if decision.hypothesis else {}
+                if not hypothesis or any(
+                    not experience_scope_matches(
+                        row["learning_assessment"].get("scope") or {},
+                        hypothesis,
+                        self.claim["owner_user_id"],
+                    )
+                    for row in prior_cases
+                ):
+                    raise LifeBlocked("experience_reuse_scope_unverified")
+                self.details["experience_reuse"] = {
+                    "status": "advisory_citation_in_unapproved_proposal",
+                    "review_refs": sorted(row["ref"] for row in prior_cases),
+                    "original_candidate_refs": sorted(row["candidate_ref"] for row in prior_cases),
+                    "measurement": hypothesis,
+                    "effect": "unknown_requires_independent_outcome_comparison",
+                }
         self.evidence = sorted(refs)
         self.details["model_note"] = decision.summary
         self.details["model_note_status"] = "unverified_suggestion"
@@ -649,6 +683,29 @@ class CyclePorts:
             return {
                 "status": "completed",
                 "summary": "已核对当前观察，本轮没有新增行动。",
+            }
+        if decision["action"] in {"ask_human", "refuse"}:
+            route = decision["action"]
+            # This is a model decision, not an authorization finding or a
+            # human notification. No new task, budget or execution is created.
+            self.details["metacognitive_route"] = {
+                "action": route,
+                "status": "model_suggestion_not_authority",
+                "handoff_status": "not_dispatched" if route == "ask_human" else "not_requested",
+                "evidence_refs": decision["evidence_refs"][:8],
+            }
+            self.details["blocked_reason"] = (
+                "model_requested_human_help"
+                if route == "ask_human"
+                else "model_refused_unverified_action"
+            )
+            return {
+                "status": "blocked",
+                "summary": (
+                    "本轮请求人工判断，尚未创建人工交接或执行任务。"
+                    if route == "ask_human"
+                    else "本轮拒绝自动提案或执行，未改变授权策略。"
+                ),
             }
         goals = []
         suggestion = decision.get("goal") or (
@@ -1077,6 +1134,17 @@ class CyclePorts:
         return state
 
     def finish(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        # Preserve the actual lineage from original reviewed evidence to a NEW
+        # pending goal/decision. A citation is not a proven causal improvement.
+        reuse = self.details.get("experience_reuse")
+        if isinstance(reuse, dict):
+            cited = set(reuse.get("review_refs", []))
+            for goal in result.get("goals") or []:
+                if isinstance(goal, dict) and cited.intersection(goal.get("evidence_refs", [])):
+                    reuse["new_goal_id"] = goal.get("id")
+                    reuse["new_decision_id"] = goal.get("decision_id")
+                    reuse["new_goal_status"] = goal.get("status")
+                    break
         if result.get("status") == "awaiting_worker" and self.details.get("awaiting_worker"):
             return dict(
                 _store().defer_cycle(

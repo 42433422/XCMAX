@@ -732,7 +732,14 @@ def finish_cycle(
                 data["unknown_usage"] = True
             elif expected_closeout is not None and budget["reserved_tokens"] == 0:
                 data["unknown_usage"] = False
-        safe = fresh and actual_tokens is not None and actual_tokens <= reserved
+        # A failed or blocked cycle may settle real tokens, but must not adopt
+        # a goal, interest or self-assessment just because the lease was fresh.
+        safe = (
+            fresh
+            and status == "completed"
+            and actual_tokens is not None
+            and actual_tokens <= reserved
+        )
         if fresh:
             _advance_goal_cursor(data, claim, details)
         if safe:
@@ -768,6 +775,22 @@ def finish_cycle(
                     data["world_review"] = next_review
                     world_receipt = {"world_review_snapshot": next_review}
         final_status = "unknown" if actual_tokens is None else status if fresh else "policy_changed"
+        # Even a blocked, cancelled or natively recovered cycle must carry an
+        # immutable reflection receipt. This does not approve learning or replay work.
+        from modstore_server.xiaoc_life_cognition import reflection_receipt
+        from modstore_server.xiaoc_life_reflection import failure_classification
+
+        received = dict(details or {})
+        if "reflection_receipt" not in received:
+            received["reflection_receipt"] = reflection_receipt(
+                received.get("outcome_feedback"),
+                evidence_refs=evidence_refs,
+                status=status,
+                actual_tokens=actual_tokens,
+            )
+        received["failure_classification"] = failure_classification(
+            final_status, received.get("reason")
+        )
         _event(
             session,
             event_id,
@@ -778,7 +801,7 @@ def finish_cycle(
             actual_tokens=actual_tokens,
             model=model,
             details={
-                **(details or {}),
+                **received,
                 **world_receipt,
                 "policy_revision": claim["policy_revision"],
                 "execution_scope": active.get("execution_scope"),

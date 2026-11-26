@@ -216,3 +216,27 @@ def test_invalid_source_revision_rejected():
     protocol = protocol.model_copy(update={"source_revision": "not-a-commit"})
     with pytest.raises(ValueError, match="invalid_source_revision"):
         run(protocol, observations, receipts)
+
+
+def test_low_confidence_routes_and_label_conflict_keep_original_receipt_distinct():
+    protocol, observations, receipts = fixture()
+    first = observations[0].model_copy(update={"confidence": 0.2, "action": "human_help"})
+    second = observations[1].model_copy(update={"confidence": 0.49})
+    observations = (first, second, *observations[2:])
+    receipts = (
+        receipts[0].model_copy(update={"observation_sha256": fingerprint(first),
+                                      "correct": True, "reason": "verified"}),
+        receipts[1].model_copy(update={"observation_sha256": fingerprint(second)}),
+        *receipts[2:],
+    )
+    report = run(protocol, observations, receipts)
+    base = report["arms"]["baseline"]["overall"]
+    assert base["route_label_conflicts"] == 1
+    assert base["route_label_conflict_refs"] == [fingerprint(first)]
+    assert report["review_findings"]["route_label_conflicts"] == 1
+    review = base["low_confidence_review"]
+    assert review["trials"] == 2
+    assert review["direct_routes"] == 1
+    assert review["human_help_routes"] == 1
+    assert review["human_help_route_refs"] == [fingerprint(first)]
+    assert review["handoff_delivery"] == "not_measured_by_offline_protocol"
