@@ -116,3 +116,38 @@ class TestHandleExcelAnalysis:
             )
             assert result["success"] is False
             assert "unsupported_action" in result["error"]
+
+
+def test_excel_query_reports_original_rows_after_filter_and_aggregation(tmp_path):
+    from openpyxl import Workbook
+
+    from app.application.tools.workflow import handle_excel_analysis
+    from app.infrastructure.excel.pandas_translator import LLMPandasTranslator
+
+    path = tmp_path / "sample.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "出货"
+    for row in (["标题"], ["数量", "金额"], [3, 800], [1, 100], [4, 900]):
+        sheet.append(row)
+    workbook.save(path)
+    args = {"action": "query", "file_path": str(path), "header_row": 2}
+    with patch.object(
+        LLMPandasTranslator,
+        "translate",
+        return_value=json.dumps(
+            {
+                "query_expression": "c0 > 2",
+                "metrics": [{"column": "金额", "op": "sum"}],
+            }
+        ),
+    ):
+        result = handle_excel_analysis({**args, "question": "数量超过两件的金额合计"})
+    assert result["success"], result
+    assert result["sheet_name"] == "出货"
+    assert result["records"] == [{"金额_sum": 1700}]
+    assert result["source_rows"] == {
+        "row_ranges": [[3, 3], [5, 5]],
+        "row_ranges_truncated": False,
+        "source_row_count": 2,
+    }

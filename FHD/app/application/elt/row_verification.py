@@ -429,11 +429,19 @@ def verify_row_effects(db: Session, native: EltRun, rows: list[EltRunRow]) -> di
             stored = {key: _stored_value(db, model, key, value) for key, value in expected.items()}
             _image(observed, stored, numbers)
     references = sorted((model.__tablename__, identity) for model, identity in effects)
+    products_by_unit = Counter(
+        str(expected["unit"]) for (model, _), expected in effects.items() if model is Product
+    )
     return {
         "target_type": native.target_type,
         "rows_checked": checked,
         "business_records": dict(Counter(table for table, _ in references)),
         "business_refs_sha256": canonical_hash(references),
+        **(
+            {"verified_products_by_unit": dict(sorted(products_by_unit.items()))}
+            if products_by_unit
+            else {}
+        ),
     }
 
 

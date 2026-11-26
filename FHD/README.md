@@ -96,6 +96,7 @@ Retort 复用 Git 原生归档与 [GitHub Compare REST 2022-11-28](https://docs.
 | SLO 错误预算候选规则 | [Sloth v0.16.0](https://github.com/slok/sloth/releases/tag/v0.16.0)，Apache-2.0，CI 镜像固定 `ghcr.io/slok/sloth:v0.16.0` | 复用 Sloth 的多窗口燃烧率规则生成器，针对现有 Prometheus 业务事件指标生成候选告警；不新增第二套 SLO 事实源，不自动替换线上告警。原采集器仍核对样本下限、24h 抓取率和正式发布身份，规则生成/合成测试不代表现场已启用或业务指标达标。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
 | ELT 预演续租 | [CPython 3.12.13 threading](https://github.com/python/cpython/blob/v3.12.13/Lib/threading.py)，PSF-2.0 | 阻塞解析和字段映射期间使用线程及 Event，在独立短事务校验原租户和租约令牌。 |
+| 工作簿原生校验与打印 | [openpyxl 3.1.5](https://foss.heptapod.net/openpyxl/openpyxl/-/tags/3.1.5)，MIT | 复用条件格式、数据验证、定义名称和页面布置对象，沿既有写入员和独立质检员按计划写入及重开核验。 |
 | ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
 | ELT 事务与提交恢复 | [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)，MIT；服务端与桌面锁 `2.0.52`，开发 `uv.lock` 为 `2.0.51` | 使用 `Session.begin_nested()` 保存点隔离失败行，既有租约 UPDATE 建立外层事务；提交应答丢失只在独立 Session 核对原行回执和计数。移除先回滚再重写已成功行的逻辑；知识库独立写入前释放 SQL 写锁，逐行记录回执。 |
 | ELT 归档并发 | [filelock 4.2.4](https://github.com/tox-dev/filelock)，MIT；[cryptography](https://github.com/pyca/cryptography)，Apache-2.0/BSD-3-Clause，`uv.lock` 为 `50.0.0`、桌面锁为 `50.0.1` | 复用跨进程文件锁与 Fernet；首次生成密钥互斥且独占创建，已有无效密钥拒绝替换；密文限额按编码开销计算，解密后核对原长度和摘要。 |

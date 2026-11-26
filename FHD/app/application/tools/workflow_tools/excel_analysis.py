@@ -9,6 +9,7 @@ import os
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import groupby, islice
 from pathlib import Path
 from typing import Any, cast
 
@@ -151,12 +152,33 @@ def frame_records(df: pd.DataFrame, limit: int = 200) -> list[Payload]:
     )
 
 
+def _row_evidence(index: pd.Index, header: int) -> Payload:
+    """Bound machine-generated coordinates without hiding that the list was truncated."""
+    groups = groupby(enumerate(index.sort_values()), lambda pair: pair[1] - pair[0])
+    ranges = []
+    for _, rows in islice(groups, 33):
+        first = last = int(next(rows)[1]) + header + 1
+        for _, row in rows:
+            last = int(row) + header + 1
+        ranges.append([first, last])
+    return {
+        "row_ranges": ranges[:32],
+        "row_ranges_truncated": len(ranges) > 32,
+        "source_row_count": len(index),
+    }
+
+
 def table_result(df: pd.DataFrame, *, offset: int = 0, max_rows: Any = None) -> Payload:
     offset = max(0, int(offset or 0))
     rows = page_rows(max_rows)
     page = df.iloc[offset : offset + rows]
     returned = len(page)
     has_more = offset + returned < len(df)
+    source_header = df.attrs.get("source_header")
+    evidence = {}
+    if type(source_header) is int:
+        matching = df.attrs.get("matched_source_rows")
+        evidence = _row_evidence(matching if matching is not None else page.index, source_header)
     return {
         "row_count": len(df),
         "returned_rows": returned,
@@ -167,6 +189,7 @@ def table_result(df: pd.DataFrame, *, offset: int = 0, max_rows: Any = None) -> 
         "next_offset": offset + returned if has_more else None,
         "columns": list(df.columns.astype(str)),
         "records": frame_records(page, limit=returned),
+        **({"source_rows": evidence} if evidence else {}),
     }
 
 
@@ -316,7 +339,12 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
     result = safe_filter_dataframe(result, plan.get("query_expression", ""))
     result = result.rename(columns=aliases)
     if plan.get("metrics"):
+        source_index = result.index
         result = aggregate_frame(result, plan)
+        if "source_header" in df.attrs:
+            result.attrs.update(
+                source_header=df.attrs["source_header"], matched_source_rows=source_index
+            )
     elif plan.get("group_by"):
         raise ValueError("missing_aggregation_metrics")
     for field in ("columns", "sort_by"):
@@ -330,6 +358,8 @@ def execute_query_plan(value: str, df: pd.DataFrame) -> pd.DataFrame:
         result = result.head(plan["limit"])
     if not result.columns.is_unique:
         raise ValueError("query result has ambiguous column names")
+    if "source_header" in df.attrs:
+        result.attrs["source_header"] = df.attrs["source_header"]
     return result
 
 
@@ -413,13 +443,21 @@ class ExcelAnalysis:
                 "header_row": header,
             }
         offset, max_rows = page_budget(args)
-        base = {"success": True, "action": action, "file_path": file_path}
+        source_sheet = str(sheet).strip() if sheet else first_sheet_name(path)
+        source_header = header if header is not None else 1
+        if source_sheet and path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
+            df.attrs["source_header"] = source_header
+        base = {
+            "success": True,
+            "action": action,
+            "file_path": file_path,
+            "sheet_name": source_sheet,
+            "header_row": source_header,
+        }
         if action == "structure":
             snapshot = dataframe_schema_snapshot(df)
             return {
                 **base,
-                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
-                "header_row": header if header is not None else 1,
                 "data": json_safe(snapshot),
                 "row_count": snapshot["row_count"],
                 "columns": snapshot["columns"],
@@ -434,7 +472,6 @@ class ExcelAnalysis:
         if action == "read":
             out = {
                 **base,
-                "sheet_name": str(sheet).strip() if sheet else first_sheet_name(path),
                 **table_result(df, offset=offset, max_rows=max_rows),
             }
             if path.suffix.lower() in {".xlsx", ".xlsm", ".xltx", ".xltm"}:
@@ -446,8 +483,6 @@ class ExcelAnalysis:
                         out["customer_hint"] = hint
                 except RECOVERABLE_ERRORS:
                     self.logger.debug("suppressed exception", exc_info=True)
-            # 始终回写实际使用的工作表与表头（默认第 1 行），后续导入步骤才能安全引用。
-            out["header_row"] = header if header is not None else 1
             return out
         if action == "query":
             if isinstance(question, str) and question.strip():
@@ -461,7 +496,7 @@ class ExcelAnalysis:
                     offset=offset,
                     max_rows=max_rows,
                 )
-                return {**base, "header_row": header, **result}
+                return {**base, **result}
             try:
                 result = self.filter_frame(df, str(expression).strip())
             except ValueError as exc:
@@ -487,6 +522,11 @@ class ExcelAnalysis:
                 **base,
                 **table_result(result, offset=offset, max_rows=max_rows),
                 "source_row_count": len(df),
+                **(
+                    {"source_rows": _row_evidence(df.index, source_header)}
+                    if "source_header" in df.attrs
+                    else {}
+                ),
             }
         if action == "statistics":
             numeric = df.select_dtypes(include="number")
@@ -497,8 +537,12 @@ class ExcelAnalysis:
             )
             return {
                 **base,
-                "header_row": header,
                 "row_count": len(df),
+                **(
+                    {"source_rows": _row_evidence(df.index, source_header)}
+                    if "source_header" in df.attrs
+                    else {}
+                ),
                 "dtypes": {str(k): str(v) for k, v in df.dtypes.items()},
                 "numeric_summary": numeric_summary,
             }

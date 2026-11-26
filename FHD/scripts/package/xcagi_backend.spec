@@ -391,6 +391,8 @@ desktop_excludes = [
 if BUNDLE_COMPUTER_USE:
     desktop_excludes.remove("playwright")
 
+hiddenimports.append("app.mod_sdk.workbook_controls")
+
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],
     pathex=[str(ROOT), str(ROOT / "XCAGI")],
