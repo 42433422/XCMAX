@@ -753,3 +753,44 @@ def test_aiopen_tool_trace_uses_bound_execution_identity(monkeypatch):
         )
     assert result == "trace-run"
     assert captured["user_id"] == "73"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_ok"),
+    [
+        ({"success": True}, True),
+        ({"success": False}, False),
+        ({}, False),
+        ({"success": "true"}, False),
+        ({"success": True, "reconciliation_required": True}, False),
+    ],
+)
+def test_aiopen_usage_preserves_business_outcome(client, monkeypatch, payload, expected_ok):
+    from app.fastapi_routes import ai_open
+
+    usage = []
+
+    async def invoke(*_args):
+        return payload
+
+    def record(_key, _tool, *, channel, ok, duration_ms):
+        usage.append((channel, ok))
+
+    monkeypatch.setattr(ai_open, "invoke_tool", invoke)
+    monkeypatch.setattr(ai_open, "record_api_key_use", record)
+    monkeypatch.setattr(ai_open, "_trace_aiopen_tool_call", lambda **_kwargs: "")
+    monkeypatch.setattr(ai_open, "format_tool_result_text", lambda *_args: "")
+    rest = client.post("/api/aiopen/invoke", json={"tool": "api_catalog", "args": {}})
+    assert rest.status_code == 200
+    mcp = client.post(
+        "/api/aiopen/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "api_catalog", "arguments": {}},
+        },
+    )
+    assert mcp.status_code == 200
+    assert mcp.json()["result"]["isError"] is (not expected_ok)
+    assert usage == [("rest", expected_ok), ("mcp", expected_ok)]

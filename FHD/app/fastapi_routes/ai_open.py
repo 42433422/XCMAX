@@ -262,7 +262,7 @@ async def aiopen_invoke(
         x_aiopen_key,
         tool,
         channel="rest",
-        ok=status == 200,
+        ok=status == 200 and safe_control_payload(result).get("success") is True,
         duration_ms=(time.perf_counter() - started) * 1000,
     )
     payload = {"tool": tool, **result}
@@ -334,11 +334,16 @@ def _record_mcp_call(
 ) -> None:
     if msg.get("method") != "tools/call":
         return
+    result = response.get("result") if isinstance(response, dict) else None
     record_api_key_use(
         key,
         _mcp_tool_name(msg),
         channel="mcp",
-        ok=not (isinstance(response, dict) and response.get("error")),
+        ok=(
+            isinstance(result, dict)
+            and result.get("isError") is False
+            and not response.get("error")
+        ),
         duration_ms=(time.perf_counter() - started) * 1000,
     )
 

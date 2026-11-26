@@ -288,7 +288,7 @@ async def handle_mcp_message(
         )
         mcp_result: dict[str, Any] = {
             "content": [{"type": "text", "text": format_result(tool, result)}],
-            "isError": not bool(result.get("success", False)),
+            "isError": safe_control_payload(result).get("success") is not True,
         }
         if trace_id:
             mcp_result["_meta"] = {"run_id": trace_id, "agent_run_id": trace_id}
