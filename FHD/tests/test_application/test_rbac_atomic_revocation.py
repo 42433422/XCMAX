@@ -83,9 +83,7 @@ def _readback(factory, role_id: int):
 
 def test_permission_update_revokes_only_matching_role_sessions(role_host):
     _engine, factory, role_id, _alice_id, _bob_id = role_host
-    result = RbacAppService().update_role(
-        role_id, permissions=["elt.execute"], tenant_id=7
-    )
+    result = RbacAppService().update_role(role_id, permissions=["elt.execute"], tenant_id=7)
     assert result["sessions_revoked"] == 1
     assert {item["code"] for item in result["permissions"]} == {"elt.execute"}
     assert _readback(factory, role_id) == (
@@ -104,9 +102,7 @@ def test_failed_session_delete_rolls_back_permission_change(role_host):
     event.listen(engine, "before_cursor_execute", fail_session_delete)
     try:
         with pytest.raises(RuntimeError, match="forced session revocation failure"):
-            RbacAppService().update_role(
-                role_id, permissions=["elt.execute"], tenant_id=7
-            )
+            RbacAppService().update_role(role_id, permissions=["elt.execute"], tenant_id=7)
     finally:
         event.remove(engine, "before_cursor_execute", fail_session_delete)
 
@@ -118,6 +114,7 @@ def test_failed_session_delete_rolls_back_permission_change(role_host):
 
 def test_role_assignment_and_session_revocation_share_host_transaction(role_host):
     engine, factory, _role_id, alice_id, _bob_id = role_host
+
     # Revocation failure must not persist a role assignment, either.
     def fail_session_delete(_conn, _cursor, statement, _params, _context, _many):
         if statement.lstrip().lower().startswith("delete from sessions"):
@@ -132,18 +129,11 @@ def test_role_assignment_and_session_revocation_share_host_transaction(role_host
 
     with factory() as db:
         assert db.query(User).filter(User.id == alice_id).one().role == "tenant:7:worker"
-        assert (
-            db.query(UserSession)
-            .filter(UserSession.user_id == alice_id)
-            .count()
-            == 1
-        )
+        assert db.query(UserSession).filter(UserSession.user_id == alice_id).count() == 1
 
 
 @pytest.mark.parametrize("forbidden_role", ["tenant:8:worker", "admin"])
-def test_platform_scope_cannot_grant_cross_tenant_or_admin_role(
-    role_host, forbidden_role
-):
+def test_platform_scope_cannot_grant_cross_tenant_or_admin_role(role_host, forbidden_role):
     _engine, factory, _role_id, alice_id, _bob_id = role_host
     with pytest.raises(AppError):
         RbacAppService().assign_user_role(alice_id, forbidden_role, tenant_id=None)

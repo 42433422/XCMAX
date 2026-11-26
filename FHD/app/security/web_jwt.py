@@ -119,12 +119,7 @@ def _live_token_session_user(db: Any, payload: dict[str, Any]) -> Any | None:
     """
     session_id = payload.get("session_id")
     user_id = payload.get("user_id")
-    if (
-        type(session_id) is not str
-        or not session_id
-        or type(user_id) is not int
-        or user_id <= 0
-    ):
+    if type(session_id) is not str or not session_id or type(user_id) is not int or user_id <= 0:
         return None
     from app.db.models.user import Session as UserSession
     from app.infrastructure.session.session_manager import session_has_expired

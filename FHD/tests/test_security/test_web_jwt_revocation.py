@@ -89,9 +89,7 @@ def _worker(url, schema, token, observed, proceed):
 def test_sqlite_existing_jwt_and_refresh_fail_after_role_revoke(tmp_path, monkeypatch):
     import app.db
 
-    engine = create_engine(
-        "sqlite:///" + str(tmp_path / "revocation.db"), poolclass=NullPool
-    )
+    engine = create_engine("sqlite:///" + str(tmp_path / "revocation.db"), poolclass=NullPool)
     try:
         _schema(engine)
         factory = sessionmaker(bind=engine)
@@ -101,9 +99,7 @@ def test_sqlite_existing_jwt_and_refresh_fail_after_role_revoke(tmp_path, monkey
         monkeypatch.setenv("XCAGI_WEB_JWT_AUTH", "1")
         tokens = web_jwt.issue_web_tokens(user_id=user_id, session_id="old-session")
         assert web_jwt.resolve_user_from_web_jwt(tokens["access_token"]).id == user_id
-        changed = RbacAppService().update_role(
-            role_id, permissions=["elt.execute"], tenant_id=7
-        )
+        changed = RbacAppService().update_role(role_id, permissions=["elt.execute"], tenant_id=7)
         assert changed["sessions_revoked"] == 1
         assert web_jwt.resolve_user_from_web_jwt(tokens["access_token"]) is None
         assert web_jwt.refresh_web_access_token(tokens["refresh_token"]) is None
@@ -118,9 +114,7 @@ def test_sqlite_existing_jwt_and_refresh_fail_after_role_revoke(tmp_path, monkey
 def test_sqlite_disabled_user_rejects_old_signed_access(tmp_path, monkeypatch):
     import app.db
 
-    engine = create_engine(
-        "sqlite:///" + str(tmp_path / "disabled.db"), poolclass=NullPool
-    )
+    engine = create_engine("sqlite:///" + str(tmp_path / "disabled.db"), poolclass=NullPool)
     try:
         _schema(engine)
         factory = sessionmaker(bind=engine)
@@ -171,9 +165,7 @@ def test_postgres_two_processes_observe_same_committed_revocation(monkeypatch):
         )
         worker.start()
         assert observed.get(timeout=60) == ("before", True)
-        changed = RbacAppService().update_role(
-            role_id, permissions=["elt.execute"], tenant_id=7
-        )
+        changed = RbacAppService().update_role(role_id, permissions=["elt.execute"], tenant_id=7)
         assert changed["sessions_revoked"] == 1
         proceed.put("check")
         assert observed.get(timeout=60) == ("after", False)

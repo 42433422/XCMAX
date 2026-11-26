@@ -1,3 +1,5 @@
+# CI SSOT: generated from FHD/.github/workflows/rbac-postgres-revocation.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: XCMAX RBAC PostgreSQL Revocation Evidence
 
 on:
@@ -10,6 +12,7 @@ on:
       - "FHD/tests/test_application/test_rbac_atomic_revocation.py"
       - "FHD/tests/test_security/test_web_jwt_revocation.py"
       - ".github/workflows/fhd-rbac-postgres-revocation.yml"
+      - "FHD/.github/workflows/rbac-postgres-revocation.yml"
 
 permissions:
   contents: read
@@ -17,6 +20,10 @@ permissions:
 concurrency:
   group: rbac-pg-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: FHD
 
 jobs:
   postgres-two-process:
@@ -39,9 +46,6 @@ jobs:
           --health-retries 12
     env:
       XCAGI_TEST_POSTGRES_URL: "postgresql+psycopg://postgres:rbac-ci-only@127.0.0.1:5432/postgres"
-    defaults:
-      run:
-        working-directory: FHD
     steps:
       - name: Checkout exact PR HEAD
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
