@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from modstore_server import xiaoc_life_store
 from modstore_server.xiaoc_goal_governance import (
     goal_conflicts,
     goal_dependency_gate,
@@ -20,7 +21,6 @@ from modstore_server.xiaoc_goal_governance import (
 )
 from modstore_server.xiaoc_goal_management import discover_goal_candidate
 from modstore_server.xiaoc_life_policy import LifePolicyError
-from modstore_server import xiaoc_life_store
 
 
 @pytest.fixture
@@ -260,8 +260,8 @@ def test_resumable_candidate_uses_existing_identity_after_policy_is_granted(oper
 def test_autonomous_discovery_still_only_submits_review_proposal(operating, monkeypatch):
     import asyncio
 
+    from modstore_server import strategic_portfolio, strategy_business_context, xiaoc_self_model
     from modstore_server.xiaoc_life_runtime import CyclePorts
-    from modstore_server import strategy_business_context, strategic_portfolio, xiaoc_self_model
 
     now, value, state, goal, _ = operating
     limits = {
