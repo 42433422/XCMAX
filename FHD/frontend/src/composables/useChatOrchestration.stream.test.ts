@@ -24,7 +24,7 @@ const {
   attachApprovalCardToLastAiMessage,
   attachBusinessResultToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
-  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
+  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, listEvents, continueRun, cancelRun, streamMode, modState,
   approvalGetMyRequests, approvalApprove,
 } = vi.hoisted(() => ({
   applyPlainTextToMessageIndex: vi.fn(),
@@ -43,7 +43,7 @@ const {
   attachAgentRunTraceToLastAiMessage: vi.fn(),
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
-  getRun: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
+  getRun: vi.fn(), listEvents: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
   approvalGetMyRequests: vi.fn(), approvalApprove: vi.fn(),
 }))
 
@@ -217,7 +217,7 @@ vi.mock('@/api/chat', () => ({
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
-vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, continueRun, cancelRun } }))
+vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, listEvents, continueRun, cancelRun } }))
 vi.mock('@/api/approval', () => ({
   approvalApi: { getMyRequests: approvalGetMyRequests, approve: approvalApprove },
 }))
@@ -273,6 +273,50 @@ describe('useChatOrchestration stream', () => {
     expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('follows the original queued run and renders its persisted reply once without resubmitting', async () => {
+    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
+    getRun.mockResolvedValueOnce({ data: {
+      run_id: 'queued-original', status: 'completed', final_output: { xiaox_result: {
+        ok: true, output: '任务已完成并保存回执', execution_state: 'completed', verified_operations: true,
+      } },
+    } })
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
+        run_id: 'queued-original', execution_state: 'queued' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('queued-session') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('整理订单')
+    await vi.waitFor(() => expect(saveMessage).toHaveBeenCalledOnce())
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '任务已完成并保存回执', expect.anything())
+    expect(saveMessage).toHaveBeenCalledWith('ai', '任务已完成并保存回执', 'queued-session', expect.anything())
+    expect(listEvents).toHaveBeenCalledExactlyOnceWith('queued-original', {})
+    expect(getRun).toHaveBeenCalledExactlyOnceWith('queued-original')
+    expect(sendChatStream).toHaveBeenCalledOnce()
+    expect(continueRun).not.toHaveBeenCalled()
+    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('does not publish a queued reply that returns after the account switches', async () => {
+    listEvents.mockResolvedValueOnce({ data: [{ event_id: 'terminal-event' }] })
+    getRun.mockImplementationOnce(async () => {
+      productReadAccountEpoch.value++
+      return { data: { run_id: 'old-run', status: 'completed', final_output: { xiaox_result: {
+        ok: true, output: '旧账号结果', execution_state: 'completed',
+      } } } }
+    })
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '等待后台执行', runtime: 'xiaox',
+        run_id: 'old-run', execution_state: 'queued' } })
+    })
+    await useChatOrchestration({ sessionId: ref('old-session') }).sendMessage('整理订单')
+    await vi.waitFor(() => expect(getRun).toHaveBeenCalledExactlyOnceWith('old-run'))
+    await nextTick()
+    expect(saveMessage).not.toHaveBeenCalled()
+    expect(addMessage.mock.calls.some(([text]) => text === '旧账号结果')).toBe(false)
+    expect(continueRun).not.toHaveBeenCalled()
   })
 
   it('renders a Xiaox input wait as waiting despite success=false and keeps its continuation', async () => {

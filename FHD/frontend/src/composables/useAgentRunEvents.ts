@@ -87,11 +87,13 @@ export async function waitForAgentRunTerminal(
         normalized,
         afterEventId ? { after_event_id: afterEventId } : {},
       )
+      if (!isCurrent()) return null
       const rows = Array.isArray(response?.data) ? response.data : []
       const lastEventId = asString(rows[rows.length - 1]?.event_id).trim()
       if (lastEventId) afterEventId = lastEventId
       const run = (await agentRunsApi.getRun(normalized))?.data
-      if (run && FOLLOW_TERMINAL.has(String(run.status))) return run
+      if (!isCurrent()) return null
+      if (run?.run_id === normalized && FOLLOW_TERMINAL.has(String(run.status))) return run
     } catch {
       // Transient read failure: keep the cursor and retry without resubmitting.
     }
