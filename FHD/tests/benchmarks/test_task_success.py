@@ -33,7 +33,11 @@ from scripts.dev.benchmark_evidence import (
     trial_artifact,
     write_report,
 )
-from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
+from scripts.dev.task_benchmark_report import (
+    passes_gate,
+    startup_blocked_task_ids,
+    summarize_trials,
+)
 
 BENCH_DIR = Path(__file__).resolve().parent
 RUNNER_PATH = BENCH_DIR / "task_success_runner.py"
@@ -98,9 +102,8 @@ def _run_trial(tasks_path: Path, trial: int) -> list[dict]:
         pytest.fail(
             f"trial {trial} runner 失败（exit={proc.returncode}）:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
         )
-    return [
-        json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    lines = out.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
 
 
 def test_task_set_pass_k():
@@ -123,12 +126,16 @@ def test_task_set_pass_k():
     if any(type(count) is not int or count < 0 for count in responses):
         raise ValueError("model_responses must be nonnegative integers")
     execution_mode = "model_workflow" if sum(responses) else "rule_only"
+    # A benchmark that catches an infrastructure exception before execution
+    # must not report a green pytest result just because observe has floor 0.
+    startup_blocked_tasks = startup_blocked_task_ids(per_trial)
     completed_identity = evidence_identity(spec["path"], execution_mode=execution_mode)
     identity["tracked_source_dirty"] = (
         identity["tracked_source_dirty"]
         or completed_identity["tracked_source_dirty"]
         or any(identity[key] != completed_identity[key] for key in ("source_sha", "dataset_sha256"))
     )
+    gate_passed = not startup_blocked_tasks and mode == "gate" and passes_gate(measured, minimum)
     report = {
         **identity,
         **measured,
@@ -136,9 +143,10 @@ def test_task_set_pass_k():
         "golden_set": spec["path"].name,
         "execution_mode": execution_mode,
         "model_responses": sum(responses),
+        "startup_blocked_tasks": startup_blocked_tasks,
         "acceptance_mode": mode,
         "min_required": minimum,
-        "gate_passed": mode == "gate" and passes_gate(measured, minimum),
+        "gate_passed": gate_passed,
         "trial_artifacts": [
             trial_artifact(report_directory() / f"task_benchmark_trial_{i}.jsonl")
             for i in range(trials)
@@ -154,6 +162,13 @@ def test_task_set_pass_k():
     for d, s in report["by_domain"].items():
         print(f"  {d:12s} {s['pass_k']}/{s['total']}")
     print(f"报告: {report_path}")
+
+    if startup_blocked_tasks:
+        pytest.fail(
+            f"任务基准未真正开始执行的任务：{startup_blocked_tasks}；"
+            f"原始试验报告见 {report_path}",
+            pytrace=False,
+        )
 
     if mode == "gate":
         assert report["gate_passed"], (

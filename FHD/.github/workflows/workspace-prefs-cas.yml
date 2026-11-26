@@ -1,0 +1,90 @@
+name: FHD workspace preferences CAS
+"on":
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "FHD/app/application/tenant_workspace_prefs.py"
+      - "FHD/app/domain/shared_services/user_preference_service.py"
+      - "FHD/app/db/models/ai.py"
+      - "FHD/alembic/versions/2026_11_25_workspace_prefs_unique.py"
+      - "FHD/app/fastapi_routes/workspace_prefs_routes.py"
+      - "FHD/app/fastapi_routes/mobile_extensions/routes_workspace.py"
+      - "FHD/tests/test_tenant_workspace_prefs.py"
+      - "FHD/tests/test_application/test_tenant_workspace_prefs.py"
+      - "FHD/tests/test_routes/test_workspace_prefs_routes.py"
+      - "FHD/tests/test_routes/test_mobile_workspace_prefs.py"
+      - "FHD/frontend/src/utils/workspacePrefsApi.ts"
+      - "FHD/frontend/src/utils/workspacePrefsApi.test.ts"
+      - "FHD/frontend/src/stores/accountProfile.ts"
+      - ".github/workflows/workspace-prefs-cas.yml"
+      - "FHD/.github/workflows/workspace-prefs-cas.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fhd-workspace-prefs-cas-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  persisted-cas-sqlite-and-pg:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: xcagi_test
+          POSTGRES_PASSWORD: prefs-test-only
+          POSTGRES_DB: xcagi_prefs_guard
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U xcagi_test -d xcagi_prefs_guard"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: sqlite:////tmp/xcmax_prefs_app.db
+      XCMAX_PREF_GUARD_ONLY: "1"
+      XCMAX_PREF_TEST_PG_URL: postgresql+psycopg://xcagi_test:prefs-test-only@127.0.0.1:5432/xcagi_prefs_guard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install backend test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          set -euo pipefail
+          test_pins="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --test-toolchain-pins)"
+          read -r -a test_requirements <<< "$test_pins"
+          python -m pip install -r requirements-server-api.txt -r ops/deploy/requirements-dev.txt -e ".[server-api]" "${test_requirements[@]}"
+      - name: Run preference migration, CAS, cross-process and API regressions
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_workspace_prefs.py \
+            tests/test_application/test_tenant_workspace_prefs.py \
+            tests/test_routes/test_workspace_prefs_routes.py \
+            tests/test_routes/test_mobile_workspace_prefs.py
+
+  frontend-cas-and-tenant-isolation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install frontend dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: npm ci
+      - name: Test workspace revision and conflict controls
+        run: npm run test -- src/utils/workspacePrefsApi.test.ts
+      - name: Verify frontend type contracts
+        run: npm run type-check:build

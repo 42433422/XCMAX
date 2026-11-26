@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from logging import Logger
 
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
+
+
+@contextmanager
+def _seed_transaction(real_engine: Engine) -> Iterator[Connection]:
+    """Take the SQLite write reservation before reading seed existence.
+
+    Separate read-then-insert transactions can both see an empty RBAC table,
+    then race to insert identical unique permissions. Holding BEGIN IMMEDIATE
+    through the read and the whole seed makes concurrent startup idempotent.
+    """
+    with real_engine.begin() as conn:
+        if (
+            real_engine.dialect.name == "sqlite"
+            and real_engine.url.database not in (None, ":memory:")
+        ):
+            conn.exec_driver_sql("BEGIN IMMEDIATE")
+        yield conn
+
 
 
 def seed_admin(
@@ -33,7 +52,10 @@ def seed_admin(
     if real_engine.dialect.name == "postgresql":
         prepare_profile(real_engine)
     hp = generate_password_hash(password)
-    with real_engine.begin() as conn:
+    with _seed_transaction(real_engine) as conn:
+        # Another process may have seeded the account after our fast-path read.
+        if int(conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0) != 0:
+            return
         conn.execute(
             text(
                 "\n                INSERT INTO users (\n                    username, password, display_name, email, role,\n                    is_active, mfa_enabled, tier, industry_id, created_at,\n                    failed_login_attempts, email_verified\n                )\n                VALUES (\n                    :username, :password, :display_name, :email, 'admin',\n                    TRUE, FALSE, 'admin', :industry_id, :now,\n                    0, FALSE\n                )\n                "
@@ -56,12 +78,11 @@ def seed_rbac(real_engine: Engine, *, logger: Logger) -> None:
 
     from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES, Permission, Role
 
-    if not {"permissions", "roles", "role_permissions"}.issubset(
-        set(inspect(real_engine).get_table_names() or [])
-    ):
+    table_names = set(inspect(real_engine).get_table_names() or [])
+    if not {"permissions", "roles", "role_permissions"}.issubset(table_names):
         return
     SessionLocal = sessionmaker(bind=real_engine)
-    with SessionLocal() as session:
+    with _seed_transaction(real_engine) as conn, SessionLocal(bind=conn) as session:
         perm_by_code = {perm.code: perm for perm in session.query(Permission).all()}
         for row in DEFAULT_PERMISSIONS:
             perm = perm_by_code.get(row["code"])
@@ -94,5 +115,5 @@ def seed_rbac(real_engine: Engine, *, logger: Logger) -> None:
                 if perm is not None and code not in assigned:
                     role.permissions.append(perm)
                     assigned.add(code)
-        session.commit()
+        session.flush()
     logger.info("SQLite RBAC 默认权限/角色已增量同步")

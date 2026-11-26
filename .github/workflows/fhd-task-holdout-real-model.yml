@@ -1,0 +1,267 @@
+# CI SSOT: generated from FHD/.github/workflows/task-holdout-real-model.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: XCMAX Holdout 13x3 Real Model and Database Evidence
+
+on:
+  push:
+    branches: [fix/sqlite-bootstrap-holdout-20261125]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sqlite-model-holdout-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  original-model-holdout:
+    if: github.repository == '42433422/XCMAX'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      TASK_BENCHMARK_RUN: "1"
+      TASK_BENCHMARK_SET: holdout
+      TASK_BENCHMARK_TRIALS: "3"
+      TASK_BENCHMARK_MODE: gate
+      TASK_BENCHMARK_HOLDOUT_MIN_PASS: "0.4"
+      XCAGI_SKIP_INTENT_LLM: ""
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - name: Checkout exact protected-repo candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Bind raw trial provenance to candidate SHA
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Install pinned backend and model runtime dependencies
+        run: |
+          set -euo pipefail
+          pins="$(python scripts/dev/check_requirements_lock.py --test-toolchain-pins)"
+          read -r -a requirements <<< "$pins"
+          uv pip install --system --python "$(command -v python)" \
+            -r requirements-server-api.txt \
+            -r ops/deploy/requirements-dev.txt "${requirements[@]}"
+          uv pip check --system --python "$(command -v python)"
+
+      - name: Require real model credentials rather than rule fallback
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY}" ] || [ -z "${OPENAI_MODEL}" ]; then
+            echo "::error::BLOCKED_MODEL_CREDENTIALS: XCAGI_LLM_API_KEY and XCAGI_LLM_MODEL must be configured; no rule-only fallback"
+            exit 1
+          fi
+
+      # The isolated trial creates a real local user/session, not a Market
+      # account. Use the original deployment route qualification, not a fake
+      # Market login, an injected principal or a generated PASS receipt.
+      - name: Qualify the explicit independent deployment route before holdout
+        env:
+          HOLDOUT_ROUTE_METADATA: ${{ vars.XCAGI_HOLDOUT_RUNTIME_ROUTE_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python - <<'PY'
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          from app.application.agent_runtime.configuration import get_deployment_runtime_settings
+          from app.infrastructure.codex.policy import ModelRoute, RuntimePolicyError
+
+          reports = Path("test_reports")
+          reports.mkdir(exist_ok=True)
+          marker = reports / "holdout_runtime_preflight.json"
+          root = Path(os.environ["RUNNER_TEMP"]) / (
+              "xcmax-holdout-runtime-" + os.environ["GITHUB_RUN_ID"] + "-"
+              + os.environ["GITHUB_RUN_ATTEMPT"]
+          )
+          qualification = root / "qualification.json"
+
+          def record(reason, *, status="BLOCKED"):
+              marker.write_text(json.dumps({
+                  "status": status, "reason": reason,
+                  "source_sha": os.environ["GITHUB_SHA"],
+              }) + "\n")
+              print(status + ": " + reason)
+
+          required = {
+              "provider_id", "upstream_vendor", "context_window",
+              "max_output_tokens", "response_model", "gateway_kind",
+          }
+          try:
+              metadata = json.loads(os.environ.get("HOLDOUT_ROUTE_METADATA") or "{}")
+              if not isinstance(metadata, dict) or set(metadata) != required:
+                  raise ValueError("expected exact non-secret route metadata")
+              if metadata["gateway_kind"] not in {"responses", "litellm"}:
+                  raise ValueError("requires an independently qualified deployment gateway")
+              if not os.environ.get("OPENAI_BASE_URL"):
+                  raise ValueError("explicit gateway URL required")
+              route = {
+                  **metadata,
+                  "base_url": os.environ["OPENAI_BASE_URL"],
+                  "model": os.environ["OPENAI_MODEL"],
+                  "api_key_env": "OPENAI_API_KEY",
+                  "failover_policy": "disabled",
+              }
+              ModelRoute(**route).token()
+          except (KeyError, TypeError, ValueError):
+              record("explicit_deployment_route_configuration_missing_or_invalid")
+              raise SystemExit(1) from None
+
+          root.mkdir(mode=0o700, exist_ok=False)
+          config = root / "runtime.json"
+          config.write_text(json.dumps({
+              "engine": "codex", "surfaces": ["chat", "employee"],
+              "route": route, "runtime_root": str(root),
+              "qualification_file": str(qualification),
+          }) + "\n")
+          os.environ["XCAGI_AGENT_RUNTIME_CONFIG"] = str(config)
+          try:
+              settings = get_deployment_runtime_settings()
+              settings.require_qualified().token()
+          except (RuntimePolicyError, OSError, RuntimeError):
+              record("independent_deployment_qualification_failed")
+              raise SystemExit(1) from None
+          finally:
+              # Preserve only original non-secret qualification evidence, never
+              # runtime.json, credentials, process state or the runtime directory.
+              destination = reports / "holdout_runtime_evidence"
+              for evidence in [qualification, *root.glob("attempt-*/evidence.json")]:
+                  if evidence.is_file() and not evidence.is_symlink():
+                      target = destination / evidence.relative_to(root)
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(evidence, target)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("XCAGI_AGENT_RUNTIME_CONFIG=" + str(config) + "\n")
+          record("independent_deployment_qualification_verified", status="QUALIFIED")
+          PY
+
+      - name: Run isolated 13-task x 3-trial original holdout
+        run: |
+          python -m pytest -q --tb=short \
+            tests/benchmarks/test_task_success.py \
+            --junitxml=holdout-13x3-junit.xml
+
+      - name: Verify original raw trials, same SHA and hard gate
+        run: |
+          python scripts/dev/verify_task_benchmark_evidence.py --set holdout --minimum 0.4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("test_reports/task_holdout_report.json").read_text())
+          assert report["source_sha"] == __import__("os").environ["GITHUB_SHA"]
+          assert report["total_tasks"] == 13 and report["trials"] == 3
+          assert report["model_responses"] > 0
+          assert report["execution_mode"] == "model_workflow"
+          assert not report["startup_blocked_tasks"]
+          assert report["gate_passed"] is True
+          print("PASS: 13 x 3 model holdout and independent business verification")
+          PY
+
+      - name: Write failure categories without upgrading missing evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          path = Path("test_reports/task_holdout_report.json")
+          verified_path = Path("test_reports/task_holdout_run_mode.json")
+          status = "BLOCKED"
+          reason = "no_complete_trial_report_or_model_preflight_failed"
+          preflight = Path("test_reports/holdout_runtime_preflight.json")
+          if preflight.exists():
+              try:
+                  setup = json.loads(preflight.read_text())
+                  if setup.get("source_sha") == os.environ["GITHUB_SHA"] and setup.get("status") == "BLOCKED":
+                      reason = setup["reason"]
+              except (KeyError, ValueError, OSError):
+                  reason = "runtime_preflight_evidence_unreadable"
+          category_counts = {}
+          if path.exists():
+              try:
+                  report = json.loads(path.read_text())
+                  category_counts = report.get("failure_categories") or {}
+                  if category_counts.get("model_provider_auth"):
+                      status, reason = "AUTH_BLOCKED", "model_provider_credentials_or_authorization_rejected"
+                  elif category_counts.get("runtime_account_auth"):
+                      status, reason = "AUTH_BLOCKED", "runtime_account_login_required"
+                  elif category_counts.get("model_provider_service") or category_counts.get("model_provider_rate_limit"):
+                      reason = "model_provider_unavailable_or_rate_limited"
+                  elif category_counts.get("database_lock") or category_counts.get("database_error"):
+                      reason = "database_startup_blocked"
+                  elif report.get("startup_blocked_tasks"):
+                      reason = "runtime_admission_or_execution_unverified"
+                  elif verified_path.exists():
+                      verified = json.loads(verified_path.read_text())
+                      if (
+                          verified.get("status") == "VERIFIED"
+                          and verified.get("source_sha") == os.environ["GITHUB_SHA"]
+                          and verified.get("gate_passed") is True
+                          and report.get("gate_passed") is True
+                          and report.get("total_tasks") == 13
+                          and report.get("trials") == 3
+                          and report.get("model_responses", 0) > 0
+                      ):
+                          status, reason = "PASS", "independent_original_receipt_verified"
+                      else:
+                          reason = "independent_verifier_not_satisfied"
+                  elif report.get("model_responses", 0) > 0 and report.get("trials") == 3:
+                      status, reason = "FAIL", "business_or_safety_threshold_not_met"
+                  else:
+                      reason = "no_verified_real_model_response_or_incomplete_trials"
+              except (ValueError, OSError):
+                  reason = "trial_report_unreadable"
+          marker = {
+              "status": status,
+              "reason": reason,
+              "source_sha": os.environ["GITHUB_SHA"],
+              "model_credentials_present": bool(os.getenv("OPENAI_API_KEY")),
+              "failure_categories": category_counts,
+              "source": "holdout-13x3-workflow",
+          }
+          destination = Path("test_reports/holdout_13x3_status.json")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          destination.write_text(json.dumps(marker, indent=2) + "\n")
+          print(json.dumps(marker))
+          PY
+
+      - name: Upload raw receipts even on failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: holdout-13x3-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            FHD/test_reports/task_holdout_report.json
+            FHD/test_reports/task_holdout_run_mode.json
+            FHD/test_reports/task_benchmark_trial_*.jsonl
+            FHD/test_reports/holdout_13x3_status.json
+            FHD/test_reports/holdout_runtime_preflight.json
+            FHD/test_reports/holdout_runtime_evidence/
+            FHD/holdout-13x3-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
