@@ -350,9 +350,9 @@ html[data-workbench-theme='light'] .filter-btn {
   color: #1d1d1f;
 }
 html[data-workbench-theme='light'] .filter-btn.active {
-  border-color: #0071e3;
-  background: rgba(0, 113, 227, 0.08);
-  color: #0071e3;
+  border-color: var(--xc-token-market-global-light-primary-hover);
+  background: var(--xc-token-market-light-wb-accent-soft);
+  color: var(--xc-token-market-global-light-primary-hover);
 }
 html[data-workbench-theme='light'] .order-card {
   background: #ffffff;
