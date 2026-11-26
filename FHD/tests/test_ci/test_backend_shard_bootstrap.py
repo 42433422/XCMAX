@@ -31,7 +31,7 @@ def cli(args, output, total="4", cwd=None):
     )
 
 
-@pytest.mark.parametrize("total", [4, 8, 16, 24])
+@pytest.mark.parametrize("total", [4, 8, 16, 24, 32, 48, 64])
 def test_plan_and_complete_evidence_agree_without_site_packages(tmp_path, total):
     output = tmp_path / "outputs"
     result = cli(["plan", "--total", total], output)
@@ -157,7 +157,7 @@ def test_mode_dependent_collection_cannot_publish_install_output(tmp_path):
     assert not output.exists()
 
 
-@pytest.mark.parametrize("value", [None, "", "0", "25", "eight", "4;false", "٤"])
+@pytest.mark.parametrize("value", [None, "", "0", "65", "eight", "4;false", "٤"])
 def test_total_has_no_implicit_or_unsafe_fallback(monkeypatch, value):
     if value is None:
         monkeypatch.delenv("BACKEND_SHARD_TOTAL", raising=False)

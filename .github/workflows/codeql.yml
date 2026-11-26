@@ -20,7 +20,7 @@ concurrency:
 jobs:
   analyze:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:
       actions: read
@@ -129,7 +129,7 @@ jobs:
     name: security-no-new-critical-high
     if: ${{ github.event_name == 'pull_request' }}
     needs: analyze
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     permissions:
       actions: read
       contents: read
