@@ -54,6 +54,13 @@ def test_ios_release_rejects_unpinned_checkout_and_only_uploads_identified_ipa(
     ):
         assert required in guard["run"]
 
+    sdk = next(step for step in steps if step.get("id") == "flutter_sdk")
+    assert "cat .flutter-version" in sdk["run"]
+    flutter = next(step for step in steps if step.get("uses") == "subosito/flutter-action@v2")
+    assert flutter["with"]["flutter-version"] == "${{ steps.flutter_sdk.outputs.version }}"
+    assert "channel" not in flutter["with"]
+    assert steps.index(sdk) < steps.index(flutter)
+
     version = next(step for step in steps if step.get("name") == "Resolve release version")
     assert "config/download_release.json" not in version["run"]
     assert "catalog_version%.*" not in version["run"]
