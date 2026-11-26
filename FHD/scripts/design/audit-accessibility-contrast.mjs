@@ -225,5 +225,37 @@ for (const [state, block] of [['default', officeSuccessDefault], ['hover', offic
   pair('Desktop office success ' + state, () => fg, () => bg);
 }
 
+
+// Read the order-list component's actual ordinary-text and opaque surface
+// declarations. Keep the existing explicit light override paired with its
+// own background; default rules must remain readable even without a theme attribute.
+const marketOrders = readFileSync(new URL('../成都修茈科技有限公司/MODstore_deploy/market/src/views/OrderListView.vue', root), 'utf8');
+function orderStyle(selector) {
+  const marker = '\n' + selector + ' {';
+  const start = marketOrders.indexOf(marker);
+  if (start < 0) throw Error('Missing order-list selector: ' + selector);
+  const end = marketOrders.indexOf('}', start);
+  if (end < 0) throw Error('Unterminated order-list selector: ' + selector);
+  return marketOrders.slice(start + marker.length, end);
+}
+for (const mode of ['dark', 'light']) {
+  const prefix = mode === 'light' ? "html[data-workbench-theme='light'] " : '';
+  for (const [selector, surface] of [
+    ['.order-list-toolbar__hint', '.order-list-page'],
+    ['.loading', '.order-list-page'],
+    ['.order-no', '.order-card'],
+    ['.order-time', '.order-card'],
+    ['.empty', '.order-list-page'],
+  ]) {
+    pair('Market order list ' + mode + ' ' + selector,
+      () => {
+        const value = /(?:^|;)\s*color\s*:\s*([^;]+);/.exec(orderStyle(prefix + selector))?.[1]?.trim();
+        if (!value?.startsWith('var(--xc-token-')) throw Error('Order-list text must use a generated token: ' + selector);
+        return resolveColor(value, [], marketGeneratedCss);
+      },
+      () => marketDeclaration(orderStyle(prefix + surface), 'background'));
+  }
+}
+
 console.log(JSON.stringify({ scope: 'static opaque source pairs only', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

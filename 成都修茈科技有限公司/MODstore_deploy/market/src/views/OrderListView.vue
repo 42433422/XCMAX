@@ -200,7 +200,7 @@ onBeforeUnmount(() => { ++readSequence })
 }
 .order-list-toolbar__hint {
   font-size: 11px;
-  color: #71717a;
+  color: var(--xc-token-market-dark-wb-text-muted);
   max-width: 200px;
   line-height: 1.3;
 }
@@ -209,7 +209,7 @@ onBeforeUnmount(() => { ++readSequence })
   margin-bottom: 12px;
 }
 .loading {
-  color: #a1a1aa;
+  color: var(--xc-token-market-dark-wb-text-muted);
 }
 .order-filters {
   display: flex;
@@ -253,7 +253,7 @@ onBeforeUnmount(() => { ++readSequence })
 .order-no {
   font-family: ui-monospace, monospace;
   font-size: 0.85rem;
-  color: #a1a1aa;
+  color: var(--xc-token-market-dark-wb-text-muted);
 }
 .order-status {
   font-size: 0.85rem;
@@ -289,7 +289,7 @@ onBeforeUnmount(() => { ++readSequence })
 }
 .order-time {
   font-size: 0.8rem;
-  color: #71717a;
+  color: var(--xc-token-market-dark-wb-text-muted);
 }
 .btn-cancel,
 .btn-refund {
@@ -306,7 +306,7 @@ onBeforeUnmount(() => { ++readSequence })
   color: #c7d2fe;
 }
 .empty {
-  color: #71717a;
+  color: var(--xc-token-market-dark-wb-text-muted);
   text-align: center;
   padding: 40px 0;
 }
@@ -337,13 +337,13 @@ html[data-workbench-theme='light'] .order-list-page {
   color: #1d1d1f;
 }
 html[data-workbench-theme='light'] .order-list-toolbar__hint {
-  color: #86868b;
+  color: var(--xc-token-market-light-wb-text-muted);
 }
 html[data-workbench-theme='light'] .err {
   color: #d32f2f;
 }
 html[data-workbench-theme='light'] .loading {
-  color: #86868b;
+  color: var(--xc-token-market-light-wb-text-muted);
 }
 html[data-workbench-theme='light'] .filter-btn {
   border-color: rgba(0, 0, 0, 0.1);
@@ -362,7 +362,7 @@ html[data-workbench-theme='light'] .order-card:hover {
   border-color: rgba(0, 0, 0, 0.15);
 }
 html[data-workbench-theme='light'] .order-no {
-  color: #86868b;
+  color: var(--xc-token-market-light-wb-text-muted);
 }
 html[data-workbench-theme='light'] .order-status {
   background: rgba(0, 0, 0, 0.05);
@@ -377,7 +377,7 @@ html[data-workbench-theme='light'] .order-amount {
   color: #0071e3;
 }
 html[data-workbench-theme='light'] .order-time {
-  color: #86868b;
+  color: var(--xc-token-market-light-wb-text-muted);
 }
 html[data-workbench-theme='light'] .btn-cancel,
 html[data-workbench-theme='light'] .btn-refund {
@@ -389,6 +389,6 @@ html[data-workbench-theme='light'] .btn-refund {
   color: #0071e3;
 }
 html[data-workbench-theme='light'] .empty {
-  color: #86868b;
+  color: var(--xc-token-market-light-wb-text-muted);
 }
 </style>

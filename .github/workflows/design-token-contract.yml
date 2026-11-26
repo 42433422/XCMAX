@@ -13,6 +13,7 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/market/src/tokens.css'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/style.css'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/components/AppConfirmDialog.vue'
+      - '成都修茈科技有限公司/MODstore_deploy/market/src/views/OrderListView.vue'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/design-tokens.generated.css'
       - '.github/workflows/design-token-contract.yml'
   push:
@@ -29,6 +30,7 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/market/src/tokens.css'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/style.css'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/components/AppConfirmDialog.vue'
+      - '成都修茈科技有限公司/MODstore_deploy/market/src/views/OrderListView.vue'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/design-tokens.generated.css'
       - '.github/workflows/design-token-contract.yml'
 permissions:
