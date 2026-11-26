@@ -243,7 +243,8 @@ def test_reconfiguration_resumes_original_run_without_new_dispatch(entry):
     assert resumed["runtime_context_update"]["conversation_id"] == "original"
     assert resumed["runtime_context_update"]["agent_runtime_run_id"] is None
     assert [call.kwargs["run_id"] for call in execute.call_args_list] == [
-        "run-existing", "run-existing"
+        "run-existing",
+        "run-existing",
     ]
     assert all(call.kwargs["answer_to_waiting_input"] for call in execute.call_args_list)
 
@@ -260,15 +261,20 @@ def test_stream_progress_and_setup_failure_never_emit_unverified_draft(monkeypat
     failed = invoke({"session_id": "original", "agent_runtime_run_id": "existing"})
     assert failed["data"]["error_code"] == "runtime_account_model_required"
     assert failed["execution_state"] == "blocked"
-    chat.stream_runtime_event({
-        "method": "item/agentMessage/delta", "runtime_goal_mode": "reply",
-        "payload": {"delta": "not-yet-verified"},
-    })
+    chat.stream_runtime_event(
+        {
+            "method": "item/agentMessage/delta",
+            "runtime_goal_mode": "reply",
+            "payload": {"delta": "not-yet-verified"},
+        }
+    )
     deltas.assert_not_called()
-    chat.stream_runtime_event({
-        "method": "item/started",
-        "payload": {"item": {"type": "mcpToolCall"}},
-    })
+    chat.stream_runtime_event(
+        {
+            "method": "item/started",
+            "payload": {"item": {"type": "mcpToolCall"}},
+        }
+    )
     notes.assert_called_once()
 
 

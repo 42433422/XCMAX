@@ -25,7 +25,9 @@ def public_runtime_failure(error: Exception) -> dict[str, Any]:
         "runtime_host_unverified": "本机版本身份无法核验，请检查安装包或部署版本记录。",
     }
     error_code = getattr(error, "code", None)
-    code = error_code if isinstance(error_code, str) and error_code in messages else "runtime_not_qualified"
+    code = (
+        error_code if isinstance(error_code, str) and error_code in messages else "runtime_not_qualified"
+    )
     checks = getattr(error, "checks", {})
     return {
         "error_code": code,
