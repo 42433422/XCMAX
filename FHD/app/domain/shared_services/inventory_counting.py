@@ -75,9 +75,10 @@ class InventoryCountingMixin:
                 "error_code": "inventory_count_baseline_required",
                 "message": "确认盘点前必须重新预览并提交原基线版本",
             }
-        with _facade().get_db() as db, write_transaction_guard.get()(db):
+        facade = _facade()
+        with facade.get_db() as db, write_transaction_guard.get()(db):
             try:
-                model = _facade().InventoryLedger
+                model = facade.InventoryLedger
                 query = db.query(model).filter(
                     model.product_id == product_id,
                     model.warehouse_id == warehouse_id,
@@ -121,7 +122,7 @@ class InventoryCountingMixin:
                             "error_code": "inventory_count_stale",
                             "message": "盘点预览后账面数量已变更，请重新盘点",
                         }
-                movement = _facade().InventoryTransaction
+                movement = facade.InventoryTransaction
                 movement_query = db.query(func.coalesce(func.max(movement.id), 0)).filter(
                     movement.ledger_id == ledger.id,
                     movement.tenant_id == ledger.tenant_id,
@@ -152,11 +153,11 @@ class InventoryCountingMixin:
                     }
                 if location_id is not None:
                     location = (
-                        db.query(_facade().StorageLocation)
+                        db.query(facade.StorageLocation)
                         .filter(
-                            _facade().StorageLocation.id == location_id,
-                            _facade().StorageLocation.warehouse_id == warehouse_id,
-                            _facade().StorageLocation.status == "active",
+                            facade.StorageLocation.id == location_id,
+                            facade.StorageLocation.warehouse_id == warehouse_id,
+                            facade.StorageLocation.status == "active",
                         )
                         .first()
                     )
@@ -191,7 +192,7 @@ class InventoryCountingMixin:
                     }
                 db.refresh(ledger)
                 db.add(
-                    _facade().InventoryTransaction(
+                    facade.InventoryTransaction(
                         ledger_id=ledger.id,
                         tenant_id=ledger.tenant_id,
                         transaction_type="count",
@@ -226,7 +227,7 @@ class InventoryCountingMixin:
                 }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("盘点失败: %s", e)
+                facade.logger.error("盘点失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_inventory_transactions(

@@ -294,7 +294,12 @@ def _qualified_settings(
 
 def _deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
     """Local operator entry only; never resolves an account or starts a business task."""
-    settings = runtime_settings()
+    try:
+        settings = runtime_settings()
+    except RuntimePolicyError as exc:
+        raise RuntimeSetupError(
+            "runtime_configuration_required", "部署运行目录或模型配置无效，请核对本机配置。"
+        ) from exc
     route, root, destination = settings.route, settings.runtime_root, settings.qualification_file
     if route is None or root is None or destination is None:
         raise RuntimeSetupError(
@@ -344,7 +349,12 @@ def _deployment_runtime_settings(*, retry: bool = False) -> RuntimeSettings:
         retry=retry,
         retry_hint="修复后请在部署主机执行 xcagi-brain --json runtime-check --deployment --retry。",
     )
-    current = runtime_settings()
+    try:
+        current = runtime_settings()
+    except RuntimePolicyError as exc:
+        raise RuntimeSetupError(
+            "runtime_changed", "验收期间部署模型或运行目录已变化；请恢复原配置后重新检查。"
+        ) from exc
     if current.runtime_root is not None and current.qualification_file is not None:
         current = replace(
             current,

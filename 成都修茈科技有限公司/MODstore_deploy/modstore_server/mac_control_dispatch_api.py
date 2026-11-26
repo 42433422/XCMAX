@@ -248,8 +248,10 @@ def _issue_key(repository: str, number: int) -> str:
 
 
 def _issue_scope(repository: str, base_branch: str) -> tuple[str, str]:
+    owner, separator, repo = repository.partition("/")
     if (
-        not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+        not (owner and separator and repo)
+        or any(not (c.isascii() and (c.isalnum() or c in "_.-")) for c in owner + repo)
         or not base_branch
         or len(base_branch) > 250
         or any(c.isspace() or ord(c) < 32 for c in base_branch)
@@ -370,8 +372,10 @@ def create_code_task(
                 raise HTTPException(409, "历史工单请求内容已变化，请恢复原控制任务")
             return {"success": True, "task": _service_view(existing), "accepted": True}
         key = stable_key
-    elif body.repository or body.base_branch or re.fullmatch(
-        r"gh-issue-[0-9]+-(?:run-.+|v2-.+)", key
+    elif (
+        body.repository
+        or body.base_branch
+        or re.fullmatch(r"gh-issue-[0-9]+-(?:run-.+|v2-.+)", key)
     ):
         raise HTTPException(409, "缺少普通工单身份")
     return _accept_task(db, actor=actor, key=key, request=request)

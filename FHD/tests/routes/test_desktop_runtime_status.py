@@ -190,7 +190,7 @@ def test_runtime_qualification_failure_remains_actionable(client):
 @pytest.mark.parametrize("kind", ["policy", "known", "unknown"])
 def test_runtime_qualification_errors_expose_only_public_codes_and_checks(client, method, kind):
     from app.application.agent_runtime.configuration import RuntimeSetupError
-    from app.infrastructure.codex.policy import RuntimePolicyError
+    from app.infrastructure.xiaox.policy import RuntimePolicyError
 
     private = "/private/runtime/secret.json Bearer sensitive-probe-token"
     error = (
@@ -229,12 +229,12 @@ def test_runtime_qualification_errors_expose_only_public_codes_and_checks(client
 def test_runtime_qualification_keeps_internal_policy_diagnostics_private(
     client, monkeypatch, method
 ):
-    from app.infrastructure.codex.policy import RuntimePolicyError
+    from app.infrastructure.xiaox.policy import RuntimePolicyError
 
     monkeypatch.setenv("XCAGI_AGENT_RUNTIME_CONFIG", "/fixture/operator-runtime.json")
     diagnostic = "internal runtime diagnostic: /fixture/private/account-state.json"
     with patch(
-        "app.infrastructure.codex.policy.runtime_settings",
+        "app.infrastructure.xiaox.policy.runtime_settings",
         side_effect=RuntimePolicyError(diagnostic),
     ):
         response = client.request(method, "/api/desktop/agent-runtime/qualification", json={})

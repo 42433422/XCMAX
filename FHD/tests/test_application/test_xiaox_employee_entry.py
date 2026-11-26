@@ -464,12 +464,13 @@ def test_employee_keeps_sole_runtime_when_account_configuration_is_unavailable(
     ],
 )
 def test_default_and_erp_employee_scopes_have_real_canonical_actions(
-    monkeypatch, manifest, config, expected, trusted_actor
+    manifest, config, expected, trusted_actor, monkeypatch
 ):
     from app.application.employee_runtime.tool_scope import resolve_employee_tools
 
-    monkeypatch.setattr("app.application.agent_tool_lifecycle.discovery_for_runtime", lambda _: [])
-    declared = resolve_employee_tools("clerk", manifest, config)
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    principal = trusted_actor(role="admin")
+    declared = resolve_employee_tools("clerk", manifest, config, principal.context)
     actions, _ = agent_runner._xiaox_employee_tool_scope(declared, _allow)
     assert expected.issubset(actions)
     assert all("products_bulk_import" not in action for action in actions)

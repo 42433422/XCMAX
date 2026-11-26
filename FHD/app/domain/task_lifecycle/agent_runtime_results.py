@@ -113,7 +113,7 @@ def model_unsettled(metadata: dict[str, Any]) -> bool:
 
 def classification_metadata(run: Any) -> dict[str, Any]:
     return {
-        **copy.deepcopy(run.metadata["codex_runtime"]),
+        **copy.deepcopy(run.metadata["xiaox_runtime"]),
         "goal_contract": run.metadata.get("runtime_goal_contract"),
         "goal_verification": run.metadata.get("runtime_goal_verification"),
         "goal_answers": goal_answers(run),
@@ -129,7 +129,10 @@ def failure_diagnostics(run: Any, result: dict[str, Any]) -> dict[str, str]:
         kind = str(report.get("error_code") or "goal_verification_required")
         reason = str(report.get("feedback") or result.get("error") or "")
     elif result.get("execution_state") == "unknown":
-        model_unknown = model_unsettled(run.metadata.get("codex_runtime") or {})
+        model_unknown = any(
+            model_unsettled(run.metadata.get(key) or {})
+            for key in ("xiaox_runtime", "codex_runtime")
+        )
         stage = "model" if model_unknown else "business"
         kind = "model_usage_unknown" if model_unknown else "business_outcome_unknown"
         reason = str(result.get("error") or "")

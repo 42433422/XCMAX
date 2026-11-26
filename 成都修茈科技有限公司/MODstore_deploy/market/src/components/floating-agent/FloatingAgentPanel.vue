@@ -59,7 +59,6 @@
       :light="isLightTheme"
       :ticket-id="activityTicket"
       :owner="activityOwner"
-      :initial-section="activitySection"
     />
 
     <!-- 对话区 -->
@@ -109,7 +108,6 @@
             :owner="activityOwner"
             :light="isLightTheme"
             compact
-            @open-life="activitySection = 'life'; showActivity = true"
           />
         </template>
       </PanelComposer>
@@ -205,11 +203,10 @@ const handleInput = props.handleInput
 const draft = ref('')
 const showLog = ref(false)
 const showActivity = ref(props.activityTicket !== undefined)
-const activitySection = ref<'delivery' | 'life'>('delivery')
 const activityOpen = computed(() => !props.corpMode && props.activityOwner !== undefined && showActivity.value)
 watch(
   [() => props.activityOwner, () => props.activityTicket],
-  ([, ticket]) => { showActivity.value = ticket !== undefined; activitySection.value = 'delivery' },
+  ([, ticket]) => { showActivity.value = ticket !== undefined },
 )
 const panelRef = ref<HTMLDivElement | null>(null)
 const composerRef = ref<InstanceType<typeof PanelComposer> | null>(null)

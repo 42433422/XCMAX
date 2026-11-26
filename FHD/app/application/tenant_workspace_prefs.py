@@ -222,7 +222,10 @@ def patch_workspace_prefs(
 
     with _workspace_base_db_scope():
         saved = get_user_preference_service().mutate_preference(owner, WORKSPACE_PREFS_KEY, merge)
-    return json.loads(saved)
+    prefs = json.loads(saved)
+    if not isinstance(prefs, dict):
+        raise ValueError("Workspace preferences must contain a JSON object")
+    return prefs
 
 
 def bind_selected_industry_for_user(

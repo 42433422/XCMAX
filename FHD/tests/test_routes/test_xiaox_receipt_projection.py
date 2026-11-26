@@ -195,7 +195,7 @@ def receipt_task(runtime_entry, local_tools, monkeypatch):
             state.resume_count += 1
             return thread_id
 
-        async def stream_turn(self, text, *, goal_feedback=None):
+        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
             if goal_feedback is None:
                 assert "创建客户" in text
             else:
@@ -300,7 +300,7 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     receipt_task, monkeypatch, acknowledged_success
 ):
     from app.application.agent_orchestrator import verification_readback
-    from app.infrastructure.codex.receipt_projection import resume_ready_codex_runs
+    from app.infrastructure.xiaox.receipt_projection import resume_ready_xiaox_runs
 
     state = receipt_task
     state.outcome, state.acknowledged_success = "pending", acknowledged_success
@@ -322,9 +322,9 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     assert response.status_code == 200, response.text
     parent = state.repository.get(state.parent_id)
     assert parent.status == "running", parent.final_output
-    assert parent.final_output["codex_result"]["business_completed"] is False
-    assert not parent.final_output["codex_result"].get("reconciliation_required")
-    assert resume_ready_codex_runs(repository=state.repository) == 0
+    assert parent.final_output["xiaox_result"]["business_completed"] is False
+    assert not parent.final_output["xiaox_result"].get("reconciliation_required")
+    assert resume_ready_xiaox_runs(repository=state.repository) == 0
     source_available = True
     response = state.client.post(f"/api/agent/runs/{state.child_id}/verify")
     assert response.status_code == 200, response.text
@@ -333,11 +333,11 @@ def test_acknowledged_pending_effect_waits_then_resumes_only_its_original_parent
     assert child.status == "completed", child.to_dict()
     assert child.tool_calls[0].output == original and len(child.tool_calls) == 1
     assert state.client.get(f"/api/agent/runs/{state.parent_id}").status_code == 200
-    assert resume_ready_codex_runs(repository=state.repository) == 1
-    assert resume_ready_codex_runs(repository=state.repository) == 0
+    assert resume_ready_xiaox_runs(repository=state.repository) == 1
+    assert resume_ready_xiaox_runs(repository=state.repository) == 0
     parent = state.drain(state.parent_id)
     assert parent.status == "completed", parent.final_output
-    assert parent.final_output["codex_result"]["business_completed"] is True
+    assert parent.final_output["xiaox_result"]["business_completed"] is True
     assert state.resume_count == 1 and state.effect_count() == 1
     assert state.queue.get(parent.run_id).state == "succeeded"
 

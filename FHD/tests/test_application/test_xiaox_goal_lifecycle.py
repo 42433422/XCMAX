@@ -152,7 +152,9 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
     )
     dispatches = []
     adapter_failure = failure.startswith("adapter_")
-    proven = failure not in {"missing_proof", "digest_mismatch"} and not adapter_failure
+    unproven_refusal = failure in {"missing_proof", "digest_mismatch"}
+    unknown_write = adapter_failure or unproven_refusal
+    proven = not unknown_write
     endpoint = "agent-tool:customers.create"
     limiter = rate_limiter._InMemoryRateLimiter(max_requests=120)
     monkeypatch.setitem(rate_limiter._rate_limiters, endpoint, limiter)
@@ -221,7 +223,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
 
     def script(binding, text):
         first = execute("rejected-customer", "rejected-attempt")
-        if adapter_failure:
+        if unknown_write:
             assert first["status"] == "unknown" and first["success"] is False, first
             with pytest.raises(XiaoxBindingError) as rejected:
                 state.execute(
@@ -257,7 +259,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
                 )
             )
             app = state.servers[-1]
-            app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+            app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
                 transport=upstream, **kwargs
             )
             with TestClient(app) as client:
@@ -277,14 +279,17 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
     )
     result = asyncio.run(state.invoke(task="创建名为 recovered-customer 的客户"))
     parent = state.repository.get(result["run_id"])
-    assert names() == ["rejected-customer" if adapter_failure else "recovered-customer"], (
+    expected_names = ["rejected-customer"] if adapter_failure else []
+    if not unknown_write:
+        expected_names.append("recovered-customer")
+    assert names() == expected_names, (
         result.get("exit_status"),
         result.get("error"),
         dispatches,
-        parent.metadata.get("codex_runtime", {}).get("calls"),
+        parent.metadata.get("xiaox_runtime", {}).get("calls"),
     )
     assert dispatches == names(), "recovery dispatched a business write more than once"
-    unresolved = adapter_failure or failure == "model_unknown"
+    unresolved = unknown_write or failure == "model_unknown"
     if unresolved:
         assert state.model_requests == [] and result["reconciliation_required"] is True
     else:
@@ -295,7 +300,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
         assert parent.metadata["reserved_cost_units"] > 0
         assert any(
             request["state"] == "unknown"
-            for request in parent.metadata["codex_runtime"]["model_requests"].values()
+            for request in parent.metadata["xiaox_runtime"]["model_requests"].values()
         )
     assert result["business_completed"] is (failure == "no_effect"), result
     assert result["ok"] is (failure == "no_effect"), result
@@ -304,9 +309,9 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
     )
     reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
     rows = reopened.receipt_snapshot(parent.run_id)
-    assert len(rows) == (1 if adapter_failure else 2)
+    assert len(rows) == (1 if unknown_write else 2)
     assert rows[0]["receipt"]["success"] is False
-    if not adapter_failure:
+    if not unknown_write:
         assert rows[1]["receipt"]["verified"] is True
     assert bool(rows[0]["receipt"].get("execution")) is proven
     assert dispatches == names(), "readback replayed a tool"
@@ -383,6 +388,7 @@ def test_approval_readback_allows_settled_failed_exploration_but_never_unknown(r
         runtime_goal_contract=contract,
         runtime_goal_digest=contract["digest"],
         xiaox_runtime={
+            "version": 1,
             "calls": {"read": {}, "write": {}},
             "goal_digest": contract["digest"],
             "coordinator_active": False,

@@ -106,20 +106,15 @@ class InventoryOrdersMixin:
             return {"success": False, "message": "预留数量必须大于 0"}
 
         def _run(db):
-            ledger = (
-                db.query(_facade().InventoryLedger)
-                .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
-                    *(
-                        (_facade().InventoryLedger.location_id == location_id,)
-                        if location_id is not None
-                        else ()
-                    ),
-                )
-                .first()
+            ledger_model = _facade().InventoryLedger
+            rows = db.query(ledger_model).filter(
+                ledger_model.product_id == product_id,
+                ledger_model.warehouse_id == warehouse_id,
+                ledger_model.batch_no == batch_no,
             )
+            if location_id is not None:
+                rows = rows.filter(ledger_model.location_id == location_id)
+            ledger = rows.first()
             if not ledger:
                 return {"success": False, "message": "库存台账记录不存在"}
             available = Decimal(str(ledger.available_quantity or 0))
@@ -198,20 +193,15 @@ class InventoryOrdersMixin:
             return {"success": False, "message": "扣减数量必须大于 0"}
 
         def _run(db):
-            ledger = (
-                db.query(_facade().InventoryLedger)
-                .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
-                    *(
-                        (_facade().InventoryLedger.location_id == location_id,)
-                        if location_id is not None
-                        else ()
-                    ),
-                )
-                .first()
+            ledger_model = _facade().InventoryLedger
+            rows = db.query(ledger_model).filter(
+                ledger_model.product_id == product_id,
+                ledger_model.warehouse_id == warehouse_id,
+                ledger_model.batch_no == batch_no,
             )
+            if location_id is not None:
+                rows = rows.filter(ledger_model.location_id == location_id)
+            ledger = rows.first()
             if not ledger:
                 return {"success": False, "message": "库存台账记录不存在"}
             from app.db.models.sales import SalesOrderItem
@@ -414,23 +404,18 @@ class InventoryOrdersMixin:
             return {"success": False, "message": "回补数量必须大于 0"}
 
         def _run(db):
-            ledger = (
-                db.query(_facade().InventoryLedger)
-                .filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == warehouse_id,
-                    _facade().InventoryLedger.batch_no == batch_no,
-                    *(
-                        (_facade().InventoryLedger.location_id == location_id,)
-                        if location_id is not None
-                        else ()
-                    ),
-                )
-                .first()
+            ledger_model = _facade().InventoryLedger
+            rows = db.query(ledger_model).filter(
+                ledger_model.product_id == product_id,
+                ledger_model.warehouse_id == warehouse_id,
+                ledger_model.batch_no == batch_no,
             )
+            if location_id is not None:
+                rows = rows.filter(ledger_model.location_id == location_id)
+            ledger = rows.first()
             now = datetime.now()
             if not ledger:
-                ledger = _facade().InventoryLedger(
+                ledger = ledger_model(
                     product_id=product_id,
                     warehouse_id=warehouse_id,
                     location_id=location_id,

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElButton } from 'element-plus/es/components/button/index'
+import { ElDialog } from 'element-plus/es/components/dialog/index'
 import { ElPopover } from 'element-plus/es/components/popover/index'
 import { ElSlider } from 'element-plus/es/components/slider/index'
 import './xiaocLife.css'
@@ -11,12 +13,14 @@ const emit = defineEmits<{ (e: 'open-life'): void }>()
 const life = useXiaoCLife(() => props.owner)
 const selection = ref(1)
 const expanded = ref(false)
-let compactSession = 0
+const confirmation = ref<{ owner: number; level: number; revision: number } | null>(null)
+let pointerSelecting = false
 const triggerRef = ref<HTMLButtonElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
 const marks = { 1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4', 5: 'L5', 6: 'L6' }
+const formatLevel = (level: number) => `L${level} · ${xiaocLevelLabels[level] ?? '模式待核实'}`
 const label = computed(() =>
-  life.state ? `L${life.state.level} · ${xiaocLevelLabels[life.state.level] ?? '模式待核实'}` : life.loading ? '正在读取自主模式' : '自主模式待核实',
+  life.state ? formatLevel(life.state.level) : life.loading ? '正在读取自主模式' : '自主模式待核实',
 )
 const activity = computed(() =>
   life.error
@@ -27,21 +31,13 @@ const activity = computed(() =>
         ? '自主活动已暂停'
         : life.state?.activity?.summary || xiaocStateLabel(life.state?.status ?? ''),
 )
-const canApply = computed(() => !!life.state && !life.saving && !life.error && selection.value !== life.state.level)
-const modeDescriptions: Readonly<Record<number, string>> = {
-  1: '专注对话、理解与建议。',
-  2: '在既有权限内处理明确任务。',
-  3: '自主推进任务，关注执行与结果核验。',
-  4: '按已有授权持续推进企业工作。',
-  5: '在已有预算内开展探索与能力改进。',
-  6: '在明确授权内推进长期目标与复盘。',
-}
-const previewLabel = computed(() => `L${selection.value} · ${xiaocLevelLabels[selection.value] ?? '模式待核实'}`)
+const staleConfirmation = computed(() => confirmation.value !== null
+  && confirmation.value.revision !== life.state?.revision)
 const popoverAttrs = computed(() => ({
   visible: expanded.value,
   placement: 'top-end' as const,
   fallbackPlacements: ['top-start', 'bottom-end', 'bottom-start'],
-  width: 300,
+  width: 216,
   offset: 10,
   showArrow: false,
   teleported: true,
@@ -66,7 +62,7 @@ function selectLevel(value: number | number[]) {
 async function changeLevel(value: number | number[]) {
   if (!isLevel(value) || !life.state || life.error || life.saving) return
   if (props.compact) {
-    selection.value = value
+    if (pointerSelecting) requestConfirmation(value)
     return
   }
   if (value === life.state.level) return
@@ -75,15 +71,16 @@ async function changeLevel(value: number | number[]) {
 }
 
 function closeCompact(restoreFocus = false) {
-  if (expanded.value) compactSession += 1
+  pointerSelecting = false
   expanded.value = false
   selection.value = life.state?.level ?? 1
   if (restoreFocus) triggerRef.value?.focus({ preventScroll: true })
 }
 function toggleCompact() {
+  if (confirmation.value) return
   if (expanded.value) closeCompact()
   else {
-    compactSession += 1
+    if (life.error) void life.refresh()
     selection.value = life.state?.level ?? 1
     expanded.value = true
   }
@@ -93,45 +90,85 @@ function insideCompact(event: Event) {
   return [triggerRef.value, contentRef.value].some(element => element !== null && path.includes(element))
 }
 function onOutside(event: Event) {
-  if (!expanded.value || insideCompact(event)) return
+  if (!expanded.value) return
+  if (insideCompact(event)) {
+    if (event.type === 'pointerdown' && contentRef.value && event.composedPath().includes(contentRef.value)) {
+      pointerSelecting = true
+    }
+    return
+  }
   // The panel is non-modal: do not steal focus from the next target.
   closeCompact()
 }
-function onEscape(event: KeyboardEvent) {
-  if (!expanded.value || event.key !== 'Escape' || event.defaultPrevented || !insideCompact(event)) return
+function onTouchRelease(event: PointerEvent) {
+  if (!pointerSelecting || event.pointerType !== 'touch') return
+  pointerSelecting = false
+  if (event.type === 'pointercancel') {
+    selection.value = life.state?.level ?? 1
+    return
+  }
+  // A track tap can update the Element Plus model before the touch ends
+  // without a corresponding slider change event.
+  requestAnimationFrame(() => requestConfirmation(selection.value))
+}
+function onCompactKey(event: KeyboardEvent) {
+  if (!expanded.value || event.defaultPrevented || !insideCompact(event)) return
+  pointerSelecting = false
+  if (event.key === 'Enter' && event.target instanceof Element && event.target.matches('[role="slider"]')) {
+    event.preventDefault()
+    requestConfirmation(selection.value)
+    return
+  }
+  if (event.key !== 'Escape') return
   event.stopPropagation()
   event.preventDefault()
   closeCompact(true)
 }
 function openLife() {
-  // The composer may be hidden while the activity view is shown. Close its teleported surface first.
-  closeCompact()
   emit('open-life')
 }
 function focusContent() {
-  if (expanded.value) contentRef.value?.focus({ preventScroll: true })
+  const content = contentRef.value
+  if (!expanded.value || !content || content.contains(document.activeElement)) return
+  const target = content.querySelector<HTMLElement>('[role="slider"]') ?? content
+  target.focus({ preventScroll: true })
 }
 onMounted(() => {
   document.addEventListener('pointerdown', onOutside, true)
+  document.addEventListener('pointerup', onTouchRelease, true)
+  document.addEventListener('pointercancel', onTouchRelease, true)
   document.addEventListener('focusin', onOutside, true)
-  document.addEventListener('keydown', onEscape, true)
+  document.addEventListener('keydown', onCompactKey, true)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onOutside, true)
+  document.removeEventListener('pointerup', onTouchRelease, true)
+  document.removeEventListener('pointercancel', onTouchRelease, true)
   document.removeEventListener('focusin', onOutside, true)
-  document.removeEventListener('keydown', onEscape, true)
+  document.removeEventListener('keydown', onCompactKey, true)
 })
-watch(() => props.owner, () => closeCompact())
-watch(() => props.compact, (compact) => { if (!compact) closeCompact() })
-async function applyLevel() {
+watch(() => props.owner, () => {
+  closeCompact()
+  confirmation.value = null
+})
+watch(() => props.compact, (compact) => {
+  if (compact) return
+  closeCompact()
+  confirmation.value = null
+})
+
+function requestConfirmation(level: number) {
   const state = life.state
-  if (!state || !canApply.value) return
-  const session = compactSession
-  const owner = props.owner
-  const saved = await life.save({ level: selection.value }, state.revision)
-  if (session !== compactSession || owner !== props.owner) return
-  selection.value = life.state?.level ?? 1
-  if (saved && expanded.value) closeCompact(true)
+  if (!props.compact || !expanded.value || !state || level === state.level || life.error || life.saving) return
+  closeCompact()
+  confirmation.value = { owner: props.owner, level, revision: state.revision }
+}
+
+async function applyLevel() {
+  const pending = confirmation.value
+  if (!pending || pending.owner !== props.owner || staleConfirmation.value) return
+  const saved = await life.save({ level: pending.level }, pending.revision)
+  if (saved && confirmation.value === pending) confirmation.value = null
 }
 </script>
 
@@ -167,78 +204,76 @@ async function applyLevel() {
     :class="{ 'xiaoc-life-control--light': light, 'xiaoc-life-control--compact': compact }"
     aria-label="企业小 C 自主模式"
     :aria-busy="life.loading || life.saving"
+    :title="compact && life.error ? life.error : undefined"
   >
-    <div class="xiaoc-life-control__head">
-      <div class="xiaoc-life-control__heading">
-        <strong>{{ compact ? '自主任务' : label }}</strong>
-      </div>
+    <strong v-if="compact" class="xiaoc-life-control__value" aria-hidden="true">
+      {{ life.state ? formatLevel(selection) : label }}
+    </strong>
+    <div v-else class="xiaoc-life-control__head">
+      <strong>{{ label }}</strong>
       <span>全企业生效</span>
-      <div v-if="!compact" class="xiaoc-life-control__actions">
-      <button v-if="life.state?.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">
-        启动自主活动
-      </button>
-      <template v-else-if="life.state">
-        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">
-          {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
-        </button>
-        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
-      </template>
-      </div>
-    </div>
-    <div v-if="compact" class="xiaoc-life-control__preview" aria-live="polite" aria-atomic="true">
-      <strong>{{ life.state ? (selection === life.state.level ? previewLabel : '预选 ' + previewLabel) : label }}</strong>
-      <span v-if="life.state">{{ modeDescriptions[selection] }}</span>
-      <span v-if="life.state" class="xiaoc-life-control__applied">{{ life.error ? '上次读取的设置，当前状态待核实' : selection === life.state.level ? '已应用' : '当前已应用 ' + label }}</span>
     </div>
     <ElSlider
-
       :model-value="selection"
       :min="1"
       :max="6"
       :step="1"
-      :marks="marks"
+      :marks="compact ? undefined : marks"
       show-stops
       :show-tooltip="!compact"
       :disabled="!life.state || life.saving || !!life.error"
-      :format-tooltip="(value: number) => `L${value} · ${xiaocLevelLabels[value]}`"
-      v-bind="{ ariaLabel: '小 C 全企业自主等级', 'data-autonomy-preview': compact ? selection : undefined }"
+      :format-tooltip="formatLevel"
+      :format-value-text="formatLevel"
+      v-bind="{ ariaLabel: '小 C 全企业自主等级' }"
       @update:model-value="selectLevel"
       @change="changeLevel"
     />
-    <div class="xiaoc-life-control__foot">
-      <span role="status">{{ life.error ? activity : life.state ? activity : '尚未读取运行状态' }}</span>
-      <button type="button" @click="openLife">目标与预算</button>
-    </div>
-    <div v-if="compact" class="xiaoc-life-control__actions">
-    <button v-if="life.state?.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">
-      启动自主活动
-    </button>
-    <template v-else-if="life.state">
-      <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">
-        {{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}
-      </button>
-      <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
-    </template>
-    </div>
-    <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
-      <span :title="life.state.identity_id">状态版本 {{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</span>
-      <span v-if="life.state.activity?.phase">{{ life.state.activity.phase }}</span>
-      <span v-if="life.state.activity?.checkpoint_phase">
-        {{ life.state.activity.checkpoint_phase === 'reflect' ? '已保存复盘回执' : '已保存执行回执' }}
-      </span>
-    </div>
-    <div v-if="life.state?.blockers.length" class="xiaoc-life-control__error" role="status">
-      {{ life.state.blockers.join('；') }}
-    </div>
-    <div v-if="life.error" class="xiaoc-life-control__error" role="alert">
+    <div v-if="!compact && life.error" class="xiaoc-life-control__error" role="alert">
       {{ life.error }} <button type="button" :disabled="life.loading || life.saving" @click="life.refresh()">刷新</button>
     </div>
-    <div v-if="compact" class="xiaoc-life-control__confirm">
-      <span>切换影响全企业，不扩大授权。</span>
-      <button type="button" :disabled="!canApply" @click="applyLevel">{{ life.saving ? '保存中…' : '确认切换' }}</button>
-    </div>
+    <template v-if="!compact">
+      <div class="xiaoc-life-control__foot">
+        <span role="status">{{ life.error || life.state ? activity : '尚未读取运行状态' }}</span>
+        <button type="button" @click="openLife">目标与预算</button>
+      </div>
+      <div v-if="life.state" class="xiaoc-life-control__actions">
+        <button v-if="life.state.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">启动自主活动</button>
+        <template v-else>
+          <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">{{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}</button>
+          <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
+        </template>
+      </div>
+      <div v-if="life.state?.state_version !== undefined" class="xiaoc-life-control__foot">
+        <span :title="life.state.identity_id">状态版本 {{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</span>
+        <span v-if="life.state.activity?.phase">{{ life.state.activity.phase }}</span>
+        <span v-if="life.state.activity?.checkpoint_phase">
+          {{ life.state.activity.checkpoint_phase === 'reflect' ? '已保存复盘回执' : '已保存执行回执' }}
+        </span>
+      </div>
+      <div v-if="life.state?.blockers.length" class="xiaoc-life-control__error" role="status">{{ life.state.blockers.join('；') }}</div>
+    </template>
   </section>
   </component>
+  <ElDialog
+    v-if="compact"
+    :model-value="confirmation !== null"
+    title="切换自主任务档位"
+    width="min(350px, calc(100vw - 24px))"
+    :z-index="12120"
+    append-to-body
+    :close-on-click-modal="false"
+    :close-on-press-escape="!life.saving"
+    :show-close="!life.saving"
+    @update:model-value="confirmation = null"
+    @closed="triggerRef?.focus({ preventScroll: true })"
+  >
+    <p v-if="confirmation">将全企业切换至 {{ formatLevel(confirmation.level) }}。</p>
+    <p v-if="staleConfirmation || life.error" role="alert">{{ life.error || '档位已更新，请重新选择。' }}</p>
+    <template #footer>
+      <ElButton :disabled="life.saving" @click="confirmation = null">取消</ElButton>
+      <ElButton type="primary" :loading="life.saving" :disabled="!!life.error || staleConfirmation" @click="applyLevel">确认切换</ElButton>
+    </template>
+  </ElDialog>
 </template>
 
 <style scoped>
@@ -318,9 +353,7 @@ async function applyLevel() {
   flex-wrap: wrap;
   gap: 6px;
 }
-.xiaoc-life-control__actions { display: contents; }
 .xiaoc-life-control__head > span { color: var(--life-muted); font-size: 0.7rem; }
-.xiaoc-life-control__head button,
 .xiaoc-life-control__foot button { margin-left: auto; flex-shrink: 0; }
 .xiaoc-life-control :deep(.el-slider) {
   margin-bottom: 20px;
@@ -354,60 +387,48 @@ async function applyLevel() {
   --life-surface: #292826;
   --life-accent: #d2b08e;
   --life-track: #ffffff20;
-  --life-hover: #ffffff0a;
-  --life-button-fg: #29231d;
   box-sizing: border-box;
   width: 100%;
-  max-height: min(480px, 72vh);
-  max-height: min(480px, 72dvh);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 16px;
+  padding: 8px 12px 2px;
   border: 1px solid var(--life-border);
   border-radius: 14px;
   background: var(--life-surface);
   box-shadow: 0 2px 6px #0002, 0 12px 32px #0004;
-  font-size: 0.78rem;
-  line-height: 1.5;
   transform-origin: bottom right;
 }
 .xiaoc-life-control--compact.xiaoc-life-control--light {
   --life-fg: #34312b;
-  --life-muted: #79746b;
+  --life-muted: #665f55;
   --life-border: #e8e4dc;
   --life-error: #8a311d;
   --life-surface: #fdfcf9;
   --life-accent: #9a7353;
   --life-track: #e6e0d6;
-  --life-hover: #24201807;
-  --life-button-fg: #fff;
   box-shadow: 0 2px 6px #29201808, 0 12px 32px #29201816;
 }
 .xiaoc-life-control--compact:focus { outline: none; }
-.xiaoc-life-control--compact .xiaoc-life-control__head { justify-content: space-between; gap: 6px; }
-.xiaoc-life-control__heading { min-width: 0; }
-.xiaoc-life-control--compact .xiaoc-life-control__heading strong { display: block; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
-.xiaoc-life-control--compact .xiaoc-life-control__actions { display: flex; gap: 4px; flex-basis: 100%; }
-.xiaoc-life-control--compact .xiaoc-life-control__actions button { margin: 0; color: var(--life-muted); }
+.xiaoc-life-control__value {
+  display: block;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
 .xiaoc-life-control--compact :deep(.el-slider) {
-  --el-slider-height: 4px;
-  --el-slider-button-size: 14px;
+  --el-slider-height: 10px;
+  --el-slider-button-size: 18px;
+  --el-slider-button-wrapper-offset: -13px;
   --el-slider-main-bg-color: var(--life-accent);
   --el-slider-runway-bg-color: var(--life-track);
-  --el-slider-stop-bg-color: var(--life-track);
   --el-slider-border-radius: 999px;
-  box-sizing: border-box;
   width: auto;
-  min-height: 36px;
-  margin: 0 10px 16px;
+  min-height: 32px;
+  margin: 0 8px;
   touch-action: pan-y;
 }
 .xiaoc-life-control--compact :deep(.el-slider__button) {
-  background: var(--life-accent);
-  border: 2px solid var(--life-surface);
-  box-shadow: 0 0 0 1px var(--life-accent), 0 2px 5px #0002;
+  background: #fff9ed;
+  border: 1px solid var(--life-accent);
+  box-shadow: 0 1px 4px #0004;
   transition: transform var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out), box-shadow var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
 }
 .xiaoc-life-control--compact :deep(.el-slider:not(.is-disabled) .el-slider__button-wrapper:hover .el-slider__button) {
@@ -418,21 +439,13 @@ async function applyLevel() {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--life-accent) 18%, transparent);
 }
 .xiaoc-life-control--compact :deep(.el-slider__button-wrapper:focus-visible) { outline: 2px solid var(--life-accent); outline-offset: 1px; border-radius: 50%; }
-.xiaoc-life-control--compact :deep(.el-slider__stop) { width: 4px; height: 4px; background: var(--life-muted); opacity: .6; }
-.xiaoc-life-control--compact :deep(.el-slider__marks-text) {
-  color: var(--life-muted);
-  font-size: 0.68rem;
-  font-variant-numeric: tabular-nums;
-  transition: color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
-}
-.xiaoc-life-control--compact :deep([data-autonomy-preview="1"] .el-slider__marks-text:nth-child(1)),
-.xiaoc-life-control--compact :deep([data-autonomy-preview="2"] .el-slider__marks-text:nth-child(2)),
-.xiaoc-life-control--compact :deep([data-autonomy-preview="3"] .el-slider__marks-text:nth-child(3)),
-.xiaoc-life-control--compact :deep([data-autonomy-preview="4"] .el-slider__marks-text:nth-child(4)),
-.xiaoc-life-control--compact :deep([data-autonomy-preview="5"] .el-slider__marks-text:nth-child(5)),
-.xiaoc-life-control--compact :deep([data-autonomy-preview="6"] .el-slider__marks-text:nth-child(6)) {
-  color: var(--life-fg);
-  font-weight: 600;
+.xiaoc-life-control--compact :deep(.el-slider__stop) {
+  width: 3px;
+  height: 3px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--life-fg);
+  opacity: 0.65;
 }
 @supports selector(:has(*)) {
   /* Follow the pointer directly; ease only discrete clicks and keyboard changes. */
@@ -443,56 +456,20 @@ async function applyLevel() {
     transition: width var(--wb-transition-normal, var(--xc-token-motion-standard-ms) ease-out);
   }
 }
-.xiaoc-life-control__preview {
-  display: grid;
-  grid-template-rows: auto minmax(2.8em, auto) auto;
-  gap: 3px;
-  min-width: 0;
-  color: var(--life-muted);
-}
-.xiaoc-life-control__preview strong { color: var(--life-fg); font-size: .98rem; font-weight: 600; letter-spacing: -.015em; }
-.xiaoc-life-control__applied { color: var(--life-muted); font-size: .68rem; }
-.xiaoc-life-control--compact .xiaoc-life-control__foot { gap: 8px; font-size: 0.72rem; }
-.xiaoc-life-control--compact .xiaoc-life-control__foot > span { white-space: normal; overflow-wrap: anywhere; }
-.xiaoc-life-control--compact button {
-  padding: 4px 6px;
-  border-radius: 6px;
-  text-decoration: none;
-  transition: background-color var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease), opacity var(--wb-transition-fast, var(--xc-token-motion-feedback-ms) ease);
-}
-.xiaoc-life-control--compact button:hover:not(:disabled) { background: var(--life-hover); }
-.xiaoc-life-control--compact button:focus-visible { outline: 2px solid var(--life-accent); outline-offset: 1px; }
-.xiaoc-life-control__confirm {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  padding-top: 10px;
-  border-top: 1px solid var(--life-border);
-}
-.xiaoc-life-control__confirm span { flex: 1; color: var(--life-muted); font-size: 0.68rem; }
-.xiaoc-life-control__confirm button {
-  flex-shrink: 0;
-  padding: 6px 10px;
-  background: var(--life-accent);
-  color: var(--life-button-fg);
-  font-weight: 500;
-}
-.xiaoc-life-control__confirm button:hover:not(:disabled) { background: var(--life-accent); opacity: 0.88; }
-.xiaoc-life-control__confirm button:disabled { background: var(--life-track); color: var(--life-muted); opacity: 0.7; }
 @media (pointer: coarse) {
   .xiaoc-life-disclosure__trigger { min-height: 44px; }
-  .xiaoc-life-control--compact button { min-height: 44px; min-width: 44px; }
-  .xiaoc-life-control--compact :deep(.el-slider) { min-height: 44px; }
-  .xiaoc-life-control--compact :deep(.el-slider__button-wrapper) { width: 44px; height: 44px; top: -20px; }
+  .xiaoc-life-control--compact :deep(.el-slider) {
+    --el-slider-button-wrapper-size: 44px;
+    --el-slider-button-wrapper-offset: -17px;
+    min-height: 44px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .xiaoc-life-disclosure__trigger, .xiaoc-life-disclosure__trigger svg,
-  .xiaoc-life-control--compact, .xiaoc-life-control--compact button,
+  .xiaoc-life-control--compact,
   .xiaoc-life-control--compact :deep(.el-slider__button),
   .xiaoc-life-control--compact :deep(.el-slider__button-wrapper),
-  .xiaoc-life-control--compact :deep(.el-slider__bar),
-  .xiaoc-life-control--compact :deep(.el-slider__marks-text) { transition: none !important; }
+  .xiaoc-life-control--compact :deep(.el-slider__bar) { transition: none !important; }
   .xiaoc-life-disclosure__trigger:active,
   .xiaoc-life-control--compact :deep(.el-slider .el-slider__button-wrapper:hover .el-slider__button),
   .xiaoc-life-control--compact :deep(.el-slider .el-slider__button-wrapper.dragging .el-slider__button) { transform: none !important; }

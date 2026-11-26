@@ -84,10 +84,12 @@ _ALLOWED_ERP_FIELDS: dict[str, frozenset[str]] = {
 
 def build_erp_field_claim(snapshot: dict[str, Any], field: str) -> dict[str, Any] | None:
     """Construct a typed candidate from an authorized, fresh ERP row only."""
+    entity_type = snapshot.get("entity_type")
     if (
         not isinstance(field, str)
         or _FIELD.fullmatch(field) is None
-        or field not in _ALLOWED_ERP_FIELDS.get(snapshot.get("entity_type"), frozenset())
+        or not isinstance(entity_type, str)
+        or field not in _ALLOWED_ERP_FIELDS.get(entity_type, frozenset())
         or snapshot.get("freshness") != "fresh"
         or snapshot.get("retrieved_from") != "authority"
     ):

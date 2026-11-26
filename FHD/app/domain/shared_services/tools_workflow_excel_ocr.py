@@ -145,10 +145,14 @@ def _registered_router_excel_analysis(
         summary = result.get("numeric_summary") or {}
         for column, expected in (params.get("expected_totals") or {}).items():
             # Sales exports name the money column amount. Plans often say total_amount.
-            source = column
-            if source not in summary and source == "total_amount" and "amount" in summary:
-                source = "amount"
-            actual = summary.get(source, {}).get("sum")
+            summary_column = column
+            if (
+                summary_column not in summary
+                and summary_column == "total_amount"
+                and "amount" in summary
+            ):
+                summary_column = "amount"
+            actual = summary.get(summary_column, {}).get("sum")
             if actual is None or not isclose(
                 float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-9
             ):

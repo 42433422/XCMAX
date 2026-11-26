@@ -14,14 +14,20 @@ from sqlalchemy import select
 from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, _row, digest
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError
-from modstore_server.xiaoc_life_reflection import experience_candidate_facts, review_experiences
+from modstore_server.xiaoc_life_reflection import (
+    experience_candidate_facts,
+    review_experiences,
+)
 
 
 def experience_scope(candidate: dict[str, Any]) -> dict[str, Any] | None:
     """Observed task category and exact comparison window, never transferable authority."""
     from modstore_server.xiaoc_life_reflection import _time
 
-    start, end = _time(candidate.get("window_start")), _time(candidate.get("window_end"))
+    start, end = (
+        _time(candidate.get("window_start")),
+        _time(candidate.get("window_end")),
+    )
     metric, direction, target = (
         candidate.get("metric_id"),
         candidate.get("direction"),
@@ -155,9 +161,18 @@ def review_experience(
     actor_user_id: int,
 ) -> dict[str, Any]:
     """Owner-only, idempotent review. Confirmation cannot change the source."""
-    from modstore_server.xiaoc_life_store import _active_principal, _event, _event_dict, _mutate
+    from modstore_server.xiaoc_life_store import (
+        _active_principal,
+        _event,
+        _event_dict,
+        _mutate,
+    )
 
-    target_status = {"confirm": "confirmed", "reject": "rejected", "revoke": "revoked"}.get(action)
+    target_status = {
+        "confirm": "confirmed",
+        "reject": "rejected",
+        "revoke": "revoked",
+    }.get(action)
     if target_status is None:
         raise LifePolicyError("invalid experience review action")
 
@@ -178,7 +193,11 @@ def review_experience(
         candidate, _ = validated
         current = _review_status(session, event)
         if current == target_status:
-            return {"candidate_id": candidate_id, "status": current, "revision": state["revision"]}
+            return {
+                "candidate_id": candidate_id,
+                "status": current,
+                "revision": state["revision"],
+            }
         if state["revision"] != expected_revision:
             raise LifePolicyError("experience review revision changed")
         if current != ("confirmed" if action == "revoke" else "pending_review"):
@@ -257,7 +276,13 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         key = tuple(
             scope[field]
-            for field in ("owner_user_id", "metric_id", "direction", "threshold", "window_days")
+            for field in (
+                "owner_user_id",
+                "metric_id",
+                "direction",
+                "threshold",
+                "window_days",
+            )
         )
         outcomes.setdefault(key, set()).add(event["details"]["candidate"]["outcome"])
     conflicts = {key for key, values in outcomes.items() if len(values) > 1}
@@ -270,7 +295,11 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
                 tuple(
                     scope[field]
                     for field in (
-                        "owner_user_id", "metric_id", "direction", "threshold", "window_days"
+                        "owner_user_id",
+                        "metric_id",
+                        "direction",
+                        "threshold",
+                        "window_days",
                     )
                 )
                 if scope is not None
@@ -279,11 +308,11 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
             blocked = (
                 "conflicting_measured_outcomes"
                 if key in conflicts
-                else "unverified_or_truncated_review_history"
-                if not history_complete
-                else "invalid_measurement_scope"
-                if scope is None
-                else ""
+                else (
+                    "unverified_or_truncated_review_history"
+                    if not history_complete
+                    else "invalid_measurement_scope" if scope is None else ""
+                )
             )
             grade = {
                 "evidence_grade": "verified_single_task_and_human_review",

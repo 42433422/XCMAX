@@ -293,7 +293,7 @@ def archive_from_crm_invoice(
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
 
-        def find_existing(db):
+        def find_existing(db) -> dict[str, Any] | None:
             return _invoice_archive_existing(
                 db,
                 tenant_id,

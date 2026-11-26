@@ -108,7 +108,6 @@ def test_unknown_and_unversioned_receipts_are_not_success_or_failure():
     assert result["excluded_unmeasured"] == 1
 
 
-
 def test_conflicting_receipt_does_not_inflate_completion_or_hide_risk():
     originals = [cycle(str(index), day=index) for index in range(20)]
     conflict = {**originals[-1], "status": "failed"}
@@ -161,12 +160,18 @@ def test_audit_catalog_requires_exact_18_domains_and_108_anchors(monkeypatch, tm
     # A shorter catalog cannot quietly improve measured coverage by dropping a test.
     catalog["domains"][0]["anchor_60"].pop()
     persist()
-    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+    assert audit_projection() == {
+        "status": "unknown",
+        "reason": "audit_source_unavailable",
+    }
 
     # Duplicated anchors do not count as independently registered capabilities.
     catalog["domains"][0]["anchor_60"].append(catalog["domains"][1]["anchor_60"][0])
     persist()
-    assert audit_projection() == {"status": "unknown", "reason": "audit_source_unavailable"}
+    assert audit_projection() == {
+        "status": "unknown",
+        "reason": "audit_source_unavailable",
+    }
 
 
 def test_conflicting_cost_journal_is_never_selected_by_order():

@@ -18,8 +18,11 @@ const lifeState = {
   updated_at: '2026-01-15T04:00:00Z', next_wake_at: null,
 }
 
+const touchTest = test.extend({ hasTouch: true })
+
 for (const [width, height] of [[1440, 900], [375, 812]]) {
-  test('autonomy popover keyboard and touch viewport ' + width, async ({ page, baseURL }) => {
+  const viewportTest = width === 375 ? touchTest : test
+  viewportTest('autonomy popover keyboard and touch viewport ' + width, async ({ page, baseURL }) => {
     test.skip(baselineLacksPopover, 'New autonomy popover absent from base; explicit visual review required')
     await page.setViewportSize({ width, height })
     await isolate(page, baseURL!)
@@ -60,21 +63,49 @@ for (const [width, height] of [[1440, 900], [375, 812]]) {
     await expect(trigger).toBeVisible({ timeout: 30000 })
     await expect(trigger).toHaveText('自主任务')
     await capture(page, 'autonomy-collapsed-' + width)
-    await trigger.click()
+    if (width === 375) await trigger.tap()
+    else await trigger.click()
     const popup = page.locator('.xiaoc-autonomy-popover .xiaoc-life-control--compact')
     await expect(popup).toBeVisible()
     await expect(popup).toBeInViewport({ ratio: 1 })
-    await expect(popup).toContainText('L4')
-    const thumb = popup.locator('.el-slider__button-wrapper')
+    const thumb = popup.getByRole('slider')
+    await expect(thumb).toHaveAttribute('aria-valuenow', '4')
     await thumb.click({ trial: true })
     await capture(page, 'autonomy-open-' + width)
-    await thumb.focus()
-    await page.keyboard.press('ArrowRight')
-    await expect(popup).toContainText('预选 L5')
+    if (process.env.VISUAL_CAPTURE_SIDE === 'baseline') {
+      await thumb.focus()
+      await page.keyboard.press('ArrowRight')
+      await capture(page, 'autonomy-preview-' + width)
+      return
+    }
+    const value = popup.locator('.xiaoc-life-control__value')
+    await expect(value).toHaveText('L4 · 自治运营')
+    await expect(popup.getByRole('button')).toHaveCount(0)
+    if (width === 375) {
+      const runway = popup.locator('.el-slider__runway')
+      const box = await runway.boundingBox()
+      expect(box).not.toBeNull()
+      await runway.tap({ position: { x: box!.width * 0.8, y: box!.height / 2 } })
+    } else {
+      await thumb.focus()
+      await thumb.press('ArrowRight')
+      await expect(thumb).toHaveAttribute('aria-valuetext', /^L5 · /)
+      await expect(value).toHaveText('L5 · 自主成长')
+      await page.keyboard.press('Enter')
+    }
+    const dialog = page.getByRole('dialog', { name: '切换自主任务档位' })
+    await expect(popup).toBeHidden()
+    await expect(dialog).toContainText('L5 · 自主成长')
+    await expect(dialog.getByRole('button', { name: '确认切换' })).toBeEnabled()
     await capture(page, 'autonomy-preview-' + width)
-    await page.keyboard.press('Escape')
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await dialog.getByRole('button', { name: '取消' }).click()
     await expect(trigger).toBeFocused()
+    await trigger.click()
+    await expect(thumb).toHaveAttribute('aria-valuetext', 'L4 · 自治运营')
+    await page.getByRole('button', { name: '工作动态' }).click()
+    await page.getByRole('button', { name: '自主状态' }).click()
+    await expect(page.getByRole('button', { name: '暂停自主活动' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '设置预算' })).toBeVisible()
     expect(lifeWrites).toBe(0)
   })
 }

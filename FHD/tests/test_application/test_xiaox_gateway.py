@@ -623,7 +623,7 @@ def test_unready_local_server_persists_blocked_parent_without_replay(
 ):
     import uvicorn
 
-    from app.infrastructure.codex import local_server
+    from app.infrastructure.xiaox import local_server
 
     state = setup_gateway
     thread = Mock()
@@ -656,7 +656,7 @@ def test_unready_local_server_persists_blocked_parent_without_replay(
 def test_private_endpoint_startup_failure_is_operational_and_closes_resources(monkeypatch):
     import uvicorn
 
-    from app.infrastructure.codex import local_server
+    from app.infrastructure.xiaox import local_server
 
     sock = Mock()
     sock.getsockname.return_value = ("127.0.0.1", 19113)
@@ -734,7 +734,11 @@ def test_dual_request_namespaces_are_not_merged_or_executed(setup_gateway, monke
     monkeypatch.setattr(gateway, "runtime_settings", unavailable)
     monkeypatch.setattr(gateway, "get_account_runtime_settings", unavailable)
     for run_id in (None, old_id):
-        result = asyncio.run(state.invoke(settings=None, run_id=run_id, **options))
+        result = asyncio.run(
+            state.invoke(
+                settings=None, run_id=run_id, **{**options, "start_paused": run_id is None}
+            )
+        )
         assert result["error_code"] == "runtime_identity_conflict"
         assert result["retryable"] is False
     assert all(state.repository.get(rid).to_dict() == saved for rid, saved in snapshots.items())

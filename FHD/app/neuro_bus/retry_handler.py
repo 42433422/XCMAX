@@ -148,9 +148,8 @@ class RetryHandler:
         **kwargs,
     ) -> Any:
         """Use one event-loop deadline for all invocations and backoff waits."""
-        context = retry_context or self.new_context(
-            operation_name or getattr(operation, "__name__", "operation")
-        )
+        name = operation_name or getattr(operation, "__name__", "operation")
+        context = retry_context or self.new_context(name if isinstance(name, str) else "operation")
         loop = asyncio.get_running_loop()
         async with asyncio.timeout_at(deadline):
             while True:

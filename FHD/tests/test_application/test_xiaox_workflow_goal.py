@@ -306,14 +306,14 @@ def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
             original["grant"], run=mutated, principal_id=str(state.actor.user_id)
         )
     with pytest.raises(XiaoxBindingError) as error:
-        state.execute("batch-original", {"ids": [33]}, "products", "batch_delete")
+        state.execute("batch-original", {"ids": [33]}, "customers", "batch_delete")
     assert error.value.code == "call_conflict"
     with pytest.raises(XiaoxBindingError) as pending:
-        state.execute("different-batch", {"ids": [33]}, "products", "batch_delete")
+        state.execute("different-batch", {"ids": [33]}, "customers", "batch_delete")
     assert pending.value.code == "waiting_user"
     # Model-supplied approval and identity never reach the frozen batch.
     with pytest.raises(XiaoxBindingError) as forged:
-        state.execute("forged", {**params, "human_approved": True}, "products", "batch_delete")
+        state.execute("forged", {**params, "human_approved": True}, "customers", "batch_delete")
     assert forged.value.code == "identity_override"
     reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
     calls = reopened.get(state.parent.run_id).metadata["calls"]

@@ -20,6 +20,13 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.page import PageMargins
 
+from app.domain.workbook_write_contract import (
+    WORKBOOK_CONTROL_PHASES as WORKBOOK_CONTROL_PHASES,
+)
+from app.domain.workbook_write_contract import (
+    WORKBOOK_NATIVE_PHASES as WORKBOOK_NATIVE_PHASES,
+)
+
 _MARGINS = {
     "narrow": (0.25, 0.25, 0.75, 0.75, 0.3, 0.3),
     "normal": (0.7, 0.7, 0.75, 0.75, 0.3, 0.3),
@@ -30,11 +37,12 @@ _BOUNDS = (16_384, 1_048_576)
 
 def _area(token: str) -> tuple[str, tuple[int, int, int, int]]:
     ref = token.upper().replace("$", "")
-    bounds = range_boundaries(ref)
-    left, top, right, bottom = bounds
+    left, top, right, bottom = range_boundaries(ref)
+    if left is None or top is None or right is None or bottom is None:
+        raise ValueError("控制规则需要指定单元格边界")
     if not (1 <= left <= right <= _BOUNDS[0] and 1 <= top <= bottom <= _BOUNDS[1]):
         raise ValueError("控制规则范围超出 Excel 工作表边界")
-    return ref, bounds
+    return ref, (left, top, right, bottom)
 
 
 def _conditional(phase, bounds):

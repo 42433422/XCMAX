@@ -156,13 +156,27 @@ async function promote(goalId: string) {
       <button type="button" :disabled="life.loading || life.saving" @click="life.refresh()">刷新状态</button>
       <button type="button" :disabled="!life.state || life.saving" @click="editPolicy">设置预算</button>
       <button type="button" :disabled="!life.state || life.saving" @click="editTaskBudget">企业任务模板</button>
+      <button v-if="life.state?.stopped" type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: false, paused: false })">启动自主活动</button>
+      <template v-else-if="life.state">
+        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ paused: !life.state.paused })">{{ life.state.paused ? '恢复自主活动' : '暂停自主活动' }}</button>
+        <button type="button" :disabled="life.saving || !!life.error" @click="life.save({ stopped: true })">停止自主活动</button>
+      </template>
     </div>
     <p v-if="life.error" class="xiaoc-error" role="alert">{{ life.error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <template v-if="life.state">
       <dl class="life-facts">
         <dt>当前状态</dt>
-        <dd>{{ life.error ? '待同步' : life.state.paused ? '自主活动已暂停' : xiaocStateLabel(life.state.status) }}</dd>
+        <dd>{{ life.error ? '待同步' : life.state.stopped ? '自主活动已停止' : life.state.paused ? '自主活动已暂停' : life.state.activity?.summary || xiaocStateLabel(life.state.status) }}</dd>
+        <template v-if="life.state.state_version !== undefined">
+          <dt>状态版本</dt><dd :title="life.state.identity_id">{{ life.state.state_version }} · 授权版本 {{ life.state.revision }}</dd>
+        </template>
+        <template v-if="life.state.activity?.phase">
+          <dt>活动阶段</dt><dd>{{ life.state.activity.phase }}</dd>
+        </template>
+        <template v-if="life.state.activity?.checkpoint_phase">
+          <dt>活动回执</dt><dd>{{ life.state.activity.checkpoint_phase === 'reflect' ? '已保存复盘回执' : '已保存执行回执' }}</dd>
+        </template>
         <dt>当前使命</dt>
         <dd>{{ life.state.mission || '尚未设置' }}</dd>
         <dt>下一次唤醒</dt>

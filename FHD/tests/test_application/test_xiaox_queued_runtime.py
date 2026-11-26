@@ -61,7 +61,7 @@ def test_http_queue_request_and_worker_turn_have_separate_stable_identities(
     assert state.queue.get(run_id).execution_count == 0
     state.drain(run_id)
     saved = state.repository.get(run_id)
-    assert saved.metadata["codex_runtime"]["version"] == 1
+    assert saved.metadata["xiaox_runtime"]["version"] == 1
     assert set(saved.metadata["runtime_requests"]) == {original, worker_id}
     assert saved.metadata["runtime_requests"][original]["result"]["ok"] is True
     assert len(state.calls) == 1 and state.queue.get(run_id).state == "succeeded"

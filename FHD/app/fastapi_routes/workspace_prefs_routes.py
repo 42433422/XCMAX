@@ -114,22 +114,22 @@ def _patch_local_prefs(body: WorkspacePrefsPatch, request: Request):
     else:
         prefs = patch_workspace_prefs(owner_id, partial, expected_revision=body.expected_revision)
     if selected_industry_id:
-        binding_options = {
-            "industry_mod_id": str(partial.get("industry_mod_id") or "").strip(),
-            "owner_id": owner_id,
-        }
+        industry_mod_id = str(partial.get("industry_mod_id") or "").strip()
         if body.expected_revision is not None:
             # Keep the CAS write a single preference revision. Legacy callers
             # retain their prior industry-binding behavior during rollout.
             bind_selected_industry_for_user(
                 user,
                 selected_industry_id,
+                industry_mod_id=industry_mod_id,
+                owner_id=owner_id,
                 persist_workspace_prefs=False,
-                **binding_options,
             )
         else:
             prefs = (
-                bind_selected_industry_for_user(user, selected_industry_id, **binding_options)
+                bind_selected_industry_for_user(
+                    user, selected_industry_id, industry_mod_id=industry_mod_id, owner_id=owner_id
+                )
                 or prefs
             )
     return prefs, owner_id, selected_industry_id, session_id_from_request(request)

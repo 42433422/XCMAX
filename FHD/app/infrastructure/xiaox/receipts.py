@@ -216,8 +216,12 @@ def _failed_step_detail(child: Any) -> str:
         output = getattr(step, "output", None)
         if not isinstance(output, dict):
             continue
-        payload = output.get("data") if isinstance(output.get("data"), dict) else {}
-        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        payload = output.get("data")
+        if not isinstance(payload, dict):
+            continue
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            continue
         for row in result.get("outputs") or []:
             if not isinstance(row, dict):
                 continue

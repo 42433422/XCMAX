@@ -402,7 +402,14 @@ class EnterpriseCognitionService:
             if action == "perceive":
                 from app.application.enterprise_cognition.perception import observe_enterprise
 
-                return observe_enterprise(self.projections, **parsed, **scope)
+                return observe_enterprise(
+                    self.projections,
+                    tenant_id=scope["tenant_id"],
+                    actor_id=scope["actor_id"],
+                    mod_id=scope["mod_id"],
+                    limit_per_source=parsed["limit_per_source"],
+                    force_refresh=parsed["force_refresh"],
+                )
             if action == "goals":
                 return (
                     self.goals.get(parsed["goal_id"], **scope)

@@ -29,7 +29,6 @@ def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
     from docx.oxml.exceptions import InvalidXmlError
     from docx.oxml.ns import qn
     from docx.text.paragraph import Paragraph
-    from lxml.etree import XMLSyntaxError
 
     max_tables, max_rows, max_columns, max_cell_chars = 20, 200, 40, 500
     coverage.update(
@@ -107,7 +106,7 @@ def _docx_preview(raw: bytes, coverage: dict[str, Any]) -> str:
                     coverage["truncated"] |= column - 1 + row.grid_after > max_columns
             elif block.tag != qn("w:sectPr"):
                 coverage["truncated"] = True
-    except (BadZipFile, InvalidXmlError, KeyError, XMLSyntaxError, ZlibError) as exc:
+    except (BadZipFile, InvalidXmlError, KeyError, SyntaxError, ZlibError) as exc:
         raise AttachmentInputError("附件解析失败，请重新上传可读取的文件") from exc
     return "\n".join(lines)
 

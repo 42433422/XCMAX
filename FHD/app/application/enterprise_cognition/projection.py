@@ -165,11 +165,9 @@ class ProjectionService:
                         return {**base, **historical_observation(row.snapshot_json, as_of, base)}
                     except (ValueError, KeyError, TypeError):
                         return self._unknown(base, "observation_history_unavailable")
-                if not verify_only:
-                    assert cursor is not None
                 started = self.clock()
                 if (
-                    not verify_only
+                    cursor is not None
                     and not force_refresh
                     and row is not None
                     and row.expires_at > started
@@ -228,6 +226,7 @@ class ProjectionService:
                     # An ERP reference check must not allocate cursor rows,
                     # consume history slots or write materialized projections.
                     return public_snapshot(result)
+                assert cursor is not None
                 try:
                     stored, conflict = record_observation(
                         row.snapshot_json if row is not None else None, result

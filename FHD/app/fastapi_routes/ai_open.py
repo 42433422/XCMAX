@@ -340,7 +340,8 @@ def _record_mcp_call(
         _mcp_tool_name(msg),
         channel="mcp",
         ok=(
-            isinstance(result, dict)
+            response is not None
+            and isinstance(result, dict)
             and result.get("isError") is False
             and not response.get("error")
         ),

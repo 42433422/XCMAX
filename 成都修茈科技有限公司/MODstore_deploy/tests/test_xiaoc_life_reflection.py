@@ -60,7 +60,11 @@ def record(*, failed=False, value=2.0):
         "owner_user_id": 7,
         "decision_id": "decision-1",
         "proposal_sha256": "c" * 64,
-        "authorization": {"user_id": 7, "actor": "admin:7", "proposal_sha256": "c" * 64},
+        "authorization": {
+            "user_id": 7,
+            "actor": "admin:7",
+            "proposal_sha256": "c" * 64,
+        },
         "opportunities": [{"opportunity_id": "a", "hypothesis": target, "cost_cents": 2}],
         "plan": {"selected": ["a"]},
         "tasks": {"a": task},
@@ -414,7 +418,9 @@ def test_experience_scope_is_exact_and_advisory_only():
     assert not experience_scope_matches(scope, {**hypothesis, "window_days": True}, 7)
 
 
-def test_conflicting_or_incomplete_experience_history_never_reaches_cognition(monkeypatch):
+def test_conflicting_or_incomplete_experience_history_never_reaches_cognition(
+    monkeypatch,
+):
     from types import SimpleNamespace
 
     from modstore_server import xiaoc_life_experience_review as module
@@ -434,7 +440,8 @@ def test_conflicting_or_incomplete_experience_history_never_reaches_cognition(mo
     monkeypatch.setattr(xiaoc_life_store, "_active_principal", lambda session, owner: True)
     monkeypatch.setattr(xiaoc_life_store, "_event_dict", lambda row: row.event)
     monkeypatch.setattr(
-        module, "_validated",
+        module,
+        "_validated",
         lambda state, event: (
             event["details"]["candidate"],
             {"experience_candidate": {"outcome": event["details"]["candidate"]["outcome"]}},
@@ -464,8 +471,7 @@ def test_conflicting_or_incomplete_experience_history_never_reaches_cognition(mo
     assert len(overflow) == 2
     assert all("reviewed_experience" not in fact for fact in overflow)
     assert all(
-        fact["learning_assessment"]["reuse_blocker"]
-        == "unverified_or_truncated_review_history"
+        fact["learning_assessment"]["reuse_blocker"] == "unverified_or_truncated_review_history"
         for fact in overflow
     )
 

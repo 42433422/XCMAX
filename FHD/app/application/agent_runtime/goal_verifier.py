@@ -144,25 +144,6 @@ def _normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:
     return raw
 
 
-def _normalize_review_provenance(raw: Any, contract: dict[str, Any]) -> Any:
-    """Normalize request aliases only for text present verbatim in the frozen request.
-
-    Conversation history and file text cannot authorize new business goals.
-    """
-    if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
-        return raw
-    request = contract["request"]["text"]
-    for goal in raw["goals"]:
-        if (
-            isinstance(goal, dict)
-            and goal.get("source_id") in {"original_request", "input", "user_request"}
-            and isinstance(goal.get("source"), str)
-            and goal["source"] in request
-        ):
-            goal["source_id"] = "request"
-    return raw
-
-
 def verify_runtime_goal(
     binding: Any,
     config: Any,

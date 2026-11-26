@@ -498,7 +498,7 @@ class XiaoxTransport:
                             output=FunctionCallOutputBody(root=goal_feedback),
                             retain=False,
                         ),
-                        **({"output_schema": output_schema} if output_schema else {}),
+                        output_schema=output_schema or None,
                     )
                     result = await self._call(
                         client.turn_start, self.thread_id, [], params, outcome_unknown=True

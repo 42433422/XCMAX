@@ -542,8 +542,11 @@ def _check_conformance(
                 actual=str(actual)[:80],
             )
 
-    from app.domain.workbook_write_contract import WORKBOOK_CONTROL_PHASES, WORKBOOK_NATIVE_PHASES
-    from app.mod_sdk.workbook_controls import control_matches
+    from app.mod_sdk.workbook_controls import (
+        WORKBOOK_CONTROL_PHASES,
+        WORKBOOK_NATIVE_PHASES,
+        control_matches,
+    )
 
     native_checked = 0
     for ph in _plan_phases(plan):

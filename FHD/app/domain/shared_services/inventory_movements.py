@@ -76,11 +76,10 @@ def _positive_movement_quantity(value: Any) -> float:
         quantity = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("库存变动数量必须是有效正数") from exc
-    if (
-        not math.isfinite(quantity)
-        or quantity <= 0
-        or Decimal(str(quantity)).as_tuple().exponent < -4
-    ):
+    if not math.isfinite(quantity) or quantity <= 0:
+        raise ValueError("库存变动数量必须是有效正数")
+    exponent = Decimal(str(quantity)).as_tuple().exponent
+    if not isinstance(exponent, int) or exponent < -4:
         raise ValueError("库存变动数量必须是有效正数")
     return quantity
 
@@ -141,15 +140,16 @@ class InventoryMovementsMixin:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "入库数量必须是有效正数"}
+        facade = _facade()
         with (
-            nullcontext(session) if session is not None else _facade().get_db() as db,
+            nullcontext(session) if session is not None else facade.get_db() as db,
             worker_write_guard(db),
         ):
             try:
                 if product_id is None and model_number:
                     products = (
-                        db.query(_facade().Product)
-                        .filter(_facade().Product.model_number == model_number)
+                        db.query(facade.Product)
+                        .filter(facade.Product.model_number == model_number)
                         .limit(2)
                         .all()
                     )
@@ -161,9 +161,7 @@ class InventoryMovementsMixin:
                     product = products[0]
                 else:
                     product = (
-                        db.query(_facade().Product)
-                        .filter(_facade().Product.id == product_id)
-                        .first()
+                        db.query(facade.Product).filter(facade.Product.id == product_id).first()
                     )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
@@ -171,8 +169,8 @@ class InventoryMovementsMixin:
                     return {"success": False, "message": "产品编号与型号不符"}
                 if warehouse_id is None and warehouse_name:
                     warehouses = (
-                        db.query(_facade().Warehouse)
-                        .filter(_facade().Warehouse.name == warehouse_name)
+                        db.query(facade.Warehouse)
+                        .filter(facade.Warehouse.name == warehouse_name)
                         .limit(2)
                         .all()
                     )
@@ -184,8 +182,8 @@ class InventoryMovementsMixin:
                     warehouse = warehouses[0]
                 else:
                     warehouse = (
-                        db.query(_facade().Warehouse)
-                        .filter(_facade().Warehouse.id == warehouse_id)
+                        db.query(facade.Warehouse)
+                        .filter(facade.Warehouse.id == warehouse_id)
                         .first()
                     )
                 if warehouse is None or warehouse.status != "active":
@@ -195,23 +193,23 @@ class InventoryMovementsMixin:
                 product_id, warehouse_id = product.id, warehouse.id
                 if location_id is not None:
                     location = (
-                        db.query(_facade().StorageLocation)
+                        db.query(facade.StorageLocation)
                         .filter(
-                            _facade().StorageLocation.id == location_id,
-                            _facade().StorageLocation.warehouse_id == warehouse_id,
-                            _facade().StorageLocation.status == "active",
+                            facade.StorageLocation.id == location_id,
+                            facade.StorageLocation.warehouse_id == warehouse_id,
+                            facade.StorageLocation.status == "active",
                         )
                         .first()
                     )
                     if location is None:
                         return {"success": False, "message": "入库库位不属于当前仓库或未启用"}
                 rows = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(facade.InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == warehouse_id,
-                        _facade().InventoryLedger.batch_no == batch_no,
-                        _facade().InventoryLedger.location_id == location_id,
+                        facade.InventoryLedger.product_id == product_id,
+                        facade.InventoryLedger.warehouse_id == warehouse_id,
+                        facade.InventoryLedger.batch_no == batch_no,
+                        facade.InventoryLedger.location_id == location_id,
                     )
                     .limit(2)
                     .all()
@@ -232,7 +230,7 @@ class InventoryMovementsMixin:
                             "message": "入库库存基线已变更或账实不一致，未重复记账",
                         }
                 else:
-                    ledger = _facade().InventoryLedger(
+                    ledger = facade.InventoryLedger(
                         product_id=product_id,
                         warehouse_id=warehouse_id,
                         location_id=location_id,
@@ -247,7 +245,7 @@ class InventoryMovementsMixin:
                     )
                     db.add(ledger)
                 db.flush()
-                transaction = _facade().InventoryTransaction(
+                transaction = facade.InventoryTransaction(
                     ledger_id=ledger.id,
                     transaction_type="in",
                     product_id=product_id,
@@ -281,7 +279,7 @@ class InventoryMovementsMixin:
             except RECOVERABLE_ERRORS as e:
                 if session is None:
                     db.rollback()
-                _facade().logger.error("入库失败: %s", e)
+                facade.logger.error("入库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def inventory_out(
@@ -450,13 +448,14 @@ class InventoryMovementsMixin:
             return {"success": False, "message": "调拨数量必须是有效正数"}
         if from_warehouse_id == to_warehouse_id:
             return {"success": False, "message": "调拨的源仓库和目标仓库不能相同"}
-        with _facade().get_db() as db, worker_write_guard(db):
+        facade = _facade()
+        with facade.get_db() as db, worker_write_guard(db):
             try:
                 warehouses = (
-                    db.query(_facade().Warehouse)
+                    db.query(facade.Warehouse)
                     .filter(
-                        _facade().Warehouse.id.in_((from_warehouse_id, to_warehouse_id)),
-                        _facade().Warehouse.status == "active",
+                        facade.Warehouse.id.in_((from_warehouse_id, to_warehouse_id)),
+                        facade.Warehouse.status == "active",
                     )
                     .all()
                 )
@@ -464,27 +463,25 @@ class InventoryMovementsMixin:
                     return {"success": False, "message": "调拨仓库不存在或未启用"}
                 if to_location_id is not None:
                     location = (
-                        db.query(_facade().StorageLocation)
+                        db.query(facade.StorageLocation)
                         .filter(
-                            _facade().StorageLocation.id == to_location_id,
-                            _facade().StorageLocation.warehouse_id == to_warehouse_id,
-                            _facade().StorageLocation.status == "active",
+                            facade.StorageLocation.id == to_location_id,
+                            facade.StorageLocation.warehouse_id == to_warehouse_id,
+                            facade.StorageLocation.status == "active",
                         )
                         .first()
                     )
                     if location is None:
                         return {"success": False, "message": "目标库位不属于目标仓库或未启用"}
-                source = db.query(_facade().InventoryLedger).filter(
-                    _facade().InventoryLedger.product_id == product_id,
-                    _facade().InventoryLedger.warehouse_id == from_warehouse_id,
-                    _facade().InventoryLedger.available_quantity >= quantity,
+                source = db.query(facade.InventoryLedger).filter(
+                    facade.InventoryLedger.product_id == product_id,
+                    facade.InventoryLedger.warehouse_id == from_warehouse_id,
+                    facade.InventoryLedger.available_quantity >= quantity,
                 )
                 if batch_no is not None:
-                    source = source.filter(_facade().InventoryLedger.batch_no == batch_no)
+                    source = source.filter(facade.InventoryLedger.batch_no == batch_no)
                 if from_location_id is not None:
-                    source = source.filter(
-                        _facade().InventoryLedger.location_id == from_location_id
-                    )
+                    source = source.filter(facade.InventoryLedger.location_id == from_location_id)
                 source_rows = source.limit(2).all()
                 if len(source_rows) > 1:
                     return {
@@ -502,7 +499,7 @@ class InventoryMovementsMixin:
                         "error_code": "inventory_concurrent_change",
                         "message": "源仓库存已被并发修改或账实不一致，未调拨",
                     }
-                out_transaction = _facade().InventoryTransaction(
+                out_transaction = facade.InventoryTransaction(
                     ledger_id=from_ledger.id,
                     transaction_type="transfer_out",
                     product_id=product_id,
@@ -520,12 +517,12 @@ class InventoryMovementsMixin:
                 )
                 db.add(out_transaction)
                 target_rows = (
-                    db.query(_facade().InventoryLedger)
+                    db.query(facade.InventoryLedger)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
-                        _facade().InventoryLedger.batch_no == from_ledger.batch_no,
-                        _facade().InventoryLedger.location_id == to_location_id,
+                        facade.InventoryLedger.product_id == product_id,
+                        facade.InventoryLedger.warehouse_id == to_warehouse_id,
+                        facade.InventoryLedger.batch_no == from_ledger.batch_no,
+                        facade.InventoryLedger.location_id == to_location_id,
                     )
                     .limit(2)
                     .all()
@@ -547,7 +544,7 @@ class InventoryMovementsMixin:
                             "message": "目标仓库存已被并发修改或账实不一致，原调出已回滚",
                         }
                 else:
-                    to_ledger = _facade().InventoryLedger(
+                    to_ledger = facade.InventoryLedger(
                         product_id=product_id,
                         warehouse_id=to_warehouse_id,
                         location_id=to_location_id,
@@ -562,7 +559,7 @@ class InventoryMovementsMixin:
                     )
                     db.add(to_ledger)
                 db.flush()
-                in_transaction = _facade().InventoryTransaction(
+                in_transaction = facade.InventoryTransaction(
                     ledger_id=to_ledger.id,
                     transaction_type="transfer_in",
                     product_id=product_id,
@@ -591,5 +588,5 @@ class InventoryMovementsMixin:
                 }
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                _facade().logger.error("调拨失败: %s", e)
+                facade.logger.error("调拨失败: %s", e)
                 return {"success": False, "message": str(e)}

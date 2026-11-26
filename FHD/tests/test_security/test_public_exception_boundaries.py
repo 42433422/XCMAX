@@ -16,8 +16,8 @@ from app.application.admin_control.protocols import ErrorPolicy
 from app.fastapi_routes.admin_control.profiles import UserProfiles
 from app.fastapi_routes.admin_control.synchronization import Synchronization
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.test_application.test_codex_tools import _invoke
-from tests.test_application.test_codex_tools import bridge_setup as bridge_setup
+from tests.test_application.test_xiaox_tools import _invoke
+from tests.test_application.test_xiaox_tools import bridge_setup as bridge_setup
 
 PRIVATE = "Traceback /private/state.sqlite token=secret-boundary-test"
 ERRORS = ErrorPolicy(lambda: (OSError, ValueError, RuntimeError), logging.getLogger(__name__))
@@ -538,7 +538,7 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(
         base_runtime_result,
         classify_runtime_result,
     )
-    from app.infrastructure.codex.binding import CodexBindingStore
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
 
     setup = recovered_bound_receipts
     repository = setup.store.repository
@@ -612,7 +612,7 @@ def test_recovered_write_no_effect_receipt_requires_verified_goal(
         stored = db.get(AgentRunRecord, child.run_id)
         stored.payload_json = json.dumps(child.to_dict(), ensure_ascii=False, default=str)
         stored.status = child.status
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     rows = reopened.receipt_snapshot(original.run_id)
     failed = next(row for row in rows if row["call_id"] == "original-rejection")
     verified = next(row for row in rows if row["call_id"] == "verified-write")

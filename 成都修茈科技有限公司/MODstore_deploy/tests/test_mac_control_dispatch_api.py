@@ -230,10 +230,14 @@ def test_original_pr_waits_for_explicit_budget_even_with_shared_capacity(
         },
     )
     monkeypatch.setattr(
-        bridge, "github", lambda *_: pytest.fail("unapproved work cannot leave the service")
+        bridge,
+        "github",
+        lambda *_: pytest.fail("unapproved work cannot leave the service"),
     )
     monkeypatch.setattr(
-        repair, "ParaClient", lambda **_: pytest.fail("unapproved work cannot create a worker")
+        repair,
+        "ParaClient",
+        lambda **_: pytest.fail("unapproved work cannot create a worker"),
     )
     monkeypatch.setattr(
         admission,
@@ -242,7 +246,11 @@ def test_original_pr_waits_for_explicit_budget_even_with_shared_capacity(
     )
     route = "/api/service/mac-control/github-pr-tasks"
     payload = body(
-        source_sha="a" * 40, github_issue=5, pull_request=7, source_run_id=99, source_run_attempt=2
+        source_sha="a" * 40,
+        github_issue=5,
+        pull_request=7,
+        source_run_id=99,
+        source_run_attempt=2,
     )
     assert client.post(route, json=payload).status_code == 401
     result = client.post(route, headers=auth(), json=payload)
@@ -355,7 +363,9 @@ def test_legacy_published_original_pr_remains_readback_only(setup, monkeypatch):
 
     monkeypatch.setattr(bridge, "github", github)
     monkeypatch.setattr(
-        repair, "ParaClient", lambda **_: pytest.fail("legacy publication cannot dispatch again")
+        repair,
+        "ParaClient",
+        lambda **_: pytest.fail("legacy publication cannot dispatch again"),
     )
     repair.sync(factory)
     repair.sync(factory)
@@ -381,9 +391,12 @@ def test_stable_issue_lookup_and_immutable_scope(setup):
     assert client.post(route, json=issue_body(5), headers=auth()).json()["task"]["id"] == task_id
     for change in ({"base_branch": "other"}, {"message": "changed"}, {"tool": "codex"}):
         assert client.post(route, json=issue_body(5, **change), headers=auth()).status_code == 409
-    assert client.post(
-        route, json=issue_body(5, request_key="gh-issue-5-random"), headers=auth()
-    ).status_code == 409
+    assert (
+        client.post(
+            route, json=issue_body(5, request_key="gh-issue-5-random"), headers=auth()
+        ).status_code
+        == 409
+    )
     with factory() as db:
         assert db.query(MacControlTask).filter_by(actor=SERVICE_ACTOR).count() == 1
 
@@ -432,9 +445,7 @@ def test_existing_legacy_task_recovered_even_without_github_receipt(setup, state
     assert replay.status_code == 202, replay.text
     assert replay.json()["task"]["id"] == task_id
     for mismatch in ({"base_branch": "other"}, {"repository": "other/repo"}):
-        assert client.get(
-            lookup, params={**scope, **mismatch}, headers=auth()
-        ).status_code == 409
+        assert client.get(lookup, params={**scope, **mismatch}, headers=auth()).status_code == 409
     with factory() as db:
         assert db.query(MacControlTask).filter_by(actor=SERVICE_ACTOR).count() == 1
 

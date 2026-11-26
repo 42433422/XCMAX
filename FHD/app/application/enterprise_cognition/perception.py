@@ -160,7 +160,7 @@ def observe_enterprise(
     source_statuses: dict[str, str] = {}
 
     for code, entities in _DOMAIN_SOURCES.items():
-        sources = []
+        sources: list[dict[str, Any]] = []
         for entity_type in entities:
             name = entity_type
             try:
@@ -200,7 +200,7 @@ def observe_enterprise(
                 )
                 source_statuses[name] = "unavailable"
                 continue
-            samples = []
+            samples: list[dict[str, Any]] = []
             source_observed = 0
             source_alerts = []
             for ref in refs["refs"][:limit_per_source]:
@@ -276,7 +276,7 @@ def observe_enterprise(
                     status = "partial_sample"
                 else:
                     status = "fresh_sample"
-            source_result = {"source": name, "status": status, "samples": samples}
+            source_result: dict[str, Any] = {"source": name, "status": status, "samples": samples}
             if status not in {"permission_denied", "unavailable"}:
                 source_result["sampled_count"] = len(samples)
                 source_result["has_more"] = refs["has_more"]

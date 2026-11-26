@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from sqlalchemy import text
+from sqlalchemy import MetaData, text
 
 from alembic import op
 
@@ -143,11 +143,19 @@ _NON_ORM_PG_DDL: tuple[str, ...] = (
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # 1. Every ORM table, in FK-correct order, idempotently (checkfirst=True).
     from app.db.db_base import Base
     import app.db.models  # noqa: F401  (populates Base.metadata)
 
-    Base.metadata.create_all(bind=conn, checkfirst=True)
+    # The SKU migration installs its expression index after legacy products have
+    # been upgraded. Earlier SQLite revisions reflect this table and its indexes.
+    baseline = MetaData()
+    for table in Base.metadata.sorted_tables:
+        snapshot = table.to_metadata(baseline)
+        if snapshot.name == "products":
+            snapshot.indexes = {
+                index for index in snapshot.indexes if index.name != "uq_products_tenant_unit_sku"
+            }
+    baseline.create_all(bind=conn, checkfirst=True)
 
     # 2. Raw-SQL, non-ORM tables (PostgreSQL only — they never existed on sqlite).
     if conn.dialect.name == "postgresql":

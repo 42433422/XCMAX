@@ -296,7 +296,7 @@ def dynamic_chat_runtime(runtime_entry, monkeypatch):
         async def interrupt(self):
             return None
 
-        async def stream_turn(self, text, *, goal_feedback=None):
+        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
             bridge = state.servers[-1].state.xiaox_tool_bridge
             binding = bridge.store.authenticate(self.config.mcp_token)
             state.bridge, state.token = bridge, self.config.mcp_token

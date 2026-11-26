@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_runtime.chat import runtime_chat_payload
 from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.xiaox_http_runtime import (
@@ -69,11 +70,25 @@ def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
 ):
     state = reference_chat
     context = {"session_id": state.conversation, "turn_id": "initial-reference-turn"}
-    response = state.chat_client.post(
-        "/api/ai/chat", json={"message": "查询候选并以选中名称新增客户", "context": context}
-    )
-    assert response.status_code == 200, response.text
-    first = response.json()
+
+    def send(message):
+        response = state.chat_client.post(
+            "/api/ai/chat", json={"message": message, "context": context}
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def finish(ack):
+        if ack["execution_state"] != "queued":
+            return ack
+        run = state.drain(ack["run_id"])
+        return runtime_chat_payload(
+            run.final_output["xiaox_result"], conversation_id=state.conversation
+        )
+
+    initial = send("查询候选并以选中名称新增客户")
+    assert initial["execution_state"] == "queued", initial
+    first = finish(initial)
     assert first["needs_user_input"] is True, first
     parent_id = first["run_id"]
     original = state.repository.get(parent_id)
@@ -81,16 +96,13 @@ def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
     thread_id = original.metadata["xiaox_runtime"]["thread_id"]
     context["agent_runtime_run_id"] = parent_id
     context["turn_id"] = "unclear-reference-answer"
-    uncertain = state.chat_client.post(
-        "/api/ai/chat", json={"message": "确认", "context": context}
-    ).json()
+    uncertain = finish(send("确认"))
     assert uncertain["needs_user_input"] is True, uncertain
     assert uncertain["requires_confirmation"] is False
     assert state.business_calls == [("products", "query")]
 
     context["turn_id"] = "selected-reference-answer"
-    answer_payload = {"message": "第二个", "context": context}
-    answered = state.chat_client.post("/api/ai/chat", json=answer_payload).json()
+    answered = finish(send("第二个"))
     assert answered["run_id"] == parent_id, answered
     assert answered["requires_confirmation"] is True, answered
     child_id = answered["data"]["data"]["approval_card"]["run_id"]
@@ -102,13 +114,9 @@ def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
     assert write.status == "waiting_user" and write.params == {"unit_name": "second"}
     assert state.queue.get(child_id) is None
 
-    repeated = state.chat_client.post("/api/ai/chat", json=answer_payload)
-    assert repeated.status_code == 200, repeated.text
-    assert repeated.json()["run_id"] == parent_id
+    assert send("第二个")["run_id"] == parent_id
     context["turn_id"] = "not-a-write-approval"
-    pending = state.chat_client.post(
-        "/api/ai/chat", json={"message": "确认", "context": context}
-    ).json()
+    pending = send("确认")
     assert pending["run_id"] == parent_id and pending["requires_confirmation"] is True, pending
     assert pending["data"]["data"]["approval_card"]["run_id"] == child_id
     assert state.repository.get(child_id).status == "waiting_user"

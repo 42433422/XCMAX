@@ -164,11 +164,8 @@ class RedisStreamsBridge:
 
     @staticmethod
     def _report_exit(task: asyncio.Task[None]) -> None:
-        if not task.cancelled() and task.exception() is not None:
-            exc = task.exception()
-            logger.error(
-                "Redis Streams worker terminated", exc_info=(type(exc), exc, exc.__traceback__)
-            )
+        if not task.cancelled() and (exc := task.exception()) is not None:
+            logger.error("Redis Streams worker terminated", exc_info=exc)
 
     async def stop(self) -> None:
         task = self._task
@@ -238,8 +235,10 @@ class RedisStreamsBridge:
         return [msg for _, entries in result for msg in self._decode(entries)]
 
     def _recover_one(self) -> list[dict[str, Any]]:
+        client = self._redis
+        assert client is not None
         self._ensure_group()
-        result = self._redis.xautoclaim(
+        result = client.xautoclaim(
             STREAM_KEY,
             CONSUMER_GROUP,
             self._consumer_id,
@@ -284,8 +283,10 @@ class RedisStreamsBridge:
             return 0
 
     def _renew(self, msg_id: str) -> bool:
+        client = self._redis
+        assert client is not None
         return bool(
-            self._redis.execute_command(
+            client.execute_command(
                 "EVAL", _RENEW, 1, STREAM_KEY, CONSUMER_GROUP, msg_id, self._consumer_id
             )
         )
@@ -312,9 +313,9 @@ class RedisStreamsBridge:
         return acknowledged
 
     def _delivery_count(self, msg_id: str) -> int:
-        rows = self._redis.xpending_range(
-            STREAM_KEY, CONSUMER_GROUP, min=msg_id, max=msg_id, count=1
-        )
+        client = self._redis
+        assert client is not None
+        rows = client.xpending_range(STREAM_KEY, CONSUMER_GROUP, min=msg_id, max=msg_id, count=1)
         return int(rows[0]["times_delivered"]) if rows else 0
 
     async def _run(self) -> None:

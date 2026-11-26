@@ -362,18 +362,6 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         )
 
     def _record_partition_outcome(self, task: asyncio.Task[str]) -> None:
-        # Count tasks cancelled before their coroutine starts, too.
-        if task.cancelled():
-            outcome = "cancelled"
-        elif task.exception() is not None:
-            outcome = "failed"
-        else:
-            outcome = task.result()
-        if outcome not in ("delivered", "failed", "unhandled", "cancelled"):
-            outcome = "failed"
-        record_event_outcome(self._enable_metrics, outcome)
-
-    def _record_partition_outcome(self, task: asyncio.Task[str]) -> None:
         # Count even tasks cancelled before their coroutine starts.
         if task.cancelled():
             outcome = "cancelled"
@@ -683,7 +671,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
     async def deliver_stream_event(self, event: NeuroEvent) -> str:
         """Wait for the existing partition worker, not merely queue admission."""
-        waiter = asyncio.get_running_loop().create_future()
+        waiter: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         self._stream_waiters[id(event)] = waiter
         try:
             if not self.ingest_remote_event(event):

@@ -336,7 +336,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         bounded = max(1, min(100, int(limit)))
         selected = rows[:bounded]
         sessions: dict[str, list[tuple]] = {}
-        results = []
+        results: list[dict[str, Any]] = []
         activated = 0
         for row in selected:
             memory_id = str(row["memory_id"])
@@ -807,6 +807,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
 
             verified = []
             for score, row in selected:
+                safe_row: dict[str, Any] | None
                 if review_only:
                     # Historical facts remain review-only, and current source
                     # visibility is still mandatory before showing old values.

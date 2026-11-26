@@ -330,7 +330,7 @@ def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
 @pytest.mark.parametrize("bound", [False, True])
 def test_original_child_receipt_never_follows_a_replacement_attempt(bridge_setup, bound):
     from app.db.models.agent import AgentRunRecord
-    from app.infrastructure.codex.receipts import read_call_receipt
+    from app.infrastructure.xiaox.receipts import read_call_receipt
 
     setup = bridge_setup
     receipt = _invoke(
@@ -442,7 +442,7 @@ def test_lost_child_binding_ack_recovers_only_original_sql_admission(bridge_setu
 def test_evidence_consumers_reject_an_unsupported_parent_binding(
     bridge_setup, monkeypatch, consumer
 ):
-    from app.infrastructure.codex.receipts import (
+    from app.infrastructure.xiaox.receipts import (
         browser_action_receipts,
         read_action_artifact,
         read_call_receipt,
@@ -562,7 +562,7 @@ def test_employee_gate_cannot_be_lost_or_override_actor_permissions(bridge_setup
         setup.run.run_id,
         lambda run, metadata: metadata["runtime_config"].update(gate_required=True),
     )
-    args = {"call_id": "gated", "tool_id": "products", "action": "query", "params": {}}
+    args = {"call_id": "gated", "tool_id": "customers", "action": "query", "params": {}}
     with pytest.raises(XiaoxBindingError) as error:
         _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert error.value.code == "gate_required"

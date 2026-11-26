@@ -13,6 +13,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.application.agent_orchestrator.artifact_files import (
     RUN_FILE_MIME_TYPES,
     artifact_path,
@@ -134,7 +136,7 @@ def _fresh_named_upload(upload: EltUpload) -> EltUpload:
 
 
 def _resolve_owned_upload(
-    db: Any, value: str, context: dict[str, Any], owner_user_id: int
+    db: Session, value: str, context: dict[str, Any], owner_user_id: int
 ) -> EltUpload | None:
     """Resolve one identity inside the original account/tenant boundary."""
     query = db.query(EltUpload).filter(

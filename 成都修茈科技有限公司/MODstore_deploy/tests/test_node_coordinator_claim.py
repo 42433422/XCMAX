@@ -206,9 +206,7 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
             "FROM llm_model_concurrency WHERE model_key = ?",
             ("litellm/xcmax-xiaomi-fast",),
         ).one() == (12, 1, 12, 0)
-        assert conn.exec_driver_sql(
-            "SELECT COUNT(*) FROM llm_model_concurrency"
-        ).scalar_one() == 7
+        assert conn.exec_driver_sql("SELECT COUNT(*) FROM llm_model_concurrency").scalar_one() == 7
         expected_eta = (
             "2026-10-21 03:30:00"
             if starting_head.endswith("ticket_eta") or starting_head == "both"

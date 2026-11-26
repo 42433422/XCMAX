@@ -167,7 +167,7 @@ class Client:
             "at": now(),
             "method": method,
             "path": path,
-            "request_sha256": sha_bytes(body or b""),
+            "request_sha256": None,  # Request bodies can contain login credentials.
             "status": status,
             "elapsed_ms": elapsed,
             "response_sha256": sha_bytes(text.encode()),

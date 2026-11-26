@@ -39,6 +39,7 @@ _DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 # fastembed（Apache-2.0，ONNX Runtime，不依赖 torch）：中文默认 bge-small-zh
 _DEFAULT_FASTEMBED_MODEL = "BAAI/bge-small-zh-v1.5"
 _HASH_EMBED_DIM = 192
+_CACHED_MODEL_LOAD_ERRORS = RECOVERABLE_ERRORS + (RuntimeError,)
 
 
 def _resolve_mode() -> EmbeddingMode | Literal["auto"]:
@@ -97,12 +98,15 @@ def _load_cached_fastembed(model_name: str) -> tuple[Any | None, int]:
         from fastembed import TextEmbedding
 
         cache = _fastembed_cache_dir()
-        options = {"cache_dir": str(cache)} if cache is not None else {}
-        model = TextEmbedding(model_name=model_name, local_files_only=True, **options)
+        model = TextEmbedding(
+            model_name=model_name,
+            cache_dir=str(cache) if cache is not None else None,
+            local_files_only=True,
+        )
         vectors = list(model.embed(["dimension_probe"]))
         if len(vectors) == 1 and len(vectors[0]) > 0:
             return model, len(vectors[0])
-    except (*RECOVERABLE_ERRORS, RuntimeError) as exc:
+    except _CACHED_MODEL_LOAD_ERRORS as exc:
         logger.info("Cached FastEmbed unavailable; using hash: %s", type(exc).__name__)
     return None, 0
 
@@ -344,8 +348,9 @@ class EmbeddingService(EmbedderPort):
                 from fastembed import TextEmbedding
 
                 cache = _fastembed_cache_dir()
-                options = {"cache_dir": str(cache)} if cache is not None else {}
-                self._fastembed_model = TextEmbedding(model_name=model_name, **options)
+                self._fastembed_model = TextEmbedding(
+                    model_name=model_name, cache_dir=str(cache) if cache is not None else None
+                )
                 logger.info("EmbeddingService fastembed 模型加载完成: %s", model_name)
                 return self._fastembed_model
             except RECOVERABLE_ERRORS as e:

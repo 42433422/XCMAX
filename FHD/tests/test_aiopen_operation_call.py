@@ -259,15 +259,15 @@ def test_chat_goal_uses_original_task_and_rejects_changed_request(bound_key, tmp
     )
     from app.application.agent_runtime import gateway
     from app.application.aiopen.generated_tools import execute_message
-    from app.infrastructure.codex import queued_runtime
-    from app.infrastructure.codex.policy import ModelRoute, RuntimeSettings
+    from app.infrastructure.xiaox import queued_runtime
+    from app.infrastructure.xiaox.policy import ModelRoute, RuntimeSettings
 
     actor, issue = bound_key
     context = service.resolve_api_key_execution_context(issue()["key"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
     settings = RuntimeSettings(
-        engine="codex",
+        engine="xiaox",
         route=ModelRoute(
             base_url="http://127.0.0.1:19112/v1",
             model="queue-fixture",
@@ -284,7 +284,7 @@ def test_chat_goal_uses_original_task_and_rejects_changed_request(bound_key, tmp
     notified = Mock()
     monkeypatch.setattr(task_dispatcher, "notify_agent_task_dispatcher", notified)
     runtime = Mock(side_effect=AssertionError("durable admission must not execute a model"))
-    monkeypatch.setattr(gateway, "run_codex_agent", runtime)
+    monkeypatch.setattr(gateway, "run_xiaox_agent", runtime)
     with execution_context_scope(context):
         first = execute_message({"message": "读取客户", "request_id": "same-goal"})
         second = execute_message({"message": "读取客户", "request_id": "same-goal"})
@@ -305,7 +305,7 @@ def test_chat_goal_uses_original_task_and_rejects_changed_request(bound_key, tmp
     notified.assert_called_once()
     runtime.assert_not_called()
     run = repository.get(first["run_id"])
-    assert run.intent == "codex.runtime" and run.metadata["runtime_type"] == "codex"
+    assert run.intent == "xiaox.runtime" and run.metadata["runtime_type"] == "xiaox"
     assert run.tool_calls == [] and run.message == "读取客户"
     assert (
         run.metadata["runtime_context"]["_credential_authorization"]

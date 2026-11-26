@@ -39,9 +39,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.domain.workbook_write_contract import WORKBOOK_CONTROL_PHASES
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
-from app.mod_sdk.workbook_controls import write_control
+from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
 
 PLAN_VERSION = 1
 

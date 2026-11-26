@@ -62,12 +62,12 @@ def test_unexpected_task_error_finalizes_original_run_before_propagating(
         )
 
     assert raised.value is failure
-    metadata = store.run.metadata["codex_runtime"]
+    metadata = store.run.metadata["xiaox_runtime"]
     assert metadata["coordinator_active"] is False
     assert metadata["revoked"] is True
     assert "active_started_at" not in metadata
     assert store.run.status == ("blocked" if uncertain else "failed")
-    result = store.run.final_output["codex_result"]
+    result = store.run.final_output["xiaox_result"]
     assert result["ok"] is False and result["runtime_completed"] is False
     assert result.get("reconciliation_required", False) is uncertain
     assert "private callback bug" not in json.dumps(result)
@@ -101,14 +101,14 @@ def test_finalization_storage_failure_still_releases_owned_coordinator(
         return close(run_id, reason, generation=generation, release_coordinator=release_coordinator)
 
     def snapshot_with_failure(run_id):
-        if failure_stage == "snapshot" and store.run.metadata["codex_runtime"].get("revoked"):
+        if failure_stage == "snapshot" and store.run.metadata["xiaox_runtime"].get("revoked"):
             raise failure
         return snapshot(run_id)
 
     def update_with_failure(run_id, mutation):
         candidate = copy.deepcopy(store.run)
-        mutation(candidate, candidate.metadata["codex_runtime"])
-        if failure_stage == "terminal_write" and "codex_result" in candidate.final_output:
+        mutation(candidate, candidate.metadata["xiaox_runtime"])
+        if failure_stage == "terminal_write" and "xiaox_result" in candidate.final_output:
             raise failure
         return update(run_id, mutation)
 
@@ -120,11 +120,11 @@ def test_finalization_storage_failure_still_releases_owned_coordinator(
 
     assert raised.value is failure
     assert releases[-1] is True
-    metadata = store.run.metadata["codex_runtime"]
+    metadata = store.run.metadata["xiaox_runtime"]
     assert metadata["coordinator_active"] is False and metadata["revoked"] is True
     assert "exit" in store.log
     if failure_stage != "revocation":
-        assert "codex_result" not in store.run.final_output
+        assert "xiaox_result" not in store.run.final_output
         assert browsers == []  # No terminal receipt to authorize browser disposal.
     else:
         assert len(browsers) == 1 and browsers[0]["run_id"] == store.run.run_id
@@ -158,8 +158,8 @@ def test_original_callback_error_survives_finalization_storage_failure(
 
         def terminal_unavailable(run_id, mutation):
             candidate = copy.deepcopy(store.run)
-            mutation(candidate, candidate.metadata["codex_runtime"])
-            if "codex_result" in candidate.final_output:
+            mutation(candidate, candidate.metadata["xiaox_runtime"])
+            if "xiaox_result" in candidate.final_output:
                 unavailable()
             return update(run_id, mutation)
 
@@ -173,10 +173,10 @@ def test_original_callback_error_survives_finalization_storage_failure(
     assert raised.value is failure
     assert "interrupt" in store.log and "exit" in store.log
     if failure_stage == "revocation":
-        assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+        assert store.run.final_output["xiaox_result"]["reconciliation_required"] is True
         assert store.run.metadata["non_retryable"] is True
     else:
-        assert store.run.metadata["codex_runtime"]["coordinator_active"] is False
+        assert store.run.metadata["xiaox_runtime"]["coordinator_active"] is False
 
 
 @pytest.mark.parametrize("fail_lease_write", [False, True])
@@ -214,8 +214,8 @@ def test_late_cancellation_during_browser_release_keeps_original_cancellation(
 
     asyncio.run(scenario())
     assert store.run.status == "completed"
-    assert store.run.final_output["codex_result"]["reply_completed"] is True
-    assert store.run.metadata["codex_runtime"]["coordinator_active"] is fail_lease_write
+    assert store.run.final_output["xiaox_result"]["reply_completed"] is True
+    assert store.run.metadata["xiaox_runtime"]["coordinator_active"] is fail_lease_write
 
 
 def test_failed_revocation_still_interrupts_the_runtime(setup_runtime, monkeypatch):
@@ -258,11 +258,11 @@ def test_cancellation_survives_secondary_interrupt_error(setup_runtime, monkeypa
 
     asyncio.run(cancel())
     assert store.log.index("interrupt") < store.log.index("exit")
-    metadata = store.run.metadata["codex_runtime"]
+    metadata = store.run.metadata["xiaox_runtime"]
     assert metadata["coordinator_active"] is False and metadata["revoked"] is True
     assert metadata["runtime_status"] == store.run.status == "cancelled"
     assert store.run.metadata["non_retryable"] is True
-    assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+    assert store.run.final_output["xiaox_result"]["reconciliation_required"] is True
 
 
 def test_interrupt_programming_error_propagates_without_prior_failure(setup_runtime, monkeypatch):
@@ -283,7 +283,7 @@ def test_interrupt_programming_error_propagates_without_prior_failure(setup_runt
     assert caught.value is failure
     assert "exit" in store.log
     assert store.run.status == "failed"
-    assert store.run.metadata["codex_runtime"]["coordinator_active"] is False
+    assert store.run.metadata["xiaox_runtime"]["coordinator_active"] is False
 
 
 @pytest.mark.parametrize("fail_terminal_write", [False, True])

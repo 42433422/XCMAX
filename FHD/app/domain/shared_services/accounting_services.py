@@ -135,11 +135,12 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
         if not isinstance(item, dict):
             return {"success": False, "message": "分录行格式无效"}
         account_id = item.get("account_id")
+        account_code = item.get("account_code")
         account = None
         if account_id:
             account = _find_account(db, account_id)
-        elif item.get("account_code"):
-            account = _find_account_by_code(db, item.get("account_code"))
+        elif account_code:
+            account = _find_account_by_code(db, account_code)
         try:
             debit = _to_decimal(item.get("debit", 0))
             credit = _to_decimal(item.get("credit", 0))
@@ -159,7 +160,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
         parsed_lines.append(
             {
                 "account_id": account.id if account else None,
-                "account_code": item.get("account_code") or (account.code if account else None),
+                "account_code": account_code or (account.code if account else None),
                 "account_name": item.get("account_name") or (account.name if account else None),
                 "debit": debit,
                 "credit": credit,

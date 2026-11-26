@@ -460,7 +460,7 @@ class TestInventoryIn:
         db.add_all([product, warehouse])
         db.commit()
         if problem == "duplicate_product":
-            db.add(Product(name="重名型号", model_number="A100"))
+            db.add(Product(name="重名型号", model_number="A100", unit="箱"))
         if problem == "duplicate_warehouse":
             db.add(Warehouse(code="OTHER", name="主仓库", status="active"))
         db.commit()
@@ -541,38 +541,44 @@ class TestInventoryIn:
 # inventory_out
 # ---------------------------------------------------------------------------
 class TestInventoryOut:
-    @patch("app.domain.shared_services.inventory_service.get_db")
-    def test_insufficient_stock(self, mock_get_db):
-        mock_db = MagicMock()
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_get_db.return_value = mock_db
-
-        svc = InventoryService()
-        result = svc.inventory_out(product_id=1, warehouse_id=1, quantity=100)
+    def test_insufficient_stock(self, test_session):
+        product = Product(name="无库存产品")
+        warehouse = Warehouse(code="OUT", name="出库仓", status="active")
+        test_session.add_all([product, warehouse])
+        test_session.commit()
+        with patch(
+            "app.domain.shared_services.inventory_service.get_db", _mock_get_db(test_session)
+        ):
+            result = InventoryService().inventory_out(
+                product_id=product.id, warehouse_id=warehouse.id, quantity=100
+            )
         assert result["success"] is False
         assert "库存不足" in result["message"]
+        assert test_session.query(InventoryTransaction).count() == 0
 
 
 # ---------------------------------------------------------------------------
 # inventory_transfer
 # ---------------------------------------------------------------------------
 class TestInventoryTransfer:
-    @patch("app.domain.shared_services.inventory_service.get_db")
-    def test_source_insufficient(self, mock_get_db):
-        mock_db = MagicMock()
-        mock_db.__enter__ = MagicMock(return_value=mock_db)
-        mock_db.__exit__ = MagicMock(return_value=False)
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_get_db.return_value = mock_db
-
-        svc = InventoryService()
-        result = svc.inventory_transfer(
-            product_id=1, from_warehouse_id=1, to_warehouse_id=2, quantity=100
-        )
+    def test_source_insufficient(self, test_session):
+        product = Product(name="无可调拨库存的产品")
+        source = Warehouse(code="FROM", name="来源仓", status="active")
+        target = Warehouse(code="TO", name="目标仓", status="active")
+        test_session.add_all([product, source, target])
+        test_session.commit()
+        with patch(
+            "app.domain.shared_services.inventory_service.get_db", _mock_get_db(test_session)
+        ):
+            result = InventoryService().inventory_transfer(
+                product_id=product.id,
+                from_warehouse_id=source.id,
+                to_warehouse_id=target.id,
+                quantity=100,
+            )
         assert result["success"] is False
         assert "库存不足" in result["message"]
+        assert test_session.query(InventoryTransaction).count() == 0
 
 
 # ---------------------------------------------------------------------------
