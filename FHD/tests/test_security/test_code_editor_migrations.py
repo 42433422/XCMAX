@@ -68,16 +68,24 @@ def test_proposal_migration_preserves_claims_on_rollback(tmp_path):
         engine.dispose()
 
 
-def _upgrade_proposals(starting_revision, *intermediate):
+def _upgrade_proposals(engine, starting_revision, *intermediate):
     from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
 
     from alembic import command
 
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    scripts = ScriptDirectory.from_config(config)
+    # These fixtures use partial schemas. Install the outbox that already existed at the stamp.
+    outbox = scripts.get_revision("2026_06_25_mobile_outbox")
+    with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
+        outbox.module.upgrade()
     command.stamp(config, starting_revision)
     for revision in (*intermediate, "head", "head"):
         command.upgrade(config, revision)
-    return config
+    return scripts.get_current_head()
 
 
 @pytest.mark.parametrize("legacy_schema", [True, False])
@@ -87,7 +95,6 @@ def test_forward_proposal_scope_migration_keeps_payload_claims_and_ownership(
     import sqlite3
     from contextlib import closing
 
-    from alembic.script import ScriptDirectory
     from sqlalchemy import text
 
     client, root, engine = editor_http
@@ -147,7 +154,7 @@ def test_forward_proposal_scope_migration_keeps_payload_claims_and_ownership(
         original_schema = db.execute(
             text("SELECT sql FROM sqlite_master WHERE name='code_edit_proposals'")
         ).scalar_one()
-    config = _upgrade_proposals("2026_11_24_code_edit_proposals")
+    head = _upgrade_proposals(engine, "2026_11_24_code_edit_proposals")
     with closing(sqlite3.connect(engine.url.database)) as db:
         db.row_factory = sqlite3.Row
         after = {
@@ -171,10 +178,7 @@ def test_forward_proposal_scope_migration_keeps_payload_claims_and_ownership(
                 ).fetchone()[0]
                 == original_schema
             )
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "2026_11_24_trial_session"
-        )
-    assert ScriptDirectory.from_config(config).get_heads() == ["2026_11_24_trial_session"]
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == head
     _p2(client)
     client.headers["X-Session-ID"] = "editor-session-2"
     _diff(client, ids["pending"], 404)
@@ -219,7 +223,7 @@ def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(
         db.execute(text("INSERT INTO users VALUES (1, 'ultra')"))
         db.execute(text("CREATE TABLE retained_fixture (value TEXT NOT NULL)"))
         db.execute(text("INSERT INTO retained_fixture VALUES ('kept<A&B>')"))
-    _upgrade_proposals("2026_11_21_enterprise_cognition", starting_revision)
+    head = _upgrade_proposals(engine, "2026_11_21_enterprise_cognition", starting_revision)
     with engine.connect() as db:
         assert db.execute(text("SELECT value FROM retained_fixture")).scalar_one() == "kept<A&B>"
         assert "code_edit_proposals" in inspect(db).get_table_names()
@@ -228,8 +232,5 @@ def test_code_editor_proposal_upgrade_keeps_existing_data_and_is_idempotent(
                 "SELECT account_tier, account_license_plan_id, account_license_expires_at FROM users"
             )
         ).all() == [("ultra", None, None)]
-        assert (
-            db.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "2026_11_24_trial_session"
-        )
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head
     engine.dispose()
