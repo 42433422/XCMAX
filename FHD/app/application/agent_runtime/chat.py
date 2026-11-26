@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
+from pathlib import Path
 from typing import Any
+
+from filelock import FileLock, Timeout
 
 from app.application.agent_runtime.configuration import RuntimePolicyError
 from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
@@ -115,6 +119,36 @@ _ACTIVE_SLOTS: set[str] = set()
 _ACTIVE_SLOTS_GUARD = threading.Lock()
 
 
+def _chat_file_lock_path(owner: str) -> Path:
+    """Private, stable authenticated account lock shared by local backend processes."""
+    from app.application.agent_runtime.configuration import _private_directory
+    from app.utils.path_io.path_utils import get_desktop_state_dir
+
+    root = _private_directory(
+        Path(get_desktop_state_dir(create=True)) / "codex-runtime" / "chat-admission"
+    )
+    filename = hashlib.sha256(owner.encode("utf-8")).hexdigest() + ".lock"
+    path = root / filename
+    if path.is_symlink():
+        raise OSError("Chat admission lock must not be a symlink")
+    return path
+
+
+def _chat_busy(session: str, run_id: str | None) -> dict[str, Any]:
+    return runtime_chat_payload(
+        {
+            "ok": False,
+            "run_id": run_id,
+            "resume_required": bool(run_id),
+            "error": "当前账号已有任务正在执行，请稍后重试。",
+            "error_code": "runtime_busy",
+            "execution_state": "blocked",
+            "retryable": True,
+        },
+        conversation_id=session,
+    )
+
+
 def run_runtime_chat(
     *,
     user_id: str,
@@ -122,32 +156,37 @@ def run_runtime_chat(
     context: dict[str, Any],
     file_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Admit one chat turn per account in this process without retaining idle accounts."""
+    """Admit one turn per authenticated account across local backend processes."""
     session = str(context.get("session_id") or context.get("conversation_id") or "")
-    # The service's user_id is conversation-scoped. Reuse its authenticated
-    # account identity; the gateway still validates authority over every run.
+    run_id = str(context.get("agent_runtime_run_id") or "") or None
+    # Use the authenticated owner, not the transient conversation-scoped ID.
     owner = authenticated_task_owner(user_id, context)
     with _ACTIVE_SLOTS_GUARD:
         busy = owner in _ACTIVE_SLOTS
         if not busy:
             _ACTIVE_SLOTS.add(owner)
     if busy:
-        # Two fixed runtimes for one account used to fail as an unexplained
-        # `unknown` state; report an explicit, retryable admission result instead.
-        run_id = str(context.get("agent_runtime_run_id") or "") or None
-        return runtime_chat_payload(
-            {
-                "ok": False,
-                "run_id": run_id,
-                "resume_required": bool(run_id),
-                "error": "当前账号已有任务正在执行，请稍后重试。",
-                "error_code": "runtime_busy",
-                "execution_state": "blocked",
-                "retryable": True,
-            },
-            conversation_id=session,
-        )
+        return _chat_busy(session, run_id)
+    disk_lock: FileLock | None = None
     try:
+        try:
+            disk_lock = FileLock(_chat_file_lock_path(owner), timeout=0, mode=0o600)
+            disk_lock.acquire(timeout=0)
+        except Timeout:
+            return _chat_busy(session, run_id)
+        except (OSError, RuntimePolicyError):
+            return runtime_chat_payload(
+                {
+                    "ok": False,
+                    "error": "运行状态目录不可用于安全并发控制，本轮任务未启动。",
+                    "run_id": run_id,
+                    "resume_required": bool(run_id),
+                    "error_code": "runtime_storage_invalid",
+                    "execution_state": "blocked",
+                    "retryable": False,
+                },
+                conversation_id=session,
+            )
         return _run_runtime_chat(
             user_id=user_id,
             message=message,
@@ -155,8 +194,12 @@ def run_runtime_chat(
             file_context=file_context,
         )
     finally:
-        with _ACTIVE_SLOTS_GUARD:
-            _ACTIVE_SLOTS.remove(owner)
+        try:
+            if disk_lock is not None and disk_lock.is_locked:
+                disk_lock.release()
+        finally:
+            with _ACTIVE_SLOTS_GUARD:
+                _ACTIVE_SLOTS.remove(owner)
 
 
 def _run_runtime_chat(

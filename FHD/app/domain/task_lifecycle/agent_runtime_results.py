@@ -305,7 +305,7 @@ def classify_runtime_result(
             exit_status="goal_verification_required",
             execution_state="blocked",
             error="已执行动作不等于整体目标完成，原任务目标仍需核对",
-            output="本轮未通过完整性核验，原任务与回执已保留，请核对后重试。",
+            output="本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。",
             goal_response=reviewed_output,
             verification_feedback=feedback,
             retryable=isinstance(report, dict)
