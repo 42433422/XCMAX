@@ -34,7 +34,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeQueued, isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
+import { isFixedRuntimePayload, isRuntimeQueued, isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -159,10 +159,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
 
   function isUnfinishedResponse(value: unknown): boolean {
     const payload = asPlannerPayload(value)
-    const isRuntime = payload.runtime === 'codex' || asRecord(payload.data).runtime === 'codex'
     // A rejected runtime admission is terminal for this round, even when its parent is retained.
     // Canonical state keeps reconciliation and authorization waits ahead of the runtime envelope.
-    if (isRuntime && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
+    if (isFixedRuntimePayload(payload) && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
     return isUnfinishedPlannerResponse(payload)
   }
 

@@ -652,9 +652,9 @@
     "FHD/frontend/src/composables/chat-orchestration/useChatOrchestrationRemoteRound.ts": {
       "base_file": "FHD/frontend/src/composables/chat-orchestration/useChatOrchestrationRemoteRound.ts",
       "base_blob": "334078bc0063635fcd9d8964705b6c8f801ad561",
-      "head_blob": "506fea2ef8383e56aba3cab0c0823a2a463a1bca",
+      "head_blob": "eff9d36c77456ce81e0f1d206a26005bb5cf4602",
       "before_lines": 1021,
-      "after_lines": 1123,
+      "after_lines": 1122,
       "reason": "仅为架构评审请求，非批准；用户已要求 #3468 在完整 CI 与审查后合入。把 runtimeContinuation、等待状态和审批卡接入现有远端响应消费，保留未完成任务，并在续接时跳过会分叉原任务的产品与 Mod 本地快路径。 本轮blocked与保留的waiting父引用分开渲染，正确显示失败提示而保留原续接。",
       "boundary": "仅负责现有消息附加信息、等待展示和请求路由；不在前端授予审批或判断业务完成，等待结果不记作模型成功。 合并 Xiaox 排队接续、回执投影及前端流式节流。",
       "validation": "本轮最终前端源码的原12文件续接回归443/443通过（43.06秒），覆盖消息恢复、审批、批量、流式与原父任务引用；blocked原父保留场景在单JSON与真实batch均精确断言失败提示。串行原npm run type-check:build通过（23.16秒），未改编译配置或门禁；最终head完整CI另行核验。 联合候选单独验收，来源 PR 的结果保留为对照记录。",

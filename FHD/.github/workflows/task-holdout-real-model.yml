@@ -2,7 +2,7 @@ name: XCMAX Holdout 13x3 Real Model and Database Evidence
 
 on:
   push:
-    branches: [fix/sqlite-bootstrap-holdout-20261125, codex/backend-core-11wg-clean-20261126]
+    branches: [fix/sqlite-bootstrap-holdout-20261125, codex/backend-core-11wg-clean-20261126, codex/integrate-open-prs-20261126]
 
 permissions:
   contents: read

@@ -552,21 +552,11 @@ def test_denied_proposal_returns_error_and_real_write_capabilities(setup_runtime
 
 def test_write_goal_feedback_surfaces_definite_write_failure(setup_runtime):
     invoke, _ = setup_runtime
-    store = Store(
-        rows=[
-            {
-                "tool_id": "employee",
-                "action": "execute",
-                "action_id": "a1-write",
-                "receipt": {
-                    "status": "blocked",
-                    "verified": False,
-                    "retryable": True,
-                    "message": "非法 Excel 表格名称：'销售明细表'",
-                },
-            }
-        ]
-    )
+    operation = {"tool_id": "employee", "action": "execute", "params": {}}
+    failed = receipt(status="failed", verified=False, success=False)
+    failed.update(**operation, read_only=False, fingerprint=canonical_digest(operation))
+    failed["receipt"].update(retryable=True, message="非法 Excel 表格名称：'销售明细表'")
+    store = Store(rows=[failed])
     store.review_kind = "write"
     store.reviews = [
         review(

@@ -170,6 +170,7 @@ RELEVANT = {
         "prefixes": [
             "FHD/scripts/autonomy/runtime_tools/",
             "FHD/app/infrastructure/codex/",
+            "FHD/app/infrastructure/xiaox/",
             # Native workers consume shared receipts, lazy tool dispatch,
             # persisted approvals and leases, not only the executor facade.
             "FHD/app/domain/task_lifecycle/",
@@ -185,7 +186,7 @@ RELEVANT = {
         "regexes": [
             r"FHD/tests/(?:test_application|test_domain|test_infrastructure)/test_"
             r"(?:agent_(?:runtime|tool|result)|approval|business_write|catalog_product|"
-            r"codex|task_(?:lifecycle|execution|dispatcher)|tool|unified_tool|worker)"
+            r"codex|xiaox|task_(?:lifecycle|execution|dispatcher)|tool|unified_tool|worker)"
             r"(?:_[^/]+)?\.py",
         ],
         "exact": [

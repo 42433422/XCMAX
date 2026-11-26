@@ -553,7 +553,9 @@ def test_legacy_approved_unversioned_elt_task_is_blocked_without_rewriting_param
     with monkeypatch.context() as old_deployment:
         old_deployment.setattr(tool_spec, "get_tool_action_spec", old_spec)
         old_deployment.setattr("app.infrastructure.xiaox.tools.get_tool_action_spec", old_spec)
+        old_deployment.setattr(capability_catalog, "build_tool_specs_v2", old_catalog)
         pending = state.execute("legacy", "elt_import", "execute", params)
+        assert pending.get("pending_approval") is True, pending
 
         def deploy_and_change():
             old_deployment.undo()
