@@ -39,6 +39,8 @@
         @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
+        :pending-turn-id="pendingTurnId"
+        :stopped-turn-id="stoppedTurnId"
         :loading-progress-text="loadingProgressText"
         :message-heights="messageHeights"
         :latest-ai-message-index="latestAiMessageIndex"
@@ -420,6 +422,8 @@ const {
   isLoading,
   isRecalling,
   isStreamingReply,
+  pendingTurnId,
+  stoppedTurnId,
   isExecuting,
   latestAssistantPush,
   taskList,

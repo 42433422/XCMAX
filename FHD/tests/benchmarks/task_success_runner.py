@@ -9,7 +9,7 @@
         --tasks tests/benchmarks/task_golden_set.json \
         --trial 0 --out /tmp/trial_0.jsonl
 
-评测链路：instruction → qualified Codex runtime → durable host child tasks
+评测链路：instruction → qualified Xiaox runtime → durable host child tasks
 （包含审批、依赖和工具结果校验）→ DB 终态断言（复用
 business_db_write_verification._model_config 的实体映射 SSOT）。
 """
@@ -32,7 +32,7 @@ _TRIAL_BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 
 def _bootstrap_isolated_db() -> None:
-    """在导入 app 之前设置隔离环境：独立 SQLite 文件；模型仅使用显式配置且已认证的 Codex 路由。"""
+    """在导入 app 之前设置隔离环境：独立 SQLite 文件；模型仅使用显式配置且已认证的 Xiaox 路由。"""
     global _BOOTED
     if _BOOTED:
         return
@@ -57,7 +57,7 @@ def _bootstrap_isolated_db() -> None:
 
 def _completed_model_requests(metadata: dict[str, Any]) -> int:
     """Count only original-run requests that actually returned and settled usage."""
-    calls = metadata.get("codex_runtime", {}).get("model_requests", {})
+    calls = metadata.get("xiaox_runtime", {}).get("model_requests", {})
     return sum(
         row.get("state") == "completed" and isinstance(row.get("usage"), dict)
         for row in calls.values()
@@ -249,8 +249,17 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
     )
 
 
+def _trial_session_factory():
+    """Bind a real engine once; the lazy proxy is not an ORM transaction identity."""
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import get_runtime_engine
+
+    return sessionmaker(bind=get_runtime_engine())
+
+
 def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
-    """Use the same authenticated Codex/SQL queue as product requests.
+    """Use the same authenticated Xiaox/SQL queue as product requests.
 
     The caller's explicit scenario answers/approvals are the only continuation
     authority. No expected success can approve an action or select another model.
@@ -260,7 +269,6 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     from types import SimpleNamespace
     from uuid import uuid4
 
-    from sqlalchemy.orm import sessionmaker
     from starlette.requests import Request
 
     from app.application.agent_orchestrator import AgentOrchestrator
@@ -276,28 +284,27 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         SQLAlchemyTaskExecutionRepository,
     )
     from app.application.agent_runtime.gateway import run_runtime_task
-    from app.db import engine
     from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
-    from app.infrastructure.codex.binding import CodexBindingStore
-    from app.infrastructure.codex.receipt_projection import (
-        refresh_codex_receipts,
-        resume_ready_codex_runs,
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
+    from app.infrastructure.xiaox.receipt_projection import (
+        refresh_xiaox_receipts,
+        resume_ready_xiaox_runs,
     )
     from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
-    factory = sessionmaker(bind=engine)
+    factory = _trial_session_factory()
     sid = uuid4().hex
     with factory.begin() as db:
-        role = Role(name="admin")
-        role.permissions = [
-            Permission(code=item["code"], name=item["name"]) for item in DEFAULT_PERMISSIONS
-        ]
-        db.add(role)
+        # Reuse the real bootstrap grants: never manufacture a second copy of
+        # every Permission while runtime startup may also be seeding RBAC.
+        role = db.query(Role).filter(Role.name == "admin").one_or_none()
+        if role is None or not role.is_system:
+            raise RuntimeError("task benchmark requires seeded system admin RBAC")
         actor = User(
             username="task-benchmark-" + sid,
             password=generate_password_hash(uuid4().hex),
@@ -344,11 +351,16 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         return (
             False,
             str(admitted.get("error_code") or "runtime admission failed"),
-            {"status": "blocked", "final_output": admitted, "model_responses": 0},
+            {
+                "status": "blocked",
+                "final_output": admitted,
+                "runtime_admitted": False,
+                "model_responses": 0,
+            },
             [],
         )
     parent = drain(admitted["run_id"])
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     approvals, answers = list(task.get("approvals") or []), list(task.get("answers") or [])
     error = ""
     for _ in range(32):
@@ -383,7 +395,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
                     break
                 parent = drain(parent.run_id)
                 continue
-            if resume_ready_codex_runs(repository=repository):
+            if resume_ready_xiaox_runs(repository=repository):
                 parent = drain(parent.run_id)
                 continue
             break
@@ -434,8 +446,8 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
                 authenticated_actor_binding=principal.actor_authorization,
             )
         drain(child.run_id)
-        parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
-    parent = refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+        parent = refresh_xiaox_receipts(repository.get(parent.run_id), repository=repository)
+    parent = refresh_xiaox_receipts(repository.get(parent.run_id), repository=repository)
     rows = store.receipt_snapshot(parent.run_id)
     children = [repository.get(row["child_run_id"]) for row in rows]
     nodes = [SimpleNamespace(tool_id=row["tool_id"], action=row["action"]) for row in rows]
@@ -448,6 +460,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     )
     execution = {
         **parent.to_dict(),
+        "runtime_admitted": True,
         "steps": [step.to_dict() for child in children for step in child.steps],
         "tool_calls": [call.to_dict() for child in children for call in child.tool_calls],
         "final_output": {
@@ -468,6 +481,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     import app.db.models
     from app.db import engine
     from app.db.db_base import Base
+    from app.db.init_db import ensure_sqlite_rbac_bootstrap
     from app.infrastructure.tenant_scope import tenant_scope
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
@@ -477,8 +491,6 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         seed_records,
         seed_sales_period_orders,
     )
-
-    Base.metadata.create_all(engine, checkfirst=True)
 
     data = json.loads(tasks_path.read_text(encoding="utf-8"))
     tasks = data["tasks"]
@@ -490,10 +502,12 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         engine.dispose()
         Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine, checkfirst=True)
+        # Each task starts from the production RBAC seed, on the isolated trial
+        # database, before the runtime imports can attempt lazy initialization.
+        ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
         for task in tasks:
-            _reset_db()
             expect = task.get("expect") or {}
             result: dict[str, Any] = {
                 "task_id": task["task_id"],
@@ -501,17 +515,20 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "difficulty": task.get("difficulty"),
                 "trial": trial,
                 "routing_pass": False,
+                "runtime_admitted": False,
                 "exec_pass": None,
                 "db_pass": None,
                 "pass": False,
                 "failure": None,
             }
             try:
+                _reset_db()
                 seed_records(task.get("fixtures") or [])
                 seed_inventory_quantities(task.get("inventory_quantities") or [])
                 seed_sales_period_orders(task.get("sales_period_orders") or [])
                 seed_ledger_period_entries(task.get("ledger_period_entries") or [])
                 exec_ok, exec_why, executed, nodes = _execute_goal(task)
+                result["runtime_admitted"] = executed.get("runtime_admitted") is True
                 ok, why = _check_no_actions(nodes, expect)
                 if ok:
                     ok, why = _check_routing(nodes, expect)
@@ -547,6 +564,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             result["model_responses"] = (result.get("execution") or {}).get("model_responses", 0)
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
+            out.flush()
 
 
 def main() -> int:

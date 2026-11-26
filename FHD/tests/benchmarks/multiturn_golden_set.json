@@ -1,0 +1,475 @@
+{
+  "_meta": {
+    "name": "xcagi-multiturn-golden-set",
+    "version": 1,
+    "methodology": "τ-bench 方法论 + BFCL 多轮调用断言：对话剧本 → 状态断言 → pass^k 可靠性",
+    "mode": "offline_scripted",
+    "scoring": {
+      "pass^1": "单次试验全部断言通过的任务占比",
+      "pass^k": "k 次独立进程试验全部通过的任务占比",
+      "per_task": "同题所有 checks 全部通过才算通过；任一条失败即整题失败"
+    },
+    "schema_notes": {
+      "setup": "题目前置条件：候选实体、Excel 夹具、初始计划状态",
+      "turns": "按顺序发送的用户消息；每条都是一次独立 HTTP 对话轮次",
+      "scripted_model": "离线模式下替身模型的确定性输出（计划或翻译器返回）",
+      "expect.actions": "期望的工具调用序列，tool_id+action 精确匹配，* 为通配",
+      "expect.forbid_actions": "不得出现的工具调用",
+      "expect.max_clarifications": "整段对话允许的追问次数上限",
+      "expect.answer_contains": "最终回复必须包含的文本片段（用于核验真实业务结果）",
+      "expect.answer_must_not_contain": "最终回复不得出现的文本片段（防止编造或错误话术）",
+      "expect.error_code": "失败时必须暴露的错误码，不允许笼统成功",
+      "expect.db_state": "写操作执行后的数据库终态断言",
+      "expect.tool_call_count": "工具实际执行次数（用于幂等断言）",
+      "expect.restart_between_turns": "在第 N 轮后重启后端进程，再继续后续轮次"
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "mt.clarify.letter_a_001",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "easy",
+      "setup": {
+        "candidates": [
+          {"id": 31, "name": "澜宇电视柜", "model_number": "A100"},
+          {"id": 42, "name": "澜宇电视柜", "model_number": "B200"}
+        ],
+        "plan": "clarify(ambiguous_target) → business_db.read",
+        "question": "请选择要查询的型号：A. A100  B. B200"
+      },
+      "turns": ["A"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "resolved_id": "31",
+        "max_clarifications": 1,
+        "final_status": "completed"
+      }
+    },
+    {
+      "task_id": "mt.clarify.letter_lowercase_002",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "easy",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["b"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "resolved_id": "42",
+        "max_clarifications": 1
+      }
+    },
+    {
+      "task_id": "mt.clarify.letter_fullwidth_003",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "easy",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["Ｂ"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "resolved_id": "42",
+        "max_clarifications": 1
+      }
+    },
+    {
+      "task_id": "mt.clarify.letter_prefix_004",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "easy",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["选A"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "resolved_id": "31",
+        "max_clarifications": 1
+      }
+    },
+    {
+      "task_id": "mt.clarify.letter_invalid_005",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "medium",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["C"],
+      "expect": {
+        "forbid_actions": [{"tool_id": "business_db", "action": "read"}],
+        "final_status": "waiting_user",
+        "clarification_candidates_unchanged": true
+      }
+    },
+    {
+      "task_id": "mt.clarify.letter_freeform_006",
+      "domain": "multiturn",
+      "category": "clarification_letter",
+      "difficulty": "hard",
+      "setup": {
+        "candidates": [],
+        "prior_assistant_question": "要看 A. 2026-09-30 当天，还是 B. 2026 年 9 月整月？",
+        "plan": "无结构化 pending（助手仅文字提问）"
+      },
+      "turns": ["A"],
+      "expect": {
+        "planner_received_continuation_context": true,
+        "max_clarifications": 1,
+        "answer_must_not_contain": ["没有待确认的操作", "请再说一次要确认什么"]
+      }
+    },
+    {
+      "task_id": "mt.confirm.after_letter_001",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "medium",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["A", "确认"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "tool_call_count": 1,
+        "max_clarifications": 1,
+        "answer_must_not_contain": ["请确认", "请再次确认"]
+      }
+    },
+    {
+      "task_id": "mt.confirm.no_pending_prior_question_002",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "hard",
+      "setup": {"prior_assistant_question": "确认要查询 2026-09-30 的购货明细吗？", "pending": null},
+      "turns": ["确认"],
+      "expect": {
+        "answer_must_not_contain": ["当前会话没有待确认的操作"],
+        "planner_received_continuation_context": true
+      }
+    },
+    {
+      "task_id": "mt.confirm.continue_003",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "easy",
+      "setup": {"paused_elt_import": true, "pending": "workflow"},
+      "turns": ["继续"],
+      "expect": {
+        "actions": [{"tool_id": "elt_import", "action": "execute"}],
+        "tool_call_count": 1
+      }
+    },
+    {
+      "task_id": "mt.confirm.cancel_004",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "easy",
+      "setup": {"pending_plan": "business_db.write", "requires_approval": true},
+      "turns": ["取消"],
+      "expect": {
+        "no_actions": true,
+        "tool_call_count": 0,
+        "final_status": "cancelled"
+      }
+    },
+    {
+      "task_id": "mt.confirm.duplicate_005",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "hard",
+      "setup": {"pending_plan": "business_db.write", "requires_approval": true},
+      "turns": ["确认", "确认"],
+      "expect": {
+        "tool_call_count": 1,
+        "actions": [{"tool_id": "business_db", "action": "write"}],
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.confirm.after_done_006",
+      "domain": "multiturn",
+      "category": "confirmation",
+      "difficulty": "hard",
+      "setup": {"already_completed_write": "customers/星光贸易"},
+      "turns": ["确认"],
+      "expect": {
+        "no_actions": true,
+        "tool_call_count": 0,
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.restart.clarify_001",
+      "domain": "multiturn",
+      "category": "restart_recovery",
+      "difficulty": "hard",
+      "setup": {"candidates": ["A100", "B200"], "plan": "clarify(ambiguous_target) → business_db.read"},
+      "turns": ["A"],
+      "expect": {
+        "restart_between_turns": 0,
+        "actions": [{"tool_id": "business_db", "action": "read"}],
+        "resolved_id": "31",
+        "max_clarifications": 1
+      }
+    },
+    {
+      "task_id": "mt.restart.approval_002",
+      "domain": "multiturn",
+      "category": "restart_recovery",
+      "difficulty": "hard",
+      "setup": {"pending_plan": "business_db.write", "requires_approval": true},
+      "turns": ["确认"],
+      "expect": {
+        "restart_between_turns": 0,
+        "actions": [{"tool_id": "business_db", "action": "write"}],
+        "tool_call_count": 1,
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.restart.confirm_no_pending_003",
+      "domain": "multiturn",
+      "category": "restart_recovery",
+      "difficulty": "hard",
+      "setup": {"prior_assistant_question": "请确认是否按 2026-09-30 查询购货明细", "pending": null},
+      "turns": ["确认"],
+      "expect": {
+        "restart_between_turns": 0,
+        "answer_must_not_contain": ["当前会话没有待确认的操作"],
+        "planner_received_continuation_context": true
+      }
+    },
+    {
+      "task_id": "mt.restart.completed_continue_004",
+      "domain": "multiturn",
+      "category": "restart_recovery",
+      "difficulty": "hard",
+      "setup": {"already_completed_write": "customers/星光贸易"},
+      "turns": ["继续"],
+      "expect": {
+        "restart_between_turns": 0,
+        "no_actions": true,
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.fail.translation_none_001",
+      "domain": "multiturn",
+      "category": "tool_failure_recovery",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "澜宇购货明细", "scripted_translator": "return None"},
+      "turns": ["表格里 9 月 30 日购货多少？"],
+      "expect": {
+        "error_code": "query_translation_failed",
+        "answer_contains": ["未能识别", "请指明列名或日期范围"],
+        "answer_must_not_contain": ["共", "合计", "已查询到"]
+      }
+    },
+    {
+      "task_id": "mt.fail.code_error_retry_002",
+      "domain": "multiturn",
+      "category": "tool_failure_recovery",
+      "difficulty": "hard",
+      "setup": {"excel_fixture": "澜宇购货明细", "scripted_translator": ["result = df.nonexistent", "result = df.head(2)"]},
+      "turns": ["给我前两条明细"],
+      "expect": {
+        "translator_call_count": 2,
+        "second_call_has_error_feedback": true,
+        "actions": [{"tool_id": "excel_analysis", "action": "query"}],
+        "row_count": 2
+      }
+    },
+    {
+      "task_id": "mt.fail.retry_exhausted_003",
+      "domain": "multiturn",
+      "category": "tool_failure_recovery",
+      "difficulty": "hard",
+      "setup": {"excel_fixture": "澜宇购货明细", "scripted_translator": ["result = df.bad1", "result = df.bad2"]},
+      "turns": ["给我前两条明细"],
+      "expect": {
+        "error_code": "excel_query_failed",
+        "answer_must_not_contain": ["已查询到", "共 2 条"]
+      }
+    },
+    {
+      "task_id": "mt.fail.tool_timeout_004",
+      "domain": "multiturn",
+      "category": "tool_failure_recovery",
+      "difficulty": "medium",
+      "setup": {"scripted_tool": "timeout", "tool": "business_db.read"},
+      "turns": ["查一下客户 星光贸易"],
+      "expect": {
+        "execution_state": "failed",
+        "answer_contains": ["超时", "失败"],
+        "answer_must_not_contain": ["查询成功"]
+      }
+    },
+    {
+      "task_id": "mt.excel.lanyu_2026_09_30_001",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "hard",
+      "setup": {
+        "excel_fixture": "澜宇购货明细（表头第 2 行，含合计行，日期为中文格式）",
+        "scripted_translator": "按日期 2026-09-30 过滤明细并返回行数、数量、金额"
+      },
+      "turns": ["澜宇2026/9/30购货明细多少？"],
+      "expect": {
+        "max_clarifications": 0,
+        "actions": [{"tool_id": "excel_analysis", "action": "query"}],
+        "answer_contains": ["2026-09-30", "明细", "金额"],
+        "answer_must_not_contain": ["请选择 A", "请选择 B"],
+        "row_count": ">0"
+      }
+    },
+    {
+      "task_id": "mt.excel.header_row_002",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "标题行 + 空行 + 第 4 行表头"},
+      "turns": ["这张表有哪些列？"],
+      "expect": {
+        "actions": [{"tool_id": "excel_analysis", "action": "structure"}],
+        "header_row": 4,
+        "answer_must_not_contain": ["Unnamed"]
+      }
+    },
+    {
+      "task_id": "mt.excel.cn_date_range_003",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "hard",
+      "setup": {"excel_fixture": "日期文本 12月27-26年1月23"},
+      "turns": ["12月27到26年1月23的明细有多少条？"],
+      "expect": {
+        "normalized_range": ["2025-12-27", "2026-01-23"],
+        "row_count": ">0"
+      }
+    },
+    {
+      "task_id": "mt.excel.serial_date_004",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "日期列为 Excel 序列号 46292"},
+      "turns": ["46292 是哪一天？"],
+      "expect": {
+        "normalized_date": "2026-09-27",
+        "answer_contains": ["2026-09-27"]
+      }
+    },
+    {
+      "task_id": "mt.excel.amount_text_005",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "金额列形如 ¥1,234.00元"},
+      "turns": ["购货金额合计多少？"],
+      "expect": {
+        "numeric_amount": true,
+        "answer_contains": ["1234"],
+        "answer_must_not_contain": ["¥1,234.00元元"]
+      }
+    },
+    {
+      "task_id": "mt.excel.total_rows_006",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "hard",
+      "setup": {"excel_fixture": "明细行 + 合计行", "structure_expected": "suspected_total_rows 非空"},
+      "turns": ["明细一共多少条？合计是多少？"],
+      "expect": {
+        "detail_count_excludes_total_rows": true,
+        "answer_contains": ["合计"],
+        "answer_must_not_contain": ["合计 1 条"]
+      }
+    },
+    {
+      "task_id": "mt.excel.no_data_007",
+      "domain": "excel",
+      "category": "excel_query",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "澜宇购货明细，无 2026-09-30 记录"},
+      "turns": ["澜宇2026/9/30购货明细多少？"],
+      "expect": {
+        "row_count": 0,
+        "answer_contains": ["没有", "未找到", "无记录"],
+        "answer_must_not_contain": ["共 0 元", "合计 0"]
+      }
+    },
+    {
+      "task_id": "mt.write.requires_approval_001",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "medium",
+      "setup": {"instruction": "新增客户 星光贸易", "requires_approval": true},
+      "turns": ["新增客户 星光贸易"],
+      "expect": {
+        "actions": [],
+        "tool_call_count": 0,
+        "final_status": "waiting_user",
+        "db_state": [{"entity": "customers", "op": "absent", "where": {"unit_name": "星光贸易"}}]
+      }
+    },
+    {
+      "task_id": "mt.write.approved_once_002",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "medium",
+      "setup": {"instruction": "新增客户 星光贸易"},
+      "turns": ["新增客户 星光贸易", "确认"],
+      "expect": {
+        "actions": [{"tool_id": "business_db", "action": "write"}],
+        "tool_call_count": 1,
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.write.duplicate_message_003",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "hard",
+      "setup": {"instruction": "新增客户 星光贸易", "approval_token": "same"},
+      "turns": ["新增客户 星光贸易", "确认", "确认"],
+      "expect": {
+        "tool_call_count": 1,
+        "db_state": [{"entity": "customers", "op": "count", "count": 1}]
+      }
+    },
+    {
+      "task_id": "mt.write.replay_blocked_004",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "hard",
+      "setup": {"approval_token": "saved-token", "already_consumed": true},
+      "turns": ["确认"],
+      "expect": {
+        "no_actions": true,
+        "tool_call_count": 0,
+        "answer_contains": ["已失效", "已使用", "重新发起"]
+      }
+    },
+    {
+      "task_id": "mt.write.cancel_005",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "easy",
+      "setup": {"pending_plan": "business_db.write"},
+      "turns": ["取消"],
+      "expect": {
+        "no_actions": true,
+        "final_status": "cancelled",
+        "db_state": [{"entity": "customers", "op": "absent", "where": {"unit_name": "星光贸易"}}]
+      }
+    },
+    {
+      "task_id": "mt.write.readonly_no_approval_006",
+      "domain": "write",
+      "category": "write_approval",
+      "difficulty": "medium",
+      "setup": {"excel_fixture": "澜宇购货明细", "planner_risk": "high"},
+      "turns": ["澜宇2026/9/30购货明细多少？"],
+      "expect": {
+        "max_clarifications": 0,
+        "no_approval_required": true,
+        "actions": [{"tool_id": "excel_analysis", "action": "query"}],
+        "answer_must_not_contain": ["需要审批", "请确认执行"]
+      }
+    }
+  ]
+}

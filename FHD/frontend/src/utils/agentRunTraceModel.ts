@@ -1,5 +1,5 @@
 /**
- * AgentRun 执行流可视化模型（Codex 风格）。
+ * AgentRun 执行流可视化模型（Xiaox 风格）。
  *
  * 把后端 RunEvent[] 重建为按时间顺序排列的 Phase 列表，
  * 供 ChatMessageList 内联渲染为 terminal 风格执行流卡片。
@@ -218,7 +218,7 @@ export function shouldShowAgentRunPlanGraph(trace: AgentRunTraceData | null | un
 }
 
 /**
- * 把 RunEvent[] 重建为 Codex 风格的 AgentRunTraceData。
+ * 把 RunEvent[] 重建为 Xiaox 风格的 AgentRunTraceData。
  *
  * @param events 后端事件流（按时间顺序）
  * @param runId  AgentRun id

@@ -20,7 +20,6 @@ from app.errors import (
     ServiceUnavailableError,
     WorkflowError,
 )
-from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def with_error_handling(
     """
     Decorator for structured error handling.
 
-    Replaces broad `except Exception:` with specific error handling and logging.
+    Handle expected operational failures; unexpected programming errors propagate.
     """
 
     def decorator(func: Callable) -> Callable:
@@ -75,7 +74,7 @@ def with_error_handling(
                     "message": f"Service unavailable: {e}",
                     "error_code": f"{error_code_prefix}service_unavailable",
                 }
-            except (ValueError, TypeError) as e:
+            except ValueError as e:
                 log_func = getattr(logger, log_level if log_level != "error" else "warning")
                 log_func("Validation error [%s]: %s", func.__name__, e)
                 if fallback:
@@ -121,25 +120,6 @@ def with_error_handling(
                     "success": False,
                     "message": str(e),
                     "error_code": e.code.value,
-                }
-            except WorkflowError as e:
-                log_func = getattr(logger, log_level)
-                log_func("Workflow error [%s]: %s", func.__name__, e)
-                if fallback:
-                    return fallback(*args, **kwargs)
-                return {
-                    "success": False,
-                    "message": str(e),
-                    "error_code": f"{error_code_prefix}workflow_error",
-                }
-            except BOUNDARY_ERRORS as e:
-                logger.exception("Unexpected error in %s: %s", func.__name__, e)
-                if fallback:
-                    return fallback(*args, **kwargs)
-                return {
-                    "success": False,
-                    "message": f"Unexpected error: {type(e).__name__}",
-                    "error_code": f"{error_code_prefix}unexpected_error",
                 }
 
         return wrapper

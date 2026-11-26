@@ -586,6 +586,20 @@ def verified_step_output(run: AgentRun, step: AgentStep) -> dict[str, Any]:
     return copy.deepcopy(step.output)
 
 
+def verified_effect_receipt(run: AgentRun, step: AgentStep) -> bool:
+    """Settle an open effect only with its original independently verified receipt."""
+    call = latest_step_call(run, step)
+    return bool(
+        step.status == "completed"
+        and call is not None
+        and call.status == "completed"
+        and (call.metadata.get("verification") or {}).get("status") == "verified"
+        and _accepted_report_valid(run, step, call)
+        and not execution_result_outcome_unknown(call.output, include_execution=True)
+        and verified_step_output(run, step).get("success") is True
+    )
+
+
 def summarize_verification(run: AgentRun) -> dict[str, Any]:
     reports = []
     for step in run.steps:

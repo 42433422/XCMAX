@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -272,10 +271,10 @@ class TestWorkingMemory:
             snapshot = wm.recall()
         assert snapshot.is_empty
 
-    def test_recall_long_term_disabled_by_default(self):
-        """默认不启用长期记忆。"""
+    def test_recall_long_term_enabled_by_default(self):
+        """默认启用长期记忆。"""
         wm = WorkingMemory(session_id="sess1", user_id="u1")
-        assert wm._enable_long_term is False
+        assert wm._enable_long_term is True
 
     def test_recall_long_term_returns_items(self):
         """启用长期记忆时返回向量召回结果。"""

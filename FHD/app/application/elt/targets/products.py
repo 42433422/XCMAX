@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError
@@ -16,6 +17,7 @@ from app.application.elt.targets.helpers import (
     assert_created_row_unchanged,
     assert_rollback_image_matches,
     decimal_or_none,
+    issue,
     model_values,
     optional_text,
 )
@@ -86,16 +88,43 @@ class ProductAdapter(TargetAdapter):
             exact_match=exact_match,
         )
 
-    def _same_name_candidates(self, db: Session, data: dict[str, Any]) -> list[Product]:
-        return cast(
-            "list[Product]",
-            owned_query(db, Product)
-            .filter(
+    def _same_name_candidates(
+        self, db: Session, data: dict[str, Any], *, normalized: bool = False
+    ) -> list[Product]:
+        query = owned_query(db, Product)
+        if normalized:
+            unit, name = self._name_key(data)
+            query = query.filter(func.trim(Product.unit) == unit, func.trim(Product.name) == name)
+        else:
+            query = query.filter(
                 Product.unit == str(data.get("unit") or ""),
                 Product.name == str(data.get("name") or ""),
             )
-            .all(),
-        )
+        return cast("list[Product]", query.all())
+
+    @classmethod
+    def _no_model_conflict(cls, data, candidates):
+        code = "ELT_PRODUCT_NO_MODEL_CONFLICT"
+        if len(candidates) > 1:
+            return issue(
+                code, "model_number", "同一客户同名产品匹配到多条记录；请补全型号后重新预演"
+            )
+        if not candidates:
+            return None
+        candidate = candidates[0]
+        values = candidate if isinstance(candidate, dict) else model_values(candidate, cls.fields)
+        if (optional_text(data.get("specification")) or "") != (
+            optional_text(values.get("specification")) or ""
+        ):
+            return issue(
+                code, "specification", "同一客户同名无型号产品的规格不同；请核对后重新预演"
+            )
+        price = decimal_or_none(data.get("price"))
+        existing_price = decimal_or_none(values.get("price"))
+        # Product inserts with no price receive the ORM column's zero default.
+        if price != existing_price and not (price is None and existing_price == 0):
+            return issue(code, "price", "同一客户同名无型号产品的价格不同；请核对后重新预演")
+        return None
 
     def preview(self, db, data, *, allowed_update_fields, context):
         issues = self.validate(data)
@@ -120,21 +149,27 @@ class ProductAdapter(TargetAdapter):
             cache["product_by_name_key"] = name_index
         match_key = self._match_key(data)
         obj = index.get(match_key)
-        ambiguity = self.model_ambiguity_issue(
-            data,
-            list((name_index or {}).get(self._name_key(data), [])),
-            exact_match=bool(obj),
-        )
+        name_key = self._name_key(data)
+        candidates = name_index.get(name_key, [])
+        ambiguity = self.model_ambiguity_issue(data, candidates, exact_match=bool(obj))
         if ambiguity:
             return PreviewDecision(
                 "error",
                 issues=[ambiguity],
                 reason="product_model_ambiguous",
             )
+        no_model = match_key[1] == "name"
+        if no_model:
+            conflict = self._no_model_conflict(data, candidates)
+            if conflict:
+                return PreviewDecision(
+                    "error", issues=[conflict], reason="product_no_model_conflict"
+                )
+            obj = candidates[0] if candidates else None
         if not obj:
             virtual = {"_elt_virtual": True, **json_safe(data)}
             index[match_key] = virtual
-            (name_index or {}).setdefault(self._name_key(data), []).append(virtual)
+            name_index.setdefault(name_key, []).append(virtual)
             return PreviewDecision("new", after=json_safe(data), reason="product_not_found")
         if isinstance(obj, dict):
             return PreviewDecision(
@@ -144,6 +179,14 @@ class ProductAdapter(TargetAdapter):
                 reason="duplicate_in_source_file",
             )
         before = model_values(obj, self.fields)
+        if no_model:
+            return PreviewDecision(
+                "skip",
+                match_ref=str(obj.id),
+                before=before,
+                after=before,
+                reason="duplicate_product",
+            )
         updates = {
             key: data.get(key)
             for key in allowed_update_fields
@@ -164,15 +207,17 @@ class ProductAdapter(TargetAdapter):
         )
 
     def execute_row(self, db, data, *, action, match_ref, allowed_update_fields, context):
+        no_model = self._match_key(data)[1] == "name"
+        if action == "new" or (action == "update" and no_model):
+            candidates = self._same_name_candidates(db, data, normalized=no_model)
+            conflict = self.model_ambiguity_issue(data, candidates, exact_match=False)
+            if no_model and not conflict:
+                conflict = self._no_model_conflict(data, candidates)
+            if conflict:
+                raise EltError(conflict["code"], conflict["message"], status_code=409)
         if action == "new":
-            ambiguity = self.model_ambiguity_issue(
-                data,
-                self._same_name_candidates(db, data),
-                exact_match=False,
-            )
-            if ambiguity:
-                raise EltError(ambiguity["code"], ambiguity["message"], status_code=409)
-            if self._match(db, data):
+            already_exists = bool(candidates) if no_model else self._match(db, data) is not None
+            if already_exists:
                 raise EltError(
                     "ELT_MATCH_CHANGED",
                     "产品在预演后已存在，请重新预演",
@@ -192,6 +237,12 @@ class ProductAdapter(TargetAdapter):
             db.add(obj)
             db.flush()
             return {"match_ref": str(obj.id), "after": model_values(obj, self.fields)}
+        if action == "update" and no_model:
+            raise EltError(
+                "ELT_PRODUCT_NO_MODEL_CONFLICT",
+                "无型号产品不能覆盖已有记录；请补全型号后重新预演",
+                status_code=409,
+            )
         obj = owned_query(db, Product).filter(Product.id == int(match_ref)).first()
         if not obj:
             raise EltError("ELT_MATCH_DISAPPEARED", "预演匹配的产品已不存在", status_code=409)

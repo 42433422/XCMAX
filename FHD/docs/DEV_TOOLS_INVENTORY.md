@@ -51,6 +51,7 @@
 | verify_desktop_manifest_drift.py | `scripts/dev/verify_desktop_manifest_drift.py` | verify | no | stdlib |
 | verify_doc_claims.py | `scripts/dev/verify_doc_claims.py` | verify | no | stdlib |
 | verify_doc_versions.py | `scripts/dev/verify_doc_versions.py` | verify | no | stdlib |
+| verify_pg_history_upgrade.py | `scripts/dev/verify_pg_history_upgrade.py` | verify | yes | Alembic, SQLAlchemy, PostgreSQL |
 | verify_employee_contract.py | `scripts/dev/verify_employee_contract.py` | verify | no | stdlib |
 | verify_neuro_bus_prod.py | `scripts/dev/verify_neuro_bus_prod.py` | verify | no | stdlib |
 | verify_no_legacy_shims.py | `scripts/dev/verify_no_legacy_shims.py` | verify | no | stdlib |

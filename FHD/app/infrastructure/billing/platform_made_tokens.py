@@ -1,7 +1,7 @@
 """平台制作 Token：管理端同源聚合的公开快照。
 
 与「平台使用 Token」（线上对话 + AI 员工账本）区分：
-- 制作 = FHD 本地账本 + Cursor + Codex + Trae + mimo（管理端 /admin/token-usage）
+- 制作 = FHD 本地账本 + Cursor + Xiaox + Trae + mimo（管理端 /admin/token-usage）
 - 使用 = llm_call_logs + employee_execution_metrics（官网可视化实时账本）
 
 公开快照只保留聚合数字，不含路径、会话明细或 by_model 明细。
@@ -20,7 +20,7 @@ from app.utils.scalars import coerce_int as _to_int
 _SOURCE_LABELS = {
     "local": "FHD 本地账本",
     "cursor": "Cursor",
-    "codex": "Codex",
+    "xiaox": "Xiaox",
     "trae": "Trae",
     "mimo": "mimo",
 }
@@ -42,7 +42,7 @@ def build_public_snapshot(summary: Mapping[str, Any]) -> dict[str, Any]:
     """把管理端 token-usage 摘要收敛为官网可公开字段。"""
     sources_in = summary.get("sources") if isinstance(summary.get("sources"), Mapping) else {}
     sources_out: list[dict[str, Any]] = []
-    for key in ("local", "cursor", "codex", "trae", "mimo"):
+    for key in ("local", "cursor", "xiaox", "trae", "mimo"):
         raw = sources_in.get(key) if isinstance(sources_in, Mapping) else None
         raw = raw if isinstance(raw, Mapping) else {}
         available = bool(raw.get("available"))
@@ -64,7 +64,7 @@ def build_public_snapshot(summary: Mapping[str, Any]) -> dict[str, Any]:
         "platform_made_completion_tokens": _to_int(summary.get("grand_completion_tokens")),
         "sources": sources_out,
         "definition": (
-            "管理端同源算法：FHD 本地账本 + Cursor + Codex + Trae + mimo 五源合计；"
+            "管理端同源算法：FHD 本地账本 + Cursor + Xiaox + Trae + mimo 五源合计；"
             "与线上对话/AI 员工「平台使用 Token」分开统计"
         ),
     }

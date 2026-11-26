@@ -46,7 +46,7 @@ import pytest
 @pytest.mark.parametrize("source", ["pro", "normal", None])
 @pytest.mark.parametrize("message", ["导入Excel", "你好", "确认", "取消", "测试消息"])
 def test_public_chat_model_failure_has_no_local_success_or_implicit_import(source, message):
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
     from tests.test_application.ai_chat_test_helpers import _make_svc
 
     service = _make_svc()

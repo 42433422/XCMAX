@@ -65,6 +65,8 @@ if [[ "${XCAGI_BUNDLE_COMPUTER_USE:-0}" == "1" ]]; then
   BACKEND_EXTRAS="server-api,computer-use"
 fi
 "${PYTHON}" -m pip install -r requirements-server-api.txt -e ".[${BACKEND_EXTRAS}]"
+"${PYTHON}" -m pip install -r ops/deploy/requirements-memory-runtime.txt
+"${PYTHON}" scripts/dev/provision_memory_model.py
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
 
 if [[ "$(uname -s)" == "Darwin" ]]; then

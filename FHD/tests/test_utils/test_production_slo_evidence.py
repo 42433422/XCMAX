@@ -939,3 +939,63 @@ def test_recovered_epoch_still_requires_90_fresh_continuous_days_for_one_release
     )
     assert stale["passed"] is False
     assert "latest_formal_sample_stale_or_missing" in stale["blockers"]
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    [
+        ("independent", "observed_increase"),
+        ("overlap", "blocked"),
+        ("rolling", "blocked"),
+        ("scrape_loss", "blocked"),
+        ("source_change", "blocked"),
+        ("stale", "blocked"),
+    ],
+)
+def test_error_rate_comparison_reuses_real_collector_chain(tmp_path, monkeypatch, mode, expected):
+    collector = _module()
+    verifier = _verifier_module()
+    start = datetime(2026, 11, 23, 12, tzinfo=UTC)
+    window = "30d" if mode == "rolling" else "1d"
+    recent = start + (timedelta(hours=23) if mode == "overlap" else timedelta(days=1))
+
+    for index, end in enumerate((start, recent)):
+        readings = {**GOOD_READINGS, "SLO-API-03": 0.001 + index * 0.001}
+
+        def query(_url, expr, **_kwargs):
+            if expr in collector.SCRAPE_QUERIES.values():
+                return "5000" if mode == "scrape_loss" and index else "5760"
+            for slo_id, template in collector.SAMPLE_QUERIES.items():
+                if expr == template.format(w=window):
+                    return str(collector.SAMPLE_MINIMUMS[slo_id])
+            for slo_id, template in collector.QUERIES.items():
+                if expr == template.format(w=window):
+                    return str(readings[slo_id])
+            raise AssertionError(expr)
+
+        monkeypatch.setattr(collector, "prom_query", query)
+        _collect(
+            collector,
+            tmp_path / f"{index}.json",
+            window=window,
+            mode="preflight",
+            release_id="",
+            prom_url=(
+                "https://other.example.invalid"
+                if mode == "source_change" and index
+                else "https://prometheus.example.invalid"
+            ),
+            now=end,
+        )
+    now = recent + (timedelta(hours=25) if mode == "stale" else timedelta(0))
+    result = verifier.compare_error_rate_windows(tmp_path, now=now)
+    assert result["status"] == expected
+    assert result["execution_authorized"] is False
+    assert result["passed"] is (mode == "independent")
+    if mode == "independent":
+        assert result["error_rate_delta"] == pytest.approx(0.001)
+        assert result["windows"][0]["end"] == result["windows"][1]["start"]
+        assert result["windows"][0]["evidence_hash"] != result["windows"][1]["evidence_hash"]
+    else:
+        assert result["blockers"]
+        assert "error_rate_delta" not in result

@@ -3,6 +3,7 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import type { ChatPlannerPayload } from '@/types/chat'
 import { asArray, asBoolean, asRecord, asString } from '@/utils/typeGuards'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { isFixedRuntimePayload } from '@/utils/chatRuntimeContinuation'
 
 function nestedData(data: ChatPlannerPayload): Record<string, unknown> {
   return asRecord(asRecord(data.data).data)
@@ -64,14 +65,15 @@ export function parseApprovalCardFromPayload(data: ChatPlannerPayload): ChatAppr
   const action = asString(envelope.action).trim()
   if (!Object.keys(explicit).length && action !== 'workflow_confirmation_required' && action !== 'approval_pending') return null
   const raw = { ...inner, ...explicit }
-  const codex = data.runtime === 'codex' || envelope.runtime === 'codex'
+  const fixedRuntime = isFixedRuntimePayload(data)
   const childRunId = asString(explicit.run_id || explicit.agent_run_id).trim()
-  const parentRunId = asString(data.run_id || data.agent_run_id || envelope.run_id).trim()
+  const parentRunIds = [data.run_id, data.agent_run_id, envelope.run_id, envelope.agent_run_id]
+    .map(value => asString(value).trim()).filter(Boolean)
   // A runtime parent coordinates receipts. Only the explicit business child
   // can receive an approval grant; never borrow the parent's envelope ID.
-  if (codex && (!childRunId || childRunId === parentRunId
+  if (fixedRuntime && (!childRunId || parentRunIds.includes(childRunId)
     || (explicit.run_id && explicit.agent_run_id && explicit.run_id !== explicit.agent_run_id))) return null
-  const runId = codex ? childRunId
+  const runId = fixedRuntime ? childRunId
     : asString(raw.run_id || raw.agent_run_id || envelope.run_id || envelope.agent_run_id || data.run_id || data.agent_run_id)
   return restoreApprovalCard({
     version: Number(raw.version) || 1,

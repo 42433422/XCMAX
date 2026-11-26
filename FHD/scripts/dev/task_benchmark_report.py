@@ -6,6 +6,49 @@ from collections import Counter, defaultdict
 from typing import Any
 
 
+def classify_trial_failure(row: dict[str, Any]) -> str | None:
+    """Keep provider outages distinct from SQLite startup and business failures.
+
+    Provider attribution requires an explicit model/provider hint in the raw
+    receipt. An unrelated business-API 401 is not evidence of a model key error.
+    This classification never changes a trial pass/fail or the acceptance floor.
+    """
+    if row.get("pass") is True:
+        return None
+    failure = str(row.get("failure") or "").lower()
+    if "database is locked" in failure or "sqlite_busy" in failure:
+        return "database_lock"
+    if "database" in failure and any(
+        token in failure for token in ("operationalerror", "integrityerror")
+    ):
+        return "database_error"
+    provider = any(
+        token in failure
+        for token in ("openai", "llm provider", "model provider", "codex model", "model api")
+    )
+    if provider:
+        if any(code in failure for code in ("http 401", "http 403", "status=401", "status=403")):
+            return "model_provider_auth"
+        if any(code in failure for code in ("http 429", "status=429", "rate limit")):
+            return "model_provider_rate_limit"
+        if any(code in failure for code in ("http 500", "http 502", "http 503", "http 504")):
+            return "model_provider_service"
+    if row.get("runtime_admitted") is not True:
+        execution = row.get("execution")
+        output = execution.get("final_output") if isinstance(execution, dict) else None
+        if (
+            isinstance(output, dict)
+            and output.get("execution_state") == "blocked"
+            and output.get("failure_stage") == "runtime_setup"
+            and output.get("error_code") == "runtime_login_required"
+        ):
+            return "runtime_account_auth"
+        return "runtime_admission"
+    if type(row.get("exec_pass")) is not bool:
+        return "runtime_execution_unverified"
+    return "business_or_result_failure"
+
+
 def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str, Any]:
     identifiers = [task["task_id"] for task in tasks]
     if not identifiers or len(set(identifiers)) != len(identifiers):
@@ -21,6 +64,7 @@ def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str
             if type(row.get("pass")) is not bool or row.get("trial") != number:
                 raise ValueError(f"trial {number} has invalid outcome or trial identity")
             by_task[row["task_id"]].append(row)
+    categories: Counter[str] = Counter()
     domains: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "pass_k": 0})
     failures: list[dict] = []
     pass_k = pass_at_k = safety_failures = 0
@@ -33,6 +77,10 @@ def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str
         domains[domain]["total"] += 1
         domains[domain]["pass_k"] += all_pass
         if not all_pass:
+            for row in rows:
+                category = classify_trial_failure(row)
+                if category is not None:
+                    categories[category] += 1
             first = next(row for row in rows if not row["pass"])
             safety_failures += domain == "safety" or task.get("critical") is True
             failures.append(
@@ -54,9 +102,22 @@ def summarize_trials(tasks: list[dict], per_trial: list[list[dict]]) -> dict[str
         "pass_k": pass_k / total,
         "pass_at_k": pass_at_k / total,
         "safety_failures": safety_failures,
+        "failure_categories": dict(sorted(categories.items())),
         "by_domain": dict(sorted(domains.items())),
         "failures": failures,
     }
+
+
+def startup_blocked_task_ids(per_trial: list[list[dict]]) -> list[str]:
+    """Fail closed when admission or execution was not established by a raw trial."""
+    return sorted(
+        {
+            row["task_id"]
+            for rows in per_trial
+            for row in rows
+            if row.get("runtime_admitted") is not True or type(row.get("exec_pass")) is not bool
+        }
+    )
 
 
 def passes_gate(report: dict[str, Any], minimum: float) -> bool:

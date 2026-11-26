@@ -388,12 +388,15 @@ class AuthorityReader:
         identity = source.scalar(
             select(User).where(User.id == row.user_id, User.tenant_id == scope.tenant_id)
         )
-        state["role"] = (
-            identity.role if identity is not None and identity.role == "ai_employee" else None
+        # A reused or incorrectly linked AI user cannot prove another employee's
+        # identity, even when the tenant and generic ai_employee role match.
+        canonical_identity = (
+            identity is not None
+            and identity.role == "ai_employee"
+            and identity.username == f"ai-employee:{row.employee_id}"
         )
-        state["identity_active"] = (
-            bool(identity.is_active) if state["role"] == "ai_employee" else None
-        )
+        state["role"] = "ai_employee" if canonical_identity else None
+        state["identity_active"] = bool(identity.is_active) if canonical_identity else None
         state["capability_evidence"] = {
             "status": "unknown",
             "source": "installed_employee_pack",
@@ -405,6 +408,13 @@ class AuthorityReader:
             "source": "employee_run_logs",
             "scope": "current_actor_employee_active_store",
             "capacity_verified": False,
+        }
+        state["performance"] = {
+            "status": "unknown",
+            "source": "employee_run_logs",
+            "scope": "current_actor_employee_active_store",
+            "independent_business_verified": False,
+            "cost_attribution": "unknown",
         }
         # A host view of another Mod's employee cannot attribute its local ledger
         # or registry observations to that Mod.
@@ -432,23 +442,51 @@ class AuthorityReader:
         try:
             with self.business_session_factory() as business:
                 grouped = business.execute(
-                    select(EmployeeRunLog.status, func.count(EmployeeRunLog.id))
+                    select(
+                        EmployeeRunLog.status,
+                        EmployeeRunLog.verified,
+                        EmployeeRunLog.finished_at.is_not(None),
+                        func.count(EmployeeRunLog.id),
+                    )
                     .where(
                         EmployeeRunLog.employee_id == row.employee_id,
                         EmployeeRunLog.tenant_id == scope.tenant_id,
                         EmployeeRunLog.user_id == int(scope.actor_id),
                     )
-                    .group_by(EmployeeRunLog.status)
+                    .group_by(
+                        EmployeeRunLog.status,
+                        EmployeeRunLog.verified,
+                        EmployeeRunLog.finished_at.is_not(None),
+                    )
                 ).all()
         except SQLAlchemyError:
             return
         counts: dict[str, int] = {}
-        for status, count in grouped:
+        finished_counts: dict[str, int] = {}
+        legacy_marked_successes = incomplete_terminal = 0
+        for status, verified, finished, count in grouped:
             try:
                 canonical = canonicalize("employee", status)
             except LegacyTransitionError:
                 canonical = "unknown"
             counts[canonical] = counts.get(canonical, 0) + int(count)
+            if canonical in TERMINAL:
+                if not finished:
+                    incomplete_terminal += int(count)
+                    continue
+                finished_counts[canonical] = finished_counts.get(canonical, 0) + int(count)
+                if canonical == "succeeded" and verified == 1:
+                    legacy_marked_successes += int(count)
+        # Current ledger writes verified=0; a legacy flag is historical metadata,
+        # not proof of an execution contract or independent business acceptance.
+        state["performance"].update(
+            status="observed" if counts else "no_history",
+            recorded_runs=sum(counts.values()),
+            finished_terminal_counts=finished_counts,
+            legacy_marked_success_count=legacy_marked_successes,
+            unmarked_success_count=finished_counts.get("succeeded", 0) - legacy_marked_successes,
+            incomplete_terminal_count=incomplete_terminal,
+        )
         state["workload"].update(
             status="observed" if counts else "no_history",
             counts=counts,

@@ -235,8 +235,12 @@
             {{ item.text }}
           </button>
         </div>
+        <ChatTypingIndicator v-if="msg === pendingUserMessage" label="正在生成回复…" data-testid="chat-turn-pending" />
+        <div v-if="msg === stoppedTurnMessage" class="message-recovery" role="status" data-testid="chat-turn-stopped">
+          <p class="message-recovery__text">已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。</p>
+        </div>
       </div>
-      <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply" class="message ai">
+      <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply && !pendingUserMessage" class="message ai">
         <div class="chat-loading-row">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
           <span class="status-dot online"></span>
@@ -285,6 +289,8 @@ const props = defineProps<{
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
   isStreamingReply: boolean
+  pendingTurnId?: string
+  stoppedTurnId?: string
   loadingProgressText: string
   messageHeights: Map<number, number>
   latestAiMessageIndex: number
@@ -314,6 +320,17 @@ const emit = defineEmits<{
   'retry-model': [payload: { text: string; turnId: string }]
   'confirm-destructive': [payload: { text: string; idempotencyKey: string }]
 }>()
+
+const pendingUserMessage = computed(() => {
+  const turnId = props.pendingTurnId
+  if (!props.isLoading || !turnId || props.messages.some(msg => msg.role === 'ai' && msg.turnId === turnId)) return undefined
+  return props.messages.find(msg => msg.role === 'user' && msg.turnId === turnId)
+})
+
+const stoppedTurnMessage = computed(() => {
+  const latest = props.messages.at(-1)
+  return !props.isLoading && props.stoppedTurnId && latest?.turnId === props.stoppedTurnId ? latest : undefined
+})
 
 function businessResultText(message: ChatMessage): string {
   return formatBusinessResultSummary(message.businessResult)
@@ -499,7 +516,7 @@ async function showEarlier() {
   await moveWindow(-1, Math.max(0, props.messages.length - count - 60))
 }
 
-watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
+watch([() => props.proactiveSuggestions?.size, stoppedTurnMessage], scrollToLatestIfFollowing, { flush: 'post' })
 type Presentation = { key: string; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
 function presentation(message: ChatMessage): Presentation {

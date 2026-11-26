@@ -200,7 +200,7 @@ def apply_clarification_answer(
         or reference_receipt.get("question_params") != step.params
         or reference_receipt.get("answer") is not None
         or (
-            (run.metadata.get("runtime_context") or {}).get("source") == "codex_runtime"
+            (run.metadata.get("runtime_context") or {}).get("source") == "xiaox_runtime"
             and str(answered_by or "") != run.user_id
         )
     ):

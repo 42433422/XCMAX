@@ -55,7 +55,12 @@ class MarketPage(Protocol):
 
 class ModPackageWriter(Protocol):
     def install_mod_package(
-        self, package_path: str, verify_signature: bool = True, activate: bool = True
+        self,
+        package_path: str,
+        verify_signature: bool = True,
+        activate: bool = True,
+        *,
+        owner_scope: str = "",
     ) -> tuple[bool, str, ModMetadata | None]: ...
 
 

@@ -29,10 +29,10 @@ from app.db.models.user import Session as UserSession
 from app.infrastructure.auth.agent_principal import require_agent_principal
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.test_application.test_codex_business_targets import _elt_preview
-from tests.test_application.test_codex_business_targets import elt_runtime as elt_runtime
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 from tests.test_application.test_etl_preview_task_boundaries import snapshot
+from tests.test_application.test_xiaox_business_targets import _elt_preview
+from tests.test_application.test_xiaox_business_targets import elt_runtime as elt_runtime
 
 
 @pytest.mark.parametrize("target_count", [2, 1])

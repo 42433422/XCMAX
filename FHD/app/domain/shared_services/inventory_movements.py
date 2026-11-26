@@ -5,6 +5,7 @@ import logging
 import math
 from contextlib import nullcontext
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,44 @@ def _posted_stock_out(db, model, product_id, reference_type, reference_id):
     return query.first()
 
 
+def _move_available(db: Any, ledger: Any, delta: Decimal, now: datetime) -> bool:
+    """Atomic physical/free-stock movement bound to the original tenant and row."""
+    model = _facade().InventoryLedger
+    physical = Decimal(str(ledger.quantity or 0))
+    available = Decimal(str(ledger.available_quantity or 0))
+    reserved = Decimal(str(ledger.reserved_quantity or 0))
+    if (
+        physical < 0
+        or available < 0
+        or reserved < 0
+        or physical != available + reserved
+        or available + delta < 0
+    ):
+        return False
+    changed = (
+        db.query(model)
+        .filter(
+            model.id == ledger.id,
+            model.tenant_id == ledger.tenant_id,
+            model.quantity == physical,
+            model.available_quantity == available,
+            model.reserved_quantity == reserved,
+        )
+        .update(
+            {
+                model.quantity: model.quantity + delta,
+                model.available_quantity: model.available_quantity + delta,
+                model.updated_at: now,
+            },
+            synchronize_session=False,
+        )
+    )
+    if changed != 1:
+        return False
+    db.refresh(ledger)
+    return True
+
+
 def _positive_movement_quantity(value: Any) -> float:
     if isinstance(value, bool):
         raise ValueError("库存变动数量必须是有效正数")
@@ -37,7 +76,11 @@ def _positive_movement_quantity(value: Any) -> float:
         quantity = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("库存变动数量必须是有效正数") from exc
-    if not math.isfinite(quantity) or quantity <= 0:
+    if (
+        not math.isfinite(quantity)
+        or quantity <= 0
+        or Decimal(str(quantity)).as_tuple().exponent < -4
+    ):
         raise ValueError("库存变动数量必须是有效正数")
     return quantity
 
@@ -150,20 +193,44 @@ class InventoryMovementsMixin:
                 if warehouse_name and warehouse.name != warehouse_name:
                     return {"success": False, "message": "仓库编号与名称不符"}
                 product_id, warehouse_id = product.id, warehouse.id
-                ledger = (
+                if location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == location_id,
+                            _facade().StorageLocation.warehouse_id == warehouse_id,
+                            _facade().StorageLocation.status == "active",
+                        )
+                        .first()
+                    )
+                    if location is None:
+                        return {"success": False, "message": "入库库位不属于当前仓库或未启用"}
+                rows = (
                     db.query(_facade().InventoryLedger)
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
                         _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == location_id,
                     )
-                    .first()
+                    .limit(2)
+                    .all()
                 )
+                if len(rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "物理库存台账重复，需先核对历史记录",
+                    }
+                ledger = rows[0] if rows else None
                 now = datetime.now()
                 if ledger:
-                    ledger.quantity = float(ledger.quantity or 0) + quantity
-                    ledger.available_quantity = float(ledger.available_quantity or 0) + quantity
-                    ledger.updated_at = now
+                    if not _move_available(db, ledger, Decimal(str(quantity)), now):
+                        return {
+                            "success": False,
+                            "error_code": "inventory_concurrent_change",
+                            "message": "入库库存基线已变更或账实不一致，未重复记账",
+                        }
                 else:
                     ledger = _facade().InventoryLedger(
                         product_id=product_id,
@@ -243,11 +310,27 @@ class InventoryMovementsMixin:
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 stock_model = _facade().InventoryTransaction
+                resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
+                    db, warehouse_id
+                )
+                if resolved_warehouse_id is None:
+                    return {"success": False, "error_code": error_code, "message": problem}
                 if reference_type and reference_id not in (None, ""):
                     posted = _posted_stock_out(
                         db, stock_model, resolved_product_id, str(reference_type), reference_id
                     )
                     if posted is not None:
+                        if (
+                            Decimal(str(-posted.quantity)) != Decimal(str(quantity))
+                            or posted.warehouse_id != resolved_warehouse_id
+                            or posted.batch_no != batch_no
+                            or posted.location_id != location_id
+                        ):
+                            return {
+                                "success": False,
+                                "error_code": "inventory_replay_conflict",
+                                "message": "原出库单据身份已使用，数量或库存归属不一致",
+                            }
                         return {
                             "success": True,
                             "message": "该业务单据已出库，未重复扣减",
@@ -257,15 +340,6 @@ class InventoryMovementsMixin:
                                 "quantity": quantity,
                             },
                         }
-                resolved_warehouse_id, problem, error_code = _stock_out_warehouse_id(
-                    db, warehouse_id
-                )
-                if resolved_warehouse_id is None:
-                    return {
-                        "success": False,
-                        "error_code": error_code,
-                        "message": problem,
-                    }
                 query = db.query(_facade().InventoryLedger).filter(
                     _facade().InventoryLedger.product_id == resolved_product_id,
                     _facade().InventoryLedger.warehouse_id == resolved_warehouse_id,
@@ -275,7 +349,14 @@ class InventoryMovementsMixin:
                     query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
                 if location_id:
                     query = query.filter(_facade().InventoryLedger.location_id == location_id)
-                ledger = query.first()
+                rows = query.limit(2).all()
+                if len(rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "多个批次或库位均可出库，请明确原库存归属",
+                    }
+                ledger = rows[0] if rows else None
                 if not ledger:
                     return {
                         "success": False,
@@ -283,9 +364,12 @@ class InventoryMovementsMixin:
                         "message": "库存不足或库存记录不存在",
                     }
                 now = datetime.now()
-                ledger.quantity = float(ledger.quantity) - quantity
-                ledger.available_quantity = float(ledger.available_quantity) - quantity
-                ledger.updated_at = now
+                if not _move_available(db, ledger, -Decimal(str(quantity)), now):
+                    return {
+                        "success": False,
+                        "error_code": "inventory_concurrent_change",
+                        "message": "可用库存不足、账实不一致或被并发变更，未扣减",
+                    }
                 transaction = stock_model(
                     ledger_id=ledger.id,
                     transaction_type="out",
@@ -314,6 +398,17 @@ class InventoryMovementsMixin:
                     )
                     if raced is None:
                         raise
+                    if (
+                        Decimal(str(-raced.quantity)) != Decimal(str(quantity))
+                        or raced.warehouse_id != resolved_warehouse_id
+                        or raced.batch_no != batch_no
+                        or raced.location_id != location_id
+                    ):
+                        return {
+                            "success": False,
+                            "error_code": "inventory_replay_conflict",
+                            "message": "并发出库身份冲突，原请求的参数不一致",
+                        }
                     return {
                         "success": True,
                         "message": "该业务单据已出库，未重复扣减",
@@ -353,30 +448,67 @@ class InventoryMovementsMixin:
             quantity = _positive_movement_quantity(quantity)
         except ValueError:
             return {"success": False, "message": "调拨数量必须是有效正数"}
+        if from_warehouse_id == to_warehouse_id:
+            return {"success": False, "message": "调拨的源仓库和目标仓库不能相同"}
         with _facade().get_db() as db, worker_write_guard(db):
             try:
-                from_ledger = (
-                    db.query(_facade().InventoryLedger)
+                warehouses = (
+                    db.query(_facade().Warehouse)
                     .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == from_warehouse_id,
-                        _facade().InventoryLedger.available_quantity >= quantity,
+                        _facade().Warehouse.id.in_((from_warehouse_id, to_warehouse_id)),
+                        _facade().Warehouse.status == "active",
                     )
-                    .first()
+                    .all()
                 )
+                if {w.id for w in warehouses} != {from_warehouse_id, to_warehouse_id}:
+                    return {"success": False, "message": "调拨仓库不存在或未启用"}
+                if to_location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == to_location_id,
+                            _facade().StorageLocation.warehouse_id == to_warehouse_id,
+                            _facade().StorageLocation.status == "active",
+                        )
+                        .first()
+                    )
+                    if location is None:
+                        return {"success": False, "message": "目标库位不属于目标仓库或未启用"}
+                source = db.query(_facade().InventoryLedger).filter(
+                    _facade().InventoryLedger.product_id == product_id,
+                    _facade().InventoryLedger.warehouse_id == from_warehouse_id,
+                    _facade().InventoryLedger.available_quantity >= quantity,
+                )
+                if batch_no is not None:
+                    source = source.filter(_facade().InventoryLedger.batch_no == batch_no)
+                if from_location_id is not None:
+                    source = source.filter(
+                        _facade().InventoryLedger.location_id == from_location_id
+                    )
+                source_rows = source.limit(2).all()
+                if len(source_rows) > 1:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "调拨来源存在多个批次或库位，请明确选择",
+                    }
+                from_ledger = source_rows[0] if source_rows else None
                 if not from_ledger:
                     return {"success": False, "message": "源仓库库存不足"}
                 now = datetime.now()
-                from_ledger.quantity = float(from_ledger.quantity) - quantity
-                from_ledger.available_quantity = float(from_ledger.available_quantity) - quantity
-                from_ledger.updated_at = now
+                if not _move_available(db, from_ledger, -Decimal(str(quantity)), now):
+                    return {
+                        "success": False,
+                        "error_code": "inventory_concurrent_change",
+                        "message": "源仓库存已被并发修改或账实不一致，未调拨",
+                    }
                 out_transaction = _facade().InventoryTransaction(
                     ledger_id=from_ledger.id,
                     transaction_type="transfer_out",
                     product_id=product_id,
                     warehouse_id=from_warehouse_id,
-                    location_id=from_location_id,
-                    batch_no=batch_no,
+                    location_id=from_ledger.location_id,
+                    batch_no=from_ledger.batch_no,
                     quantity=-quantity,
                     before_quantity=float(from_ledger.quantity) + quantity,
                     after_quantity=float(from_ledger.quantity),
@@ -387,26 +519,39 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(out_transaction)
-                to_ledger = (
+                target_rows = (
                     db.query(_facade().InventoryLedger)
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == to_warehouse_id,
-                        (_facade().InventoryLedger.batch_no == batch_no)
-                        | _facade().InventoryLedger.batch_no.is_(None),
+                        _facade().InventoryLedger.batch_no == from_ledger.batch_no,
+                        _facade().InventoryLedger.location_id == to_location_id,
                     )
-                    .first()
+                    .limit(2)
+                    .all()
                 )
+                if len(target_rows) > 1:
+                    db.rollback()
+                    return {
+                        "success": False,
+                        "error_code": "inventory_identity_ambiguous",
+                        "message": "目标物理库存重复，原调出已回滚",
+                    }
+                to_ledger = target_rows[0] if target_rows else None
                 if to_ledger:
-                    to_ledger.quantity = float(to_ledger.quantity) + quantity
-                    to_ledger.available_quantity = float(to_ledger.available_quantity) + quantity
-                    to_ledger.updated_at = now
+                    if not _move_available(db, to_ledger, Decimal(str(quantity)), now):
+                        db.rollback()
+                        return {
+                            "success": False,
+                            "error_code": "inventory_concurrent_change",
+                            "message": "目标仓库存已被并发修改或账实不一致，原调出已回滚",
+                        }
                 else:
                     to_ledger = _facade().InventoryLedger(
                         product_id=product_id,
                         warehouse_id=to_warehouse_id,
                         location_id=to_location_id,
-                        batch_no=batch_no,
+                        batch_no=from_ledger.batch_no,
                         quantity=quantity,
                         available_quantity=quantity,
                         reserved_quantity=0,
@@ -423,7 +568,7 @@ class InventoryMovementsMixin:
                     product_id=product_id,
                     warehouse_id=to_warehouse_id,
                     location_id=to_location_id,
-                    batch_no=batch_no,
+                    batch_no=from_ledger.batch_no,
                     quantity=quantity,
                     before_quantity=float(to_ledger.quantity) - quantity,
                     after_quantity=float(to_ledger.quantity),

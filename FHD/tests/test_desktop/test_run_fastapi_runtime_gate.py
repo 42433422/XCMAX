@@ -43,17 +43,17 @@ def test_missing_installed_cli_stops_before_bootstrap_and_migration(
 
     assert error.value.code == 1
     assert startup[0] == []
-    assert "codex_runtime_unavailable" in capsys.readouterr().err
+    assert "xiaox_runtime_unavailable" in capsys.readouterr().err
     startup[1].assert_not_called()
 
 
-@pytest.mark.parametrize("code", ["codex_runtime_version_mismatch", "codex_timeout"])
+@pytest.mark.parametrize("code", ["xiaox_runtime_version_mismatch", "xiaox_timeout"])
 def test_installed_cli_failure_is_nonzero_and_never_becomes_healthy(
     monkeypatch, capsys, startup, code
 ):
-    from app.infrastructure.codex import transport
+    from app.infrastructure.xiaox import transport
 
-    probe = Mock(side_effect=transport.CodexTransportError(code, "private diagnostic"))
+    probe = Mock(side_effect=transport.XiaoxTransportError(code, "private diagnostic"))
     monkeypatch.setattr(transport, "verify_packaged_runtime", probe)
     with pytest.raises(SystemExit) as error:
         run_fastapi.main(["--desktop"])
@@ -66,7 +66,7 @@ def test_installed_cli_failure_is_nonzero_and_never_becomes_healthy(
 
 
 def test_each_installed_start_runs_real_cli_before_migration(monkeypatch, capsys, startup):
-    from app.infrastructure.codex import transport
+    from app.infrastructure.xiaox import transport
 
     verify = transport.verify_packaged_runtime
 
@@ -84,7 +84,7 @@ def test_each_installed_start_runs_real_cli_before_migration(monkeypatch, capsys
 
 @pytest.mark.parametrize("frozen,desktop", [(False, True), (False, False), (True, False)])
 def test_source_and_web_entries_do_not_require_desktop_probe(monkeypatch, startup, frozen, desktop):
-    from app.infrastructure.codex import transport
+    from app.infrastructure.xiaox import transport
     from app.utils.device_system import listen_port
 
     monkeypatch.setattr(run_fastapi, "_is_frozen", lambda: frozen)

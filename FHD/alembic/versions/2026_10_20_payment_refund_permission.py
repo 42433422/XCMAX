@@ -17,8 +17,8 @@ def upgrade():
     bind.execute(
         sa.text(
             "INSERT INTO permissions (name, code, module, description) "
-            "SELECT :name, :code, :module, :description "
-            "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code = :code)"
+            "SELECT :name, CAST(:code AS VARCHAR), :module, :description "
+            "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code = CAST(:code AS VARCHAR))"
         ),
         {
             "name": "退款本人所属订单",

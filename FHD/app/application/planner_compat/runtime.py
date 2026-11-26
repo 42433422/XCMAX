@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any, Protocol, TypeVar
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -11,6 +12,15 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 from .protocols import ChatBody, Context, Payload, ReplyFormatter
 
 T = TypeVar("T")
+
+# Context is copied into asyncio tasks and to_thread; the receipt is shared.
+observed_chat_run: ContextVar[dict[str, str] | None] = ContextVar("observed_chat_run", default=None)
+
+
+def publish_admitted_chat_run(run_id: str, turn_id: str) -> None:
+    receipt = observed_chat_run.get()
+    if receipt is not None and receipt.get("turn_id") == turn_id:
+        receipt.setdefault("run_id", run_id)
 
 
 class MainlineService(Protocol):

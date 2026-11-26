@@ -65,6 +65,63 @@ class StorageLocation(TenantScopedMixin, Base):
 
 class InventoryLedger(TenantScopedMixin, Base):
     __tablename__ = "inventory_ledger"
+    # SQL NULL values must not permit duplicate physical stock identities.
+    __table_args__ = (
+        Index(
+            "uq_stock_identity_batch_location",
+            "tenant_id",
+            "product_id",
+            "warehouse_id",
+            "batch_no",
+            "location_id",
+            unique=True,
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NOT NULL AND location_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NOT NULL AND location_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_stock_identity_batch",
+            "tenant_id",
+            "product_id",
+            "warehouse_id",
+            "batch_no",
+            unique=True,
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NOT NULL AND location_id IS NULL"
+            ),
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NOT NULL AND location_id IS NULL"
+            ),
+        ),
+        Index(
+            "uq_stock_identity_location",
+            "tenant_id",
+            "product_id",
+            "warehouse_id",
+            "location_id",
+            unique=True,
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NULL AND location_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NULL AND location_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_stock_identity_unassigned",
+            "tenant_id",
+            "product_id",
+            "warehouse_id",
+            unique=True,
+            sqlite_where=text("tenant_id IS NOT NULL AND batch_no IS NULL AND location_id IS NULL"),
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND batch_no IS NULL AND location_id IS NULL"
+            ),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)

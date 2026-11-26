@@ -89,3 +89,12 @@ def test_invalid_false_values_cannot_select_the_read_contract(contract, value):
     params[spec.read_only_if_unset[0]] = value
     assert not validate_tool_call(spec.tool_id, spec.action, params).ok
     assert spec.is_read_only_call(params) is False
+
+
+@pytest.mark.parametrize("action", ["view", "list", "query"])
+def test_template_preview_reads_declare_the_read_only_contract(action):
+    # 只读动作未声明 read_only 时会被当作无独立回读的写动作，整轮执行被判为未知。
+    spec = get_tool_action_spec("template_preview", action)
+    assert spec is not None
+    assert spec.read_only is True
+    assert spec.is_read_only_call({"action": action}) is True

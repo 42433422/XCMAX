@@ -87,7 +87,7 @@ def downstream_verification(run, params: dict, context: dict) -> dict:
     current = next((step for step in run.steps if step.step_id == context["step_id"]), None)
     if current is None:
         return {}
-    # Dynamic Codex actions have one original business node. The condition is
+    # Dynamic Xiaox actions have one original business node. The condition is
     # part of that node's exact approved parameters, never a mutable run flag.
     node = next((item for item in ordered if item.node_id == current.node_id), None)
     if (

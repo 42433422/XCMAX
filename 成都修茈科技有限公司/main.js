@@ -269,3 +269,55 @@ if (document.readyState === 'loading') {
 } else {
   bootCorpButler()
 }
+
+// Presentation only; order and benefit eligibility stay server-side.
+function launchCampaignWindow(campaign, now) {
+  if (!campaign || campaign.enabled !== true || !Array.isArray(campaign.benefits) ||
+      !campaign.benefits.length || !campaign.benefits.every(item => typeof item === 'string' && item.trim())) return null
+  const timestamp = value => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN
+  const start = timestamp(campaign.starts_at)
+  const end = timestamp(campaign.ends_at)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end ||
+      now < start || now >= end) return null
+  const seconds = Math.ceil((end - now) / 1000)
+  const pad = n => String(n).padStart(2, '0')
+  return Math.floor(seconds / 86400) + ' 天 : ' + pad(Math.floor(seconds / 3600) % 24) + ' 时 : ' +
+    pad(Math.floor(seconds / 60) % 60) + ' 分 : ' + pad(seconds % 60) + ' 秒'
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const panels = document.querySelectorAll('[data-launch-campaign]')
+  if (!panels.length) return
+  try {
+    const response = await fetch('/site/data/public-site.json', { credentials: 'same-origin', cache: 'no-cache' })
+    if (!response.ok) return
+    const data = await response.json()
+    const campaign = data?.pricing?.commercial_terms?.launch_campaign
+    if (!campaign || campaign.enabled !== true) return
+    let timer
+    function update() {
+      const remaining = launchCampaignWindow(campaign, Date.now())
+      for (const panel of panels) {
+        panel.hidden = remaining === null
+        if (remaining !== null) {
+          panel.querySelector('[data-launch-benefits]').textContent = campaign.benefits.join(' · ')
+          const clock = panel.querySelector('[data-launch-clock]')
+          if (clock.textContent !== remaining) {
+            clock.textContent = remaining
+            if (clock.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+              clock.animate([{ opacity: .65, transform: 'translateY(2px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 200 })
+            }
+          }
+        }
+      }
+      if (Date.now() >= Date.parse(campaign.ends_at)) stop()
+    }
+    function stop() { window.clearInterval(timer) }
+    function start() { stop(); timer = window.setInterval(update, 1000); update() }
+    window.addEventListener('pagehide', stop)
+    window.addEventListener('pageshow', start)
+    start()
+  } catch {
+    // No verified campaign data: never show a fabricated countdown.
+  }
+})

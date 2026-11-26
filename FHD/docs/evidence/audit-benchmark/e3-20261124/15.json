@@ -1,0 +1,166 @@
+{
+  "domain": "15",
+  "title": "Retort 共享引擎：真实 CLI 质量门禁（ruff/pytest/密度/契约）→ 负向 → 恢复",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "7ae9e323b3df5df90e5dbb30da8632fb73cbd74c",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "对真实夹具工程执行 retort quality-gates（真实 ruff + pytest 子进程），注入 lint 违规与失败断言验证拦截，修复后验证恢复，再注入语法故障验证不崩溃",
+    "negative": "lint 违规 / 失败断言 / 语法错误必须被门禁判失败",
+    "concurrency": 1,
+    "execution": "subprocess: python -m retort_engine.cli quality-gates"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "syntax-broken source file in project under audit",
+      "exit_code": 1,
+      "status": "failed",
+      "failure_names": [
+        "lint",
+        "pytest"
+      ]
+    }
+  ],
+  "evidence_ids": [
+    "15-gates-baseline",
+    "15-gates-lint-negative",
+    "15-gates-pytest-negative",
+    "15-gates-recovered",
+    "15-gates-syntax-fault",
+    "15-gates-final"
+  ],
+  "observed_results": [
+    {
+      "step_id": "15-gates-baseline",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 0,
+      "elapsed_ms": 622,
+      "response_sha256": "20b5f5abb9f270a210ae0b2c5bdf9362b9aafd90817f0fefdd9ea8901509cbd2",
+      "response_excerpt": "st_lines_to_target\": 0,\n      \"stdout_tail\": \"test_to_source_ratio=1.0; target=0.8; missing_test_lines_to_target=0\",\n      \"stderr_tail\": \"\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": []\n  }\n}\n"
+    },
+    {
+      "step_id": "15-gates-lint-negative",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 1,
+      "elapsed_ms": 528,
+      "response_sha256": "8ca5002e3c1038a49bd927447f76f08d6b263cd89d9db34ea280e00c6bf95678",
+      "response_excerpt": "target=0.8; missing_test_lines_to_target=1\",\n      \"stderr_tail\": \"test density below Retort target\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": [\n      \"lint\",\n      \"test_density\"\n    ]\n  }\n}\n"
+    },
+    {
+      "step_id": "15-gates-pytest-negative",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 1,
+      "elapsed_ms": 535,
+      "response_sha256": "e9ff00f933661b5a35ab4dac19b0c71b954fb6a998eca09ff9dc6783dba04c9c",
+      "response_excerpt": "ing_test_lines_to_target=1\",\n      \"stderr_tail\": \"test density below Retort target\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\"\n    ]\n  }\n}\n"
+    },
+    {
+      "step_id": "15-gates-recovered",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 0,
+      "elapsed_ms": 528,
+      "response_sha256": "3b8d285b976023609ee2d93e9efd386b4e660ee41ff484ae0cfb27967e65c9a9",
+      "response_excerpt": "st_lines_to_target\": 0,\n      \"stdout_tail\": \"test_to_source_ratio=1.0; target=0.8; missing_test_lines_to_target=0\",\n      \"stderr_tail\": \"\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": []\n  }\n}\n"
+    },
+    {
+      "step_id": "15-gates-syntax-fault",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 1,
+      "elapsed_ms": 595,
+      "response_sha256": "b23fedae082ed8d157a38fa37225cb5e8c1c0a26a0866891cb416a6453b7e976",
+      "response_excerpt": "out_tail\": \"test_to_source_ratio=3.0; target=0.8; missing_test_lines_to_target=0\",\n      \"stderr_tail\": \"\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": [\n      \"lint\",\n      \"pytest\"\n    ]\n  }\n}\n"
+    },
+    {
+      "step_id": "15-gates-final",
+      "method": "EXEC",
+      "path": "quality-gates --project /Users/Shared/XCMAX/.e3run/fixtures/retort-15 --json --output /Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json",
+      "status": 0,
+      "elapsed_ms": 520,
+      "response_sha256": "2fc8865ba48e153ee97e4bc953c6a543c14c4f91d6c82ae518e5637129d0384e",
+      "response_excerpt": "st_lines_to_target\": 0,\n      \"stdout_tail\": \"test_to_source_ratio=1.0; target=0.8; missing_test_lines_to_target=0\",\n      \"stderr_tail\": \"\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema_count\": 52,\n      \"failed\": [],\n      \"stdout_tail\": \"validated 52 Retort contracts\",\n      \"stderr_tail\": \"\"\n    }\n  ],\n  \"evidence\": {\n    \"runner\": \"retort_quality_gate_bundle\",\n    \"python\": \"/Users/Shared/XCMAX/FHD/.venv/bin/python\",\n    \"gate_names\": [\n      \"lint\",\n      \"pytest\",\n      \"test_density\",\n      \"contract\"\n    ],\n    \"failure_names\": []\n  }\n}\n"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "15.gates-baseline",
+      "description": "真实 CLI 质量门禁在干净夹具上全绿（4/4）",
+      "passed": true,
+      "detail": "{\"passed_count\": 4, \"gate_count\": 4, \"contract_schema_count\": 52, \"test_to_source_ratio\": 1.0}"
+    },
+    {
+      "id": "15.report-artifact",
+      "description": "门禁报告落盘且可解析",
+      "passed": true,
+      "detail": "/Users/Shared/XCMAX/.e3run/fixtures/retort-15/gate-report.json"
+    },
+    {
+      "id": "15.lint-negative",
+      "description": "真实 ruff 门禁拦截未使用导入",
+      "passed": true,
+      "detail": "{\"status\": \"failed\", \"failure_names\": [\"lint\", \"test_density\"]}"
+    },
+    {
+      "id": "15.pytest-negative",
+      "description": "真实 pytest 门禁拦截错误断言",
+      "passed": true,
+      "detail": "{\"status\": \"failed\", \"pytest_ok\": false}"
+    },
+    {
+      "id": "15.recovery",
+      "description": "修复后门禁恢复全绿（无残留失败态）",
+      "passed": true,
+      "detail": "{\"gate_count\": 4, \"passed_count\": 4, \"all_gates_passed\": true, \"lint_passed\": true, \"pytest_passed\": true, \"test_density_passed\": true, \"test_density_target_met\": true, \"test_to_source_ratio\": 1.0, \"test_line_count\": 3, \"source_line_count\":"
+    },
+    {
+      "id": "15.syntax-fault",
+      "description": "语法损坏源码导致门禁失败且 CLI 不崩溃",
+      "passed": true,
+      "detail": "out_tail\": \"test_to_source_ratio=3.0; target=0.8; missing_test_lines_to_target=0\",\n      \"stderr_tail\": \"\"\n    },\n    {\n      \"name\": \"contract\",\n      \"kind\": \"in_process\",\n      \"command\": [\n        \"retort\",\n        \"contract-sanity\"\n      ],\n      \"ok\": true,\n      \"returncode\": 0,\n      \"schema"
+    },
+    {
+      "id": "15.final-recovery",
+      "description": "最终再次恢复全绿",
+      "passed": true,
+      "detail": "{\"gate_count\": 4, \"passed_count\": 4, \"all_gates_passed\": true, \"lint_passed\": true, \"pytest_passed\": true, \"test_density_passed\": true, \"test_density_target_met\": true, \"test_to_source_ratio\": 1.0, \"test_line_count\": 3, \"source_line_count\":"
+    }
+  ],
+  "assertions_passed": 7,
+  "assertions_total": 7,
+  "unknowns": [
+    "project-assess / self-evolve 依赖 PaiBi LLM 深度评审（本机无模型凭证，实测抛 RuntimeError: PaiBi LLM deep review did not complete → 未纳入本域 E3）",
+    "未做多工程并发、跨版本契约升级回放（cross-domain-ci-regression 等需 LLM/外部仓库）"
+  ],
+  "axis_levels": null,
+  "domain_status": "E3",
+  "level": "E3",
+  "score": 90,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:10:58.072950+00:00",
+  "fixture": "/Users/Shared/XCMAX/.e3run/fixtures/retort-15",
+  "engine_root": "/Users/Shared/XCMAX/packages/retort_engine"
+}

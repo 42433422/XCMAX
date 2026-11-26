@@ -462,7 +462,9 @@ def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str,
         return {}
 
 
-def _execution_receipt_current(db: Session, row: EltRun, *, valid_rows_only: bool) -> bool:
+def _execution_receipt_readback(
+    db: Session, row: EltRun, *, valid_rows_only: bool
+) -> dict[str, Any] | None:
     """Read the owned operation ledger and its actual target records without replay."""
     from app.application.elt.dynamic_verification import verify_dynamic_effects
     from app.application.elt.row_verification import verify_row_effects
@@ -486,7 +488,7 @@ def _execution_receipt_current(db: Session, row: EltRun, *, valid_rows_only: boo
         or receipt.get("partial") is not bool(row.error_rows and valid_rows_only)
         or (row.error_rows and not valid_rows_only)
     ):
-        return False
+        return None
     rows = (
         db.query(EltRunRow)
         .filter_by(run_id=row.id, tenant_id=row.tenant_id, owner_user_id=row.owner_user_id)
@@ -499,14 +501,12 @@ def _execution_receipt_current(db: Session, row: EltRun, *, valid_rows_only: boo
         or any(item.execution_status != "success" for item in expected)
         or any(item.execution_status not in (None, "") for item in rows if item not in expected)
     ):
-        return False
+        return None
     if row.target_type == "dynamic_table":
-        verify_dynamic_effects(db, row, rows, receipt)
-    elif len(expected) != row.executed_rows:
-        return False
-    else:
-        verify_row_effects(db, row, rows)
-    return True
+        return verify_dynamic_effects(db, row, rows, receipt)
+    if len(expected) != row.executed_rows:
+        return None
+    return verify_row_effects(db, row, rows)
 
 
 def verify_agent_execution(
@@ -732,10 +732,11 @@ def _verify_execution_target(
                 return _report("failed", "result_preview_changed", "elt_execution")
             current = HistoryServiceMixin().run_dict(row)
             expected = _summary(current)
+            readback = _execution_receipt_readback(
+                db, row, valid_rows_only=params.get("valid_rows_only") is True
+            )
             if (
-                not _execution_receipt_current(
-                    db, row, valid_rows_only=params.get("valid_rows_only") is True
-                )
+                readback is None
                 or (
                     row.target_type in {"shipment_records", "customer_products"}
                     and (
@@ -836,7 +837,9 @@ def _verify_execution_target(
                 owner_id=row.owner_user_id,
                 preview_revision=revision,
                 plan_sha256=plan_sha256,
+                file_sha256=row.file_sha256,
                 executed_rows=row.executed_rows,
+                readback=readback,
                 receipt_sha256=receipt_sha256,
                 scope="current_elt_business_rows",
                 business_effect_verified=True,

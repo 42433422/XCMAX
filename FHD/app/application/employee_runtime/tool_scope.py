@@ -73,16 +73,28 @@ def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> lis
     actions = _as_dict(config.get("actions"))
     agent = _as_dict(actions.get("agent"))
     v2 = _as_dict(manifest.get("employee_config_v2"))
-    for candidate in (
-        config.get("tools"),
-        actions.get("tools"),
-        agent.get("tools"),
-        v2.get("tools"),
-        manifest.get("tools"),
-    ):
-        if isinstance(candidate, list):
-            return [x.strip() for x in candidate if isinstance(x, str) and x.strip()]
-    return None
+    allowed: list[str] | None = None
+    for layer in (config, actions, agent, v2, manifest):
+        if "tools" not in layer:
+            continue
+        candidate = layer["tools"]
+        if not isinstance(candidate, list):
+            return []
+        declared = list(
+            dict.fromkeys(x.strip() for x in candidate if isinstance(x, str) and x.strip())
+        )
+        if allowed is None:
+            allowed = declared
+            continue
+        narrowed: list[str] = []
+        for left in allowed:
+            for right in declared:
+                if left == right or ("." not in right and left.startswith(right + ".")):
+                    narrowed.append(left)
+                elif "." not in left and right.startswith(left + "."):
+                    narrowed.append(right)
+        allowed = list(dict.fromkeys(narrowed))
+    return allowed
 
 
 def _capability_text(manifest: dict[str, Any], config: dict[str, Any]) -> str:

@@ -788,35 +788,40 @@ class TestOrderStorePaths:
 
 
 class TestOrderStoreLoadEdges:
-    def test_load_returns_empty_when_oserror(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """File exists but open() raises OSError → returns empty state."""
+    def test_load_propagates_oserror(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An unreadable existing payment ledger must not become an empty one."""
         target = tmp_path / "orders.json"
-        target.write_text('{"orders": {}, "entitlements": {}}', encoding="utf-8")
+        original = '{"orders": {}, "entitlements": {}}'
+        target.write_text(original, encoding="utf-8")
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
-        with patch("builtins.open", side_effect=OSError("disk error")):
-            data = order_store._load()
-        assert data == {"orders": {}, "entitlements": {}}
+        with (
+            patch("builtins.open", side_effect=OSError("disk error")),
+            pytest.raises(OSError, match="disk error"),
+        ):
+            order_store._load()
+        assert target.read_text(encoding="utf-8") == original
 
-    def test_load_repairs_orders_non_dict(
+    def test_load_rejects_orders_non_dict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "orders.json"
-        target.write_text('{"orders": "not-a-dict", "entitlements": {}}', encoding="utf-8")
+        original = '{"orders": "not-a-dict", "entitlements": {}}'
+        target.write_text(original, encoding="utf-8")
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
-        data = order_store._load()
-        assert data["orders"] == {}
-        assert data["entitlements"] == {}
+        with pytest.raises(ValueError, match="payment orders must be a mapping"):
+            order_store._load()
+        assert target.read_text(encoding="utf-8") == original
 
-    def test_load_repairs_entitlements_non_dict(
+    def test_load_rejects_entitlements_non_dict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "orders.json"
-        target.write_text('{"orders": {}, "entitlements": "bad"}', encoding="utf-8")
+        original = '{"orders": {}, "entitlements": "bad"}'
+        target.write_text(original, encoding="utf-8")
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
-        data = order_store._load()
-        assert data["entitlements"] == {}
+        with pytest.raises(ValueError, match="payment entitlements must be a mapping"):
+            order_store._load()
+        assert target.read_text(encoding="utf-8") == original
 
 
 class TestOrderStoreAtomicWrite:

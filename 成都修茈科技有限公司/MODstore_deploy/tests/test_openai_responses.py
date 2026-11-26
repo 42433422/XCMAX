@@ -23,6 +23,10 @@ from modstore_server.llm_billing_values import WalletHold
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.llm_gateway_contract import codex_route_contract
 from modstore_server.llm_key_resolver import ChatRouteSnapshot, chat_route_token
+from modstore_server.llm_model_concurrency import (
+    concurrency_key,
+)
+from modstore_server.llm_model_concurrency import controller as concurrency
 from tests.platform_model_support import isolated as isolated
 from tests.test_llm_client_requests import db as db
 
@@ -441,6 +445,81 @@ async def test_definite_wallet_rejection_is_not_an_unknown_paid_attempt(billed, 
     result, _ = await _consume(await billed["call"]())
     assert result["xcagi"]["request_id"].endswith("-2")
     assert len(billed["requests"]) == billed["wallet"].settle.await_count == 1
+
+
+CONCURRENCY_KEY = concurrency_key("litellm", "account-model")
+
+
+async def test_saturated_model_concurrency_rejects_before_journal_or_wallet(
+    billed, db, monkeypatch
+):
+    monkeypatch.setattr(responses, "_CONCURRENCY_WAIT_S", 0.0)
+    concurrency.seed(db, CONCURRENCY_KEY, 1)
+    held = await concurrency.acquire(db, CONCURRENCY_KEY, wait_s=0.0, timeout_s=30)
+    assert held is not None and held.enforced
+    with pytest.raises(HTTPException) as error:
+        await billed["call"]()
+    assert error.value.status_code == 429
+    assert error.value.headers["Retry-After"] == "1"
+    assert error.value.detail["code"] == "MODEL_CONCURRENCY_SATURATED"
+    assert ledger.lookup(db, 7, KEY, 90) == "not_found"
+    assert billed["wallet"].preauthorize.await_count == 0
+    assert billed["requests"] == []
+    concurrency.release(db, held)
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
+
+
+async def test_completed_receipt_still_replays_while_the_model_is_saturated(
+    billed, db, monkeypatch
+):
+    first, _ = await _consume(await billed["call"]())
+    assert first is not None
+    monkeypatch.setattr(responses, "_CONCURRENCY_WAIT_S", 0.0)
+    concurrency.seed(db, CONCURRENCY_KEY, 1)
+    held = await concurrency.acquire(db, CONCURRENCY_KEY, wait_s=0.0, timeout_s=30)
+    assert held is not None
+    replay, _ = await _consume(await billed["call"]())
+    assert replay == first
+    assert len(billed["requests"]) == 1
+    concurrency.release(db, held)
+
+
+async def test_upstream_429_halves_the_limit_and_keeps_the_attempt_unresolved(billed, db):
+    concurrency.seed(db, CONCURRENCY_KEY, 4)
+    billed["status"] = 429
+    billed["headers"] = {**COUNTERS, "retry-after": "3"}
+    with pytest.raises(HTTPException) as error:
+        await billed["call"]()
+    assert error.value.status_code == 409 and error.value.detail["state"] == "settling"
+    assert concurrency.current_limit(db, CONCURRENCY_KEY) == 2
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
+    billed["wallet"].release.assert_not_awaited()
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
+
+
+async def test_stream_completion_releases_the_slot(billed, db):
+    concurrency.seed(db, CONCURRENCY_KEY, 1)
+    _, events = await _consume(await billed["call"](body=_payload(stream=True)))
+    assert events[-1]["type"] == "response.completed"
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
+
+
+async def test_stream_cancellation_releases_the_slot(billed, db):
+    concurrency.seed(db, CONCURRENCY_KEY, 1)
+    billed["pause"] = asyncio.Event()
+    response = await billed["call"](body=_payload(stream=True))
+    frames = response.body_iterator
+    await anext(frames)
+    await anext(frames)
+    waiting = asyncio.create_task(anext(frames))
+    await asyncio.wait_for(billed["read_blocked"].wait(), timeout=5)
+    waiting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        async with asyncio.timeout(5):
+            await waiting
+    with pytest.raises(StopAsyncIteration):
+        await anext(frames)
+    assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
 
 
 @pytest.mark.parametrize(

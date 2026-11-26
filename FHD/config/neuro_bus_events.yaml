@@ -82,6 +82,7 @@ streams:
         - { type: "step.blocked",          const: STEP_BLOCKED }
         - { type: "step.waiting_user",      const: STEP_WAITING_USER }
         - { type: "step.approved",         const: STEP_APPROVED }
+        - { type: "step.auto_approved",    const: STEP_AUTO_APPROVED, payload_fields: [step_id, tool_id, action, risk, decision, reason] }
         - { type: "approval.rejected",     const: APPROVAL_REJECTED }
         - { type: "approval.timed_out",    const: APPROVAL_TIMED_OUT }
         - { type: "step.repair_applied",    const: STEP_REPAIR_APPLIED }

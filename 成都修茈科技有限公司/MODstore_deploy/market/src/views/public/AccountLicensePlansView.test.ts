@@ -292,15 +292,15 @@ describe('AccountLicensePlansView', () => {
     apiMock.paymentAccountPlans.mockResolvedValue({ plans: [
       freePlan,
       { id: 'saas-trial-30', name: '30 天体验', price: 99, amount_cents: 9900, license_type: 'trial' },
-      { id: 'saas-permanent-standard', name: 'XCAGI 软件', price: 6800, amount_cents: 680000, license_type: 'permanent' },
+      { id: 'saas-permanent-standard', name: 'XCAGI 软件', price: 3000, amount_cents: 300000, license_type: 'permanent' },
       { id: 'saas-permanent-growth', name: '旧成长版', price: 99999, license_type: 'permanent' },
-    ], commercial_terms: { customization_from_cents: 298000 } })
+    ], commercial_terms: { customization_from_cents: 99900 } })
     apiMock.paymentCheckout.mockResolvedValue({ ok: true, type, order_id: 'STANDARD-1' })
     const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
     await flushPromises()
     expect(wrapper.findAll('.license-card')).toHaveLength(1)
-    expect(wrapper.get('.license-card button').text()).toBe('立即购买 ¥6,800')
-    expect(wrapper.text()).toContain('2,980 起')
+    expect(wrapper.get('.license-card button').text()).toBe('立即购买 ¥3,000')
+    expect(wrapper.text()).toContain('999 起')
     expect(wrapper.text()).toContain('起价不是全部需求的总价')
     expect(wrapper.text()).not.toContain('旧成长版')
     expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
@@ -312,7 +312,7 @@ describe('AccountLicensePlansView', () => {
 
   it('keeps a legacy permanent owner from buying the software or trial again', async () => {
     apiMock.paymentAccountPlans.mockResolvedValue({ plans: [
-      { id: 'saas-permanent-standard', name: 'XCAGI 软件买断', amount_cents: 680000, price: 6800, license_type: 'permanent' },
+      { id: 'saas-permanent-standard', name: 'XCAGI 软件买断', amount_cents: 300000, price: 3000, license_type: 'permanent' },
       { id: 'saas-trial-30', name: '企业功能体验', amount_cents: 9900, price: 99, license_type: 'trial' },
     ] })
     apiMock.accountBootstrap.mockResolvedValue({ user: {}, account: { active_plan_id: 'saas-permanent-ultra' } })
@@ -330,7 +330,7 @@ describe('AccountLicensePlansView', () => {
 
   it('preserves the software purchase through login even when the page had no selected plan', async () => {
     hasTokenMock.mockReturnValue(false)
-    apiMock.paymentAccountPlans.mockResolvedValue({ plans: [{ id: 'saas-permanent-standard', name: 'XCAGI 软件', amount_cents: 680000, price: 6800, license_type: 'permanent' }] })
+    apiMock.paymentAccountPlans.mockResolvedValue({ plans: [{ id: 'saas-permanent-standard', name: 'XCAGI 软件', amount_cents: 300000, price: 3000, license_type: 'permanent' }] })
     const router = makeRouter()
     await router.push('/account-plans?source=official-site')
     const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })

@@ -71,20 +71,28 @@ class TestEmbeddingServiceDisabled:
         # 通过 get_singleton 路径触发单例创建
         assert get_default_embedding_service() is None
 
-    def test_default_mode_when_env_unset_is_hash_for_non_desktop(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        """env 未设置时非 desktop 默认 hash（web omniscient 关键词+向量混合检索）。
-
-        代码逻辑见 embedding_service._resolve_mode：未配置 FHD_EMBEDDING_MODE
-        且非 desktop mode 时回退到 hash（用于 web 全知视图），desktop 才默认 disabled。
-        """
-        # 在 CI 中（非 desktop mode），默认应为 hash
-        monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
+    def test_default_mode_prefers_cached_fastembed_and_falls_back(self, monkeypatch):
         monkeypatch.delenv("XCAGI_RAG_ENABLED", raising=False)
-        svc = EmbeddingService()
-        assert svc.mode == "hash"
-        assert svc.is_available() is True
+        monkeypatch.setattr(
+            "app.infrastructure.llm.embedding_service._load_cached_fastembed",
+            lambda name: (None, 0),
+        )
+        fallback = EmbeddingService()
+        assert fallback.mode == "hash"
+        assert fallback.dim() == 192
+        assert fallback.is_available() is True
+        fake = MagicMock()
+        fake.embed.return_value = [[0.1, 0.2, 0.3]]
+        monkeypatch.setattr(
+            "app.infrastructure.llm.embedding_service._load_cached_fastembed",
+            lambda name: (fake, 3),
+        )
+        semantic = EmbeddingService()
+        assert semantic.mode == "fastembed"
+        assert semantic.is_semantic()
+        assert semantic.dim() == 3
+        assert semantic.embed_one("hello") == [0.1, 0.2, 0.3]
+        assert semantic.embedding_fingerprint != fallback.embedding_fingerprint
 
     def test_invalid_mode_falls_back_to_hash_for_non_desktop(self, monkeypatch: pytest.MonkeyPatch):
         """非法 mode 在非 desktop 环境下回退到 hash（与 _resolve_mode 一致）。

@@ -204,6 +204,12 @@ def verify_business_db_write(
                 )
                 return _failed_result(result, verification)
             checked.append(column_name)
+        # Seeing an existing row by ID is not evidence that a requested
+        # create/update/upsert happened. Require at least one value read back
+        # from the authoritative database before accepting the business result.
+        if not checked and operation in {"create", "update", "upsert"}:
+            verification.update(state="present", reason="no_verifiable_fields")
+            return _failed_result(result, verification)
         verification.update(
             verified=True,
             state="present",

@@ -122,7 +122,7 @@ def capture_surface_acceptance(run: Any, step: Any, context: dict) -> dict:
 
 
 def _mcp_action_acceptance(run: Any, step: Any, context: dict) -> dict:
-    """Freeze one Codex-selected action against original, current page evidence."""
+    """Freeze one Xiaox-selected action against original, current page evidence."""
     from jsonschema import Draft202012Validator
 
     from app.application.agent_orchestrator.browser_tool_process import read_browser_snapshot
@@ -133,7 +133,7 @@ def _mcp_action_acceptance(run: Any, step: Any, context: dict) -> dict:
         snapshot_text,
         targets_observed,
     )
-    from app.infrastructure.codex.receipts import browser_action_receipts
+    from app.infrastructure.xiaox.receipts import browser_action_receipts
 
     config = browser_server_config(step.tool_id)
     scope = mcp_session_scope({**context, "run_id": run.run_id})

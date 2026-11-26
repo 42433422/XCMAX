@@ -6,6 +6,7 @@ FastAPI 错误处理器
 
 import logging
 import re
+import traceback
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -284,12 +285,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         if context:
             return _reviewed_excel_failure(request, exc)
         request_id = ensure_request_id(request)
+        # Keep the call site without logging unredacted exception text or
+        # source snippets; unknown programming errors must remain diagnosable.
+        frames = traceback.extract_tb(exc.__traceback__)[-12:]
+        safe_stack = " -> ".join(
+            f"{frame.name}@{frame.filename}:{frame.lineno}" for frame in frames
+        )
         logger.error(
-            "Unhandled %s request_id=%s path=%s detail=%s",
+            "Unhandled %s request_id=%s path=%s detail=%s stack=%s",
             type(exc).__name__,
             request_id,
             request.url.path,
             redact_log_text(str(exc))[:300],
+            safe_stack,
         )
         return JSONResponse(
             status_code=500,

@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
 
+from app.mod_sdk.erp_customers_facade import CustomerCompatMutation
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,19 +132,26 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return _invoke("customers", "get", request=request, customer_id=customer_id)
 
     @router.post("/customers")
-    def mod_customers_create(request: Request, body: dict | None = Body(default=None)):
-        return _invoke("customers", "create", request=request, body=body or {})
+    def mod_customers_create(
+        request: Request,
+        body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
+    ):
+        return _invoke(
+            "customers", "create", request=request, body=body.model_dump(exclude_unset=True)
+        )
 
     @router.put("/customers/{customer_id:int}")
     def mod_customers_update(
-        request: Request, customer_id: int, body: dict | None = Body(default=None)
+        request: Request,
+        customer_id: int,
+        body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
     ):
         return _invoke(
             "customers",
             "update",
             request=request,
             customer_id=customer_id,
-            body=body or {},
+            body=body.model_dump(exclude_unset=True),
         )
 
     @router.delete("/customers/{customer_id:int}")

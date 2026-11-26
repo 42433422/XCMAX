@@ -1,10 +1,10 @@
 {
   "mode": "monitoring",
   "llm_verified": false,
-  "status": "UNVERIFIED",
-  "reason": "XCAGI_SKIP_INTENT_LLM=1（规则引擎口径），本报告不构成 LLM 实测验收",
-  "run_id": "43850727859",
-  "sha": "a018ae4b793629c0d61978f64bcdb043e2d1c1e2",
+  "status": "NOT_RUN",
+  "reason": "基准报告缺失：本次运行未产出 task_benchmark_report.json",
+  "run_id": "45312878748",
+  "sha": "1a5e1d194f1b361ea488bf9bd781a788f767419f",
   "actor": "42433422",
-  "observed_at": "2026-11-16T18:41:16.463750+08:00"
+  "observed_at": "2026-11-24T10:46:52.200137+08:00"
 }

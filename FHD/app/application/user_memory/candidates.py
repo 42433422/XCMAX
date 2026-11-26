@@ -74,6 +74,7 @@ class CandidateMemory:
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
         activate_personal_capture: bool = False,
+        auto_review_capture: bool = False,
     ) -> dict[str, Any]:
         """Persist a candidate or activate an authorized personal capture in one commit."""
         normalized_type = self.ports.normalize_type(memory_type)
@@ -92,7 +93,47 @@ class CandidateMemory:
             and governance["source_policy"] == "observed_pending"
             and bool(governance["evidence"])
         )
-        activate = activate_personal_capture and personal_capture
+        expected_scope = (
+            "user"
+            if user_id.startswith("personal-memory:v1:")
+            else "tenant"
+            if user_id.startswith("enterprise-memory:v1:")
+            else ""
+        )
+        reviewed_capture = (
+            auto_review_capture
+            and bool(expected_scope)
+            and governance["source"] == "chat_trace"
+            and governance["source_policy"] == "observed_pending"
+            and any(
+                item.get("kind") == "conversation_turn"
+                and item.get("scope") == expected_scope
+                and item.get("user_excerpt")
+                and item.get("tenant_id")
+                for item in governance["evidence"]
+            )
+        )
+        if reviewed_capture:
+            from app.application.persy_memory_utils import review_explicit_capture
+
+            # Recheck the actual canonical value at the authority boundary;
+            # the caller's review flag alone is not sufficient to activate it.
+            proposed = {
+                "memory_type": normalized_type,
+                "key": normalized_key,
+                "value": value,
+            }
+            reviewed_capture = any(
+                review_explicit_capture(
+                    proposed, str(item.get("user_excerpt") or ""), expected_scope
+                )
+                == {**proposed, "confidence": governance["confidence"]}
+                for item in governance["evidence"]
+                if item.get("kind") == "conversation_turn"
+                and item.get("scope") == expected_scope
+                and item.get("tenant_id")
+            )
+        activate = (activate_personal_capture and personal_capture) or reviewed_capture
         memory = self.access.get_memory(user_id) or self.access.new_memory(user_id)
         fingerprint = self.ports.fingerprint(normalized_type, normalized_key, value)
         for record in memory.memory_v2_records:
@@ -145,10 +186,23 @@ class CandidateMemory:
             if conflicts:
                 candidate["conflict_review"] = conflicts
                 activate = False
+        # A different active value for the same key is a review task, not a
+        # silent overwrite or an additional contradictory planner fact.
+        if reviewed_capture and any(
+            row.get("status") == "active"
+            and row.get("key") == normalized_key
+            and row.get("fingerprint") != fingerprint
+            for row in memory.memory_v2_records
+        ):
+            candidate["governance_flags"].append("auto_review_conflicting_key")
+            activate = False
         if activate:
             candidate.update(
                 status="active",
-                source_policy="personal_auto_saved",
+                source_policy=(
+                    "personal_auto_saved" if expected_scope == "user" else "capture_auto_reviewed"
+                ),
+                auto_review_policy="direct_assertion_v1" if reviewed_capture else "legacy_personal",
                 auto_confirm_allowed=True,
                 requires_user_confirmation=False,
                 eligible_for_planner=True,
@@ -220,6 +274,129 @@ class CandidateMemory:
         sync_preference_projection(memory, record, updated, now)
         self.access.save_memory(user_id, memory)
         return {"success": True, "memory": dict(updated)}
+
+    @project_after_commit
+    @memory_transaction
+    def auto_review_pending(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        expected_revision: int,
+        proof: JsonObject,
+    ) -> dict[str, Any]:
+        """Review one unchanged candidate against an independently read chat receipt."""
+        from app.application.dataset_rag_app_service import DatasetAccessContext
+        from app.application.persy_memory_utils import (
+            AUTO_REVIEW_SCOPES,
+            _memory_owner_id,
+            review_explicit_capture,
+        )
+
+        def pending(reason: str) -> dict[str, Any]:
+            return {"success": True, "review_status": "pending", "reason": reason}
+
+        scope = str(proof.get("scope") or "")
+        if scope not in AUTO_REVIEW_SCOPES:
+            return pending("invalid_scope")
+        access = DatasetAccessContext(
+            actor_id=str(proof.get("actor_id") or ""),
+            tenant_id=str(proof.get("tenant_id") or ""),
+            mod_id=str(proof.get("mod_id") or ""),
+        )
+        if (
+            not access.actor_id
+            or not access.tenant_id
+            or _memory_owner_id(access, scope) != user_id
+        ):
+            return pending("scope_mismatch")
+        if not proof.get("message_id") or not proof.get("conversation_key"):
+            return pending("source_receipt_missing")
+        memory = self.access.get_memory(user_id)
+        if memory is None:
+            return pending("not_found")
+        idx, record = self.ports.find_record(memory, memory_id)
+        if record is None or record.get("status") != "pending":
+            return pending("not_pending")
+        if (
+            int(record.get("revision") or 1) != expected_revision
+            or record.get("history")
+            or record.get("correction_count")
+        ):
+            return pending("revision_changed")
+        if (
+            record.get("source") != "chat_trace"
+            or record.get("source_policy") != "observed_pending"
+        ):
+            return pending("unsupported_source")
+        if not any(
+            isinstance(item, dict)
+            and item.get("kind") == "conversation_turn"
+            and all(
+                str(item.get(key) or "") == str(proof.get(key) or "")
+                for key in ("scope", "tenant_id", "mod_id", "session_id", "user_excerpt")
+            )
+            for item in record.get("evidence") or []
+        ):
+            return pending("source_evidence_changed")
+        reviewed = review_explicit_capture(record, str(proof["user_excerpt"]), scope)
+        if reviewed is None:
+            return pending("review_policy_not_met")
+        fingerprint = self.ports.fingerprint(
+            reviewed["memory_type"], reviewed["key"], reviewed["value"]
+        )
+        for other in memory.memory_v2_records:
+            if other.get("memory_id") == memory_id:
+                continue
+            # Canonicalization must not revive rejected or deleted values,
+            # including historical revisions of a different memory ID.
+            if other.get("fingerprint") == fingerprint and other.get("status") in {
+                "active",
+                "deleted",
+                "rejected",
+            }:
+                return pending("duplicate_or_revoked")
+            if any(
+                (entry.get("previous") or {}).get("fingerprint") == fingerprint
+                for entry in other.get("history") or []
+                if entry.get("action") in {"correct", "confirm"}
+            ):
+                return pending("superseded")
+            if other.get("status") == "active" and other.get("key") == reviewed["key"]:
+                return pending("conflicting_active_key")
+        updated = {**record, **reviewed, "fingerprint": fingerprint}
+        invalid = validate_relation_value(updated["value"])
+        if invalid is not None:
+            return pending("invalid_relation")
+        if relation_write_conflicts(memory.memory_v2_records, updated):
+            return pending("conflicting_relation")
+        now = self.access.now()
+        updated.pop("conflict_review", None)
+        updated.update(
+            status="active",
+            source_policy="personal_auto_saved" if scope == "user" else "capture_auto_reviewed",
+            auto_review_policy="historical_direct_assertion_v1",
+            auto_confirm_allowed=True,
+            requires_user_confirmation=False,
+            eligible_for_planner=True,
+            auto_saved_at=now,
+            confirmed_at=now,
+            updated_at=now,
+            auto_review_receipt={
+                "message_id": str(proof["message_id"]),
+                "conversation_key": str(proof["conversation_key"]),
+                "session_id": str(proof["session_id"]),
+                "actor_id": access.actor_id,
+                "tenant_id": access.tenant_id,
+                "mod_id": access.mod_id,
+                "reviewed_at": now,
+            },
+        )
+        _advance_revision(record, updated, action="confirm", at=now)
+        memory.memory_v2_records[idx] = updated
+        sync_preference_projection(memory, record, updated, now)
+        self.access.save_memory(user_id, memory)
+        return {"success": True, "review_status": "active", "memory": dict(updated)}
 
     def reject(self, user_id: str, memory_id: str, *, reason: str = "") -> dict[str, Any]:
         return self.ports.set_status(user_id, memory_id, "rejected", reason=reason)

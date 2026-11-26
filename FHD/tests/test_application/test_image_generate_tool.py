@@ -299,7 +299,9 @@ def test_image_markdown_targets_are_encoded_by_the_active_adapter():
 
 
 def _image_receipt(name, **output):
-    return {
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+
+    row = {
         "call_id": name,
         "child_run_id": f"image-child-{name}",
         "child_task_id": f"image-task-{name}",
@@ -321,6 +323,11 @@ def _image_receipt(name, **output):
             },
         },
     }
+    row["fingerprint"] = canonical_digest(
+        {key: row.get(key) for key in ("tool_id", "action", "params")}
+    )
+    row["receipt"].update(run_id=row["child_run_id"], task_id=row["child_task_id"])
+    return row
 
 
 def _image_runtime_response(rows, *, reviewed=False):

@@ -51,6 +51,12 @@
           <p class="description">{{ plan.description }}</p>
           <p v-if="plan.license_type === 'free'" class="description">个人基础功能，不含企业业务模块。</p>
           <p v-else-if="plan.license_type === 'permanent'" class="description">一次付费，标准功能永久使用；AI 使用费和定制费另计。</p>
+          <div v-if="plan.id === 'saas-permanent-standard' && campaignClock && !permanentActivated" class="launch-campaign" aria-label="首发权益活动">
+              <strong>✦ 首发专属权益</strong>
+              <p>{{ launchCampaign?.benefits.join(' · ') }}</p>
+              <div class="launch-campaign-clock"><span>权益领取倒计时</span><output :key="campaignClock" role="timer" aria-live="off">{{ campaignClock }}</output></div>
+              <small>活动结束后长期买断价与定制起价不变。</small>
+            </div>
         </div>
         <ul>
           <li v-for="feature in plan.features || []" :key="feature">{{ feature }}</li>
@@ -91,6 +97,33 @@ const authStore = useAuthStore()
 const plans = ref<AccountLicensePlan[]>([])
 const loading = ref(true)
 const customizationFrom = ref<number | null>(null)
+type LaunchCampaign = { enabled: boolean; starts_at: string | null; ends_at: string | null; benefits: string[] }
+const launchCampaign = ref<LaunchCampaign | null>(null)
+const campaignNow = ref(Date.now())
+let campaignTimer: ReturnType<typeof setInterval> | undefined
+const campaignClock = computed(() => {
+  const campaign = launchCampaign.value
+  if (!campaign || campaign.enabled !== true || !Array.isArray(campaign.benefits) ||
+    !campaign.benefits.length || !campaign.benefits.every(item => typeof item === 'string' && item.trim())) return null
+  const timestamp = (value: string | null) => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN
+  const start = timestamp(campaign.starts_at)
+  const end = timestamp(campaign.ends_at)
+  const now = campaignNow.value
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || now < start || now >= end) return null
+  const seconds = Math.ceil((end - now) / 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${Math.floor(seconds / 86400)} 天 : ${pad(Math.floor(seconds / 3600) % 24)} 时 : ${pad(Math.floor(seconds / 60) % 60)} 分 : ${pad(seconds % 60)} 秒`
+})
+function startCampaignClock() {
+  clearInterval(campaignTimer)
+  campaignNow.value = Date.now()
+  if (launchCampaign.value?.enabled === true) campaignTimer = setInterval(() => {
+    campaignNow.value = Date.now()
+    if (campaignNow.value >= Date.parse(launchCampaign.value?.ends_at || '')) clearInterval(campaignTimer)
+  }, 1000)
+}
+onUnmounted(() => clearInterval(campaignTimer))
+
 const checkingOut = ref(false)
 const activePlanId = ref('')
 const permanentActivated = computed(() => activePlanId.value.startsWith('saas-permanent-'))
@@ -154,6 +187,8 @@ async function loadPlans() {
     if (disposed) return
     plans.value = Array.isArray(result?.plans) ? result.plans.filter(plan => ['saas-personal-free', 'saas-trial-30', 'saas-permanent-standard'].includes(plan.id)) : []
     customizationFrom.value = result?.commercial_terms?.customization_from_cents ?? null
+    launchCampaign.value = result?.commercial_terms?.launch_campaign ?? null
+    startCampaignClock()
   } catch {
     if (!disposed) errorMessage.value = '暂时无法加载方案，请稍后重试。'
   } finally {
@@ -300,4 +335,15 @@ button:disabled { opacity: .55; cursor: wait; }
 .allowance-panel > button { max-width: 480px; }
 .error { color: #ffd3d3; background: #391a1a; }
 .loading { text-align: center; color: #aeb2bb; }
+
+/* Launch benefits are separate from permanent pricing; inherit existing theme colors. */
+.launch-campaign { margin: 16px 0; padding: 14px 18px; border: 1px solid var(--line, currentColor); border-radius: var(--radius-md, 12px); color: inherit; }
+.launch-campaign[hidden] { display: none !important; }
+.launch-campaign strong { letter-spacing: .04em; }
+.launch-campaign p { margin: 4px 0; }
+.launch-campaign-clock { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.launch-campaign-clock time, .launch-campaign-clock output { font-weight: 750; font-variant-numeric: tabular-nums; animation: launch-clock-enter .24s ease-out both; }
+.launch-campaign small { display: block; opacity: .8; }
+@keyframes launch-clock-enter { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .launch-campaign-clock time, .launch-campaign-clock output { animation: none; } }
 </style>

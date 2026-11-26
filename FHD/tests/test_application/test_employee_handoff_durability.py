@@ -573,3 +573,142 @@ def test_missing_task_root_requires_reconciliation_without_a_replacement(handoff
         user_id="11", task_id=handoff_env.context["task_id"]
     )
     assert [run.run_id for run in runs] == [first["child_run_id"]]
+
+
+@pytest.mark.parametrize(
+    ("flags", "code"),
+    [
+        ({"available": False}, "handoff_unknown_employee"),
+        ({"available": "false"}, "handoff_identity_unverified"),
+        ({"available": 1}, "handoff_identity_unverified"),
+        ({"timeout": "false"}, "handoff_identity_unverified"),
+        ({"crash": True}, "employee_unavailable"),
+        ({"timeout": True}, "employee_unavailable"),
+        ({"unrecoverable": True}, "employee_unavailable"),
+    ],
+)
+def test_unavailable_handoff_target_cannot_start_a_child(handoff_env, flags, code):
+    path = handoff_env.workspace / "employees" / "employee-b.json"
+    card = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**card, **flags}), encoding="utf-8")
+
+    result = _commit(handoff_env)
+
+    assert result["success"] is False
+    assert result["error_code"] == code
+    assert (
+        handoff_env.repository().list_task_runs(
+            user_id="11", task_id=handoff_env.context["task_id"]
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("interruption", ["role_revoke", "disable_account"])
+def test_inflight_handoff_rechecks_original_session_after_role_revocation(
+    handoff_env, customers_db, monkeypatch, interruption
+):
+    """A revoked role cannot use a tool after an already admitted handoff."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import timedelta
+
+    import app.db
+    from app.application.rbac_app_service import RbacAppService
+    from app.db.db_base import Base
+    from app.db.models.permission import Permission, Role
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        bind_agent_actor_scope,
+    )
+    from app.utils.time import utc_now_naive
+
+    Base.metadata.create_all(customers_db)
+    monkeypatch.setattr(app.db, "HostSessionLocal", handoff_env.factory)
+    with handoff_env.factory.begin() as db:
+        role = Role(
+            name="tenant:11:handoff-reviewer",
+            is_system=False,
+            permissions=[Permission(code="customer.view", name="Read customer")],
+        )
+        db.add(role)
+        db.flush()
+        role_id = role.id
+        db.add(
+            User(
+                id=11,
+                username="handoff-revoke-owner",
+                password="unused",
+                tenant_id=11,
+                role=role.name,
+                tier="enterprise",
+                is_active=True,
+            )
+        )
+        db.flush()
+        db.add(
+            UserSession(
+                user_id=11,
+                session_id="handoff-revoke-original",
+                expires_at=utc_now_naive() + timedelta(hours=1),
+            )
+        )
+    ctx = {
+        **handoff_env.context,
+        "_actor_authorization": bind_agent_actor_scope(
+            session_id="handoff-revoke-original", user_id="11"
+        ),
+        "_mod_authorization": None,
+    }
+    entered, released = threading.Event(), threading.Event()
+    original_execute = AgentToolExecutor.execute
+    attempts: list[str] = []
+
+    def after_admission(self, step, *, runtime_context):
+        attempts.append(step.step_id)
+        entered.set()
+        assert released.wait(20)
+        return original_execute(self, step, runtime_context=runtime_context)
+
+    monkeypatch.setattr(AgentToolExecutor, "execute", after_admission)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_commit, handoff_env, context=ctx)
+        assert entered.wait(20), "handoff never reached the original tool gate"
+        try:
+            if interruption == "role_revoke":
+                changed = RbacAppService().update_role(role_id, tenant_id=11, permissions=[])
+                assert changed["sessions_revoked"] == 1
+            else:
+                with handoff_env.factory.begin() as db:
+                    db.get(User, 11).is_active = False
+        finally:
+            released.set()
+        outcome = future.result(timeout=30)
+    assert outcome.get("success") is not True, outcome
+    with handoff_env.factory() as db:
+        remaining = db.query(UserSession).filter_by(session_id="handoff-revoke-original").count()
+        assert remaining == (0 if interruption == "role_revoke" else 1)
+        role = db.query(Role).filter_by(id=role_id).one()
+        expected = [] if interruption == "role_revoke" else ["customer.view"]
+        assert sorted(permission.code for permission in role.permissions) == expected
+        assert db.get(User, 11).is_active is (interruption != "disable_account")
+    with pytest.raises(AgentModAuthorizationError):
+        bind_agent_actor_scope(session_id="handoff-revoke-original", user_id="11")
+    before = len(
+        handoff_env.repository().list_task_runs(
+            user_id="11", task_id=handoff_env.context["task_id"]
+        )
+    )
+    repeated = _commit(handoff_env, context=ctx)
+    assert repeated.get("success") is not True, repeated
+    assert len(attempts) == 1
+    assert (
+        len(
+            handoff_env.repository().list_task_runs(
+                user_id="11", task_id=handoff_env.context["task_id"]
+            )
+        )
+        == before
+    )

@@ -11,10 +11,12 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.db_base import Base
+from app.db.db_base import Base, TrimIndexValue
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 
@@ -23,6 +25,21 @@ class Product(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     __table_args__ = (
         Index("ix_products_unit", "unit"),
         Index("ix_products_model_number", "model_number"),
+        # ELT and product imports identify an SKU by purchasing unit and model.
+        # Missing models remain unresolved legacy identities, never guessed.
+        Index(
+            "uq_products_tenant_unit_sku",
+            "tenant_id",
+            TrimIndexValue(text("coalesce(unit, '')")),
+            func.lower(TrimIndexValue(text("model_number"))),
+            unique=True,
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND model_number IS NOT NULL AND trim(model_number) <> ''"
+            ),
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND model_number IS NOT NULL AND trim(model_number) <> ''"
+            ),
+        ),
         # UOM 换算/补货字段的 DB 级约束（字段可空，用 COALESCE 兜底默认值）
         CheckConstraint("COALESCE(uom_factor, 1) > 0", name="ck_products_uom_factor_positive"),
         CheckConstraint("COALESCE(min_stock, 0) >= 0", name="ck_products_min_stock_nonnegative"),

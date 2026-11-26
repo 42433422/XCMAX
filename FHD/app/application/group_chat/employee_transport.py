@@ -57,6 +57,13 @@ class EmployeeTransport:
             "completed",
             "done",
         }
+        uncertain = (
+            dispatch.get("reconciliation_required") is True
+            or dispatch.get("outcome") == "unknown"
+            or status in {"dispatch_unknown", "dispatching", "dispatch_pending", "unknown"}
+        )
+        if uncertain:
+            accepted, status = False, "unknown"
         summary = str(assistant.get("body") or "").strip()
         if not summary:
             summary = "已进入超级员工执行队列。"
@@ -71,6 +78,7 @@ class EmployeeTransport:
             "task_id": str(dispatch.get("task_id") or ""),
             "dispatcher": str(dispatch.get("dispatcher") or ""),
             "branch_context": branch_context,
+            "reconciliation_required": uncertain,
         }
 
     def create_super_employee_relay_task(
@@ -87,6 +95,19 @@ class EmployeeTransport:
             relay_id = str((desktop or {}).get("relay_id") or "").strip()
             if not relay_id:
                 return None
+        except RECOVERABLE_ERRORS:
+            return None
+        unknown = {
+            "success": False,
+            "status": "unknown",
+            "execution_state": "unknown",
+            "reconciliation_required": True,
+            "summary": "桌面派工结果待核对，未重新派工。",
+            "risk": "原派工可能已被接纳，禁止跨执行端重复提交。",
+            "dispatcher": "mobile_relay",
+            "relay_id": relay_id,
+        }
+        try:
             relay_task = relay.create_task(
                 user_id=int(user_id),
                 relay_id=relay_id,
@@ -118,12 +139,12 @@ class EmployeeTransport:
                 },
             )
         except RECOVERABLE_ERRORS:
-            return None
+            return unknown
         if not isinstance(relay_task, dict):
-            return None
+            return unknown
         relay_task_id = str(relay_task.get("task_id") or "").strip()
         if not relay_task_id:
-            return None
+            return unknown
         return {
             "success": True,
             "status": str(relay_task.get("status") or "queued"),

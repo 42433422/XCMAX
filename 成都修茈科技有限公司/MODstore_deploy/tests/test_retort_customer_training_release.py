@@ -5,11 +5,14 @@ from __future__ import annotations
 import base64
 from datetime import timedelta
 from urllib.parse import quote
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
+from modstore_server import retort_experiment_runtime as runtime
 from modstore_server import retort_feedback_experiments as lifecycle
+from modstore_server import retort_training_candidates as training
 from modstore_server import workflow_nl_graph
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import RetortEvolutionRun, get_session_factory
@@ -105,6 +108,360 @@ def test_exact_released_and_running_treatment_reaches_original_promotion(
         assert effects["training_candidate"]["growthbook"] == run["spec"]
         assert effects["experiment"]["release_sha"] == run["delivery"]["release_sha"]
         assert effects["experiment"]["traffic"] == "candidate"
+
+
+def test_late_postpromotion_failure_reopens_original_training_compensation(
+    released_customer_training,
+):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        db.commit()
+    assert training.request_postpromotion_regression_rechecks() == 0
+    for user_id in run["users"][:2]:
+        with get_session_factory()() as db:
+            progress = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})[
+                "experiment"
+            ]
+            observation_id = str(uuid4())
+            enqueue(
+                db,
+                "experiment.postpromotion_observed",
+                run["id"],
+                {
+                    "assignment_stage": "approved_rollout",
+                    "request_id": run["id"],
+                    "experiment_id": progress["experiment_id"],
+                    "policy_digest": progress["policy_digest"],
+                    "release_sha": progress["release_sha"],
+                    "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                    "variation_id": "1",
+                    "observation_id": observation_id,
+                    "subject_id": str(user_id),
+                    "user_id": user_id,
+                    "execution_id": str(uuid4()),
+                    "success": False,
+                    "customer_outcome_evidence_sha256": "b" * 64,
+                    "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                    "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
+                },
+                event_id="experiment.postpromotion_observed:" + observation_id,
+            )
+            db.commit()
+    Clock.value += timedelta(seconds=3)
+    # Stop-loss blocks the next real assignment immediately, even before the
+    # original scheduler has restarted the completed Retort recovery tail.
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert row.status == "impact_recheck"
+        effects = json_loads(row.effects_json, {})
+        assert effects["training_regression_recheck"]["reason"] == "workflow_execution_stop_loss"
+        assert effects["experiment"]["traffic"] == "candidate"
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    assert first["experiment"]["status"] in ("awaiting_rollout_readback", "measured")
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "experiment_regression"
+    assert second["experiment"]["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
+        assert effects["experiment"]["decision"] == "rollback"
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "no_outbox_regression",
+        "no_outbox_source_fault",
+        "release_changed",
+        "snapshot_changed",
+        "clock_changed",
+    ],
+)
+def test_postpromotion_recheck_cannot_accept_forged_or_unbound_evidence(
+    released_customer_training, tamper
+):
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        effects["training_regression_recheck"] = {
+            "source": "original_experiment_outbox",
+            "reason": (
+                "workflow_postpromotion_source_unverified"
+                if tamper in {"no_outbox_source_fault", "clock_changed"}
+                else "workflow_execution_stop_loss"
+            ),
+            "request_id": run["id"],
+            "promoted_at": None if tamper == "clock_changed" else progress["closed_at"],
+            "release_sha": ("f" * 40 if tamper == "release_changed" else progress["release_sha"]),
+            "final_snapshot_sha256": (
+                "f" * 64 if tamper == "snapshot_changed" else progress["final_snapshot_sha256"]
+            ),
+        }
+        row.status = "impact_recheck"
+        row.effects_json = json_dumps(effects)
+        db.commit()
+    previous_calls = list(run["api"].calls)
+    state = {**run["state"], "delivery": run["delivery"]}
+    result = training.read_training_impact(run["id"], state)
+    assert result["status"] == "waiting_customer_impact"
+    assert result["reason"] == "training_regression_recheck_unverified"
+    assert run["api"].calls == previous_calls
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+
+def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
+    released_customer_training,
+):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        no_evidence = training.postpromotion_effect_snapshot(
+            db, row, run["spec"], effects, observed_at=Clock.value + timedelta(days=1)
+        )
+        assert no_evidence["status"] == "unknown"
+        assert no_evidence["observations"] == 0
+        observation_id = str(uuid4())
+        user_id = run["users"][0]
+        enqueue(
+            db,
+            "experiment.postpromotion_observed",
+            run["id"],
+            {
+                "assignment_stage": "approved_rollout",
+                "request_id": run["id"],
+                "experiment_id": progress["experiment_id"],
+                "policy_digest": progress["policy_digest"],
+                "release_sha": progress["release_sha"],
+                "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                "variation_id": "1",
+                "observation_id": observation_id,
+                "subject_id": str(user_id),
+                "user_id": user_id,
+                "execution_id": str(uuid4()),
+                "success": True,
+                "customer_outcome_evidence_sha256": "b" * 64,
+                "assigned_at": (Clock.value + timedelta(seconds=1)).isoformat(),
+                "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
+            },
+            event_id="experiment.postpromotion_observed:" + observation_id,
+        )
+        db.commit()
+    Clock.value += timedelta(seconds=3)
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        saved = json_loads(row.effects_json, {})["training_online_observations"]
+        assert saved["scope"] == "cumulative_absolute_observation_not_causal_lift"
+        assert len(saved["snapshots"]) == 1
+        daily = saved["snapshots"][0]
+        assert daily["status"] == "observational_only"
+        assert daily["observations"] == daily["successes"] == daily["unique_subjects"] == 1
+        assert daily["failures"] == 0
+        assert daily["independently_verified_lift"] is False
+        assert len(daily["source_events_sha256"]) == 64
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert (
+            len(json_loads(row.effects_json, {})["training_online_observations"]["snapshots"]) == 1
+        )
+
+
+@pytest.mark.parametrize("fault", ["non_boolean", "wrong_stage", "reverse_time", "malformed_json"])
+def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
+    released_customer_training, fault
+):
+    from modstore_server.eventing.db_outbox import enqueue
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        progress = effects["experiment"]
+        observation_id = str(uuid4())
+        user_id = run["users"][0]
+        event = enqueue(
+            db,
+            "experiment.postpromotion_observed",
+            run["id"],
+            {
+                "assignment_stage": "trial" if fault == "wrong_stage" else "approved_rollout",
+                "request_id": run["id"],
+                "experiment_id": progress["experiment_id"],
+                "policy_digest": progress["policy_digest"],
+                "release_sha": progress["release_sha"],
+                "measurement_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+                "variation_id": "1",
+                "observation_id": observation_id,
+                "subject_id": str(user_id),
+                "user_id": user_id,
+                "execution_id": str(uuid4()),
+                "success": 1 if fault == "non_boolean" else True,
+                "customer_outcome_evidence_sha256": "b" * 64,
+                "assigned_at": (
+                    Clock.value + timedelta(seconds=3 if fault == "reverse_time" else 1)
+                ).isoformat(),
+                "completed_at": (Clock.value + timedelta(seconds=2)).isoformat(),
+            },
+            event_id="experiment.postpromotion_observed:" + observation_id,
+        )
+        assert event is not None
+        if fault == "malformed_json":
+            event.payload_json = "{"
+        db.flush()
+        snapshot = training.postpromotion_effect_snapshot(
+            db, row, run["spec"], effects, observed_at=Clock.value + timedelta(days=1)
+        )
+        assert snapshot["status"] == "source_unverified"
+        assert snapshot["observations"] == snapshot["successes"] == 0
+        assert snapshot["independently_verified_lift"] is False
+        from modstore_server.retort_workflow_metrics import postpromotion_stop_reason
+
+        Clock.value += timedelta(seconds=4)
+        assert postpromotion_stop_reason(db, row, run["spec"]) == (
+            "workflow_postpromotion_source_unverified"
+        )
+        db.commit()
+
+    # Unverifiable evidence must trigger the original withdrawal tail, not
+    # merely a temporary traffic guard or a fabricated business regression.
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        assert row.status == "impact_recheck"
+        effects = json_loads(row.effects_json, {})
+        assert effects["training_regression_recheck"]["reason"] == (
+            "workflow_postpromotion_source_unverified"
+        )
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "workflow_postpromotion_source_unverified"
+    assert second["experiment"]["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
+
+
+@pytest.mark.parametrize(
+    "closed_at",
+    [
+        None,
+        123,
+        "not-a-timestamp",
+        "2026-01-01T00:00:00",
+        "9999-01-01T00:00:00+00:00",
+    ],
+)
+def test_promoted_training_blocks_traffic_without_valid_rollout_clock(
+    released_customer_training, closed_at
+):
+    from modstore_server.retort_workflow_metrics import postpromotion_stop_reason
+
+    run = released_customer_training
+    start(run)
+    run["advance"]()
+    Clock.value += timedelta(hours=3)
+    assert run["advance"]()["status"] == "awaiting_experiment_stop"
+    assert run["advance"]()["decision"] == "promote"
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, run["id"])
+        row.status = "completed"
+        effects = json_loads(row.effects_json, {})
+        effects["experiment"]["closed_at"] = closed_at
+        row.effects_json = json_dumps(effects)
+        assert postpromotion_stop_reason(db, row, run["spec"]) == (
+            "workflow_postpromotion_source_unverified"
+        )
+        db.commit()
+
+    owner = run["users"][0]
+    assert runtime.select_variant(
+        surface="workflow_nl_prompt",
+        resource_id=WORKFLOW_NL_RESOURCE,
+        subject_id=owner,
+        workflow_id=run["workflows"][owner],
+        default_value=run["spec"]["lifecycle"]["treatment_prompt"],
+    ) == (run["spec"]["lifecycle"]["control_prompt"], None)
+
+    # The same persisted clock fault must survive switching local traffic to
+    # control; otherwise the next impact tick never verifies remote withdrawal.
+    assert training.request_postpromotion_regression_rechecks() == 1
+    assert training.request_postpromotion_regression_rechecks() == 0
+    state = {**run["state"], "delivery": run["delivery"]}
+    first = training.read_training_impact(run["id"], state)
+    assert first["status"] == "waiting_customer_impact"
+    assert first["experiment"]["status"] == "awaiting_rollout_readback"
+    second = training.read_training_impact(run["id"], state)
+    assert second["status"] == "customer_impact_rejected"
+    assert second["reason"] == "workflow_postpromotion_source_unverified"
+    assert second["experiment"]["decision"] == "rollback"
+    with get_session_factory()() as db:
+        effects = json_loads(db.get(RetortEvolutionRun, run["id"]).effects_json, {})
+        assert effects["experiment"]["traffic"] == "control"
 
 
 @pytest.mark.parametrize("phase", ["create", "start", "lease", "promote", "rollout_readback"])

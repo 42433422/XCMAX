@@ -14,6 +14,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from modstore_server.strategic_customer_outcomes import CustomerGoalBinding
+from modstore_server.xiaoc_goal_governance import (
+    goal_path,
+    observed_priority,
+    review_milestones,
+)
 from modstore_server.xiaoc_life_policy import LifePolicyError, parse_time
 
 ORIGIN = "customer_value_gap/v1"
@@ -166,7 +171,12 @@ def discover_goal_candidate(
             "evidence_refs": [ref],
             "issue_key": stage,
             "observation": observation,
-            "priority": {"basis": "observed_gap_count", "score": count},
+            "priority": observed_priority(stage, count, value["observed_at"], now=now),
+            "hierarchy": goal_path(
+                state["identity_id"], str(state.get("mission") or ""), goal_id, now=now
+            ),
+            "depends_on_goal_ids": [],
+            "milestones": review_milestones(now=now, deadline=deadline),
             "expected_benefit": "识别并减少已核验缺口；收益金额尚未测量。",
             "risk": "窗口滚动、重复归因、误把缺失证据当成客户失败；不得据此自动改写业务。",
             "cost_estimate": {"status": "unknown", "existing_policy_upper_bound": budget_bound},
@@ -174,6 +184,7 @@ def discover_goal_candidate(
             "acceptance": {
                 "metric": "customer_value_lifecycle_gap_count",
                 "stage": stage,
+                "direction": "min",
                 "baseline": count,
                 "target": 0,
                 "condition": "独立回读同口径及原客户/订单；窗口滚动或缺失来源不能证明改善。",
@@ -194,6 +205,68 @@ def discover_goal_candidate(
         fact = {"ref": ref, "text": json.dumps(observation, ensure_ascii=False)}
         return goal, fact
     return None
+
+
+def resumable_operating_candidate(
+    context: dict[str, Any],
+    state: dict[str, Any],
+    owner: int,
+    *,
+    now: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Return a sourced existing proposal after a previous unconfigured/failed cycle.
+
+    The original stable goal and idempotency key are reused, so no parallel
+    queue or duplicate business action is created by a repeat observation.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate
+
+    policy = state.get("policy") or {}
+    value = context.get("customer_value")
+    if (
+        state.get("paused")
+        or state.get("stopped")
+        or not policy.get("employee_id")
+        or not isinstance(policy.get("portfolio_limits"), dict)
+        or not isinstance(value, dict)
+        or type(owner) is not int
+        or owner <= 0
+    ):
+        return None
+    pending = []
+    goals = state.get("goals") or []
+    for goal in goals:
+        if (
+            not isinstance(goal, dict)
+            or goal.get("candidate_origin") != ORIGIN
+            or goal.get("status") != "proposed"
+            or goal.get("candidate_owner_user_id") != owner
+            or goal.get("decision_id")
+            or goal.get("step_bindings")
+        ):
+            continue
+        try:
+            if goal.get("next_review_at") and parse_time(goal["next_review_at"]) > now:
+                continue
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if (
+            candidate_gate(goal, owner, value, now=now)["status"] != "eligible"
+            or governance_gate(goal, goals, now=now)["status"] != "reviewable"
+        ):
+            continue
+        priority = goal.get("priority") or {}
+        score = priority.get("score") if isinstance(priority, dict) else 0
+        pending.append((score if type(score) is int else 0, goal))
+    if not pending:
+        return None
+    selected = sorted(pending, key=lambda row: (-row[0], row[1]["id"]))[0][1]
+    observation = selected["observation"]
+    fact = {
+        "ref": selected["evidence_refs"][0],
+        "text": json.dumps(observation, ensure_ascii=False),
+    }
+    return dict(selected), fact
 
 
 def check_candidate_promotion(
@@ -359,6 +432,75 @@ def build_goal_opportunities(
             ).model_dump()
         )
     return rows, ids
+
+
+def compile_autonomous_review_plan(
+    goal: dict[str, Any],
+    *,
+    owner: int,
+    policy: dict[str, Any],
+    goals: list[dict[str, Any]],
+    current_value: dict[str, Any],
+    now: datetime,
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Compile inspect -> plan review tasks using ONLY the existing human policy.
+
+    This never approves the portfolio. Empty tool input prevents automatically
+    selecting a privileged business mutation under a generic employee policy.
+    """
+    from modstore_server.xiaoc_goal_governance import governance_gate
+
+    limits = policy.get("portfolio_limits")
+    employee_id = policy.get("employee_id")
+    if (
+        not isinstance(limits, dict)
+        or not isinstance(employee_id, str)
+        or not employee_id
+        or policy.get("task_input")
+    ):
+        raise LifePolicyError("自主调查需要原预算、员工及空的安全任务输入")
+    if goal.get("candidate_origin") != ORIGIN or goal.get("status") != "proposed":
+        raise LifePolicyError("仅未审批的原经营候选可自动生成调查提案")
+    authorization_expiry = policy.get("authorization_expires_at")
+    if authorization_expiry is not None:
+        try:
+            expires = parse_time(authorization_expiry)
+            proposal_expires = parse_time(limits["expires_at"])
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise LifePolicyError("当前授权期限无效") from exc
+        if not now < proposal_expires <= expires:
+            raise LifePolicyError("当前授权已过期或原提案期限超过授权")
+    check_candidate_promotion(goal, owner, limits, current_value, now=now)
+    if governance_gate(goal, goals, now=now)["status"] != "reviewable":
+        raise LifePolicyError("原候选来源、冲突或前置依赖未通过审查")
+    seconds = limits.get("compute_seconds")
+    if type(seconds) is not int or not 2 <= seconds <= 7_776_000:
+        raise LifePolicyError("原预算不足以执行两个可核验的原子调查步骤")
+    # A single review step may consume at most 240 seconds in the approved worker.
+    allowed_seconds = min(seconds, 480)
+    resources = {name: limits.get(name) for name in ("cost_cents", "tokens", "compute_seconds")}
+    if any(type(value) is not int or value < 0 for value in resources.values()):
+        raise LifePolicyError("原预算资源合同不完整")
+    allocations = []
+    for index, step in enumerate(EXECUTION_STEPS):
+        cost = (
+            limits["cost_cents"] // 2
+            if index == 0
+            else limits["cost_cents"] - limits["cost_cents"] // 2
+        )
+        tokens = limits["tokens"] // 2 if index == 0 else limits["tokens"] - limits["tokens"] // 2
+        compute = allowed_seconds // 2 if index == 0 else allowed_seconds - allowed_seconds // 2
+        allocations.append(
+            GoalStepAllocation(
+                step_id=step,
+                employee_id=employee_id,
+                input_data={},
+                cost_cents=cost,
+                tokens=tokens,
+                compute_seconds=compute,
+            )
+        )
+    return build_goal_opportunities(goal, allocations, limits)
 
 
 def _valid_sha(value: Any) -> bool:

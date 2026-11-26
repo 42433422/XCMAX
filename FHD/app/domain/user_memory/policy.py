@@ -116,6 +116,18 @@ def is_scoped_memory_owner(user_id: str) -> bool:
     )
 
 
+def is_erp_bound_memory(record: Any) -> bool:
+    """Claims tied to ERP must not enter unscoped vector or legacy recall."""
+    if not isinstance(record, dict):
+        return False
+    if record.get("source") == "erp_authority":
+        return True
+    evidence = record.get("evidence")
+    return isinstance(evidence, list) and any(
+        isinstance(item, dict) and item.get("kind") == "erp_fact_reference_v1" for item in evidence
+    )
+
+
 def is_recallable_memory(record: Any) -> bool:
     return (
         isinstance(record, dict)

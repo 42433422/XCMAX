@@ -42,6 +42,24 @@ class TestExplicitAllowlist:
     def test_empty_list_denies_tools(self):
         assert ts._explicit_allowlist({"tools": []}, {"tools": ["excel_analysis"]}) == []
 
+    @pytest.mark.parametrize(
+        ("config", "manifest", "expected"),
+        [
+            ({"tools": ["customers"]}, {"tools": ["customers.query"]}, ["customers.query"]),
+            ({"tools": ["customers.query"]}, {"tools": ["customers"]}, ["customers.query"]),
+            ({"tools": ["customers.query"]}, {"tools": ["customers.export"]}, []),
+            ({"tools": ["customers"]}, {"tools": []}, []),
+            ({"tools": ["customers"]}, {"tools": "customers"}, []),
+            (
+                {"tools": ["customers"], "actions": {"agent": {"tools": ["customers.query"]}}},
+                {"employee_config_v2": {"tools": ["customers.export"]}},
+                [],
+            ),
+        ],
+    )
+    def test_every_explicit_layer_narrows_authority(self, config, manifest, expected):
+        assert ts._explicit_allowlist(config, manifest) == expected
+
 
 class TestCapabilityText:
     def test_from_employee_capabilities_dict_and_str(self):
@@ -161,3 +179,13 @@ class TestResolveEmployeeTools:
             actor.context,
         )
         assert names == ["business_db.read"]
+
+
+def test_pack_action_restriction_is_preserved_for_admin_actor(trusted_actor):
+    actor = trusted_actor(role="admin", tier="admin")
+    assert ts.employee_tool_names(
+        "e",
+        {"tools": ["customers.query"]},
+        {"tools": ["customers"]},
+        actor.context,
+    ) == ["customers.query"]

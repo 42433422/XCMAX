@@ -1,0 +1,216 @@
+{
+  "domain": "07",
+  "title": "Mod SDK 与行业模块：真实签名包打包 → 安装 → 路由 → 重启 → 篡改拒绝 → 卸载",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "7ae9e323b3df5df90e5dbb30da8632fb73cbd74c",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "build_mod.py --sign 打包 → /api/mod-store/upload 安装 → 调用 Mod 路由 → SIGKILL 重启 → 篡改包负向 → 卸载",
+    "negative": "字节篡改的签名包必须拒绝",
+    "concurrency": 1,
+    "signing": "临时 Ed25519 密钥对（仓库外），通过 XCAGI_MOD_PUBLIC_KEY 作为附加信任根"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "SIGKILL after install, then restart",
+      "mode": "kill9",
+      "pids_before": [
+        26988
+      ],
+      "pids_killed": [
+        26988
+      ],
+      "down_after_kill": true,
+      "pid_after": 27000,
+      "readiness": {
+        "liveness": true,
+        "routes_ready": true,
+        "wait_ms": 2629,
+        "pid": 27000
+      }
+    },
+    {
+      "fault": "install content-tampered signed package",
+      "status": 200,
+      "rejected": true,
+      "excerpt": "{\"success\":false,\"message\":\"签名验证失败：MOD 内容哈希不匹配，可能被篡改\",\"data\":null}"
+    }
+  ],
+  "evidence_ids": [
+    "07-install",
+    "07-mods-list",
+    "07-mod-route",
+    "07-mods-after-restart",
+    "07-route-after-restart",
+    "07-tampered-install",
+    "07-uninstall",
+    "07-mod-after-uninstall"
+  ],
+  "observed_results": [
+    {
+      "step_id": "07-install",
+      "method": "POST",
+      "path": "/api/mod-store/upload?activate=true",
+      "status": 200,
+      "elapsed_ms": 18,
+      "response_sha256": "ebb872d257b0447a0d2284b9077489ad35c768387912360e4e218b7e18dc2374",
+      "response_excerpt": "{\"success\":true,\"message\":\"MOD e3-test-mod-1795457451 安装成功\",\"data\":{\"id\":\"e3-test-mod-1795457451\",\"name\":\"E3 Test Mod\",\"version\":\"1.0.1795457451\",\"author\":\"e3-harness\",\"description\":\"E3 evidence package\",\"artifact\":\"mod\",\"bundle\":{},\"dependencies\":{\"xcagi\":\">=1.0.0\"},\"backend_entry\":\"blueprints\",\"backend_init\":\"mod_init\",\"frontend_routes\":\"\",\"frontend_pro_entry_path\":\"\",\"frontend_menu\":[],\"frontend_menu_overrides\":[],\"config_overrides\":\"\",\"hooks\":{},\"comms_exports\":[],\"mod_path\":\"/Users/Shared/XCMAX/.e3run/data/mods/e3-test-mod-1795457451\",\"primary\":false,\"workflow_employees\":[],\"industry\":{},\"ui_labels\":{},\"ui_starter_pack\":[],\"scope\":\"global\",\"frontend_runtime\":{}}}"
+    },
+    {
+      "step_id": "07-mods-list",
+      "method": "GET",
+      "path": "/api/mods",
+      "status": 200,
+      "elapsed_ms": 23,
+      "response_sha256": "08f81fee8a33cc9ae4f591166e0ad76fe31367407d89068faf877c4cdaac65b2",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":\"attendance-industry\",\"name\":\"通用考勤模块\",\"version\":\"1.0.5\",\"author\":\"XCAGI\",\"description\":\"主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。\",\"primary\":true,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"考勤\",\"name\":\"通用考勤能力\",\"description\":\"可与任意客户所属行业组合使用的考勤、排班与出勤统计能力\",\"units\":{\"primary\":\"天\",\"secondary\":\"小时\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\",\"conversion\":{\"天_to_小时\":8.0}},\"quantity_fields\":{\"primary_field\":\"days\",\"secondary_field\":\"hours\",\"spec_field\":\"shift\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\"},\"product_fields\":{\"name\":\"员工姓名\",\"model\":\"工号\",\"category\":\"部门\",\"price\":\"时薪\",\"unit\":\"单位\"},\"order_types\":{\"shipment\":\"考勤单\",\"receipt\":\"排班单\",\"return\":\"异常单\"},\"intent_keywords\":{\"create_order\":[\"录考勤\",\"登记出勤\",\"排班\",\"生成考勤单\"],\"quantity_unit\":\"天\",\"print_label\":[\"考勤表\",\"工时单\",\"标签\"],\"product\":[\"员工\",\"工号\",\"人员\",\"花名册\"],\"customer\":[\"部门\",\"班组\",\"项目\"]},\"print_config\":{\"printer_type\":\"PDF\",\"label_width\":80,\"label_height\":50},\"subsystems\":{\"products\":{\"label\":\"人员管理\",\"entity\":\"人员\",\"fields\":[{\"key\":\"model_number\",\"label\":\"工号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"name\",\"label\":\"姓名\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"specification\",\"label\":\"班次\",\"type\":\"enum\",\"semantic\":\"spec\",\"validators\":[{\"type\":\"oneOf\",\"params\":[\"早\",\"中\",\"晚\"]}]},{\"key\":\"price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"unit\",\"label\":\"单位\",\"type\":\"text\"}]},\"customers\":{\"label\":\"部门管理\",\"entity\":\"部门\",\"fields\":[{\"key\":\"customer_name\",\"label\":\"部门名称\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"contact_person\",\"label\":\"主管\",\"type\":\"text\"},{\"key\":\"contact_phone\",\"label\":\"联系电话\",\"type\":\"text\"},{\"key\":\"address\",\"label\":\"上级部门\",\"type\":\"text\"}]},\"orders\":{\"label\":\"考勤单\",\"entity\":\"考勤单\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"unit_price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"derived\"}]},\"shipment-records\":{\"label\":\"考勤记录\",\"entity\":\"考勤记录\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"unit_price\",\"label\":\"时薪"
+    },
+    {
+      "step_id": "07-mod-route",
+      "method": "GET",
+      "path": "/api/mod/e3-test-mod-1795457451/status",
+      "status": 200,
+      "elapsed_ms": 15,
+      "response_sha256": "3bc2819d97a13408c44618a85a093abffe53b676ef39413b168a3e8a8d5319da",
+      "response_excerpt": "{\"success\":true,\"ok\":true,\"mod\":\"e3-test-mod-1795457451\",\"version\":\"1.0.1795457451\",\"kind\":\"e3-evidence\"}"
+    },
+    {
+      "step_id": "07-mods-after-restart",
+      "method": "GET",
+      "path": "/api/mods",
+      "status": 200,
+      "elapsed_ms": 28,
+      "response_sha256": "08f81fee8a33cc9ae4f591166e0ad76fe31367407d89068faf877c4cdaac65b2",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":\"attendance-industry\",\"name\":\"通用考勤模块\",\"version\":\"1.0.5\",\"author\":\"XCAGI\",\"description\":\"主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。\",\"primary\":true,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"考勤\",\"name\":\"通用考勤能力\",\"description\":\"可与任意客户所属行业组合使用的考勤、排班与出勤统计能力\",\"units\":{\"primary\":\"天\",\"secondary\":\"小时\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\",\"conversion\":{\"天_to_小时\":8.0}},\"quantity_fields\":{\"primary_field\":\"days\",\"secondary_field\":\"hours\",\"spec_field\":\"shift\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\"},\"product_fields\":{\"name\":\"员工姓名\",\"model\":\"工号\",\"category\":\"部门\",\"price\":\"时薪\",\"unit\":\"单位\"},\"order_types\":{\"shipment\":\"考勤单\",\"receipt\":\"排班单\",\"return\":\"异常单\"},\"intent_keywords\":{\"create_order\":[\"录考勤\",\"登记出勤\",\"排班\",\"生成考勤单\"],\"quantity_unit\":\"天\",\"print_label\":[\"考勤表\",\"工时单\",\"标签\"],\"product\":[\"员工\",\"工号\",\"人员\",\"花名册\"],\"customer\":[\"部门\",\"班组\",\"项目\"]},\"print_config\":{\"printer_type\":\"PDF\",\"label_width\":80,\"label_height\":50},\"subsystems\":{\"products\":{\"label\":\"人员管理\",\"entity\":\"人员\",\"fields\":[{\"key\":\"model_number\",\"label\":\"工号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"name\",\"label\":\"姓名\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"specification\",\"label\":\"班次\",\"type\":\"enum\",\"semantic\":\"spec\",\"validators\":[{\"type\":\"oneOf\",\"params\":[\"早\",\"中\",\"晚\"]}]},{\"key\":\"price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"unit\",\"label\":\"单位\",\"type\":\"text\"}]},\"customers\":{\"label\":\"部门管理\",\"entity\":\"部门\",\"fields\":[{\"key\":\"customer_name\",\"label\":\"部门名称\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"contact_person\",\"label\":\"主管\",\"type\":\"text\"},{\"key\":\"contact_phone\",\"label\":\"联系电话\",\"type\":\"text\"},{\"key\":\"address\",\"label\":\"上级部门\",\"type\":\"text\"}]},\"orders\":{\"label\":\"考勤单\",\"entity\":\"考勤单\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"unit_price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"derived\"}]},\"shipment-records\":{\"label\":\"考勤记录\",\"entity\":\"考勤记录\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"unit_price\",\"label\":\"时薪"
+    },
+    {
+      "step_id": "07-route-after-restart",
+      "method": "GET",
+      "path": "/api/mod/e3-test-mod-1795457451/status",
+      "status": 200,
+      "elapsed_ms": 11,
+      "response_sha256": "3bc2819d97a13408c44618a85a093abffe53b676ef39413b168a3e8a8d5319da",
+      "response_excerpt": "{\"success\":true,\"ok\":true,\"mod\":\"e3-test-mod-1795457451\",\"version\":\"1.0.1795457451\",\"kind\":\"e3-evidence\"}"
+    },
+    {
+      "step_id": "07-tampered-install",
+      "method": "POST",
+      "path": "/api/mod-store/upload?activate=true",
+      "status": 200,
+      "elapsed_ms": 16,
+      "response_sha256": "25b1993ca1765478c37d7b346ab2d89155d3bfdcc55301e3176bb1adbf2a3720",
+      "response_excerpt": "{\"success\":false,\"message\":\"签名验证失败：MOD 内容哈希不匹配，可能被篡改\",\"data\":null}"
+    },
+    {
+      "step_id": "07-uninstall",
+      "method": "POST",
+      "path": "/api/mod-store/uninstall",
+      "status": 200,
+      "elapsed_ms": 14,
+      "response_sha256": "afdf4085a3dd3d7c728883ac64c3565fa4412e6d25266b83e84ba2a9b65428b3",
+      "response_excerpt": "{\"success\":true,\"message\":\"MOD e3-test-mod-1795457451 卸载成功\",\"data\":{\"id\":\"e3-test-mod-1795457451\"}}"
+    },
+    {
+      "step_id": "07-mod-after-uninstall",
+      "method": "GET",
+      "path": "/api/mods",
+      "status": 200,
+      "elapsed_ms": 32,
+      "response_sha256": "ec3da5418215db287b40d376eb10f5d00a08dbc90b24a83831f201eb6a7de7af",
+      "response_excerpt": "{\"success\":true,\"data\":[{\"id\":\"attendance-industry\",\"name\":\"通用考勤模块\",\"version\":\"1.0.5\",\"author\":\"XCAGI\",\"description\":\"主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。\",\"primary\":true,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"考勤\",\"name\":\"通用考勤能力\",\"description\":\"可与任意客户所属行业组合使用的考勤、排班与出勤统计能力\",\"units\":{\"primary\":\"天\",\"secondary\":\"小时\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\",\"conversion\":{\"天_to_小时\":8.0}},\"quantity_fields\":{\"primary_field\":\"days\",\"secondary_field\":\"hours\",\"spec_field\":\"shift\",\"primary_label\":\"出勤天数\",\"secondary_label\":\"工时\",\"spec_label\":\"班次\"},\"product_fields\":{\"name\":\"员工姓名\",\"model\":\"工号\",\"category\":\"部门\",\"price\":\"时薪\",\"unit\":\"单位\"},\"order_types\":{\"shipment\":\"考勤单\",\"receipt\":\"排班单\",\"return\":\"异常单\"},\"intent_keywords\":{\"create_order\":[\"录考勤\",\"登记出勤\",\"排班\",\"生成考勤单\"],\"quantity_unit\":\"天\",\"print_label\":[\"考勤表\",\"工时单\",\"标签\"],\"product\":[\"员工\",\"工号\",\"人员\",\"花名册\"],\"customer\":[\"部门\",\"班组\",\"项目\"]},\"print_config\":{\"printer_type\":\"PDF\",\"label_width\":80,\"label_height\":50},\"subsystems\":{\"products\":{\"label\":\"人员管理\",\"entity\":\"人员\",\"fields\":[{\"key\":\"model_number\",\"label\":\"工号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"name\",\"label\":\"姓名\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"specification\",\"label\":\"班次\",\"type\":\"enum\",\"semantic\":\"spec\",\"validators\":[{\"type\":\"oneOf\",\"params\":[\"早\",\"中\",\"晚\"]}]},{\"key\":\"price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"unit\",\"label\":\"单位\",\"type\":\"text\"}]},\"customers\":{\"label\":\"部门管理\",\"entity\":\"部门\",\"fields\":[{\"key\":\"customer_name\",\"label\":\"部门名称\",\"type\":\"text\",\"required\":true,\"semantic\":\"entity_name\"},{\"key\":\"contact_person\",\"label\":\"主管\",\"type\":\"text\"},{\"key\":\"contact_phone\",\"label\":\"联系电话\",\"type\":\"text\"},{\"key\":\"address\",\"label\":\"上级部门\",\"type\":\"text\"}]},\"orders\":{\"label\":\"考勤单\",\"entity\":\"考勤单\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"unit_price\",\"label\":\"时薪\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"price\"},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"number\",\"unit\":\"元\",\"semantic\":\"derived\"}]},\"shipment-records\":{\"label\":\"考勤记录\",\"entity\":\"考勤记录\",\"fields\":[{\"key\":\"purchase_unit\",\"label\":\"部门\",\"type\":\"text\",\"semantic\":\"foreign_ref\"},{\"key\":\"product_name\",\"label\":\"事项说明\",\"type\":\"text\",\"semantic\":\"entity_name\"},{\"key\":\"model_number\",\"label\":\"关联编号\",\"type\":\"text\",\"semantic\":\"model\"},{\"key\":\"quantity_kg\",\"label\":\"工时 (小时)\",\"type\":\"number\",\"unit\":\"小时\",\"semantic\":\"secondary_qty\"},{\"key\":\"quantity_tins\",\"label\":\"数量 (天/次)\",\"type\":\"number\",\"unit\":\"天\",\"semantic\":\"primary_qty\"},{\"key\":\"tin_spec\",\"label\":\"班次\",\"type\":\"text\",\"semantic\":\"spec\"},{\"key\":\"unit_price\",\"label\":\"时薪"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "07.build",
+      "description": "用真实 build_mod.py --sign 产出签名包",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "id": "07.install",
+      "description": "真实签名包上传安装成功",
+      "passed": true,
+      "detail": "{\"success\":true,\"message\":\"MOD e3-test-mod-1795457451 安装成功\",\"data\":{\"id\":\"e3-test-mod-1795457451\",\"name\":\"E3 Test Mod\",\"version\":\"1.0.1795457451\",\"author\":\"e3-harness\",\"description\":\"E3 evidence package\",\"artifact\":\"mod\",\"bundle\":{},\"dependencies\":{\"xcagi\":\">=1.0.0\"},\"backend_entry\":\"blueprints\",\"backend_init\":\"mod_init\",\"frontend_routes\":\"\",\"frontend_pro_entry_path\":\"\",\"frontend_menu\":[],\"fronten"
+    },
+    {
+      "id": "07.installed-visible",
+      "description": "已安装列表可见新 Mod",
+      "passed": true,
+      "detail": "accessories-packaging-industry,artifact-generator,attendance-industry,coating-industry,code-validator,csv-full-read-employee,csv-generate-employee,doc-knowledge-curator,e3-test-mod,e3-test-mod-1795457372,e3-test-mod-1795457451,ecosystem-delivery-reporter,ecosystem-investor-portal-officer,ecosystem-j"
+    },
+    {
+      "id": "07.route-live",
+      "description": "安装后 Mod 路由立即生效（新版本已激活）",
+      "passed": true,
+      "detail": "status=200 version='1.0.1795457451' {\"success\":true,\"ok\":true,\"mod\":\"e3-test-mod-1795457451\",\"version\":\"1.0.1795457451\",\"kind\":\"e3-evidence\"}"
+    },
+    {
+      "id": "07.install-persistence",
+      "description": "重启后 Mod 仍安装",
+      "passed": true,
+      "detail": "accessories-packaging-industry,artifact-generator,attendance-industry,coating-industry,code-validator,csv-full-read-employee,csv-generate-employee,doc-knowledge-curator,e3-test-mod,e3-test-mod-1795457"
+    },
+    {
+      "id": "07.route-after-restart",
+      "description": "重启后新版本 Mod 路由生效",
+      "passed": true,
+      "detail": "version='1.0.1795457451' {\"success\":true,\"ok\":true,\"mod\":\"e3-test-mod-1795457451\",\"version\":\"1.0.1795457451\",\"kind\":\"e3-evidence\"}"
+    },
+    {
+      "id": "07.tamper-rejected",
+      "description": "篡改包被拒绝安装",
+      "passed": true,
+      "detail": "{\"success\":false,\"message\":\"签名验证失败：MOD 内容哈希不匹配，可能被篡改\",\"data\":null}"
+    },
+    {
+      "id": "07.uninstall",
+      "description": "真实卸载成功",
+      "passed": true,
+      "detail": "{\"success\":true,\"message\":\"MOD e3-test-mod-1795457451 卸载成功\",\"data\":{\"id\":\"e3-test-mod-1795457451\"}}"
+    },
+    {
+      "id": "07.uninstall-verified",
+      "description": "卸载后 Mod 从安装列表移除",
+      "passed": true,
+      "detail": "accessories-packaging-industry,artifact-generator,attendance-industry,coating-industry,code-validator,csv-full-read-employee,csv-generate-employee,doc-knowledge-curator,e3-test-mod,e3-test-mod-1795457"
+    }
+  ],
+  "assertions_passed": 9,
+  "assertions_total": 9,
+  "unknowns": [
+    "跨租户安装隔离未做（本轮单租户）",
+    "未覆盖「升级失败回滚到旧版本」分支（仅验证新版本需重启激活）"
+  ],
+  "axis_levels": null,
+  "domain_status": "E3",
+  "level": "E3",
+  "score": 90,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:10:54.721961+00:00",
+  "package": "/Users/Shared/XCMAX/.e3run/inputs/mod/dist/e3-test-mod-1795457451-1.0.1795457451.xcmod",
+  "package_sha256": "e28de17313f5a7f574a1aa0d3dbc3a958ee901ccf29e03b4ba0589aefcf02cfc",
+  "mod_id": "e3-test-mod-1795457451",
+  "run_version": "1.0.1795457451",
+  "owner_binding": "upload 安装收据绑定当前工作空间 owner，安装者可自行卸载"
+}
