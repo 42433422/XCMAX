@@ -294,11 +294,7 @@ class RunRepair:
             )
         except ProhibitedActionError:
             return None
-        if (
-            decision.decision == "blocked"
-            or not decision.allowed
-            or decision.requires_confirmation
-        ):
+        if decision.decision == "blocked" or not decision.allowed or decision.requires_confirmation:
             return None
         rank = {
             RiskLevel.LOW: 0,
