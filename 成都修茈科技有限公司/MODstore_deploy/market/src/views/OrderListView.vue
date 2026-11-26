@@ -10,10 +10,7 @@
       </div>
     </div>
     <div v-if="err" class="err" role="alert">{{ err }} <button type="button" class="retry-btn" :disabled="loading" @click="load">重试</button></div>
-    <div v-if="loading" class="loading">加载中…</div>
-
-    <div v-else>
-      <div class="order-filters">
+    <div class="order-filters">
         <button
           v-for="f in filters"
           :key="f.value"
@@ -23,8 +20,10 @@
         >
           {{ f.label }}
         </button>
-      </div>
+    </div>
+    <div v-if="loading" class="loading">加载中…</div>
 
+    <div v-else>
       <div v-if="!err && !orders.length" class="empty">暂无订单</div>
       <div v-else-if="!err" class="order-list">
         <div v-for="order in orders" :key="order.out_trade_no" class="order-card" role="link" tabindex="0" :aria-label="`查看订单 ${order.out_trade_no}`" @click="goDetail(order)" @keydown.enter.self="goDetail(order)" @keydown.space.self.prevent="goDetail(order)">
