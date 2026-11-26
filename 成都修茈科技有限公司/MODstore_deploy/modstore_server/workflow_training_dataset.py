@@ -180,6 +180,7 @@ def seal_business_evidence(bundle, tests, verified, verdict):
     if any(
         report.get("measurement_scope") != BUSINESS_SCOPE
         or report.get("runtime_verified") is not True
+        or type(report.get("pass")) is not bool
         for report in verified.values()
     ):
         return {
@@ -190,10 +191,81 @@ def seal_business_evidence(bundle, tests, verified, verdict):
             "holdout_verified": False,
             "reason": "training_business_execution_unverified",
         }
+    # A caller-provided success flag is not proof of a native customer replay.
+    # Bind BOTH arms to the frozen original source manifest and readback hashes,
+    # without accepting a model's self-declared runtime or artifact identity.
+    from modstore_server.workflow_training_replay import validate_replay_manifest
+
+    for index, test in enumerate(tests):
+        replay = (test["vars"].get("generation_context") or {}).get("customer_business_replay")
+        identity = validate_replay_manifest(replay)
+        for arm in (0, 1):
+            evidence = verified[arm, index].get("business_evidence")
+            if not isinstance(evidence, dict):
+                raise ValueError("training_business_evidence_missing")
+            output = evidence.get("output_sha256")
+            references = identity.get("expected_reference_sha256")
+            source_bound = (
+                all(
+                    evidence.get(key) == identity.get(key)
+                    for key in ("manifest_sha256", "source_group_sha256")
+                )
+                and evidence.get("expected_reference_sha256") == references
+                and all(
+                    evidence.get(key) == replay.get(key)
+                    for key in ("contract_sha256", "source_evidence_sha256")
+                )
+                and all(
+                    isinstance(evidence.get(key), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", evidence[key])
+                    for key in (
+                        "manifest_sha256",
+                        "source_group_sha256",
+                        "contract_sha256",
+                        "source_evidence_sha256",
+                    )
+                )
+                and isinstance(references, dict)
+                and bool(references)
+                and all(
+                    isinstance(path, str)
+                    and bool(path)
+                    and isinstance(sha, str)
+                    and re.fullmatch(r"[0-9a-f]{64}", sha)
+                    for path, sha in references.items()
+                )
+                and isinstance(output, dict)
+                and set(output).issubset(references)
+                and all(
+                    isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha)
+                    for sha in output.values()
+                )
+                and (verified[arm, index]["pass"] is False or set(output) == set(references))
+            )
+            if not source_bound:
+                return {
+                    **verdict,
+                    "improved": False,
+                    "verdict": "keep_baseline",
+                    "runtime_verified": False,
+                    "holdout_verified": False,
+                    "reason": "training_business_evidence_origin_unverified",
+                }
+    development = [
+        index for index, partition in enumerate(partitions) if partition == "development"
+    ]
     holdout = [index for index, partition in enumerate(partitions) if partition == "holdout"]
-    holdout_passed = all(verified[1, index]["pass"] is True for index in holdout)
+    holdout_passed = bool(holdout) and all(verified[1, index]["pass"] is True for index in holdout)
     no_regression = all(
         not verified[0, index]["pass"] or verified[1, index]["pass"] for index in range(len(tests))
+    )
+    # Passing a holdout that the baseline already passed is not holdout improvement.
+    # Both partitions need at least one independently replayed paired win.
+    development_wins = sum(
+        verified[1, index]["pass"] and not verified[0, index]["pass"] for index in development
+    )
+    holdout_wins = sum(
+        verified[1, index]["pass"] and not verified[0, index]["pass"] for index in holdout
     )
     evidence = {
         tests[index]["vars"]["case_id"]: deepcopy(verified[1, index].get("business_evidence"))
@@ -201,13 +273,21 @@ def seal_business_evidence(bundle, tests, verified, verdict):
     }
     if any(not isinstance(item, dict) for item in evidence.values()):
         raise ValueError("training_business_evidence_missing")
-    eligible = bool(verdict.get("improved") and holdout_passed and no_regression)
+    eligible = bool(
+        verdict.get("improved") is True
+        and holdout_passed
+        and no_regression
+        and development_wins > 0
+        and holdout_wins > 0
+    )
     return {
         **verdict,
         "improved": eligible,
         "feedback_scope": "workflow_customer_accepted_outcome",
         "runtime_verified": True,
-        "holdout_verified": holdout_passed and no_regression,
+        "development_paired_wins": development_wins,
+        "holdout_paired_wins": holdout_wins,
+        "holdout_verified": holdout_passed and no_regression and holdout_wins > 0,
         "business_evidence": evidence,
         "evaluation_scope": "business_regression_and_holdout",
         "verdict": "candidate_for_approval" if eligible else "keep_baseline",

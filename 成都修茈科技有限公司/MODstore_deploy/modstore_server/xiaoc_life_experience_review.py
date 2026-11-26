@@ -6,6 +6,7 @@ to a desktop user's private memory or granted execution authority.
 
 from __future__ import annotations
 
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import select
@@ -14,6 +15,61 @@ from modstore_server.db.xiaoc_life import XiaoCLifeEvent
 from modstore_server.strategic_portfolio import PortfolioError, _row, digest
 from modstore_server.xiaoc_life_policy import IDENTITY_ID, LifePolicyError
 from modstore_server.xiaoc_life_reflection import experience_candidate_facts, review_experiences
+
+
+def experience_scope(candidate: dict[str, Any]) -> dict[str, Any] | None:
+    """Observed task category and exact comparison window, never transferable authority."""
+    from modstore_server.xiaoc_life_reflection import _time
+
+    start, end = _time(candidate.get("window_start")), _time(candidate.get("window_end"))
+    metric, direction, target = (
+        candidate.get("metric_id"),
+        candidate.get("direction"),
+        candidate.get("target"),
+    )
+    if (
+        type(candidate.get("owner_user_id")) is not int
+        or candidate["owner_user_id"] <= 0
+        or not isinstance(metric, str)
+        or not metric
+        or direction not in ("max", "min")
+        or type(target) not in (int, float)
+        or (type(target) is float and not isfinite(target))
+        or start is None
+        or end is None
+        or end <= start
+        or (end - start).total_seconds() % 86400 != 0
+    ):
+        return None
+    return {
+        "category": "approved_task_with_observed_metric",
+        "owner_user_id": candidate["owner_user_id"],
+        "metric_id": metric,
+        "direction": direction,
+        "threshold": target,
+        "window_days": (end - start).days,
+    }
+
+
+def experience_scope_matches(
+    scope: dict[str, Any], hypothesis: dict[str, Any], owner_user_id: int
+) -> bool:
+    """A prior case may be cited in a new proposal only for the SAME measured question."""
+    return (
+        scope.get("category") == "approved_task_with_observed_metric"
+        and type(owner_user_id) is int
+        and scope.get("owner_user_id") == owner_user_id
+        and scope.get("metric_id") == hypothesis.get("metric_id")
+        and scope.get("direction") == hypothesis.get("direction")
+        and type(scope.get("threshold")) in (int, float)
+        and (type(scope["threshold"]) is int or isfinite(scope["threshold"]))
+        and type(hypothesis.get("threshold")) in (int, float)
+        and (type(hypothesis["threshold"]) is int or isfinite(hypothesis["threshold"]))
+        and scope["threshold"] == hypothesis["threshold"]
+        and type(scope.get("window_days")) is int
+        and type(hypothesis.get("window_days")) is int
+        and scope["window_days"] == hypothesis["window_days"]
+    )
 
 
 def _review_id(candidate_id: str, *, revoke: bool = False) -> str:
@@ -156,41 +212,99 @@ def review_experience(
 
 
 def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Bounded recall independent of the general twenty-event display window."""
+    """Review-only recall with explicit provenance, applicability and conflict blocking.
+
+    A bounded history is NOT evidence that no older conflicting record exists.
+    When the review window overflows, none of its cases is eligible for reuse.
+    """
     from modstore_server.xiaoc_life_store import _active_principal, _event_dict
 
     owner = state.get("owner_user_id")
     if type(owner) is not int or not _active_principal(session, owner):
         return []
-    rows = session.scalars(
-        select(XiaoCLifeEvent)
-        .where(
-            XiaoCLifeEvent.identity_id == IDENTITY_ID,
-            XiaoCLifeEvent.kind == "experience_candidate",
+    rows = list(
+        session.scalars(
+            select(XiaoCLifeEvent)
+            .where(
+                XiaoCLifeEvent.identity_id == IDENTITY_ID,
+                XiaoCLifeEvent.kind == "experience_candidate",
+            )
+            .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
+            .limit(21)
         )
-        .order_by(XiaoCLifeEvent.created_at.desc(), XiaoCLifeEvent.id.desc())
-        .limit(20)
     )
-    facts = []
-    for row in rows:
+    history_complete = len(rows) <= 20
+    selected: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None, str]] = []
+    for row in rows[:20]:
         event = _event_dict(row)
         validated = _validated(state, event)
         if validated is None:
+            history_complete = False
             continue
         candidate, fact = validated
         status = _review_status(session, event)
+        if status == "unverified":
+            history_complete = False
+            continue
         if status not in ("confirmed", "pending_review") or not _current_candidate(
             session, candidate
         ):
             continue
+        selected.append((event, fact, experience_scope(candidate), status))
+    outcomes: dict[tuple[Any, ...], set[str]] = {}
+    for event, _, scope, status in selected:
+        if status != "confirmed" or scope is None:
+            continue
+        key = tuple(
+            scope[field]
+            for field in ("owner_user_id", "metric_id", "direction", "threshold", "window_days")
+        )
+        outcomes.setdefault(key, set()).add(event["details"]["candidate"]["outcome"])
+    conflicts = {key for key, values in outcomes.items() if len(values) > 1}
+    # Prefer approved cases; pending cases remain visible to the owner but not cognition.
+    selected.sort(key=lambda item: item[3] != "confirmed")
+    facts = []
+    for event, fact, scope, status in selected:
         if status == "confirmed":
+            key = (
+                tuple(
+                    scope[field]
+                    for field in (
+                        "owner_user_id", "metric_id", "direction", "threshold", "window_days"
+                    )
+                )
+                if scope is not None
+                else None
+            )
+            blocked = (
+                "conflicting_measured_outcomes"
+                if key in conflicts
+                else "unverified_or_truncated_review_history"
+                if not history_complete
+                else "invalid_measurement_scope"
+                if scope is None
+                else ""
+            )
+            grade = {
+                "evidence_grade": "verified_single_task_and_human_review",
+                "causal_effect": "not_established",
+                "confidence": "single_observation_not_generalizable",
+                "scope": scope,
+                "reuse_status": "blocked" if blocked else "advisory_proposal_only",
+                "reuse_blocker": blocked or None,
+            }
             fact = {
                 "ref": _review_id(event["id"]),
-                "text": "Human-confirmed historical task comparison; not causal proof.",
-                "reviewed_experience": fact["experience_candidate"],
+                "text": "Historical task comparison, not a general rule or causal proof.",
                 "candidate_ref": event["id"],
+                "learning_assessment": grade,
+                **(
+                    {"experience_conflict": fact["experience_candidate"]}
+                    if blocked
+                    else {"reviewed_experience": fact["experience_candidate"]}
+                ),
             }
         facts.append(fact)
-        if len(facts) == 2:
+        if len(facts) >= 2:
             break
     return facts

@@ -1,6 +1,18 @@
 {
   "schema_version": 1,
   "reviews": {
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_training_candidates.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_training_candidates.py",
+      "base_blob": "608669cbec586db4817ae321d1021d9f9256d5d4",
+      "head_blob": "a99f017f73ef157f8dc42cfffd9fc8df50358a87",
+      "before_lines": 523,
+      "after_lines": 892,
+      "reason": "Request architecture review for postpromotion Outbox evidence validation, independent observational metrics and the existing Retort stop/recheck recovery path; the file grows by 369 lines; use the existing runtime clock consistently for observation and stop-loss.",
+      "boundary": "Reuse the existing training candidate, Retort SQL, Outbox and GrowthBook paths. Do not expand permissions or treat observation as causal gain; no new execution authority.",
+      "validation": "Review scope: independent evidence admission, malformed receipt rejection, stop/recheck and recovery regressions. Latest CI is not fully green; native holdout, customer and production evidence remain BLOCKED.",
+      "follow_up": "Repository owner must review the exact blobs and module boundaries; consider extracting a cohesive read-only evidence projection with regression coverage after review. This request is not approval.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
       "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
       "base_blob": "65b106cd2bd2cbd21d2129bfbba002f0607caaf0",
@@ -903,26 +915,26 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_runtime.py",
-      "base_blob": "a58ea1f14f8bc56437031d2d8efbc66b021ef3e4",
-      "head_blob": "069ab78b85ea607cf04b627f2155e1750c099df7",
-      "before_lines": 1517,
-      "after_lines": 1518,
-      "reason": "#3578：补齐生命周期执行的类型声明，并将原准入额度扣除最低输出后传给既有认知裁剪。",
-      "boundary": "不改变图结构、并发锁、最终预算检查或持久化授权。",
-      "validation": "运行原 mypy、预算边界和历史复盘回归；以最终 Linux CI 为准。",
-      "follow_up": "请 @42433422 复核准入总额度、预留额度与最终检查的一致性；本记录不是审批。",
+      "base_blob": "069ab78b85ea607cf04b627f2155e1750c099df7",
+      "head_blob": "abcf5ff24409a696f66b0014dda59b75deb2beac",
+      "before_lines": 1518,
+      "after_lines": 1616,
+      "reason": "#3636 架构评审请求：在原生命周期运行时新增只读目标治理投影、权威缺口到待审提案的自动闭环，以及目标暂停/恢复/取消/调整的管理入口，全部复用既有 SQL 状态、CAS、授权与不可变审计事件。",
+      "boundary": "不新增第二执行入口或独立状态权威：提案只到 awaiting_approval，不自行批准、派工或执行；已绑定已批准执行的目标仍须走原 portfolio 停止；来源、冲突与授权在晋升、绑定与派工前均再次核验。",
+      "validation": "新增层级/证据排序/里程碑过期/冲突/依赖证明/来源伪造/授权过期/终态与 CAS 负例回归，并在原生 PostgreSQL 恢复工作流中运行；真实故障率端到端与客户验收仍未完成，以最终 CI 为准。",
+      "follow_up": "请 @42433422 复核只读投影的未知收益标记、候选生命周期门禁与 life 状态转换边界；后续按职责拆分该运行时；本记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_store.py",
-      "base_blob": "ef5cb34e5e3a75be5c04a8e42ea747a75cacdde0",
-      "head_blob": "1d15a467f6c5c3fda194918de309cce1b64c2fae",
-      "before_lines": 782,
-      "after_lines": 1182,
-      "reason": "#3558 架构评审请求：在原 SQL 生命周期状态中持久化周期身份、图阶段、检查点及收尾准入，并用周期锁协调主执行者和恢复者。",
-      "boundary": "在既有 SQL 状态与事务内比较原 claim，不新增独立状态权威；收尾仍须经原动作回执验证，不放宽新动作准入。",
-      "validation": "五文件生命周期工作流覆盖原状态准入、SQLite 状态、真实 PostgreSQL 跨进程锁与检查点恢复；正式 CI 与人工评审仍需完成。",
-      "follow_up": "请 @42433422 复核原 claim 的比较条件、锁范围和中断后状态转换，后续评估状态存取与恢复职责边界；本记录不是审批。",
+      "base_blob": "1d15a467f6c5c3fda194918de309cce1b64c2fae",
+      "head_blob": "1f841a8ccc10d45558b4d94a165f1301ea372328",
+      "before_lines": 1182,
+      "after_lines": 1297,
+      "reason": "#3636 架构评审请求：在既有 SQL 生命周期存储中持久化候选暂停/恢复/取消所需的 revision 与不可变审计事件，并保存独立 SLO 双窗口证据的回执，保持单一状态事实源。",
+      "boundary": "仅扩展既有事务内状态与事件写入，不新增并行存储或放宽原 claim/租约校验；未绑定候选的 life 状态变更不得替代已批准执行的 portfolio 停止。",
+      "validation": "覆盖原状态 CAS、重复事件幂等、授权过期与跨进程恢复回归，并在原生 PostgreSQL 工作流中执行；全仓原生测试与客户签收仍待完成。",
+      "follow_up": "请 @42433422 复核 revision 比较、事件不可变性与 SLO 证据回读的边界；后续评估状态存取与治理职责拆分；本记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/dataset_rag/document_lifecycle.py": {

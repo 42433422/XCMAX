@@ -457,6 +457,11 @@ def tick():
     )
 
     request_customer_refund_rechecks()
+    # Completed training runs still need the original impact/compensation tail
+    # when real post-rollout observations trip the existing stop-loss guard.
+    from modstore_server.retort_training_candidates import request_postpromotion_regression_rechecks
+
+    request_postpromotion_regression_rechecks()
     with get_session_factory()() as db:
         ids = [
             r.id

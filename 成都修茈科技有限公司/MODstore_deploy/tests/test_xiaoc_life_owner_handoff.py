@@ -98,6 +98,8 @@ def test_revoked_owner_with_settled_history_can_be_replaced_without_transferring
     assert updated["events"][0]["details"] == {
         "previous_owner_user_id": 7,
         "owner_user_id": 8,
+        "before_paused": before["paused"],
+        "before_stopped": before.get("stopped", False),
         "paused": False,
         "stopped": False,
     }

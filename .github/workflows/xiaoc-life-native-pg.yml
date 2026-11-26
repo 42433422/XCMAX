@@ -10,12 +10,16 @@ on:
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py'
       - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_life_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_goal_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_goal_*.py'
       - '.github/workflows/xiaoc-life-native-pg.yml'
   push:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_life_*.py'
       - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_life_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_goal_*.py'
+      - '成都修茈科技有限公司/MODstore_deploy/tests/test_xiaoc_goal_*.py'
       - '.github/workflows/xiaoc-life-native-pg.yml'
 
 permissions:
@@ -86,6 +90,11 @@ jobs:
             tests/test_xiaoc_life_state.py \
             tests/test_xiaoc_life_runtime.py \
             tests/test_xiaoc_life_integration.py
+
+      - name: Real goal governance E01-E10 regression
+        if: ${{ always() }}
+        run: |
+          python -m pytest -q --tb=short tests/test_xiaoc_goal_governance.py
 
   persy-readback:
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.base_ref == 'codex/integrate-open-prs-20261121-36690872'
