@@ -26,6 +26,7 @@ from app.domain.shared_services.accounting_values import (
 from app.domain.shared_services.accounting_values import (
     to_float as _to_float,
 )
+from app.domain.value_objects.date_range import reporting_date_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +34,20 @@ logger = logging.getLogger(__name__)
 def query_financial_ledger(
     account_id: int | None = None,
     account_code: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start_date: date | str | None = None,
+    end_date: date | str | None = None,
     status: str | None = None,
     page: int = 1,
     per_page: int = 20,
+    *,
+    period: str | None = None,
 ) -> dict[str, Any]:
     """查询总账：聚合各科目借贷发生额与余额。
 
     - 有 account 过滤时返回该科目的逐笔分录；
     - 无 account 过滤时按科目 code 汇总借贷发生额。
     """
+    start_date, end_date = reporting_date_bounds(period, start_date, end_date)
     with get_db() as db:
         q = db.query(JournalEntry)
         if status:

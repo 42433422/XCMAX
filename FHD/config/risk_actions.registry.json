@@ -580,6 +580,13 @@
       "actions": {
         "query": {
           "description": "客户查询与联系方式。按单位名称或关键词查询企业客户档案、联系人和联系电话。",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "keyword": {"type": ["string", "null"], "description": "指定客户时填写其完整名称"},
+              "customer_id": {"type": ["integer", "string"], "description": "已知档案 ID 时按 ID 查找"}
+            }
+          },
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -792,7 +799,14 @@
       "availability": "shared",
       "actions": {
         "query": {
-          "description": "产品查询。按型号或关键词查询当前企业的产品档案、单价和规格。",
+          "description": "按指定型号查询产品档案，也可确认该型号是否存在。返回当前企业的产品、单价和规格。",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "model_number": {"type": ["string", "null"], "description": "按型号查找时填写原型号"},
+              "keyword": {"type": ["string", "null"], "description": "按名称搜索时填写产品名称"}
+            }
+          },
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1414,7 +1428,7 @@
       "availability": "shared",
       "actions": {
         "sales_summary": {
-          "description": "汇总销售额及产品明细。未限定截至日期时，本月、上月等使用完整自然月的首日和末日。",
+          "description": "汇总销售额及产品明细。查询本月时传 period=this_month，由宿主按完整自然月汇总。",
           "risk": "low",
           "idempotent": true,
           "read_only": true,
@@ -1481,7 +1495,7 @@
           "availability": "shared"
         },
         "ledger_query": {
-          "description": "财务账本记录、会计台账和记账凭证查询。按开始及结束日期读取完整会计期间的记录。",
+          "description": "查询财务账本记录、会计台账和记账凭证。查询本月时传 period=this_month。",
           "read_only": true,
           "risk": "low",
           "idempotent": true,

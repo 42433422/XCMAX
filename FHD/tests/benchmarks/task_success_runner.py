@@ -42,6 +42,9 @@ def _bootstrap_isolated_db() -> None:
     url = f"sqlite+pysqlite:///{tmpdir}/trial.sqlite3"
     os.environ["DATABASE_URL"] = url
     os.environ["VECTOR_DB_URL"] = url
+    # The parent pytest process clears ambient SKU settings. The isolated
+    # trial exercises the authenticated enterprise business tools explicitly.
+    os.environ["XCAGI_PRODUCT_SKU"] = "enterprise"
     os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
     os.environ["XCAGI_AGENT_RUNTIME_HOOKS"] = "0"
     os.environ["MODEL_USAGE_LEDGER_PATH"] = f"{tmpdir}/usage.json"
@@ -300,11 +303,19 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     factory = _trial_session_factory()
     sid = uuid4().hex
     with factory.begin() as db:
-        # Reuse the real bootstrap grants: never manufacture a second copy of
-        # every Permission while runtime startup may also be seeding RBAC.
+        # Reuse the bootstrap's Permission rows while preserving the original
+        # benchmark administrator's grants in this isolated database only.
         role = db.query(Role).filter(Role.name == "admin").one_or_none()
         if role is None or not role.is_system:
             raise RuntimeError("task benchmark requires seeded system admin RBAC")
+        codes = {row["code"] for row in DEFAULT_PERMISSIONS}
+        permissions = db.query(Permission).filter(Permission.code.in_(codes)).all()
+        if {permission.code for permission in permissions} != codes:
+            raise RuntimeError("task benchmark requires all seeded permission records")
+        assigned = {permission.code for permission in role.permissions}
+        role.permissions.extend(
+            permission for permission in permissions if permission.code not in assigned
+        )
         actor = User(
             username="task-benchmark-" + sid,
             password=generate_password_hash(uuid4().hex),

@@ -187,3 +187,14 @@ class DateRange:
 
     def __len__(self) -> int:
         return self.days
+
+
+def reporting_date_bounds(
+    period: str | None, start_date: date | str | None, end_date: date | str | None
+) -> tuple[date | str | None, date | str | None]:
+    if period is None:
+        return start_date, end_date
+    if period != "this_month" or start_date is not None or end_date is not None:
+        raise ValueError("period 仅支持 this_month，且不能与显式日期同时指定")
+    month = DateRange.this_month()
+    return month.start, month.end
