@@ -29,6 +29,8 @@ jobs:
       TASK_BENCHMARK_TRIALS: "3"
       TASK_BENCHMARK_MODE: gate
       TASK_BENCHMARK_HOLDOUT_MIN_PASS: "0.4"
+      XCAGI_PRODUCT_SKU: enterprise
+      TZ: Asia/Shanghai
       XCAGI_SKIP_INTENT_LLM: ""
     defaults:
       run:

@@ -6,7 +6,7 @@ export default defineConfig({
     browserName: 'chromium', baseURL: 'http://127.0.0.1:4176',
     deviceScaleFactor: 1, locale: 'zh-CN', timezoneId: 'Asia/Shanghai',
     colorScheme: 'light', reducedMotion: 'reduce', serviceWorkers: 'block',
-    launchOptions: { args: ['--no-proxy-server', '--disable-skia-runtime-opts'] },
+    launchOptions: { args: ['--no-proxy-server', '--disable-skia-runtime-opts', '--disable-gpu'] },
   },
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4176 --strictPort',

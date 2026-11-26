@@ -202,13 +202,18 @@ def _failed_business_details(rows: list[dict[str, Any]]) -> list[str]:
 
 def _dispatch_action_proposal(bridge: Any, token: str, run_id: str, output: str) -> dict[str, Any]:
     """Submit one schema-bound proposal through the existing MCP action entry."""
+    from app.application.agent_orchestrator.tool_spec import validate_schema_object
+
     if bridge is None:
         return {}
     try:
         payload = json.loads(output)
     except (TypeError, ValueError):
         return {}
-    if not isinstance(payload, dict):
+    if (
+        not isinstance(payload, dict)
+        or not validate_schema_object(_WRITE_REMEDIATION_SCHEMA, payload)[0]
+    ):
         return {}
     tool_id = str(payload.get("tool_id") or "").strip()
     action = str(payload.get("action") or "").strip()
@@ -348,6 +353,7 @@ async def run_xiaox_agent(
     texts: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
     cancelled: asyncio.CancelledError | None = None
+    turn_deadline: asyncio.Timeout | None = None
     fatal_error: Exception | None = None
 
     def mutate(fn: Callable[[AgentRun, dict[str, Any]], None]) -> Any:
@@ -689,8 +695,9 @@ async def run_xiaox_agent(
             if remaining <= 0:
                 raise XiaoxBindingError("runtime_budget_exhausted", "原任务运行时长预算已耗尽")
             actual_config = replace(actual_config, turn_timeout_seconds=remaining)
+            turn_deadline = asyncio.timeout(remaining)
             async with (
-                asyncio.timeout(remaining),
+                turn_deadline,
                 (transport_factory or XiaoxTransport)(actual_config) as active,
             ):
                 transport = active
@@ -963,7 +970,7 @@ async def run_xiaox_agent(
 
                 except asyncio.CancelledError as exc:
                     cancelled = exc
-                    await stop("cancelled")
+                    await stop("interrupted" if turn_deadline.expired() else "cancelled")
                     raise
                 except BOUNDARY_ERRORS as exc:
                     if not isinstance(exc, (*RECOVERABLE_ERRORS, XiaoxTransportError)):
@@ -981,8 +988,16 @@ async def run_xiaox_agent(
         # do not translate it into a successful or retriable business result.
         if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, XiaoxTransportError)):
             fatal_error = exc
+        if isinstance(exc, TimeoutError) and turn_deadline is not None and turn_deadline.expired():
+            # asyncio.timeout owns this cancellation and converted it on exit.
+            # Only genuine caller cancellation propagates from finalize().
+            cancelled = None
         result.update(
-            error_code=getattr(exc, "code", "xiaox_runtime_failed"),
+            error_code=getattr(
+                exc,
+                "code",
+                "xiaox_timeout" if isinstance(exc, TimeoutError) else "xiaox_runtime_failed",
+            ),
             error="Xiaox 运行未完成，原任务和执行回执已保留",
         )
         runtime_status = "interrupted" if isinstance(exc, TimeoutError) else "failed"

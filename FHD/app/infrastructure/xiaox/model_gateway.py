@@ -181,6 +181,30 @@ def _prepare_body(body: Any, route: ModelRoute) -> dict[str, Any]:
         raise HTTPException(400, "Unsupported Responses fields or provider routing controls")
     if body.get("background") or body.get("conversation") or body.get("previous_response_id"):
         raise HTTPException(400, "Remote conversation storage is not enabled")
+    text = body.get("text")
+    output_format = text.get("format") if isinstance(text, dict) else None
+    if (
+        route.upstream_vendor.strip().casefold() == "xiaomi"
+        and route.model.startswith("mimo-")
+        and isinstance(output_format, dict)
+        and output_format.get("type") == "json_schema"
+    ):
+        schema = output_format.get("schema")
+        instructions = body.get("instructions") or ""
+        if (
+            not isinstance(schema, dict)
+            or schema.get("type") != "object"
+            or not isinstance(instructions, str)
+        ):
+            raise HTTPException(400, "MiMo structured output requires an object schema")
+        # MiMo Responses supports JSON objects. Preserve the requested schema in
+        # its instructions; the host still validates proposals before dispatch.
+        body["text"] = {**text, "format": {"type": "json_object"}}
+        body["instructions"] = (
+            instructions
+            + "\n\nReturn only a JSON object conforming to this JSON Schema:\n"
+            + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+        )
     tools = _controlled_tools(body.get("tools", []))
     maximum = body.get("max_output_tokens", route.max_output_tokens)
     if type(maximum) is not int or not 0 < maximum <= route.max_output_tokens:

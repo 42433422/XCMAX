@@ -39,7 +39,7 @@ def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(permissions=["customer.edit", "customer.view"])
+    actor = trusted_actor(permissions=["customer.edit", "customer.view", "business_db.read"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="执行企业任务", status="running")
     run.metadata["runtime_context"] = actor.context
@@ -266,7 +266,16 @@ def test_acknowledged_child_completion_uses_original_independent_readback(
     assert len(dispatched) == 1 and len(completed.tool_calls) == 1
 
 
-def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_setup, monkeypatch):
+@pytest.mark.parametrize(
+    ("tool_id", "action", "params"),
+    [
+        ("customers", "query", {"keyword": "fixture"}),
+        ("business_db", "read", {"entity": "customers", "keyword": "fixture"}),
+    ],
+)
+def test_read_executes_controlled_chain_and_replays_persisted_receipt(
+    bridge_setup, monkeypatch, tool_id, action, params
+):
     setup = bridge_setup
     calls = []
 
@@ -283,9 +292,9 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     )
     args = {
         "call_id": "read",
-        "tool_id": "customers",
-        "action": "query",
-        "params": {"keyword": "fixture"},
+        "tool_id": tool_id,
+        "action": action,
+        "params": params,
     }
     receipt = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     child = setup.store.repository.get(receipt["run_id"])
@@ -301,7 +310,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     replay = _invoke(reopened, setup.grant.mcp_token, "execute_action", args)
     assert replay["run_id"] == receipt["run_id"]
     assert replay["verified"] is True
-    assert calls == [("customers", "query")]
+    assert calls == [(tool_id, action)]
 
 
 def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):

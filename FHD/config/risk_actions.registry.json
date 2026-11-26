@@ -579,6 +579,7 @@
       "availability": "shared",
       "actions": {
         "query": {
+          "description": "客户查询与联系方式。按单位名称或关键词查询企业客户档案、联系人和联系电话。",
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -791,6 +792,7 @@
       "availability": "shared",
       "actions": {
         "query": {
+          "description": "产品查询。按型号或关键词查询当前企业的产品档案、单价和规格。",
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1412,6 +1414,7 @@
       "availability": "shared",
       "actions": {
         "sales_summary": {
+          "description": "汇总销售额及产品明细。未限定截至日期时，本月、上月等使用完整自然月的首日和末日。",
           "risk": "low",
           "idempotent": true,
           "read_only": true,
@@ -1452,6 +1455,7 @@
       "availability": "shared",
       "actions": {
         "create_transaction": {
+          "description": "登记收入、支出等财务交易。只传用户指定的交易日期。缺省由宿主取当前日期。",
           "risk": "high",
           "idempotent": false,
           "required_params": [
@@ -1477,6 +1481,7 @@
           "availability": "shared"
         },
         "ledger_query": {
+          "description": "财务账本记录、会计台账和记账凭证查询。按开始及结束日期读取完整会计期间的记录。",
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1750,6 +1755,7 @@
       "availability": "shared",
       "actions": {
         "generate": {
+          "description": "生成发货单。按编号发货时明细用 model_number，已给每桶规格用 tin_spec，桶数用 quantity_tins。未给品名时传空 name，由宿主按产品规格和客户价格回读。",
           "risk": "high",
           "idempotent": false,
           "required_params": [

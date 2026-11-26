@@ -25,6 +25,39 @@ class ShutdownTransport(Transport):
         self.store.log.append("interrupt")
 
 
+def test_owned_deadline_interrupts_verification_without_cancelling_worker(
+    setup_runtime, monkeypatch
+):
+    import time
+
+    from app.application.tool_execution_deadline import invocation_deadline
+
+    invoke, _ = setup_runtime
+    store = Store()
+    release_verifier = threading.Event()
+
+    def verify_goal(*_args, **_kwargs):
+        release_verifier.wait(5)
+        return {}
+
+    monkeypatch.setattr(
+        "app.application.agent_runtime.goal_verifier.verify_runtime_goal", verify_goal
+    )
+
+    async def scenario():
+        try:
+            with invocation_deadline(time.monotonic() + 0.5):
+                return await invoke(store, ShutdownTransport(store))
+        finally:
+            release_verifier.set()
+
+    result = asyncio.run(scenario())
+    assert not result["ok"]
+    assert result["error_code"] == "xiaox_timeout"
+    assert store.run.metadata["xiaox_runtime"]["runtime_status"] == "interrupted"
+    assert store.log.index("interrupt") < store.log.index("exit")
+
+
 @pytest.mark.parametrize(
     "failure_stage,uncertain", [("callback", False), ("callback", True), ("verification", False)]
 )

@@ -19,8 +19,10 @@ import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from modstore_server.models import (
     PersonalPlanAllowanceClaim,
     Transaction,
@@ -550,6 +552,9 @@ def test_existing_database_upgrades_idempotently_without_trusting_existing_email
     if migration_path == "deployment":
         monkeypatch.setenv("MODSTORE_DATABASE_URL", str(engine.url))
         config = Path(__file__).resolve().parents[1] / "alembic.ini"
+        migration_config = Config(str(config))
+        migration_config.set_main_option("script_location", str(config.parent / "alembic"))
+        expected_heads = sorted(ScriptDirectory.from_config(migration_config).get_heads())
 
         def deployment_command(*arguments):
             result = subprocess.run(
@@ -571,7 +576,10 @@ def test_existing_database_upgrades_idempotently_without_trusting_existing_email
         )
         for _ in range(2):
             output = deployment_command(str(config.parent / "scripts/upgrade_database.py"))
-            assert "schema migration verified heads=20261121_xiaoc_life" in output
+            assert f"schema migration verified heads={','.join(expected_heads)}" in output
+            with engine.connect() as connection:
+                current_heads = MigrationContext.configure(connection).get_current_heads()
+                assert sorted(current_heads) == expected_heads
         init_db()
         init_db()
     else:

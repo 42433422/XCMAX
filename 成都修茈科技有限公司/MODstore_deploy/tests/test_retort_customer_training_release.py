@@ -89,7 +89,16 @@ def released_customer_training(execution_experiment, monkeypatch):
 
     monkeypatch.setattr("modstore_server.customer_ticket_github.github", github)
     run["released"] = released
-    return run
+    try:
+        yield run
+    finally:
+        # The PostgreSQL suite shares a database. A promoted fixture would
+        # otherwise be a second contender in later global scheduler checks.
+        with get_session_factory()() as db:
+            row = db.get(RetortEvolutionRun, run["id"])
+            if row is not None:
+                db.delete(row)
+                db.commit()
 
 
 def test_exact_released_and_running_treatment_reaches_original_promotion(

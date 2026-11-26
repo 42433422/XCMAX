@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
     get_tool_action_spec,
+    validate_schema_object,
     validate_tool_call,
     validate_tool_result,
 )
@@ -510,16 +511,33 @@ class AgentToolExecutor:
                 }
             )
         expected_schema = context.get("tool_schema_digest")
-        if expected_schema is not None and (
-            validation.spec is None or expected_schema != validation.spec.schema_digest
-        ):
-            return {
-                "success": False,
-                "error_code": "schema_changed",
-                "execution_status": "not_started",
-                "retryable": False,
-                "message": "原调用发现的工具契约已变化，本次未执行，请重新读取契约。",
-            }
+        if expected_schema is not None:
+            from app.application.capability_catalog import authorized_tool_specs
+
+            action_key = (validation.tool_id, validation.action)
+            authorized_spec = authorized_tool_specs(
+                context, include_aiopen=True, tool_actions={action_key}
+            ).get(action_key)
+            if authorized_spec is None or expected_schema != authorized_spec.schema_digest:
+                return _pre_dispatch_refusal(
+                    {
+                        "success": False,
+                        "error_code": "schema_changed",
+                        "execution_status": "not_started",
+                        "retryable": False,
+                        "message": "原调用发现的工具契约已变化，本次未执行，请重新读取契约。",
+                    }
+                )
+            valid, message = validate_schema_object(authorized_spec.input_schema, params)
+            if not valid:
+                return _pre_dispatch_refusal(
+                    {
+                        "success": False,
+                        "error_code": "schema_validation_failed",
+                        "execution_status": "not_started",
+                        "message": message,
+                    }
+                )
         if validation.spec is not None and validation.spec.availability == "aiopen":
             from app.application.aiopen.agent_bridge import supports_aiopen_step
 

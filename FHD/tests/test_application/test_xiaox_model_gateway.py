@@ -475,6 +475,31 @@ def test_pinned_cli_trace_metadata_is_not_forwarded_as_a_provider_option(gateway
     assert b"host-only" not in calls[0].content
 
 
+def test_mimo_structured_output_uses_supported_object_format(gateway):
+    client, store, calls, response, app = gateway
+    route = replace(
+        app.state.xiaox_model_route,
+        model="mimo-v2.6-pro",
+        response_model="mimo-v2.6-pro",
+        upstream_vendor="xiaomi",
+    )
+    app.state.xiaox_model_route = route
+    store.binding.metadata["runtime_config"] = route.runtime_identity()
+    response["model"] = route.response_model
+    schema = {"type": "object", "required": ["action"], "additionalProperties": False}
+    result = post(
+        client,
+        model=route.model,
+        instructions="Original host instructions",
+        text={"format": {"type": "json_schema", "name": "proposal", "schema": schema}},
+    )
+    assert result.status_code == 200
+    wire = json.loads(calls[0].content)
+    assert wire["text"]["format"] == {"type": "json_object"}
+    assert wire["instructions"].startswith("Original host instructions\n\n")
+    assert json.loads(wire["instructions"].splitlines()[-1]) == schema
+
+
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("proof", ["zero", "missing", "nonzero", "duplicate"])
 def test_litellm_controls_and_native_single_attempt_proof(gateway, stream, proof):
