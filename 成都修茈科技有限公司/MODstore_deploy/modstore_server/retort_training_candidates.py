@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import quote
@@ -35,6 +37,203 @@ def _candidate(body):
         (root / "training-bundle.json").write_text(body["bundle_json"], encoding="utf-8")
         (root / "result.json").write_text(body["result_json"], encoding="utf-8")
         return candidate_for_experiment(root / "training-bundle.json", root / "result.json")
+
+
+def _preverify_business_sources(body, bundle, spec):
+    """Authorize original SQL fixtures before the seal can execute native packages."""
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+    from modstore_server.workflow_training_dataset import (
+        BUSINESS_SCOPE,
+        is_business_case,
+    )
+
+    life = spec.get("lifecycle") or {}
+    tests = json.loads(body["files"]["tests"])
+    if not isinstance(tests, list) or any(
+        not isinstance(test, dict) or not isinstance(test.get("vars"), dict) for test in tests
+    ):
+        raise ValueError("training_bundle_tests_invalid")
+    variables = [test["vars"] for test in tests]
+    for item in variables:
+        context = item.get("generation_context") or {}
+        if not isinstance(context, dict) or not isinstance(
+            context.get("execution_feedback") or {}, dict
+        ):
+            raise TypeError("training_bundle_tests_invalid")
+    business = any(is_business_case(item) for item in variables)
+    customer = life.get("measurement_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+    if not customer:
+        if business or bundle.get("measurement_scope") == BUSINESS_SCOPE:
+            raise ValueError("training_customer_experiment_required")
+        return None
+    case_ids = bundle.get("case_ids") or []
+    if (
+        life.get("surface") != "workflow_nl_prompt"
+        or bundle.get("surface") != "workflow_nl_prompt"
+        or body.get("surface") != "workflow_nl_prompt"
+        or body.get("resource_id") != "workflow_nl_generator"
+        or life.get("resource_id") != "workflow_nl_generator"
+        or bundle.get("measurement_scope") != BUSINESS_SCOPE
+        or not business
+        or not case_ids
+        or len(case_ids) != len(set(case_ids))
+        or len(variables) != len(case_ids)
+        or any(
+            len(bundle.get(key, [])) != len(case_ids)
+            for key in ("case_sha256", "case_context_sha256")
+        )
+    ):
+        raise ValueError("training_customer_evidence_required")
+
+    from modstore_server.workflow_execution_feedback import execution_failure_records
+    from modstore_server.workflow_nl_training import _digest
+    from modstore_server.workflow_training_dataset import partition_cases
+    from modstore_server.workflow_training_replay import validate_replay_manifest
+
+    # mine() also reads a maintenance JSONL ledger. Only the original SQL
+    # producer may authorize customer-source bindings, even if a ledger entry
+    # claims the same run id and supplies a self-consistent collection of hashes.
+    records = deepcopy(
+        execution_failure_records(
+            days=14,
+            cohort=life["cohort_user_ids"],
+            baseline=bundle["prompt_sha256"]["control"],
+        )
+    )
+    requested = body["failure_run_ids"]
+    if (
+        not requested
+        or len(requested) != len(set(requested))
+        or not set(requested).issubset({record["run_id"] for record in records})
+    ):
+        raise ValueError("training_customer_source_unbound")
+    selected, sources, selected_runs = [], {}, set()
+    for case_id, task_hash, context_hash, supplied in zip(
+        case_ids, bundle["case_sha256"], bundle["case_context_sha256"], variables
+    ):
+        matching = [
+            record
+            for record in records
+            if record["run_id"] in requested
+            and hashlib.sha256(record["task_excerpt"].encode()).hexdigest() == task_hash
+            and _digest(record["generation_context"]) == context_hash
+        ]
+        if (
+            len(matching) != 1
+            or supplied.get("case_id") != case_id
+            or supplied.get("task") != matching[0]["task_excerpt"]
+            or supplied.get("generation_context") != matching[0]["generation_context"]
+        ):
+            raise ValueError("training_customer_source_unbound")
+        record = matching[0]
+        context = record["generation_context"]
+        feedback = context.get("execution_feedback") or {}
+        outcome = feedback.get("customer_outcome") or {}
+        manifest = context.get("customer_business_replay") or {}
+        replay = validate_replay_manifest(manifest)
+        required = outcome.get("required_artifacts") or []
+        expected_paths = set(replay["expected_output_paths"])
+        if (
+            record.get("user_id") not in life["cohort_user_ids"]
+            or record["run_id"] != f"workflow-customer:{feedback.get('execution_id')}"
+            or feedback.get("measurement_scope") != WORKFLOW_CUSTOMER_MEASUREMENT
+            or feedback.get("failure_kind") != "business_outcome_failed"
+            or outcome.get("classification") != "business_failure"
+            or outcome.get("reason") != "customer_goal_not_met"
+            or outcome.get("success") is not False
+            or outcome.get("customer_policy") != life.get("customer_outcomes")
+            or any(
+                manifest.get(key) != value
+                for key, value in {
+                    "contract_sha256": outcome.get("contract_sha256"),
+                    "source_evidence_sha256": outcome.get("evidence_sha256"),
+                    "user_id": record.get("user_id"),
+                    "workflow_id": record.get("workflow_id"),
+                    "execution_id": feedback.get("execution_id"),
+                    "input_sha256": _digest(feedback.get("input")),
+                    "graph_fingerprint": feedback.get("graph_fingerprint"),
+                }.items()
+            )
+            or not required
+            or len(required) != len(expected_paths)
+            or any(not isinstance(artifact, dict) for artifact in required)
+            or {artifact.get("output_path") for artifact in required} != expected_paths
+        ):
+            raise ValueError("training_customer_source_unbound")
+        sources[case_id] = {
+            **{
+                key: replay[key]
+                for key in (
+                    "manifest_sha256",
+                    "source_group_sha256",
+                    "expected_reference_sha256",
+                    "expected_output_paths",
+                )
+            },
+            "contract_sha256": outcome["contract_sha256"],
+            "source_evidence_sha256": outcome["evidence_sha256"],
+        }
+        selected.append({"generation_context": context})
+        selected_runs.add(record["run_id"])
+    if selected_runs != set(requested):
+        raise ValueError("training_customer_source_unbound")
+    partitioned = partition_cases(selected)
+    if (
+        bundle.get("case_partitions") != [case["evaluation_partition"] for case in partitioned]
+        or bundle.get("case_source_groups") != [case["source_group_sha256"] for case in partitioned]
+        or any(
+            supplied.get(key) != original[key]
+            for supplied, original in zip(variables, partitioned)
+            for key in ("evaluation_partition", "source_group_sha256")
+        )
+    ):
+        raise ValueError("training_customer_holdout_unbound")
+    return sources
+
+
+def _customer_candidate_sources(bundle, spec, sources):
+    """Match independent replay receipts against the pre-execution SQL snapshot."""
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+    from modstore_server.workflow_training_dataset import BUSINESS_SCOPE
+
+    life = spec.get("lifecycle") or {}
+    offline = life.get("offline_evidence") or {}
+    if life.get("measurement_scope") != WORKFLOW_CUSTOMER_MEASUREMENT:
+        if (
+            offline.get("feedback_scope") == WORKFLOW_CUSTOMER_MEASUREMENT
+            or offline.get("measurement_scope") == BUSINESS_SCOPE
+        ):
+            raise ValueError("training_customer_experiment_required")
+        return
+    evidence = offline.get("business_evidence")
+    if (
+        not sources
+        or offline.get("measurement_scope") != BUSINESS_SCOPE
+        or offline.get("feedback_scope") != WORKFLOW_CUSTOMER_MEASUREMENT
+        or offline.get("runtime_verified") is not True
+        or offline.get("holdout_verified") is not True
+        or not isinstance(evidence, dict)
+        or set(evidence) != set(sources)
+        or set(evidence) != set(bundle["case_ids"])
+    ):
+        raise ValueError("training_customer_evidence_required")
+    for case_id, source in sources.items():
+        measured = evidence[case_id]
+        if (
+            not isinstance(measured, dict)
+            or any(
+                measured.get(key) != value
+                for key, value in source.items()
+                if key != "expected_output_paths"
+            )
+            or not isinstance(measured.get("output_sha256"), dict)
+            or set(measured["output_sha256"]) != set(source["expected_output_paths"])
+            or any(
+                not re.fullmatch(r"[0-9a-f]{64}", str(value))
+                for value in measured["output_sha256"].values()
+            )
+        ):
+            raise ValueError("training_customer_source_unbound")
 
 
 def create_training_candidate(body):
@@ -78,7 +277,6 @@ def create_training_candidate(body):
     owner_id = policy.get("owner_id")
     if type(owner_id) is not int or owner_id <= 0:
         raise ValueError("training_owner_unbound")
-    proposal = _candidate(body)
     request_id = str(uuid5(NAMESPACE_URL, f"xcagi:training:{body['request_key']}"))
     source_digest = hashlib.sha256(json_dumps(body).encode()).hexdigest()
     with service.run_lock(request_id):
@@ -126,7 +324,7 @@ def create_training_candidate(body):
                 )
                 for run_id in body["failure_run_ids"]
                 if (sample := observed[run_id]).get("prompt_sha256")
-                == hashlib.sha256(proposal["control_prompt"].encode()).hexdigest()
+                == bundle["prompt_sha256"]["control"]
             }
             contexts = bundle.get("case_context_sha256", [])
             if (
@@ -158,14 +356,18 @@ def create_training_candidate(body):
         )
         if (
             content.get("encoding") != "base64"
-            or prompt_from_source(
-                base64.b64decode(content["content"], validate=False).decode("utf-8"),
-                surface=surface,
-            )
-            != proposal["control_prompt"]
+            or hashlib.sha256(
+                prompt_from_source(
+                    base64.b64decode(content["content"], validate=False).decode("utf-8"),
+                    surface=surface,
+                ).encode()
+            ).hexdigest()
+            != bundle["prompt_sha256"]["control"]
         ):
             raise ValueError("training_baseline_prompt_changed")
         growthbook = dict(policy.get("growthbook") or {})
+        sources = _preverify_business_sources(body, bundle, growthbook)
+        proposal = _candidate(body)
         if surface == "rag_context_prompt" and (
             proposal["offline_evidence"].get("measurement_scope") != RAG_MEASUREMENT
             or (growthbook.get("lifecycle") or {}).get("measurement_scope") != RAG_MEASUREMENT
@@ -181,6 +383,7 @@ def create_training_candidate(body):
         if surface_identity(growthbook["lifecycle"]) != (surface, resource):
             raise ValueError("training_experiment_surface_unbound")
         growthbook = freeze_experiment_policy(growthbook)
+        _customer_candidate_sources(bundle, growthbook, sources)
         request = {key: template[key] for key in ("criterion_ids", "checks", "container_image")}
         request.update(
             request_id=request_id,
@@ -220,6 +423,54 @@ def create_training_candidate(body):
         )
 
 
+def verify_customer_training_release(spec, effects, delivery):
+    """A customer training trial consumes the approved prompt from its real release."""
+    from modstore_server.retort_experiment_surfaces import (
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+        WORKFLOW_NL_PROMPT_PATH,
+        WORKFLOW_NL_RESOURCE,
+    )
+
+    source = effects.get("training_candidate")
+    life = spec.get("lifecycle") or {}
+    if not source or life.get("measurement_scope") != WORKFLOW_CUSTOMER_MEASUREMENT:
+        return
+    from fastapi import HTTPException
+
+    from modstore_server import workflow_nl_graph
+    from modstore_server.capability_trainer import prompt_from_source
+    from modstore_server.customer_ticket_github import configuration, github
+
+    if (
+        life.get("surface") != "workflow_nl_prompt"
+        or source.get("surface") != "workflow_nl_prompt"
+        or source.get("resource_id") != WORKFLOW_NL_RESOURCE
+        or source.get("prompt_path") != WORKFLOW_NL_PROMPT_PATH
+        or source.get("growthbook") != spec
+        or not re.fullmatch(r"[0-9a-f]{40}", str(delivery.get("release_sha", "")))
+    ):
+        raise ValueError("training_customer_release_unbound")
+    try:
+        repository = configuration()["repository"]
+        content = github(
+            "GET",
+            f"/repos/{repository}/contents/{quote(WORKFLOW_NL_PROMPT_PATH, safe='/')}"
+            f"?ref={delivery['release_sha']}",
+        )
+        if content.get("encoding") != "base64":
+            raise ValueError("training_release_source_unavailable")
+        released = prompt_from_source(
+            base64.b64decode("".join(content["content"].split()), validate=True).decode("utf-8"),
+            surface="workflow_nl_prompt",
+        )
+    except (HTTPException, KeyError, TypeError, ValueError, SyntaxError) as exc:
+        raise ValueError("training_customer_release_prompt_unavailable") from exc
+    if released != life["treatment_prompt"]:
+        raise ValueError("training_customer_release_prompt_changed")
+    if workflow_nl_graph.SYSTEM_PROMPT != life["treatment_prompt"]:
+        raise ValueError("training_customer_runtime_prompt_changed")
+
+
 def training_plan(request_id):
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, request_id)
@@ -254,10 +505,13 @@ def read_training_impact(request_id, state):
         if experiment.get("decision") == "promote":
             status, reason = "customer_impact_verified", ""
         else:
-            status, reason = "customer_impact_rejected", (
-                "experiment_inconclusive"
-                if experiment.get("inconclusive")
-                else "experiment_regression"
+            status, reason = (
+                "customer_impact_rejected",
+                (
+                    "experiment_inconclusive"
+                    if experiment.get("inconclusive")
+                    else "experiment_regression"
+                ),
             )
     return {
         "status": status,

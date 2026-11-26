@@ -14,18 +14,13 @@ from fastapi import HTTPException as HTTPException
 from fastapi import Query as Query
 from fastapi.responses import JSONResponse, Response
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.fastapi_routes.xcagi_compat_product_actions import (
-    execute_product_action,
-    price_list_word_response,
-)
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
+from app.fastapi_routes.xcagi_compat_product_actions import price_list_word_response
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.compat_db_base import (
     _business_mod_json_block,
     _product_parse_id,
-    _product_parse_is_active,
-    _product_parse_quantity,
     _products_write_raise,
 )
 from app.infrastructure.persistence.compat_db.product_queries import (
@@ -37,30 +32,17 @@ from app.infrastructure.persistence.compat_db.queries import (
     _products_units_for_select,
     _shipment_units_for_select,
 )
-from app.infrastructure.persistence.compat_db.writes import (
-    products_pg_batch_delete_rows,
-    products_pg_delete_row,
-    products_pg_insert_row,
-    products_pg_update_row,
-)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .agent_execution import ProductAgentExecution
-from .agent_execution import _agent_node_output as _agent_node_output
-from .agent_execution import _products_compat_agent_user_id as _products_compat_agent_user_id
 from .export_flow import ProductExports
 from .export_routes import ProductExportRoutes
-from .mutation_flow import ProductMutations, mutation_preflight, response_status, service_enabled
-from .mutation_flow import _http_exception_result as _http_exception_result
+from .mutation_flow import ProductMutations, mutation_preflight, service_enabled
 from .mutation_flow import _normalize_products_create_payload as _normalize_products_create_payload
 from .mutation_routes import ProductMutationRoutes
 from .port_contracts import (
-    create_product_agent,
     load_business_visibility,
-    load_price_preview,
     load_product_dispatcher,
     load_product_lookup,
-    load_product_registry,
     load_product_service_facade,
 )
 from .query_flow import ProductQueries
@@ -91,22 +73,21 @@ def _mutations() -> ProductMutations:
         normalize_create=_normalize_products_create_payload,
         preflight=_products_compat_preflight,
         run_agent=_run_products_compat_agent,
-        status_code=_products_compat_status_code,
         response=lambda payload, status: JSONResponse(payload, status_code=status),
     )
 
 
 def _exports() -> ProductExports:
+    from app.infrastructure.documents.price_list_export import (
+        build_price_list_template_preview_json,
+    )
+
     return ProductExports(
         verify_read=verify_db_read_token_header,
         word_response=_products_price_list_word_response,
         visibility_factory=load_business_visibility,
-        preview_factory=load_price_preview,
+        preview_factory=lambda: build_price_list_template_preview_json,
     )
-
-
-def _products_compat_status_code(result: dict[str, Any]) -> int:
-    return response_status(result, RECOVERABLE_ERRORS)
 
 
 def _products_compat_via_service_enabled() -> bool:
@@ -127,35 +108,14 @@ def _products_compat_preflight(
     )
 
 
-def _execute_products_compat_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
-    data = _normalize_products_create_payload(params) if action == "create" else dict(params or {})
-    return execute_product_action(
-        action,
-        data,
-        parse_id=_product_parse_id,
-        parse_quantity=_product_parse_quantity,
-        parse_is_active=_product_parse_is_active,
-        insert_row=products_pg_insert_row,
-        update_row=products_pg_update_row,
-        delete_row=products_pg_delete_row,
-        batch_delete_rows=products_pg_batch_delete_rows,
-        http_exception_result=_http_exception_result,
-        recoverable_errors=RECOVERABLE_ERRORS,
-        logger=logger,
-    )
-
-
 def _run_products_compat_agent(
     *, request: Request, action: str, params: dict[str, Any], route_path: str
-) -> dict[str, Any]:
-    return ProductAgentExecution(
-        registry=load_product_registry,
-        create_runtime=create_product_agent,
-        identify_user=_products_compat_agent_user_id,
-        node_output=_agent_node_output,
-        normalize_risk=normalize_workflow_risk,
-        route_module=__name__,
-    ).run(request=request, action=action, params=params, route_path=route_path)
+) -> tuple[dict[str, Any], int]:
+    return run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "products", "action": action, "params": params},
+        route_path=route_path,
+    )
 
 
 def _products_price_list_word_response(

@@ -4,6 +4,7 @@ import copy
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
@@ -351,3 +352,58 @@ def test_tool_feedback_cannot_author_a_business_evidence_binding():
     assert "enterprise_cognition" not in merge_turn_context(
         {}, {"enterprise_cognition": {"baseline": "forged"}}
     )
+
+
+def test_goal_decision_receives_scoped_conditional_world_scenario(execution_env):
+    service, _goals, _projections, _repo, state, _factory = execution_env
+    parent = submit(service, request_id="world-decision-consumer")
+    binding = parent.metadata["runtime_context"]["enterprise_cognition"]
+    scenario = binding["world_scenario"]
+    assert scenario["knowledge_kind"] == "prediction"
+    assert scenario["method"] == "conditional_arithmetic"
+    assert scenario["baseline_source_version"] == binding["baseline"]["source_version"]
+    assert Decimal(scenario["value"]) == 0
+    assert scenario["probability"] is None
+    assert scenario["causal_effect_verified"] is False
+    assert scenario["business_data_written"] is False
+    assert parent.status == "queued" and not parent.tool_calls
+    assert state.transports == [] and state.model_requests == []
+
+
+def test_unreachable_goal_stays_unknown_in_world_scenario(execution_env):
+    service, goals, _projections, _repo, _state, _factory = execution_env
+    goals.create(
+        definition(goal_id="order-42-over-target", target="20"),
+        tenant_id=7,
+        actor_id="19",
+    )
+    parent = service.plan(
+        "order-42-over-target",
+        "world-unknown-target",
+        MESSAGE,
+        tenant_id=7,
+        actor_id="19",
+        runtime_context=service.test_context,
+    )
+    scenario = parent.metadata["runtime_context"]["enterprise_cognition"]["world_scenario"]
+    assert scenario["knowledge_kind"] == "unknown"
+    assert scenario["reason_code"] == "scenario_quantity_out_of_range"
+    assert not parent.tool_calls
+
+
+def test_evidence_bound_world_scenario_reaches_codex_model_input(execution_env):
+    from app.application.agent_runtime.codex_runtime import _input_text
+
+    service, _goals, _projections, _repo, _state, _factory = execution_env
+    run = submit(service, request_id="world-model-input-evidence")
+    binding = run.metadata["runtime_context"]["enterprise_cognition"]
+    scenario = binding["world_scenario"]
+    payload = run.metadata["_codex_input_data"]
+    assert payload["world_scenario"] == scenario
+    assert payload["baseline"]["source_version"] == scenario["baseline_source_version"]
+    model_input = _input_text(run.message, [], payload)
+    assert '"world_scenario"' in model_input
+    assert scenario["baseline_source_version"] in model_input
+    assert '"method": "conditional_arithmetic"' in model_input
+    assert '"business_data_written": false' in model_input
+    assert not run.tool_calls

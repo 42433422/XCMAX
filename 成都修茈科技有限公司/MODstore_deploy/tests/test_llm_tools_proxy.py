@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import httpx
+
 from modstore_server.llm_api import LlmChatDTO
 
 
@@ -77,46 +79,8 @@ def test_chat_message_dto_preserves_tool_role_and_tool_calls():
     assert tool_dumped["name"] == "get_weather"
 
 
-class _FakeResp:
-    def __init__(self, lines):
-        self._lines = list(lines)
-        self.status_code = 200
-
-    async def aread(self):
-        return b""
-
-    async def aiter_lines(self):
-        for line in self._lines:
-            yield line
-
-
-class _FakeStreamCtx:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self._resp
-
-    async def __aexit__(self, *args):
-        return False
-
-
-class _FakeClient:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        return False
-
-    def stream(self, *args, **kwargs):
-        return _FakeStreamCtx(self._resp)
-
-
 def test_stream_openai_compatible_accumulates_and_emits_tool_calls():
-    from modstore_server import llm_chat_proxy
+    from modstore_server import llm_chat_proxy, platform_model_transport
 
     lines = [
         'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}',
@@ -127,6 +91,27 @@ def test_stream_openai_compatible_accumulates_and_emits_tool_calls():
         'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
         "data: [DONE]",
     ]
+    chunks = [(line + "\n\n").encode("utf-8") for line in lines]
+
+    class Body(httpx.AsyncByteStream):
+        close_calls = 0
+
+        async def __aiter__(self):
+            for chunk in chunks:
+                yield chunk
+
+        async def aclose(self):
+            self.close_calls += 1
+
+    body = Body()
+    response = httpx.Response(200, stream=body, headers={"content-type": "text/event-stream"})
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return response
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
 
     async def _collect():
         events = []
@@ -150,11 +135,15 @@ def test_stream_openai_compatible_accumulates_and_emits_tool_calls():
             events.append(ev)
         return events
 
-    with patch.object(
-        llm_chat_proxy.httpx, "AsyncClient", return_value=_FakeClient(_FakeResp(lines))
+    with (
+        patch.object(llm_chat_proxy.httpx, "AsyncClient", return_value=client),
+        patch.object(platform_model_transport, "MAX_MODEL_STREAM_BYTES", sum(map(len, chunks))),
     ):
         events = asyncio.run(_collect())
 
+    assert len(requests) == 1
+    assert requests[0].headers["accept-encoding"] == "identity"
+    assert body.close_calls == 1 and response.is_closed and client.is_closed
     toolcall = [e for e in events if e.get("type") == "toolcall"]
     assert toolcall, "应产出 toolcall 事件"
     choices = toolcall[0]["choices"]

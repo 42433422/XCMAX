@@ -375,6 +375,7 @@ def test_signed_sunbird_install_fresh_process_probe_and_lost_receipt(delivery):
     lost = host(delivery, "retry")
     assert lost["result"]["pending"] == 1
     assert lost["rows"][0]["runtime_reported"] is False
+    assert lost["rows"][0]["last_error"] == "DeliveryRemoteError"
     completed = ticket_state(delivery)
     assert completed["status"] == "resolved" and completed["closed_at"]
     recovered = host(delivery, "retry")
@@ -384,6 +385,7 @@ def test_signed_sunbird_install_fresh_process_probe_and_lost_receipt(delivery):
         "pending": 0,
     }
     assert recovered["rows"][0]["runtime_response"]["receipt"]["replayed"] is True
+    assert "last_error" not in recovered["rows"][0]
     assert recovered["rows"][0]["runtime_payload"] == runtime == lost["rows"][0]["runtime_payload"]
     final = ticket_state(delivery)
     assert final["id"] == 1 and len(final["evidence"]["receipt_events"]) == 2

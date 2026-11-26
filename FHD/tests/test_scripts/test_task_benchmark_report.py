@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -170,3 +173,159 @@ def test_tampered_outcome_cannot_publish_with_old_summary(verified_artifacts):
     report_path.write_text(json.dumps(report))
     with pytest.raises(ValueError, match="summary differs"):
         require_reports(verified_artifacts, "a" * 40)
+
+
+@pytest.fixture
+def producer(tmp_path, monkeypatch):
+    path = Path(__file__).parents[1] / "benchmarks" / "test_task_success.py"
+    spec = importlib.util.spec_from_file_location("task_benchmark_producer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    dataset = tmp_path / "task_golden_set.json"
+    dataset.write_text(json.dumps({"tasks": TASKS}))
+    monkeypatch.setenv("XCAGI_BENCHMARK_REPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("TASK_BENCHMARK_TRIALS", "3")
+    monkeypatch.setenv("TASK_BENCHMARK_MODE", "gate")
+    monkeypatch.setenv("TASK_BENCHMARK_MIN_PASS", "1")
+    monkeypatch.setattr(module, "REPORT_DIR", tmp_path, raising=False)
+    monkeypatch.setattr(
+        module,
+        "_benchmark_set",
+        lambda: {
+            "name": "golden",
+            "path": dataset,
+            "report": "task_benchmark_report.json",
+            "floor_env": "TASK_BENCHMARK_MIN_PASS",
+            "default_floor": 0.4,
+        },
+    )
+    return module, dataset, tmp_path
+
+
+def _producer_trials(producer, monkeypatch, make_rows):
+    module, _, output = producer
+
+    def run_trial(_dataset, trial):
+        rows = make_rows(trial)
+        path = output / f"task_benchmark_trial_{trial}.jsonl"
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        return rows
+
+    monkeypatch.setattr(module, "_run_trial", run_trial)
+
+
+def test_producer_rejects_duplicate_rows_hiding_missing_task(producer, monkeypatch):
+    _producer_trials(producer, monkeypatch, lambda trial: [outcomes(trial)[0]] * 2)
+    with pytest.raises(ValueError, match="missing, duplicate or unknown"):
+        producer[0].test_task_set_pass_k()
+
+
+@pytest.mark.parametrize("count", [-1, True, 1.5, "1"])
+def test_producer_rejects_invalid_model_response_counts(producer, monkeypatch, count):
+    _producer_trials(
+        producer,
+        monkeypatch,
+        lambda trial: [dict(row, model_responses=count) for row in outcomes(trial)],
+    )
+    with pytest.raises(ValueError, match="model_responses"):
+        producer[0].test_task_set_pass_k()
+
+
+def test_trial_runner_cannot_reuse_stale_output(producer, monkeypatch):
+    module, dataset, output = producer
+    stale = output / "task_benchmark_trial_0.jsonl"
+    stale.write_text(json.dumps(outcomes()[0]) + "\n")
+
+    def no_output(*args, **kwargs):
+        assert not stale.exists(), "a prior trial artifact survived into the new execution"
+        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", no_output)
+    with pytest.raises(FileNotFoundError):
+        module._run_trial(dataset, 0)
+
+
+@pytest.mark.parametrize("responses, mode", [(0, "rule_only"), (2, "model_workflow")])
+def test_producer_binds_report_to_dataset_and_raw_trials(producer, monkeypatch, responses, mode):
+    module, dataset, output = producer
+    _producer_trials(
+        producer,
+        monkeypatch,
+        lambda trial: [dict(row, model_responses=responses) for row in outcomes(trial)],
+    )
+    module.test_task_set_pass_k()
+    report = json.loads((output / "task_benchmark_report.json").read_text())
+    assert len(report["source_sha"]) == 40 and report["captured_at"]
+    assert type(report["tracked_source_dirty"]) is bool
+    assert report["dataset_sha256"] == hashlib.sha256(dataset.read_bytes()).hexdigest()
+    assert report["execution_mode"] == mode
+    assert report["model_responses"] == 6 * responses
+    assert report["gate_passed"] is True and report["trials"] == 3
+    assert report["trial_artifacts"] == [
+        benchmark_evidence.trial_artifact(output / f"task_benchmark_trial_{i}.jsonl")
+        for i in range(3)
+    ]
+
+
+def test_producer_never_masks_safety_failure_with_aggregate_threshold(producer, monkeypatch):
+    monkeypatch.setenv("TASK_BENCHMARK_MIN_PASS", "0.4")
+    _producer_trials(producer, monkeypatch, lambda trial: outcomes(trial, reject=False))
+    with pytest.raises(AssertionError, match="安全失败=1"):
+        producer[0].test_task_set_pass_k()
+    report = json.loads((producer[2] / "task_benchmark_report.json").read_text())
+    assert report["pass_k"] == 0.5 and report["gate_passed"] is False
+
+
+def test_holdout_defaults_to_observation_without_claiming_acceptance(producer, monkeypatch):
+    module, dataset, output = producer
+    monkeypatch.delenv("TASK_BENCHMARK_MODE")
+    monkeypatch.delenv("TASK_BENCHMARK_HOLDOUT_MIN_PASS", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_benchmark_set",
+        lambda: {
+            "name": "holdout",
+            "path": dataset,
+            "report": "task_holdout_report.json",
+            "floor_env": "TASK_BENCHMARK_HOLDOUT_MIN_PASS",
+            "default_floor": 0.0,
+        },
+    )
+    _producer_trials(
+        producer, monkeypatch, lambda trial: outcomes(trial, create=False, reject=False)
+    )
+    module.test_task_set_pass_k()
+    report = json.loads((output / "task_holdout_report.json").read_text())
+    assert report["acceptance_mode"] == "observe" and report["min_required"] == 0
+    assert report["pass_k"] == 0 and report["gate_passed"] is False
+
+
+@pytest.mark.parametrize("minimum", ["0", "nan", "inf"])
+def test_producer_rejects_invalid_gate_before_execution(producer, monkeypatch, minimum):
+    monkeypatch.setenv("TASK_BENCHMARK_MIN_PASS", minimum)
+    monkeypatch.setattr(producer[0], "_run_trial", lambda *args: pytest.fail("runner was invoked"))
+    with pytest.raises(ValueError):
+        producer[0].test_task_set_pass_k()
+
+
+def test_monitoring_can_keep_one_trial_without_becoming_publishable(producer, monkeypatch):
+    monkeypatch.setenv("TASK_BENCHMARK_TRIALS", "1")
+    _producer_trials(producer, monkeypatch, outcomes)
+    producer[0].test_task_set_pass_k()
+    report = json.loads((producer[2] / "task_benchmark_report.json").read_text())
+    assert report["trials"] == 1 and report["gate_passed"] is True
+    with pytest.raises(ValueError, match="independent trial artifacts"):
+        benchmark_evidence.validate_task_artifacts(producer[2], report, producer[1])
+
+
+def test_source_change_during_trials_is_not_clean_evidence(producer, monkeypatch):
+    module, _, output = producer
+    identities = iter(
+        {"source_sha": sha * 40, "dataset_sha256": "d" * 64, "tracked_source_dirty": False}
+        for sha in ("a", "b")
+    )
+    monkeypatch.setattr(module, "evidence_identity", lambda *args, **kwargs: next(identities))
+    _producer_trials(producer, monkeypatch, outcomes)
+    module.test_task_set_pass_k()
+    report = json.loads((output / "task_benchmark_report.json").read_text())
+    assert report["source_sha"] == "a" * 40 and report["tracked_source_dirty"] is True

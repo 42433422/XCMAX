@@ -28,6 +28,10 @@ on:
         description: Registered upgrade/rollback evidence run; submitted claims do not certify acceptance
         required: true
         type: string
+      desktop_soak_run_id:
+        description: Successful native eight-hour desktop soak run with Windows x64 and both macOS architectures
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -68,7 +72,8 @@ jobs:
             {"convergence":"${{ inputs.convergence_run_id }}",
             "security/current":"${{ inputs.security_scan_run_id }}",
             "security/previous":"${{ inputs.previous_security_scan_run_id || inputs.security_scan_run_id }}",
-            "rollback":"${{ inputs.upgrade_rollback_run_id }}"}
+            "rollback":"${{ inputs.upgrade_rollback_run_id }}",
+            "desktop_soak":"${{ inputs.desktop_soak_run_id }}"}
         run: |
           python scripts/release/build_closure_reports.py collect \
             --release-sha "$RELEASE_SHA" --output-dir "${RUNNER_TEMP}/closure-sources"
@@ -96,6 +101,7 @@ jobs:
         env:
           ADMIN_API_BASE: ${{ secrets.MODSTORE_ADMIN_API_BASE }}
           ADMIN_TOKEN: ${{ secrets.MODSTORE_ADMIN_BEARER_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
           test -n "${ADMIN_API_BASE:-}"
@@ -103,7 +109,7 @@ jobs:
           curl --fail-with-body --silent --show-error --retry 3 \
             --connect-timeout 10 --max-time 45 \
             -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-            "${ADMIN_API_BASE%/}/api/admin/customer-value/evidence?window_days=3650" \
+            "${ADMIN_API_BASE%/}/api/admin/customer-value/evidence?window_days=3650&release_sha=${RELEASE_SHA}" \
             -o "${RUNNER_TEMP}/customer-value.json"
       - name: Build four hashed redacted reports
         env:
@@ -118,6 +124,8 @@ jobs:
             --security "${RUNNER_TEMP}/security-verification.json" \
             --slo "${RUNNER_TEMP}/slo-verification.json" \
             --upgrade-rollback "${RUNNER_TEMP}/rollback-verification.json" \
+            --desktop-soak-dir "${RUNNER_TEMP}/closure-sources/desktop_soak" \
+            --provenance "${RUNNER_TEMP}/closure-sources/provenance.json" \
             --customer-value "${RUNNER_TEMP}/customer-value.json" \
             --release-sha "$RELEASE_SHA" \
             --product-version "$PRODUCT_VERSION" \

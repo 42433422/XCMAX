@@ -256,7 +256,13 @@ def test_child_budget_shares_model_reservations_and_settles_only_once(trusted_ac
     with pytest.raises(XiaoxBindingError) as error:
         store.claim_call(run.run_id, "other", **{**options, "params": {"unit_name": "another"}})
     assert error.value.code == "call_in_progress"
-    receipt = {"status": "completed", "ai_cost_units_total": 4}
+    store.record_call(run.run_id, "a", child_run_id="fixture-budget-child")
+    receipt = {
+        "task_id": call["child_task_id"],
+        "run_id": "fixture-budget-child",
+        "status": "completed",
+        "ai_cost_units_total": 4,
+    }
     for call_id in ("a", "a"):
         store.record_call(run.run_id, call_id, receipt=receipt)
     alias, created = store.claim_call(run.run_id, "new-model-call-id", **options)
@@ -279,7 +285,7 @@ def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
     store.update(
         run.run_id, lambda parent, metadata: parent.metadata.update(ai_cost_budget_units=10)
     )
-    store.claim_call(
+    call, _ = store.claim_call(
         run.run_id,
         "a",
         tool_id="customers",
@@ -289,7 +295,16 @@ def test_unknown_child_cost_stays_reserved_and_forbids_replay(trusted_actor):
         generation=grant.binding.metadata["generation"],
         cost_units=2,
     )
-    store.record_call(run.run_id, "a", receipt={"status": "unknown", "ai_cost_units_total": 3})
+    store.record_call(
+        run.run_id,
+        "a",
+        receipt={
+            "task_id": call["child_task_id"],
+            "run_id": "",
+            "status": "unknown",
+            "ai_cost_units_total": 3,
+        },
+    )
     parent = store.get(run.run_id)
     assert parent.run.metadata["ai_cost_units_total"] == 3
     assert parent.run.metadata["reserved_cost_units"] == 7
@@ -357,7 +372,15 @@ def test_real_model_admission_and_child_claim_share_one_budget(
         _claim(store, grant.model_token, route, "m2")
     assert error.value.status_code == 402
     store.record_call(
-        run.run_id, "child", receipt={"status": "completed", "ai_cost_units_total": 2}
+        run.run_id,
+        "child",
+        child_run_id="fixture-budget-child",
+        receipt={
+            "task_id": child["child_task_id"],
+            "run_id": "fixture-budget-child",
+            "status": "completed",
+            "ai_cost_units_total": 2,
+        },
     )
     _claim(store, grant.model_token, route, "m2")
     assert store.get(run.run_id).run.metadata["ai_cost_units_total"] == spent + 2

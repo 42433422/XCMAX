@@ -18,6 +18,9 @@ from typing import Any
 import httpx
 from filelock import FileLock, Timeout
 
+from app.application.agent_runtime.runtime_error_surface import (
+    public_runtime_failure as public_runtime_failure,
+)
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route
@@ -63,6 +66,7 @@ class RuntimeSetupError(RuntimePolicyError):
     def __init__(self, code: str, message: str, *, checks: dict | None = None):
         self.code = code
         self.checks = checks or {}
+        self.public_message = message
         super().__init__(message)
 
 

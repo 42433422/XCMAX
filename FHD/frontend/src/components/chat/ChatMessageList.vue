@@ -369,38 +369,51 @@ function isMessageStreaming(message: ChatMessage): boolean {
 
 function hasUnreceiptedTools(message: ChatMessage): boolean {
   if (!message.streamStatus || isMessageStreaming(message)
+    || message.workflowAction === 'waiting_auth'
     || message.approvalCard?.status === 'pending' || message.agentRunTrace?.status === 'waiting') return false
   const receipts = new Set(message.nodeResults?.map(row => row.node_id))
   return Boolean(message.liveSteps?.some(step => step.state === 'running' && !receipts.has(step.id)))
 }
 
-type ReceiptStatus = 'running' | 'waiting' | 'paused' | 'done' | 'deferred' | 'partial' | 'unknown' | 'failed'
+type ReceiptStatus = 'running' | 'waiting' | 'authorization' | 'paused' | 'done' | 'deferred' | 'partial' | 'unknown' | 'failed' | 'cancelled' | 'interrupted' | 'rejected' | 'not_started'
 
 const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = {
   running: '进行中',
   waiting: '待确认',
+  authorization: '等待授权',
   paused: '已暂停',
   done: '已完成',
   deferred: '待处理',
   partial: '部分完成',
   unknown: '待核对',
   failed: '失败',
+  cancelled: '已取消',
+  interrupted: '已中断',
+  rejected: '未批准',
+  not_started: '未开始',
 }
 
 function receiptStatus(message: ChatMessage): ReceiptStatus {
+  const state = String(message.workflowAction || '')
+  const outcome = String(message.execution?.outcome || '')
+  const businessState = String(message.businessResult?.status || '')
+  if (outcome === 'unknown' || message.execution?.effect === 'unknown'
+    || ['unknown', 'blocked'].includes(state) || businessState === 'unknown') return 'unknown'
   if (isMessageStreaming(message)) return 'running'
-  if (message.workflowAction === 'paused') return 'paused'
-  if (message.workflowAction === 'blocked') return 'unknown'
+  if (state === 'paused') return 'paused'
+  if (state === 'cancelled' || state === 'interrupted' || state === 'rejected' || state === 'not_started') return state
+  if (state === 'waiting_auth') return 'authorization'
   if (message.workflowAction === 'waiting_approval' || message.approvalCard?.status === 'pending' || message.agentRunTrace?.status === 'waiting') return 'waiting'
   if (hasUnreceiptedTools(message)) return 'unknown'
-  const outcome = String(message.execution?.outcome || '')
-  if (outcome === 'unknown' || message.execution?.effect === 'unknown' || message.workflowAction === 'unknown') return 'unknown'
   if (outcome === 'partial' || message.execution?.effect === 'partial') return 'partial'
   const toolState = chainState(stepChainFor(message))
   if (toolState === 'unknown' || toolState === 'partial' || toolState === 'deferred') return toolState
-  if (isFailedChatReply(message)) return 'failed'
+  if (toolState === 'failed' || isFailedChatReply(message)) return 'failed'
   if ((message.executionProgress || []).some(item => item.status === 'failed')) return 'partial'
-  return 'done'
+  if (state && !['completed', 'succeeded', 'success'].includes(state)) return 'unknown'
+  if (['completed', 'succeeded', 'success'].includes(state) || outcome === 'succeeded'
+    || businessState === 'completed' || message.agentRunTrace?.terminal && message.agentRunTrace.status === 'success') return 'done'
+  return 'unknown'
 }
 
 function receiptStatusLabel(message: ChatMessage): string {

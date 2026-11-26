@@ -318,18 +318,27 @@ def test_replay_entry_not_found():
     assert reason == "entry_not_found"
 
 
-def test_replay_callback_exception_swallowed():
+def test_replay_callback_failure_is_not_marked_successful(caplog):
     dlq = DeadLetterQueue()
+    effects = []
+    error = RuntimeError("replay handler down")
 
     def boom(_ev):
-        raise RuntimeError("replay handler down")
+        effects.append("failed")
+        raise error
 
+    dlq.on_replay(lambda _ev: effects.append("first"))
     dlq.on_replay(boom)
     eid = dlq.enqueue(make_event("x"), DeadLetterReason.TIMEOUT, "e", 0)
-    ok, reason = dlq.replay(eid)
-    # 回调失败仍视为重播成功（异常被吞，标记去重）
-    assert ok is True
-    assert reason == ""
+    with pytest.raises(RuntimeError) as caught:
+        dlq.replay(eid)
+    assert caught.value is error
+    assert effects == ["first", "failed"]
+    entry = dlq.dequeue(eid)
+    assert entry is not None
+    assert dlq._deduplicator.is_replayed(eid, entry.retry_count) is False
+    assert dlq.get_stats()["replayed"] == 0
+    assert any("重播回调失败" in record.message for record in caplog.records)
 
 
 def test_replay_all_memory_with_filter():

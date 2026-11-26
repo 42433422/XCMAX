@@ -22,15 +22,14 @@ from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTas
 
 def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False) -> list[str]:
     """Only a durable successful step receipt can settle an old open effect."""
+    from app.application.agent_orchestrator.result_verification import verified_effect_receipt
     from app.application.agent_orchestrator.task_models import tenant_id_of_run
     from app.domain.task_lifecycle.control import SessionBook
 
     book = SessionBook(db)
     tenant = tenant_id_of_run(run)
     body = book.get("agent", tenant, run.run_id)
-    completed = {
-        s.step_id for s in run.steps if s.status == "completed" and s.output.get("success") is True
-    }
+    completed = {step.step_id for step in run.steps if verified_effect_receipt(run, step)}
     remaining = sorted(set(body.get("effects") or []) - completed)
     if clear_confirmed and not remaining and body.get("effects"):
         body["effects"] = []
@@ -123,6 +122,7 @@ def retry_and_enqueue(
                 or recovery.get("lease_token") != verification_lease_token
                 or float(recovery.get("lease_until") or 0) <= now
                 or principal_id != run.user_id
+                or execution is None
                 or (execution.task_id, execution.user_id, execution.tenant_id)
                 != (_task_id_of(run), run.user_id, tenant_id_of_run(run))
                 or runtime_context

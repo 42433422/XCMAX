@@ -1,6 +1,6 @@
 """AIOPEN 开放平台路由（toA：面向外部 AI Agent）。
 
-由原 Qclaw龙虾生态（:mod:`app.fastapi_routes.ai_qclaw`）升级而来：
+业务能力复用统一契约、账号授权与任务执行链：
 
 - ``GET  /api/aiopen/manifest`` — 工具目录（公开，无需 Key）
 - ``GET  /api/aiopen/guide`` — 接入说明（公开；供其他 AI 阅读后自行配置 MCP）
@@ -11,8 +11,7 @@
 - ``GET  /api/aiopen/panel`` + ``POST /api/aiopen/whitelist|config|control`` — 控制台
 - ``WS   /api/aiopen/ws`` — 前端 screen 端（虚拟光标）连接
 
-旧 ``/api/ai/qclaw/*`` URL 全部保留（见 ai_qclaw.py），与本模块共享
-``AIOPEN_STATE`` 运行时状态。
+旧 Qclaw 调用方已迁移到本路由，旧路由实现已移除。
 """
 
 from __future__ import annotations
@@ -67,7 +66,6 @@ from app.application.aiopen.service import (
     required_operation_scope,
     revoke_api_key,
     seed_capability_whitelist,
-    verify_api_key,
 )
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
@@ -266,7 +264,9 @@ async def aiopen_invoke(
         duration_ms=(time.perf_counter() - started) * 1000,
     )
     payload = {"tool": tool, **result}
-    run_id = _trace_aiopen_tool_call(
+    run_id = str(
+        result.get("run_id") or result.get("agent_run_id") or ""
+    ) or _trace_aiopen_tool_call(
         route="/api/aiopen/invoke",
         channel="aiopen_invoke",
         tool=tool,
@@ -457,7 +457,12 @@ def _catalog_denied(key: str | None) -> JSONResponse | None:
 
 def _catalog_item(entry: dict[str, Any]) -> dict[str, Any]:
     path = str(entry.get("path") or "")
-    return {**entry, "whitelisted": is_path_whitelisted(path)}
+    return {
+        **entry,
+        "whitelisted": bool(entry.get("executable"))
+        if entry.get("kind") == "capability"
+        else is_path_whitelisted(path),
+    }
 
 
 @router.get("/api/aiopen/catalog/operations")
@@ -474,7 +479,9 @@ def aiopen_catalog_operations(
     denied = _catalog_denied(x_aiopen_key)
     if denied is not None:
         return denied
-    operations = list(get_catalog(request.app).get("operations") or [])
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    operations = list(get_catalog(request.app, current_execution_context()).get("operations") or [])
     keyword = str(q or "").strip().lower()
     if keyword:
         operations = [
@@ -512,7 +519,9 @@ def aiopen_catalog_operation(
     denied = _catalog_denied(x_aiopen_key)
     if denied is not None:
         return denied
-    entry = find_operation(get_catalog(request.app), operation_id)
+    from app.infrastructure.aiopen.principal_context import current_execution_context
+
+    entry = find_operation(get_catalog(request.app, current_execution_context()), operation_id)
     if entry is None:
         return JSONResponse(
             {"success": False, "code": "OPERATION_NOT_FOUND", "message": operation_id},
@@ -700,7 +709,7 @@ def aiopen_whitelist_seed(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
-    """一键写入侧栏/业务全能力白名单，打通 MCP api_call 全调用闭环。"""
+    """更新侧栏资源展示范围；业务执行权限仍取自能力契约。"""
     enable = bool(body.get("enabled", True)) if "enabled" in body else True
     merge = bool(body.get("merge", True))
     payload = seed_capability_whitelist(enable=enable, merge=merge)
@@ -732,12 +741,25 @@ def aiopen_config(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
-    base_url = str(body.get("base_url") or "").strip().rstrip("/")
-    if not base_url:
-        return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
-    AIOPEN_STATE["openclaw_base"] = base_url
+    updates: dict[str, Any] = {}
+    if "base_url" in body:
+        base_url = str(body.get("base_url") or "").strip().rstrip("/")
+        if not base_url:
+            return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
+        updates["openclaw_base"] = base_url
+    if "wechat_open" in body:
+        if type(body["wechat_open"]) is not bool:
+            return JSONResponse(
+                {"success": False, "message": "wechat_open 必须是布尔值"}, status_code=400
+            )
+        updates["wechat_open"] = body["wechat_open"]
+    if not updates:
+        return JSONResponse(
+            {"success": False, "message": "需要 base_url 或 wechat_open"}, status_code=400
+        )
+    AIOPEN_STATE.update(updates)
     return _trace_aiopen_control_result(
-        {"success": True, "openclaw_base": base_url},
+        {"success": True, **updates},
         route="/api/aiopen/config",
         action="openclaw_config_update",
         body=body,

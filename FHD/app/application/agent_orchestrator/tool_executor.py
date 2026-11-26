@@ -22,17 +22,18 @@ from app.application.agent_orchestrator.tool_spec import (
 )
 from app.application.agent_orchestrator.verification_cognition import (
     normalize_tool_execution_result,
+    plan_admission_receipt,
     verified_plan_admission,
-)
-from app.application.employee_runtime.result_verifier import (
-    execution_result_requires_reconciliation,
 )
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
-from app.domain.task_lifecycle.results import normalize_execution_result
-from app.infrastructure.llm.retry_policy import is_transport_error
+from app.domain.task_lifecycle.results import (
+    execution_result_outcome_unknown,
+    execution_result_requires_reconciliation,
+    normalize_execution_result,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -180,6 +181,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
     )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
     from app.application.tool_execution_deadline import check_invocation_deadline
+    from app.desktop_runtime.database_generation_registry import GenerationObservationError
     from app.infrastructure.tenant_scope import tenant_scope
     from app.mod_sdk.catalog_product_store import (
         execute_catalog_price,
@@ -228,7 +230,7 @@ def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]
         return verify_catalog_action(params, context, release=existing is None)
     except (WorkerLeaseLost, TimeoutError, PermissionError):
         raise
-    except RECOVERABLE_ERRORS:
+    except RECOVERABLE_ERRORS + (GenerationObservationError,):
         if claim is not None:
             try:
                 ledger.mark_unknown(claim, context)
@@ -340,6 +342,14 @@ def _validate_local_mutation_input(
     return None
 
 
+def _pre_dispatch_refusal(result: dict[str, Any]) -> dict[str, Any]:
+    """Only host guards before claims/dispatch may attest this original no-effect result."""
+    return {
+        **result,
+        "execution": {"outcome": "not_executed", "committed": False},
+    }
+
+
 class AgentToolExecutor:
     def execute_with_deadline(self, step, *, runtime_context, deadline_monotonic):
         from app.application.agent_orchestrator.tool_process import execute_isolated
@@ -402,22 +412,26 @@ class AgentToolExecutor:
             ensure_rate_limit_backend()
             admission = check_rate_limit(str(tenant), endpoint, max_requests=120, window_seconds=60)
         except RateLimitBackendError:
-            return {
-                "success": False,
-                "error_code": "tool_rate_limit_backend_unavailable",
-                "retryable": True,
-                "execution_status": "not_started",
-                "message": "工具限流服务暂不可用，本次操作未执行。",
-            }
+            return _pre_dispatch_refusal(
+                {
+                    "success": False,
+                    "error_code": "tool_rate_limit_backend_unavailable",
+                    "retryable": True,
+                    "execution_status": "not_started",
+                    "message": "工具限流服务暂不可用，本次操作未执行。",
+                }
+            )
         if not admission.get("allowed", True):
-            return {
-                "success": False,
-                "error_code": "tool_rate_limited",
-                "retryable": True,
-                "execution_status": "not_started",
-                "retry_after": max(1, int(admission.get("retry_after") or 60)),
-                "message": "该工具调用过于频繁，请稍后再试。",
-            }
+            return _pre_dispatch_refusal(
+                {
+                    "success": False,
+                    "error_code": "tool_rate_limited",
+                    "retryable": True,
+                    "execution_status": "not_started",
+                    "retry_after": max(1, int(admission.get("retry_after") or 60)),
+                    "message": "该工具调用过于频繁，请稍后再试。",
+                }
+            )
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
         raw_params = dict(step.params or {})
@@ -485,13 +499,15 @@ class AgentToolExecutor:
             }
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
-            return {
-                "success": False,
-                "error_code": validation.error_code,
-                "message": validation.message,
-                "tool_id": validation.tool_id,
-                "action": validation.action,
-            }
+            return _pre_dispatch_refusal(
+                {
+                    "success": False,
+                    "error_code": validation.error_code,
+                    "message": validation.message,
+                    "tool_id": validation.tool_id,
+                    "action": validation.action,
+                }
+            )
         expected_schema = context.get("tool_schema_digest")
         if expected_schema is not None and (
             validation.spec is None or expected_schema != validation.spec.schema_digest
@@ -556,17 +572,17 @@ class AgentToolExecutor:
             return employee_denied
         refusal = _validate_local_mutation_input(validation.tool_id, guard_action, params)
         if refusal is not None:
-            return refusal
+            return _pre_dispatch_refusal(refusal)
         if validation.tool_id == "catalog_products_v1":
             return _execute_catalog(step, dict(runtime_context or {}))
-        product_db_read = (validation.tool_id, validation.action) == (
+        business_db_read = (validation.tool_id, validation.action) == (
             "business_db",
             "read",
-        ) and params.get("entity") == "products"
+        )
         reviewed_query = (
             validation.tool_id,
             validation.action,
-        ) in _REVIEWED_QUERY_ACTIONS or product_db_read
+        ) in _REVIEWED_QUERY_ACTIONS or (business_db_read and params.get("entity") == "products")
         if reviewed_query and client_identity:
             return _query_failure("tool_identity_override")
         query_tenant = None
@@ -584,7 +600,7 @@ class AgentToolExecutor:
         if (
             validation.tool_id,
             validation.action,
-        ) in _OWNED_READ_ACTIONS or product_db_read:
+        ) in _OWNED_READ_ACTIONS or business_db_read:
             for hint in ("service_source", "route_module"):
                 params["_runtime_context"].pop(hint, None)
         action = validation.action or step.action
@@ -614,7 +630,7 @@ class AgentToolExecutor:
             AgentModAuthorizationError,
             agent_mod_execution_scope,
         )
-        from app.infrastructure.tenant_scope import owned_tenant_scope, tenant_scope
+        from app.infrastructure.tenant_scope import owned_tenant_scope
 
         result: Any = None
         idem_key = ""
@@ -623,13 +639,12 @@ class AgentToolExecutor:
             # retain their opaque tenant keys without integer coercion.
             scope = (
                 owned_tenant_scope(runtime_tenant_id)
-                if ((validation.tool_id, action) in _OWNED_READ_ACTIONS or product_db_read)
-                and isinstance(runtime_tenant_id, int)
-                else tenant_scope(runtime_tenant_id)
+                if runtime_tenant_id is not None
+                else nullcontext()
             )
             with (
                 agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
-                scope if runtime_tenant_id is not None else nullcontext(),
+                scope,
             ):
                 if validation.tool_id == "document_template":
                     from app.application.template_mutation_receipt import template_execution_denial
@@ -731,6 +746,8 @@ class AgentToolExecutor:
                 except (WorkerLeaseLost, TimeoutError, PermissionError, RuntimeError):
                     raise
                 except RECOVERABLE_ERRORS as exc:
+                    from app.infrastructure.llm.retry_policy import is_transport_error
+
                     safe_read_retry = (
                         validation.spec is not None
                         and validation.spec.read_only
@@ -828,11 +845,19 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
-        # Retain lost-response uncertainty in the durable receipt. A mutating
-        # handler can fail after commit; pre-dispatch denials returned before claim.
+        # Settle the durable receipt with the same trusted uncertainty as the
+        # outer deadline wrapper. A schema-valid employee "success" cannot erase
+        # a lost HTTP response and leave a successful cached receipt behind.
+        # After entering a mutating handler, failure alone is not proof of no
+        # effect (adapters may have caught an exception after commit). Genuine
+        # pre-dispatch validation/authorization refusals returned before claim.
+        from app.application.agent_orchestrator.result_verification import pending_execution_receipt
+
         admitted_child = verified_plan_admission(step, result, dict(runtime_context or {}))
+        acknowledged_pending = pending_execution_receipt(result)
         if invocation_requires_reconciliation() or (
             not admitted_child
+            and not acknowledged_pending
             and (
                 execution_result_requires_reconciliation(result)
                 or (
@@ -848,15 +873,47 @@ class AgentToolExecutor:
                 "retryable": False,
                 "reconciliation_required": True,
             }
-        result = normalize_tool_execution_result(step, result, dict(runtime_context or {}))
-        # Verified child admission is a completed host receipt that still awaits
-        # business approval. Generic unfinished-result normalization must not
-        # rewrite that success into a failed/unknown effect.
-        if not verified_plan_admission(step, result, dict(runtime_context or {})):
-            result = normalize_execution_result(result)
+        if acknowledged_pending and not admitted_child:
+            result = {**result, "success": False, "retryable": False}
+        else:
+            result = normalize_tool_execution_result(step, result, dict(runtime_context or {}))
+            if not verified_plan_admission(step, result, dict(runtime_context or {})):
+                result = normalize_execution_result(result)
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
+
+
+def _normalize_timely_tool_receipt(
+    step: AgentStep, result: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
+
+    if (
+        (step.tool_id, step.action) != ("enterprise_cognition", "plan")
+        and not plan_admission_receipt(result)
+        and pending_execution_receipt(result, include_blocked=True)
+    ):
+        normalized_result = {**result, "success": False, "retryable": False}
+    else:
+        normalized_result = normalize_tool_execution_result(step, result, context)
+    if (
+        step.tool_id == "business_db"
+        and step.action == "write"
+        and normalized_result.get("success") is True
+        and isinstance(step.params.get("payload"), dict)
+    ):
+        from app.domain.shared_services.tools_workflow_common import (
+            _remember_business_db_target,
+        )
+
+        _remember_business_db_target(
+            context,
+            str(step.params.get("entity") or ""),
+            str(step.params.get("operation") or "create"),
+            normalized_result,
+        )
+    return normalized_result
 
 
 def execute_with_tool_deadline(
@@ -908,11 +965,35 @@ def execute_with_tool_deadline(
             "message": "工具缺少可取消/隔离的有界执行适配器，已拒绝执行",
         }
     result: Any = None
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        agent_mod_execution_scope,
+    )
+
+    completed_in_time = False
     from app.utils.resilience.rate_limiter import (
         ToolCircuitOpenError,
         ToolConcurrencyLimitError,
         tool_execution_slot,
     )
+
+    # Refuse an already revoked host binding before opening a write effect,
+    # reserving an execution slot, or spawning a worker. The child rechecks;
+    # a later refusal cannot erase an effect opened by this attempt.
+    try:
+        with agent_mod_execution_scope(context.get("_mod_authorization")):
+            pass
+    except AgentModAuthorizationError as exc:
+        return {
+            "success": False,
+            "error_code": "mod_authorization_invalid",
+            "message": str(exc),
+            "execution_status": "not_started",
+            "retryable": False,
+            "tool_id": step.tool_id,
+            "action": step.action,
+        }
 
     try:
         tenant_id = (
@@ -933,11 +1014,16 @@ def execute_with_tool_deadline(
                         "outcome": "not_started",
                         "retryable": False,
                     }
+                if not step.idempotent:
+                    from app.application.agent_orchestrator.task_dispatcher import note_open_effect
+
+                    note_open_effect(str(context.get("run_id") or ""), step.step_id)
                 result = (
                     bounded(step, runtime_context=context, deadline_monotonic=deadline)
                     if callable(bounded)
                     else executor.execute(step, runtime_context=context)
                 )
+                completed_in_time = time.monotonic() <= (ceiling if file_deadlines else deadline)
             record_result(
                 normalize_tool_execution_result(step, result, context)
                 if isinstance(result, dict)
@@ -962,64 +1048,57 @@ def execute_with_tool_deadline(
             "execution_status": "not_started",
             "message": "该工具暂时不可用，本次操作尚未开始，请稍后重试。",
         }
+    except WorkerLeaseLost:
+        raise
     except RECOVERABLE_ERRORS as exc:
         if not invocation.uncertain:
             raise
+        completed_in_time = file_deadlines or time.monotonic() <= deadline
         result = {
             "error_code": "tool_exception_after_unknown_io",
             "exception_type": type(exc).__name__,
         }
     else:
-        completed_in_time = time.monotonic() <= (ceiling if file_deadlines else deadline)
         if (
             completed_in_time
             and isinstance(result, dict)
             and not invocation.uncertain
-            and result.get("reconciliation_required") is True
+            and result.get("error_code") not in ("tool_worker_exited", "tool_worker_incomplete")
         ):
-            # Timely unresolved receipts retain evidence in place; only late or
-            # unknown-I/O receipts use nested reconciliation_evidence.
-            return {**result, "success": False, "outcome": "unknown", "retryable": False}
-        if (
-            completed_in_time
-            and isinstance(result, dict)
-            and not invocation.uncertain
-            and (
-                result.get("outcome") != "unknown"
-                or result.get("error_code")
-                in {
-                    "tool_identity_required",
-                    "tool_identity_override",
-                    "tool_permission_denied",
-                    "tool_contract_unavailable",
-                    "tool_scope_unavailable",
-                    "catalog_identity_override",
-                }
+            # These query refusals deliberately use an unknown outcome without
+            # opening a business effect. Other explicit uncertainty keeps the
+            # original receipt at the top level and must never permit retry.
+            refusal = result.get("error_code") in (
+                "tool_identity_required",
+                "tool_identity_override",
+                "tool_permission_denied",
+                "tool_contract_unavailable",
+                "tool_scope_unavailable",
+                "catalog_identity_override",
             )
-            and not result.get("reconciliation_required")
-        ):
-            normalized_result = normalize_tool_execution_result(step, result, context)
-            if (
-                step.tool_id == "business_db"
-                and step.action == "write"
-                and normalized_result.get("success") is True
-                and isinstance(step.params.get("payload"), dict)
-            ):
-                from app.domain.shared_services.tools_workflow_common import (
-                    _remember_business_db_target,
-                )
-
-                _remember_business_db_target(
-                    context,
-                    str(step.params.get("entity") or ""),
-                    str(step.params.get("operation") or "create"),
-                    normalized_result,
-                )
-            return normalized_result
+            evidence = {**result, "outcome": None} if refusal else result
+            if execution_result_outcome_unknown(evidence, include_execution=True):
+                return {
+                    **result,
+                    "success": False,
+                    "outcome": "unknown",
+                    "retryable": False,
+                    "reconciliation_required": True,
+                }
+            return _normalize_timely_tool_receipt(step, result, context)
     worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
+    timed_out = not completed_in_time or any(
+        marker.get("kind") == "http_timeout" for marker in invocation.uncertain
+    )
     return {
         "success": False,
-        "error_code": "tool_worker_exited" if worker_exited else "tool_timeout_unknown",
+        "error_code": (
+            "tool_worker_exited"
+            if worker_exited
+            else "tool_timeout_unknown"
+            if timed_out
+            else "tool_result_unknown"
+        ),
         "reconciliation_evidence": result if isinstance(result, dict) else {},
         "io_reconciliation": list(invocation.uncertain),
         "outcome": "unknown",
@@ -1029,5 +1108,7 @@ def execute_with_tool_deadline(
             "工具进程已退出且未返回最终回执，请核对原任务的业务结果，勿重复提交。"
             if worker_exited
             else "工具超时，业务结果未知；必须核对原调用，不可自动重试"
+            if timed_out
+            else "工具已返回，但业务结果尚未确认；请核对原调用，不可自动重试"
         ),
     }

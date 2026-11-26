@@ -62,7 +62,7 @@ class TestDbTokensStatus:
         with (
             patch(
                 "app.request_active_mod_ctx.get_request_active_mod_id",
-                side_effect=RuntimeError("ctx missing"),
+                side_effect=ImportError("ctx missing"),
             ),
             patch("app.infrastructure.auth.db_token.effective_db_read_token", return_value=None),
             patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=""),

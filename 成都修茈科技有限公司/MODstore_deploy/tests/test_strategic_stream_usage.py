@@ -235,6 +235,47 @@ async def test_stream_reserves_before_http_and_settles_actual_usage(mandate, mon
 
 
 @pytest.mark.asyncio
+async def test_many_stream_events_read_authority_without_rewriting_ledger(mandate):
+    from sqlalchemy import event
+
+    writes = []
+    engine = mandate[2].kw["bind"]
+
+    def observe_sql(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("UPDATE STRATEGIC_DECISIONS"):
+            writes.append(statement)
+
+    async def invoke(_provider, **_kwargs):
+        for _ in range(25):
+            yield {"type": "delta", "delta": "x"}
+        yield {"type": "finish"}
+        yield {"type": "usage", "usage": {"prompt_tokens": 10, "completion_tokens": 25}}
+
+    event.listen(engine, "before_cursor_execute", observe_sql)
+    try:
+        with usage.portfolio_usage_scope(mandate[0], "a", mandate[1]["lease_token"]):
+            events = [
+                row
+                async for row in usage.dispatch_budgeted_stream(
+                    invoke,
+                    "openai",
+                    {
+                        "api_key": "platform-test-key",
+                        "base_url": None,
+                        "model": "approved-model",
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "max_tokens": 50,
+                    },
+                )
+            ]
+        assert len(events) == 27
+        assert len(writes) == 2  # One reservation and one settlement, no writes per event.
+        assert _calls(mandate)[1][0]["status"] == "settled"
+    finally:
+        event.remove(engine, "before_cursor_execute", observe_sql)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("options", [{"meter": False}, {"finish": False}, {"malformed": True}])
 async def test_missing_or_incomplete_usage_keeps_hold(mandate, monkeypatch, options):
     observed = _sse(monkeypatch, mandate, **options)
@@ -376,14 +417,23 @@ async def test_total_deadline_includes_wait_for_terminal_usage(mandate, monkeypa
     assert calls[0]["status"] == "unknown"
 
 
-@pytest.mark.asyncio
-# LiteLLM 1.109.3 reads Pydantic instance metadata before excluding model_*
-# attributes. Only these SDK accesses are exempt from warnings-as-errors.
-@pytest.mark.filterwarnings(
-    r"ignore:^Accessing the 'model_(computed_)?fields' attribute on the instance is deprecated\."
-    r":pydantic.PydanticDeprecatedSince211"
-    r":^litellm\.litellm_core_utils\.model_response_utils$"
+# LiteLLM 1.109.3 installs import-time filters that pytest restores between tests.
+# Its lazy schemas/response introspection must tolerate only these known notices
+# regardless of whether a preceding catalog test already imported the SDK.
+ROUTER_SDK_WARNINGS = (
+    r"ignore:^Items? '[^']+'(, '[^']+')* on TypedDict class '[^']+' "
+    r"(is|are) using the `ReadOnly` qualifier\. Pydantic will not protect items "
+    r"from any mutation on dictionary instances\.$:UserWarning:"
+    r"pydantic\._internal\._generate_schema$",
+    r"ignore:^Accessing the 'model_(fields|computed_fields)' attribute on the instance "
+    r"is deprecated\. Instead, you should access this attribute from the model class\.$:"
+    r"pydantic.warnings.PydanticDeprecatedSince211:"
+    r"litellm\.litellm_core_utils\.model_response_utils$",
 )
+
+
+@pytest.mark.filterwarnings(*ROUTER_SDK_WARNINGS)
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fallback", [False, True])
 @pytest.mark.parametrize("receipt", ["reported", "absent", "partial"])
 async def test_real_router_requires_original_usage_and_one_reserved_attempt(

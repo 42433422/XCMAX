@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 
+from .access import serial_approval_supported, unsupported_approval_policy
 from .protocols import AuditWriter, JsonObject, WorkspaceResponse
 from .repository import ApprovalRepository
 
@@ -44,6 +45,12 @@ class FlowCatalog:
             raise HTTPException(status_code=400, detail="flow_name / flow_key 为必填项")
         if not nodes_payload:
             raise HTTPException(status_code=400, detail="至少需要一个审批节点")
+        if not serial_approval_supported(flow_payload.get("node_type")) or any(
+            not serial_approval_supported(node.get("node_type"), node.get("min_approvals", 1))
+            for node in nodes_payload
+            if isinstance(node, dict)
+        ):
+            return unsupported_approval_policy()
         with self.repository.session() as db:
             existed = (
                 db.query(ApprovalFlow)
@@ -113,6 +120,8 @@ class FlowCatalog:
 
     def update_flow(self, flow_id: int, body: JsonObject, actor: int) -> WorkspaceResponse:
         """更新审批流程基础信息（不含节点，节点暂由 POST /flows 重建）。"""
+        if not serial_approval_supported(body.get("node_type")):
+            return unsupported_approval_policy()
         with self.repository.session() as db:
             flow = self.repository.flow(db, flow_id, include_deleted=False)
             if not flow:

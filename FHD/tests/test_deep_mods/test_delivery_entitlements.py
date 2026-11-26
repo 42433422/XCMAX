@@ -1,6 +1,7 @@
 import json
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from starlette.requests import Request
 
@@ -38,6 +39,8 @@ async def test_new_signed_delivery_rights_update_only_actual_session(mod_account
     "result",
     [
         ConnectionError("offline"),
+        httpx.Response(503, json={"detail": "entitlement service unavailable"}),
+        RuntimeError("unexpected entitlement failure"),
         {"ok": True, "user_id": 102, "mod_ids": ["other-private"]},
         {"ok": False, "user_id": 101, "mod_ids": []},
     ],
@@ -45,13 +48,36 @@ async def test_new_signed_delivery_rights_update_only_actual_session(mod_account
 async def test_failed_or_wrong_account_refresh_preserves_previous_rights(
     mod_accounts, monkeypatch, result
 ):
-    remote = (
-        AsyncMock(side_effect=result)
-        if isinstance(result, Exception)
-        else AsyncMock(return_value=result)
-    )
-    monkeypatch.setattr(bridge, "custom_delivery_remote_json", remote)
-    assert not await bridge.refresh_delivery_entitlements(request(), "owner-token")
+    if isinstance(result, httpx.Response):
+        client_type = httpx.AsyncClient
+
+        def respond(outbound):
+            assert outbound.method == "GET"
+            assert outbound.url.path == "/api/enterprise/entitled-mod-ids"
+            assert outbound.headers["Authorization"] == "Bearer owner-token"
+            return result
+
+        monkeypatch.setattr(
+            httpx,
+            "AsyncClient",
+            lambda **kw: client_type(transport=httpx.MockTransport(respond), **kw),
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.market_account._market_api_base_url", lambda: "https://market.test"
+        )
+    else:
+        remote = (
+            AsyncMock(side_effect=result)
+            if isinstance(result, Exception)
+            else AsyncMock(return_value=result)
+        )
+        monkeypatch.setattr(bridge, "custom_delivery_remote_json", remote)
+    if isinstance(result, RuntimeError):
+        with pytest.raises(RuntimeError) as caught:
+            await bridge.refresh_delivery_entitlements(request(), "owner-token")
+        assert caught.value is result
+    else:
+        assert not await bridge.refresh_delivery_entitlements(request(), "owner-token")
     assert load_session_private_delivery_binding("mod-session-1")["mod_ids"] == {"taiyangniao-pro"}
 
 

@@ -123,7 +123,9 @@ class TestOnDemandLoading:
             fields = voi.get_current_industry_fields()
             assert fields == {"primary_field": "pieces", "secondary_field": "cartons"}
 
-    @pytest.mark.parametrize("profile", [RuntimeError("boom"), SimpleNamespace(units={})])
+    @pytest.mark.parametrize(
+        "profile", [OSError("industry profile unreadable"), SimpleNamespace(units={})]
+    )
     def test_get_current_industry_config_fallback_on_error(self, profile):
         """行业档案加载异常时回退到内置默认单位（get_industry_profile 抛错路径）。"""
         with (
@@ -133,7 +135,7 @@ class TestOnDemandLoading:
             ),
             patch(
                 "resources.config.industry_config.get_current_industry",
-                side_effect=RuntimeError("boom"),
+                side_effect=OSError("industry configuration unreadable"),
             ),
             patch(
                 "resources.config.industry_config.get_industry_profile",

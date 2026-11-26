@@ -43,7 +43,7 @@ class TestPlatformShellCapabilities:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("no mods"),
+                side_effect=OSError("no mods"),
             ),
             patch(
                 "app.mod_sdk.platform_shell.build_platform_shell_payload",

@@ -303,20 +303,20 @@ def request_action(
     return decision, pending
 
 
-def _execute_self_maintenance_merge(payload: dict[str, Any]) -> Any:
-    from modstore_server.self_maintenance_loop_runner import _auto_merge_low_risk_branch
+def _execute_self_maintenance_merge(payload: dict[str, Any]) -> dict[str, Any]:
+    from modstore_server.maintenance_loop.merge import _auto_merge_low_risk_branch
 
-    approval = payload.get("_approval") if isinstance(payload.get("_approval"), dict) else {}
-    if not isinstance(approval, dict):
-        approval = {}
-    return _auto_merge_low_risk_branch(
+    # The ledger claim records the human approval; the merge owner still applies
+    # its independent evidence, risk and original branch gates.
+    result = _auto_merge_low_risk_branch(
         run_id=str(payload.get("run_id") or ""),
         task_id=str(payload.get("task_id") or "") or None,
         branch=str(payload.get("branch") or "") or None,
         steps=payload.get("steps") if isinstance(payload.get("steps"), list) else None,
-        human_approved=True,
-        approved_by=str(approval.get("approver") or "github-environment"),
     )
+    if not isinstance(result, dict):
+        raise ApprovalStateError("maintenance merge returned an invalid execution receipt")
+    return result
 
 
 register_action_executor("self_maintenance_merge", _execute_self_maintenance_merge)
@@ -343,6 +343,8 @@ def _claim_action(
     actor = str(approver or "").strip()
     if not actor:
         raise ApprovalStateError("approver is required")
+    if defer_execution and not str(approval_id or "").strip():
+        raise ApprovalStateError("deferred execution requires a bound workflow approval_id")
     action = str(latest.get("action") or "")
     decision = evaluate_risk(
         action,
@@ -453,6 +455,11 @@ def complete_action(
     if latest is None:
         raise ApprovalStateError(f"approved action not found: {action_id}")
     _check_retry_approval(latest, approval_id)
+    bound_approval_id = str(latest.get("approval_id") or "")
+    if approval_id != bound_approval_id or (
+        latest.get("executor_name") == "github_deploy" and not bound_approval_id.strip()
+    ):
+        raise ApprovalStateError("execution receipt does not belong to the approved workflow")
     state = str(latest.get("state") or "")
     terminal_state = "executed" if success else "execution_failed"
     if state == terminal_state:

@@ -64,16 +64,21 @@ def shipment_client(
 ) -> TestClient:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        lambda: repo,
     )
     monkeypatch.setattr(
-        shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
+        shipment_routes,
+        "get_shipment_application_service_core",
+        lambda: mock_shipment_svc,
     )
     app = FastAPI()
     app.state.agent_runs = repo
     app.include_router(shipment_routes.router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
+        app,
+        raise_server_exceptions=False,
+        headers=trusted_actor(tenant_id=None, role="admin", tier="admin").headers,
     )
 
 
@@ -380,24 +385,39 @@ def test_shipment_generate_validation_errors(shipment_client: TestClient) -> Non
     assert empty_products.status_code == 400
 
 
-def test_shipment_generate_service_failure(
+def test_shipment_generate_cannot_write_without_tenant_approval_scope(
     shipment_client: TestClient, mock_shipment_svc: MagicMock
 ) -> None:
     mock_shipment_svc.generate_shipment_document.return_value = {
         "success": False,
         "message": "生成失败",
     }
-    r = shipment_client.post(
-        "/api/shipment/generate",
-        json={"unit_name": "甲公司", "products": [{"name": "漆"}]},
-    )
-    assert r.status_code == 500
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(None):
+        r = shipment_client.post(
+            "/api/shipment/generate",
+            json={"unit_name": "甲公司", "products": [{"name": "漆"}]},
+            headers={"Idempotency-Key": "shipment-generate"},
+        )
+    assert r.status_code == 403, r.text
     assert r.json()["success"] is False
+    assert r.json()["error_code"] == "approval_scope_required"
+    assert r.json()["execution_status"] == "not_started"
+    mock_shipment_svc.generate_shipment_document.assert_not_called()
 
 
-def test_shipment_generate_success(
-    shipment_client: TestClient, mock_shipment_svc: MagicMock, local_tools
+def test_shipment_generate_forwards_exact_parameters_to_shared_admission(
+    shipment_client: TestClient, mock_shipment_svc: MagicMock, monkeypatch
 ) -> None:
+    admission = MagicMock(
+        return_value={
+            "success": False,
+            "execution_state": "waiting_approval",
+            "http_status_code": 202,
+        }
+    )
+    monkeypatch.setattr(shipment_routes, "_run_shipment_orders_agent", admission)
     payload = {
         "unit_name": "甲公司",
         "products": [{"model_number": "9803"}],
@@ -406,23 +426,11 @@ def test_shipment_generate_success(
         "order_number": "ACCEPT-42",
     }
     r = shipment_client.post("/api/shipment/generate", json=payload)
-    assert r.status_code == 500, r.text
-    output = r.json()
-    assert output["success"] is False and output["outcome"] == "unknown"
-    assert output["agent_status"] == "blocked"
-    assert output["error_code"] == "result_verification_inconclusive"
-    assert output["verification_code"] == "result_verifier_unavailable"
-    assert output["reconciliation_required"] is True and output["retryable"] is False
-    assert output["file_path"] == "/tmp/p41.xlsx"
-    mock_shipment_svc.generate_shipment_document.assert_called_once_with(**payload)
-    run = shipment_client.app.state.agent_runs.get(output["run_id"])
-    assert run.status == "blocked" and len(run.tool_calls) == 1
-    call = run.tool_calls[0]
-    assert (call.tool_id, call.action) == ("shipment_orders", "generate")
-    assert call.output == mock_shipment_svc.generate_shipment_document.return_value
-    assert call.metadata["verification"]["accepted"] is False
-    assert run.steps[0].attempt_count == 1
-    assert not {"tool.completed", "run.completed"} & {event.event_type for event in run.events}
+    assert r.status_code == 202, r.text
+    assert r.json()["success"] is False
+    assert admission.call_args.kwargs["params"] == payload
+    assert admission.call_args.kwargs["action"] == "generate"
+    mock_shipment_svc.generate_shipment_document.assert_not_called()
 
 
 def test_shipment_orders_latest_alias(
@@ -450,11 +458,9 @@ def test_compat_customer_get_not_found(compat_customer_client: TestClient) -> No
     assert r.status_code == 404
 
 
-def test_compat_customer_update_via_service(
-    compat_customer_client: TestClient, trusted_actor, monkeypatch
+def test_compat_customer_service_flag_cannot_bypass_session(
+    compat_customer_client: TestClient,
 ) -> None:
-    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(role="admin")
     with (
         patch(
             "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
@@ -468,16 +474,17 @@ def test_compat_customer_update_via_service(
         r = compat_customer_client.put(
             "/customers/2",
             json={"unit_name": "乙公司"},
-            headers=actor.headers,
         )
-    assert r.status_code == 200, r.text
-    upd.assert_called_once()
+    assert r.status_code == 401
+    upd.assert_not_called()
 
 
 def test_compat_customer_export_not_implemented() -> None:
     from fastapi import HTTPException
 
-    from app.fastapi_routes.domains.customer.customer_routes import customers_export_stub
+    from app.fastapi_routes.domains.customer.customer_routes import (
+        customers_export_stub,
+    )
 
     with pytest.raises(HTTPException) as exc:
         customers_export_stub()
@@ -491,24 +498,17 @@ def test_compat_customer_export_not_implemented() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_legacy_tools_execute_route(tools_client: TestClient) -> None:
+def test_unregistered_tools_execute_route_is_rejected(tools_client: TestClient) -> None:
     with patch(
-        "app.application.facades.tools_facade.run_archive_tools_execute",
-        return_value=({"success": True, "tool": "excel_analysis"}, 200),
-    ) as legacy_execute:
-        r = tools_client.post(
+        "app.application.tools.registered_capabilities.execute_registered_capability"
+    ) as run:
+        response = tools_client.post(
             "/api/tools/execute",
-            json={"tool_id": "excel_analysis", "params": {}},
+            json={"tool_id": "unregistered", "params": {}},
         )
-    assert r.status_code == 400
-    assert r.json() == {
-        "success": False,
-        "error_code": "tool_contract_unavailable",
-        "message": "工具或动作未登记，未执行",
-        "retryable": False,
-        "execution_status": "not_started",
-    }
-    legacy_execute.assert_not_called()
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "tool_contract_unavailable"
+    run.assert_not_called()
 
 
 def test_compat_tools_list_role_filter(tools_client: TestClient) -> None:

@@ -221,8 +221,12 @@ def test_all_original_goals_need_independent_receipts(verifier):
     assert not verifier.classify(None)[1]["ok"]
 
 
-def test_verified_report_binds_all_goals_and_uses_only_scoped_gateway(verifier):
-    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+@pytest.mark.parametrize(
+    "wrapper", ["{}", "```json\n{}\n```", "```\n{}\n```", " \n```JSON\n{}\n```\n "]
+)
+def test_verified_report_binds_all_goals_and_uses_only_scoped_gateway(verifier, wrapper):
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=wrapper.format(raw))]
     report = verifier.verify()
     state, result = verifier.classify(report)
     assert state == "completed" and result["business_completed"]
@@ -286,6 +290,55 @@ def test_conflicting_aliases_are_not_multiple_goal_proof(verifier):
     verifier.rows.append(alias)
     report = verifier.verify()
     assert report["error_code"] == "goal_evidence_conflict" and not verifier.requests
+
+
+@pytest.mark.parametrize(
+    "missing", ["fingerprint", "receipt_run_id", "receipt_task_id", "receipt_type"]
+)
+def test_unbound_child_receipt_is_never_accepted_as_goal_evidence(verifier, missing):
+    row = verifier.rows[0]
+    if missing == "fingerprint":
+        row.pop("fingerprint")
+    elif missing == "receipt_run_id":
+        row["receipt"].pop("run_id")
+    elif missing == "receipt_task_id":
+        row["receipt"].pop("task_id")
+    else:
+        row["receipt"] = ["malformed"]
+
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    assert report["error_code"] == (
+        "goal_evidence_pending" if missing == "receipt_type" else "goal_evidence_conflict"
+    )
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["business_completed"] is False
+
+
+def test_claimed_verified_receipt_cannot_override_rejected_host_verification(verifier):
+    verifier.rows[0]["receipt"]["verification"] = {
+        "protocol": "xcagi.result-verification.v1",
+        "status": "inconclusive",
+        "accepted": False,
+    }
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+    report = verifier.verify()
+    assert report["status"] == "needs_work" and not report["accepted"]
+    assert "缺少独立核验" in report["feedback"]
+    status, result = verifier.classify(report)
+    assert status == "blocked" and not result["business_completed"]
+    assert result["tool_calls"][0]["success"] is True
+    assert result["tool_calls"][0]["verified"] is False
+    assert result["verified_operations"] is False
+
+
+def test_unknown_effect_inside_completed_receipt_blocks_goal_success(verifier):
+    verifier.rows[0]["receipt"]["execution"] = {"outcome": "unknown", "committed": True}
+    report = verifier.verify()
+    assert not report["accepted"] and not verifier.requests
+    status, result = verifier.classify(report)
+    assert status == "blocked" and result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
 
 
 def test_one_write_receipt_cannot_complete_two_distinct_effects(verifier):
@@ -615,7 +668,8 @@ def test_refusal_tool_call_and_truncation_cannot_be_retried_into_acceptance(veri
 
 
 @pytest.mark.parametrize("nested", [False, True])
-def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested):
+@pytest.mark.parametrize("wrapper", ["{}", "```json\n{}\n```"])
+def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested, wrapper):
     raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
     raw = raw.replace(
         '"status": "satisfied"' if nested else '"violations": []',
@@ -624,11 +678,33 @@ def test_duplicate_json_keys_cannot_overwrite_a_negative_review(verifier, nested
         else '"violations": ["must reject"], "violations": []',
         1,
     )
-    verifier.replies = [response({}, text=raw), response({}, text=raw)]
+    verifier.replies = [response({}, text=wrapper.format(raw)) for _ in range(2)]
     report = verifier.verify()
     assert report["accepted"] is False and report["status"] == "unavailable"
     assert len(verifier.requests) == 2
     assert {item["state"] for item in report["attempts"]} == {"invalid_format"}
+
+
+@pytest.mark.parametrize(
+    "wrapper",
+    ["```json\n{}", "说明\n```json\n{}\n```", "```json\n{}\n```\n说明", "```jsonc\n{}\n```"],
+)
+def test_incomplete_or_annotated_code_fences_remain_invalid(verifier, wrapper):
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=wrapper.format(raw)) for _ in range(2)]
+    report = verifier.verify()
+    assert not report["accepted"] and report["status"] == "unavailable"
+    assert len(verifier.requests) == 2
+    assert {item["state"] for item in report["attempts"]} == {"invalid_format"}
+
+
+def test_fenced_review_still_requires_original_host_receipts(verifier):
+    verifier.rows = verifier.rows[:1]
+    raw = json.dumps(review(goal(), goal("再查询second", goal_id="second")))
+    verifier.replies = [response({}, text=f"```json\n{raw}\n```")]
+    report = verifier.verify()
+    assert not report["accepted"] and report["status"] == "needs_work"
+    assert verifier.classify(report)[0] == "blocked"
 
 
 def test_format_retry_requires_an_original_task_reservation(verifier):
@@ -827,3 +903,57 @@ def test_optional_reply_branches_are_one_goal_not_two_required_operations(verifi
     assert report["accepted"] and report["mode"] == "reply"
     payload = json.loads(json.loads(verifier.requests[0].content)["input"][1]["content"])
     assert any("二选一" in rule and "任一" in rule for rule in payload["rules"])
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "receipt_missing",
+        "late_success_after_timeout",
+        "late_success_after_cancel",
+        "contradictory_terminal",
+        "state_missing",
+    ],
+)
+def test_terminal_receipt_negative_controls_never_mark_completed(verifier, failure):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state, receipt_verified
+
+    row = verifier.rows[0]
+    if failure == "receipt_missing":
+        row.pop("receipt")
+    elif failure == "late_success_after_timeout":
+        row["state"] = "timed_out"
+    elif failure == "late_success_after_cancel":
+        row["state"] = "cancelled"
+    elif failure == "contradictory_terminal":
+        row["receipt"]["status"] = "failed"
+    else:
+        row.pop("state")
+    assert receipt_state(row) == "unknown"
+    assert receipt_verified(row) is False
+
+    # Even if another child is genuinely complete, the parent must preserve
+    # the original uncertain side effect rather than resubmit either action.
+    state, result = verifier.classify(None)
+    assert state == "blocked"
+    assert result["execution_state"] == "unknown"
+    assert result["exit_status"] == "unknown"
+    assert result["reconciliation_required"] is True
+    assert result["needs_verification"] is True
+    assert result["retryable"] is False
+    assert result["business_completed"] is False
+    assert result["verified_operations"] is False
+    assert result["ok"] is False
+
+
+def test_late_success_cannot_overwrite_an_older_unknown_execution_receipt(verifier):
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_state
+
+    original = verifier.rows[0]
+    original["state"] = "unknown"
+    original["receipt"]["status"] = "completed"
+    original["receipt"]["success"] = True
+    original["receipt"]["verified"] = True
+    assert receipt_state(original) == "unknown"
+    assert verifier.classify(None)[0] == "blocked"
+

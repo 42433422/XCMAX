@@ -460,7 +460,10 @@ class XiaoxTransport:
         return thread_id
 
     async def stream_turn(
-        self, text: str | None, *, goal_feedback: str | None = None,
+        self,
+        text: str | None,
+        *,
+        goal_feedback: str | None = None,
         output_schema: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         if (text is None) == (goal_feedback is None):
@@ -479,7 +482,11 @@ class XiaoxTransport:
                         client.turn_start, self.thread_id, text, outcome_unknown=True
                     )
                 else:
-                    from openai_codex.generated.v2_all import TurnStartParams, TurnToolOutput
+                    from openai_codex.generated.v2_all import (
+                        FunctionCallOutputBody,
+                        TurnStartParams,
+                        TurnToolOutput,
+                    )
 
                     # Same tool-level input as SDK ExternalMessage, with our low-level
                     # client's deny-by-default approval handler still in place.
@@ -487,7 +494,9 @@ class XiaoxTransport:
                         thread_id=self.thread_id,
                         input=[],
                         tool_output=TurnToolOutput(
-                            name="verify_runtime_goal", output=goal_feedback, retain=False
+                            name="verify_runtime_goal",
+                            output=FunctionCallOutputBody(root=goal_feedback),
+                            retain=False,
                         ),
                         **({"output_schema": output_schema} if output_schema else {}),
                     )

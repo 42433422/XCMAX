@@ -259,7 +259,7 @@ def test_admission_loser_rechecks_revoked_permission(
     from app.db.models.agent import AgentRunRecord, AgentTaskRecord
     from app.db.models.permission import Role
 
-    actor = trusted_actor(role="admission-reader", permissions=["customer.view"])
+    actor = trusted_actor(role="admission-reader", permissions=["customer.edit"])
     factory = admission_sessions
     winner = SQLAlchemyAgentRunRepository(session_factory=factory)
     winner._ensure_schema()
@@ -287,8 +287,8 @@ def test_admission_loser_rechecks_revoked_permission(
             title="query",
             message="query",
             tool_id="customers",
-            action="query",
-            params={},
+            action="batch_delete",
+            params={"ids": [1]},
             runtime_context=actor.context,
         )
     with factory() as db:
@@ -297,9 +297,9 @@ def test_admission_loser_rechecks_revoked_permission(
     assert stored.status == "waiting_user" and not stored.tool_calls
 
 
-@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "rejected"])
+@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "rejected", "unknown"])
 @pytest.mark.parametrize("durable", [False, True])
-def test_late_run_saves_cannot_reopen_or_replace_a_terminal_outcome(tmp_path, terminal, durable):
+def test_late_run_saves_cannot_reopen_or_replace_a_protected_outcome(tmp_path, terminal, durable):
     import copy
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
@@ -312,6 +312,8 @@ def test_late_run_saves_cannot_reopen_or_replace_a_terminal_outcome(tmp_path, te
     )
     run = _scope_run("owner", "finished-task", "mod")
     run.status = terminal
+    if terminal == "unknown":
+        run.metadata["non_retryable"] = True
     run.final_output = {"answer": "committed"}
     repo.save(run)
     try:

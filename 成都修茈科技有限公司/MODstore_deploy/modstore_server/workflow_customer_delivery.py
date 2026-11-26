@@ -30,6 +30,7 @@ from modstore_server.workflow_sandbox_state import workflow_graph_fingerprint
 START_EVENT = "workflow.execution.feedback_started"
 CLAIM_EVENT = "workflow.customer.delivery_started"
 PRODUCED_EVENT = "workflow.customer.delivery_produced"
+COMPLETION_PROTOCOL = "workflow.customer.graph-return.v1"
 ARTIFACT_SOURCE = "native_direct_python_workflow_output"
 MAX_ARTIFACT_BYTES = 64_000_000
 SNAPSHOT_STORAGE = "private_workflow_snapshot_v1"
@@ -171,7 +172,12 @@ def _customer(db: Any, user_id: int) -> Any:
 
 
 def prepare_customer_delivery(
-    db: Any, execution: Any, binding: dict[str, Any], policy: dict[str, Any]
+    db: Any,
+    execution: Any,
+    binding: dict[str, Any],
+    policy: dict[str, Any],
+    *,
+    frozen_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Freeze the paid goal and every native node of the actually approved graph."""
     from modstore_server.customer_value_lifecycle_api import _authoritative_order
@@ -206,6 +212,7 @@ def prepare_customer_delivery(
     edges = db.scalars(select(WorkflowEdge).where(WorkflowEdge.workflow_id == workflow.id)).all()
     ordered = _serial_employees(list(nodes), list(edges))
     common = {
+        "completion_protocol": COMPLETION_PROTOCOL,
         "execution_id": int(execution.id),
         "workflow_id": int(workflow.id),
         "user_id": owner,
@@ -221,13 +228,27 @@ def prepare_customer_delivery(
         len(frozen_nodes) > 1 or any("customer_deliverables" in node for node in frozen_nodes)
     ) and not any(node.get("customer_deliverables") for node in frozen_nodes):
         raise ValueError("customer delivery requires explicit customer_deliverables")
-    if len(frozen_nodes) == 1:
-        return frozen_nodes[0]
-    contract = {**common, "nodes": frozen_nodes}
+    contract = (
+        {key: value for key, value in frozen_nodes[0].items() if key != "contract_sha256"}
+        if len(frozen_nodes) == 1
+        else {**common, "nodes": frozen_nodes}
+    )
+    from modstore_server.workflow_training_replay import capture_business_replay
+
+    # Optional training bytes are captured at admission, not at each execution
+    # boundary. Revalidation receives only the verified server-recorded contract.
+    replay = (
+        capture_business_replay(db, contract, inputs)
+        if frozen_contract is None
+        else deepcopy(frozen_contract.get("business_replay"))
+    )
+    if replay is not None:
+        contract["business_replay"] = replay
     return {**contract, "contract_sha256": digest(contract)}
 
 
 def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, Any]:
+    from modstore_server.catalog_archive_integrity import sha256_file
     from modstore_server.employee_runtime import (
         load_employee_pack_resolved,
         parse_employee_config_v2,
@@ -235,6 +256,7 @@ def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, An
     from modstore_server.employee_runtime_policy import apply_policy_to_config
     from modstore_server.strategic_execution_contract import (
         _pack_identity,
+        _workspace_file,
         freeze_execution,
         validate_input,
     )
@@ -304,6 +326,14 @@ def _freeze_node(db: Any, node: Any, inputs: dict, common: dict) -> dict[str, An
     }
     if deferred:
         contract["deferred_input_mapping"] = deepcopy(mapping)
+    else:
+        # The payload digest binds the path, not the bytes the native employee
+        # will read. Keep that source identity in the original business contract,
+        # independently of whether optional offline training capture is available.
+        source = _workspace_file(
+            str(node_input["file_path"]), frozen["input_data"]["workspace_root"], owner, exists=True
+        )
+        contract["input_file_sha256"] = sha256_file(source)
     if "customer_deliverables" in config:
         contract["customer_deliverables"] = _declared_deliverables(config["customer_deliverables"])
     return {**contract, "contract_sha256": digest(contract)}
@@ -322,6 +352,10 @@ def _stored_contract(db: Any, execution_id: int) -> tuple[Any, dict[str, Any], d
         event.event_name != START_EVENT
         or event.aggregate_id != str(execution_id)
         or event.producer != "modstore-python"
+        or (
+            "completion_protocol" in contract
+            and contract["completion_protocol"] != COMPLETION_PROTOCOL
+        )
         or digest(unsigned) != contract.get("contract_sha256")
         or contract.get("execution_id") != execution.id
         or contract.get("user_id") != execution.user_id
@@ -344,6 +378,7 @@ def require_running_contract(contract: dict[str, Any]) -> None:
     """Recheck SQL authority at every existing native execution boundary."""
     from modstore_server.strategic_execution_contract import freeze_execution
     from modstore_server.workflow_execution_feedback import _admitted
+    from modstore_server.workflow_training_replay import require_original_business_inputs
 
     with get_session_factory()() as db:
         execution, binding, stored = _stored_contract(db, int(contract["execution_id"]))
@@ -351,7 +386,10 @@ def require_running_contract(contract: dict[str, Any]) -> None:
             _admitted(db, binding) or _admitted(db, binding, promoted=True)
         ):
             raise ValueError("workflow customer delivery approval is no longer current")
-        current = prepare_customer_delivery(db, execution, binding, contract["policy"])
+        require_original_business_inputs(stored)
+        current = prepare_customer_delivery(
+            db, execution, binding, contract["policy"], frozen_contract=stored
+        )
         if current != stored:
             raise ValueError("workflow customer delivery inputs, package or agreement changed")
         resolved, _data, _rows = _walk_delivery(db, stored, until=contract["node_id"])
@@ -543,6 +581,13 @@ def _load_node_receipt(
     produced = records[PRODUCED_EVENT]
     if (
         any(produced.get(key) != value for key, value in _node_identity(node).items())
+        or (
+            ("completion_protocol" in node or "completion_protocol" in produced)
+            and (
+                node.get("completion_protocol") != COMPLETION_PROTOCOL
+                or produced.get("completion_protocol") != COMPLETION_PROTOCOL
+            )
+        )
         or not isinstance(produced.get("artifacts"), list)
         or not produced["artifacts"]
     ):
@@ -727,6 +772,7 @@ def record_customer_delivery_node(*, execution_id: int, node_id: int, output: di
                 _snapshot_artifact(contract, artifact)
                 for artifact in _native_artifacts(contract, result, verify_files=False)
             ],
+            "completion_protocol": COMPLETION_PROTOCOL,
             "native_result_sha256": digest(result),
             "node_output": deepcopy(output),
             "node_output_sha256": digest(output),
@@ -749,7 +795,14 @@ def record_customer_delivery_node(*, execution_id: int, node_id: int, output: di
 
 
 def load_completed_delivery(db: Any, execution_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read sealed completion facts; later workspace files cannot erase history.
+
+    Download/acceptance and unfinished graph finalization separately verify
+    the private original snapshot, or current bytes for an older unsnapshotted receipt.
+    """
     from modstore_server.workflow_customer_finalization import (
+        RETURNED_EVENT,
+        _legacy_completed_return,
         _load_return,
         _original_delivery,
         _utc,
@@ -758,15 +811,19 @@ def load_completed_delivery(db: Any, execution_id: int) -> tuple[dict[str, Any],
     execution, binding, contract = _stored_contract(db, execution_id)
     if execution.status != "completed" or execution.completed_at is None:
         raise ValueError("workflow customer delivery has not actually completed")
-    returned = _load_return(db, execution_id)
+    produced = load_produced_delivery(db, contract, verify_files=False)
+    returned = (
+        _load_return(db, execution_id)
+        if _event(db, f"{RETURNED_EVENT}:{execution_id}") is not None
+        else _legacy_completed_return(db, execution, binding, contract, produced)
+    )
     _original_delivery(db, returned, verify_files=False)
     if (
         execution.output_data != returned.output_json
         or execution.error_message not in (None, "")
         or _utc(execution.completed_at) != _utc(returned.completed_at)
     ):
-        raise ValueError("workflow completion differs from its original graph return")
-    produced = load_produced_delivery(db, contract, verify_files=False)
+        raise ValueError("workflow customer completion differs from its original graph return")
     required_delivery_artifacts(contract, produced)
     return binding, produced
 

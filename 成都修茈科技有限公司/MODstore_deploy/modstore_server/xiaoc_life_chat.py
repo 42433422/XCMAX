@@ -160,6 +160,9 @@ def admin_life_context(user: Any) -> str:
         for key in ("identity_id", "level", "paused", "status", "revision", "next_wake_at")
         if key in state
     }
+    from modstore_server.xiaoc_self_model import cognition_projection
+
+    visible["functional_self"] = cognition_projection(state)
     visible["mission"] = str(state.get("mission") or "")[:500]
     visible["blockers"] = [str(item)[:200] for item in state.get("blockers", [])[:4]]
     for key, fields in (
@@ -174,6 +177,7 @@ def admin_life_context(user: Any) -> str:
         "L1 仅对话；L2 只按当前用户明确要求执行一个工具；L3 及以上可编排已授权任务。"
         "暂停仅影响主动后台活动。目标与兴趣是待推进事项，不能称作已完成经历。"
         "事件只按原始状态与证据引用叙述，不能把失败、未知或观察记录说成执行成功。\n"
+        "功能性身份回读只证明身份合同，不代表工具、技能、员工或模型能力已掌握。\n"
         + json.dumps(visible, ensure_ascii=False)
     )
 

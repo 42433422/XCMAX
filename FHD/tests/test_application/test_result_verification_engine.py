@@ -17,66 +17,105 @@ from app.application.agent_orchestrator.result_verification import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-from app.application.agent_orchestrator.step_execution import StepExecution
-from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2, ToolValidationResult
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.result_verification import (
+    _adapter,
+    _approval_for,
+    _passed,
+    _paused_preview,
+    _receipt,
+    _runtime,
+)
+from tests.test_application.test_agent_user_decision_pause import native_preview as native_preview
 
 
-def _receipt(*, read_only=False, output=None):
-    context = {"tenant_id": "7", "actor_id": "9", "user_id": "9", "task_id": "task-original"}
-    step = AgentStep(
-        node_id="write", tool_id="custom_business", action="create", params={"name": "A"}
+def test_pending_preview_binding_does_not_itself_authorize_continuation(
+    trusted_actor, native_preview
+):
+    from app.application.agent_orchestrator.approval_grant import (
+        ApprovalGrantError,
+        approval_scope_matches,
     )
-    step.attempt_count, step.status = 1, "completed"
-    step.output = copy.deepcopy(output if output is not None else {"success": True, "id": 1})
-    run = AgentRun(user_id="9", message="Create A", status="running", steps=[step])
-    run.metadata["runtime_context"] = copy.deepcopy(context)
-    call = ToolCall(
-        step_id=step.step_id,
-        node_id=step.node_id,
-        tool_id=step.tool_id,
-        action=step.action,
-        params=copy.deepcopy(step.params),
-        status="completed",
-        output=copy.deepcopy(step.output),
-        metadata={"attempt_count": 1},
-    )
-    run.tool_calls.append(call)
-    spec = ToolActionSpecV2(
-        tool_id=step.tool_id,
-        action=step.action,
-        read_only=read_only,
-        output_schema={
-            "type": "object",
-            "required": ["success"],
-            "properties": {"success": {"type": "boolean"}},
-        },
-    )
-    freeze_verification_contract(run, step, call, spec, context)
-    bind_execution_receipt(call)
-    return run, step, call, context
+    from app.application.agent_orchestrator.result_verification import preview_continuation_params
+
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview)
+    assert call.metadata["verification"]["code"] == "result_preview_verified"
+    original = copy.deepcopy(call.to_dict())
+    proposal = preview_continuation_params(run, step, call)
+    assert proposal == {**call.params, "valid_rows_only": True}
+    with pytest.raises(ApprovalGrantError, match="续跑参数尚未绑定"):
+        _approval_for(run, step)
+    assert not approval_scope_matches(run, step)
+    step.params = proposal
+    run.metadata["plan"]["nodes"][0]["params"] = copy.deepcopy(proposal)
+    assert not step_verification_blocked(run, step)
+    assert not approval_scope_matches(run, step)
+    run.metadata["approval_receipt"] = _approval_for(run, step)
+    assert approval_scope_matches(run, step)
+    assert call.to_dict() == original
 
 
-def _passed():
-    return {
-        "status": "verified",
-        "code": "source_matches",
-        "checks": [
-            {
-                "check_id": "row",
-                "status": "passed",
-                "source": "separate_database_connection",
-                "evidence": {"row_id": 1},
-            }
-        ],
-    }
+@pytest.mark.parametrize(
+    "resume",
+    [
+        {},
+        {"valid_rows_only": False},
+        {"valid_rows_only": 1},
+        {"valid_rows_only": "true"},
+        {"file_path": "another-upload"},
+        {"valid_rows_only": True, "execute": True},
+    ],
+)
+def test_preview_resume_report_cannot_expand_the_parameter_allowlist(
+    trusted_actor, native_preview, resume
+):
+    from app.application.agent_orchestrator.result_verification import preview_continuation_params
+
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview, resume=resume)
+    original = copy.deepcopy(call.to_dict())
+    plan = copy.deepcopy(run.metadata["plan"])
+    assert call.metadata["verification"]["accepted"] is False
+    assert preview_continuation_params(run, step, call) is None
+    assert step_verification_blocked(run, step)
+    assert step.params == call.params
+    assert run.metadata["plan"] == plan
+    assert call.to_dict() == original
 
 
-def _adapter(monkeypatch, function):
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.verification_readback.verify_independent_result",
-        function,
-    )
+@pytest.mark.parametrize("change", ["source", "extra_param", "changed_upload", "unknown"])
+def test_verified_preview_continuation_still_requires_exact_original_authority(
+    monkeypatch, trusted_actor, native_preview, change
+):
+    from app.application.agent_orchestrator.approval_grant import approval_scope_matches
+    from app.application.agent_orchestrator.result_verification import preview_continuation_params
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+
+    actor = trusted_actor(role="admin")
+    run, step, call, context = _paused_preview(actor, native_preview)
+    proposal = preview_continuation_params(run, step, call)
+    assert proposal is not None
+    step.params = proposal
+    run.metadata["plan"]["nodes"][0]["params"] = copy.deepcopy(proposal)
+    run.metadata["approval_receipt"] = _approval_for(run, step)
+    assert approval_scope_matches(run, step)
+    if change == "source":
+        unrelated = _passed()
+        unrelated["checks"][0]["source"] = "other_authority"
+        _adapter(monkeypatch, lambda **_: unrelated)
+        original = copy.deepcopy(step)
+        original.params = copy.deepcopy(call.params)
+        assert verify_step_result(run=run, step=original, call=call, context=context)["accepted"]
+        assert preview_continuation_params(run, step, call) is None
+        assert step_verification_blocked(run, step)
+    elif change == "unknown":
+        run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+        assert requires_retry_reconciliation(run)
+    else:
+        step.params["target_type" if change == "extra_param" else "file_path"] = "other"
+        assert step_verification_blocked(run, step)
+        assert not approval_scope_matches(run, step)
 
 
 def test_tool_and_model_claims_cannot_supply_independent_evidence():
@@ -104,6 +143,124 @@ def test_read_only_contract_is_explicitly_not_independent_verification():
     summary = summarize_verification(run)
     assert summary["independently_verified_steps"] == 0
     assert summary["contract_only_steps"] == 1
+
+
+@pytest.mark.parametrize("confirmation", [False, True], ids=["parameters", "plan"])
+def test_answered_host_clarification_does_not_block_a_verified_business_read(
+    trusted_actor, confirmation
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.clarification_node import build_clarify_node
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    actor = trusted_actor(permissions=["customer.view", "business_db.read", "tool.clarify.ask"])
+    read = WorkflowNode(
+        node_id="read",
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers"} if confirmation else {},
+        risk="low",
+        idempotent=True,
+    )
+    question = (
+        WorkflowNode(
+            node_id="confirm",
+            tool_id="clarify",
+            action="ask",
+            params={"question": "请确认查询"},
+            risk="low",
+            idempotent=True,
+        )
+        if confirmation
+        else build_clarify_node(
+            "请选择业务实体",
+            ambient={
+                "target_node_id": read.node_id,
+                "clarification": {"reason": "missing_required", "missing_fields": ["entity"]},
+            },
+        )
+    )
+    read.depends_on = [question.node_id]
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(
+        user_id=str(actor.user_id),
+        message="查询当前企业客户",
+        plan=PlanGraph(plan_id="confirmed-read", intent="read", nodes=[question, read]),
+        runtime_context=actor.context,
+    )
+    assert run.status == "waiting_user" and not run.tool_calls, (run.error, run.final_output)
+    if confirmation:
+        completed = orchestrator.continue_plan_confirmation(
+            run.run_id,
+            answered_by=str(actor.user_id),
+            clarification_step_id=run.steps[0].step_id,
+            confirmed=True,
+        )
+    else:
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=run.steps[0].step_id,
+            parameters={"entity": "customers"},
+            requested_by=str(actor.user_id),
+        )
+        completed = orchestrator.execute_dispatched_run(run.run_id)
+    assert completed.status == "completed"
+    assert completed.metadata["verification"]["accepted"] is True
+    control = completed.metadata["verification"]["steps"][0]
+    assert control["status"] == "not_required"
+    assert control["code"] == "host_control_answer_confirmed"
+    assert len(completed.tool_calls) == 1
+    assert completed.tool_calls[0].tool_id == "business_db"
+
+
+@pytest.mark.parametrize("mismatch", ["no_event", "other_run", "other_step", "business_write"])
+def test_answer_flag_or_unrelated_host_event_cannot_clear_historical_effect(mismatch):
+    run, read, call, context = _receipt(read_only=True)
+    verify_step_result(run=run, step=read, call=call, context=context)
+    historical = AgentStep(
+        node_id="old",
+        tool_id="sales" if mismatch == "business_write" else "clarify",
+        action="quote" if mismatch == "business_write" else "ask",
+        status="completed",
+        output={"success": True, "answer_confirmed": True},
+    )
+    run.steps.insert(0, historical)
+    if mismatch != "no_event":
+        event = run.add_event(
+            "step.clarification_answered",
+            data={"step_id": "other" if mismatch == "other_step" else historical.step_id},
+        )
+        if mismatch == "other_run":
+            event.run_id = "another-run"
+    assert step_verification_blocked(run, historical)
+    assert summarize_verification(run)["accepted"] is False
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_unverified_effect_receipt_preserves_known_pending_or_unknown_without_rewriting(pending):
+    from app.application.agent_orchestrator.result_verification import project_verification
+    from app.application.agent_orchestrator.trace_payloads import agent_node_output
+    from app.domain.task_lifecycle.results import execution_result_pending_state
+    from app.fastapi_routes.tools_execute import _capability_http_receipt
+
+    original = (
+        {"success": False, "execution_state": "pending"} if pending else {"success": True, "id": 1}
+    )
+    run, step, call, context = _receipt(output=original)
+    verify_step_result(run=run, step=step, call=call, context=context)
+    project_verification(run)
+    run.status = "blocked"
+    # A stale final projection must not override the immutable call and its
+    # current host readback; neither variant permits a new dispatch.
+    run.final_output["node_outputs"] = {step.node_id: {"success": True}}
+    projected = agent_node_output(run, step.node_id)
+    state = execution_result_pending_state(projected)
+    assert state == ("pending" if pending else "unknown")
+    payload, status = _capability_http_receipt({**projected, "execution_state": state})
+    assert status == 202 and payload["success"] is False
+    assert payload["retryable"] is False
+    assert bool(payload.get("reconciliation_required")) is (not pending)
+    assert step.output == call.output == original
 
 
 def test_read_only_tool_cannot_bypass_file_verification():
@@ -188,23 +345,51 @@ def test_completed_step_cannot_skip_static_proof_binding(monkeypatch, mutation):
     assert not summarize_verification(run)["accepted"]
 
 
-def test_historical_completed_step_does_not_disappear_from_coverage(monkeypatch):
+@pytest.mark.parametrize("has_call", [False, True])
+def test_historical_completed_step_does_not_disappear_from_coverage(monkeypatch, has_call):
+    from app.application.agent_orchestrator.result_verification import (
+        project_verification,
+        verified_step_output,
+    )
+    from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+
     _adapter(monkeypatch, lambda **_: _passed())
     run, step, call, context = _receipt()
     verify_step_result(run=run, step=step, call=call, context=context)
-    run.steps.append(
-        AgentStep(
-            node_id="legacy",
-            tool_id="legacy",
-            action="create",
-            status="completed",
-            output={"success": True},
-        )
+    legacy = AgentStep(
+        node_id="legacy",
+        tool_id="legacy",
+        action="create",
+        status="completed",
+        output={"success": True},
     )
-    summary = summarize_verification(run)
+    run.steps.append(legacy)
+    if has_call:
+        run.tool_calls.append(
+            ToolCall(
+                step_id=legacy.step_id,
+                node_id=legacy.node_id,
+                tool_id=legacy.tool_id,
+                action=legacy.action,
+                status="completed",
+                output=copy.deepcopy(legacy.output),
+            )
+        )
+    original_step = copy.deepcopy(legacy.to_dict())
+    original_calls = [copy.deepcopy(item.to_dict()) for item in run.tool_calls]
+    summary = project_verification(run)
     assert summary["status"] == "not_verified"
     assert not summary["accepted"]
     assert len(summary["steps"]) == 2
+    run.status = "blocked"
+    projected = verified_step_output(run, legacy)
+    assert projected["success"] is False and projected["execution_state"] == "unknown"
+    assert projected["reconciliation_required"] is True and projected["retryable"] is False
+    assert dispatched_run_state(run) == ("unknown", "needs_verification")
+    assert requires_retry_reconciliation(run)
+    assert legacy.to_dict() == original_step
+    assert [item.to_dict() for item in run.tool_calls] == original_calls
 
 
 @pytest.mark.parametrize(
@@ -221,59 +406,6 @@ def test_output_contract_and_explicit_failures_precede_readback(monkeypatch, bod
     run, step, call, context = _receipt(output=body)
     assert not verify_step_result(run=run, step=step, call=call, context=context)["accepted"]
     assert calls == []
-
-
-def _runtime(tmp_path, monkeypatch):
-    database = tmp_path / "actual-effect.sqlite3"
-    with sqlite3.connect(database) as db:
-        db.execute("CREATE TABLE effects (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
-    dispatches, charges = [], []
-
-    def dispatch(_step, *, runtime_context):
-        dispatches.append(runtime_context["idempotency_key"])
-        with sqlite3.connect(database) as db:
-            db.execute("INSERT INTO effects(id,name) VALUES(1,'A')")
-        return {"success": True, "id": 1}
-
-    def readback(**_):
-        with sqlite3.connect(database) as db:
-            row = db.execute("SELECT id,name FROM effects WHERE id=1").fetchone()
-        assert row == (1, "A")
-        return _passed()
-
-    _adapter(monkeypatch, readback)
-    spec = ToolActionSpecV2(tool_id="custom_business", action="create", risk="high")
-    dependencies = SimpleNamespace(
-        action_spec=lambda *_: spec,
-        validate=lambda *_: ToolValidationResult(
-            ok=True, tool_id=spec.tool_id, action=spec.action, spec=spec
-        ),
-    )
-    usage = SimpleNamespace(
-        refresh_run_cost_metadata=lambda run: run.metadata.update(
-            cost_units_total=0, ai_cost_units_total=0
-        ),
-        record_tool_usage_entry=lambda *_: charges.append(1) or True,
-        record_tool_usage_refund=lambda *_args, **_kwargs: pytest.fail(
-            "Executed effect cannot be refunded by verification"
-        ),
-    )
-    repo = InMemoryAgentRunRepository()
-    runner = StepExecution(
-        repo,
-        SimpleNamespace(execute=dispatch),
-        usage,
-        dependencies,
-        attach_artifacts=lambda *_args, **_kwargs: None,
-        observe=lambda *_args, **_kwargs: {},
-    )
-    step = AgentStep(
-        node_id="write", tool_id=spec.tool_id, action=spec.action, params={"name": "A"}
-    )
-    run = AgentRun(user_id="9", message="Create A", steps=[step], status="running")
-    context = {"tenant_id": "7", "user_id": "9", "actor_id": "9"}
-    run.metadata["runtime_context"] = context
-    return repo, runner, run, step, context, readback, dispatches, charges
 
 
 def test_verifier_timeout_only_rechecks_original_committed_effect(tmp_path, monkeypatch):
@@ -604,3 +736,207 @@ def test_control_answer_cannot_attest_changed_scope_or_business_action(drift):
     else:
         control.tool_id, control.action = "sales", "deliver"
     assert step_verification_blocked(run, control)
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_pending_receipt_requires_real_readback_even_when_read_only(read_only):
+    run, step, call, context = _receipt(
+        read_only=read_only, output={"success": False, "execution_state": "pending"}
+    )
+    report = verify_step_result(run=run, step=step, call=call, context=context)
+    assert not report["accepted"]
+    assert report["code"] == "result_verifier_unavailable"
+    assert step_verification_blocked(run, step)
+
+
+@pytest.mark.parametrize(
+    "state", ["failed", "cancelled", "rejected", "unknown", "waiting_approval"]
+)
+def test_failed_unknown_or_unapproved_receipt_cannot_gain_business_success(monkeypatch, state):
+    _adapter(monkeypatch, lambda **_: pytest.fail("failed receipt must not be upgraded"))
+    run, step, call, context = _receipt(output={"success": False, "execution_state": state})
+    report = verify_step_result(run=run, step=step, call=call, context=context)
+    assert report["code"] == "execution_receipt_not_successful" and not report["accepted"]
+
+
+def test_pending_step_keeps_acknowledgement_and_never_dispatches_twice(tmp_path, monkeypatch):
+    repo, runner, run, step, context, readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    dispatch = runner.executor.execute
+
+    def accepted(*args, **kwargs):
+        dispatch(*args, **kwargs)
+        return {"success": False, "execution_state": "pending", "request_id": "accepted-original"}
+
+    runner.executor.execute = accepted
+    _adapter(
+        monkeypatch,
+        lambda **_: {"status": "inconclusive", "code": "provider_pending", "checks": []},
+    )
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    original = copy.deepcopy(step.output)
+    assert run.status == "blocked" and step.status == "completed", repr(
+        (step.output, [call.metadata.get("verification") for call in run.tool_calls])
+    )
+    assert step.output["execution_state"] == "pending"
+    assert "outcome" not in step.output and "reconciliation_required" not in step.output
+    assert run.metadata["recovery"]["state"] == "result_pending"
+    _adapter(monkeypatch, readback)
+    recovered = repo.get(run.run_id)
+    runner.execute_step(recovered, recovered.steps[0], runtime_context=context, node_outputs={})
+    assert summarize_verification(recovered)["accepted"]
+    assert recovered.tool_calls[0].output == original
+    assert len(dispatches) == len(charges) == 1
+    assert recovered.steps[0].attempt_count == 1
+
+
+def test_terminal_evidence_rechecks_actual_sqlite_row_before_claiming_success(
+    tmp_path, monkeypatch
+):
+    """The child readback, not a successful transport envelope, governs the parent."""
+    from app.domain.task_lifecycle.agent_runtime_contract import canonical_digest
+    from app.domain.task_lifecycle.agent_runtime_results import receipt_verified
+
+    repo, runner, run, step, context, _readback, dispatches, charges = _runtime(
+        tmp_path, monkeypatch
+    )
+    database = tmp_path / "actual-effect.sqlite3"
+
+    def read_database(**_kwargs):
+        # This is a second SQLite connection, not the dispatcher's return value.
+        with sqlite3.connect(database) as db:
+            actual = db.execute("SELECT id,name FROM effects WHERE id=1").fetchone()
+        return (
+            _passed()
+            if actual == (1, "A")
+            else {"status": "inconclusive", "code": "database_row_missing", "checks": []}
+        )
+
+    _adapter(monkeypatch, read_database)
+    runner.execute_step(run, step, runtime_context=context, node_outputs={})
+    assert summarize_verification(run)["accepted"] is True
+    call = run.tool_calls[0]
+
+    def original_child_row():
+        report = call.metadata["verification"]
+        operation = {"tool_id": step.tool_id, "action": step.action, "params": step.params}
+        return {
+            **operation,
+            "fingerprint": canonical_digest(operation),
+            "child_run_id": run.run_id,
+            "child_task_id": "original-child-task",
+            "state": "completed",
+            "read_only": False,
+            "receipt": {
+                "run_id": run.run_id,
+                "task_id": "original-child-task",
+                "status": "completed",
+                "success": report["accepted"],
+                "verified": report["accepted"],
+                "verification": report,
+            },
+        }
+
+    assert receipt_verified(original_child_row()) is True
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='tampered' WHERE id=1")
+
+    negative = verify_step_result(run=run, step=step, call=call, context=context)
+    assert negative["accepted"] is False
+    assert summarize_verification(run)["accepted"] is False
+    assert receipt_verified(original_child_row()) is False
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE effects SET name='A' WHERE id=1")
+    recovered = verify_step_result(run=run, step=step, call=call, context=context)
+    assert recovered["accepted"] is True
+    assert receipt_verified(original_child_row()) is True
+    assert len(dispatches) == len(charges) == len(run.tool_calls) == 1
+
+
+def test_terminal_evidence_reads_real_xlsx_and_rejects_corrupt_original(
+    tmp_path, monkeypatch, trusted_actor
+):
+    """A genuine export is read back from disk; tampering revokes its verification."""
+    from app.application.agent_orchestrator.artifact_files import artifact_path
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
+
+    actor = trusted_actor(role="admin")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.artifact_files.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    step = AgentStep(
+        node_id="export",
+        tool_id="reports",
+        action="export",
+        params={"report_type": "sales", "data": [{"product": "A", "quantity": 2}]},
+        status="completed",
+        attempt_count=1,
+    )
+    run = AgentRun(
+        user_id=str(actor.user_id),
+        message="Export approved rows",
+        status="blocked",
+        steps=[step],
+        metadata={"runtime_context": copy.deepcopy(actor.context)},
+    )
+    call = ToolCall(
+        step_id=step.step_id,
+        node_id=step.node_id,
+        tool_id=step.tool_id,
+        action=step.action,
+        params=copy.deepcopy(step.params),
+        status="completed",
+        metadata={"attempt_count": 1},
+    )
+    run.tool_calls.append(call)
+    freeze_verification_contract(
+        run, step, call, get_tool_action_spec("reports", "export"), actor.context
+    )
+    step.output = _registered_router_reports(
+        step.action, step.params,
+        {
+            **actor.context,
+            "run_id": run.run_id,
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "call_id": call.call_id,
+            "input_sha256": canonical_hash(step.params),
+        },
+        "shared",
+        run.message,
+    )
+    assert step.output["success"] is True
+    call.output = copy.deepcopy(step.output)
+    bind_execution_receipt(call)
+    readback_context = {
+        **actor.context,
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "node_id": step.node_id,
+    }
+    verified = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
+    assert verified["accepted"] is True
+    assert any(item["source"] in {"run_artifact", "report_data", "report_export", "report_sql"}
+               for item in verified["checks"])
+
+    artifact = step.output["artifacts"][0]
+    path = artifact_path(run.run_id, artifact["artifact_id"])
+    with path.open("ab") as output:
+        output.write(b"tampered-after-export")
+
+    rejected = verify_step_result(
+        run=run, step=step, call=call, context=readback_context
+    )
+    assert rejected["accepted"] is False
+    assert rejected["status"] in {"failed", "inconclusive"}
+    assert summarize_verification(run)["accepted"] is False
+    # The original producer must never be invoked just to verify a file.
+    assert step.attempt_count == len(run.tool_calls) == 1

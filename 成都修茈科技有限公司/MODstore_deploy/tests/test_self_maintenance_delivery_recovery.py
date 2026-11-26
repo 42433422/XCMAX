@@ -43,8 +43,10 @@ def test_evicted_request_enters_original_delivery_reconciliation(ledger, monkeyp
     monkeypatch.setattr(
         deployment,
         "_run_deploy_receipts_after_merge",
-        lambda **kwargs: calls.append(kwargs)
-        or {"enabled": True, "ok": False, "reason": "workflow_not_completed"},
+        lambda **kwargs: (
+            calls.append(kwargs)
+            or {"enabled": True, "ok": False, "reason": "workflow_not_completed"}
+        ),
     )
     outcomes._reconcile_requested_merge_feedback(
         memory,
@@ -79,11 +81,27 @@ def tick(fetcher):
     return memory
 
 
-def test_persisted_pages_make_bounded_progress_past_unknown_first_page(ledger, monkeypatch):
+@pytest.mark.parametrize("recent_unknown", [False, True])
+def test_persisted_pages_make_bounded_progress_past_unknown_first_page(
+    ledger, monkeypatch, recent_unknown
+):
     for index in range(store.DELIVERY_RECOVERY_RUNS * 2 + 1):
         store._append_ledger(request(f"loop-{index}", f"task-{index}"))
     for index in range(store.DELIVERY_RECOVERY_ROWS + 17):
         store._append_ledger({"phase": "complete", "run_id": f"new-{index}", "status": "completed"})
+    if recent_unknown:
+        store._write_loop_memory(
+            {
+                "recent_runs": [
+                    {
+                        **request(f"loop-{index}", f"task-{index}"),
+                        "status": "completed_merge_requested",
+                    }
+                    for index in range(store.DELIVERY_RECOVERY_RUNS)
+                ],
+                "open_items": [],
+            }
+        )
     calls, checked, reads = [], [], []
     original = store._read_delivery_row
 
@@ -105,7 +123,7 @@ def test_persisted_pages_make_bounded_progress_past_unknown_first_page(ledger, m
     monkeypatch.setattr(
         deployment,
         "_run_deploy_receipts_after_merge",
-        lambda **kwargs: calls.append(kwargs["run_id"]) or {"enabled": True, "ok": False},
+        lambda **kwargs: (calls.append(kwargs["run_id"]) or {"enabled": True, "ok": False}),
     )
     seen_progress = []
     for _ in range(12):
@@ -147,6 +165,37 @@ def test_terminal_appended_during_paged_verification_is_seen_before_recovery(led
         if not cursor:
             break
     assert recovered == [] and cursor == {}
+
+
+@pytest.mark.parametrize("status", ["completed_merged", "completed_merge_failed"])
+def test_paged_terminal_fences_stale_recent_projection_before_any_fetch(ledger, status):
+    original = request()
+    store._append_ledger(original)
+    for _ in range(store.DELIVERY_RECOVERY_ROWS + 17):
+        store._append_ledger({"phase": "heartbeat"})
+    store._append_ledger(
+        {
+            **original,
+            "event": "merge_feedback_reconciled",
+            "status": status,
+            "merge_reconciliation": {
+                "status": "merged" if status == "completed_merged" else "failed"
+            },
+            "deployment_receipt": {"ok": status == "completed_merged"},
+        }
+    )
+    stale = {**original, "status": "completed_merge_requested"}
+    store._write_loop_memory({"recent_runs": [dict(stale), stale], "open_items": []})
+
+    def forbidden(*_):
+        pytest.fail("an unverified UI projection must never bypass the durable terminal")
+
+    for _ in range(6):
+        memory = tick(forbidden)
+        if not memory.get("delivery_recovery_cursor"):
+            break
+    assert all(run["status"] == status for run in memory["recent_runs"])
+    assert memory["recent_runs"][0]["deployment_receipt"] == {"ok": status == "completed_merged"}
 
 
 def test_partial_snapshot_resumes_after_the_original_append_completes(ledger):

@@ -10,6 +10,7 @@ from starlette.requests import Request
 
 from app.legacy.lan import lan_compat
 from app.mod_sdk import approval_compat, neuro_bus_compat, planner_compat
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _http_request() -> Request:
@@ -85,7 +86,7 @@ class TestLanCompat:
         with (
             patch(
                 "app.infrastructure.mods.mod_manager.get_mod_manager",
-                side_effect=RuntimeError("no mgr"),
+                side_effect=FileNotFoundError("mods root working directory unavailable"),
             ),
             patch.object(lan_compat, "_resolve_mod_dir", return_value=mod_dir),
         ):
@@ -118,13 +119,18 @@ class TestPlannerCompat:
         assert out["success"] is True
         assert out["data"][0]["intent"] == "greeting"
 
-    def test_list_planner_tools_registry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_list_planner_tools_registry(
+        self, monkeypatch: pytest.MonkeyPatch, trusted_actor
+    ) -> None:
+        actor = trusted_actor(permissions=["customer.view"])
+        received = []
         monkeypatch.setattr(
             "app.mod_sdk.planner_tools.list_planner_tools_registry_detail",
-            lambda: {"tools": ["price_list"]},
+            lambda context: received.append(context) or {"tools": ["price_list"]},
         )
-        reg = planner_compat.list_planner_tools_registry()
+        reg = planner_compat.list_planner_tools_registry(actor.request)
         assert reg["tools"] == ["price_list"]
+        assert received[0]["_actor_authorization"] == actor.context["_actor_authorization"]
 
     def test_resolve_ai_tier_for_request(self) -> None:
         req = _http_request()

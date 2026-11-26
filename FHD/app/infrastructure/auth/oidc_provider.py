@@ -144,9 +144,11 @@ async def exchange_oidc_authorization(code: str) -> dict[str, Any]:
         tok_res = await client.post(token_ep, data=data)
         tok_res.raise_for_status()
         tokens = tok_res.json()
+        if not isinstance(tokens, dict):
+            raise httpx.RemoteProtocolError("OIDC token endpoint 返回了无效响应")
         access = str(tokens.get("access_token") or "").strip()
         if not access:
-            raise RuntimeError("OIDC token endpoint 未返回 access_token")
+            raise httpx.RemoteProtocolError("OIDC token endpoint 未返回 access_token")
         ui_res = await client.get(userinfo_ep, headers={"Authorization": f"Bearer {access}"})
         ui_res.raise_for_status()
         profile = ui_res.json()

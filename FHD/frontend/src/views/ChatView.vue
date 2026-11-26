@@ -330,7 +330,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -358,6 +358,7 @@ import { isFailedChatReply, useProactiveReplySuggestions } from '@/composables/u
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
+import { startupReadyKey } from '@/composables/useStartupSplash'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
@@ -380,6 +381,7 @@ const props = withDefaults(
 )
 
 const router = useRouter()
+const shellReady = inject(startupReadyKey, null)
 const modsStore = useModsStore()
 const { mods: modsFromStore } = storeToRefs(modsStore)
 const taskCenterStore = useAgentTaskCenterStore()
@@ -700,7 +702,7 @@ async function restoreOwnedConversation() {
   const mod = modsStore.activeModId
   const originalSession = currentSessionId.value
   const isOwnerCurrent = captureAuthSession()
-  const canApply = () => restoreActive && generation === restoreGeneration && isOwnerCurrent()
+  const canApply = () => restoreActive && shellReady?.value !== false && generation === restoreGeneration && isOwnerCurrent()
     && scope === chatScope.value && mod === modsStore.activeModId && !resolveWorkspaceSessionId(props) && !isLoading.value
   if (!isDurableChatScope(scope) || !canApply()) return
   let serverId = ''
@@ -757,10 +759,12 @@ watch(() => [chatScope.value, modsStore.activeModId, productReadAccountEpoch.val
   const workspaceSession = resolveWorkspaceSessionId(props)
   if (previous) {
     currentSessionId.value = workspaceSession || readAiSessionIdFromStorage() || generateSessionId()
-    if (workspaceSession && isDurableChatScope(chatScope.value)) void syncSessionMessages().catch(() => undefined)
+    if (workspaceSession && isDurableChatScope(chatScope.value) && shellReady?.value !== false) void syncSessionMessages().catch(() => undefined)
   }
   void restoreOwnedConversation()
 }, { immediate: true, flush: 'post' })
+// Optional restoration must not replace the required startup read's scope or messages.
+watch(() => shellReady?.value, () => { void restoreOwnedConversation() }, { flush: 'sync' })
 watch(isLoading, (loading) => {
   if (loading) restoreGeneration += 1
   else refreshAfterDesktopAssistant()

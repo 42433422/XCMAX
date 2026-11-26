@@ -9,24 +9,30 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """``sqlite://`` 在 SQLAlchemy 下无法持久化表；IM 测试使用临时文件库。"""
     db_file = tmp_path / "im_v0_test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    from app.db import SessionLocal, dispose_and_recreate_engine, engine
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
     from app.db.db_base import Base
     from app.db.init_db import ensure_sqlite_im_bootstrap, init_im_tables
     from app.db.models.user import User
+    from app.fastapi_routes import im_routes
 
-    dispose_and_recreate_engine()
+    engine = create_engine(f"sqlite:///{db_file}")
+    session_factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(im_routes, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(im_routes, "HostSessionLocal", session_factory)
+    monkeypatch.setattr(im_routes, "_schema_ready", False)
     # Lifespan starts background task dispatchers as well as the IM router, so
     # the isolated database must contain the complete current application
     # schema (not only the tables directly asserted by this file).
     Base.metadata.create_all(engine, checkfirst=True)
     init_im_tables(engine)
     ensure_sqlite_im_bootstrap(engine, swallow_errors=False)
-    session = SessionLocal()
-    try:
+    with session_factory() as session:
         for uid, username in [(1, "im_u1"), (2, "im_u2"), (9, "im_u9")]:
             if session.get(User, uid) is None:
                 session.add(
@@ -39,8 +45,8 @@ def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
                     )
                 )
         session.commit()
-    finally:
-        session.close()
+    yield
+    engine.dispose()
 
 
 @pytest.fixture(autouse=True)

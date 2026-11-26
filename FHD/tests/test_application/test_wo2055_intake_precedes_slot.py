@@ -203,7 +203,7 @@ def test_product_report_negation_does_not_capture_real_manufacturing(message, ex
     assert looks_like_issue_report(message) is expected
 
 
-def test_approval_freeze_is_idempotent_detached_and_elevates_all_required_nodes():
+def test_approval_freeze_is_idempotent_detached_and_elevates_explicit_policy_nodes():
     from app.application.workflow.approval_persistence import freeze_approval_plan
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
@@ -227,7 +227,7 @@ def test_approval_freeze_is_idempotent_detached_and_elevates_all_required_nodes(
     frozen = freeze_approval_plan(original, "first")
     assert frozen is not None
     assert [node.risk for node in original.nodes] == ["medium", "medium"]
-    assert [node.risk for node in frozen.nodes] == ["high", "high"]
+    assert [node.risk for node in frozen.nodes] == ["medium", "high"]
     assert plan_fingerprint(frozen) == plan_fingerprint(freeze_approval_plan(frozen, "first"))
     original.nodes[0].params["nested"]["value"] = 99
     original.nodes[1].depends_on.clear()

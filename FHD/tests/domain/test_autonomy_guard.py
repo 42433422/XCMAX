@@ -879,9 +879,34 @@ def test_deferred_workflow_only_marks_executed_after_real_outcome(monkeypatch) -
         outcome={"marker": "created"},
     )
     assert completed["state"] == "executed"
-    assert complete_action("deferred-freeze", success=True, approver="reviewer") == completed
+    assert (
+        complete_action(
+            "deferred-freeze", success=True, approver="reviewer", approval_id="deployment-1"
+        )
+        == completed
+    )
     with pytest.raises(ApprovalStateError, match="already terminal"):
-        complete_action("deferred-freeze", success=False, approver="reviewer")
+        complete_action(
+            "deferred-freeze", success=False, approver="reviewer", approval_id="deployment-1"
+        )
+
+
+@pytest.mark.parametrize("approval_id", ["", "unrelated-workflow"])
+@pytest.mark.parametrize("success", [True, False])
+def test_legacy_unbound_workflow_cannot_accept_execution_receipts(
+    tmp_path, approval_id, success
+) -> None:
+    action_id = "release:" + "e" * 40
+    request_action("apply_release_to_cvm", action_id=action_id, executor_name="github_deploy")
+    approved = resume_action(
+        action_id, approver="reviewer", approval_id="original-workflow", defer_execution=True
+    )
+    # Read an actual persisted record from versions that admitted deferred work without an ID.
+    original = {**approved, "approval_id": ""}
+    (tmp_path / "approval-ledger.jsonl").write_text(json.dumps(original) + "\n", encoding="utf-8")
+    with pytest.raises(ApprovalStateError, match="approved workflow"):
+        complete_action(action_id, success=success, approval_id=approval_id)
+    assert get_action_state(action_id) == original
 
 
 def test_executed_release_reconciles_obsolete_approval_backlog(monkeypatch) -> None:

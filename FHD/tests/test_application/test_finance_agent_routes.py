@@ -8,10 +8,15 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import finance as finance_routes
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(finance_routes, "_svc", lambda: fake_service)
+    monkeypatch.setattr(
+        "app.application.finance_app_service.FinanceAppService", lambda: fake_service
+    )
     app = FastAPI()
     app.include_router(finance_routes.router)
     return TestClient(app, raise_server_exceptions=False)
@@ -20,10 +25,10 @@ def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestCli
 def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     # Dispatch-only service mocks do not provide an independent transaction receipt.
     assert run.status == "blocked"
-    assert run.intent == f"finance_{action}"
+    assert run.intent == f"ERP Agent 请求执行 finance.{action}"
     assert run.tool_calls[0].tool_id == "finance"
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.finance.{action}"
@@ -38,7 +43,7 @@ def _assert_finance_run(repo: InMemoryAgentRunRepository, run_id: str, action: s
 
 
 def test_finance_transaction_mutation_routes_execute_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     svc = MagicMock()
@@ -48,7 +53,8 @@ def test_finance_transaction_mutation_routes_execute_through_agent_orchestrator(
     }
     svc.update_transaction.return_value = {"success": True, "data": {"id": 31}}
     svc.delete_transaction.return_value = {"success": True, "message": "凭证已删除"}
-    client = _client(svc, monkeypatch)
+    actor = trusted_actor(user_id=17, role="admin")
+    client = ApprovedCapabilityClient(_client(svc, monkeypatch), repo, actor)
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -77,9 +83,9 @@ def test_finance_transaction_mutation_routes_execute_through_agent_orchestrator(
             headers={"X-User-Id": "tenant-a"},
         )
 
-    assert create_txn.status_code == 200
-    assert update_txn.status_code == 200
-    assert delete_txn.status_code == 200
+    assert create_txn.status_code == 202
+    assert update_txn.status_code == 202
+    assert delete_txn.status_code == 202
 
     svc.create_transaction.assert_called_once_with(
         {"transaction_type": "expense", "amount": 128.5, "description": "运费"}

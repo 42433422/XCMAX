@@ -65,5 +65,6 @@ class LifeUpdate(BaseModel):
     expected_revision: int = Field(ge=1)
     level: int | None = Field(default=None, ge=1, le=6)
     paused: bool | None = None
+    stopped: bool | None = None
     mission: str | None = Field(default=None, min_length=1, max_length=1000)
     policy: dict[str, Any] | None = None

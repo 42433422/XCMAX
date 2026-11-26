@@ -25,6 +25,28 @@ from tests.test_strategic_portfolio import claim_proposal, limits, opportunity, 
 database = portfolio_fixtures.database
 
 
+@pytest.mark.parametrize("relative", ["../project-sibling/private.json", "linked.json"])
+@pytest.mark.parametrize("exists", [True, False])
+def test_file_contract_keeps_selected_workspace_boundary(tmp_path, monkeypatch, relative, exists):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "42"
+    workspace = tenant / "project"
+    sibling = tenant / "project-sibling"
+    workspace.mkdir(parents=True)
+    sibling.mkdir()
+    outside = sibling / "private.json"
+    outside.write_text("other project")
+    (workspace / "linked.json").symlink_to(outside)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tmp_path / "{user_id}"))
+    with pytest.raises(portfolio.PortfolioError, match="selected workspace"):
+        _workspace_file(relative, str(workspace), 42, exists=exists)
+    valid = workspace / "valid.json"
+    if exists:
+        valid.write_text("approved project")
+    assert _workspace_file("./valid.json", str(workspace), 42, exists=exists) == valid
+
+
 def test_dispatch_preserves_approved_business_input_and_tenant_workspace(database, monkeypatch):
     from modstore_server import employee_executor, employee_runtime
     from modstore_server.strategic_execution_contract import verify_execution_binding
@@ -160,6 +182,105 @@ def test_proposal_cannot_select_another_tenant_workspace(database, tmp_path):
     other.mkdir(parents=True)
     with pytest.raises(portfolio.PortfolioError, match="tenant boundary"):
         proposal(database, rows=[opportunity(input_data={"project_root": str(other)})])
+
+
+@pytest.mark.parametrize("configuration", ["template", "nested_template", "default"])
+def test_tenant_file_authorization_rejects_symlinked_tenant_roots(
+    tmp_path, monkeypatch, configuration
+):
+    from modstore_server.integrations.vibe_adapter import (
+        VibePathError,
+        ensure_within_workspace,
+    )
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    base = tmp_path / "workspaces"
+    own, other = base / "7", base / "8"
+    if configuration == "default":
+        monkeypatch.delenv("MODSTORE_TENANT_WORKSPACE_ROOT", raising=False)
+        monkeypatch.setenv("MODSTORE_DATA_DIR", str(tmp_path))
+    else:
+        template = base / "{user_id}"
+        if configuration == "nested_template":
+            template /= "data"
+        monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(template))
+    project = own / "data" if configuration == "nested_template" else own
+    destination = other / "data" if configuration == "nested_template" else other
+    destination.mkdir(parents=True)
+    (destination / "source.csv").write_text("customer,value\nfixture,7\n")
+    own.symlink_to(other, target_is_directory=True)
+    with pytest.raises(VibePathError):
+        ensure_within_workspace(project / "source.csv", user_id=7)
+    with pytest.raises(portfolio.PortfolioError):
+        _workspace_file("source.csv", str(project), 7, exists=True)
+
+
+def test_tenant_file_authorization_preserves_existing_inputs_and_new_outputs(tmp_path, monkeypatch):
+    from modstore_server.integrations.vibe_adapter import (
+        VibePathError,
+        ensure_within_workspace,
+    )
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces" / "7"
+    project = tenant / "project"
+    project.mkdir(parents=True)
+    source = project / "source.csv"
+    source.write_text("customer,value\nfixture,7\n")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant.parent / "{user_id}"))
+    for selected in ("source.csv", str(source)):
+        assert _workspace_file(selected, str(project), 7, exists=True) == source
+    output = project / "outputs" / "new.csv"
+    assert _workspace_file("outputs/new.csv", str(project), 7, exists=False) == output
+    assert ensure_within_workspace(output, user_id=7, must_exist=False) == output
+    assert not output.parent.exists()
+    with pytest.raises(VibePathError):
+        ensure_within_workspace(output, user_id=7)
+    with pytest.raises(portfolio.PortfolioError):
+        _workspace_file(".", str(project), 7, exists=True)
+    with pytest.raises(portfolio.PortfolioError):
+        _workspace_file("source.csv", str(source), 7, exists=False)
+    # Explicit administrator aliases and ordinary in-scope symlinks retain
+    # the existing contract; a derived tenant directory cannot claim that trust.
+    configured = tmp_path / "configured"
+    configured.symlink_to(tenant, target_is_directory=True)
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(configured))
+    internal = project / "source-link.csv"
+    internal.symlink_to(source)
+    assert ensure_within_workspace(configured / "project", user_id=7) == project
+    assert _workspace_file("source-link.csv", str(project), 7, exists=True) == source
+
+
+@pytest.mark.parametrize("exists", [False, True])
+@pytest.mark.parametrize(
+    "escape", ["sibling_relative", "sibling_absolute", "other_tenant", "symlink"]
+)
+def test_tenant_file_authorization_keeps_selected_workspace_boundary(
+    tmp_path, monkeypatch, exists, escape
+):
+    from modstore_server.strategic_execution_contract import _workspace_file
+
+    tenant = tmp_path / "workspaces" / "7"
+    project, sibling, other = (
+        tenant / "project",
+        tenant / "sibling",
+        tenant.parent / "8",
+    )
+    for root in (project, sibling, other):
+        root.mkdir(parents=True)
+        (root / "source.csv").write_text("customer,value\nfixture,7\n")
+    monkeypatch.setenv("MODSTORE_TENANT_WORKSPACE_ROOT", str(tenant.parent / "{user_id}"))
+    (project / "linked").symlink_to(sibling, target_is_directory=True)
+    name = "source.csv" if exists else "new.csv"
+    requested = {
+        "sibling_relative": f"../sibling/{name}",
+        "sibling_absolute": str(sibling / name),
+        "other_tenant": str(other / name),
+        "symlink": f"linked/{name}",
+    }[escape]
+    with pytest.raises(portfolio.PortfolioError):
+        _workspace_file(requested, str(project), 7, exists=exists)
+    assert not (sibling / "new.csv").exists() and not (other / "new.csv").exists()
 
 
 def test_catalog_archive_changed_after_approval_blocks_real_executor(

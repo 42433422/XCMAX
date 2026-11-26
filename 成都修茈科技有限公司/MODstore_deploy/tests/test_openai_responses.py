@@ -153,12 +153,19 @@ def billed(db, monkeypatch):
         "pause": None,
         "read_blocked": asyncio.Event(),
         "cancel_on_terminal": None,
+        "stream_chunks": None,
+        "body_chunks": 0,
     }
     real_client = transport.DefaultAsyncHttpxClient
     httpx = importlib.import_module(real_client.__mro__[1].__module__.split(".")[0])
 
     class Body(httpx.AsyncByteStream):
         async def __aiter__(self):
+            if state["stream_chunks"] is not None:
+                for chunk in state["stream_chunks"]:
+                    state["body_chunks"] += 1
+                    yield chunk
+                return
             result = state["result"]
             events = [
                 {
@@ -365,6 +372,37 @@ async def test_terminal_is_held_until_native_eof_and_authoritative_settlement(bi
     assert billed["closed"] is True and ledger.lookup(db, 7, KEY, 90) == "completed"
     with pytest.raises(StopAsyncIteration):
         await anext(events)
+
+
+@pytest.mark.parametrize("limit", ["partial-line", "comments", "events"])
+async def test_account_runtime_stream_limit_keeps_the_original_wallet_hold_without_replay(
+    billed, db, monkeypatch, limit
+):
+    from modstore_server import llm_gateway_contract, platform_model_transport
+
+    if limit == "events":
+        monkeypatch.setattr(llm_gateway_contract, "MAX_STREAM_EVENTS", 1)
+    else:
+        prefix = b'data: {"unfinished":"' if limit == "partial-line" else b": keepalive\n\n"
+        chunk = b"x" * 64 if limit == "partial-line" else b": " + b"x" * 64 + b"\n\n"
+        billed["stream_chunks"] = [prefix, chunk, b"unread-tail"]
+        monkeypatch.setattr(platform_model_transport, "MAX_MODEL_STREAM_BYTES", len(prefix) + 63)
+    body = _payload(stream=True)
+    result, events = await _consume(await billed["call"](body=body))
+    assert result is None and events[-1]["code"] == "CODEX_REQUEST_UNRESOLVED"
+    assert all(event["type"] not in responses._TERMINALS for event in events)
+    if limit != "events":
+        assert billed["body_chunks"] == 2
+    assert billed["closed"] and all(client.is_closed for client in billed["clients"])
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
+    assert len(billed["requests"]) == 1
+    assert billed["requests"][0].headers["accept-encoding"] == "identity"
+    billed["wallet"].settle.assert_not_awaited()
+    billed["wallet"].release.assert_not_awaited()
+    assert db.query(LlmCallLog).count() == 0
+    with pytest.raises(HTTPException) as error:
+        await billed["call"](body=body)
+    assert error.value.status_code == 409 and len(billed["requests"]) == 1
 
 
 @pytest.mark.parametrize("cancel_point", ["blocked-read", "ready-terminal"])

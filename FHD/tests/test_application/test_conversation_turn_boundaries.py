@@ -347,7 +347,7 @@ async def test_failed_ack_stays_cached_until_explicit_save_only_repair(runtime):
 
     def lost_ack(*args):
         actual_persist(*args)
-        raise RuntimeError("simulated acknowledgement loss")
+        raise TimeoutError("simulated acknowledgement loss")
 
     runtime.service._persist_chat_turn = Mock(side_effect=lost_ack)
     payload = await compat.execute_compat_chat(runtime.actor.request, _body(message=message))

@@ -6,6 +6,7 @@ Covers helper functions, route endpoints, token management, and error paths.
 from __future__ import annotations
 
 import json
+import sqlite3
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -856,7 +857,7 @@ class TestMarketAccountOverview:
         with patch(
             "app.fastapi_routes.market_account._authorization_from_request_resolved",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("resolve failed"),
+            side_effect=sqlite3.OperationalError("resolve failed"),
         ):
             resp = client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200

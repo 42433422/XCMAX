@@ -71,6 +71,7 @@ class CliExecutionError(RuntimeError):
         if not started and reason != "unavailable" and stage == "cli":
             detail = "启动失败"
             code = "cli_launch_failed"
+        # Raw CLI diagnostics can contain credentials; classify failures without persisting them.
         message = f"{tool}{' CLI' if stage == 'cli' else ''} {detail}。"
         if started:
             message += "任务效果尚未确认，请核对已有变更；不会自动重放。"
@@ -92,8 +93,9 @@ class CliExecutionError(RuntimeError):
             "termination_reason": reason,
             "partial_text": partial_text,
             "partial_output": partial_text,
-            # CLI diagnostics can contain provider keys and local credentials.
             "stderr_present": bool(stderr),
+            # Keep the receipt shape, but never persist or publish raw diagnostics.
+            "stderr": "",
             "retryable": False,
             "reconciliation_required": started,
         }
@@ -152,7 +154,11 @@ def require_cli_success(
 
 
 def cli_exception(
-    tool: str, exc: OSError | subprocess.SubprocessError, *, partial_text: str = "", started: bool
+    tool: str,
+    exc: OSError | subprocess.SubprocessError,
+    *,
+    partial_text: str = "",
+    started: bool,
 ) -> CliExecutionError:
     if isinstance(exc, subprocess.TimeoutExpired):
         reason, started = f"timeout:{exc.timeout:g}", True
@@ -160,15 +166,11 @@ def cli_exception(
         reason, started = "nonzero_exit", True
     else:
         reason = "process_error" if started else "launch_failed"
-    stderr = getattr(exc, "stderr", "") or (str(exc) if isinstance(exc, OSError) else "")
-    if isinstance(stderr, bytes):
-        stderr = stderr.decode("utf-8", errors="replace")
     return CliExecutionError(
         tool,
         reason,
         exit_code=getattr(exc, "returncode", None),
         partial_text=partial_text,
-        stderr=stderr,
         started=started,
     )
 
@@ -204,7 +206,9 @@ class CliExecutor:
                     )
                     execution_started = True
                 body = self._reply_text(
-                    output_path, stdout, best_effort=bool(killed_reason) or returncode != 0
+                    output_path,
+                    stdout,
+                    best_effort=bool(killed_reason) or returncode != 0,
                 )
             except (OSError, subprocess.SubprocessError) as exc:
                 raw = getattr(exc, "stdout", "") or stdout
@@ -214,7 +218,7 @@ class CliExecutor:
                     exc,
                     partial_text=self._reply_text(output_path, stdout, best_effort=True),
                     started=execution_started or runner is subprocess.run,
-                ) from exc
+                ) from None
             return require_cli_success(
                 self._p.display_tool,
                 returncode,
@@ -254,7 +258,7 @@ class CliExecutor:
                 env=self._ports.environment(),
             )
         except OSError as exc:
-            raise cli_exception(self._p.display_tool, exc, started=False) from exc
+            raise cli_exception(self._p.display_tool, exc, started=False) from None
         out_parts: list[str] = []
         err_parts: list[str] = []
         last_activity = [time.monotonic()]
@@ -336,15 +340,12 @@ class CliExecutor:
             stream_json = self._p.cli_stream_json
             text_parts: list[str] = []
 
-            stderr_prefix = bytearray()
-
             async def drain_stderr() -> None:
                 nonlocal last_activity
                 if proc.stderr is not None:
-                    while data := await proc.stderr.read(8192):
+                    while await proc.stderr.read(8192):
                         last_activity = time.monotonic()
-                        # Drain the entire pipe, retaining only bounded error context.
-                        stderr_prefix.extend(data[: max(0, 4096 - len(stderr_prefix))])
+                        # Drain without returning CLI stderr, which may contain credentials.
 
             def timeout_reason() -> str:
                 now = time.monotonic()
@@ -368,7 +369,6 @@ class CliExecutor:
                     reason,
                     exit_code=proc.returncode,
                     partial_text=partial_text(best_effort=True),
-                    stderr=stderr_prefix.decode("utf-8", errors="replace"),
                 ).event()
 
             stderr_task = asyncio.create_task(drain_stderr())
@@ -412,7 +412,6 @@ class CliExecutor:
                         self._p.display_tool,
                         proc.returncode,
                         body,
-                        stderr_prefix.decode("utf-8", errors="replace"),
                     )
                 except CliExecutionError as exc:
                     yield exc.event()

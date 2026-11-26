@@ -49,9 +49,9 @@ def settle_target(
 
     target = canonical_execution_state(state)
     code = str(error_code or "")
-    if target == "unknown":
-        return "unknown", "needs_verification"
-    if target == "failed" and open_effects:
+    # An unconfirmed external effect is not cancelled by a local timeout,
+    # pause or rejection. Only a verified success may close its receipt.
+    if target == "unknown" or (open_effects and target != "succeeded"):
         return "unknown", "needs_verification"
     if target == "failed" and failure_retries(attempts, code):
         return "queued", code

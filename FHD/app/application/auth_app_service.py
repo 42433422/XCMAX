@@ -64,9 +64,12 @@ class AuthApplicationService:
         *,
         totp_code: str | None = None,
         enforce_mfa: bool = True,
+        offline: bool = False,
     ) -> dict[str, Any]:
         """登录方法，调用 authenticate"""
-        return self.authenticate(username, password, totp_code=totp_code, enforce_mfa=enforce_mfa)
+        return self.authenticate(
+            username, password, totp_code=totp_code, enforce_mfa=enforce_mfa, offline=offline
+        )
 
     def create_session_for_username(self, username: str) -> dict[str, Any]:
         """市场已验证身份后创建本地会话（手机验证码 / OIDC 等无本地密码场景）。"""
@@ -204,6 +207,7 @@ class AuthApplicationService:
         *,
         totp_code: str | None = None,
         enforce_mfa: bool = True,
+        offline: bool = False,
     ) -> dict[str, Any]:
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
@@ -253,7 +257,19 @@ class AuthApplicationService:
                         }
                     return {"success": False, "message": "用户名或密码错误"}
 
-                # MFA：用户开启 MFA 时校验 TOTP（enforce_mfa=False 用于市场已验证场景）
+                if offline:
+                    from app.application.desktop_admin_gate import (
+                        forbidden_payload,
+                        is_admin_account_kind,
+                    )
+
+                    if is_admin_account_kind(user.role) or is_admin_account_kind(user.tier):
+                        return forbidden_payload()
+                    # 本次离线尝试不能创建自己的首次成功登录证据。
+                    if user.last_login is None:
+                        return {"success": False, "message": "请先在本机完成在线登录"}
+
+                # 市场已验证或本机已有成功登录的离线场景可免 MFA，密码仍逐次校验。
                 if enforce_mfa and getattr(user, "mfa_enabled", False):
                     if not verify_totp(getattr(user, "totp_secret", "") or "", totp_code or ""):
                         return {

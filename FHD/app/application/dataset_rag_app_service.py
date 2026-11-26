@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
-from typing import Any
+from typing import Any, cast
 
 from app.application.dataset_rag.access_policy import (
     DATASET_ADMIN_PERMISSION as DATASET_ADMIN_PERMISSION,
@@ -149,6 +149,13 @@ from app.infrastructure.rag.dataset_vector_index import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_upload_dir
+
+
+def get_agent_dataset_access_context(runtime_context: dict[str, Any]) -> DatasetAccessContext:
+    """Bind an agent's dataset request to the existing live authorization adapter."""
+    from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+
+    return cast("DatasetAccessContext", agent_dataset_access_context(runtime_context))
 
 
 def _default_storage_path() -> Path:

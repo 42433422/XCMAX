@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { renderMarkdown, stripInternalMarkers } from './lightMarkdown'
 
 describe('lightMarkdown.renderMarkdown', () => {
+  it('keeps original code and entity text at the HTML output boundary', () => {
+    const code = 'if a < b:\n    print("<script>literal()</script> &lt;entity&gt; A&B")'
+    const content = `\`\`\`text\n${code}\n\`\`\``
+    const doc = new DOMParser().parseFromString(renderMarkdown(content), 'text/html')
+    expect(doc.querySelector('.md-code__body')?.textContent).toBe(code)
+    expect(doc.querySelector('script, [onerror]')).toBeNull()
+  })
+
   it('renders basic paragraph and bold', () => {
     const html = renderMarkdown('hello **world**')
     expect(html).toContain('<p class="md-p">hello <strong>world</strong></p>')

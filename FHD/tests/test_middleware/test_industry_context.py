@@ -104,9 +104,7 @@ async def test_resolve_session_user_exception_falls_back_to_general():
     mw = _middleware()
     req = _make_request()
 
-    with patch(
-        "app.middleware.industry_context.get_current_user", side_effect=RuntimeError("boom")
-    ):
+    with patch("app.middleware.industry_context.get_current_user", side_effect=OSError("boom")):
         resp = await mw.dispatch(req, _call_next)
 
     assert resp.status_code == 200

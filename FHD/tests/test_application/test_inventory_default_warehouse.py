@@ -130,32 +130,16 @@ def setup_client(factory, monkeypatch):
     return TestClient(app, raise_server_exceptions=False), state
 
 
-def test_setup_route_requires_login_tenant_and_permission(setup_client, factory):
+def test_setup_read_route_requires_login_tenant_and_permission(setup_client, factory):
     client, state = setup_client
-    assert client.post("/api/inventory/setup/warehouse").status_code == 401
+    assert client.get("/api/inventory/setup/warehouse").status_code == 401
     state["user"] = SimpleNamespace(id=1, tenant_id=None, is_active=True)
-    assert client.post("/api/inventory/setup/warehouse").status_code == 403
+    assert client.get("/api/inventory/setup/warehouse").status_code == 403
     state["user"] = SimpleNamespace(id=1, tenant_id=12, is_active=True)
     state["allowed"] = False
-    assert client.post("/api/inventory/setup/warehouse").status_code == 403
+    assert client.get("/api/inventory/setup/warehouse").status_code == 403
+    state["allowed"] = True
+    response = client.get("/api/inventory/setup/warehouse")
+    assert response.status_code == 200
+    assert response.json()["data"]["initialized"] is False
     assert _all_warehouses(factory) == []
-
-
-def test_setup_route_initializes_only_the_session_tenant(setup_client, factory):
-    client, state = setup_client
-    state["user"] = SimpleNamespace(id=1, tenant_id=12, is_active=True)
-    status = client.get("/api/inventory/setup/warehouse")
-    assert status.status_code == 200 and status.json()["data"]["initialized"] is False
-    # 伪造的 tenant_id 请求体 / 头不能改变初始化目标
-    created = client.post(
-        "/api/inventory/setup/warehouse", json={"tenant_id": 99}, headers={"X-Tenant-ID": "99"}
-    )
-    assert created.status_code == 200, created.text
-    body = created.json()
-    assert body["data"]["created"] is True and body["data"]["name"] == DEFAULT_WAREHOUSE_NAME
-    again = client.post("/api/inventory/setup/warehouse").json()
-    assert again["data"]["created"] is False
-    assert [(r["code"], r["tenant_id"]) for r in _all_warehouses(factory)] == [
-        (default_warehouse_code(12), 12)
-    ]
-    assert client.get("/api/inventory/setup/warehouse").json()["data"]["initialized"] is True

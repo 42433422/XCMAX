@@ -138,14 +138,14 @@ class TestCognitiveRouterRoute:
 
         assert trace_id_a != trace_id_b
 
-    def test_route_swallows_exceptions_and_returns_none(self, clean_env, tmp_path):
+    def test_route_handles_policy_io_failure_and_returns_none(self, clean_env, tmp_path):
         """policy_router 抛异常时优雅降级返回 None。"""
         clean_env.setenv("XCAGI_ROUTING_LOG_PATH", str(tmp_path / "log.jsonl"))
         router = CognitiveRouter()
 
         with patch(
             "app.neuro_bus.routing.cognitive_router.decide_processor_with_policy",
-            side_effect=RuntimeError("boom"),
+            side_effect=OSError("boom"),
         ):
             decision, trace_id = router.route("你好")
 

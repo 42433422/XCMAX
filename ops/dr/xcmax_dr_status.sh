@@ -11,7 +11,20 @@ PG16_CONTAINER="${OPS_DR_WAL_PG16_CONTAINER:-xcmax-dr-postgres16-wal}"
 printf 'archive_latest=%s\n' "$(readlink -f "$DR_ROOT/archive/latest" 2>/dev/null || true)"
 printf 'logical_snapshot=%s\n' "$(cat "$STATE/last_restored_snapshot" 2>/dev/null || true)"
 printf 'wal_base=%s\n' "$(cat "$STATE/wal_base_applied" 2>/dev/null || true)"
-printf 'release_sha=%s\n' "$(cat "$STATE/release_applied_sha" 2>/dev/null || true)"
+release_pending=0
+for component in modstore fhd; do
+  pending=0
+  if [[ -e "$STATE/release_apply_${component}.pending" ]]; then
+    pending=1
+    release_pending=1
+  fi
+  printf 'release_%s_pending=%s\n' "$component" "$pending"
+done
+release_sha=""
+if [[ "$release_pending" == 0 ]]; then
+  release_sha="$(cat "$STATE/release_applied_sha" 2>/dev/null || true)"
+fi
+printf 'release_sha=%s\n' "$release_sha"
 printf 'release_modstore_sha=%s\n' \
   "$(cat "$STATE/release_applied_modstore_sha" 2>/dev/null || true)"
 printf 'release_fhd_sha=%s\n' \

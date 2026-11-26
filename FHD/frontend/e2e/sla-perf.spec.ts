@@ -1,4 +1,4 @@
-import { test, expect, type TestInfo } from '@playwright/test'
+import { test, expect, type Response, type TestInfo } from '@playwright/test'
 import { installE2eShellMocks, isFullStack, loginBrowserSession } from './helpers'
 import { assertWithinBudget, latencyPercentile, positiveBudget } from './performance-budget'
 
@@ -19,7 +19,8 @@ test.describe('Measured performance budgets', () => {
     if (isFullStack()) await loginBrowserSession(page)
     else await installE2eShellMocks(page)
     const rendererErrors: string[] = []
-    const failedReads: Array<{ path: string; status: number }> = []
+    const failedReads: Array<{ path: string; method: string; status: number }> = []
+    let marketHandoff: Response | undefined
     page.on('pageerror', error => { if (rendererErrors.length < 20) rendererErrors.push(error.message) })
     page.on('console', message => {
       if (message.type() === 'error' && message.text().startsWith('[Vue]') && rendererErrors.length < 20) {
@@ -28,8 +29,11 @@ test.describe('Measured performance budgets', () => {
     })
     page.on('response', response => {
       const path = new URL(response.url()).pathname
-      if (response.status() >= 400 && path.startsWith('/api/') && failedReads.length < 20) {
-        failedReads.push({ path, status: response.status() })
+      const method = response.request().method()
+      const isHandoff = !isFullStack() && method === 'GET' && path === '/api/market/session-handoff'
+      if (isHandoff) marketHandoff = response
+      if (response.status() >= 400 && path.startsWith('/api/') && !(isHandoff && response.status() === 404) && failedReads.length < 20) {
+        failedReads.push({ path, method, status: response.status() })
       }
     })
     const started = performance.now()
@@ -44,7 +48,16 @@ test.describe('Measured performance budgets', () => {
       await page.locator('#messageInput').fill('SLA readiness probe')
       await expect(page.locator('#messageInput')).toHaveValue('SLA readiness probe')
       elapsed = performance.now() - started
+      if (!isFullStack()) {
+        // Optional account linking can finish after readiness; verify its actual
+        // unlinked contract without adding that wait to the UI measurement.
+        await expect.poll(() => marketHandoff?.status()).toBe(404)
+        expect(await marketHandoff?.json()).toEqual({ success: false, message: '当前会话未连接市场账号，请重新登录' })
+        expect(marketHandoff?.headers()['cache-control']).toBe('no-store')
+        expect(marketHandoff?.headers().pragma).toBe('no-cache')
+      }
       expect(rendererErrors, 'Vue updates must complete without a renderer failure').toEqual([])
+      expect(failedReads, 'Startup reads must belong to the measured account').toEqual([])
     } finally {
       const state = await page.evaluate(() => ({
         path: location.pathname,

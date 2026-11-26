@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.application.workflow.approval_service import (
     ApprovalService,
@@ -586,7 +587,7 @@ class TestModuleLevelFunctions:
 
     @patch("app.db.session.get_db")
     def test_process_approval_timeouts_db_error(self, mock_get_db):
-        mock_get_db.side_effect = RuntimeError("db error")
+        mock_get_db.side_effect = OperationalError(None, None, OSError("db error"))
         result = process_approval_timeouts()
         assert result["success"] is False
 

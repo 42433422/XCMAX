@@ -444,7 +444,7 @@ class TestDefaultDepartments:
         from app.mod_sdk import duty_roster
 
         def boom():
-            raise RuntimeError("no config")
+            raise OSError("no config")
 
         monkeypatch.setattr(duty_roster, "load_departments", boom)
         result = _default_departments()
@@ -629,7 +629,7 @@ class TestDefaultDutyEmployeeLoader:
         )
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            MagicMock(side_effect=RuntimeError("no mod manager")),
+            MagicMock(side_effect=OSError("no mod manager")),
         )
         result = _default_duty_employee_loader()
         assert len(result) >= 1
@@ -647,7 +647,7 @@ class TestDefaultDutyEmployeeLoader:
         )
         monkeypatch.setattr(duty_roster, "load_duty_employee_records", lambda: [])
         mock_mod_manager = MagicMock()
-        mock_mod_manager.list_all_mods.side_effect = RuntimeError("boom")
+        mock_mod_manager.list_all_mods.side_effect = OSError("boom")
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
@@ -679,7 +679,7 @@ class TestDefaultEnterpriseEmployeeLoader:
         self, monkeypatch: pytest.MonkeyPatch
     ):
         mock_mod_manager = MagicMock()
-        mock_mod_manager.list_all_mods.side_effect = RuntimeError("db error")
+        mock_mod_manager.list_all_mods.side_effect = OSError("db error")
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             lambda: mock_mod_manager,
@@ -2220,7 +2220,7 @@ class TestSuperDiscussionReply:
     @pytest.mark.asyncio
     async def test_super_discussion_reply_exception(self, tmp_path: Path):
         async def failing_completion(messages):
-            raise RuntimeError("LLM 不可用")
+            raise OSError("LLM 不可用")
 
         svc = make_service(tmp_path, completion_fn=failing_completion)
         group = {"name": "测试群", "members": []}
@@ -2452,7 +2452,7 @@ class TestRouteAfterDiscussion:
         self, tmp_path: Path
     ):
         async def completion(messages):
-            raise RuntimeError("LLM 不可用")
+            raise OSError("LLM 不可用")
 
         svc = make_service(tmp_path, completion_fn=completion)
         candidates = [{"employee_id": "e1"}, {"employee_id": "e2"}]
@@ -2546,7 +2546,7 @@ class TestAiReply:
     @pytest.mark.asyncio
     async def test_ai_reply_exception_returns_error_message(self, tmp_path: Path):
         async def completion(messages):
-            raise RuntimeError("LLM 不可用")
+            raise OSError("LLM 不可用")
 
         svc = make_service(tmp_path, completion_fn=completion)
         group = {"name": "测试群", "members": []}
@@ -2707,7 +2707,7 @@ class TestExecuteEmployeeWork:
     @pytest.mark.asyncio
     async def test_execute_employee_work_exception_returns_failed(self, tmp_path: Path):
         def executor(employee_id, task, input_data, user_id):
-            raise RuntimeError("工具不可用")
+            raise OSError("工具不可用")
 
         svc = make_service(tmp_path, executor=executor)
         result = await svc._execute_employee_work(
@@ -2877,7 +2877,7 @@ class TestInvokeSuperEmployeeTask:
     def test_invoke_super_employee_task_relay_exception_falls_back(self, tmp_path: Path):
         class FakeRelay:
             def list_desktops(self, *, user_id):
-                raise RuntimeError("relay down")
+                raise OSError("relay down")
 
         class FakeSuperService:
             def invoke(self, *, user_id, message, context):
@@ -2978,7 +2978,7 @@ class TestCreateSuperEmployeeRelayTask:
     def test_create_relay_task_returns_none_on_exception(self, tmp_path: Path):
         class FakeRelay:
             def list_desktops(self, *, user_id):
-                raise RuntimeError("relay error")
+                raise OSError("relay error")
 
         svc = make_service(tmp_path)
         svc._mobile_relay_service = lambda: FakeRelay()  # type: ignore[method-assign]
@@ -3527,7 +3527,7 @@ class TestSuperEmployeeReply:
     async def test_super_employee_reply_exception_returns_error(self, tmp_path: Path):
         class FakeService:
             def invoke(self, *, user_id, message, context):
-                raise RuntimeError("服务不可用")
+                raise OSError("服务不可用")
 
         svc = make_service(tmp_path)
         with patch(
@@ -3589,7 +3589,7 @@ class TestSeedDepartmentGroups:
 
     def test_seed_department_groups_employee_loader_exception(self, tmp_path: Path):
         def boom():
-            raise RuntimeError("loader error")
+            raise OSError("loader error")
 
         svc = make_service(tmp_path, employees=boom)
         groups = svc._seed_department_groups(user_id=1)
@@ -4009,7 +4009,7 @@ class TestBackfillDepartmentMembers:
 
     def test_backfill_with_employee_loader_exception(self, tmp_path: Path):
         def boom():
-            raise RuntimeError("loader error")
+            raise OSError("loader error")
 
         svc = make_service(tmp_path, employees=boom)
         groups = [{"id": "g1", "department_key": "d1", "members": []}]

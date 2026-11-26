@@ -200,18 +200,33 @@ class RiskPolicyCatalog:
         description: str = "",
         actions: dict[str, Any] | None = None,
     ) -> None:
-        """登记运行时发现的工具动作（如外部 MCP 工具），只增不改。"""
+        """Refresh one provider snapshot; conflicting product definitions fail closed."""
         if not actions:
             return
+        if any(not isinstance(spec, dict) for spec in actions.values()):
+            raise ValueError("capability action metadata must be an object")
+        identity = str(tool_id)
         tools = self.registry.setdefault("tools", {})
+        incoming = {str(name): copy.deepcopy(spec) for name, spec in actions.items()}
+        if identity.startswith("mcp__"):
+            # MCP discovery owns this namespace. A refresh replaces its snapshot,
+            # including removed actions and changed risk/schema; setdefault would
+            # keep the first, potentially less restrictive policy forever.
+            tools[identity] = {
+                "description": str(description or ""),
+                "availability": "shared",
+                "actions": incoming,
+            }
+            return
         tool = tools.setdefault(
-            str(tool_id),
+            identity,
             {"description": str(description or ""), "availability": "shared", "actions": {}},
         )
         existing = tool.setdefault("actions", {})
-        for name, spec in actions.items():
-            if isinstance(spec, dict):
-                existing.setdefault(str(name), copy.deepcopy(spec))
+        for name, spec in incoming.items():
+            if name in existing and existing[name] != spec:
+                raise ValueError(f"Duplicate capability definition: {identity}.{name}")
+        existing.update(incoming)
 
     def get_action_spec(self, tool_id: str, operation: str) -> dict[str, Any] | None:
         tool = (self.registry.get("tools") or {}).get(str(tool_id))

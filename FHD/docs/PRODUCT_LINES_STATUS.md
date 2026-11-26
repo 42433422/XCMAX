@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-11-22 05:45 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-11-22 21:21 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -95,10 +95,12 @@
 | Android | 实验骨架·非签约级 |
 | HarmonyOS | 候选·非签约级 |
 
-## 6. 覆盖率（`coverage` 域，唯一数字源）
+## 6. 覆盖率历史证据（`coverage` 域，唯一数字源）
 
 后端行 88.19% / 分支 81.5%；前端行 93.21% / 分支 82.45%（提交态 92505cab6，采集于 2026-07-25T11:34:00Z）。
 
-棘轮 floor：后端行 78 / 分支 69；前端行 92 / 分支 81。门禁结论：passed。
+棘轮 floor：后端行 78 / 分支 69；前端行 92 / 分支 81。原记录门禁：passed。
+
+本版验证：UNVERIFIED。数值仅适用于上述采样版本；本页生成时间不更新测试时间。当前 HEAD 需独立绑定源码 SHA 与原始测试凭据，不能沿用历史通过结论。
 
 任何文档引用覆盖率必须引用本表或 `FHD/metrics/coverage-dual-summary.json`，不得另抄一份数字。

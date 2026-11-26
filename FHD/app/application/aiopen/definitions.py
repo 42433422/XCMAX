@@ -44,28 +44,8 @@ CAPABILITY_ROUTE_PREFIXES: tuple[str, ...] = (
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "api_catalog",
-        "description": "列出 AIOPEN 白名单内可调用的 XCAGI 业务 API 路由及其启用状态。",
+        "description": "查询当前账号真正可用的能力、工具与员工，读取唯一 ToolSpec 能力目录。",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-    },
-    {
-        "name": "api_call",
-        "description": "调用白名单内的 XCAGI 业务 API。path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。method 支持 GET/POST/PUT/PATCH/DELETE。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "API 路径，如 /api/products/list；可带 query",
-                },
-                "method": {
-                    "type": "string",
-                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
-                    "default": "GET",
-                },
-                "body": {"type": "object", "description": "请求体（JSON，非 GET/DELETE 时使用）"},
-            },
-            "required": ["path"],
-        },
     },
     {
         "name": "knowledge_search",
@@ -103,9 +83,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "operation_call",
         "description": (
-            "按 operation_id 执行系统地图中的业务接口。params 传路径/查询参数，body 传 JSON 请求体。"
-            "危险操作默认返回 APPROVAL_REQUIRED 不执行；写操作需服务端开启 AIOPEN_ENABLE_WRITES，"
-            "危险操作另需服务端显式开启 AIOPEN_AUTO_APPROVE_DANGER 才会留痕后自动批准。"
+            "按 capability.<tool_id>.<action> 执行当前账号可用的业务能力，params 必须满足目录 input_schema。"
+            "写操作需要稳定 request_id；审批、权限和幂等由原 AgentTask 执行链统一校验，"
+            "等待审批或结果未知时只查询原 run_id，不要换号重发。"
         ),
         "inputSchema": {
             "type": "object",
@@ -118,31 +98,35 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "type": "object",
                     "description": "路径参数与查询参数，键名与 operation 卡片一致",
                 },
-                "body": {"type": "object", "description": "JSON 请求体（写操作使用）"},
+                "request_id": {"type": "string", "description": "写操作的稳定请求号，重试沿用原值"},
             },
             "required": ["operation_id"],
         },
     },
     {
         "name": "chat",
-        "description": "向 XCAGI AI 助手发送一条消息（unified_chat，source=aiopen），返回助手回复。",
+        "description": "向小C提交带稳定 request_id 的目标；使用当前账号能力规划，返回原任务状态、审批与核验回执。",
         "inputSchema": {
             "type": "object",
-            "properties": {"message": {"type": "string", "description": "要发送的消息"}},
-            "required": ["message"],
+            "properties": {
+                "message": {"type": "string", "description": "要发送的消息"},
+                "request_id": {"type": "string", "description": "同一意图重试保持原请求号"},
+            },
+            "required": ["message", "request_id"],
         },
     },
     {
         "name": "capability_loop",
-        "description": "全调用闭环自检：api_catalog → 抽样 api_call(GET) → chat → ui_sessions，返回各步成败，供外部 Agent 确认 MCP 已打通。",
+        "description": "只读闭环自检：账号能力发现 → 受控只读执行 → 原任务核验回执；不通过自检发起业务写入或付费对话。",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "probe_path": {
+                "operation_id": {
                     "type": "string",
-                    "description": "可选抽样 API，默认自动选已启用白名单路径",
+                    "description": "可选：当前账号可用的只读 capability ID",
                 },
-                "message": {"type": "string", "description": "可选 chat 探测文案"},
+                "params": {"type": "object"},
+                "request_id": {"type": "string"},
             },
             "additionalProperties": False,
         },
@@ -356,5 +340,3 @@ _UI_ACTIONS = {
 
 # 等待与截图比普通操作耗时更长，单独放宽虚拟光标回执超时。
 _UI_ACTION_TIMEOUTS = {"snapshot": 20.0, "wait": 20.0, "screenshot": 30.0, "upload": 20.0}
-
-_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})

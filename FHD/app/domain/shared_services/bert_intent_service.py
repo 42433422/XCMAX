@@ -7,7 +7,8 @@ BERT 意图分类推理服务
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 from app.domain.shared_services.bert_intent_labels import (  # noqa: F401
     ID_TO_LABEL,
@@ -21,6 +22,22 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+_BertParams = ParamSpec("_BertParams")
+_BertResult = TypeVar("_BertResult")
+
+
+def _call_bert_sdk(
+    operation: Callable[_BertParams, _BertResult],
+    /,
+    *args: _BertParams.args,
+    **kwargs: _BertParams.kwargs,
+) -> _BertResult:
+    """Keep SDK runtime failures distinct from internal recognition errors."""
+    try:
+        return operation(*args, **kwargs)
+    except RuntimeError as exc:
+        raise OSError(f"BERT 运行库调用失败：{exc}") from exc
 
 
 def _import_ml_stack():
@@ -90,11 +107,11 @@ class BertIntentClassifier:
         torch = self._torch
         self.max_length = max_length
         self.confidence_threshold = confidence_threshold
-        self.use_fp16 = use_fp16 and torch.cuda.is_available()
+        self.use_fp16 = use_fp16 and _call_bert_sdk(torch.cuda.is_available)
         self.local_files_only = local_files_only
 
         if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.device = "cuda" if _call_bert_sdk(torch.cuda.is_available) else "cpu"
         else:
             self.device = device
 
@@ -127,6 +144,8 @@ class BertIntentClassifier:
             model_path: 模型路径或模型名称
             local_files_only: 是否仅使用本地文件
         """
+        self.model = None
+        self.tokenizer = None
         _, AutoModelForSequenceClassification, AutoTokenizer = _import_ml_stack()
         model_path = str(model_path)
         is_local_distillation_model = False
@@ -158,18 +177,21 @@ class BertIntentClassifier:
                         self.id2label = {int(k): v for k, v in data.get("id2label", {}).items()}
                         self.label2id = data.get("label2id", {})
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path, local_files_only=local_files_only
+        tokenizer = _call_bert_sdk(
+            AutoTokenizer.from_pretrained, model_path, local_files_only=local_files_only
         )
 
-        loaded_model = AutoModelForSequenceClassification.from_pretrained(
-            model_path, local_files_only=local_files_only
+        loaded_model = _call_bert_sdk(
+            AutoModelForSequenceClassification.from_pretrained,
+            model_path,
+            local_files_only=local_files_only,
         )
-        loaded_model.to(self.device)
-        loaded_model.eval()
+        _call_bert_sdk(loaded_model.to, self.device)
+        _call_bert_sdk(loaded_model.eval)
 
         if self.use_fp16:
-            loaded_model = loaded_model.half()
+            loaded_model = _call_bert_sdk(loaded_model.half)
+        self.tokenizer = tokenizer
         self.model = loaded_model
 
         logger.info(
@@ -201,26 +223,27 @@ class BertIntentClassifier:
 
         torch = self._torch
         with torch.no_grad():
-            inputs = self.tokenizer(
+            inputs = _call_bert_sdk(
+                self.tokenizer,
                 text,
                 max_length=self.max_length,
                 padding="max_length",
                 truncation=True,
                 return_tensors="pt",
             )
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            inputs = {k: _call_bert_sdk(v.to, self.device) for k, v in inputs.items()}
 
             if self.use_fp16:
-                inputs = {k: v.half() for k, v in inputs.items()}
+                inputs = {k: _call_bert_sdk(v.half) for k, v in inputs.items()}
 
-            outputs = self.model(**inputs)
+            outputs = _call_bert_sdk(self.model, **inputs)
             logits = outputs.logits
 
-            probs = torch.softmax(logits, dim=-1)
-            confidence, predicted_idx = torch.max(probs, dim=-1)
+            probs = _call_bert_sdk(torch.softmax, logits, dim=-1)
+            confidence, predicted_idx = _call_bert_sdk(torch.max, probs, dim=-1)
 
-        predicted_idx = predicted_idx.item()
-        confidence = confidence.item()
+        predicted_idx = _call_bert_sdk(predicted_idx.item)
+        confidence = _call_bert_sdk(confidence.item)
 
         predicted_label = self.id2label.get(predicted_idx, "unk")
 
@@ -232,7 +255,9 @@ class BertIntentClassifier:
         }
 
         if return_probs:
-            prob_list = probs.squeeze().cpu().numpy().tolist()
+            prob_tensor = _call_bert_sdk(probs.squeeze)
+            prob_tensor = _call_bert_sdk(prob_tensor.cpu)
+            prob_list = _call_bert_sdk(prob_tensor.numpy).tolist()
             result["all_probs"] = {
                 self.id2label.get(i, f"label_{i}"): round(float(p), 4)
                 for i, p in enumerate(prob_list)
@@ -257,28 +282,29 @@ class BertIntentClassifier:
 
         torch = self._torch
         with torch.no_grad():
-            inputs = self.tokenizer(
+            inputs = _call_bert_sdk(
+                self.tokenizer,
                 texts,
                 max_length=self.max_length,
                 padding="max_length",
                 truncation=True,
                 return_tensors="pt",
             )
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            inputs = {k: _call_bert_sdk(v.to, self.device) for k, v in inputs.items()}
 
             if self.use_fp16:
-                inputs = {k: v.half() for k, v in inputs.items()}
+                inputs = {k: _call_bert_sdk(v.half) for k, v in inputs.items()}
 
-            outputs = self.model(**inputs)
+            outputs = _call_bert_sdk(self.model, **inputs)
             logits = outputs.logits
 
-            probs = torch.softmax(logits, dim=-1)
-            confidences, predicted_indices = torch.max(probs, dim=-1)
+            probs = _call_bert_sdk(torch.softmax, logits, dim=-1)
+            confidences, predicted_indices = _call_bert_sdk(torch.max, probs, dim=-1)
 
         results = []
         for i, text in enumerate(texts):
-            predicted_idx = predicted_indices[i].item()
-            confidence = confidences[i].item()
+            predicted_idx = _call_bert_sdk(predicted_indices[i].item)
+            confidence = _call_bert_sdk(confidences[i].item)
             predicted_label = self.id2label.get(predicted_idx, "unk")
 
             result = {
@@ -289,7 +315,8 @@ class BertIntentClassifier:
             }
 
             if return_probs:
-                prob_list = probs[i].cpu().numpy().tolist()
+                prob_tensor = _call_bert_sdk(probs[i].cpu)
+                prob_list = _call_bert_sdk(prob_tensor.numpy).tolist()
                 result["all_probs"] = {
                     self.id2label.get(j, f"label_{j}"): round(float(p), 4)
                     for j, p in enumerate(prob_list)

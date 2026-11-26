@@ -4,6 +4,7 @@ security_headers, user_memory_service (mocked I/O)."""
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -11,7 +12,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 
 import app.db as db_mod
 import app.domain.shared_services.user_memory_service as ums
@@ -196,7 +199,9 @@ def test_finance_delete_transaction_success(mock_get_db: MagicMock) -> None:
 def test_finance_create_transaction_rollback(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_get_db.return_value = _mock_get_db(mock_db)
-    mock_db.add.side_effect = RuntimeError("constraint")
+    mock_db.commit.side_effect = OperationalError(
+        None, None, sqlite3.OperationalError("database is locked")
+    )
     with patch(
         "app.application.finance_app_service.FinancialTransaction", return_value=MagicMock()
     ):
@@ -396,7 +401,7 @@ def test_redis_rate_limiter_pipeline_counts() -> None:
 
 def test_redis_rate_limiter_get_remaining_handles_error() -> None:
     fake_redis = MagicMock()
-    fake_redis.get.side_effect = RuntimeError("redis read fail")
+    fake_redis.get.side_effect = RedisConnectionError("redis read fail")
     limiter = redis_client_mod._RedisRateLimiter(max_requests=10, window_seconds=30)
     limiter._redis = fake_redis
     assert limiter.get_remaining("k") == 0

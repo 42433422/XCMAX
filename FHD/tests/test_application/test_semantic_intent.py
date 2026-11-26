@@ -64,7 +64,7 @@ def test_unavailable_model_degrades_to_no_matches(semantic_on, monkeypatch):
 def test_router_failure_is_swallowed(semantic_on, monkeypatch):
     class _Boom:
         def __call__(self, *args, **kwargs):
-            raise RuntimeError("onnx exploded")
+            raise ValueError("invalid embedding shape")
 
     monkeypatch.setattr(semantic_intent, "_load_router", lambda: _Boom())
     assert semantic_intent.classify_intents("主页按键不明显") == []

@@ -28,8 +28,7 @@ def dynamic_runtime(trusted_actor, monkeypatch, tmp_path):
         permissions=[
             "product.view",
             "customer.view",
-            "tool.customers.create",
-            "tool.products.batch_delete",
+            "customer.edit",
             "tool.excel_analyzer.analyze",
         ]
     )
@@ -284,8 +283,13 @@ def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
         lambda *args: dispatched.append(args) or {"success": True},
     )
     params = {"ids": [11, 22]}
-    first = state.execute("batch-original", params, "products", "batch_delete")
-    repeated = state.execute("batch-repeat", params, "products", "batch_delete")
+    # Exercise the tenant-owned batch contract; global legacy product writes
+    # remain unavailable to this same authenticated enterprise actor.
+    with pytest.raises(CodexBindingError) as legacy:
+        state.describe("products", "batch_delete")
+    assert legacy.value.code == "permission_denied"
+    first = state.execute("batch-original", params, "customers", "batch_delete")
+    repeated = state.execute("batch-repeat", params, "customers", "batch_delete")
     assert first["pending_approval"] is repeated["pending_approval"] is True
     assert first["run_id"] == repeated["run_id"] and first["task_id"] == repeated["task_id"]
     child = state.repository.get(first["run_id"])

@@ -1,4 +1,4 @@
-"""COVERAGE_RAMP Phase 2 (p2-p3-ext): planner tools, workflow import preview,
+"""COVERAGE_RAMP Phase 2 (p2-p3-ext): planner tools, spreadsheet reader,
 ai_chat helpers, ocr cache, rag semantic chunker fixed, contexts notifier."""
 
 from __future__ import annotations
@@ -14,55 +14,24 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
 )
 from app.application.tools.workflow import (
-    _import_customers_preview_or_execute,
-    _import_orders_preview_or_execute,
-    _import_products_preview_or_execute,
     _read_excel_dataframe,
 )
 from app.infrastructure.rag.rag_service import RagQuery
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
 
 # ---------------------------------------------------------------------------
-# workflow import preview helpers
+# spreadsheet reader
 # ---------------------------------------------------------------------------
 
 
-def test_import_products_preview_mode() -> None:
-    df = pd.DataFrame([{"产品名称": "漆A", "单价": 10, "数量": 2}])
-    raw = _import_products_preview_or_execute(
-        df, list(df.columns), unit_name="七彩", confirm=False, row_count=1
-    )
-    out = json.loads(raw)
-    assert out["success"] is True
-    assert out.get("preview") is True
-
-
-def test_import_customers_preview_mode() -> None:
-    df = pd.DataFrame([{"单位名称": "七彩", "联系人": "张三", "电话": "13800000000"}])
-    out = json.loads(
-        _import_customers_preview_or_execute(df, list(df.columns), confirm=False, row_count=1)
-    )
-    assert out["success"] is True
-
-
-def test_import_orders_preview_mode() -> None:
-    df = pd.DataFrame([{"产品": "漆", "数量": 1, "单价": 99}])
-    out = json.loads(
-        _import_orders_preview_or_execute(
-            df, list(df.columns), unit_name="七彩", confirm=False, row_count=1
-        )
-    )
-    assert out["success"] is True
-
-
-@patch("app.application.tools.workflow.pd.read_excel")
+@patch("app.application.tools.workflow_tools.excel_analysis.pd.read_excel")
 def test_read_excel_dataframe_passes_header(mock_read: MagicMock, tmp_path) -> None:
     fp = tmp_path / "t.xlsx"
     fp.write_bytes(b"x")
     mock_read.return_value = pd.DataFrame({"a": [1]})
     df = _read_excel_dataframe(Path(fp), sheet_name="S1", header_row_1based=2)
     assert len(df) == 1
-    mock_read.assert_called_once()
+    mock_read.assert_called_once_with(fp, engine="openpyxl", sheet_name="S1", header=1)
 
 
 # ---------------------------------------------------------------------------

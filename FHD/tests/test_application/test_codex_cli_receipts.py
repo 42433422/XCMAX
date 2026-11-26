@@ -16,7 +16,11 @@ from app.application.codex_super_employee_service import CodexSuperEmployeeServi
 from app.application.super_employee.cli import CliExecutionError, CliExecutor
 from app.application.super_employee.development import DevelopmentWorkflow
 from app.application.super_employee.profiles import CLAUDE_PROFILE, CODEX_PROFILE
-from app.application.super_employee.protocols import CliPorts, DevelopmentPorts, WorktreePorts
+from app.application.super_employee.protocols import (
+    CliPorts,
+    DevelopmentPorts,
+    WorktreePorts,
+)
 
 
 @pytest.fixture
@@ -75,10 +79,12 @@ def test_sync_receipt_requires_zero_exit_even_with_partial_output(child, tmp_pat
         with pytest.raises(CliExecutionError) as raised:
             runtime.run_cli_once(sys.executable, "task", str(tmp_path))
         error = raised.value
-        assert error.returncode == 7 and error.partial_output == "partial reply"
-        assert error.payload()["success"] is False and error.payload()["retryable"] is False
-        assert error.payload()["outcome"] == "unknown"
-        assert "synthetic-stderr-secret" not in error.reply_body()
+        assert error.receipt["exit_code"] == 7
+        assert error.receipt["partial_text"] == "partial reply"
+        assert error.receipt["success"] is False and error.receipt["retryable"] is False
+        assert error.receipt["outcome"] == "unknown"
+        assert "synthetic-stderr-secret" not in error.body
+        assert "synthetic-stderr-secret" not in json.dumps(error.event())
 
 
 @pytest.mark.parametrize("mode", ["file", "stdout", "json"])
@@ -98,8 +104,8 @@ def test_stream_receipt_uses_real_exit_and_never_promotes_partial_text(child, tm
         assert events[-1]["type"] == "done"
     else:
         assert all(event["type"] != "done" for event in events)
-        assert events[-1]["type"] == "error" and events[-1]["returncode"] == 9
-        assert events[-1]["partial_output"].strip() == "partial reply"
+        assert events[-1]["type"] == "error" and events[-1]["exit_code"] == 9
+        assert events[-1]["partial_text"].strip() == "partial reply"
         assert events[-1]["reconciliation_required"] is True
 
 
@@ -120,8 +126,9 @@ def test_timeout_keeps_partial_output_and_cannot_complete(child, tmp_path, strea
     else:
         with pytest.raises(CliExecutionError) as raised:
             runtime.run_cli_once(sys.executable, "task", str(tmp_path))
-        result = raised.value.payload()
-    assert result["partial_output"] == "partial reply"
+        result = raised.value.receipt
+    assert result["partial_text"] == "partial reply"
+    assert result["error_code"] == "cli_timeout"
     assert result["outcome"] == "unknown" and result["retryable"] is False
     assert "synthetic-stderr-secret" not in json.dumps(result)
 
@@ -134,7 +141,9 @@ def test_missing_exit_code_is_not_assumed_success(child, tmp_path):
     )
     with pytest.raises(CliExecutionError) as raised:
         runtime.run_cli_once(sys.executable, "task", str(tmp_path))
-    assert raised.value.returncode is None
+    assert raised.value.receipt["exit_code"] is None
+    assert raised.value.receipt["termination_reason"] == "exit_unknown"
+    assert raised.value.receipt["outcome"] == "unknown"
 
 
 @pytest.fixture
@@ -168,7 +177,12 @@ def test_sync_service_and_persisted_messages_remain_failed(failed_service, monke
         monkeypatch.setattr(
             service,
             "_dispatch",
-            lambda request: {"accepted": False, "queued": True, "status": "queued"},
+            lambda request: {
+                "accepted": False,
+                "queued": False,
+                "status": "dispatch_error",
+                "safe_to_fallback": True,
+            },
         )
     result = service.invoke(user_id=1, message="Explain sorting algorithms")
     assert result["dispatch"]["status"] == "failed"
@@ -177,6 +191,65 @@ def test_sync_service_and_persisted_messages_remain_failed(failed_service, monke
     assert "partial reply" in result["assistant_message"]["body"]
     assert "synthetic-stderr-secret" not in json.dumps(result)
     assert service.list_messages(user_id=1)[-1]["status"] == "failed" and len(calls) == 1
+
+
+@pytest.mark.parametrize("status", ["failed", "dispatch_unknown"])
+def test_reading_history_preserves_failed_receipts_without_running_cli(failed_service, status):
+    service, calls = failed_service
+    request_id, task_id = "original-cli-request", "original-cli-task"
+    receipt = {
+        "success": False,
+        "status": status,
+        "outcome": "unknown",
+        "error_code": "cli_timeout",
+        "request_id": request_id,
+        "task_id": task_id,
+        "partial_text": "partial reply",
+        "retryable": False,
+        "reconciliation_required": True,
+    }
+    rows = [
+        service._message_row(
+            user_id=1,
+            role="user",
+            body="Explain sorting algorithms",
+            created_at="2026-11-21T00:00:00Z",
+            request_id="pending-reply",
+            status="sent",
+        ),
+        service._message_row(
+            user_id=1,
+            role="user",
+            body="Explain sorting algorithms",
+            created_at="2026-11-21T00:00:01Z",
+            request_id=request_id,
+            status="sent",
+        ),
+        service._message_row(
+            user_id=1,
+            role="assistant",
+            body="任务效果未确认；partial reply",
+            created_at="2026-11-21T00:00:02Z",
+            request_id=request_id,
+            status=status,
+            extra={
+                "kind": service._p.direct_kind,
+                "task_id": task_id,
+                "cli_execution": receipt,
+                "reconciliation_required": True,
+            },
+        ),
+    ]
+    service._append_messages(rows)
+    for _ in range(2):
+        history = service.list_messages(user_id=1)
+        assert len(history) == len(rows)
+        original = history[-1]
+        assert original["status"] == status
+        assert original["dispatch_request_id"] == request_id and original["task_id"] == task_id
+        assert original["body"] == rows[-1]["body"]
+        assert service._messages.read_all_message_rows() == rows
+        assert calls == []
 
 
 def test_message_history_never_starts_a_cli_backfill(failed_service):
@@ -194,9 +267,77 @@ def test_message_history_never_starts_a_cli_backfill(failed_service):
         ]
     )
     first = service.list_messages(user_id=1)
-    assert len(first) == 1 and first[0]["status"] == "sent"
     assert service.list_messages(user_id=1) == first
+    assert len(first) == 1 and first[0]["status"] == "sent"
+    assert first[0]["role"] == "user"
     assert calls == []
+
+
+def test_failed_local_request_is_not_replayed_after_service_restart(failed_service, tmp_path):
+    service, calls = failed_service
+    context = {"request_id": "failed-local-request"}
+    first = service.invoke(user_id=1, message="Explain sorting algorithms", context=context)
+    resumed_service = CodexSuperEmployeeService(
+        storage_root=tmp_path / "messages",
+        codex_cli_runner=lambda *args, **kwargs: pytest.fail("failed request replayed the CLI"),
+    )
+
+    resumed = resumed_service.invoke(
+        user_id=1, message="Explain sorting algorithms", context=context
+    )
+
+    assert len(calls) == 1
+    assert first["dispatch"]["status"] == resumed["dispatch"]["status"] == "failed"
+    assert resumed["dispatch"]["reconciliation_required"] is True
+    assert "synthetic-stderr-secret" not in json.dumps(resumed)
+
+
+@pytest.mark.parametrize(
+    ("failure", "error_code", "exit_code"),
+    [
+        (OSError("synthetic-system-secret"), "cli_execution_failed", None),
+        (
+            subprocess.CalledProcessError(23, "fixture-cli", stderr="synthetic-system-secret"),
+            "cli_nonzero_exit",
+            23,
+        ),
+        (
+            subprocess.TimeoutExpired("fixture-cli", 45, stderr="synthetic-system-secret"),
+            "cli_timeout",
+            None,
+        ),
+    ],
+)
+def test_service_stream_exception_keeps_receipt_without_raw_diagnostics(
+    tmp_path, monkeypatch, failure, error_code, exit_code
+):
+    service = CodexSuperEmployeeService(storage_root=tmp_path / "messages")
+    monkeypatch.setattr(service, "_cli_path", lambda: "fixture-codex")
+    monkeypatch.setattr(service, "_cli_workspace", lambda context: str(tmp_path))
+    monkeypatch.setattr(service, "_is_task_intent", lambda text, context: False)
+
+    async def interrupted(*args):
+        yield {"type": "token", "text": "partial reply"}
+        raise failure
+
+    monkeypatch.setattr(service, "_run_cli_streaming", interrupted)
+
+    async def collect():
+        return [
+            event
+            async for event in service.invoke_stream(
+                user_id=1, message="Explain sorting algorithms"
+            )
+        ]
+
+    events = asyncio.run(collect())
+    assert events[-1]["error_code"] == error_code
+    assert events[-1]["exit_code"] == exit_code
+    assert events[-1]["partial_text"] == "partial reply"
+    assert events[-1]["outcome"] == "unknown"
+    assert events[-1]["reconciliation_required"] is True
+    assert not any(event["type"] == "done" for event in events)
+    assert "synthetic-system-secret" not in json.dumps(events)
 
 
 @pytest.mark.parametrize("missing_receipt", [False, True])
@@ -213,7 +354,9 @@ def test_service_stream_requires_successful_terminal_receipt(
         yield {"type": "token", "text": "partial reply"}
 
     monkeypatch.setattr(
-        service, "_run_cli_streaming", tokens_only if missing_receipt else runtime.run_cli_streaming
+        service,
+        "_run_cli_streaming",
+        tokens_only if missing_receipt else runtime.run_cli_streaming,
     )
 
     async def collect():
@@ -226,7 +369,10 @@ def test_service_stream_requires_successful_terminal_receipt(
 
     events = asyncio.run(collect())
     assert events[-1]["type"] == "error" and all(e["type"] != "done" for e in events)
-    assert events[-1]["partial_output"] == "partial reply"
+    assert events[-1]["partial_text"] == "partial reply"
+    assert events[-1]["outcome"] == "unknown"
+    assert events[-1]["retryable"] is False
+    assert "synthetic-stderr-secret" not in json.dumps(events)
 
 
 def test_failed_coding_does_not_verify_retry_or_publish(child, tmp_path):
@@ -251,8 +397,9 @@ def test_failed_coding_does_not_verify_retry_or_publish(child, tmp_path):
             hard_cap=lambda: 20,
         ),
     )
-    with pytest.raises(CliExecutionError) as failed:
+    with pytest.raises(CliExecutionError) as raised:
         workflow.run_dev_task_loop(sys.executable, "task", str(tmp_path))
     assert effects == []
-    assert failed.value.receipt["workspace_preserved"] is True
-    assert failed.value.receipt["workspace"] == str(tmp_path)
+    assert raised.value.receipt["exit_code"] == 7
+    assert raised.value.receipt["workspace"] == str(tmp_path)
+    assert raised.value.receipt["workspace_preserved"] is True

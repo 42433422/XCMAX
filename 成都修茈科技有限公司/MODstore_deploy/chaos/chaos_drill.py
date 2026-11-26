@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import subprocess
 import sys
 import time
@@ -86,7 +87,7 @@ def run_command(command: list[str], execute: bool) -> int:
     print(f"$ {printable}")
     if not execute:
         return 0
-    return subprocess.call(command, cwd=ROOT)
+    return subprocess.run(command, cwd=ROOT, timeout=120, check=False).returncode
 
 
 def run_smoke(args: argparse.Namespace, execute: bool) -> int:
@@ -106,16 +107,10 @@ def run_smoke(args: argparse.Namespace, execute: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run a controlled MODstore chaos drill."
-    )
+    parser = argparse.ArgumentParser(description="Run a controlled MODstore chaos drill.")
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), required=True)
-    parser.add_argument(
-        "--duration", type=int, default=60, help="Fault duration in seconds"
-    )
-    parser.add_argument(
-        "--confirm", action="store_true", help="Actually execute the drill"
-    )
+    parser.add_argument("--duration", type=int, default=60, help="Fault duration in seconds")
+    parser.add_argument("--confirm", action="store_true", help="Actually execute the drill")
     parser.add_argument(
         "--skip-smoke",
         action="store_true",
@@ -126,6 +121,8 @@ def main() -> int:
     parser.add_argument("--payment-url", default="http://127.0.0.1:8080")
     parser.add_argument("--prometheus-url", default="http://127.0.0.1:9090")
     args = parser.parse_args()
+    if not 0 <= args.duration <= 3600:
+        parser.error("--duration must be between 0 and 3600 seconds")
 
     scenario = SCENARIOS[args.scenario]
     execute = args.confirm
@@ -135,9 +132,7 @@ def main() -> int:
     for item in scenario.observe:
         print(f"- {item}")
     if not execute:
-        print(
-            "\nDry run only. Re-run with --confirm in a staging environment to execute."
-        )
+        print("\nDry run only. Re-run with --confirm in a staging environment to execute.")
 
     if not args.skip_smoke:
         print("\nPre-check:")
@@ -145,28 +140,58 @@ def main() -> int:
             print("Pre-check failed; aborting drill.")
             return 1
 
-    print("\nInject fault:")
-    for command in scenario.inject:
-        code = run_command(command, execute)
-        if code != 0:
-            return code
+    code = 0
+    previous_handlers = {}
+
+    def interrupted(signum, _frame):
+        nonlocal code
+        code = 128 + signum
+        raise KeyboardInterrupt
 
     if execute:
-        print(f"\nHolding fault for {args.duration}s...")
-        time.sleep(max(1, args.duration))
-    else:
-        print(f"\nWould hold fault for {args.duration}s.")
+        previous_handlers = {
+            sig: signal.signal(sig, interrupted) for sig in (signal.SIGINT, signal.SIGTERM)
+        }
+    try:
+        print("\nInject fault:")
+        for command in scenario.inject:
+            code = run_command(command, execute)
+            if code:
+                break
+        if not code:
+            print(f"\n{'Holding' if execute else 'Would hold'} fault for {args.duration}s.")
+            if execute:
+                time.sleep(args.duration)
+    except KeyboardInterrupt:
+        code = code or 130
+        print("Drill interrupted; recovering before exit.")
+    except (OSError, subprocess.SubprocessError) as error:
+        code = 1
+        print(f"Fault command failed: {error}")
+    finally:
+        # Even a failed stop may have partially taken effect. Always recover all
+        # affected services, and allow bounded cleanup to finish on cancellation.
+        for sig in previous_handlers:
+            signal.signal(sig, signal.SIG_IGN)
+        try:
+            print("\nRecover:")
+            for command in scenario.recover:
+                try:
+                    recovery = run_command(command, execute)
+                except (OSError, subprocess.SubprocessError) as error:
+                    recovery = 1
+                    print(f"Recovery command failed: {error}")
+                if recovery:
+                    code = code or recovery
+                    print("Recovery failed; manual recovery is required.")
+        finally:
+            for sig, handler in previous_handlers.items():
+                signal.signal(sig, handler)
 
-    print("\nRecover:")
-    for command in scenario.recover:
-        code = run_command(command, execute)
-        if code != 0:
-            return code
-
-    if not args.skip_smoke:
+    if not code and not args.skip_smoke:
         print("\nPost-check:")
         return run_smoke(args, execute)
-    return 0
+    return code
 
 
 if __name__ == "__main__":

@@ -68,13 +68,21 @@ def build_report(path: Path, since_hours: int) -> dict:
             symbols[mod].add(str(sym))
         total += 1
 
+    # An absent log (or an empty window with no collection heartbeat) is
+    # unknown, not proof of zero legacy usage. Never publish a false zero.
+    source_status = (
+        "missing"
+        if not path.is_file()
+        else "observed_events" if total > 0 else "unverified_zero"
+    )
     report = {
-        "log_path": str(path),
+        "log_path": path.name,
         "since_hours": since_hours,
-        "total_events": total,
-        # 启发式"遗留活动压力"：近 N 小时 legacy 事件量 / 基线(1000 事件/周期) 归一化到 [0,1]。
-        # 供演化信号聚合（aggregate_signals 读取 legacy_ratio）判断是否低于阈值触发提案。
-        "legacy_ratio": round(min(1.0, total / 1000.0), 4),
+        "source_status": source_status,
+        "total_events": total if source_status != "missing" else None,
+        # Positive observations can signal legacy pressure. With no observed
+        # events, coverage is unproven and downstream retirement must block.
+        "legacy_ratio": round(min(1.0, total / 1000.0), 4) if total else None,
         "modules": [],
     }
     for mod, count in module_counter.most_common():
@@ -96,7 +104,7 @@ def render_text(report: dict) -> str:
         "",
     ]
     if not report["modules"]:
-        lines.append("(no records in window — candidates for deletion, double-check via rg)")
+        lines.append("(no verified zero-usage evidence; do not retire legacy code)")
         return "\n".join(lines)
     for entry in report["modules"]:
         lines.append(f"- {entry['module']}  count={entry['count']}")

@@ -146,6 +146,7 @@ def browser_runtime(tmp_path, monkeypatch, trusted_actor):
         args=(
             str(entry),
             "--headless",
+            "--sandbox",
             "--isolated",
             "--executable-path",
             executable,
@@ -384,6 +385,7 @@ def test_live_missing_evidence_and_lost_generation_fail_closed(browser_runtime, 
     assert "reconciliation_evidence" not in resumed
     assert resumed["reconciliation_required"] is True
     assert resumed["retryable"] is False
+    assert runtime.close(0) == 0  # The failed resume must not create a new browser worker.
     assert submissions == []
 
 

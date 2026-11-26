@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.application.agent_orchestrator import run_lifecycle
 from app.application.agent_orchestrator.run_models import AgentRun, ToolCall
 from app.application.agent_runtime import xiaox_runtime as runtime
 from app.domain.task_lifecycle.agent_runtime_contract import (
@@ -262,7 +263,14 @@ def setup_runtime(tmp_path, monkeypatch):
     return invoke, config
 
 
-def receipt(*, status="completed", verified=True, success=True):
+def receipt(
+    *,
+    status="completed",
+    verified=True,
+    success=True,
+    child_run_id="run-child",
+    child_task_id="task-child",
+):
     call = ToolCall(
         step_id="step-child",
         node_id="node-child",
@@ -279,9 +287,12 @@ def receipt(*, status="completed", verified=True, success=True):
         "params": {},
         "state": status,
         "read_only": True,
-        "child_task_id": "task-child",
-        "child_run_id": "run-child",
+        "fingerprint": canonical_digest({"tool_id": "sales", "action": "query", "params": {}}),
+        "child_task_id": child_task_id,
+        "child_run_id": child_run_id,
         "receipt": {
+            "run_id": child_run_id,
+            "task_id": child_task_id,
             "status": status,
             "verified": verified,
             "success": success,
@@ -620,10 +631,8 @@ def test_verifier_feedback_completes_missing_work_in_same_thread(setup_runtime):
                 assert "继续核对原始目标" in goal_feedback
                 # The second SDK turn supplies only the missing read; the first
                 # call keeps its original persisted receipt and identity.
-                missing = receipt()
-                missing.update(
-                    call_id="missing-read", child_run_id="second-child", child_task_id="second-task"
-                )
+                missing = receipt(child_run_id="second-child", child_task_id="second-task")
+                missing["call_id"] = "missing-read"
                 missing["receipt"]["tool_calls"][0]["call_id"] = "second-child-call"
                 store.rows.append(missing)
                 store.review_missing = False
@@ -901,6 +910,19 @@ def test_unknown_outcome_is_durable_and_never_replayed(setup_runtime):
     assert again.inputs == [] and again.started == []
 
 
+def test_malformed_child_receipt_preserves_unknown_during_final_projection(setup_runtime):
+    invoke, _ = setup_runtime
+    row = receipt()
+    row["receipt"] = ["malformed"]
+    store = Store(rows=[row])
+    result = asyncio.run(invoke(store, Transport(store)))
+    assert result["ok"] is False and result["business_completed"] is False
+    assert result["execution_state"] == "unknown" and result["reconciliation_required"] is True
+    assert store.run.status == "blocked" and store.run.metadata["non_retryable"] is True
+    assert store.run.tool_calls == []
+    assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+
+
 def test_model_usage_uncertainty_blocks_completion(setup_runtime):
     invoke, _ = setup_runtime
     store = Store(rows=[receipt()])
@@ -989,7 +1011,7 @@ def test_changed_conversation_stops_before_native_thread_resume(setup_runtime, m
     invoke, _ = setup_runtime
     store = Store(metadata={"thread_id": "thread-one"})
     monkeypatch.setattr(
-        runtime, "continuation_conversation_error", lambda *_args: "conversation cleared"
+        run_lifecycle, "continuation_conversation_error", lambda *_args: "conversation cleared"
     )
     transport = Transport(store)
     result = asyncio.run(invoke(store, transport))

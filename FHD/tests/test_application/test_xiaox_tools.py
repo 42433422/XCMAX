@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from types import SimpleNamespace
 
 import pytest
@@ -38,7 +39,7 @@ def bridge_setup(trusted_actor, monkeypatch, tmp_path):
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    actor = trusted_actor(permissions=["product.view", "tool.customers.create", "customer.view"])
+    actor = trusted_actor(permissions=["customer.edit", "customer.view"])
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     run = AgentRun(user_id=str(actor.user_id), message="执行企业任务", status="running")
     run.metadata["runtime_context"] = actor.context
@@ -71,7 +72,7 @@ def test_authority_arguments_and_unbound_tools_never_publish_tasks(bridge_setup)
                 "execute_action",
                 {
                     "call_id": "attack",
-                    "tool_id": "products",
+                    "tool_id": "customers",
                     "action": "query",
                     "params": params,
                 },
@@ -167,7 +168,7 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
         grant.mcp_token,
         "execute_action",
         {
-            "tool_id": "products",
+            "tool_id": "customers",
             "action": "query",
             "params": {"keyword": "first"},
             "call_id": "first",
@@ -183,7 +184,7 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
         renewed.mcp_token,
         "execute_action",
         {
-            "tool_id": "products",
+            "tool_id": "customers",
             "action": "query",
             "params": {"keyword": "second"},
             "call_id": "second",
@@ -192,7 +193,77 @@ def test_dynamic_observations_use_reopened_sql_child_evidence(bridge_setup, monk
     assert second["verified"] is True and second["run_id"] != first["run_id"]
     snapshot = reopened.receipt_snapshot(run.run_id)
     assert len(snapshot) == 2 and all(row["receipt"]["verified"] for row in snapshot)
-    assert dispatched == [("products", "query", "first"), ("products", "query", "second")]
+    assert dispatched == [("customers", "query", "first"), ("customers", "query", "second")]
+
+
+def test_acknowledged_child_completion_uses_original_independent_readback(
+    bridge_setup, monkeypatch, tmp_path
+):
+    import copy
+    import sqlite3
+
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+    )
+
+    setup = bridge_setup
+    source = tmp_path / "acknowledged-result.sqlite"
+    with sqlite3.connect(source) as db:
+        db.execute("CREATE TABLE result (request_id TEXT PRIMARY KEY, completed INTEGER)")
+        db.execute("INSERT INTO result VALUES ('original-request', 0)")
+    dispatched = []
+
+    def dispatch(*args):
+        dispatched.append(args)
+        return {"success": False, "execution_state": "pending", "request_id": "original-request"}
+
+    def readback(**kwargs):
+        with sqlite3.connect(source) as db:
+            row = db.execute(
+                "SELECT completed FROM result WHERE request_id = ?",
+                (kwargs["output"]["request_id"],),
+            ).fetchone()
+        ready = row == (1,)
+        return {
+            "status": "verified" if ready else "inconclusive",
+            "code": "original_result_observed" if ready else "original_result_pending",
+            "checks": [
+                {
+                    "check_id": "original_request",
+                    "status": "passed" if ready else "unavailable",
+                    "source": "independent_sqlite_connection",
+                    "evidence": {"request_id": "original-request", "completed": ready},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", dispatch
+    )
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.verification_readback.verify_independent_result",
+        readback,
+    )
+    args = {"tool_id": "customers", "action": "query", "params": {}, "call_id": "original"}
+    first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
+    assert first["status"] == "running" and first["verified"] is False
+    with pytest.raises(CodexBindingError) as error:
+        _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "next"})
+    assert error.value.code == "call_in_progress"
+    original = copy.deepcopy(setup.store.repository.get(first["run_id"]).tool_calls[0].output)
+    with sqlite3.connect(source) as db:
+        db.execute("UPDATE result SET completed = 1 WHERE request_id = 'original-request'")
+    observed = reverify_run(setup.store.repository, first["run_id"])
+    assert verification_can_finalize(observed)
+    setup.bridge.orchestrator.retry_run(first["run_id"], requested_by=setup.run.user_id)
+    completed = setup.bridge.orchestrator.execute_dispatched_run(first["run_id"])
+    assert completed.status == "completed"
+    receipt = _invoke(setup.bridge, setup.grant.mcp_token, "task_evidence", {"call_id": "original"})
+    assert receipt["verified"] is True and receipt["status"] == "completed"
+    assert receipt["run_id"] == first["run_id"] and receipt["task_id"] == first["task_id"]
+    assert receipt["tool_calls"][0]["output"] == original
+    assert len(dispatched) == 1 and len(completed.tool_calls) == 1
 
 
 def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_setup, monkeypatch):
@@ -212,7 +283,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     )
     args = {
         "call_id": "read",
-        "tool_id": "products",
+        "tool_id": "customers",
         "action": "query",
         "params": {"keyword": "fixture"},
     }
@@ -230,7 +301,7 @@ def test_read_executes_controlled_chain_and_replays_persisted_receipt(bridge_set
     replay = _invoke(reopened, setup.grant.mcp_token, "execute_action", args)
     assert replay["run_id"] == receipt["run_id"]
     assert replay["verified"] is True
-    assert calls == [("products", "query")]
+    assert calls == [("customers", "query")]
 
 
 def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
@@ -254,6 +325,158 @@ def test_lost_claim_without_child_cannot_be_replayed(bridge_setup):
         setup.store.create(setup.run.run_id)
     assert error.value.code == "reconciliation_required"
     assert len(setup.store.repository.list_recent()) == 1
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_original_child_receipt_never_follows_a_replacement_attempt(bridge_setup, bound):
+    from app.db.models.agent import AgentRunRecord
+    from app.infrastructure.codex.receipts import read_call_receipt
+
+    setup = bridge_setup
+    receipt = _invoke(
+        setup.bridge,
+        setup.grant.mcp_token,
+        "execute_action",
+        {
+            "call_id": "original",
+            "tool_id": "customers",
+            "action": "create",
+            "params": {"unit_name": "fixture"},
+        },
+    )
+    original = setup.store.repository.get(receipt["run_id"])
+    replacement = copy.deepcopy(original)
+    replacement.run_id = AgentRun(user_id=original.user_id, message="replacement").run_id
+    replacement.metadata["task_context"]["attempt"] = 2
+    setup.store.repository.save(replacement)
+    with setup.actor.factory.begin() as db:
+        db.query(AgentRunRecord).filter_by(run_id=original.run_id).delete()
+    if not bound:
+        setup.store.update(
+            setup.run.run_id,
+            lambda _run, metadata: metadata["calls"]["original"].update(child_run_id=""),
+        )
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    binding = reopened.get(setup.run.run_id)
+    call = binding.metadata["calls"]["original"]
+    result = read_call_receipt(reopened, binding, call)
+    assert result["status"] == "unknown"
+    assert result["run_id"] == (original.run_id if bound else "")
+    assert result["reconciliation_required"] is True and result["retryable"] is False
+    assert reopened.repository.get(replacement.run_id).status == "waiting_user"
+    assert reopened.get(setup.run.run_id).metadata["calls"]["original"] == call
+    snapshot = reopened.receipt_snapshot(setup.run.run_id)[0]
+    assert snapshot["receipt"]["status"] == "unknown"
+    assert snapshot["child_run_id"] == call["child_run_id"]
+    assert reopened.get(setup.run.run_id).run.metadata["non_retryable"] is True
+
+
+@pytest.mark.parametrize("field", ["run_id", "task_id"])
+@pytest.mark.parametrize("missing", [False, True])
+def test_receipt_identity_mismatch_cannot_release_original_reservation(
+    bridge_setup, field, missing
+):
+    setup = bridge_setup
+    setup.store.update(
+        setup.run.run_id,
+        lambda parent, _metadata: parent.metadata.update(ai_cost_budget_units=10),
+    )
+    receipt = _invoke(
+        setup.bridge,
+        setup.grant.mcp_token,
+        "execute_action",
+        {
+            "call_id": "original",
+            "tool_id": "customers",
+            "action": "create",
+            "params": {"unit_name": "fixture"},
+        },
+    )
+    before = setup.store.get(setup.run.run_id)
+    foreign = {**receipt, "status": "completed", "ai_cost_units_total": 4}
+    if missing:
+        foreign.pop(field)
+    else:
+        foreign[field] = "another-original-identity"
+    with pytest.raises(CodexBindingError) as error:
+        setup.store.record_call(
+            setup.run.run_id, "original", child_run_id=receipt["run_id"], receipt=foreign
+        )
+    assert error.value.code == "evidence_mismatch"
+    after = setup.store.get(setup.run.run_id)
+    assert after.metadata["calls"] == before.metadata["calls"]
+    assert after.run.metadata["reserved_cost_units"] == 10
+    assert after.run.metadata["ai_cost_units_total"] == before.run.metadata.get(
+        "ai_cost_units_total", 0
+    )
+
+
+def test_lost_child_binding_ack_recovers_only_original_sql_admission(bridge_setup):
+    setup = bridge_setup
+    original = _invoke(
+        setup.bridge,
+        setup.grant.mcp_token,
+        "execute_action",
+        {
+            "call_id": "original",
+            "tool_id": "customers",
+            "action": "create",
+            "params": {"unit_name": "fixture"},
+        },
+    )
+    setup.store.update(
+        setup.run.run_id,
+        lambda _run, metadata: metadata["calls"]["original"].update(child_run_id=""),
+    )
+    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    recovered = reopened.receipt_snapshot(setup.run.run_id)[0]
+    assert recovered["child_run_id"] == recovered["receipt"]["run_id"] == original["run_id"]
+    assert recovered["receipt"]["status"] == "waiting_user"
+    assert recovered["receipt"]["pending_approval"] is True
+    assert recovered["receipt"]["verified"] is False
+    assert len(reopened.repository.list_recent()) == 2
+    assert reopened.repository.get(original["run_id"]).tool_calls == []
+
+
+@pytest.mark.parametrize("consumer", ["receipt", "browser", "artifact"])
+def test_evidence_consumers_reject_an_unsupported_parent_binding(
+    bridge_setup, monkeypatch, consumer
+):
+    from app.infrastructure.codex.receipts import (
+        browser_action_receipts,
+        read_action_artifact,
+        read_call_receipt,
+    )
+
+    setup = bridge_setup
+    original = _invoke(
+        setup.bridge,
+        setup.grant.mcp_token,
+        "execute_action",
+        {
+            "call_id": "original",
+            "tool_id": "customers",
+            "action": "create",
+            "params": {"unit_name": "fixture"},
+        },
+    )
+    child = setup.store.repository.get(original["run_id"])
+    context = {**child.metadata["runtime_context"], "run_id": child.run_id}
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: setup.store.repository,
+    )
+    setup.store.update(setup.run.run_id, lambda _run, metadata: metadata.update(version=2))
+    binding = setup.store.get(setup.run.run_id)
+    with pytest.raises(CodexBindingError) as error:
+        if consumer == "receipt":
+            read_call_receipt(setup.store, binding, binding.metadata["calls"]["original"])
+        elif consumer == "browser":
+            browser_action_receipts(context, "customers")
+        else:
+            read_action_artifact(f"/api/agent/runs/{child.run_id}/artifacts/original", context)
+    assert error.value.code == "runtime_contract_unsupported"
+    assert setup.store.repository.get(child.run_id).tool_calls == []
 
 
 @pytest.mark.parametrize("claimed_success", [False, True])
@@ -327,7 +550,7 @@ def test_request_input_is_durable_and_blocks_additional_actions(bridge_setup):
             "execute_action",
             {
                 "call_id": "read",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },
@@ -404,7 +627,7 @@ def test_waiting_approval_blocks_new_business_actions(bridge_setup):
             "execute_action",
             {
                 "call_id": "second",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },
@@ -455,7 +678,7 @@ def test_revoke_after_child_is_saved_prevents_dispatch(bridge_setup, monkeypatch
             "execute_action",
             {
                 "call_id": "read",
-                "tool_id": "products",
+                "tool_id": "customers",
                 "action": "query",
                 "params": {},
             },

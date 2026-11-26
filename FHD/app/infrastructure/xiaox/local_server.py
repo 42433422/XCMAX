@@ -48,7 +48,7 @@ class LocalRuntimeServer:
         while not self._server.started:
             if not self._thread.is_alive() or time.monotonic() >= deadline:
                 self.__exit__(None, None, None)
-                raise RuntimeError("Private runtime endpoint failed to start")
+                raise ConnectionError("Private runtime endpoint failed to start")
             self._thread.join(0.01)
         return self
 

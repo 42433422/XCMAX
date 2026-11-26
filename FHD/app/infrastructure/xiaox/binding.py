@@ -471,6 +471,19 @@ class XiaoxBindingStore:
             if matches:
                 calls[call_id] = copy.deepcopy(matches[0])
                 return
+            # Existing calls above only read their durable receipt. New work must
+            # wait until the model that proposed it has a settled usage receipt.
+            model_calls = (metadata.get("model_requests") or {}).values()
+            if metadata.get("model_reconciliation_required") or any(
+                item.get("state") == "unknown" for item in model_calls
+            ):
+                raise CodexBindingError(
+                    "reconciliation_required", "原模型计量结果尚待核对，未创建业务任务"
+                )
+            if any(item.get("state") == "reserved" for item in model_calls):
+                raise CodexBindingError(
+                    "call_in_progress", "原模型请求尚未结束，请先等待其计量回执"
+                )
             if any((c.get("receipt") or {}).get("pending_approval") for c in calls.values()):
                 raise XiaoxBindingError("waiting_user", "请先处理原业务任务的审批")
             if any(
@@ -526,12 +539,23 @@ class XiaoxBindingStore:
         receipt: dict[str, Any] | None = None,
     ) -> XiaoxBinding:
         def record(run: AgentRun, metadata: dict[str, Any]) -> None:
+            self._validate_goal(run, metadata)
             call = metadata.get("calls", {}).get(call_id)
             if call is None:
                 raise XiaoxBindingError("call_missing", "调用未持久登记")
+            original_run_id = call["child_run_id"] or child_run_id
+            if receipt is not None and (
+                receipt.get("task_id") != call["child_task_id"]
+                or receipt.get("run_id") != original_run_id
+                or (not original_run_id and receipt.get("status") not in {"claimed", "unknown"})
+            ):
+                raise XiaoxBindingError("evidence_mismatch", "业务回执与原任务或执行标识不一致")
             previous_receipt = call.get("receipt") or {}
-            if receipt is not None and (previous_receipt.get("child_updated_at") or "") > (
-                receipt.get("child_updated_at") or ""
+            if (
+                receipt is not None
+                and receipt.get("status") != "unknown"
+                and (previous_receipt.get("child_updated_at") or "")
+                > (receipt.get("child_updated_at") or "")
             ):
                 return
             if child_run_id:

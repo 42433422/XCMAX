@@ -57,7 +57,7 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
         user = db.get(User, 1)
         user.tenant_id = 7
         role = Role(name="user")
-        role.permissions = [Permission(code="product.view", name="Query products")]
+        role.permissions = [Permission(code="shipment.view", name="Query shipments")]
         db.add(role)
     binding = bind_agent_mod_scope(
         session_id="secret-session", user_id="1", mod_id="test-private-mod"
@@ -84,7 +84,7 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
         "app.application.facades.tools_facade.execute_registered_workflow_tool", execute
     )
     step = AgentStep(
-        node_id="query", tool_id="products", action="query", params={"keyword": "5003"}
+        node_id="query", tool_id="shipment_records", action="query", params={"unit_name": "5003"}
     )
 
     def run():
@@ -110,6 +110,98 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
 def test_binding_rejects_wrong_owner_or_unentitled_mod(mod_session, user_id, mod_id):
     with pytest.raises(AgentModAuthorizationError):
         bind_agent_mod_scope(session_id="secret-session", user_id=user_id, mod_id=mod_id)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["revoked", "revoked_with_prior_effect", "handler_not_started", "handler_auth_error"],
+)
+def test_dispatch_effect_requires_host_admission_and_never_trusts_tool_refusal(
+    mod_session, monkeypatch, failure
+):
+    from app.application.agent_orchestrator import task_dispatcher
+    from app.application.agent_orchestrator.task_execution_models import dispatched_run_state
+    from app.application.agent_orchestrator.task_execution_repository import (
+        InMemoryTaskExecutionRepository,
+    )
+    from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+
+    monkeypatch.delenv("XCAGI_AGENT_TOOL_HARD_TIMEOUT_REQUIRED", raising=False)
+    binding = bind_agent_mod_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
+    run = AgentRun(user_id="1", message="inbound", status="queued")
+    step = AgentStep(
+        node_id="stock",
+        tool_id="inventory",
+        action="stock_in",
+        idempotent=False,
+        params={"model_number": "A100", "warehouse_name": "main", "quantity": 50},
+    )
+    queue = InMemoryTaskExecutionRepository()
+    queue.enqueue(run)
+    assert queue.claim("worker", lease_seconds=30) is not None
+    prior = ["other-write"] if failure == "revoked_with_prior_effect" else []
+    for effect in prior:
+        assert queue.mark_open_effect(run.run_id, effect, owner_id="worker")
+    if failure.startswith("revoked"):
+        with mod_session.begin() as db:
+            db.query(UserSession).one().entitled_mod_ids_json = "[]"
+        monkeypatch.setattr(
+            "app.utils.resilience.rate_limiter.tool_execution_slot",
+            lambda *a, **kw: pytest.fail("host refusal must not reserve a circuit probe"),
+        )
+    calls = []
+
+    def handler(*args):
+        calls.append(args)
+        assert queue.lifecycle(run.run_id)["effects"] == [step.step_id]
+        if failure == "handler_auth_error":
+            raise AgentModAuthorizationError("handler failed after starting")
+        # Tool-controlled status is not evidence that dispatch never happened.
+        return {
+            "success": False,
+            "error_code": "mod_authorization_invalid",
+            "execution_status": "not_started",
+        }
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", handler
+    )
+    token = task_dispatcher._open_effect.set((queue, run.run_id, "worker"))
+    try:
+        result = execute_with_tool_deadline(
+            SimpleNamespace(execute=AgentToolExecutor().execute),
+            step,
+            runtime_context={
+                "run_id": run.run_id,
+                "tenant_id": "1",
+                "_mod_authorization": binding,
+            },
+            timeout_seconds=10,
+        )
+    finally:
+        task_dispatcher._open_effect.reset(token)
+    assert get_request_active_mod_id() == ""
+    assert result["success"] is False
+    if failure.startswith("revoked"):
+        assert calls == []
+        assert result["execution_status"] == "not_started"
+        assert result["error_code"] == "mod_authorization_invalid"
+        assert queue.lifecycle(run.run_id)["effects"] == prior
+    else:
+        assert len(calls) == 1
+        assert queue.lifecycle(run.run_id)["effects"] == [step.step_id]
+    run.status = "blocked"
+    step.status, step.output = "failed", result
+    run.steps = [step]
+    state, error_code = dispatched_run_state(run)
+    stopped = queue.finish(run.run_id, "worker", state, error_code=error_code)
+    assert stopped.state == ("blocked" if failure == "revoked" else "unknown")
+    assert queue.lifecycle(run.run_id)["effects"] == (
+        prior if failure.startswith("revoked") else [step.step_id]
+    )
+    assert queue.claim("next-worker", lease_seconds=30) is None
 
 
 def test_client_cannot_supply_or_replace_mod_authorization():
@@ -350,15 +442,14 @@ def test_background_binding_rejects_account_scope_changes(mod_session, field, va
             pytest.fail("changed account scope must not execute")
 
 
-def test_owned_run_without_mod_binding_stays_visible_to_its_owner(monkeypatch):
+def test_owned_run_without_mod_binding_stays_visible_to_its_owner():
     """M9/M10 回归：legacy/compat 路径创建的 run 未写入 _mod_authorization，
     当请求头注入 active-mod（前端 window.fetch 补丁总会注入）时，
     用户仍必须能读到**自己创建的** run，而不是 403。"""
     from app.fastapi_routes.domains.agent import route_support
 
-    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "1")
     run = AgentRun(user_id="1", message="统计客户与产品")
-    run.metadata["runtime_context"] = {"source": "compat_chat_stream_agent_tool"}
+    run.metadata["runtime_context"] = {"tenant_id": "1", "source": "compat_chat_stream_agent_tool"}
     orchestrator = SimpleNamespace(get_run=lambda run_id: run)
     principal = AgentPrincipal(
         user_id="1", tenant_id="1", mod_authorization={"mod_id": "attendance-industry"}
@@ -370,13 +461,15 @@ def test_owned_run_without_mod_binding_stays_visible_to_its_owner(monkeypatch):
     assert got is run
 
 
-def test_owned_run_still_enforces_mod_user_and_tenant_boundaries(monkeypatch):
+def test_owned_run_still_enforces_mod_user_and_tenant_boundaries():
     """负向：本次改动**不得**放宽 Mod / 用户 / 租户边界。"""
     from app.fastapi_routes.domains.agent import route_support
 
-    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "1")
     bound = AgentRun(user_id="1", message="bound")
-    bound.metadata["runtime_context"] = {"_mod_authorization": {"mod_id": "mod-a"}}
+    bound.metadata["runtime_context"] = {
+        "tenant_id": "1",
+        "_mod_authorization": {"mod_id": "mod-a"},
+    }
     orchestrator = SimpleNamespace(get_run=lambda run_id: bound)
 
     cross_mod = AgentPrincipal(user_id="1", tenant_id="1", mod_authorization={"mod_id": "mod-b"})

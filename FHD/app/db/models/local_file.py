@@ -1,4 +1,4 @@
-"""本机文件只读授权与索引状态。
+"""本机文件授权、索引状态与账号隔离的代码修改提案。
 
 授权按 ``tenant_id + owner_user_id`` 隔离：只有授权目录内的文件会被读取，
 撤销后立即失效；索引记录逐文件保存指纹，用于增量同步与删除清理。
@@ -23,6 +23,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.db_base import Base
 from app.db.mixins import TenantScopedMixin, TimestampMixin
+
+
+class CodeEditProposal(Base):
+    """Immutable proposal; a committed claim fences uncertain filesystem writes."""
+
+    __tablename__ = "code_edit_proposals"
+
+    edit_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    scope_json: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
 
 
 class LocalFileGrant(TimestampMixin, TenantScopedMixin, Base):

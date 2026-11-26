@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 import pytest
 
@@ -17,6 +17,8 @@ class Store:
     def __init__(self):
         self.state = {
             "identity_id": "enterprise:xiaoc",
+            "revision": 1,
+            "owner_user_id": 17,
             "level": 5,
             "paused": False,
             "mission": "改善产品与持续学习",
@@ -37,6 +39,10 @@ class Store:
         self.active = True
         self.claimed = False
         self.finished = []
+        self.phases = []
+        self.checkpoints = []
+        self.graph_started = False
+        self.act_admitted = False
 
     def read_state(self):
         return copy.deepcopy(self.state)
@@ -58,6 +64,32 @@ class Store:
         self.finished.append(result)
         return {"cycle_id": claim["cycle_id"], **result}
 
+    def begin_cycle_graph(self, claim):
+        if not self.cycle_active(claim) or self.graph_started:
+            return False
+        self.graph_started = True
+        return True
+
+    def pending_native_act_claim(self):
+        return None
+
+    def admit_cycle_act(self, claim):
+        if not self.cycle_active(claim) or self.act_admitted:
+            return False
+        self.act_admitted = True
+        return True
+
+    def record_cycle_phase(self, claim, phase):
+        if phase != "reflect":
+            assert self.cycle_active(claim)
+        self.phases.append(phase)
+
+    def record_cycle_checkpoint(self, claim, phase, **details):
+        self.checkpoints.append((phase, details))
+
+    def mark_model_attempt(self, claim):
+        self.claim["outbound_attempted"] = True
+
     def record_cycle_step(self, claim, **details):
         assert self.cycle_active(claim)
         self.claim.setdefault("steps", []).append(details)
@@ -66,6 +98,7 @@ class Store:
 @pytest.fixture
 def ports(monkeypatch):
     from modstore_server import (
+        llm_api,
         strategic_portfolio_usage,
         strategy_planner,
         xiaoc_life_reconciliation,
@@ -76,6 +109,16 @@ def ports(monkeypatch):
     calls = []
     current = {}
     monkeypatch.setattr(runtime, "_store", lambda: store)
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    test_saver = InMemorySaver()
+
+    @asynccontextmanager
+    async def memory_checkpointer():
+        yield test_saver
+
+    monkeypatch.setattr(runtime, "native_life_checkpointer", memory_checkpointer)
     monkeypatch.setattr(xiaoc_life_reconciliation, "reconcile_goals", lambda: None)
     monkeypatch.setattr(xiaoc_life_reconciliation, "reconcile_usage", lambda: None)
     monkeypatch.setattr(runtime.CyclePorts, "approved_portfolio", lambda self: None)
@@ -88,7 +131,12 @@ def ports(monkeypatch):
             "domains": {"status": "unrated", "domains": []},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "test-model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "test-model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
 
     async def admission(_provider, _model, *, owner_user_id):
         assert owner_user_id == 17
@@ -145,6 +193,9 @@ def ports(monkeypatch):
 def test_real_graph_proposes_without_claiming_goal_completed_or_self_approval(ports):
     store, calls, current, _, _ = ports
     result = asyncio.run(runtime.tick_async())
+    assert store.phases == ["observe", "decide", "act", "reflect"]
+    assert [phase for phase, _ in store.checkpoints] == ["act", "reflect"]
+    assert store.checkpoints[-1][1]["actual_tokens"] == 42
     assert len(calls) == 1
     assert current["owner"] == 17
     assert result["actual_tokens"] == 42
@@ -255,6 +306,8 @@ def test_research_uses_actual_sources_once_and_preserves_their_limits(ports, mon
     store = ports[0]
     store.claim["domain"] = "exploration"
     store.state["interests"] = [{"topic": "事务恢复", "evidence_refs": ["experience:1"]}]
+    history = [{"ref": f"old:{index}", "text": "历史反馈"} for index in range(12)]
+    monkeypatch.setattr(runtime, "feedback_facts", lambda _state: copy.deepcopy(history))
     queries = []
     monkeypatch.setattr(research_tools, "searxng_instance_url", lambda: "https://search.example")
 
@@ -275,7 +328,37 @@ def test_research_uses_actual_sources_once_and_preserves_their_limits(ports, mon
     web = next(row for row in sources if row["ref"].startswith("web:"))
     assert web["url"] == "https://docs.example/transactions"
     assert web["interpretation"] == "retrieved_source_not_verified_claim"
+    observations = json.loads(ports[1][0]["messages"][1]["content"])["observations"]
+    assert observations[0]["ref"] == web["ref"]
+    assert any(row["ref"] == "old:0" for row in observations)
     assert "尚未执行" in result["summary"]
+
+
+@pytest.mark.parametrize(
+    "facts,reason",
+    [
+        ([{"text": "无来源"}], "no_observed_context"),
+        (
+            [{"ref": "receipt:large", "business_feedback": {"measurement": "测" * 1500}}],
+            "life_cycle_prompt_budget_exhausted",
+        ),
+    ],
+)
+def test_invalid_cognition_context_blocks_before_model_and_learning(
+    ports, monkeypatch, facts, reason
+):
+    store, calls, *_ = ports
+    original = copy.deepcopy(store.state)
+
+    async def observe(_self, _state):
+        return {"facts": facts}
+
+    monkeypatch.setattr(runtime.CyclePorts, "observe", observe)
+    result = asyncio.run(runtime.run_claimed_cycle(store.claim))
+    assert result["status"] == "blocked" and result["details"]["reason"] == reason
+    assert result["actual_tokens"] == 0 and not calls
+    assert not result["goals"] and not result["interests"] and not result["self_model"]
+    assert store.state == original and len(store.finished) == 1
 
 
 def test_public_prompt_excludes_private_account_context_and_raw_paths(ports, monkeypatch):
@@ -314,6 +397,7 @@ def test_prior_interests_and_self_assessment_change_next_model_context(ports):
         "title": "规划不足",
         "description": "应先检验目标与回执的对应关系",
         "status": "hypothesis",
+        "owner_user_id": 17,
     }
     asyncio.run(runtime.tick_async())
     payload = json.loads(ports[1][0]["messages"][1]["content"])
@@ -337,14 +421,14 @@ def test_newest_first_events_schedule_unvisited_then_least_recent_domain(ports):
     assert "exploration" not in runtime._domain_order(state)
 
 
-def test_pre_outbound_reservation_rejection_is_not_unknown_spending(ports, monkeypatch):
+def test_unreceipted_model_rejection_does_not_invent_free_usage(ports, monkeypatch):
     async def denied(*args, **kwargs):
         raise ValueError("another planning call owns the account quota slot")
 
     monkeypatch.setattr(ports[3], "chat_dispatch_via_platform_only", denied)
     result = asyncio.run(runtime.tick_async())
-    assert result["status"] == "failed" and result["actual_tokens"] == 0
-    assert not ports[1]
+    assert result["status"] == "failed" and result["actual_tokens"] is None
+    assert ports[0].claim["outbound_attempted"] and not ports[1]
 
 
 @pytest.mark.parametrize(
@@ -438,7 +522,7 @@ def test_portfolio_task_larger_than_cycle_reservation_never_dispatches(ports, mo
     assert result["actual_tokens"] == 0 and not ports[1]
 
 
-def test_same_goal_across_cycles_preserves_execution_identity(ports):
+def test_same_goal_across_cycles_preserves_execution_identity(ports, monkeypatch):
     store = ports[0]
     first = asyncio.run(runtime.tick_async())
     goal = {
@@ -449,6 +533,11 @@ def test_same_goal_across_cycles_preserves_execution_identity(ports):
     store.state["goals"] = [goal]
     store.claimed = False
     store.claim["cycle_id"] = "second-cycle"
+    store.graph_started = False
+    store.act_admitted = False
+    # This unit fixture has no strategic_decisions database. Exercise the
+    # original-goal identity contract without pretending it has a real ledger.
+    monkeypatch.setattr(runtime, "_cycle_reservation", lambda state, domain: 32768)
     second = asyncio.run(runtime.tick_async())
     assert second["goals"][0] == goal
     assert second["details"]["existing_goal_id"] == goal["id"]
@@ -470,9 +559,11 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
 
     import modstore_server.strategic_company_resources as company
     from modstore_server import (
+        llm_api,
         llm_chat_proxy,
         llm_key_resolver,
         llm_quota_monitor,
+        models,
         strategic_portfolio,
         strategic_portfolio_usage,
         strategy_planner,
@@ -488,7 +579,6 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     )
     from modstore_server.db.strategic import StrategicDecision
     from modstore_server.db.xiaoc_life import XiaoCLifeEvent, XiaoCLifeState
-    from modstore_server.services import llm
     from modstore_server.strategic_layer import decision_ledger
     from modstore_server.xiaoc_life_policy import LifeUpdate
 
@@ -515,6 +605,7 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     for module in (
         db_base,
+        models,
         xiaoc_life_store,
         xiaoc_life_reconciliation,
         strategic_portfolio,
@@ -599,7 +690,12 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
             "repo": {"status": "ok", "numeric_signals": {"failures": 1}},
         },
     )
-    monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
+
+    async def route(_db, user_id, *, platform_only):
+        assert user_id == 17 and platform_only is True
+        return {"provider": "test", "model": "model"}
+
+    monkeypatch.setattr(llm_api, "resolve_default_llm_route", route)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "test-only-key")
 
     async def quota(**kwargs):
@@ -715,3 +811,98 @@ def test_graph_sql_lifecycle_and_platform_reservation_agree(
         check_company_receipt()
     finally:
         engine.dispose()
+
+
+def test_model_timeout_without_receipt_keeps_unknown_cost(ports, monkeypatch):
+    store, calls, _, llm, _ = ports
+
+    async def timeout(*args, **kwargs):
+        raise asyncio.TimeoutError("upstream response lost")
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", timeout)
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "failed" and result["actual_tokens"] is None
+    assert store.claim["outbound_attempted"] and not calls
+    assert len(store.finished) == 1
+
+
+def test_native_pre_act_restart_reuses_saved_decision_without_rebilling(ports, monkeypatch):
+    """A second runner may resume only before any act invocation is admitted."""
+    from modstore_server import xiaoc_life_reconciliation as reconciliation
+
+    store, calls, *_ = ports
+    original_admit = store.admit_cycle_act
+    admitted = []
+
+    def block_first_admission(claim):
+        admitted.append("first")
+        return False
+
+    monkeypatch.setattr(store, "admit_cycle_act", block_first_admission)
+    first = asyncio.run(runtime.tick_async())
+    assert len(calls) == 1 and not store.finished and store.graph_started
+    assert first["identity_id"] == store.state["identity_id"]
+
+    # The test's receipt is simulated; actual production recovery independently
+    # queries the persisted original model/portfolio execution ledger.
+    monkeypatch.setattr(reconciliation, "_verified_usage", lambda steps, owner: 42)
+    monkeypatch.setattr(store, "admit_cycle_act", original_admit)
+    monkeypatch.setattr(store, "pending_native_act_claim", lambda: store.claim)
+    resumed = asyncio.run(runtime.tick_async())
+    assert resumed["actual_tokens"] == 42
+    assert len(store.finished) == 1 and len(calls) == 1
+    assert store.act_admitted and admitted == ["first"]
+
+    # The CAS guard rejects a second resume instead of resending the act.
+    assert original_admit(store.claim) is False
+
+
+def test_checkpointer_connection_loss_blocks_before_any_model_call(ports, monkeypatch):
+    store, calls, *_ = ports
+
+    @asynccontextmanager
+    async def disconnected():
+        raise OSError("checkpoint database disconnected")
+        yield None
+
+    monkeypatch.setattr(runtime, "native_life_checkpointer", disconnected)
+    result = asyncio.run(runtime.tick_async())
+    assert result["status"] == "failed"
+    assert result["actual_tokens"] == 0
+    assert store.claimed and len(store.finished) == 1
+    assert not calls and not store.claim.get("outbound_attempted")
+
+
+def test_customer_gap_scheduler_creates_review_only_candidate_without_chat(ports, monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server import strategic_portfolio, strategy_planner
+
+    store, calls, *_ = ports
+    monkeypatch.setattr(
+        strategy_planner,
+        "collect_context",
+        lambda: {
+            "customer_value": {
+                "status": "ok",
+                "source_owner": "python_payment_orders",
+                "observed_at": datetime.now(UTC).isoformat(),
+                "window_days": 90,
+                "value_ledger_ready": True,
+                "lifecycle_gaps": {"acceptance": 3},
+            }
+        },
+    )
+    monkeypatch.setattr(
+        strategic_portfolio,
+        "create_portfolio_proposal",
+        lambda **_: pytest.fail("a discovered issue must not create approval or dispatch"),
+    )
+    result = asyncio.run(runtime.tick_async())
+    assert not calls
+    goal = result["goals"][0]
+    assert goal["status"] == "proposed" and "decision_id" not in goal
+    assert goal["candidate_owner_user_id"] == 17
+    assert goal["acceptance"]["baseline"] == 3
+    assert goal["evidence_refs"] == [result["details"]["sources"][0]["ref"]]
+    assert result["actual_tokens"] == 0

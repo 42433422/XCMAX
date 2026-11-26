@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.application.elt.errors import EltConflict
 from app.application.elt.service_source import SourceServiceMixin
@@ -223,7 +223,59 @@ def record_confirmation(run: EltRun, revision: str, *, valid_rows_only: bool) ->
         "preview_revision": revision,
         "valid_rows_only": valid_rows_only,
     }
+    if (db := object_session(run)) is not None:
+        db.flush()
+        details[CONFIRMATION_KEY]["plan_sha256"] = execution_plan_sha256(db, run)
     run.summary_json = dump_json(details)
+
+
+def execution_plan_sha256(db: Session, run: EltRun) -> str:
+    """Retain approved inputs after execution replaces row references and after images."""
+    with db.no_autoflush:
+        digest = hashlib.sha256(
+            dump_json(
+                {
+                    "run_id": run.id,
+                    "upload_id": run.upload_id,
+                    "file_sha256": run.file_sha256,
+                    "target_type": run.target_type,
+                    "template_version_id": run.template_version_id,
+                    "draft": load_json(run.draft_json, {}),
+                    "source_features": load_json(run.source_features_json, {}),
+                    "counts": [
+                        run.total_rows,
+                        run.new_rows,
+                        run.update_rows,
+                        run.skip_rows,
+                        run.error_rows,
+                    ],
+                }
+            ).encode()
+        )
+        rows = (
+            db.query(EltRunRow)
+            .filter_by(run_id=run.id, tenant_id=run.tenant_id, owner_user_id=run.owner_user_id)
+            .order_by(EltRunRow.id)
+        )
+        for row in rows.yield_per(500):
+            digest.update(
+                dump_json(
+                    [
+                        row.id,
+                        row.source_sheet,
+                        row.source_row,
+                        row.source_slice,
+                        load_json(row.source_json, {}),
+                        load_json(row.normalized_json, {}),
+                        load_json(row.provenance_json, {}),
+                        load_json(row.validation_json, []),
+                        row.final_action,
+                        load_json(row.before_json, {}),
+                        row.match_ref if row.final_action != "new" else None,
+                    ]
+                ).encode()
+            )
+    return digest.hexdigest()
 
 
 def verify_execution(db: Session, run: EltRun, *, valid_rows_only: bool) -> dict[str, Any] | None:
@@ -237,126 +289,12 @@ def verify_execution(db: Session, run: EltRun, *, valid_rows_only: bool) -> dict
 
 
 def verify_agent_preview(
-    step: Any, output: dict[str, Any], context: dict[str, Any]
+    call: Any, output: dict[str, Any], context: dict[str, Any]
 ) -> dict[str, Any]:
-    """Verify only the owned, unchanged preview; this never confirms a business write."""
-    from app.application.agent_orchestrator.verification_readback import _report
-    from app.application.elt.service_history import HistoryServiceMixin
-    from app.db.session import get_db
-    from app.domain.shared_services.auth_service import get_auth_service
-    from app.domain.shared_services.tools_workflow_elt import (
-        _owned_upload,
-        _pending_mappings,
-        _summary,
-    )
-    from app.infrastructure.auth.agent_mod_scope import _bound_actor, agent_mod_execution_scope
-    from app.infrastructure.tenant_scope import tenant_scope
-    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+    """Verify the original owned preview manifests without confirming a business write."""
+    from app.application.elt.preview_verification import read_preview_evidence
 
-    actor = _bound_actor(context)
-    if "elt.execute" not in get_auth_service().get_user_permissions(actor):
-        return _report("inconclusive", "result_read_permission_unavailable", "task_scope")
-    returned = output.get("data")
-    if not isinstance(returned, dict) or not isinstance(returned.get("run_id"), str):
-        return _report("inconclusive", "result_receipt_missing", "elt_preview")
-    tenant = str(context.get("tenant_id") or "")
-    if not tenant.isdecimal() or int(tenant) <= 0:
-        return _report("failed", "result_scope_mismatch", "task_scope")
-    token = set_request_active_mod_id("")
-    try:
-        with (
-            agent_mod_execution_scope(context.get("_mod_authorization")),
-            tenant_scope(int(tenant)),
-        ):
-            upload = _owned_upload(str(step.params.get("file_path") or ""), context)
-            with get_db() as db:
-                row = (
-                    db.query(EltRun)
-                    .filter_by(id=returned["run_id"], owner_user_id=actor.id, tenant_id=int(tenant))
-                    .one_or_none()
-                )
-                if row is None or not (
-                    (upload and row.upload_id == upload["id"])
-                    or (not step.params.get("file_path") and step.params.get("run_id") == row.id)
-                ):
-                    return _report("failed", "result_scope_mismatch", "elt_preview")
-                revision = preview_revision(row)
-                if (
-                    not revision
-                    or row.executed_rows
-                    or row.confirmed_at is not None
-                    or load_json(row.receipt_json, {})
-                    or db.query(EltRunRow.id)
-                    .filter(
-                        EltRunRow.run_id == row.id,
-                        EltRunRow.execution_status.is_not(None),
-                    )
-                    .first()
-                    is not None
-                ):
-                    return _report("inconclusive", "result_preview_not_current", "elt_preview")
-                verify_preview(db, row, returned.get("preview_revision"))
-                current = HistoryServiceMixin().run_dict(row)
-                expected = _summary(current)
-                if expected.get("customer_products"):
-                    return _report(
-                        "inconclusive", "result_companion_verification_required", "elt_preview"
-                    )
-                if any(
-                    returned.get(key) != expected[key]
-                    for key in (
-                        "run_id",
-                        "preview_revision",
-                        "target_type",
-                        "status",
-                        "total_rows",
-                        "new_rows",
-                        "update_rows",
-                        "skip_rows",
-                        "error_rows",
-                        "executed_rows",
-                    )
-                ):
-                    return _report("failed", "result_preview_mismatch", "elt_preview")
-                blocked_by_errors = (
-                    bool(row.error_rows) and step.params.get("valid_rows_only") is not True
-                )
-                pending_mappings = _pending_mappings(current)
-                executable = not (
-                    blocked_by_errors
-                    or (pending_mappings and step.params.get("accept_suggested") is not True)
-                )
-                resume_params = {}
-                if blocked_by_errors:
-                    resume_params["valid_rows_only"] = True
-                elif not executable and pending_mappings:
-                    resume_params["accept_suggested"] = True
-                if (
-                    output.get("preview") is not True
-                    or returned.get("executable") is not executable
-                    or output.get("requires_user_decision") is not (not executable)
-                    or output.get("resume_params", {}) != resume_params
-                    or any(value is not True for value in output.get("resume_params", {}).values())
-                ):
-                    return _report("failed", "result_preview_mismatch", "elt_preview")
-                return _report(
-                    "verified",
-                    "result_preview_verified",
-                    "elt_preview",
-                    run_id=row.id,
-                    upload_id=row.upload_id,
-                    tenant_id=tenant,
-                    owner_id=str(actor.id),
-                    preview_revision=revision,
-                    scope="preview_only",
-                    business_effect_verified=False,
-                    executable=executable,
-                    resume_params=resume_params,
-                )
-    except EltConflict:
-        return _report("failed", "result_preview_changed", "elt_preview")
-    finally:
-        reset_request_active_mod_id(token)
+    return read_preview_evidence(call, output, context)
 
 
 def _execution_source_hash(db: Session, run: EltRun) -> str:
@@ -385,9 +323,55 @@ def _execution_run_ids(params: dict[str, Any]) -> list[str]:
     return _split_run_ids(params.get("run_ids")) or _split_run_ids(params.get("run_id"))
 
 
-def capture_agent_execution(step: Any, context: dict[str, Any]) -> dict[str, Any]:
+def capture_agent_execution(run: Any, step: Any, context: dict[str, Any]) -> dict[str, Any]:
     """Freeze every original target before dispatch, retaining single-run contracts."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.elt_checkpoint_recovery import checkpoint_step
+    from app.application.dataset_rag.document_lifecycle import agent_ingest_read_repository
+    from app.application.elt.chat_recall import _REQUIRED_IDENTITY
+    from app.application.elt.preview_verification import capture_preview_inputs
+    from app.domain.shared_services.tools_workflow_elt import durable_elt_checkpoint_ids
+
     run_ids = _execution_run_ids(step.params)
+    paths = step.params.get("file_paths")
+    if paths:
+        if run_ids:
+            return {}
+        durable = checkpoint_step(run) is step
+        sources = capture_preview_inputs(step.params, context, preserve_uploads=durable)
+        if not sources:
+            return {}
+        checkpoints = {}
+        if durable:
+            if any(source["file_path"] != source["upload_id"] for source in sources):
+                return {}
+            checkpoints = durable_elt_checkpoint_ids(
+                context["run_id"], context["step_id"], [source["upload_id"] for source in sources]
+            )
+        origin = {key: str(context.get(key) or "").strip() for key in _REQUIRED_IDENTITY}
+        bound = []
+        for source in sources:
+            target = {
+                "file_path": source["file_path"],
+                "upload_id": source["upload_id"],
+                "file_sha256": source["sha256"],
+                "auxiliary_store_sha256": canonical_hash(
+                    str(agent_ingest_read_repository().storage_path)
+                ),
+            }
+            if native_id := checkpoints.get(source["upload_id"]):
+                target.update(
+                    _capture_execution_target(native_id, context) or {"run_id": native_id}
+                )
+            elif all(origin.values()):
+                target["origin"] = {
+                    **origin,
+                    "mod_id": str(context.get("mod_id") or context.get("active_mod_id") or ""),
+                }
+            else:
+                return {}
+            bound.append(target)
+        return {"sources": bound}
     if not run_ids:
         return {}
     if len(run_ids) == 1:
@@ -398,6 +382,7 @@ def capture_agent_execution(step: Any, context: dict[str, Any]) -> dict[str, Any
 def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str, Any]:
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
     from app.application.elt.auxiliary_verification import capture_auxiliary_sources
+    from app.application.elt.row_verification import ROW_TARGETS
     from app.application.elt.service_history import HistoryServiceMixin
     from app.domain.shared_services.tools_workflow_elt import _companion_summary
     from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -416,10 +401,12 @@ def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str,
             revision = preview_revision(row) if row is not None else None
             if (
                 row is None
-                or row.target_type not in {"shipment_records", "customer_products"}
+                or row.target_type not in ROW_TARGETS | {"dynamic_table"}
                 or not revision
             ):
                 return {}
+            if row.status == "preview_ready":
+                verify_preview(db, row, revision)
             details = load_json(row.summary_json, {})
             parent_id = details.get("linked_from_shipment_preview")
             parent = (
@@ -455,6 +442,7 @@ def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str,
                 "file_sha256": row.file_sha256,
                 "target_type": row.target_type,
                 "preview_revision": revision,
+                "plan_sha256": execution_plan_sha256(db, row),
                 "source_sha256": _execution_source_hash(db, row),
                 **capture_auxiliary_sources(row),
                 # These are the reviewed, pre-dispatch projections. The writer
@@ -474,112 +462,50 @@ def _capture_execution_target(run_id: str, context: dict[str, Any]) -> dict[str,
         return {}
 
 
-def _execution_rows_current(
-    db: Session, run: EltRun, expected_rows: dict[str, Any] | None = None
-) -> bool:
-    """Compare original committed row images using the existing target snapshot readers."""
-    from app.application.elt.targets.customer_product_support import (
-        customer_image_matches,
-        customer_values,
-    )
-    from app.application.elt.targets.customer_products import CustomerProductsAdapter
-    from app.application.elt.targets.helpers import (
-        assert_created_row_unchanged,
-        assert_snapshot_unchanged,
-        decimal_or_none,
-        decimal_or_zero,
-        integer_or_zero,
-        optional_text,
-    )
-    from app.application.elt.targets.orders import ShipmentAdapter
-    from app.application.elt.targets.products import ProductAdapter
-    from app.db.models import Product, PurchaseUnit, ShipmentRecord
+def _execution_receipt_current(db: Session, row: EltRun, *, valid_rows_only: bool) -> bool:
+    """Read the owned operation ledger and its actual target records without replay."""
+    from app.application.elt.dynamic_verification import verify_dynamic_effects
+    from app.application.elt.row_verification import verify_row_effects
+    from app.domain.task_lifecycle.results import execution_result_requires_reconciliation
 
-    rows = db.query(EltRunRow).filter_by(
-        run_id=run.id,
-        tenant_id=run.tenant_id,
-        owner_user_id=run.owner_user_id,
-        execution_status="success",
+    receipt = load_json(row.receipt_json, {})
+    details = load_json(row.summary_json, {})
+    if (
+        row.status != "completed"
+        or not (row.confirmed_at and row.executed_at)
+        or row.rollback_status
+        or row.rolled_back_at
+        or row.operation_token
+        or row.operation_kind
+        or not isinstance(receipt, dict)
+        or execution_result_requires_reconciliation(receipt)
+        or execution_result_requires_reconciliation(details)
+        or receipt.get("run_id") != row.id
+        or receipt.get("target_type") != row.target_type
+        or receipt.get("executed_rows") != row.executed_rows
+        or receipt.get("partial") is not bool(row.error_rows and valid_rows_only)
+        or (row.error_rows and not valid_rows_only)
+    ):
+        return False
+    rows = (
+        db.query(EltRunRow)
+        .filter_by(run_id=row.id, tenant_id=row.tenant_id, owner_user_id=row.owner_user_id)
+        .order_by(EltRunRow.id)
+        .all()
     )
-    for row in rows.yield_per(500):
-        after = load_json(row.after_json, {})
-        if not isinstance(after, dict) or not after or not isinstance(row.match_ref, str):
-            return False
-        if run.target_type == "shipment_records":
-            record = (
-                db.query(ShipmentRecord)
-                .filter_by(id=row.match_ref, tenant_id=run.tenant_id)
-                .one_or_none()
-            )
-            if (
-                record is None
-                or after.get("id") != record.id
-                or not set(record.to_dict()) <= set(after)
-            ):
-                return False
-            if not ShipmentAdapter._belongs_to_current_run(record, run.id):
-                return False
-            assert_snapshot_unchanged(record, after, "发货记录")
-            data = load_json(row.normalized_json, {})
-            tin_spec = decimal_or_none(data.get("tin_spec"))
-            assert_snapshot_unchanged(
-                record,
-                {
-                    "purchase_unit": str(data.get("purchase_unit") or ""),
-                    "product_name": str(data.get("product_name") or ""),
-                    "model_number": optional_text(data.get("model_number")),
-                    "quantity_kg": float(decimal_or_zero(data.get("quantity_kg"))),
-                    "quantity_tins": integer_or_zero(data.get("quantity_tins")),
-                    "tin_spec": float(tin_spec) if tin_spec is not None else None,
-                    # SQLAlchemy applies ShipmentRecord's zero defaults when
-                    # the worker supplies an absent optional money value.
-                    "unit_price": decimal_or_zero(data.get("unit_price")),
-                    "amount": decimal_or_zero(data.get("amount")),
-                },
-                "已审批出货内容",
-            )
-            if (
-                not db.query(PurchaseUnit.id)
-                .filter_by(tenant_id=run.tenant_id, unit_name=record.purchase_unit, is_active=True)
-                .first()
-            ):
-                return False
-        else:
-            customer_id, product_id = CustomerProductsAdapter._parse_match_ref(row.match_ref)
-            customer = (
-                db.query(PurchaseUnit)
-                .filter_by(id=customer_id, tenant_id=run.tenant_id)
-                .one_or_none()
-            )
-            product = (
-                db.query(Product).filter_by(id=product_id, tenant_id=run.tenant_id).one_or_none()
-            )
-            customer_after, product_after = after.get("customer"), after.get("product")
-            reviewed = (expected_rows or {}).get(str(row.id)) or {}
-            expected_customer, expected_product = reviewed.get("customer"), reviewed.get("product")
-            if (
-                customer is None
-                or product is None
-                or not customer.is_active
-                or not isinstance(customer_after, dict)
-                or not isinstance(product_after, dict)
-                or not set(customer_values(customer)) <= set(customer_after)
-                or not {field.key for field in ProductAdapter.fields} <= set(product_after)
-                or not customer_image_matches(customer, customer_after)
-                or not isinstance(expected_customer, dict)
-                or not isinstance(expected_product, dict)
-                or not set(customer_values(customer)) <= set(expected_customer)
-                or not {field.key for field in ProductAdapter.fields} <= set(expected_product)
-                or not customer_image_matches(customer, expected_customer)
-                or customer.unit_name != product.unit
-                or after.get("relationship")
-                != {"customer_name": customer.unit_name, "product_unit": product.unit}
-            ):
-                return False
-            assert_created_row_unchanged(product, product_after, ProductAdapter.fields, "关联产品")
-            assert_created_row_unchanged(
-                product, expected_product, ProductAdapter.fields, "已审批产品内容"
-            )
+    expected = [item for item in rows if item.final_action in {"new", "update"}]
+    if (
+        len(rows) != row.total_rows
+        or any(item.execution_status != "success" for item in expected)
+        or any(item.execution_status not in (None, "") for item in rows if item not in expected)
+    ):
+        return False
+    if row.target_type == "dynamic_table":
+        verify_dynamic_effects(db, row, rows, receipt)
+    elif len(expected) != row.executed_rows:
+        return False
+    else:
+        verify_row_effects(db, row, rows)
     return True
 
 
@@ -611,19 +537,48 @@ def verify_agent_execution(
         step.params, context
     ) or receipt_sha256 != canonical_hash(output):
         return _report("failed", "result_receipt_mismatch", "tool_idempotency")
+    sources = baseline.get("sources") if step.params.get("file_paths") else None
     run_ids = _execution_run_ids(step.params)
-    if not run_ids:
-        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
-    baselines = {run_ids[0]: baseline} if len(run_ids) == 1 else baseline.get("targets")
+    baselines: dict[str, Any] | None
+    if sources is not None:
+        items = output.get("results")
+        if (
+            not isinstance(sources, list)
+            or not sources
+            or output.get("batch") is not True
+            or not isinstance(items, list)
+            or len(items) != len(sources)
+        ):
+            return _report("failed", "result_scope_mismatch", "elt_execution")
+        baselines = {}
+        for source, item in zip(sources, items, strict=True):
+            data = item.get("data") if isinstance(item, dict) else None
+            run_id = data.get("run_id") if isinstance(data, dict) else None
+            if (
+                not isinstance(source, dict)
+                or not isinstance(run_id, str)
+                or not run_id
+                or run_id in baselines
+                or item.get("file_path") != source.get("file_path")
+                or (source.get("run_id") and source["run_id"] != run_id)
+            ):
+                return _report("failed", "result_scope_mismatch", "elt_execution")
+            baselines[run_id] = source
+        run_ids = list(baselines)
+    else:
+        if not run_ids:
+            return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
+        baselines = {run_ids[0]: baseline} if len(run_ids) == 1 else baseline.get("targets")
+        items = output.get("results") if len(run_ids) > 1 else [output]
     if not isinstance(baselines, dict) or set(baselines) != set(run_ids):
         return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
-    items = output.get("results") if len(run_ids) > 1 else [output]
     if (
         not isinstance(items, list)
         or len(items) != len(run_ids)
         or any(not isinstance(item, dict) for item in items)
         or (
-            len(run_ids) > 1
+            sources is None
+            and len(run_ids) > 1
             and (
                 output.get("batch") is not True
                 or any(not isinstance(item.get("run_id"), str) for item in items)
@@ -634,11 +589,17 @@ def verify_agent_execution(
         return _report("failed", "result_scope_mismatch", "elt_execution")
     checks = []
     for item in items:
-        run_id = item["run_id"] if len(run_ids) > 1 else run_ids[0]
+        run_id = (
+            item["data"]["run_id"]
+            if sources is not None
+            else item["run_id"]
+            if len(run_ids) > 1
+            else run_ids[0]
+        )
         target = baselines[run_id]
         if not isinstance(target, dict) or not target:
             return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
-        if step.params.get("run_ids") or len(run_ids) > 1:
+        if sources is None and (step.params.get("run_ids") or len(run_ids) > 1):
             revisions = step.params.get("preview_revisions")
             if not isinstance(revisions, dict) or revisions.get(run_id) != target.get(
                 "preview_revision"
@@ -657,20 +618,22 @@ def verify_agent_execution(
             context,
             receipt_sha256,
         )
-        if report["status"] != "verified" or len(run_ids) == 1:
+        if report["status"] != "verified" or (sources is None and len(run_ids) == 1):
             return report
         checks.extend(report["checks"])
     if (
         output.get("success") is not True
         or execution_result_error(output)
         or execution_result_requires_reconciliation(output)
-        or output.get("committed") is not True
+        or output.get("committed")
+        is not (sum(check["evidence"]["executed_rows"] for check in checks) > 0)
         or output.get("done_count") != len(run_ids)
         or output.get("run_count") != len(run_ids)
         or output.get("pending_count") != 0
         or output.get("deferred_count") != 0
         or output.get("deferred") is not False
-        or output.get("deferred_run_ids") != []
+        or output.get("deferred_run_ids", []) != []
+        or output.get("truncated", False) is not False
         or not isinstance(output.get("data"), dict)
         or output["data"].get("executed_rows")
         != sum(check["evidence"]["executed_rows"] for check in checks)
@@ -687,6 +650,7 @@ def _verify_execution_target(
     receipt_sha256: str,
 ) -> dict[str, Any]:
     """Reuse the original single-target SQL proof after binding the whole durable receipt."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
     from app.application.agent_orchestrator.verification_readback import _report
     from app.application.agent_orchestrator.verification_transactions import _transaction_read_scope
     from app.application.elt.auxiliary_verification import verify_auxiliary_receipts
@@ -695,6 +659,7 @@ def _verify_execution_target(
         unchanged_source_upload,
     )
     from app.application.elt.errors import EltError
+    from app.application.elt.row_verification import _execution_rows_current
     from app.application.elt.service_history import HistoryServiceMixin
     from app.domain.shared_services.tools_workflow_elt import _summary
 
@@ -712,34 +677,82 @@ def _verify_execution_target(
                 )
                 .one_or_none()
             )
-            if row is None or any(
-                getattr(row, attr) != baseline.get(attr)
-                for attr in ("upload_id", "file_sha256", "target_type")
+            parsed_here = "file_path" in baseline and "plan_sha256" not in baseline
+            if (
+                row is None
+                or any(
+                    getattr(row, attr) != baseline.get(attr)
+                    for attr in ("upload_id", "file_sha256")
+                )
+                or (not parsed_here and row.target_type != baseline.get("target_type"))
             ):
                 return _report("failed", "result_scope_mismatch", "elt_execution")
             details = load_json(row.summary_json, {})
-            revision = baseline["preview_revision"]
+            confirmation = details.get(CONFIRMATION_KEY)
+            if not isinstance(confirmation, dict):
+                return _report("failed", "result_preview_changed", "elt_execution")
+            revision = (
+                confirmation.get("preview_revision")
+                if parsed_here
+                else baseline.get("preview_revision")
+            )
+            plan_sha256 = (
+                confirmation.get("plan_sha256") if parsed_here else baseline.get("plan_sha256")
+            )
             if (
-                baseline.get("run_id") != row.id
+                (not parsed_here and baseline.get("run_id") != row.id)
+                or (baseline.get("run_id") and baseline["run_id"] != row.id)
+                or (parsed_here and not (baseline.get("run_id") or baseline.get("origin")))
+                or (
+                    baseline.get("origin")
+                    and details.get("chat_import_origin") != baseline["origin"]
+                )
+                or not isinstance(revision, str)
+                or re.fullmatch(r"[0-9a-f]{64}", revision) is None
+                or not isinstance(plan_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", plan_sha256) is None
                 or (details.get(REVIEW_KEY) or {}).get("revision") != revision
-                or details.get(CONFIRMATION_KEY)
+                or confirmation
                 != {
                     "preview_revision": revision,
                     "valid_rows_only": params.get("valid_rows_only") is True,
+                    "plan_sha256": plan_sha256,
                 }
-                or _execution_source_hash(db, row) != baseline["source_sha256"]
+                or execution_plan_sha256(db, row) != plan_sha256
+                or (
+                    not parsed_here
+                    and _execution_source_hash(db, row) != baseline.get("source_sha256")
+                )
                 or not unchanged_source_upload(db, row)
-                or details.get("linked_from_shipment_preview") != baseline.get("parent_run_id")
+                or (
+                    not parsed_here
+                    and details.get("linked_from_shipment_preview") != baseline.get("parent_run_id")
+                )
             ):
                 return _report("failed", "result_preview_changed", "elt_execution")
             current = HistoryServiceMixin().run_dict(row)
             expected = _summary(current)
             if (
-                not _legacy_completed_receipt(db, row)
-                or row.executed_rows <= 0
-                or not _execution_rows_current(db, row, baseline.get("expected_rows"))
-                or output.get("committed") is not True
-                or (returned.get("customer_products") or {}) != baseline.get("companion_preview")
+                not _execution_receipt_current(
+                    db, row, valid_rows_only=params.get("valid_rows_only") is True
+                )
+                or (
+                    row.target_type in {"shipment_records", "customer_products"}
+                    and (
+                        (
+                            not parsed_here
+                            and row.target_type == "customer_products"
+                            and not isinstance(baseline.get("expected_rows"), dict)
+                        )
+                        or not _execution_rows_current(db, row, baseline.get("expected_rows"))
+                    )
+                )
+                or output.get("committed") is not (row.executed_rows > 0)
+                or (
+                    not parsed_here
+                    and (returned.get("customer_products") or {})
+                    != baseline.get("companion_preview")
+                )
                 or any(
                     returned.get(name) != value
                     for name, value in expected.items()
@@ -747,7 +760,32 @@ def _verify_execution_target(
                 )
             ):
                 return _report("failed", "result_business_state_mismatch", "elt_execution")
-            if row.target_type == "customer_products":
+            if parsed_here and (
+                returned.get("customer_products") or details.get("linked_customer_products_preview")
+            ):
+                from app.application.elt.preview_verification import _native_preview
+
+                companion = returned.get("customer_products") or {}
+                link = (details.get("linked_customer_products_preview") or {}).get("run_id")
+                if not link or companion.get("run_id") != link:
+                    return _report("failed", "result_companion_mismatch", "elt_execution")
+                child = _native_preview(
+                    db,
+                    companion,
+                    {"upload_id": row.upload_id, "sha256": row.file_sha256},
+                    context,
+                    row.owner_user_id,
+                )
+                if (
+                    child["target_type"] != "customer_products"
+                    or (child["draft"].get("linked_preview") or {}).get("parent_run_id") != row.id
+                    or child["details"].get("linked_from_shipment_preview")
+                    not in (None, "", row.id)
+                ):
+                    return _report("failed", "result_companion_mismatch", "elt_execution")
+            if row.target_type == "customer_products" and details.get(
+                "linked_from_shipment_preview"
+            ):
                 parent_id = details.get("linked_from_shipment_preview")
                 parent = (
                     db.query(EltRun)
@@ -764,11 +802,29 @@ def _verify_execution_target(
                     ).get("run_id")
                     != row.id
                     or not _legacy_completed_receipt(db, parent)
-                    or _execution_source_hash(db, parent) != baseline.get("parent_source_sha256")
+                    or (
+                        not parsed_here
+                        and _execution_source_hash(db, parent)
+                        != baseline.get("parent_source_sha256")
+                    )
                     or not _execution_rows_current(db, parent)
                 ):
                     return _report("failed", "result_companion_mismatch", "elt_execution")
-            auxiliary = verify_auxiliary_receipts(db, row, baseline, returned)
+            # For a file parsed in this dispatch, its original operation's plan
+            # digest above binds the newly produced source features. The store
+            # identity was still frozen before dispatch, alongside source+origin.
+            auxiliary_baseline = (
+                {
+                    **baseline,
+                    "preview_revision": revision,
+                    "source_features_sha256": canonical_hash(
+                        load_json(row.source_features_json, {})
+                    ),
+                }
+                if parsed_here
+                else baseline
+            )
+            auxiliary = verify_auxiliary_receipts(db, row, auxiliary_baseline, returned)
             if auxiliary is not None:
                 return auxiliary
             return _report(
@@ -779,12 +835,15 @@ def _verify_execution_target(
                 tenant_id=tenant,
                 owner_id=row.owner_user_id,
                 preview_revision=revision,
+                plan_sha256=plan_sha256,
                 executed_rows=row.executed_rows,
                 receipt_sha256=receipt_sha256,
                 scope="current_elt_business_rows",
                 business_effect_verified=True,
             )
-    except EltError:
+    except (EltError, ValueError):
         return _report("failed", "result_business_state_mismatch", "elt_execution")
+    except LookupError:
+        return _report("inconclusive", "result_verifier_unavailable", "elt_execution")
     except PermissionError:
         return _report("inconclusive", "result_read_permission_unavailable", "task_scope")

@@ -43,6 +43,9 @@ _SERVER_FIELDS = frozenset(
         "employee_id",
         "employee_tool_allowlist",
         "mutation_policy",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "_bulk_preview_scope",
         "_bulk_preview_scopes",
         "node_outputs",
@@ -69,6 +72,9 @@ _UNTRUSTED_CONTROL = frozenset(
         "permissions",
         "system_prompt",
         "grant_tools",
+        "service_source",
+        "template_base_dir",
+        "route_module",
         "employee_tool_allowlist",
         "node_outputs",
         "_actor_authorization",
@@ -290,6 +296,53 @@ def actor_tool_denial(
 
     try:
         actor = _bound_actor(ctx)
+        if tool_id == "business_db" and action in {"read", "write"}:
+            tenant = getattr(actor, "tenant_id", None)
+            if type(tenant) is not int or tenant <= 0:
+                return _denial(
+                    "tool_permission_denied",
+                    "业务读写需要已认证企业归属",
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="owned_tenant_required",
+                )
+            if action == "read" and (params or {}).get("entity") == "products":
+                from fastapi import HTTPException
+
+                from app.infrastructure.auth.business_scope_gate import (
+                    check_owned_business_permission,
+                )
+
+                try:
+                    check_owned_business_permission(actor, "product.view")
+                except HTTPException as exc:
+                    return _denial(
+                        "tool_permission_denied",
+                        str(exc.detail),
+                        context=ctx,
+                        tool_id=tool_id,
+                        action=action,
+                        reason="owned_business_permission_denied",
+                    )
+        if spec.policy.get("data_scope") == "legacy_global":
+            from fastapi import HTTPException
+
+            from app.infrastructure.auth.business_scope_gate import (
+                check_legacy_business_user_permission,
+            )
+
+            try:
+                check_legacy_business_user_permission(actor, spec.permission)
+            except HTTPException as exc:
+                return _denial(
+                    "tool_permission_denied",
+                    str(exc.detail),
+                    context=ctx,
+                    tool_id=tool_id,
+                    action=action,
+                    reason="legacy_store_not_scoped",
+                )
         if tool_id == "memory_v2":
             aliases = {str(actor.id)}
             if not str(actor.username).isdecimal():
@@ -604,10 +657,15 @@ def _finish_claim(key: str, owner: str, output: dict[str, Any] | None) -> None:
 
 
 def _retained_result(output: dict[str, Any]) -> dict[str, Any] | None:
+    from app.application.agent_orchestrator.result_verification import pending_execution_receipt
     from app.application.employee_runtime.result_verifier import (
         execution_result_requires_reconciliation,
     )
 
+    if pending_execution_receipt(output):
+        # Acceptance pins the original claim just like uncertain effects, while
+        # retaining the provider's known state for independent readback later.
+        return {**output, "success": False, "retryable": False}
     if (
         execution_result_requires_reconciliation(output)
         or str(output.get("execution_status") or "").lower()

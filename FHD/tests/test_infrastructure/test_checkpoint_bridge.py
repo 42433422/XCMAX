@@ -282,11 +282,16 @@ def test_offline_native_revision_preserves_receipts_or_refuses_drift(
         command.downgrade(config, previous)
     assert receipts() == before
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            ScriptDirectory.from_config(config).get_current_head(),
-        )
-    command.downgrade(config, "2026_11_11_agent_permissions")
+        assert db.execute("SELECT version_num FROM alembic_version").fetchall() == [
+            (ScriptDirectory.from_config(config).get_current_head(),)
+        ]
+    common_ancestor = "2026_11_11_agent_permissions"
+    command.downgrade(config, common_ancestor)
     assert receipts() == before
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchall() == [
+            (common_ancestor,)
+        ]
     command.upgrade(config, "head")
     assert receipts() == before
     with closing(sqlite3.connect(path)) as db:

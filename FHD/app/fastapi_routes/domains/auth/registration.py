@@ -236,14 +236,60 @@ class Registration:
             active_plan_id = str(market_reg.get("active_plan_id") or "").strip()
             local_user_id = (result.get("user") or {}).get("id")
             if active_plan_id and local_user_id is not None:
+                from app.application import enterprise_login_flow
+                from app.application.surface_audit_demo_account import is_local_demo_market_token
+                from app.application.tenant_rbac_app_service import bind_verified_market_identity
                 from app.application.tenant_subscription_app_service import apply_paid_plan_for_user
+                from app.db.models.user import Session as UserSession
 
-                applied = apply_paid_plan_for_user(
-                    user_id=int(local_user_id),
-                    plan_id=active_plan_id,
-                    sync_from_market=True,
-                    active_plan_expires_at=market_reg.get("active_plan_expires_at"),
-                )
+                verified = False
+                try:
+                    market_user_id = int(
+                        enterprise_login_flow.extract_market_user_blob(market_reg).get("id") or 0
+                    )
+                    verified = (
+                        bool(session_id and mtok)
+                        and not is_local_demo_market_token(mtok)
+                        and bool(market_reg.get("is_enterprise"))
+                        and not market_reg.get("is_market_admin")
+                        and market_user_id > 0
+                        and market_reg.get("account_state") == "active"
+                        and market_reg.get("desktop_access") is True
+                    )
+                    if verified:
+                        with self.database() as db:
+                            verified = (
+                                db.query(UserSession.id)
+                                .filter(
+                                    UserSession.session_id == str(session_id),
+                                    UserSession.user_id == int(local_user_id),
+                                    UserSession.expires_at > self.utc_now(),
+                                )
+                                .first()
+                                is not None
+                            )
+                    if verified:
+                        bind_verified_market_identity(
+                            user_id=int(local_user_id),
+                            market_user_id=market_user_id,
+                            market_username=enterprise_login_flow.resolve_market_username(
+                                market_reg
+                            )
+                            or username,
+                            market_is_enterprise=True,
+                            market_is_admin=False,
+                        )
+                except (TypeError, ValueError):
+                    verified = False
+                applied = False
+                if verified:
+                    applied = apply_paid_plan_for_user(
+                        user_id=int(local_user_id),
+                        plan_id=active_plan_id,
+                        sync_from_market=True,
+                        active_plan_expires_at=market_reg.get("active_plan_expires_at"),
+                        verified_account_sync=verified,
+                    )
                 if active_plan_id == "saas-trial-30" and not applied:
                     return JSONResponse(
                         error_envelope(

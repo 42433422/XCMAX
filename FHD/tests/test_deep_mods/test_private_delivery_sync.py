@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application import private_delivery_sync as service
+from app.application.private_mod_delivery_artifacts import DeliveryInstallError, DeliveryRemoteError
 from app.fastapi_routes.delivery_sync_routes import router
 from app.infrastructure.mods.install_receipts import read_verified_install
 from app.infrastructure.mods.mod_manager import ModManager
@@ -199,6 +200,62 @@ def test_catalog_outage_still_retries_receipts_and_shared_issue_identity(sync_cl
     mocks.fetch.side_effect = None
     assert run(sync_client)["pending"] == 2
     assert mocks.receipts.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [{"success": False, "message": "install declined"}, DeliveryInstallError("install declined")],
+)
+def test_rejected_install_continues_sync_and_can_recover_on_retry(sync_client, failure):
+    _, mocks = sync_client
+    mocks.fetch.return_value = [release("pending-mod"), release("ready-mod")]
+    mocks.update.side_effect = [
+        failure,
+        {"success": True, "updated": True},
+    ]
+    mocks.receipts.return_value = {"pending": 2}
+    result = run(sync_client)
+    assert result["installed"] == ["ready-mod"]
+    assert result["pending"] == 3
+    assert result["errors"] == [{"mod_id": "pending-mod", "message": "install declined"}]
+    mocks.entitlements.assert_awaited_once()
+    mocks.receipts.assert_awaited_once()
+    mocks.issues.assert_awaited_once()
+
+    mocks.fetch.return_value = [release("pending-mod")]
+    mocks.update.side_effect = None
+    mocks.receipts.return_value = {"pending": 0}
+    result = run(sync_client)
+    assert result["installed"] == ["pending-mod"]
+    assert result["pending"] == 0
+    assert result["errors"] == []
+    assert mocks.receipts.await_count == mocks.issues.await_count == 2
+
+
+def test_issue_remote_failure_remains_pending_and_later_sync_retries(sync_client):
+    _, mocks = sync_client
+    mocks.issues.side_effect = DeliveryRemoteError("delivery service unavailable")
+    result = run(sync_client)
+    assert result["pending"] == 1
+    assert result["errors"] == [{"mod_id": "", "message": "delivery service unavailable"}]
+    mocks.issues.side_effect = None
+    assert run(sync_client)["pending"] == 0
+    assert mocks.receipts.await_count == mocks.issues.await_count == 2
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+def test_install_programming_error_is_not_reported_as_pending(sync_client, error_type):
+    _, mocks = sync_client
+    mocks.fetch.return_value = [release()]
+    error = error_type("unclassified install error")
+    mocks.update.side_effect = error
+    with pytest.raises(error_type) as raised:
+        run(sync_client)
+    assert raised.value is error
+    mocks.update.assert_awaited_once()
+    mocks.entitlements.assert_not_awaited()
+    mocks.receipts.assert_not_awaited()
+    mocks.issues.assert_not_awaited()
 
 
 def test_live_owner_lock_prevents_duplicate_sync(sync_client):

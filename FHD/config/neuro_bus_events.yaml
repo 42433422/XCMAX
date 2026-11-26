@@ -24,16 +24,20 @@ streams:
     description: |
       Events appended via run.add_event(); exposed at GET /api/agent/runs/{id}/events.
       Producers: app/application/agent_orchestrator/*.py + enterprise_cognition/outcomes.py
-      + chat_trace.py + artifact_ingestion.py. Frontend: composables/useAgentRunEvents.ts.
+      + chat_trace.py + task_context.py + artifact_ingestion.py. Frontend: composables/useAgentRunEvents.ts.
     categories:
       run:
         - { type: "run.created",           const: RUN_CREATED,           sla_tier: conscious }
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
+        # Phase timing follows the business result; observation itself is not a terminal event.
+        - type: "run.observed"
+          const: RUN_OBSERVED
+          sla_tier: conscious
+          payload_fields: [phase, phase_duration_ms, duration_ms, duration_scope, status, parent_span_id, error_code, error_type]
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
         - { type: "approval.authorization_mismatch", const: APPROVAL_AUTHORIZATION_MISMATCH }
         - { type: "run.observation_interrupted", const: RUN_OBSERVATION_INTERRUPTED, payload_fields: [reason, worker_pending, business_outcome, replay_allowed] }
-        - { type: "run.observed", const: RUN_OBSERVED, payload_fields: [phase, status, duration_ms, duration_scope, parent_span_id] }
         - { type: "run.ambiguous_target_paused", const: RUN_AMBIGUOUS_TARGET_PAUSED }
         - { type: "run.resumed", const: RUN_RESUMED }
         - { type: "run.continuation_queued", const: RUN_CONTINUATION_QUEUED }
@@ -47,10 +51,14 @@ streams:
         - { type: "task.worker_failed", const: TASK_WORKER_FAILED }
         - { type: "task.worker_recovered", const: TASK_WORKER_RECOVERED }
         - { type: "task.recovery_blocked", const: TASK_RECOVERY_BLOCKED }
+      runtime:
+        - { type: "runtime.input_answered", const: RUNTIME_INPUT_ANSWERED, payload_fields: [question, answer] }
+        - { type: "runtime.codex.started", const: RUNTIME_CODEX_STARTED, payload_fields: [thread_id] }
+        - { type: "runtime.codex.finished", const: RUNTIME_CODEX_FINISHED, payload_fields: [runtime_status, business_completed, receipt_count] }
       orchestration:
-        - { type: "approval.scope_changed", const: APPROVAL_SCOPE_CHANGED, payload_fields: [step_id] }
         - { type: "approval.resume_plan_rejected", const: APPROVAL_RESUME_PLAN_REJECTED }
         - { type: "approval.resume_proof_missing", const: APPROVAL_RESUME_PROOF_MISSING }
+        - { type: "approval.scope_changed", const: APPROVAL_SCOPE_CHANGED, payload_fields: [step_id] }
         - { type: "run.clarification_resumed", const: RUN_CLARIFICATION_RESUMED }
         - { type: "run.idempotency_conflict", const: RUN_IDEMPOTENCY_CONFLICT }
         - { type: "step.clarification_required", const: STEP_CLARIFICATION_REQUIRED }
@@ -65,6 +73,7 @@ streams:
         - { type: "workflow.plan_policy_normalized", const: WORKFLOW_PLAN_POLICY_NORMALIZED }
         - { type: "workflow.plan_policy_rejected", const: WORKFLOW_PLAN_POLICY_REJECTED }
         - { type: "workflow.plan_reference_resolved", const: WORKFLOW_PLAN_REFERENCE_RESOLVED }
+        - { type: "workflow.resume_params_rejected", const: WORKFLOW_RESUME_PARAMS_REJECTED, payload_fields: [step_id, execution_started] }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }

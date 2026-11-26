@@ -31,7 +31,11 @@ from modstore_server.llm_billing import (
 )
 from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
 from modstore_server.llm_billing_values import exact_reported_usage
-from modstore_server.llm_gateway_contract import codex_route_contract, gateway_body
+from modstore_server.llm_gateway_contract import (
+    StreamReceiptBudget,
+    codex_route_contract,
+    gateway_body,
+)
 from modstore_server.llm_key_resolver import read_chat_route_token
 from modstore_server.llm_model_concurrency import (
     concurrency_key,
@@ -364,6 +368,7 @@ async def run_billed_responses(
                 terminal = None
                 response_id = None
                 size = 0
+                stream_budget = StreamReceiptBudget()
                 try:
                     while True:
                         remaining = deadline - asyncio.get_running_loop().time()
@@ -374,8 +379,10 @@ async def run_billed_responses(
                                 event = await anext(source)
                         except StopAsyncIteration:
                             break
+                        value = event.model_dump(mode="json", exclude_unset=True)
+                        stream_budget.consume(value)
                         data = redact_key(
-                            transport.project(event.model_dump(mode="json", exclude_unset=True)),
+                            transport.project(value),
                             route.api_key,
                         )
                         size += len(json.dumps(data, ensure_ascii=False).encode("utf-8"))

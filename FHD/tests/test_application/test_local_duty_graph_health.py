@@ -289,7 +289,7 @@ class TestReadLocalEmployeeManifest:
         (emp_dir / "manifest.json").write_text(json.dumps({"name": "Test"}), encoding="utf-8")
 
         mgr = MagicMock()
-        mgr.all_mods_roots.side_effect = RuntimeError("fail")
+        mgr.all_mods_roots.side_effect = OSError("fail")
         mgr.mods_root = str(tmp_path)
 
         with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mgr):
@@ -382,7 +382,7 @@ class TestReadLocalEmployeeManifest:
     def test_get_mod_manager_raises_returns_none(self):
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             result = read_local_employee_manifest("emp-1")
 

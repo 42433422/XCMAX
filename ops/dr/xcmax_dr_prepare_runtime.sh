@@ -7,6 +7,15 @@
 
 set -euo pipefail
 
+RELEASE_UPDATE=0
+RESTORE_DATA=1
+case "$*" in
+  --release-update) RELEASE_UPDATE=1; RESTORE_DATA=0 ;;
+  --preserve-data) RESTORE_DATA=0 ;;
+  "") ;;
+  *) echo "usage: $0 [--release-update | --preserve-data]" >&2; exit 2 ;;
+esac
+
 [[ "${EUID}" == "0" ]] || {
   echo "请以 root 运行" >&2
   exit 2
@@ -87,7 +96,7 @@ install -d -o root -g "$APP_USER" -m 0750 "$RUNTIME/payment"
 
 payment_incoming="$DR_ROOT/incoming/runtime-artifacts/payment-service-1.0.0.jar"
 payment_jar="$RUNTIME/payment/payment-service-1.0.0.jar"
-if [[ -s "$payment_incoming" ]]; then
+if [[ "$RESTORE_DATA" == 1 && -s "$payment_incoming" ]]; then
   actual_payment_sha="$(sha256sum "$payment_incoming" | awk '{print $1}')"
   [[ "$actual_payment_sha" == "$PAYMENT_SHA256" ]] || {
     echo "支付 JAR 哈希不匹配: $actual_payment_sha" >&2
@@ -102,21 +111,25 @@ sync_tree() {
   rsync -a "$src/" "$dest/"
 }
 
-sync_tree "$RESTORE_CONFIG/var/lib/xcagi" "$DATA/fhd/xcagi-state"
-sync_tree "$RESTORE_CONFIG/opt/fhd-full/mods" "$DATA/fhd/mods"
-sync_tree "$RESTORE_CONFIG/opt/fhd-full/uploads" "$DATA/fhd/uploads"
+restore_runtime_data() {
+  [[ "$RESTORE_DATA" == 1 ]] || return 0
+  sync_tree "$RESTORE_CONFIG/var/lib/xcagi" "$DATA/fhd/xcagi-state"
+  sync_tree "$RESTORE_CONFIG/opt/fhd-full/mods" "$DATA/fhd/mods"
+  sync_tree "$RESTORE_CONFIG/opt/fhd-full/uploads" "$DATA/fhd/uploads"
 
-modstore_data_src="$RESTORE_CONFIG/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy/modstore_server/data"
-sync_tree "$modstore_data_src" "$DATA/modstore/data"
+  modstore_data_src="$RESTORE_CONFIG/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy/modstore_server/data"
+  sync_tree "$modstore_data_src" "$DATA/modstore/data"
 
-latest="$(readlink -f "$DR_ROOT/archive/latest" 2>/dev/null || true)"
-if [[ -n "$latest" && -s "$latest/modstore_sqlite.db.gz" ]]; then
-  sqlite_tmp="$(mktemp "$DATA/modstore/.modstore.db.XXXXXX")"
-  gzip -dc "$latest/modstore_sqlite.db.gz" >"$sqlite_tmp"
-  chown "$APP_USER:$APP_USER" "$sqlite_tmp"
-  chmod 0600 "$sqlite_tmp"
-  mv -f "$sqlite_tmp" "$DATA/modstore/modstore.db"
-fi
+  latest="$(readlink -f "$DR_ROOT/archive/latest" 2>/dev/null || true)"
+  if [[ -n "$latest" && -s "$latest/modstore_sqlite.db.gz" ]]; then
+    sqlite_tmp="$(mktemp "$DATA/modstore/.modstore.db.XXXXXX")"
+    gzip -dc "$latest/modstore_sqlite.db.gz" >"$sqlite_tmp"
+    chown "$APP_USER:$APP_USER" "$sqlite_tmp"
+    chmod 0600 "$sqlite_tmp"
+    mv -f "$sqlite_tmp" "$DATA/modstore/modstore.db"
+  fi
+}
+restore_runtime_data
 chown -R "$APP_USER:$APP_USER" "$DATA"
 # 发布包由受限传输账号落盘时顶层可能是 0700；业务用户只获代码读取/执行权。
 chgrp -R "$APP_USER" "$FHD_ROOT" "$MODSTORE_ROOT"
@@ -295,6 +308,17 @@ if runtime_mode == "active-peer":
             fhd_overrides[redis_key] = localize_url(
                 fhd_source[redis_key], redis_port
             )
+fhd_manifest = runtime_root / "fhd" / "fhd-manifest.json"
+if fhd_manifest.is_file():
+    release = json.loads(fhd_manifest.read_text(encoding="utf-8"))
+    version, sha, digest = release.get("version"), release.get("git_sha"), release.get("sha256")
+    if (not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha)
+            or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            or release.get("release_id") != f"xcagi-{version}-{sha}"):
+        raise SystemExit("FHD DR manifest identity mismatch")
+    fhd_overrides.update(FHD_DEPLOY_ROOT=str(runtime_root / "fhd"), XCAGI_GIT_SHA=sha,
+                         XCAGI_ARTIFACT_SHA256=digest, XCMAX_PRODUCT_VERSION=version,
+                         XCAGI_RELEASE_ID=release["release_id"])
 release_manifest = source_root / ".xcmax-release.json"
 if release_manifest.is_file():
     try:
@@ -304,6 +328,9 @@ if release_manifest.is_file():
     if isinstance(release, dict) and release.get("git_sha"):
         mod_overrides["MODSTORE_GIT_SHA"] = str(release["git_sha"])
         mod_overrides["MODSTORE_RELEASE_MANIFEST"] = str(release_manifest)
+        mod_overrides["MODSTORE_EXPECTED_GIT_SHA"] = str(release["git_sha"])
+        mod_overrides["MODSTORE_RELEASE_ARTIFACT_SHA256"] = str(release.get("artifact_sha256", ""))
+        mod_overrides["XCMAX_PRODUCT_VERSION"] = str(release.get("product_version", ""))
 rewrite(fhd_src, fhd_dst, fhd_overrides)
 rewrite(mod_src, mod_dst, mod_overrides)
 PY
@@ -447,6 +474,10 @@ chmod 0644 \
 }
 
 systemctl daemon-reload
+if [[ "$RELEASE_UPDATE" == 1 ]]; then
+  echo "DR 运行配置已按原发布身份更新；数据与服务角色由原调用者保持"
+  exit 0
+fi
 systemctl disable --now \
   xcmax-dr-fhd.service xcmax-dr-scheduler.service xcmax-dr-payment.service \
   >/dev/null 2>&1 || true

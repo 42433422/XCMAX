@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 import pytest
 
 from app.application import employee_circle_sync as sync
@@ -91,7 +92,7 @@ def test_throttled_second_call_skips(monkeypatch):
 
 def test_threads_unreachable_degrades(monkeypatch):
     async def boom(path, **kw):
-        raise RuntimeError("modstore down")
+        raise httpx.ConnectError("modstore down")
 
     monkeypatch.setattr(sync, "modstore_get", boom)
     out = asyncio.run(sync.sync_modstore_reports(force=True))

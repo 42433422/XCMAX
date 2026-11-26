@@ -112,6 +112,9 @@ def harness_event_context(run: Any) -> dict[str, Any]:
 
 
 def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
+    from app.application.agent_orchestrator.result_verification import verified_step_output
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+
     payloads: list[dict[str, Any]] = []
     final_output = getattr(run, "final_output", {})
     final_output = final_output if isinstance(final_output, dict) else {}
@@ -119,7 +122,11 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     if isinstance(node_outputs, dict):
         payloads.extend(value for value in node_outputs.values() if isinstance(value, dict))
     for step in getattr(run, "steps", []) or []:
-        output = getattr(step, "output", {})
+        output = (
+            verified_step_output(run, step)
+            if isinstance(run, AgentRun) and isinstance(step, AgentStep)
+            else getattr(step, "output", {})
+        )
         if isinstance(output, dict) and output not in payloads:
             payloads.append(output)
     chat_payload = final_output.get("chat_payload")
@@ -480,6 +487,7 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         not terminal_catalog
         and runtime_result is None
         and not admissions
+        and runtime_result is None
         and isinstance(existing, dict)
         and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
     ):

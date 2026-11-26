@@ -90,7 +90,8 @@ jobs:
         run: python -m pytest -m release_gate -q --tb=short
 
   modstore-backend-test:
-    runs-on: ubuntu-latest
+    # The pinned SRT namespace/seccomp chain has this explicit Linux host contract.
+    runs-on: ubuntu-22.04
     needs: [release-gate]
     services:
       postgres:
@@ -143,10 +144,14 @@ jobs:
 
       - name: Install the pinned experiment evaluator
         run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
           mkdir -p "$RUNNER_TEMP/xcagi-promptfoo"
           cp "$GITHUB_WORKSPACE/FHD/scripts/autonomy/runtime_tools/capability_trainer_deps/"{package.json,package-lock.json} "$RUNNER_TEMP/xcagi-promptfoo/"
           bash "$GITHUB_WORKSPACE/FHD/scripts/ci/npm_ci_with_network_retry.sh" --prefix "$RUNNER_TEMP/xcagi-promptfoo" --ignore-scripts --no-audit --no-fund
           echo "PROMPTFOO_CLI=$RUNNER_TEMP/xcagi-promptfoo/node_modules/.bin/promptfoo" >> "$GITHUB_ENV"
+          echo "PROMPTFOO_SANDBOX_ENTRY=$RUNNER_TEMP/xcagi-promptfoo/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" >> "$GITHUB_ENV"
 
       - name: Install the pinned native report consumer
         run: |
@@ -167,7 +172,7 @@ jobs:
       - name: Run mypy type checking
         run: |
           # 与 pyproject.toml 的开发工具版本一致。
-          pip install mypy==2.4.0 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          pip install mypy==2.4.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)

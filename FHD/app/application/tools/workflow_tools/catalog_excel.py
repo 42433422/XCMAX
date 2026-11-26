@@ -1,15 +1,23 @@
-"""Public excel workflow tool definitions, in their registered order."""
+"""Workbook parameter schemas consumed by the canonical ToolActionSpecV2 catalog."""
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 from app.application.tools.workflow_tools.contracts import Payload
-from app.application.tools.workflow_tools.registry import tool_spec
+
+
+def tool_spec(name: str, description: str, properties: Payload, required: list[str]) -> Payload:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {"type": "object", "properties": properties, "required": required},
+        },
+    }
 
 
 def excel_tool_specs() -> list[Payload]:
-    specs = [
+    return [
         tool_spec(
             "excel_analysis",
             "分析 Excel 文件内容，支持读取、结构识别、查询、聚合等操作。在需要处理 Excel 数据时必须先调用此工具获取文件内容。如果用户选中了特定工作表，请使用 sheet_name 参数指定工作表名称。不确定表头或列名时先用 action=structure 获取列名/类型/样例/日期列，再用 action=query 提自然语言问题。read/query/aggregate 单次默认返回 1000 行；当结果 has_more=true 时，用 next_offset 作为 offset 继续分页读取，直到 has_more=false。",
@@ -112,109 +120,4 @@ def excel_tool_specs() -> list[Payload]:
             },
             ["action"],
         ),
-        tool_spec(
-            "excel_chart_recommend",
-            "根据 Excel 数据内容推荐合适的图表类型。",
-            {"file_path": {"type": "string", "description": "Excel 文件路径"}},
-        ),
-        tool_spec(
-            "import_excel_to_database",
-            "将 Excel 数据导入到数据库。系统会分析 Excel 内容并自动匹配字段进行导入。报价单等多行标题表必须传 header_row（与 extract-grid / excel_analysis 一致），否则列名会变成 Unnamed、映射错乱。可选 last_data_row_1based 截断表尾说明文字；未传时仍会对典型合同/报价表尾条款行做启发式过滤。【重要】参数 unit_name 在本系统中表示「客户公司全称」（与主库 purchase_units / 产品上 unit 字段一致），用于把产品挂到该客户下；不是 SKU 计量单位（件、桶、箱等）。缺省时可从运行时上下文 customer_hint / excel_customer_hint 或 Excel「客户/购买单位」列推断。若上下文已含 excel_customer_hint 或已解析的文档客户名，不要在对话中再向用户索要公司名称，直接调用本工具即可（unit_name 可填该名或留空）。",
-            {
-                "file_path": {"type": "string", "description": "Excel 文件路径"},
-                "sheet_name": {
-                    "type": "string",
-                    "description": "工作表名称；与 excel_analysis 所选表一致",
-                },
-                "header_row": {
-                    "type": "integer",
-                    "description": "表头所在 Excel 行号（从 1 开始）。必须与上传预览检测的 header_row / "
-                    "excel_analysis 一致。",
-                },
-                "last_data_row_1based": {
-                    "type": "integer",
-                    "description": "可选：数据区最后一行的 Excel 行号（含），用于去掉表尾条款/说明行。与 "
-                    "header_row 同时使用时，保留的数据行数 = "
-                    "last_data_row_1based - header_row。",
-                },
-                "import_type": {
-                    "type": "string",
-                    "enum": ["products", "customers", "orders"],
-                    "description": "导入类型：products产品、customers客户、orders订单",
-                },
-                "unit_name": {
-                    "type": "string",
-                    "description": "客户公司全称（业务上亦称「购买单位」= "
-                    "往来客户，非件/桶等计量单位）。导入产品时必须指向该客户；可留空由服务端从 "
-                    "excel_customer_hint / customer_hint 推断",
-                },
-                "price_column": {
-                    "type": "string",
-                    "description": "可选：用作单价的表头子串（如「调价前」「调价后」）。不传时自动推断；若同时存在调价前/调价后等价类列，默认取调价前列。",
-                },
-                "confirm": {
-                    "type": "boolean",
-                    "description": "是否执行写入。默认 false，仅返回预览；用户审核本次内容并明确确认后才可传 true。"
-                    "写入令牌用于权限校验，不能代替本次内容确认。",
-                },
-                "preview_only": {
-                    "type": "boolean",
-                    "description": "可选：是否仅预览不写入。true 时即使未传 confirm 也只返回预览。",
-                },
-                "db_write_token": {
-                    "type": "string",
-                    "description": "数据库写入授权令牌（如系统要求）",
-                },
-            },
-            ["file_path", "import_type"],
-        ),
-        tool_spec(
-            "template_preview",
-            "查看、查询或保存 Excel/单据模板。用户要求“保存到模板库”“加入模板”或基于当前 Excel 生成模板时使用 action=create，并传入 file_path/sheet_name/header_row。",
-            {
-                "action": {
-                    "type": "string",
-                    "enum": ["view", "list", "query", "create"],
-                    "description": "view=打开模板预览；list/query=查询模板；create=保存当前结构到模板库",
-                },
-                "template_name": {"type": "string", "description": "模板名称"},
-                "name": {"type": "string", "description": "模板名称别名"},
-                "file_path": {"type": "string", "description": "当前 Excel 文件路径"},
-                "sheet_name": {"type": "string", "description": "工作表名称"},
-                "header_row": {"type": "integer", "description": "表头行号，1-based"},
-                "template_type": {"type": "string", "description": "模板类型，默认 Excel"},
-                "business_scope": {"type": "string", "description": "业务范围"},
-            },
-            ["action"],
-        ),
-        tool_spec(
-            "generate_office_document",
-            "根据用户自然语言需求**直接生成可下载的 Word（.docx）或 Excel（.xlsx）文件**。适用于：合同/协议（如技术服务合同、AI 服务合同）、报价单、项目清单、排期表、简单报表等。调用后返回一次性下载链接，须完整转告用户该 URL。若用户仅做数据分析而非要独立文件，不要用此工具。",
-            {
-                "user_request": {
-                    "type": "string",
-                    "description": "用户对文档的完整要求（主题、甲乙方角色、关键条款或表格列等）",
-                },
-                "output_format": {
-                    "type": "string",
-                    "enum": ["docx", "xlsx"],
-                    "description": "docx=Word 文书；xlsx=表格",
-                },
-            },
-            ["user_request", "output_format"],
-        ),
     ]
-    # Existing registered Excel Mods still call this name. Its shape comes from
-    # the same canonical analysis fields; employee discovery publishes structure
-    # once through excel_analysis instead of advertising both aliases.
-    fields = specs[0]["function"]["parameters"]["properties"]
-    specs.insert(
-        1,
-        tool_spec(
-            "excel_schema_understand",
-            "读取 Excel 列名、类型、样例和日期列；与 excel_analysis.structure 使用同一契约。",
-            {name: deepcopy(fields[name]) for name in ("file_path", "sheet_name", "header_row")},
-            ["file_path"],
-        ),
-    )
-    return specs

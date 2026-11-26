@@ -192,7 +192,7 @@ def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -
     assert 'missing+=("SERVER_SSH_KEY|FHD_PUSH_SSH_KEY")' in workflow
     assert "deploy-windows:" not in workflow
     assert "deploy-macos:" not in workflow
-    assert "needs: [release-preflight, windows, macos]" in workflow
+    assert "needs: [release-preflight, windows, windows-acceptance, macos]" in workflow
     assert "Publish unified Windows + macOS release to CVM" in workflow
     assert "publish-website-pointer:" in workflow
     assert (

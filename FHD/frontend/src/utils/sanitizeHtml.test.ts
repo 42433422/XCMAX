@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import DOMPurify from 'dompurify'
 import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, sanitizeTaskSummaryHtml } from './sanitizeHtml'
 
 describe('plainTextFromChatHtml', () => {
@@ -36,6 +37,20 @@ describe('sanitizeChatBubbleHtml', () => {
 })
 
 describe('sanitizeChatBubbleMarkdown', () => {
+  it('keeps shared sanitizer hooks and does not allow image data URLs as links', () => {
+    const existingHook = vi.fn()
+    DOMPurify.addHook('uponSanitizeAttribute', existingHook)
+    try {
+      const output = sanitizeChatBubbleMarkdown('[image](data:image/png;base64,AA==)')
+      expect(output).not.toContain('href=')
+      existingHook.mockClear()
+      sanitizeChatBubbleHtml('<p title="kept">text</p>')
+      expect(existingHook).toHaveBeenCalled()
+    } finally {
+      DOMPurify.removeHook('uponSanitizeAttribute', existingHook)
+    }
+  })
+
   it('renders markdown bold into strong', () => {
     const out = sanitizeChatBubbleMarkdown('**bold**')
     expect(out).toContain('<strong>bold</strong>')
@@ -52,6 +67,13 @@ describe('sanitizeChatBubbleMarkdown', () => {
     expect(out).not.toContain('<br>')
     expect(out).toContain('列表项')
     expect(out).toMatch(/<li[^>]*>/)
+  })
+
+  it('preserves original prompt characters inside a rendered code block', () => {
+    const code = "if x < 3 and y > 0:\n    print('A&B')"
+    const out = sanitizeChatBubbleMarkdown('```python\n' + code + '\n```')
+    const rendered = new DOMParser().parseFromString(out, 'text/html')
+    expect(rendered.querySelector('code')?.textContent?.trim()).toBe(code)
   })
 })
 
@@ -70,14 +92,27 @@ describe('sanitizeTaskSummaryHtml', () => {
     expect(out).not.toContain('<script>')
   })
 
-  it('keeps interactive inputs inside a sales-contract preview', () => {
-    const html =
-      '<div class="sales-contract-excel-preview">' +
-      '<input class="sales-contract-excel-preview__qty-input" type="number" onchange="f()" />' +
-      '</div>'
-    const out = sanitizeTaskSummaryHtml({ type: 'sales_contract', summary: html })
+  it('keeps preview controls and data while removing inline handlers', () => {
+    const fixture = new DOMParser().parseFromString(
+      `<div class="sales-contract-excel-preview">
+        <input class="sales-contract-excel-preview__qty-input" type="number" data-row-id="1" value="10" />
+        <button class="sales-contract-row-action-btn" data-row-id="1">Edit</button>
+      </div>`,
+      'text/html',
+    )
+    const input = fixture.querySelector('input')
+    const button = fixture.querySelector('button')
+    input?.setAttribute('onchange', 'f()')
+    button?.setAttribute('onclick', 'f()')
+    expect(input?.getAttribute('onchange')).toBe('f()')
+    expect(button?.getAttribute('onclick')).toBe('f()')
+    const out = sanitizeTaskSummaryHtml({ type: 'sales_contract', summary: fixture.body.innerHTML })
     expect(out).toContain('input')
-    expect(out).toContain('onchange')
+    expect(out).toContain('button')
+    expect(out).toContain('data-row-id="1"')
+    expect(out).toContain('value="10"')
+    expect(out).not.toContain('onchange')
+    expect(out).not.toContain('onclick')
   })
 
   it('strips handlers when type is not sales_contract', () => {

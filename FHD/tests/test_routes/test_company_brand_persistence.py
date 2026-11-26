@@ -157,7 +157,7 @@ def test_failed_or_unconfirmed_market_save_does_not_change_local_data(company_ap
 
 def test_market_exception_does_not_change_local_data(company_app):
     app = company_app
-    app.market.side_effect = RuntimeError("upstream unavailable")
+    app.market.side_effect = ConnectionError("upstream unavailable")
     before = app.snapshot()
     assert save(app).status_code == 502
     assert app.snapshot() == before
@@ -198,7 +198,7 @@ def test_local_commit_failure_rolls_back_tenant_and_session_after_remote_success
 
     def reject_session_update(_conn, _cursor, statement, _parameters, _context, _executemany):
         if statement.startswith("UPDATE sessions"):
-            raise RuntimeError("fixture local write failure")
+            raise sqlite3.OperationalError("fixture local write failure")
 
     event.listen(app.engine, "before_cursor_execute", reject_session_update)
     try:

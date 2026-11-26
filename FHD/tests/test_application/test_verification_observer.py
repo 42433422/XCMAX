@@ -6,7 +6,7 @@ import copy
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -142,6 +142,143 @@ def _another(runtime, *, unknown=False, failed_read=False):
     if failed_read:
         _add_failed_read(run)
     return run
+
+
+@pytest.fixture
+def unknown_original(pending_receipt):
+    runtime = pending_receipt
+    previous = runtime.repo.get(runtime.run.run_id)
+    previous.metadata[KEY] = {"status": "observed"}
+    runtime.repo.save(previous)
+    run = _another(runtime)
+    run.status = "unknown"
+    run.metadata.update(
+        non_retryable=True,
+        recovery={"state": "manual_reconciliation_required"},
+        execution={"state": "active"},
+    )
+    _persist(runtime, run, state="unknown", effects=["unsettled-original-effect"])
+    return runtime, run
+
+
+@pytest.mark.parametrize("automatic", [False, True])
+def test_unknown_original_run_only_observes_without_requeue(unknown_original, automatic):
+    from app.application.agent_orchestrator.verification_recovery import (
+        reverify_run,
+        verification_can_finalize,
+    )
+
+    runtime, run = unknown_original
+    original = runtime.repo.get(run.run_id)
+    queue = runtime.queue.get(run.run_id).to_dict()
+    restarted = SQLAlchemyAgentRunRepository(session_factory=runtime.actor.factory)
+    if automatic:
+        assert _recover(runtime, repository=restarted) == 1
+    else:
+        reverify_run(restarted, run.run_id, runtime_context=runtime.actor.context)
+    observed = restarted.get(run.run_id)
+    assert observed.status == "unknown"
+    assert observed.metadata["verification"]["accepted"] is True
+    assert observed.metadata["non_retryable"] is True
+    assert observed.metadata["recovery"] == original.metadata["recovery"]
+    assert observed.metadata["runtime_context"] == original.metadata["runtime_context"]
+    assert observed.steps == original.steps
+    assert observed.tool_calls[0].output == original.tool_calls[0].output
+    assert observed.tool_calls[0].cost_units == original.tool_calls[0].cost_units
+    assert len(runtime.observed) == 1
+    assert runtime.queue.get(run.run_id).to_dict() == queue
+    assert runtime.queue.claim("must-not-replay", lease_seconds=60, run_id=run.run_id) is None
+    assert not verification_can_finalize(observed)
+    observed.metadata.pop("non_retryable")
+    observed.metadata.pop("recovery")
+    assert not verification_can_finalize(observed), "unknown status itself forbids finalization"
+
+
+@pytest.mark.parametrize("changed", ["live_lease", "wrong_tenant", "missing_queue"])
+def test_unknown_original_read_requires_stopped_paired_queue(unknown_original, changed):
+    from app.application.agent_orchestrator.run_models import utc_now_iso
+    from app.application.agent_orchestrator.verification_recovery import (
+        VerificationRecoveryError,
+        reverify_run,
+    )
+
+    runtime, run = unknown_original
+    with runtime.actor.factory.begin() as db:
+        row = db.get(AgentTaskExecutionRecord, run.run_id)
+        if changed == "missing_queue":
+            db.delete(row)
+        elif changed == "wrong_tenant":
+            row.tenant_id = "different-tenant"
+        else:
+            row.state = "running"
+            row.lease_owner = "current-worker"
+            row.lease_expires_at = (
+                datetime.fromisoformat(utc_now_iso()) + timedelta(seconds=600)
+            ).isoformat()
+    before = runtime.repo.get(run.run_id).to_dict()
+    with pytest.raises(VerificationRecoveryError):
+        reverify_run(runtime.repo, run.run_id, runtime_context=runtime.actor.context)
+    assert _recover(runtime) == 0
+    assert runtime.repo.get(run.run_id).to_dict() == before
+    assert runtime.observed == []
+
+
+def test_unknown_original_observer_keeps_expired_authorization(unknown_original):
+    from app.db.models.user import Session as UserSession
+    from app.utils.time import utc_now_naive
+
+    runtime, run = unknown_original
+    original = runtime.repo.get(run.run_id)
+    queue = runtime.queue.get(run.run_id).to_dict()
+    with runtime.actor.factory.begin() as db:
+        db.get(UserSession, runtime.actor.session_row_id).expires_at = utc_now_naive() - timedelta(
+            seconds=1
+        )
+    assert _recover(runtime) == 1
+    saved = runtime.repo.get(run.run_id)
+    assert saved.status == "unknown"
+    assert saved.metadata[KEY]["reason_code"] == "verification_authorization_unavailable"
+    assert saved.metadata["runtime_context"] == original.metadata["runtime_context"]
+    assert saved.steps == original.steps and saved.tool_calls == original.tool_calls
+    assert runtime.queue.get(run.run_id).to_dict() == queue
+    assert runtime.observed == []
+
+
+def test_desktop_restart_unknown_retains_readonly_verification(pending_receipt, monkeypatch):
+    from app.application.agent_orchestrator.stale_run_reconciler import (
+        reconcile_stale_running_runs,
+    )
+    from app.application.agent_orchestrator.verification_recovery import reverify_run
+
+    runtime = pending_receipt
+    run = _another(runtime)
+    run.status = "running"
+    run.metadata["execution"] = {"state": "active"}
+    project_verification(run)
+    runtime.repo.save(run)
+    runtime.queue.enqueue(run)
+    owner = "original-desktop-worker"
+    assert runtime.queue.claim(owner, lease_seconds=600, run_id=run.run_id)
+    assert runtime.queue.mark_open_effect(run.run_id, "unsettled-original-effect", owner_id=owner)
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.run_repository.get_agent_run_repository",
+        lambda: runtime.repo,
+    )
+    assert reconcile_stale_running_runs() == 1
+    interrupted = runtime.repo.get(run.run_id)
+    parked = runtime.queue.get(run.run_id)
+    assert interrupted.status == parked.state == "unknown"
+    assert parked.last_error_code == "needs_verification"
+    assert not parked.lease_owner and not parked.lease_expires_at and not parked.finished_at
+    assert runtime.queue.claim("replacement-worker", lease_seconds=60, run_id=run.run_id) is None
+    observed = reverify_run(runtime.repo, run.run_id, runtime_context=runtime.actor.context)
+    assert observed.status == "unknown"
+    assert observed.metadata["verification"]["accepted"] is True
+    assert observed.steps == interrupted.steps
+    assert observed.tool_calls[0].output == interrupted.tool_calls[0].output
+    assert observed.metadata["recovery"] == interrupted.metadata["recovery"]
+    assert runtime.queue.get(run.run_id).to_dict() == parked.to_dict()
 
 
 def test_pending_source_backoff_then_original_graph_finalizes_without_new_call(pending_receipt):

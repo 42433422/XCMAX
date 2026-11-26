@@ -98,7 +98,7 @@ class TestEnrichKittenAnalyzerRuntime:
         with patch(
             "app.infrastructure.web_search.kitten_web_search",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("network error"),
+            side_effect=ConnectionError("network error"),
         ):
             result = await enrich_kitten_analyzer_runtime(rc, "hello")
             assert result["web_search_results"] == []

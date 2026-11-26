@@ -16,7 +16,10 @@ from app.db.models import InventoryLedger, InventoryTransaction, Product, Wareho
 from app.db.models.permission import Permission, Role
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope, bind_agent_mod_scope
+from app.infrastructure.auth.agent_mod_scope import (
+    bind_agent_actor_scope,
+    bind_agent_mod_scope,
+)
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 from app.request_active_mod_ctx import get_request_active_mod_id
 from app.utils.time import utc_now_naive
@@ -29,7 +32,11 @@ def _stock_in(context):
         node_id="stock",
         tool_id="inventory",
         action="stock_in",
-        params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50},
+        params={
+            "model_number": "A100",
+            "warehouse_name": "same warehouse",
+            "quantity": 50,
+        },
     )
     result = AgentToolExecutor().execute(step, runtime_context=context)
     assert current_tenant_id() is None
@@ -44,7 +51,9 @@ def _child_stock_in(context, results):
 
 
 def _child_dispatch(run_id, results):
-    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.run_sql_repository import (
+        SQLAlchemyAgentRunRepository,
+    )
     from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
     from app.application.agent_orchestrator.task_execution_sql_repository import (
         SQLAlchemyTaskExecutionRepository,
@@ -171,7 +180,10 @@ def _inventory_scope(tmp_path, monkeypatch):
         "mod_id": "private-a",
         "_mod_authorization": binding,
         "_actor_authorization": bind_agent_actor_scope(
-            session_id="private-session", user_id="1", execution_tenant_id="1", mod_id="private-a"
+            session_id="private-session",
+            user_id="1",
+            execution_tenant_id="1",
+            mod_id="private-a",
         ),
     }
     return engines, factories, context
@@ -194,7 +206,9 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
             from app.application.agent_orchestrator.run_sql_repository import (
                 SQLAlchemyAgentRunRepository,
             )
-            from app.application.agent_orchestrator.task_background import apply_approved_step
+            from app.application.agent_orchestrator.task_background import (
+                apply_approved_step,
+            )
             from app.application.agent_orchestrator.task_execution_sql_repository import (
                 SQLAlchemyTaskExecutionRepository,
             )
@@ -207,7 +221,11 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
                 status="waiting_user",
                 risk="high",
                 idempotent=False,
-                params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50},
+                params={
+                    "model_number": "A100",
+                    "warehouse_name": "same warehouse",
+                    "quantity": 50,
+                },
             )
             from app.application.workflow.workflow_types import (
                 PlanGraph,
@@ -301,7 +319,9 @@ def verified_inventory(tmp_path, monkeypatch, request):
     from types import SimpleNamespace
 
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_repository import (
+        InMemoryAgentRunRepository,
+    )
     from app.application.inventory_app_service import InventoryAppService
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
@@ -379,8 +399,12 @@ def test_inventory_readback_binds_original_receipt_and_live_mod_stock(verified_i
 
     from sqlalchemy import event
 
-    from app.application.agent_orchestrator.result_verification import verify_step_result
-    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.result_verification import (
+        verify_step_result,
+    )
+    from app.application.agent_orchestrator.task_background import (
+        task_execution_context,
+    )
     from app.application.agent_orchestrator.tool_permission import _idempotency_path
 
     engines, factories, run = verified_inventory
@@ -448,7 +472,9 @@ def test_inventory_readback_binds_original_receipt_and_live_mod_stock(verified_i
             event.remove(engine, "before_cursor_execute", observe)
 
 
-def test_inventory_claimed_verified_cannot_borrow_another_call_or_ledger(verified_inventory):
+def test_inventory_claimed_verified_cannot_borrow_another_call_or_ledger(
+    verified_inventory,
+):
     import copy
     from types import SimpleNamespace
 
@@ -467,7 +493,9 @@ def test_inventory_claimed_verified_cannot_borrow_another_call_or_ledger(verifie
         == "result_receipt_unavailable"
     )
     case.run, case.step, case.call = run, run.steps[0], run.tool_calls[0]
-    from app.application.agent_orchestrator.task_background import task_execution_context
+    from app.application.agent_orchestrator.task_background import (
+        task_execution_context,
+    )
 
     case.context = {
         **actor.context,
@@ -475,7 +503,10 @@ def test_inventory_claimed_verified_cannot_borrow_another_call_or_ledger(verifie
         "step_id": case.step.step_id,
         **task_execution_context(run, case.step),
     }
-    for override in ({"verified": True}, {"data": {**case.call.output["data"], "ledger_id": 999}}):
+    for override in (
+        {"verified": True},
+        {"data": {**case.call.output["data"], "ledger_id": 999}},
+    ):
         assert (
             verify(case, {**copy.deepcopy(case.call.output), **override})["code"]
             == "result_receipt_mismatch"

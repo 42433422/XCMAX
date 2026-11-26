@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local' } }))
+const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local', fromRuntime: false } }))
 import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { speakText, stopSpeaking } from '@/utils/tts'
 import { useChatMessageUi } from './useChatMessageUi'
-import { ref, nextTick } from 'vue'
+import { effectScope, ref, nextTick } from 'vue'
 import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { setActivePinia, createPinia } from 'pinia'
@@ -42,12 +42,15 @@ vi.mock('@/constants/industryPresets', () => ({
   isIndustryWelcomePlainText: (text: string) => text.startsWith('你好，我是业务助手。'),
 }))
 
-vi.mock('@/utils/chatStorageKeys', () => ({
-  resolveChatIdentity: (modId = '') => `identity:${modId}`,
-  resolveChatStorageScope: () => chatStorageScope.value,
-  buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
-  buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
-}))
+vi.mock('@/utils/chatStorageKeys', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/utils/chatStorageKeys')>()
+  return {
+    resolveChatIdentity: (modId = '') => `identity:${modId}`,
+    resolveChatStorageScope: () => chatStorageScope.fromRuntime ? actual.resolveChatStorageScope() : chatStorageScope.value,
+    buildChatMessagesKey: (sid: string, modId: string) => `chat_${sid}_${modId}`,
+    buildChatSessionMetaKey: (sid: string, modId: string) => `chat_meta_${sid}_${modId}`,
+  }
+})
 
 vi.mock('@/utils/tts', () => ({
   speakText: vi.fn().mockResolvedValue(undefined),
@@ -120,6 +123,47 @@ describe('useChatMessages', () => {
     await chat.loadEarlierMessages()
     expect(chat.messages.value.map(row => row.content)).toEqual(['older', 'latest'])
     expect(chat.earlierMessagesError.value).toBe('')
+  })
+
+  it.each([false, true])('retains older pages and their cursor on refresh (client message identity: %s)', async clientBound => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('refresh-loaded-history'))
+    const row = (id: number) => ({ id, role: 'ai', content: `message ${id}`,
+      ...(clientBound ? { client_message_id: `client-${id}` } : {}) })
+    const latest = { success: true, id: 'refresh-loaded-history', revision: 0, has_more: true,
+      next_before_id: 160, messages: [row(160)] }
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0,
+      has_more: true, next_before_id: 80, messages: [row(80)] } as never)
+    await chat.loadEarlierMessages()
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 80', 'message 160'])
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0,
+      has_more: false, messages: [row(1)] } as never)
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenLastCalledWith('refresh-loaded-history', { before_id: 80, limit: 80 })
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 1', 'message 80', 'message 160'])
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    expect(chat.messagesHaveEarlier.value).toBe(false)
+    expect(chat.messages.value.map(message => message.content)).toEqual(['message 1', 'message 80', 'message 160'])
+    const calls = vi.mocked(api.getConversation).mock.calls.length
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenCalledTimes(calls)
+  })
+
+  it('discards loaded older pages after a destructive history revision', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('recalled-loaded-history'))
+    chat.loadMessages([{ role: 'ai', content: 'recalled message', time: '', serverMessageId: 1,
+      persistence: { id: 'client-old', status: 'saved' } }], { revision: 0, has_more: false })
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'recalled-loaded-history', revision: 1,
+      has_more: true, next_before_id: 160, messages: [{ id: 160, role: 'ai', content: 'current message' }] } as never)
+    await chat.syncFromServer()
+    expect(chat.messages.value.map(message => message.content)).toEqual(['current message'])
+    expect(chat.messagesHaveEarlier.value).toBe(true)
   })
 
   it('initializes with welcome message', () => {
@@ -502,20 +546,69 @@ describe('useChatMessages', () => {
     expect(chat.messages.value).toEqual([])
   })
 
-  it('loads older cursor pages on demand and preserves chronological order', async () => {
+  it.each([false, true])('keeps loaded cursor pages through refresh (client binding=%s)', async clientBound => {
     const api = (await import('@/api/chat')).default
     const chat = useChatMessages(ref('paged-history'))
-    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'paged-history', revision: 0,
-      has_more: true, next_before_id: 4, messages: [4, 5].map(id => ({ id, role: 'ai', content: `message-${id}` })) } as never)
+    const row = (id: number) => ({ id, role: 'ai', content: `message-${id}`,
+      ...(clientBound ? { metadata: { client_message_id: `client-${id}` } } : {}) })
+    const latest = { success: true, id: 'paged-history', revision: 0,
+      has_more: true, next_before_id: 4, messages: [4, 5].map(row) }
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never)
     expect(await chat.syncFromServer()).toBe(true)
     expect(chat.messagesHaveEarlier.value).toBe(true)
     expect(chat.messages.value).toHaveLength(2)
     vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: false,
-      messages: [1, 2, 3].map(id => ({ id, role: 'ai', content: `message-${id}` })) } as never)
+      messages: [1, 2, 3].map(row) } as never)
     await chat.loadEarlierMessages()
     expect(api.getConversation).toHaveBeenLastCalledWith('paged-history', { before_id: 4, limit: 80 })
     expect(chat.messages.value.map(row => row.content)).toEqual([1, 2, 3, 4, 5].map(id => `message-${id}`))
     expect(chat.messagesHaveEarlier.value).toBe(false)
+    const keys = chat.messages.value.map(chatMessageKey)
+    vi.mocked(api.getConversation).mockResolvedValueOnce(latest as never).mockResolvedValueOnce(latest as never)
+    await chat.syncFromServer()
+    await chat.syncFromServer()
+    expect(chat.messages.value.map(row => row.content)).toEqual([1, 2, 3, 4, 5].map(id => `message-${id}`))
+    expect(chat.messages.value.map(chatMessageKey)).toEqual(keys)
+    expect(chat.messages.value.map(row => row.persistence?.id)).toEqual([1, 2, 3, 4, 5].map(id => `${clientBound ? 'client-' : 'server:'}${id}`))
+    expect(chat.messagesHaveEarlier.value).toBe(false)
+  })
+
+  it.each([false, true])('continues history from the confirmed cursor after refresh (new gap=%s)', async gap => {
+    const api = (await import('@/api/chat')).default, chat = useChatMessages(ref('cursor-refresh'))
+    const rows = (ids: number[]) => ids.map(id => ({ id, role: 'ai', content: `message-${id}`, metadata: { client_message_id: `client-${id}` } }))
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: true, next_before_id: 4, messages: rows([4, 5]) } as never)
+    await chat.syncFromServer()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: true, next_before_id: 2, messages: rows([2, 3]) } as never)
+    await chat.loadEarlierMessages()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: true,
+      next_before_id: gap ? 7 : 4, messages: rows(gap ? [7, 8] : [4, 5]) } as never)
+    await chat.syncFromServer()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: false,
+      messages: rows(gap ? [1, 2, 3, 4, 5, 6] : [1]) } as never)
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenLastCalledWith('cursor-refresh', { before_id: gap ? 7 : 2, limit: 80 })
+    expect(chat.messages.value.map(row => row.content)).toEqual((gap ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2, 3, 4, 5]).map(id => `message-${id}`))
+  })
+
+  it('retires an older pending page when the latest window no longer overlaps it', async () => {
+    const api = (await import('@/api/chat')).default, chat = useChatMessages(ref('detached-page'))
+    const rows = (ids: number[]) => ids.map(id => ({ id, role: 'ai', content: `message-${id}` }))
+    chat.loadMessages([2, 3, 4, 5].map(id => ({ role: 'ai', content: `message-${id}`, time: '',
+      persistence: { id: `server:${id}`, status: 'saved' } })), { revision: 0, has_more: true, next_before_id: 2 })
+    let release!: (page: never) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+    const pending = chat.loadEarlierMessages()
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: true, next_before_id: 7, messages: rows([7, 8]) } as never)
+    await chat.syncFromServer()
+    release({ success: true, revision: 0, has_more: false, messages: rows([1]) } as never)
+    await pending
+    expect(chat.messages.value.map(row => row.content)).toEqual(['message-7', 'message-8'])
+    expect(chat.earlierMessagesLoading.value).toBe(false)
+    expect(chat.messagesHaveEarlier.value).toBe(true)
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: false, messages: rows([1, 2, 3, 4, 5, 6]) } as never)
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenLastCalledWith('detached-page', { before_id: 7, limit: 80 })
+    expect(chat.messages.value.map(row => row.content)).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map(id => `message-${id}`))
   })
 
   it('discards a late history page after switching sessions', async () => {
@@ -530,6 +623,53 @@ describe('useChatMessages', () => {
     await pending
     expect(chat.messages.value.some(row => row.content.includes('old private history'))).toBe(false)
     expect(chat.messagesHaveEarlier.value).toBe(false)
+  })
+
+  it.each(['latest', 'earlier'])('does not overwrite a reopened conversation with an unmounted %s read', async page => {
+    const api = (await import('@/api/chat')).default
+    const previousScope = effectScope(), currentScope = effectScope()
+    const previous = previousScope.run(() => useChatMessages(ref('reopened-history')))!
+    previous.loadMessages([{ role: 'ai', content: 'saved reply', time: '', persistence: { id: 'server:4', status: 'saved' } }],
+      { revision: 0, has_more: true, next_before_id: 4 })
+    let release!: (response: never) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+    const pending = page === 'latest' ? previous.syncFromServer() : previous.loadEarlierMessages()
+    previousScope.stop()
+    const current = currentScope.run(() => useChatMessages(ref('reopened-history')))!
+    try {
+      current.addMessage('new unsaved request', 'user')
+      await nextTick()
+      const cached = localStorage.getItem('chat_reopened-history_')
+      const writes = vi.spyOn(Storage.prototype, 'setItem')
+      try {
+        release({ success: true, revision: 0, messages: [{ id: 1, role: 'ai', content: 'old read' }] } as never)
+        await pending
+        await nextTick()
+        expect(writes).not.toHaveBeenCalled()
+        expect(localStorage.getItem('chat_reopened-history_')).toBe(cached)
+        expect(current.messages.value.map(row => row.content)).toEqual(['saved reply', 'new unsaved request'])
+        const calls = vi.mocked(api.getConversation).mock.calls.length
+        await previous.loadEarlierMessages()
+        expect(await previous.syncFromServer()).toBe(false)
+        expect(api.getConversation).toHaveBeenCalledTimes(calls)
+      } finally { writes.mockRestore() }
+    } finally { previousScope.stop(); currentScope.stop() }
+  })
+
+  it('allows an explicitly retained reply to finish after the view is unmounted', () => {
+    const scope = effectScope(), reopenedScope = effectScope()
+    const chat = scope.run(() => useChatMessages(ref('retained-reply')))!
+    const retained = chat.retainConversationMessages()
+    try {
+      const index = retained.pushStreamingAiShell()
+      scope.stop()
+      retained.applyPlainTextToMessageIndex(index, 'original task completed')
+      retained.persist()
+      const reopened = reopenedScope.run(() => useChatMessages(ref('retained-reply')))!
+      expect(reopened.messages.value).toBe(retained.messages.value)
+      expect(reopened.messages.value.at(-1)?.content).toBe('original task completed')
+      expect(JSON.parse(localStorage.getItem('chat_retained-reply_') || '[]').at(-1).content).toBe('original task completed')
+    } finally { scope.stop(); reopenedScope.stop(); retained.release() }
   })
 
   it('syncFromServer handles success', async () => {
@@ -596,15 +736,17 @@ describe('useChatMessages', () => {
     expect(chat.messages.value.some(row => String(row.content).includes('智能助手'))).toBe(true)
   })
 
-  it.each(['session', 'mod', 'account', 'live-message'])('ignores a late history response after %s changes', async (change) => {
+  it.each(['session', 'session-round-trip', 'mod', 'mod-round-trip', 'account', 'live-message'])('ignores a late history response after %s changes', async (change) => {
     const sid = ref('current')
     const chat = useChatMessages(sid)
     const api = (await import('@/api/chat')).default
     let finish!: (value: any) => void
     vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
     const pending = chat.syncFromServer()
-    if (change === 'session') sid.value = 'other'
-    if (change === 'mod') activeModIdRef.value = 'other-mod'
+    if (change.startsWith('session')) sid.value = 'other'
+    if (change === 'session-round-trip') sid.value = 'current'
+    if (change.startsWith('mod')) activeModIdRef.value = 'other-mod'
+    if (change === 'mod-round-trip') activeModIdRef.value = ''
     if (change === 'account') (await import('@/utils/productReadAccountScope')).productReadAccountEpoch.value++
     if (change === 'live-message') chat.addMessage('new live request', 'user')
     await nextTick()
@@ -696,6 +838,51 @@ describe('required initial conversation readiness', () => {
     expect(chat.messages.value.some(row => row.content.includes('locally retained draft'))).toBe(true)
   })
 
+  it.each(['required-empty', 'required-nonempty', 'earlier'] as const)(
+    'keeps an in-flight %s read across same-owner profile hydration', async page => {
+      const api = (await import('@/api/chat')).default
+      const { setRuntimeTenantStorageScopeInput } = await import('@/utils/tenantStorageScopeRuntime')
+      const { resolveChatStorageScope } = await import('@/utils/chatStorageKeys')
+      const { productReadAccountEpoch } = await import('@/utils/productReadAccountScope')
+      const { captureAuthSession } = await import('@/utils/authSessionCache')
+      const owner = { localUserId: 41, accountKind: 'personal' }
+      const scope = effectScope()
+      chatStorageScope.fromRuntime = true
+      setRuntimeTenantStorageScopeInput(owner)
+      try {
+        const chat = scope.run(() => useChatMessages(ref('hydrated-session')))!
+        if (page === 'earlier') chat.loadMessages([
+          { role: 'ai', content: 'latest reply', time: '', persistence: { id: 'server:4', status: 'saved' } },
+        ], { revision: 0, has_more: true, next_before_id: 4 })
+        const before = JSON.stringify(chat.messages.value)
+        const identity = [activeModIdRef.value, productReadAccountEpoch.value, resolveChatStorageScope()]
+        const authenticated = captureAuthSession()
+        let finish!: (value: Awaited<ReturnType<typeof api.getConversation>>) => void
+        vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+        const pending = (page === 'earlier' ? chat.loadEarlierMessages() : chat.syncFromServer({ required: true }))
+          .then(value => ({ ok: true, value }), error => ({ ok: false, error }))
+        // /auth/me hydration publishes a fresh identity object for the same owner.
+        setRuntimeTenantStorageScopeInput({ ...owner })
+        expect([activeModIdRef.value, productReadAccountEpoch.value, resolveChatStorageScope()]).toEqual(identity)
+        expect(authenticated()).toBe(true)
+        expect(JSON.stringify(chat.messages.value)).toBe(before)
+        const loading = chat.earlierMessagesLoading.value
+        finish({ success: true, id: 'hydrated-session', revision: 0, has_more: false,
+          messages: page === 'required-empty' ? [] : [{ id: 1, role: 'ai', content: 'hydrated server reply' }],
+        } as never)
+        expect(await pending).toEqual({ ok: true, value: page === 'earlier' ? undefined : true })
+        expect(loading).toBe(page === 'earlier')
+        if (page === 'required-empty') expect(JSON.stringify(chat.messages.value)).toBe(before)
+        else expect(chat.messages.value.map(row => row.content)).toEqual(page === 'earlier'
+          ? ['hydrated server reply', 'latest reply'] : ['hydrated server reply'])
+      } finally {
+        scope.stop()
+        chatStorageScope.fromRuntime = false
+        setRuntimeTenantStorageScopeInput(null)
+      }
+    },
+  )
+
   it.each([
     { success: false, messages: [] },
     { success: true },
@@ -758,6 +945,85 @@ describe('required initial conversation readiness', () => {
 
 describe('message persistence failure UX', () => {
   beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks() })
+
+  it('bounds confirmed local copies while retaining pending messages and authoritative history metadata', async () => {
+    const api = useChatMessages(ref('bounded-cache'))
+    const serverRow = (id: number) => ({ id, role: id === 1 ? 'user' : 'ai', content: `original ${id}` })
+    const durable = Array.from({ length: 160 }, (_, index) => ({
+      role: index === 0 ? 'user' as const : 'ai' as const, content: `original ${index + 1}`, time: '12:00',
+      serverMessageId: index + 1, persistence: { id: `server:${index + 1}`, status: 'saved' as const, durable: true },
+    }))
+    const protectedRows = [
+      { role: 'user' as const, content: 'unsaved', time: '12:01', persistence: { id: 'local', status: 'local' as const } },
+      { role: 'user' as const, content: 'saving', time: '12:01', persistence: { id: 'saving', status: 'saving' as const } },
+      { role: 'user' as const, content: 'failed', time: '12:01', persistence: { id: 'failed', status: 'failed' as const,
+        request: { role: 'user' as const, content: 'failed', expected_revision: 0 } } },
+      { ...durable[0], content: 'legacy saved without durable evidence', persistence: { id: 'legacy', status: 'saved' as const } },
+      { ...durable[0], content: 'saved with a pending request', persistence: { id: 'pending', status: 'saved' as const,
+        durable: true, request: { role: 'user' as const, content: 'pending', expected_revision: 0 } } },
+      { ...durable[0], content: 'active stream', streamingShell: true, persistence: { id: 'stream', status: 'saved' as const, durable: true } },
+    ]
+    api.loadMessages([...protectedRows, ...durable], { revision: 0, title: 'Original conversation', message_count: 160, has_more: false })
+    expect(api.messages.value).toHaveLength(166)
+    const cache = JSON.parse(localStorage.getItem('chat_bounded-cache_') || '[]')
+    expect(cache).toHaveLength(86)
+    for (const row of protectedRows) expect(cache.some((item: any) => item.persistence.id === row.persistence.id)).toBe(true)
+    expect(cache.some((item: any) => item.content === 'original 1')).toBe(false)
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Original conversation', message_count: 160 })
+
+    resetChatMessageStores()
+    const reopened = useChatMessages(ref('bounded-cache'))
+    reopened.addMessage('New local question', 'user')
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Original conversation', message_count: 160 })
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, id: 'bounded-cache', durable: true,
+      revision: 0, title: 'Original conversation', message_count: 160, has_more: true, next_before_id: 81,
+      messages: Array.from({ length: 80 }, (_, index) => serverRow(index + 81)) } as never)
+    await reopened.syncFromServer()
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, durable: true, revision: 0,
+      title: 'Original conversation', message_count: 160, has_more: false,
+      messages: Array.from({ length: 80 }, (_, index) => serverRow(index + 1)) } as never)
+    await reopened.loadEarlierMessages()
+    expect(reopened.messages.value.some(row => row.content === 'original 1')).toBe(true)
+    expect(reopened.messages.value.some(row => row.content === 'New local question')).toBe(true)
+    expect(reopened.messagesHaveEarlier.value).toBe(false)
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, id: 'bounded-cache', durable: true,
+      revision: 1, title: 'Recalled conversation', message_count: 1, has_more: false,
+      messages: [serverRow(1)] } as never)
+    await reopened.syncFromServer()
+    expect(JSON.parse(localStorage.getItem('chat_meta_bounded-cache_') || '{}'))
+      .toMatchObject({ title: 'Recalled conversation', message_count: 1 })
+  })
+
+  it('limits confirmed serialized size without trimming an oversized unsaved message', () => {
+    const api = useChatMessages(ref('byte-budget'))
+    const pending = { role: 'user' as const, content: 'pending '.repeat(40_000), time: '',
+      persistence: { id: 'unsaved-large', status: 'failed' as const } }
+    const confirmed = Array.from({ length: 6 }, (_, index) => ({ role: 'ai' as const,
+      content: String(index).repeat(100_000), time: '', serverMessageId: index + 1,
+      persistence: { id: `server:${index + 1}`, status: 'saved' as const, durable: true } }))
+    api.loadMessages([pending, ...confirmed])
+    const cache = JSON.parse(localStorage.getItem('chat_byte-budget_') || '[]')
+    expect(cache).toHaveLength(3)
+    expect(cache[0].content).toBe(pending.content)
+    expect(cache.slice(1).map((row: any) => row.serverMessageId)).toEqual([5, 6])
+    expect(api.messages.value).toHaveLength(7)
+  })
+
+  it('keeps the previous unconfirmed cache and every live message when a bounded write hits quota', () => {
+    const api = useChatMessages(ref('quota-old-copy'))
+    api.addMessage('previous unconfirmed copy', 'user')
+    const previous = localStorage.getItem('chat_quota-old-copy_')
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    api.addMessage('new unconfirmed copy', 'user')
+    expect(localStorage.getItem('chat_quota-old-copy_')).toBe(previous)
+    expect(api.messages.value.map(row => row.content)).toContain('previous unconfirmed copy')
+    expect(api.messages.value.map(row => row.content)).toContain('new unconfirmed copy')
+    expect(api.cacheError.value).toContain('本机保存失败')
+    write.mockRestore()
+  })
 
   it('retains a retryable bubble when both the server and local storage fail, then recovers its local copy', async () => {
     const api = useChatMessages(ref('cache-failure'))
@@ -945,12 +1211,15 @@ it.each([undefined, 'explicit-turn'])('preserves the user turn through the save 
   api.addMessage('本轮原文', 'user', { turnId: 'local-turn' })
   await api.saveMessage('user', '本轮原文', undefined, override ? { turnId: override } : undefined)
   expect(api.messages.value.at(-1)?.serverMessageId).toBe(41)
+  expect(api.messages.value.at(-1)?.persistence?.durable).toBe(true)
   const payload = vi.mocked(chatApi.saveMessage).mock.calls[0]![0] as { metadata: string; client_message_id: string }
   const storedMetadata = { ...JSON.parse(payload.metadata), client_message_id: payload.client_message_id }
   const restored = chatMessageExtrasFromServerRow({ id: 41, role: 'user', metadata: JSON.stringify(storedMetadata) })
   expect(restored.turnId).toBe(override || 'local-turn')
   expect(restored.serverMessageId).toBe(41)
   expect(restored.persistence).toEqual({ id: payload.client_message_id, status: 'saved' })
+  expect(chatMessageExtrasFromServerRow({ id: 41, durable: true, role: 'user', metadata: JSON.stringify(storedMetadata) })
+    .persistence?.durable).toBe(true)
 })
 
 

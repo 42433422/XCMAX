@@ -1,4 +1,4 @@
-"""Unified-agent execution helpers used by customer compatibility routes."""
+"""Customer HTTP adapters for the canonical authenticated execution entry."""
 
 from __future__ import annotations
 
@@ -6,89 +6,19 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as agent_node_output
+from app.application.agent_orchestrator.trace_payloads import agent_node_output as agent_node_output
+from app.fastapi_routes.tools_execute import user_id_from_tool_request as customers_agent_user_id
 
-
-def customers_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "customers-route"
-    ).strip()
+__all__ = ["agent_node_output", "customers_agent_user_id", "run_customers_agent"]
 
 
 def run_customers_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    *, request: Request, action: str, params: dict[str, Any], route_path: str
+) -> tuple[dict[str, Any], int]:
+    from app.fastapi_routes.tools_execute import run_tools_execute_agent
 
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("customers") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 customers 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"customers_{action}"
-    params = {key: value for key, value in params.items() if key not in {"tenant_id", "tenantId"}}
-    runtime_context = request_runtime_context(
-        request,
-        {
-            "source": "customers_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "route_confirmed": True,
-            "service_source": "fastapi_customer_route",
-        },
+    return run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "customers", "action": action, "params": dict(params)},
+        route_path=route_path,
     )
-    user_id = str(runtime_context["user_id"])
-    from app.middleware.request_id import ensure_request_id
-
-    risk = normalize_workflow_risk(str(action_meta.get("risk") or "medium"))
-    plan = PlanGraph(
-        plan_id=f"{node_id}:{ensure_request_id(request)}",
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 customers.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="customers",
-                action=action,
-                params=dict(params or {}),
-                risk=risk,
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute customers.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=risk,
-        metadata={"source": "customers_route", "route": route_path},
-    )
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Customers {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id,
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return agent_node_output(run, node_id)

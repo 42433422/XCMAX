@@ -262,7 +262,7 @@ class TestListTemplatesGet:
     def test_error(self):
         with patch(
             "app.application.excel_template_http_app_service._get_template_list",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             resp = list_templates_get()
             assert resp.status_code == 500
@@ -289,7 +289,7 @@ class TestListTemplatesByType:
         import app.application.template_app_service as _ts
 
         _ts._template_app_service = None
-        with patch("app.application.get_template_app_service", side_effect=RuntimeError("fail")):
+        with patch("app.application.get_template_app_service", side_effect=OSError("fail")):
             resp = list_templates_by_type(type="发货单", active_only="true")
             assert resp.status_code == 500
 

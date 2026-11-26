@@ -36,7 +36,7 @@ _MOCK_MANIFEST_DATA: dict[str, Any] = {
     "name": "AIOPEN",
     "version": "1.0.0",
     "tagline": "test tagline",
-    "tools": [{"name": "api_call", "description": "d", "inputSchema": {}}],
+    "tools": [{"name": "operation_call", "description": "d", "inputSchema": {}}],
 }
 _MOCK_RUN = MagicMock()
 _MOCK_RUN.run_id = "run-123"
@@ -67,7 +67,6 @@ def _all_mocks(**extra: Any):
             ...
     """
     defaults = {
-        "verify_api_key": True,
         "authorize_api_key": {"ok": True},
         "aiopen_manifest": _MOCK_MANIFEST_DATA,
         "invoke_tool": AsyncMock(return_value={"success": True, "message": "ok"}),
@@ -91,7 +90,6 @@ def _all_mocks(**extra: Any):
     # Attributes whose value is a *return value* (the attribute is a callable
     # in the real module, so we must wrap the value in a MagicMock).
     _wrap_as_return: set[str] = {
-        "verify_api_key",
         "authorize_api_key",
         "revoke_api_key",
         "list_api_keys",
@@ -186,12 +184,12 @@ def test_invoke_args_non_dict_defaults_to_empty():
         c = _make_client()
         resp = c.post(
             "/api/aiopen/invoke",
-            json={"tool": "api_call", "args": ["not", "a", "dict"]},
+            json={"tool": "operation_call", "args": ["not", "a", "dict"]},
             headers={"X-AIOPEN-Key": "any"},
         )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["tool"] == "api_call"
+    assert body["tool"] == "operation_call"
 
 
 # ===========================================================================
@@ -207,7 +205,7 @@ def test_invoke_run_id_present_in_response():
             c = _make_client()
             resp = c.post(
                 "/api/aiopen/invoke",
-                json={"tool": "api_call", "args": {}},
+                json={"tool": "operation_call", "args": {}},
                 headers={"X-AIOPEN-Key": "any"},
             )
     body = resp.json()
@@ -222,7 +220,7 @@ def test_invoke_run_id_empty_not_in_response():
             c = _make_client()
             resp = c.post(
                 "/api/aiopen/invoke",
-                json={"tool": "api_call", "args": {}},
+                json={"tool": "operation_call", "args": {}},
                 headers={"X-AIOPEN-Key": "any"},
             )
     body = resp.json()
@@ -264,7 +262,7 @@ def test_mcp_post_tools_call_run_id_in_meta():
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "api_call", "arguments": {}},
+                    "params": {"name": "operation_call", "arguments": {}},
                 },
                 headers={"X-AIOPEN-Key": "any"},
             )
@@ -284,7 +282,7 @@ def test_mcp_post_tools_call_no_run_id_no_meta():
                     "jsonrpc": "2.0",
                     "id": 2,
                     "method": "tools/call",
-                    "params": {"name": "api_call", "arguments": {}},
+                    "params": {"name": "operation_call", "arguments": {}},
                 },
                 headers={"X-AIOPEN-Key": "any"},
             )
@@ -341,7 +339,7 @@ def test_mcp_post_body_none_params_defaults(client):
         headers={"X-AIOPEN-Key": "any", "Content-Type": "application/json"},
     )
     # null → body is None (not dict, not list) → parse error path
-    assert resp.status_code in {200, 202, 400}
+    assert resp.status_code == 400
 
 
 # ===========================================================================
@@ -547,39 +545,13 @@ def test_config_base_url_accepted(client):
 
 
 # ===========================================================================
-# 18. aiopen_openclaw_chat – message empty → 400
 #     Lines 531-532
 # ===========================================================================
 
 
-def test_openclaw_chat_empty_message_returns_400(client):
-    """POST /api/aiopen/openclaw/chat with empty message → 400."""
-    resp = client.post("/api/aiopen/openclaw/chat", json={})
-    assert resp.status_code == 400
-    assert resp.json()["success"] is False
-
-
-def test_openclaw_chat_whitespace_message_returns_400(client):
-    """POST /api/aiopen/openclaw/chat with whitespace message → 400."""
-    resp = client.post("/api/aiopen/openclaw/chat", json={"message": "   "})
-    assert resp.status_code == 400
-
-
 # ===========================================================================
 # 19. aiopen_openclaw_chat – retired raw gateway
-# ===========================================================================
-
-
-def test_openclaw_chat_retired_without_execution(client):
-    with patch("app.application.aiopen.service.openclaw_chat_proxy") as proxy:
-        resp = client.post("/api/aiopen/openclaw/chat", json={"message": "hello"})
-    assert resp.status_code == 410
-    assert resp.json()["execution_state"] == "not_started"
-    assert resp.json()["retryable"] is False
-    proxy.assert_not_called()
-
-
-# ===========================================================================
+# ====================================================================# ===========================================================================
 # 20. aiopen_screen_ws – session_id empty → auto-generate
 #     Lines 561-562
 # ===========================================================================

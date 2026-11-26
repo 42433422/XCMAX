@@ -111,6 +111,33 @@ export function createTraceId(): string {
   return `trace${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`
 }
 
+/** Bind a write attempt before transport; existing durable caller identities win. */
+export function withExecutionRequestKey(
+  method: string,
+  original: HeadersInit = {},
+  body?: BodyInit | null,
+  explicit?: string,
+): Record<string, string> {
+  const headers: Record<string, string> = original instanceof Headers || Array.isArray(original)
+    ? Object.fromEntries(new Headers(original).entries()) : { ...original }
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) return headers
+  const existing = Object.keys(headers).find((key) => key.toLowerCase() === 'idempotency-key')
+  if (existing && headers[existing].trim()) return headers
+  if (existing) delete headers[existing]
+  let key = explicit?.trim() || ''
+  if (!key && typeof body === 'string') {
+    try {
+      const value = JSON.parse(body)
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        key = [value.idempotency_key, value.request_id, value.client_request_id, value.turn_id]
+          .find((item): item is string => typeof item === 'string' && !!item.trim())?.trim() || ''
+      }
+    } catch { /* A non-JSON upload receives an identity for this attempt. */ }
+  }
+  headers['Idempotency-Key'] = key || createTraceId()
+  return headers
+}
+
 const recentSubmits = new Map<string, number>()
 
 export function isDuplicateUnsafeSubmit(key: string, now = Date.now(), windowMs = 800): boolean {

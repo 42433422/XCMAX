@@ -45,6 +45,21 @@ def blob(root: Path, ref: str, path: str) -> tuple[str, int]:
     return oid, len(text.splitlines())
 
 
+def pr_merge_base(root: Path, source: str, head: str) -> str:
+    """Bind the comparison to the tested PR merge, not stale event metadata."""
+    if not all(re.fullmatch(r"[0-9a-f]{40}", value) for value in (source, head)):
+        raise ValueError("PR merge and head identities must be full commit SHAs")
+    source, head = commit(root, source), commit(root, head)
+    if commit(root, "HEAD") != source:
+        raise ValueError("PR merge SHA differs from the tested checkout")
+    parents = git(root, "rev-list", "--parents", "-n", "1", source).decode().split()
+    if len(parents) != 3 or parents[2] != head:
+        raise ValueError(
+            "Tested PR merge must have two parents and the event head second"
+        )
+    return parents[1]
+
+
 def growth(root: Path, base: str, head: str) -> tuple[str, str, dict]:
     base, head = commit(root, base), commit(root, head)
     # The merge base excludes unrelated changes which landed on the target
@@ -147,13 +162,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", default="HEAD")
     parser.add_argument(
+        "--pr-merge-sha",
+        help="Verify the checkout against this GitHub PR merge SHA and use its first parent",
+    )
+    parser.add_argument(
         "--print-template",
         action="store_true",
         help="Print measured records to complete, not approvals",
     )
     args = parser.parse_args(argv)
     try:
-        base, head, changes = growth(args.repo_root, args.base, args.head)
+        comparison_base = (
+            pr_merge_base(args.repo_root, args.pr_merge_sha, args.head)
+            if args.pr_merge_sha is not None
+            else args.base
+        )
+        base, head, changes = growth(args.repo_root, comparison_base, args.head)
         if args.print_template:
             entries = {
                 path: {
@@ -179,7 +203,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(
         json.dumps(
-            {"base": base, "head": head, "growth": changes, "errors": errors},
+            {
+                "base": base,
+                "head": head,
+                **(
+                    {"event_base": args.base, "tested_merge_sha": args.pr_merge_sha}
+                    if args.pr_merge_sha is not None
+                    else {}
+                ),
+                "growth": changes,
+                "errors": errors,
+            },
             ensure_ascii=False,
             indent=2,
         )

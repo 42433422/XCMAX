@@ -4,7 +4,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { resolveErpApiPathWhenReady } from '@/utils/erpDomainPaths'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { classifyTransportFailure, createTraceId, noteTransportFailure, noteTransportSuccess, publishStabilityNotice, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
+import { classifyTransportFailure, createTraceId, withExecutionRequestKey, noteTransportFailure, noteTransportSuccess, publishStabilityNotice, RefreshSingleFlight, SideEffectGate } from '@/utils/networkStability'
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -231,6 +231,7 @@ async function requestWithRetry<T = unknown>(url: string, options: RequestOption
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
   const method = String(options.method || 'GET').toUpperCase()
+  options = { ...options, headers: withExecutionRequestKey(method, options.headers, options.body, options.idempotencyKey) }
   const key = options.idempotencyKey
   const sideEffect = options.sideEffect === true || (!!key && method !== 'GET' && method !== 'HEAD')
   if (sideEffect && key) {

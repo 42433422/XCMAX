@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, time
+from io import BytesIO
 from typing import Any, TypedDict
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -42,7 +43,7 @@ def _is_unreadable_workbook_error(error_message: str) -> bool:
 
 
 def _extract_structured_excel_preview(
-    file_path: str, sheet_name: str | None = None, sample_limit: int = 6
+    file_path: str | BytesIO, sheet_name: str | None = None, sample_limit: int = 6
 ):
     try:
         from openpyxl import load_workbook
@@ -171,7 +172,7 @@ def _extract_structured_excel_preview(
 
 
 def _extract_excel_grid_preview(
-    file_path: str, sheet_name: str | None = None, max_rows: int = 18, max_cols: int = 12
+    file_path: str | BytesIO, sheet_name: str | None = None, max_rows: int = 18, max_cols: int = 12
 ):
     try:
         from openpyxl import load_workbook
@@ -234,7 +235,7 @@ def _extract_excel_grid_preview(
 
 
 def _extract_excel_grid_style_cache(
-    file_path: str, sheet_name: str | None = None, max_rows: int = 24, max_cols: int = 14
+    file_path: str | BytesIO, sheet_name: str | None = None, max_rows: int = 24, max_cols: int = 14
 ):
     try:
         from copy import copy
@@ -313,7 +314,7 @@ def _extract_excel_grid_style_cache(
 
 
 def _extract_excel_all_sheets_preview(
-    file_path: str,
+    file_path: str | BytesIO,
     sample_limit: int = 8,
     max_rows: int = 24,
     max_cols: int = 14,
@@ -345,7 +346,7 @@ def _extract_excel_all_sheets_preview(
 
 
 def _extract_logical_tables_from_sheet(
-    file_path: str, sheet_name: str, max_scan_rows: int = 400, max_scan_cols: int = 25
+    file_path: str | BytesIO, sheet_name: str, max_scan_rows: int = 400, max_scan_cols: int = 25
 ):
     try:
         from openpyxl import load_workbook
@@ -409,7 +410,7 @@ def _extract_logical_tables_from_sheet(
         return []
 
 
-def _list_excel_sheet_names(file_path: str):
+def _list_excel_sheet_names(file_path: str | BytesIO):
     try:
         from openpyxl import load_workbook
 

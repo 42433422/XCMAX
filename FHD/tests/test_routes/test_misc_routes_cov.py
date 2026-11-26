@@ -369,7 +369,7 @@ class TestMemoryV2AgentOutput:
         out = _memory_v2_agent_output(run, "missing")
         assert "success" in out
 
-    def test_error_message_populated_from_run_error(self):
+    def test_missing_receipt_does_not_expose_raw_run_error(self):
         run = MagicMock()
         run.final_output = None
         run.steps = []
@@ -377,7 +377,9 @@ class TestMemoryV2AgentOutput:
         run.status = "failed"
         run.error = "something broke"
         out = _memory_v2_agent_output(run, "n3")
-        assert out.get("message") == "something broke"
+        assert out["success"] is False
+        assert "something broke" not in str(out)
+        assert "回执" in out["message"]
 
 
 # ===========================================================================
@@ -386,7 +388,8 @@ class TestMemoryV2AgentOutput:
 
 
 class TestToolsRoutes:
-    def test_compat_tools_list_no_role(self, client: TestClient):
+    def test_compat_tools_list_no_role(self, client: TestClient, trusted_actor):
+        client.headers.update(trusted_actor().headers)
         with patch(
             "app.fastapi_routes.domains.misc.misc_routes.get_tools_payload",
             return_value={"tools": []},
@@ -394,7 +397,8 @@ class TestToolsRoutes:
             r = client.get("/tools")
         assert r.status_code == 200
 
-    def test_compat_tools_list_with_role_filter(self, client: TestClient):
+    def test_compat_tools_list_with_role_filter(self, client: TestClient, trusted_actor):
+        client.headers.update(trusted_actor().headers)
         tools = [{"name": "t1", "roles": ["admin"]}, {"name": "t2", "roles": ["user"]}]
         with patch(
             "app.fastapi_routes.domains.misc.misc_routes.get_tools_payload",
@@ -404,6 +408,42 @@ class TestToolsRoutes:
         assert r.status_code == 200
         data = r.json()
         assert all("admin" in t.get("roles", []) for t in data.get("tools", []))
+
+    @pytest.mark.parametrize("path", ["/tools", "/db-tools"])
+    def test_tools_catalog_requires_verified_account(self, client: TestClient, path):
+        with patch(
+            "app.fastapi_routes.domains.misc.misc_routes.get_workflow_tool_registry"
+        ) as registry:
+            response = client.get(path, headers={"X-User-Id": "17"})
+        assert response.status_code == 401
+        registry.assert_not_called()
+
+    @pytest.mark.parametrize("path", ["/tools", "/db-tools"])
+    def test_tools_catalog_projects_authenticated_grants(self, client, trusted_actor, path):
+        actor = trusted_actor(user_id=17, permissions=["tool.ocr.request"])
+        client.headers.update(actor.headers)
+        with patch(
+            "app.fastapi_routes.domains.misc.misc_routes.get_workflow_tool_registry",
+            return_value={
+                "ocr": {
+                    "actions": {
+                        "request": {
+                            "description": "Request OCR",
+                            "input_schema": {"type": "object"},
+                        }
+                    }
+                }
+            },
+        ) as registry:
+            response = client.get(path, params={"role": "admin"}, headers={"X-User-Id": "900"})
+        assert response.status_code == 200
+        context = registry.call_args.args[0]
+        assert context["user_id"] == "17"
+        assert context["actor_id"] == "17"
+        assert context["_actor_authorization"]
+        entries = response.json()["planner_tools"]
+        assert [entry["capability_id"] for entry in entries] == ["ocr.request"]
+        assert entries[0]["parameters"] == {"type": "object"}
 
     def test_tool_categories(self, client: TestClient):
         with patch(

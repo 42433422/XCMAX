@@ -116,6 +116,32 @@ class TestCollaborationGraph:
         g.add("a", ["a", " ", "b"])
         assert g.edges["a"] == ["b"]
 
+    def test_normalized_self_reference_is_still_rejected_for_execution(self):
+        g = CollaborationGraph()
+        g.add("a", ["a", "b"])
+        assert g.edges["a"] == ["b"]
+        assert g.detect_cycle() == ["a", "a"]
+        assert g.execution_cycle("a") == ["a", "a"]
+
+    def test_replacing_dependencies_clears_old_self_reference(self):
+        g = CollaborationGraph()
+        g.add("a", ["a", "b"])
+        g.add("a", ["b"])
+        assert g.detect_cycle() is None
+        assert g.execution_cycle("a") is None
+
+    def test_unrelated_self_reference_does_not_block_execution(self):
+        g = CollaborationGraph()
+        g.add("root", ["worker"])
+        g.add("unrelated", ["unrelated"])
+        assert g.detect_cycle() == ["unrelated", "unrelated"]
+        assert g.execution_cycle("root") is None
+
+    def test_constructor_self_reference_is_rejected_for_execution(self):
+        g = CollaborationGraph({"a": ["a"]})
+        assert g.detect_cycle() == ["a", "a"]
+        assert g.execution_cycle("a") == ["a", "a"]
+
     def test_add_dedup_deps(self):
         g = CollaborationGraph()
         g.add("a", ["b", "b", "c"])

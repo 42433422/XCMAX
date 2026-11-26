@@ -17,9 +17,7 @@ import { useChatTaskList } from './useChatTaskList'
 import { useChatMessages, type ChatMessage } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
-import { FHD_DB_WRITE_UNLOCKED_EVENT } from '@/fhd/dbTokenHeaders'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
-import { useChatDbTokenGate } from './useChatDbTokenGate'
 import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
 import { useChatSessionActivity } from './useChatSessionActivity'
@@ -45,7 +43,7 @@ import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
+import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { approvalApi } from '@/api/approval'
 import chatApi from '@/api/chat'
@@ -57,7 +55,7 @@ import { activeChatTurnMessage, activeChatTurnStatus, droppedRoundFromHistory, r
 import { useAiSdkChatRound } from './chat-orchestration/useAiSdkChatRound'
 import { stepsFromAiParts } from '@/utils/agentStepChain'
 import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
-import { requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
+import { plannerExecutionState, requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
 
 function durableRecallMessageId(message: ChatMessage): number | undefined {
   if (message.persistence?.status !== 'saved') return undefined
@@ -149,7 +147,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     sortTaskList,
     upsertTask,
     removeTask,
-    finishTask,
     failTask,
     toggleTaskExpanded,
     setTaskFilter,
@@ -170,19 +167,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   persistTaskPanelStateForSession = panelPersistence.persistTaskPanelStateForSession
   const { applyPersistedTaskPanelStateForSession } = panelPersistence
-  const pendingDbWriteChatRetryMessages = ref<string[] | null>(null)
-  const plannerWriteUnlockResumeDraft = ref('')
   const lastRequestContextSummary = ref('')
-  const executeRemoteChatRoundRef: {
-    fn: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
-  } = { fn: async () => {} }
-  const dbGate = useChatDbTokenGate({
-    sessionId,
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
-    executeRemoteChatRound: (msgs, opts) => executeRemoteChatRoundRef.fn(msgs, opts),
-  })
-  const { handleChatRequiresToken } = dbGate
   const excelCtx = useChatExcelContext({
     sessionId, addAndSaveMessage,
     getIdentity: () => resolveChatIdentity(String(modsStore.activeModId || '')),
@@ -240,8 +225,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     messages,
     sessionId,
     lastRequestContextSummary,
-    plannerWriteUnlockResumeDraft,
-    resolveChatDbTokensForPayload: dbGate.resolveChatDbTokensForPayload,
     captureArtifacts: excelCtx.captureChatArtifacts,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
@@ -280,8 +263,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     captureRound: chatSessionActivity.captureGeneration,
     onConversation: observeConversation,
     onIdentityChange: () => {
-      pendingDbWriteChatRetryMessages.value = null
-      plannerWriteUnlockResumeDraft.value = ''
       chatRequest.cancelPendingChatBatch()
       clearVoiceQueue()
     },
@@ -367,15 +348,18 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     })
     void stream.resume(turn.turnId, controller.signal).then(result => {
       if (!isCurrent() || result.error || readActiveChatTurn(receipt)) return
-      if (awaitingAuthorization) { message.workflowAction = 'waiting_approval'; stopTurnObservation(); return }
       const payload = asRecord(receipt)
+      if (awaitingAuthorization && !requiresTurnReconciliation(receipt)
+        && parseApprovalCardFromPayload(payload)?.status !== 'pending') {
+        finishObservedTurn(observation, 'waiting_auth', '原任务正在等待授权，请到任务工作区核对。')
+        return
+      }
       const response = asString(payload.response || payload.message || result.text).trim()
       if (!response || typeof payload.success !== 'boolean') return
-      const runtimeState = runtimeContinuationFromPayload(payload) ? runtimeExecutionState(payload) : ''
-      const action = requiresTurnReconciliation(payload) ? 'unknown'
-        : runtimeState ? runtimeState
+      const state = plannerExecutionState(payload)
+      const action = state === 'unknown' ? 'unknown'
         : parseApprovalCardFromPayload(payload)?.status === 'pending' ? 'waiting_approval'
-          : payload.success ? 'completed' : 'failed'
+          : state || (payload.success ? 'completed' : 'failed')
       finishObservedTurn(observation, action, response, payload)
     })
     // The workspace already consumes task updates and polls when its stream is unavailable.
@@ -491,7 +475,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     upsertTask,
     failTask,
     getLastAiMessageRef,
-    handleChatRequiresToken,
     persistTaskPanelStateForSession,
     handleAutoAction,
   })
@@ -559,10 +542,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     flushMessagesCache,
     ttsEnabled,
     chatSessionActivity,
-    pendingDbWriteChatRetryMessages,
-    plannerWriteUnlockResumeDraft,
     chatRequest,
-    handleChatRequiresToken,
     resolveExcelAnalysisContextForRequest,
     multimodalPendingCount,
     stateSteps,
@@ -613,8 +593,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     chatRequest.cancelPendingChatBatch(sessionId.value)
     chatRequest.stopLoadingProgress()
     clearVoiceQueue()
-    pendingDbWriteChatRetryMessages.value = null
-    plannerWriteUnlockResumeDraft.value = ''
     if (!stopped) return
     const kept = messages.value.filter((msg) => {
       if (!msg.streamingShell) return true
@@ -755,7 +733,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (runId) {
         try {
           const receipt = action === 'confirm'
-            ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card', ...dbGate.resolveChatDbTokensForPayload() } })
+            ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card' } })
             : await agentRunsApi.cancelRun(runId)
           if (!isCurrent() || !receipt) return
           if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
@@ -926,7 +904,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (!document.getElementById('app') || shellReady) void agentTaskRuntime.refreshTasks().catch(() => {})
     } else await agentTaskRuntime.refreshTasks()
   }
-  executeRemoteChatRoundRef.fn = executeRemoteChatRound
 
   registerHistoryModWatch(showHistoryPanel)
 
@@ -938,14 +915,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const restored = readPersistedExcelAnalysisContext(sid)
       if (restored) lastExcelAnalysisContext.value = restored
     }
-    window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.mountWorkflowPanel()
     agentTaskRuntime.start()
   })
 
   onBeforeUnmount(() => {
     localViewRevision++
-    window.removeEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.unmountWorkflowPanel()
     agentTaskRuntime.stop()
     chatSessionActivity.cancelAll()

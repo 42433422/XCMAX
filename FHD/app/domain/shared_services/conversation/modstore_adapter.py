@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio as asyncio
+import asyncio
 import hashlib as hashlib
 import json as json
 import logging
@@ -58,6 +58,8 @@ from app.legacy.market_llm.openai_compat import (
 from app.legacy.market_llm.openai_compat import _to_openai_object as _to_openai_object
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 
+from .stream_content_guard import _stream_payload_has_content
+
 logger = logging.getLogger(__name__)
 _httpx_sync_client = _transport.httpx_sync_client
 _iter_transport_sse_data_payloads = _transport.iter_market_sse_data_payloads
@@ -85,57 +87,6 @@ async def _aiter_market_sse_data_payloads(response: httpx.Response) -> AsyncIter
         response, payload_has_content=_market_sse_payload_has_content
     ):
         yield data
-
-
-_KEEPALIVE_STATES = frozenset({"processing", "accepted", "heartbeat", "ping", "keepalive"})
-_KEEPALIVE_EVENTS = frozenset({"heartbeat", "ping", "keepalive", "keep-alive", "processing"})
-
-
-def _delta_fields_have_content(holder: dict) -> bool:
-    for key in ("content", "reasoning_content"):
-        value = holder.get(key)
-        if isinstance(value, str) and value:
-            return True
-    return bool(holder.get("tool_calls"))
-
-
-def _stream_payload_carries_delta(payload: dict) -> bool:
-    delta = payload.get("delta")
-    if isinstance(delta, str) and delta:
-        return True
-    if isinstance(delta, dict) and _delta_fields_have_content(delta):
-        return True
-    if isinstance(payload.get("content"), str) and payload["content"]:
-        return True
-    if isinstance(payload.get("reasoning_content"), str) and payload["reasoning_content"]:
-        return True
-    if payload.get("tool_calls"):
-        return True
-    for choice in payload.get("choices") or []:
-        if not isinstance(choice, dict):
-            continue
-        for holder in (choice.get("delta"), choice.get("message")):
-            if isinstance(holder, dict) and _delta_fields_have_content(holder):
-                return True
-    return False
-
-
-def _stream_payload_has_content(payload: Any) -> bool:
-    """True only for real answer events; keepalive/status events never count as progress."""
-    if not isinstance(payload, dict) or not payload:
-        return False
-    if _stream_payload_carries_delta(payload):
-        return True
-    for key in ("status", "state"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip().lower() in _KEEPALIVE_STATES:
-            return False
-    if any(payload.get(key) for key in ("heartbeat", "ping", "keepalive", "keep_alive")):
-        return False
-    event = payload.get("event") or payload.get("type")
-    if isinstance(event, str) and event.strip().lower() in _KEEPALIVE_EVENTS:
-        return False
-    return True
 
 
 class ModstorePlatformAdapter:
@@ -282,8 +233,9 @@ class ModstorePlatformAdapter:
         self, primary_provider: str, primary_model: str, connection: Connection | None = None
     ) -> list[tuple[str, str]]:
         connection = connection or self._connection()
-        if self._pinned_snapshot(connection, (primary_provider, primary_model)):
-            return [(primary_provider, primary_model)]
+        route = (primary_provider, primary_model)
+        if self._pinned_snapshot(connection, route):
+            return [route]
         cached = self._account_default
         return routing.FailoverDiscovery(
             connection,
@@ -292,7 +244,7 @@ class ModstorePlatformAdapter:
             {"provider": cached[1][0], "model": cached[1][1]}
             if cached is not None and cached[0] == connection
             else None,
-        ).candidates(primary_provider, primary_model)
+        ).candidates(*route)
 
     def _post_market_chat_sync(
         self,
@@ -515,6 +467,54 @@ class ModstorePlatformAdapter:
         )
         prepared.assert_valid(self._connection())
         return prepared
+
+    async def prepare_chat_failover_routes(
+        self, primary: PreparedChatRoute
+    ) -> AsyncIterator[PreparedChatRoute]:
+        """Revalidate platform candidates without changing the account's selected default."""
+        primary.assert_valid(self._connection())
+        if (
+            primary.native_vision
+            or primary.snapshot.get("key_source") != "platform"
+            or primary.snapshot.get("route_source")
+            not in {"platform_gateway", "platform_configuration", "fallback"}
+            or not completions._allows_failover(ChatInput([], extra={"allow_failover": True}))
+        ):
+            return
+        connection = primary.connection
+        discovery = routing.FailoverDiscovery(
+            connection,
+            self._catalog_gateway(connection).read_sync,
+            _httpx_sync_client,
+            {"provider": primary.route[0], "model": primary.route[1]},
+        )
+        routes = await asyncio.to_thread(discovery.candidates, *primary.route)
+        primary.assert_valid(self._connection())
+        seen = {primary.route}
+        for route in routes:
+            if route in seen:
+                continue
+            primary.assert_valid(self._connection())
+            snapshot = await asyncio.to_thread(
+                routing.resolve_account_route, connection, _httpx_sync_client, route
+            )
+            primary.assert_valid(self._connection())
+            if snapshot.get("key_source") != "platform" or snapshot.get("route_source") not in {
+                "explicit",
+                "platform_gateway",
+                "platform_configuration",
+                "fallback",
+            }:
+                raise _transport.MarketModelError({"status": 403})
+            prepared = PreparedChatRoute(
+                connection, (snapshot["provider"], snapshot["model"]), snapshot
+            )
+            prepared.assert_valid(self._connection())
+            if prepared.route in seen:
+                seen.add(route)
+                continue
+            seen.update((route, prepared.route))
+            yield prepared
 
     @contextmanager
     def _route_observation(self):

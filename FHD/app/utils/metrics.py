@@ -171,6 +171,32 @@ neurobus_events_dead_lettered_total = Counter(
     "Total NeuroBus events moved to DLQ",
 )
 
+# Versioned accounting; historical published/lost/DLQ counters are unchanged.
+# Neither admission nor handler completion is a durable business-write receipt.
+_NEUROBUS_EVENT_OUTCOMES = (
+    "accepted",
+    "rejected",
+    "deduplicated",
+    "delivered",
+    "failed",
+    "unhandled",
+    "cancelled",
+)
+neurobus_delivery_outcomes_total = Counter(
+    "neurobus_delivery_outcomes_total",
+    "NeuroBus admission decisions and terminal event delivery outcomes",
+    ["outcome"],
+)
+for _outcome in _NEUROBUS_EVENT_OUTCOMES:
+    neurobus_delivery_outcomes_total.labels(outcome=_outcome)
+
+
+def record_neurobus_event_outcome(outcome: str) -> None:
+    if outcome not in _NEUROBUS_EVENT_OUTCOMES:
+        raise ValueError("unknown NeuroBus delivery outcome")
+    neurobus_delivery_outcomes_total.labels(outcome=outcome).inc()
+
+
 mod_sqlite_copy_present = Gauge(
     "mod_sqlite_copy_present",
     "Whether per-mod SQLite copy exists on disk (1=present)",

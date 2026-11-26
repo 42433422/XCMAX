@@ -4,6 +4,56 @@
 
 set -euo pipefail
 
+require_standby_restore() {
+  # main is root-only. Inspect the role as data, without executing its contents.
+  python3 - "$STATE" "$ROLE_ENV" <<'PYROLE'
+import os
+from pathlib import Path
+import stat
+import sys
+
+state, role = map(Path, sys.argv[1:])
+for marker in (
+    "promoted_at",
+    "release_apply_modstore.pending",
+    "release_apply_fhd.pending",
+):
+    if os.path.lexists(state / marker):
+        raise SystemExit(f"拒绝逻辑恢复：存在未隔离的运行状态 {marker}")
+try:
+    fd = os.open(role, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    with os.fdopen(fd, encoding="utf-8") as handle:
+        metadata = os.fstat(handle.fileno())
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.geteuid()
+                or metadata.st_mode & 0o077):
+            raise ValueError("运行角色文件必须由 root 私有且为普通文件")
+        values = []
+        for raw in handle:
+            line = raw.strip()
+            if line.startswith("export "):
+                line = line[7:]
+            key, separator, value = line.partition("=")
+            if separator and key.strip() == "XCMAX_DR_SAVED_RUNTIME_MODE":
+                value = value.strip()
+                if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+                    value = value[1:-1]
+                values.append(value)
+        if values != ["standby"]:
+            raise ValueError("只有明确的 standby 节点允许逻辑快照覆盖")
+except (OSError, UnicodeError, ValueError) as exc:
+    raise SystemExit(f"拒绝逻辑恢复：运行角色无法证明安全 ({exc})") from exc
+PYROLE
+}
+
+acquire_restore_runtime_lock() {
+  # The same lock covers release apply and promotion; retain it through restore.
+  exec 8>"$RUNTIME_LOCK"
+  flock -n 8 || {
+    echo "拒绝逻辑恢复：发布切换或灾备提升正在进行" >&2
+    return 1
+  }
+}
+
 [[ "${EUID}" == "0" ]] || {
   echo "请以 root 运行" >&2
   exit 2
@@ -15,15 +65,19 @@ STATE="${OPS_DR_STATE:-/var/lib/xcmax-dr}"
 LOG="${OPS_DR_RESTORE_LOG:-/var/log/xcmax-dr/restore.log}"
 PG_CONTAINER="${OPS_DR_PG_CONTAINER:-xcmax-dr-postgres}"
 LOCK="/run/lock/xcmax-dr-restore.lock"
+RUNTIME_LOCK="/run/lock/xcmax-dr-release-apply.lock"
+ROLE_ENV="${OPS_DR_RUNTIME_ROLE_ENV:-/etc/xcmax-dr-runtime-role.env}"
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
+
+exec 9>"$LOCK"
+flock -n 9 || exit 0
+acquire_restore_runtime_lock
+require_standby_restore
 
 mkdir -p "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
 chmod 700 "$STATE" "$(dirname "$LOG")"
-
-exec 9>"$LOCK"
-flock -n 9 || exit 0
 
 log() {
   echo "[$(date -Is)] $*" | tee -a "$LOG"

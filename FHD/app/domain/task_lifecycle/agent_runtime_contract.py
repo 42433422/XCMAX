@@ -10,6 +10,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_outcome_unknown,
+)
+
 
 class AgentRuntimeContractError(ValueError):
     def __init__(self, code: str, message: str) -> None:
@@ -168,7 +173,8 @@ def goal_evidence_snapshot(
         task = str(row.get("child_task_id") or "")
         operation = {key: copy.deepcopy(row.get(key)) for key in ("tool_id", "action", "params")}
         fingerprint = canonical_digest(operation)
-        receipt = copy.deepcopy(row.get("receipt") or {})
+        raw_receipt = row.get("receipt")
+        receipt = copy.deepcopy(raw_receipt) if isinstance(raw_receipt, dict) else {}
         item = {
             "evidence_id": child,
             "task_id": task,
@@ -182,9 +188,10 @@ def goal_evidence_snapshot(
         if (
             not child
             or not task
-            or row.get("fingerprint", fingerprint) != fingerprint
-            or receipt.get("run_id", child) != child
-            or receipt.get("task_id", task) != task
+            or not isinstance(raw_receipt, dict)
+            or row.get("fingerprint") != fingerprint
+            or receipt.get("run_id") != child
+            or receipt.get("task_id") != task
             or tasks.get(task, child) != child
             or (child in evidence and evidence[child] != item)
             or (not item["read_only"] and fingerprint in effects and effects[fingerprint] != child)
@@ -211,9 +218,7 @@ _REPLY_STYLE_RE = re.compile(r"语气|口吻|风格|说话方式|措辞|称呼")
 _STYLE_NEGATION_RE = re.compile(r"不要|不得|禁止|请勿|勿再|停止|取消|别再")
 
 
-def is_deferred_reply_preference(
-    request_text: str, goal: "GoalAssessment"
-) -> bool:
+def is_deferred_reply_preference(request_text: str, goal: GoalAssessment) -> bool:
     """Host-only: a future-turn tone preference cannot be proven by this turn's reply."""
     if goal.kind != "constraint" or goal.status != "not_applicable" or goal.evidence_ids:
         return False
@@ -253,6 +258,8 @@ def validate_goal_review(
         and row["receipt"].get("status") == "completed"
         and row["receipt"].get("success") is True
         and row["receipt"].get("verified") is True
+        and not execution_result_outcome_unknown(row["receipt"], include_execution=True)
+        and not execution_result_error(row["receipt"])
     }
     errors = list(snapshot["conflicts"])
     seen: set[str] = set()

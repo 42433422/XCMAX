@@ -18,6 +18,19 @@ def _normalize_optional_str(value: str | None) -> str | None:
     return stripped if stripped else None
 
 
+def import_price_list_template(
+    params: dict[str, Any], runtime_context: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply the frozen upload only after the shared capability admission chain."""
+    from app.infrastructure.documents.price_list_export import save_price_list_docx_template
+    from app.utils.path_io.upload_helpers import read_capability_upload
+
+    content = read_capability_upload(
+        params, runtime_context, namespace="price-list-template", suffixes=frozenset({".docx"})
+    )
+    return save_price_list_docx_template(content)
+
+
 class ProductApplicationService:
     """产品应用服务 - 负责产品相关的用例编排"""
 

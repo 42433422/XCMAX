@@ -13,7 +13,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import JSON, bindparam, column, create_engine, select, table, type_coerce
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
@@ -80,13 +80,22 @@ def _events(binding: dict[str, Any]) -> list[dict[str, Any]]:
         with engine.connect() as connection:
             # Exact request identity, bounded results, no access to prompts or
             # responses. More than one outbound attempt remains unresolved.
+            events = table(
+                "LiteLLM_AccountingEvent",
+                column("event_id"),
+                column("kind"),
+                column("schema_version"),
+                column("payload"),
+            )
+            # Compile JSON access for the dialect without changing payload's result type.
+            request_id = type_coerce(events.c.payload, JSON)["event"]["request_id"].as_string()
             rows = connection.execute(
-                text(
-                    "SELECT event_id, kind, schema_version, payload "
-                    'FROM "LiteLLM_AccountingEvent" '
-                    "WHERE kind IN ('inbound_usage', 'outbound_usage') "
-                    "AND payload -> 'event' ->> 'request_id' = :request_id LIMIT 3"
-                ),
+                select(events)
+                .where(
+                    events.c.kind.in_(("inbound_usage", "outbound_usage")),
+                    request_id == bindparam("request_id"),
+                )
+                .limit(3),
                 {"request_id": binding["request_id"]},
             ).mappings()
             return [dict(row) for row in rows]
@@ -99,7 +108,11 @@ def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
     from litellm.accounting import InboundUsageEvent, OutboundUsageEvent
     from litellm.constants import LITELLM_PROXY_MASTER_KEY_ALIAS
 
-    if binding.get("provider") != "litellm":
+    if binding.get("provider") != "litellm" or not isinstance(binding.get("started_at"), str):
+        return None
+    try:
+        started = _date(binding["started_at"])
+    except (PortfolioError, OverflowError):
         return None
     if "accounting_identity_scheme" in binding or "accounting_identity" in binding:
         identity = binding.get("accounting_identity")
@@ -139,7 +152,7 @@ def read_usage(binding: dict[str, Any]) -> dict[str, Any] | None:
             dimensions.get("key") != identity
             or dimensions.get("model_group") != binding["model"]
             or event.call_type.value not in {"acompletion", "completion", "aresponses", "responses"}
-            or event.started_at < _date(binding["started_at"])
+            or event.started_at < started
             or event.ended_at > datetime.now(UTC)
         ):
             return None

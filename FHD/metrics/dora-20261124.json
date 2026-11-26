@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-11-24T10:00:19Z",
+  "environment": "production",
+  "source_event_count": 1637,
+  "window_days": 7,
+  "event_count": 4,
+  "deployment_frequency_per_day": 0.4286,
+  "lead_time_for_changes_hours": 1.2258,
+  "mean_time_to_restore_hours": null,
+  "mean_time_to_restore_sample_count": 0,
+  "change_failure_rate": 0.25,
+  "successes": 3,
+  "failures": 1,
+  "rollbacks": 0
+}

@@ -27,9 +27,9 @@ def _queued_run(actor, task_id: str, *, idempotent: bool = True) -> AgentRun:
     run.steps.append(
         AgentStep(
             node_id="query",
-            tool_id="products",
-            action="query",
-            params={"keyword": task_id},
+            tool_id="business_db",
+            action="read",
+            params={"entity": "customers", "keyword": task_id},
             risk="low" if idempotent else "high",
             idempotent=idempotent,
         )
@@ -37,13 +37,13 @@ def _queued_run(actor, task_id: str, *, idempotent: bool = True) -> AgentRun:
     run.metadata["plan"] = plan_to_dict(
         PlanGraph(
             plan_id=task_id,
-            intent="products_query",
+            intent="customers_query",
             nodes=[
                 WorkflowNode(
                     node_id="query",
-                    tool_id="products",
-                    action="query",
-                    params={"keyword": task_id},
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "customers", "keyword": task_id},
                     risk="low",
                     idempotent=True,
                 )
@@ -155,8 +155,8 @@ def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed(a
         ToolCall(
             step_id=idempotent.steps[0].step_id,
             node_id="query",
-            tool_id="products",
-            action="query",
+            tool_id="business_db",
+            action="read",
             status="running",
         )
     )
@@ -238,8 +238,8 @@ def test_dispatcher_restart_claims_expired_lease_and_completes_idempotent_task(a
         ToolCall(
             step_id=run.steps[0].step_id,
             node_id="query",
-            tool_id="products",
-            action="query",
+            tool_id="business_db",
+            action="read",
             status="running",
         )
     )

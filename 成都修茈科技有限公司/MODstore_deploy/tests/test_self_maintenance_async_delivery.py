@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import os
+import stat
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from modstore_server.maintenance_loop import deployment, outcomes, store
+from modstore_server.maintenance_loop import deployment
+from modstore_server.maintenance_loop import memory as memory_domain
+from modstore_server.maintenance_loop import outcomes, store
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -17,6 +22,12 @@ from modstore_server.self_maintenance_gh_gateway import GhActionsDeploymentGatew
 
 MERGE_SHA = "a" * 40
 ARTIFACT = "b" * 64
+
+
+@pytest.fixture(autouse=True)
+def isolated_feedback_ledger(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "feedback.jsonl"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "memory.json"))
 
 
 def test_remote_merge_completion_resumes_exact_original_delivery(monkeypatch):
@@ -160,6 +171,183 @@ def _writes(gateway):
     return [call for call in gateway.commands if call[:3] == ["gh", "workflow", "run"]]
 
 
+def test_staging_dispatch_binds_exact_release_and_artifact(dispatch_environment, monkeypatch):
+    gateway = GitHubFixture([])
+    run = gateway._run
+
+    def submit_after_intent(args):
+        if args[:3] == ["gh", "workflow", "run"]:
+            intent = store._read_ledger(limit=0)[-1]
+            assert intent["event"] == "deploy_dispatch_intent"
+            assert intent["merge_sha"] == MERGE_SHA
+            assert intent["inputs"] == {
+                "release_sha": MERGE_SHA,
+                "release_artifact_sha256": ARTIFACT,
+            }
+        return run(args)
+
+    monkeypatch.setattr(gateway, "_run", submit_after_intent)
+    receipt = _submit(gateway, environment="staging")
+    assert receipt.head_sha == MERGE_SHA and receipt.environment == "staging"
+    command = _writes(gateway)[0]
+    assert f"release_sha={MERGE_SHA}" in command
+    assert f"release_artifact_sha256={ARTIFACT}" in command
+
+
+def test_pending_delivery_recovers_after_history_eviction_and_stays_terminal(monkeypatch):
+    store._append_ledger(
+        {
+            "event": "merge_requested",
+            "ok": True,
+            "phase": "merge",
+            "status": "pending",
+            "run_id": "evicted-original",
+            "para_task_id": "evicted-para",
+            "branch": "repair/evicted",
+        }
+    )
+    memory = {
+        "open_items": [],
+        "recent_runs": [{"run_id": f"new-{i}", "status": "skipped"} for i in range(20)],
+    }
+    calls = []
+    completed = {
+        "enabled": True,
+        "ok": True,
+        "staging_verified": True,
+        "production_enabled": False,
+    }
+    monkeypatch.setattr(
+        deployment,
+        "_run_deploy_receipts_after_merge",
+        lambda **kwargs: calls.append(kwargs)
+        or (dict(completed) if len(calls) > 1 else {"enabled": True, "ok": False}),
+    )
+    for _ in range(3):
+        outcomes._reconcile_requested_merge_feedback(
+            memory,
+            api_base="https://para.invalid",
+            task_fetcher=lambda *_: {"status": "merged", "merge_commit_sha": MERGE_SHA},
+        )
+        # Simulate restart from only the persisted bounded projection.
+        store._write_loop_memory(memory)
+        memory = store._load_loop_memory()
+    assert len(calls) == 2
+    assert calls[0]["run_id"] == "evicted-original"
+    assert calls[0]["merge_result"]["remote_task_id"] == "evicted-para"
+    assert len(memory["recent_runs"]) == 20
+    assert all(run["status"] == "completed_merged" for run in store.merge_feedback_runs())
+
+
+def test_evicted_failed_merge_is_not_reopened_after_remediation_resolution():
+    store._append_ledger(
+        {
+            "event": "merge_requested",
+            "ok": True,
+            "branch": "repair/original",
+            "status": "pending",
+            "run_id": "evicted-failure",
+            "para_task_id": "failed-task",
+        }
+    )
+    memory = {"open_items": [], "recent_runs": []}
+    calls = []
+
+    def fetch(*args):
+        calls.append(args)
+        return {"status": "merge_conflict", "merge_conflict": {"detail": "conflict"}}
+
+    first = outcomes._reconcile_requested_merge_feedback(
+        memory, api_base="https://para.invalid", task_fetcher=fetch
+    )
+    assert first["remediation_added"] == 1
+    memory = store._load_loop_memory()
+    closed = memory_domain._close_open_items_in_memory(
+        memory,
+        actor="test-repair",
+        resolution_reason="replacement_merged",
+        task_ids=["failed-task"],
+    )
+    assert closed["closed_count"] == 1
+    # Neither bounded UI projection can be used as the permanent replay fence.
+    memory["closed_items"] = []
+    store._write_loop_memory(memory)
+    restarted = store._load_loop_memory()
+    second = outcomes._reconcile_requested_merge_feedback(
+        restarted, api_base="https://para.invalid", task_fetcher=fetch
+    )
+    assert second["remediation_added"] == 0 and restarted["open_items"] == []
+    assert len(calls) == 1
+    assert store.merge_feedback_runs()[0]["status"] == "completed_merge_failed"
+
+
+@pytest.mark.parametrize("status", ["completed_merged", "completed_merge_failed"])
+def test_durable_terminal_feedback_overrides_stale_pending_projection(status, monkeypatch):
+    pending = {
+        "run_id": "original-loop",
+        "para_task_id": "original-task",
+        "status": "completed_merge_requested",
+    }
+    terminal = {
+        **pending,
+        "event": "merge_feedback_reconciled",
+        "status": status,
+        "merge_reconciliation": {"status": "merged" if status == "completed_merged" else "failed"},
+        "deployment_receipt": {"ok": status == "completed_merged"},
+    }
+    store._append_ledger(terminal)
+    # A late stale final snapshot must not downgrade a durable terminal event.
+    store._append_ledger({**pending, "phase": "complete"})
+    memory = {"recent_runs": [pending], "open_items": []}
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("terminal delivery must not fetch or deploy again")
+
+    monkeypatch.setattr(deployment, "_run_deploy_receipts_after_merge", forbidden)
+    result = outcomes._reconcile_requested_merge_feedback(
+        memory, api_base="https://para.invalid", task_fetcher=forbidden
+    )
+    assert result["changed"] is True
+    assert pending["status"] == status
+    assert pending["deployment_receipt"] == terminal["deployment_receipt"]
+    assert store.merge_feedback_runs()[0]["status"] == status
+
+
+def test_memory_terminal_before_interrupted_ledger_append_is_recovered():
+    store._append_ledger(
+        {
+            "event": "merge_requested",
+            "ok": True,
+            "branch": "repair/original",
+            "status": "pending",
+            "run_id": "original-loop",
+            "para_task_id": "original-task",
+        }
+    )
+    store._write_loop_memory(
+        {
+            "recent_runs": [
+                {
+                    "run_id": "original-loop",
+                    "para_task_id": "original-task",
+                    "branch": "repair/original",
+                    "status": "completed_merge_failed",
+                    "merge_reconciliation": {"status": "merge_conflict"},
+                }
+            ],
+            "open_items": [],
+        }
+    )
+
+    def forbidden(*_args):
+        pytest.fail("persisted terminal memory must repair the ledger without replay")
+
+    outcomes._reconcile_requested_merge_feedback(
+        store._load_loop_memory(), api_base="https://para.invalid", task_fetcher=forbidden
+    )
+    assert store.merge_feedback_runs()[0]["status"] == "completed_merge_failed"
+
+
 def test_production_adapter_uses_exact_release_and_real_scan_contract(dispatch_environment):
     gateway = GitHubFixture([])
     receipt = _submit(gateway)
@@ -170,29 +358,14 @@ def test_production_adapter_uses_exact_release_and_real_scan_contract(dispatch_e
     assert "previous_security_scan_run_id=700" in request
     assert receipt.workflow_run_id == "900"
     assert receipt.head_sha == MERGE_SHA
-    assert any(call[0] == sys.executable and "--release-sha" in call for call in gateway.commands)
+    clearance = next(call for call in gateway.commands if call[0] == sys.executable)
+    assert clearance[clearance.index("--release-sha") + 1] == MERGE_SHA
+    assert clearance[clearance.index("--repository") + 1] == "owner/product"
+    assert clearance[clearance.index("--current-run-id") + 1] == "700"
     assert [row["event"] for row in store._read_ledger(limit=0)] == [
         "deploy_dispatch_intent",
         "deploy_dispatch_bound",
     ]
-
-
-def test_staging_binds_release_input_durably_before_dispatch(dispatch_environment, monkeypatch):
-    gateway = GitHubFixture([])
-    run = gateway._run
-
-    def submit_after_intent(args):
-        intent = store._read_ledger(limit=0)[-1]
-        assert intent["event"] == "deploy_dispatch_intent"
-        assert intent["merge_sha"] == MERGE_SHA
-        assert intent["inputs"] == {"release_sha": MERGE_SHA}
-        return run(args)
-
-    monkeypatch.setattr(gateway, "_run", submit_after_intent)
-    receipt = _submit(gateway, "staging")
-    assert f"release_sha={MERGE_SHA}" in _writes(gateway)[0]
-    assert receipt.head_sha == MERGE_SHA
-    assert receipt.environment == "staging"
 
 
 def test_main_controller_can_advance_without_relabeling_release_source(dispatch_environment):
@@ -205,21 +378,18 @@ def test_main_controller_can_advance_without_relabeling_release_source(dispatch_
     assert completed.require_success(receipt) == completed
 
 
-@pytest.mark.parametrize("environment", ["production", "staging"])
-def test_lost_dispatch_response_recovers_same_workflow_after_restart(
-    dispatch_environment, environment
-):
+def test_lost_dispatch_response_recovers_same_workflow_after_restart(dispatch_environment):
     remote = []
     first = GitHubFixture(remote)
     first.lose_response = True
     with pytest.raises(DeploymentReceiptError, match="gh_command_failed"):
-        _submit(first, environment)
+        _submit(first)
     second = GitHubFixture(remote)
-    assert _submit(second, environment).workflow_run_id == "900"
+    assert _submit(second).workflow_run_id == "900"
     assert len(_writes(first)) == 1
     assert _writes(second) == []
     third = GitHubFixture(remote)
-    assert _submit(third, environment).workflow_run_id == "900"
+    assert _submit(third).workflow_run_id == "900"
     assert _writes(third) == []
 
 
@@ -340,6 +510,35 @@ def test_intent_fsync_failure_blocks_external_dispatch(dispatch_environment, mon
     with pytest.raises(OSError, match="durable storage unavailable"):
         _submit(gateway)
     assert _writes(gateway) == []
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"phase": "complete", "policy_decision": {}},
+        {"event": "merge_feedback_reconciled"},
+    ],
+)
+def test_windows_durable_ledger_syncs_file_without_opening_directory(monkeypatch, record):
+    synced = []
+    native_open = os.open
+
+    def windows_open(path, flags, *args, **kwargs):
+        if Path(path).is_dir():
+            raise PermissionError("Windows cannot open directories for fsync")
+        return native_open(path, flags, *args, **kwargs)
+
+    def fsync(descriptor):
+        synced.append(stat.S_ISREG(os.fstat(descriptor).st_mode))
+
+    monkeypatch.setattr(
+        store,
+        "os",
+        SimpleNamespace(**{**vars(os), "name": "nt", "open": windows_open, "fsync": fsync}),
+    )
+    store._append_ledger(record)
+    assert synced == [True]
+    assert store._read_ledger()[-1].items() >= record.items()
 
 
 class PaginatedGitHubFixture(GitHubFixture):

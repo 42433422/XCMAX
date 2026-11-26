@@ -11,9 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+
+def _db_error(message: str) -> OperationalError:
+    return OperationalError(None, None, sqlite3.OperationalError(message))
 
 
 def _setup_shared_0(tmp_path):
@@ -32,7 +37,9 @@ def _setup_shared_0(tmp_path):
 Mock = MagicMock
 
 import pytest
+from psycopg import OperationalError as PsycopgOperationalError
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
 # ========================= _iter_seed_dirs - deep =========================
 
@@ -169,7 +176,10 @@ class TestEnsurePostgresqlAuthBootstrapDeep:
 
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch(
+                "sqlalchemy.inspect",
+                side_effect=OperationalError(None, None, PsycopgOperationalError("inspect failed")),
+            ),
             patch("app.db.init_db._seed_default_admin_user") as mock_seed,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
@@ -340,7 +350,7 @@ class TestEnsureSessionsMarketAccessTokenColumnDeep:
 
         mock_engine = Mock()
         mock_engine.dialect.name = "sqlite"
-        mock_engine.begin.side_effect = RuntimeError("begin failed")
+        mock_engine.begin.side_effect = _db_error("begin failed")
         # First inspect (add): column missing; Second inspect (verify): column present
         # so verify step doesn't raise RuntimeError
         mock_insp_1 = Mock()
@@ -608,7 +618,7 @@ class TestEnsureUserPreferencesBootstrapDeep:
         mock_engine.dialect.name = "sqlite"
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("sqlalchemy.inspect", side_effect=_db_error("inspect failed")),
             patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
@@ -893,7 +903,7 @@ class TestResolveAuthBootstrapEngineEdgeCases:
         mock_engine = Mock()
         mock_engine.dialect.name = "sqlite"
         with (
-            patch("app.db._create_engine_for_url", side_effect=RuntimeError("bad url")),
+            patch("app.db._create_engine_for_url", side_effect=ValueError("bad url")),
             patch("app.db._get_engine", return_value=mock_engine),
         ):
             result = _resolve_auth_bootstrap_engine("not_an_engine", database_url="bad://url")
@@ -904,7 +914,7 @@ class TestResolveAuthBootstrapEngineEdgeCases:
 
         real_engine = create_engine("sqlite:///:memory:")
         with (
-            patch("app.db._create_engine_for_url", side_effect=RuntimeError("bad url")),
+            patch("app.db._create_engine_for_url", side_effect=ValueError("bad url")),
         ):
             result = _resolve_auth_bootstrap_engine(real_engine, database_url="bad://url")
         assert result is real_engine
@@ -1072,7 +1082,7 @@ class TestEnsureSqliteRbacBootstrapCreatesTables:
         mock_engine.dialect.name = "sqlite"
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("sqlalchemy.inspect", side_effect=_db_error("inspect failed")),
             patch("app.db.init_db._seed_sqlite_rbac_defaults") as mock_seed,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise
@@ -1142,7 +1152,7 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
         mock_engine.dialect.name = "sqlite"
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=mock_engine),
-            patch("sqlalchemy.inspect", side_effect=RuntimeError("inspect failed")),
+            patch("sqlalchemy.inspect", side_effect=_db_error("inspect failed")),
             patch("app.db.db_base.Base.metadata.create_all") as mock_create,
         ):
             # inspect() raises a RECOVERABLE_ERRORS member -> swallowed, no raise

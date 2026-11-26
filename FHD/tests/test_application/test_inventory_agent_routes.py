@@ -8,15 +8,23 @@ from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.fastapi_routes import inventory as inventory_routes
+from tests.fixtures.approved_capability_client import ApprovedCapabilityClient
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch, actor=None) -> TestClient:
     monkeypatch.setattr(inventory_routes, "_svc", lambda: fake_service)
+    monkeypatch.setattr(
+        "app.application.inventory_app_service.InventoryAppService",
+        lambda: fake_service,
+    )
     app = FastAPI()
+    app.state.actor = actor
     app.include_router(inventory_routes.router)
     return TestClient(
-        app, raise_server_exceptions=False, headers=actor.headers if actor is not None else {}
+        app,
+        raise_server_exceptions=False,
+        headers=actor.headers if actor is not None else {},
     )
 
 
@@ -24,7 +32,7 @@ def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action:
     run = repo.get(run_id)
     assert run is not None and run.user_id == "17"
     assert run.status == "blocked"
-    assert run.intent == f"inventory_{action}"
+    assert run.intent == f"ERP Agent 请求执行 inventory.{action}"
     assert run.metadata["runtime_context"]["tenant_id"] == "7"
     assert run.metadata["runtime_context"]["_actor_authorization"]
     assert run.tool_calls[0].tool_id == "inventory"
@@ -47,10 +55,10 @@ def _assert_inventory_run(repo: InMemoryAgentRunRepository, run_id: str, action:
 
 
 def _assert_unverified_payload(response) -> None:
-    assert response.status_code == 200, response.text
+    assert response.status_code == 202, response.text
     payload = response.json()
     assert payload["success"] is False
-    assert payload["error_code"] == "result_verification_inconclusive"
+    assert payload["error_code"] == "result_verification_required"
     assert payload["retryable"] is False and payload["reconciliation_required"] is True
     assert payload["outcome"] == "unknown"
 
@@ -113,6 +121,7 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
         monkeypatch,
         trusted_actor(user_id=17, permissions=[f"tool.inventory.{action}"]),
     )
+    client = ApprovedCapabilityClient(client, repo, client.app.state.actor)
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -122,7 +131,10 @@ def test_inventory_structure_mutation_routes_execute_through_agent_orchestrator(
         return_value=repo,
     ):
         response = client.request(
-            method, "/api/inventory" + path, json=payload, headers={"X-User-Id": "tenant-a"}
+            method,
+            "/api/inventory" + path,
+            json=payload,
+            headers={"X-User-Id": "tenant-a"},
         )
     _assert_unverified_payload(response)
     getattr(svc, action).assert_called_once_with(*expected)
@@ -150,6 +162,7 @@ def test_inventory_stock_mutation_routes_execute_through_agent_orchestrator(
             ],
         ),
     )
+    client = ApprovedCapabilityClient(client, repo, client.app.state.actor)
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
 
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -224,11 +237,6 @@ def test_inventory_mutation_rejects_missing_session_or_permission(
     if not authenticated:
         assert response.status_code == 401
     else:
-        assert response.status_code == 200, response.text
-        run = repo.get(response.json()["run_id"])
-        assert run is not None and run.status == "blocked" and not run.tool_calls
-        assert any(
-            event.event_type == "workflow.plan_audit_rejected"
-            and event.data["error_code"] == "tool_permission_denied"
-            for event in run.events
-        )
+        assert response.status_code == 403, response.text
+        assert response.json()["error_code"] == "tool_permission_denied"
+        assert not response.json().get("run_id")

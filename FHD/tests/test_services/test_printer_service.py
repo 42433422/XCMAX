@@ -68,7 +68,7 @@ class TestPrinterService(unittest.TestCase):
 
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
-        mock_printer_instance.get_available_printers.side_effect = RuntimeError("获取打印机失败")
+        mock_printer_instance.get_available_printers.side_effect = OSError("获取打印机失败")
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -123,7 +123,7 @@ class TestPrinterService(unittest.TestCase):
 
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
-        mock_printer_instance.get_default_printer.side_effect = RuntimeError("获取默认打印机异常")
+        mock_printer_instance.get_default_printer.side_effect = OSError("获取默认打印机异常")
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -382,7 +382,7 @@ class TestPrinterService(unittest.TestCase):
 
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
-        mock_printer_instance.test_printer.side_effect = RuntimeError("测试打印机异常")
+        mock_printer_instance.test_printer.side_effect = OSError("测试打印机异常")
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -499,7 +499,7 @@ class TestPrinterService(unittest.TestCase):
         mock_enhanced.return_value = mock_enhanced_instance
 
         service = PrinterService()
-        with patch.object(service, "get_document_printer", side_effect=RuntimeError("验证异常")):
+        with patch.object(service, "get_document_printer", side_effect=OSError("验证异常")):
             result = service.validate_printer_separation()
 
         self.assertFalse(result["valid"])

@@ -337,6 +337,19 @@ def execution_result_pending_state(data: dict[str, Any]) -> str:
     states = set().union(
         *(execution_result_states(row) for row in execution_result_envelopes(data))
     )
+    # The orchestration may be blocked precisely because an acknowledged effect
+    # is still pending independent readback. Keep that known effect state rather
+    # than presenting the stopped graph as a failed request or a new unknown.
+    for row in execution_result_envelopes(data):
+        report = row.get("verification")
+        if (
+            isinstance(report, dict)
+            and report.get("protocol") == "xcagi.result-verification.v1"
+            and report.get("accepted") is False
+            and row.get("execution_state")
+            in {"pending", "accepted", "queued", "running", "processing"}
+        ):
+            return str(row["execution_state"])
     pending = next(
         (
             state
@@ -398,65 +411,18 @@ def normalize_execution_result(data: dict[str, Any]) -> dict[str, Any]:
     if error:
         result.update(success=False, message=error)
     if requires_reconciliation:
-        result.update(
-            success=False,
-            outcome="unknown",
-            retryable=False,
-            reconciliation_required=True,
-        )
+        result.update(success=False, retryable=False)
+        # A confirmed wait is still unfinished; independent uncertain evidence
+        # continues to override it and retain the original readback fence.
+        if execution_result_outcome_unknown(data) or execution_result_wait_reason(data) not in {
+            "authorization",
+            "approval",
+            "input",
+        }:
+            result.update(outcome="unknown", reconciliation_required=True)
     return result
 
 
 def execution_result_awaits_approval(data: dict[str, Any]) -> bool:
     """Keep known approval/credential waits distinct from successful execution."""
     return execution_result_wait_reason(data) in {"approval", "authorization"}
-
-
-def agent_node_output(run: Any, node_id: str, *, include_run_error: bool = True) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    for call in reversed(getattr(run, "tool_calls", []) or []):
-        if str(getattr(call, "node_id", "")) != node_id:
-            continue
-        metadata = getattr(call, "metadata", {}) or {}
-        verification = metadata.get("verification") or {}
-        status = verification.get("status")
-        if (
-            metadata.get("verification_contract")
-            and verification.get("accepted") is False
-            and status in {"failed", "inconclusive"}
-            and output.get("success") is True
-        ):
-            # The HTTP projection must not promote a raw tool receipt rejected
-            # by its host verifier. The original receipt stays on the run.
-            output.update(
-                success=False,
-                error_code=f"result_verification_{status}",
-                message="工具结果尚未通过独立核验，请核对原操作结果，勿重复提交。",
-                verification_code=str(verification.get("code") or ""),
-                retryable=False,
-                reconciliation_required=True,
-                outcome="unknown",
-            )
-        break
-    if (
-        include_run_error
-        and not output.get("success")
-        and getattr(run, "error", False)
-        and not output.get("message")
-    ):
-        output["message"] = getattr(run, "error", False)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output

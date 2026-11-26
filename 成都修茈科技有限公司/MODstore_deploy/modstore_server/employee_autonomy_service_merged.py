@@ -9,6 +9,7 @@ import importlib
 
 from fastapi import HTTPException
 
+from modstore_server.models import EmployeeSuggestion
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.xiaoc_life_chat import (
     current_manual_life_scope,
@@ -392,8 +393,6 @@ def _suggestion_dispatch_receipt(row):
 
 
 def _transition_suggestion(session, row, **values) -> bool:
-    from modstore_server.models import EmployeeSuggestion
-
     return (
         session.query(EmployeeSuggestion)
         .filter_by(id=row.id, status=row.status, kind=row.kind)
@@ -403,8 +402,6 @@ def _transition_suggestion(session, row, **values) -> bool:
 
 
 def _suggestion_changed(session, sid: int):
-    from modstore_server.models import EmployeeSuggestion
-
     session.rollback()
     current = session.get(EmployeeSuggestion, sid)
     return _suggestion_dispatch_receipt(current) or {

@@ -20,7 +20,7 @@ from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 @pytest.mark.parametrize("entrypoint", ["chat", "voice"])
-@pytest.mark.parametrize("failure", [OperationalError, RuntimeError])
+@pytest.mark.parametrize("failure", [OperationalError, ConnectionError])
 def test_committed_customer_uncertainty_survives_real_entrypoint(
     trusted_actor, dynamic_chat_runtime, local_tools, monkeypatch, entrypoint, failure
 ):

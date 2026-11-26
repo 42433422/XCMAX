@@ -136,3 +136,70 @@ def test_indexer_indexes_updates_and_cleans_up(tmp_path, monkeypatch):
         rows = indexer._existing_document(grant["id"], 7, 1, str(doc.resolve()))
         assert rows.status == "deleted"
         assert calls[-1][0] == "delete"
+
+
+@pytest.mark.parametrize("receipt", [{"success": False, "message": "写入被拒绝"}, None, "invalid"])
+def test_indexer_records_failure_and_retries_same_document(tmp_path, monkeypatch, receipt):
+    failed_path = _write(tmp_path / "failed.txt")
+    other_path = _write(tmp_path / "other.txt")
+    failures = {str(failed_path): receipt}
+    calls: list[tuple[str, str]] = []
+
+    class FakeService:
+        def ingest_document(self, **kwargs):
+            calls.append((kwargs["source"], kwargs["document_id"]))
+            if kwargs["source"] in failures:
+                return failures[kwargs["source"]]
+            return {"success": True, "document": {"document_id": kwargs["document_id"]}}
+
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        lambda: FakeService(),
+    )
+    with tenant_scope(1):
+        grant = service.create_grant(owner_id=7, tenant=1, mode="folder", root_path=str(tmp_path))
+        indexer._sync_grant(grant["id"], 7, 1)
+        failed = indexer._existing_document(grant["id"], 7, 1, str(failed_path))
+        other = indexer._existing_document(grant["id"], 7, 1, str(other_path))
+        assert failed.status == "error" and failed.attempt_count == 1
+        assert failed.last_error == (
+            receipt["message"] if isinstance(receipt, dict) else "知识库写入失败"
+        )
+        assert other.status == "indexed"
+        status = service.get_grant(owner_id=7, tenant=1, grant_id=grant["id"])
+        assert (status.scan_status, status.error_count, status.indexed_count) == ("ready", 1, 1)
+
+        failures.clear()
+        indexer._sync_grant(grant["id"], 7, 1)
+        retried = indexer._existing_document(grant["id"], 7, 1, str(failed_path))
+        assert retried.status == "indexed" and retried.attempt_count == 0
+        assert retried.last_error == ""
+        failed_ids = [document_id for source, document_id in calls if source == str(failed_path)]
+        assert len(failed_ids) == 2 and failed_ids[0] == failed_ids[1] == retried.document_id
+        assert retried.document_id
+        assert [source for source, _ in calls].count(str(other_path)) == 1
+        status = service.get_grant(owner_id=7, tenant=1, grant_id=grant["id"])
+        assert (status.scan_status, status.error_count, status.indexed_count) == ("ready", 0, 1)
+        assert status.skipped_count == 1
+
+
+@pytest.mark.parametrize("error", [RuntimeError("unexpected"), TypeError("unexpected")])
+def test_indexer_does_not_classify_programming_error_as_ingest_failure(
+    tmp_path, monkeypatch, error
+):
+    path = _write(tmp_path / "note.txt")
+
+    class FakeService:
+        def ingest_document(self, **_kwargs):
+            raise error
+
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        lambda: FakeService(),
+    )
+    with tenant_scope(1):
+        grant = service.create_grant(owner_id=7, tenant=1, mode="folder", root_path=str(tmp_path))
+        with pytest.raises(type(error)) as caught:
+            indexer._sync_grant(grant["id"], 7, 1)
+        assert caught.value is error
+        assert indexer._existing_document(grant["id"], 7, 1, str(path)) is None

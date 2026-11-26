@@ -14,9 +14,23 @@ from modstore_server.retort_experiment_surfaces import (
     WORKFLOW_NL_RESOURCE,
 )
 
+DEFERRED_BUSINESS_REASON = "training_business_replay_requires_host_verification"
+
 
 def offline_execution_feedback(bundle, variables, passed):
     """Static regression can propose a runtime experiment, never prove its business effect."""
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+
+    if any(
+        (v.get("generation_context", {}).get("execution_feedback") or {}).get("measurement_scope")
+        == WORKFLOW_CUSTOMER_MEASUREMENT
+        for v in variables
+    ):
+        return {
+            "feedback_scope": WORKFLOW_CUSTOMER_MEASUREMENT,
+            "runtime_verified": False,
+            "reason": "independent_business_replay_required",
+        }
     if (
         bundle.get("surface") == "workflow_nl_prompt"
         and any(
@@ -188,6 +202,27 @@ def failure_records(*, days=14):
 
 def get_assert(output, context):
     """Promptfoo's Python assertion runs the actual converter and validator in disposable SQL."""
+    source = context["vars"]["generation_context"]
+    from modstore_server.retort_experiment_surfaces import WORKFLOW_CUSTOMER_MEASUREMENT
+
+    if (
+        "customer_business_replay" in source
+        or (source.get("execution_feedback") or {}).get("measurement_scope")
+        == WORKFLOW_CUSTOMER_MEASUREMENT
+    ):
+        # The model-facing sandbox cannot create a stricter nested namespace.
+        # Only the existing host seal may run original packages in a separate,
+        # network-denied sandbox; this result never claims business validation.
+        if os.environ.get("XCAGI_TRAINING_DEFER_NATIVE_REPLAY") == "1":
+            return {
+                "pass": False,
+                "score": 0,
+                "runtime_verified": False,
+                "reason": DEFERRED_BUSINESS_REASON,
+            }
+        from modstore_server.workflow_training_replay import evaluate_business_replay
+
+        return evaluate_business_replay(output, source)
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
@@ -195,7 +230,6 @@ def get_assert(output, context):
     from modstore_server.workflow_api.helpers import _restore_workflow_from_snapshot
     from modstore_server.workflow_nl_apply import _apply_generated_response
 
-    source = context["vars"]["generation_context"]
     engine = create_engine("sqlite:///:memory:")
     try:
         Base.metadata.create_all(engine)

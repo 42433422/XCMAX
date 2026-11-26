@@ -1,7 +1,6 @@
-"""Build the AIOPEN operation catalog from the live FastAPI application.
+"""Project canonical executable capabilities and nonexecutable OpenAPI resources.
 
-路由表是能力事实源：目录从应用 OpenAPI 生成，不手工维护。
-语义（何时用、副作用、前置条件）来自 ``overlay/operations.yaml``，与代码同仓评审。
+ToolActionSpecV2 owns business contracts; HTTP overlays describe resource metadata.
 """
 
 from __future__ import annotations
@@ -10,12 +9,13 @@ import json
 import re
 import threading
 import weakref
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-# 内部控制面不进入开放目录，也不可被 api_call 之外的通道发现。
+# 内部控制面不进入对外资源描述；可执行能力由 ToolActionSpecV2 投影。
 EXCLUDED_PREFIXES: tuple[str, ...] = (
     "/api/aiopen",
     "/api/admin",
@@ -314,6 +314,8 @@ def build_operations(app: Any) -> list[dict[str, Any]]:
             parameters = operation.get("parameters")
             entry: dict[str, Any] = {
                 "operation_id": operation_id,
+                "kind": "http_resource",
+                "executable": False,
                 "tool_name": _unique(f"{domain}_{action}", taken_tools, f"_{method.lower()}"),
                 "method": method,
                 "path": path,
@@ -341,32 +343,47 @@ def build_operations(app: Any) -> list[dict[str, Any]]:
     return operations
 
 
-def build_catalog(app: Any) -> dict[str, Any]:
-    operations = build_operations(app)
+def _catalog_projection(
+    operations: list[dict[str, Any]], runtime_context: dict[str, Any] | None
+) -> dict[str, Any]:
+    from app.application.capability_catalog import capability_entries
+
+    entries = deepcopy(operations) + capability_entries(runtime_context)
     return {
         "success": True,
         "transport": "runtime",
+        "authority": "ToolActionSpecV2",
         "excluded_prefixes": list(EXCLUDED_PREFIXES),
-        "count": len(operations),
-        "operations": operations,
+        "count": len(entries),
+        "operations": entries,
     }
 
 
-def get_catalog(app: Any) -> dict[str, Any]:
+def build_catalog(app: Any, runtime_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _catalog_projection(build_operations(app), runtime_context)
+
+
+def get_catalog(app: Any, runtime_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    # Cache only route metadata. Account grants and dynamic tools are always read
+    # from current execution authority, never reused across users or tenants.
     with _CACHE_LOCK:
         cached = _CATALOG_CACHE.get(app)
-    if cached is not None:
-        return cached
-    catalog = build_catalog(app)
-    with _CACHE_LOCK:
-        _CATALOG_CACHE[app] = catalog
-    return catalog
+    if cached is None:
+        cached = {"operations": build_operations(app)}
+        with _CACHE_LOCK:
+            _CATALOG_CACHE[app] = cached
+    return _catalog_projection(cached["operations"], runtime_context)
 
 
 def find_operation(catalog: dict[str, Any], operation_id: str) -> dict[str, Any] | None:
-    target = str(operation_id or "").strip().lower()
+    target = str(operation_id or "").strip()
     for entry in catalog.get("operations") or []:
-        if isinstance(entry, dict) and str(entry.get("operation_id") or "").lower() == target:
+        if not isinstance(entry, dict):
+            continue
+        identity = str(entry.get("operation_id") or "")
+        if identity == target or (
+            entry.get("kind") != "capability" and identity.casefold() == target.casefold()
+        ):
             return entry
     return None
 

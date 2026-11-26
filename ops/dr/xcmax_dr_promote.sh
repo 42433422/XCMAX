@@ -69,11 +69,22 @@ fi
 install -d -m 0700 "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
 exec 9>"$LOCK"
-flock -n 9 || exit 0
+flock -n 9 || { echo "拒绝提升：另一提升任务正在进行" >&2; exit 1; }
+exec 8>/run/lock/xcmax-dr-release-apply.lock
+flock -n 8 || { echo "拒绝提升：发布或恢复正在进行" >&2; exit 1; }
+# Reuse the exact runtime gate under the lock already held by promotion. The
+# helper is source-safe; re-running its CLI would attempt to re-acquire this lock.
+# shellcheck disable=SC1091
+source /usr/local/sbin/xcmax-dr-apply-release
+RUNTIME="$DR_ROOT/runtime"
+INCOMING="${OPS_DR_INCOMING:-$DR_ROOT/incoming}"
+RELEASE_ORDER=/usr/local/sbin/xcmax-release-order
 
 log() {
   echo "[$(date -Is)] $*" | tee -a "$LOG"
 }
+
+verify_applied_release_pair
 
 APP_SUPERUSER="$(cat "$STATE/wal_pg16_superuser" 2>/dev/null || true)"
 [[ -n "$APP_SUPERUSER" ]] || {
@@ -125,14 +136,15 @@ OPS_DR_REDIS_PORT=6379 \
 OPS_DR_PAYMENT_API_PORT=18080 \
 OPS_DR_PG_PRESERVE_CREDENTIALS=1 \
 OPS_DR_RUNTIME_MODE=promoted \
-  "$PREPARE_RUNTIME"
+  "$PREPARE_RUNTIME" --preserve-data
 
 systemctl restart xcmax-dr-modstore
-systemctl start xcmax-dr-fhd xcmax-dr-payment xcmax-dr-scheduler
+systemctl start xcmax-dr-fhd
 
-curl -fsS http://127.0.0.1:15100/api/health >/dev/null
-curl -fsS http://127.0.0.1:19999/api/health >/dev/null
+verify_current_release_pair
+systemctl start xcmax-dr-payment
 curl -fsS http://127.0.0.1:18080/actuator/health >/dev/null
+systemctl start xcmax-dr-scheduler
 
 /usr/local/sbin/xcmax-dr-prepare-edge --promoted
 date -u +%s >"$STATE/promoted_at"

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import re
 import time
 from typing import Any
 
+from app.application.agent_orchestrator import run_lifecycle
+from app.application.agent_orchestrator.run_models import AgentRun, tool_call_from_dict
 from app.application.agent_orchestrator.task_models import mod_id_of_run, tenant_id_of_run
 from app.application.agent_orchestrator.tool_permission import redact
+from app.domain.task_lifecycle.agent_runtime_results import model_unsettled, receipt_state
 from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_error,
@@ -20,6 +25,71 @@ from app.infrastructure.xiaox.binding import (
     XiaoxBindingStore,
     canonical_digest,
 )
+
+
+def project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
+    """Display child receipts while retaining their original verification owner."""
+    known = {call.call_id for call in run.tool_calls}
+    for row in rows:
+        child_id = str(row.get("child_run_id") or "")
+        receipt = row.get("receipt")
+        if not child_id or not isinstance(receipt, dict):
+            continue
+        for raw in receipt.get("tool_calls") or []:
+            if not isinstance(raw, dict) or not raw.get("call_id"):
+                continue
+            projection_id = (
+                "codex_" + hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
+            )
+            if projection_id in known:
+                continue
+            payload = copy.deepcopy(raw)
+            payload["call_id"] = projection_id
+            child_metadata = payload.get("metadata") or {}
+            payload["metadata"] = {
+                **{
+                    key: value
+                    for key, value in child_metadata.items()
+                    if not key.startswith("verification")
+                },
+                "source": "codex_child_receipt",
+                "child_run_id": child_id,
+                "child_call_id": raw["call_id"],
+                # The redacted display payload is not the original child's
+                # output. Its hash/contract must never become a parent-step
+                # verification record. Completion re-reads the original child.
+                "child_verification": {
+                    "contract_sha256": (child_metadata.get("verification_contract") or {}).get(
+                        "contract_sha256"
+                    ),
+                    "output_sha256": child_metadata.get("verification_output_sha256"),
+                    "report_sha256": (child_metadata.get("verification") or {}).get(
+                        "report_sha256"
+                    ),
+                },
+            }
+            run.tool_calls.append(tool_call_from_dict(payload))
+            known.add(projection_id)
+
+
+def resume_error(
+    store: CodexBindingStore, binding: CodexBinding, rows: list[dict[str, Any]]
+) -> str:
+    if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
+        return error
+    if model_unsettled(binding.metadata):
+        return "原模型请求或计量结果尚待核对，禁止自动恢复"
+    for row in rows:
+        if receipt_state(row) == "unknown":
+            return "业务结果尚未确定，禁止恢复模型执行或重放工具"
+        child_id = str(row.get("child_run_id") or "")
+        child = store.repository.get(child_id) if child_id else None
+        if child is not None and child.status in {"failed", "blocked"}:
+            # We never retry a child here; nevertheless enforce the existing
+            # continuation guard before allowing a model to propose more work.
+            if error := run_lifecycle.safe_continuation_error(child):
+                return error
+    return ""
 
 
 def _safe_output(value: Any) -> Any:
@@ -44,16 +114,19 @@ def _unknown(call: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _verified_step(step: Any, record: Any) -> bool:
+def _verified_step(run: AgentRun, step: Any, record: Any) -> bool:
     """A successful step needs its independently persisted matching tool call."""
+    from app.application.agent_orchestrator.result_verification import verified_step_output
+
+    if step is None or record is None:
+        return False
+    output = verified_step_output(run, step)
     return bool(
-        step is not None
-        and record is not None
-        and step.status == record.status == "completed"
+        step.status == record.status == "completed"
         and (record.node_id, record.tool_id, record.action, record.params, record.output)
         == (step.node_id, step.tool_id, step.action, step.params, step.output)
-        and step.output.get("success") is True
-        and not execution_result_error(step.output)
+        and output.get("success") is True
+        and not execution_result_error(output)
         and not execution_result_outcome_unknown(step.output, include_execution=True)
         and not any(
             isinstance(row.get("status_code"), int) and row["status_code"] >= 400
@@ -62,6 +135,42 @@ def _verified_step(step: Any, record: Any) -> bool:
     )
 
 
+def _pending_step(run: AgentRun, step: Any, record: Any) -> bool:
+    """An acknowledged effect can wait while its host is parked for readback."""
+    from app.application.agent_orchestrator.result_verification import (
+        _binding_valid,
+        pending_execution_receipt,
+    )
+
+    if (
+        run.status != "blocked"
+        or step is None
+        or record is None
+        or step.status != "completed"
+        or record.status != "completed"
+        or not pending_execution_receipt(record.output)
+        or (record.metadata.get("verification") or {}).get("status")
+        not in {"pending", "inconclusive", "verified"}
+        or (
+            (run.metadata.get("recovery") or {}).get("state") != "result_pending"
+            and not _verified_step(run, step, record)
+        )
+        or any(
+            isinstance(row.get("status_code"), int) and row["status_code"] >= 400
+            for row in execution_result_envelopes(record.output)
+        )
+    ):
+        return False
+    try:
+        return _binding_valid(
+            run,
+            step,
+            record,
+            run.metadata.get("runtime_context") or {},
+            record.metadata.get("verification_contract"),
+        )
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
 def _failed_execution_receipt(child: Any, step: Any, record: Any) -> dict[str, Any] | None:
     """Project only the bound, frozen original rejection; never infer from failure."""
     from app.application.agent_orchestrator.result_verification import _binding_valid
@@ -109,12 +218,11 @@ def _failed_step_detail(child: Any) -> str:
             if detail:
                 return str(detail)
     return ""
-
-
 def read_call_receipt(
     store: XiaoxBindingStore, binding: XiaoxBinding, call: dict[str, Any]
 ) -> dict[str, Any]:
     """Read business truth, never turn completion or MCP transport success."""
+    store._validate_goal(binding.run, binding.metadata)
     if (call.get("tool_id"), call.get("action")) == ("xcmax_workflow", "execute"):
         return {**_unknown(call), "error_code": "retired_runtime_contract"}
     child_run_id = str(call.get("child_run_id") or "")
@@ -175,8 +283,15 @@ def read_call_receipt(
         if len(child.steps) == len(child.tool_calls) == 1
         else None
     )
+    steps = {step.step_id: step for step in child.steps}
+    pending_calls = {
+        record.call_id
+        for record in child.tool_calls
+        if _pending_step(child, steps.get(record.step_id), record)
+    }
     unverified_effect = not verification["accepted"] and any(
         (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+        and record.call_id not in pending_calls
         and (
             record.output.get("success") is True
             or (child.status in {"blocked", "failed"} and execution is None)
@@ -222,11 +337,14 @@ def read_call_receipt(
         child.status == "completed"
         and bool(completed_steps)
         and verification["accepted"]
-        and all(_verified_step(step, latest.get(step.step_id)) for step in completed_steps)
+        and all(_verified_step(child, step, latest.get(step.step_id)) for step in completed_steps)
     )
     status = child.status
+    if status == "blocked" and any(record.call_id in pending_calls for record in latest.values()):
+        status = "running"
     if status == "completed" and not verified:
         status = "failed"
+    execution = _failed_execution_receipt(child, step, latest.get(step.step_id))
     approval_card = None
     clarification = None
     if status == "waiting_user":
@@ -304,7 +422,6 @@ def action_parent(context: dict[str, Any]) -> tuple[XiaoxBindingStore, XiaoxBind
         return None
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.domain.task_lifecycle.agent_runtime_contract import validate_runtime_goal
 
     repository = get_agent_run_repository()
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -331,7 +448,9 @@ def action_parent(context: dict[str, Any]) -> tuple[XiaoxBindingStore, XiaoxBind
     ):
         raise PermissionError("当前动作不属于原账号、租户与 Mod 任务")
     binding = XiaoxBinding(parent)
-    if binding.metadata.get("goal_digest") != validate_runtime_goal(parent):
+    if binding.metadata.get("goal_digest") != XiaoxBindingStore._validate_goal(
+        parent, binding.metadata
+    ):
         raise PermissionError("原任务目标绑定已变化")
     calls = list((binding.metadata.get("calls") or {}).values())
     if not any(

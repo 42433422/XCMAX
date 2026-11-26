@@ -25,10 +25,14 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     ACTIVE_STATES,
     WAITING_STATES,
     base_runtime_result,
+    classification_metadata,
+    classify_runtime_result,
+    failure_diagnostics,
     model_unsettled,
     receipt_state,
 )
-from app.infrastructure.xiaox.binding import XiaoxBinding, XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.receipts import project_child_calls, resume_error
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +85,6 @@ def _continuation_ready(run: AgentRun, rows: list[dict[str, Any]]) -> bool:
 
 def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun | None:
     """Build a projection; the SQL queue boundary independently verifies its inputs."""
-    from app.application.agent_runtime.xiaox_runtime import (
-        _classification_metadata,
-        _classify,
-        _failure_diagnostics,
-        _project_child_calls,
-    )
-
     if not projection_allowed(run):
         return None
     if requires_retry_reconciliation(run) and not any(
@@ -112,10 +109,10 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
     ):
         if key in previous:
             result[key] = copy.deepcopy(previous[key])
-    status = _classify(
+    status = classify_runtime_result(
         result,
         rows,
-        _classification_metadata(XiaoxBinding(run)),
+        classification_metadata(run),
         str(run.metadata.get("runtime_completion_mode") or "auto"),
         str(metadata.get("runtime_status") or "interrupted"),
     )
@@ -131,7 +128,7 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
             error="",
         )
     result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
-    result.update(_failure_diagnostics(run, result))
+    result.update(failure_diagnostics(run, result))
     fingerprint = canonical_digest(
         {
             "goal": run.metadata.get("runtime_goal_digest"),
@@ -143,7 +140,7 @@ def project_receipt_state(run: AgentRun, rows: list[dict[str, Any]]) -> AgentRun
     if run.metadata.get("runtime_receipt_projection") == fingerprint:
         return None
     projected = copy.deepcopy(run)
-    _project_child_calls(projected, rows)
+    project_child_calls(projected, rows)
     projected.status = status
     projected.error = str(result.get("error") or "")
     projected.final_output["xiaox_result"] = result
@@ -209,7 +206,6 @@ def resume_ready_xiaox_runs(
     starting Xiaox; neither this scan nor a result read executes business tools.
     """
     from app.application.agent_orchestrator.run_models import utc_now_iso
-    from app.application.agent_runtime.xiaox_runtime import _resume_error
     from app.db.models.agent import AgentRunRecord
     from app.infrastructure.xiaox.queued_runtime import enqueue_resume, stage_queued_request
     from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -263,7 +259,7 @@ def resume_ready_xiaox_runs(
                 continue
             rows = store.receipt_snapshot(current.run_id)
             binding = store.get(current.run_id)
-            if not _continuation_ready(binding.run, rows) or _resume_error(store, binding, rows):
+            if not _continuation_ready(binding.run, rows) or resume_error(store, binding, rows):
                 continue
             key = "receipt_" + canonical_digest(
                 {"goal": binding.run.metadata.get("runtime_goal_digest"), "receipts": rows}

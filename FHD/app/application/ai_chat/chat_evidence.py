@@ -363,7 +363,7 @@ def prepare_chat_evidence(
             )
             memories = recalled.get("memories") if recalled.get("success") else []
             if memories:
-                from app.application.user_memory.policy import is_recallable_memory
+                from app.domain.user_memory.policy import is_recallable_memory
 
                 recalled_memories = [item for item in memories if is_recallable_memory(item)]
                 # 知识问句的记忆会作为知识证据注入；其他问句仍保留在个人记忆里。

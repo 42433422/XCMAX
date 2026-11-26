@@ -20,15 +20,17 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from app.application.agent_orchestrator.run_lifecycle import (
-    continuation_conversation_error,
-    safe_continuation_error,
-)
-from app.application.agent_orchestrator.run_models import AgentRun, RunStatus, tool_call_from_dict
+from app.application.agent_orchestrator import run_lifecycle
+from app.application.agent_orchestrator.run_models import AgentRun, RunStatus
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.domain.task_lifecycle.agent_runtime_results import ACTIVE_STATES as _ACTIVE
 from app.domain.task_lifecycle.agent_runtime_results import WAITING_STATES as _WAITING
 from app.domain.task_lifecycle.agent_runtime_results import base_runtime_result as _base_result
+from app.domain.task_lifecycle.agent_runtime_results import (
+    classification_metadata,
+    failure_diagnostics,
+    withhold_runtime_output,
+)
 from app.domain.task_lifecycle.agent_runtime_results import classify_runtime_result as _classify
 from app.domain.task_lifecycle.agent_runtime_results import model_unsettled as _model_unsettled
 from app.domain.task_lifecycle.agent_runtime_results import receipt_state as _receipt_state
@@ -37,7 +39,9 @@ from app.infrastructure.xiaox.binding import (
     XiaoxBindingError,
     XiaoxBindingStore,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.infrastructure.codex.receipts import project_child_calls, resume_error
+from app.infrastructure.codex.transport import CodexTransportError
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     from app.infrastructure.xiaox import XiaoxTransportConfig
@@ -403,6 +407,7 @@ async def run_xiaox_agent(
     texts: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
     cancelled: asyncio.CancelledError | None = None
+    fatal_error: Exception | None = None
 
     def mutate(fn: Callable[[AgentRun, dict[str, Any]], None]) -> Any:
         def guarded(run: AgentRun, metadata: dict[str, Any]) -> None:
@@ -437,8 +442,8 @@ async def run_xiaox_agent(
                 generation=generation,
                 release_coordinator=release_coordinator,
             )
-        except RECOVERABLE_ERRORS:
-            if cancelled is None:
+        except BOUNDARY_ERRORS:
+            if cancelled is None and fatal_error is None:
                 raise
             logger.warning(
                 "Xiaox cancellation retained after revocation storage failure", exc_info=True
@@ -454,8 +459,124 @@ async def run_xiaox_agent(
                 try:
                     async with asyncio.timeout(min(float(config.timeout_seconds), 5.0)):
                         await transport.interrupt()
-                except RECOVERABLE_ERRORS:
-                    pass  # Transport context exit also closes the native process.
+                except BOUNDARY_ERRORS as exc:
+                    # Preserve the original cancellation/failure across a secondary
+                    # shutdown bug. Without one, unexpected errors still propagate.
+                    if (
+                        cancelled is None
+                        and fatal_error is None
+                        and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError))
+                    ):
+                        raise
+                    logger.warning("Codex runtime interrupt failed during shutdown", exc_info=True)
+
+    async def finalize() -> None:
+        nonlocal cancelled
+        try:
+            rows = store.receipt_snapshot(run_id)
+            binding = store.get(run_id)
+            result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
+            status: RunStatus = _classify(
+                result,
+                rows,
+                classification_metadata(binding.run),
+                completion_mode,
+                runtime_status,
+            )
+            if runtime_status in {"cancelled", "paused"}:
+                status = "cancelled" if runtime_status == "cancelled" else "paused"
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    exit_status=status,
+                    execution_state=status,
+                    runtime_completed=False,
+                )
+
+            def finish(run: AgentRun, metadata: dict[str, Any]) -> None:
+                if started_at := metadata.pop("active_started_at", None):
+                    metadata["active_seconds"] = float(metadata.get("active_seconds", 0)) + max(
+                        0.0, time.time() - float(started_at)
+                    )
+                result["active_seconds"] = float(metadata.get("active_seconds") or 0)
+                result["model_request_attempts"] = len(metadata.get("model_requests") or {})
+                result.update(failure_diagnostics(run, result))
+                # Attempts remain in their original events/model ledger. A recovered
+                # transient failure must not label the final successful run as failed.
+                for key, value in (
+                    ("runtime_failure_kind", result["failure_kind"]),
+                    ("runtime_failure_reason", result["failure_reason"]),
+                    ("runtime_failure_stage", result["failure_stage"]),
+                ):
+                    if value:
+                        run.metadata[key] = value
+                    else:
+                        run.metadata.pop(key, None)
+                project_child_calls(run, rows)
+                if run.status not in _TERMINAL and run.status != "paused":
+                    run.status = status
+                elif run.status != "completed" and result["ok"]:
+                    withhold_runtime_output(result, status=run.status, error="业务结果未通过核验")
+                elif run.status != "completed":
+                    result.update(
+                        ok=False,
+                        business_completed=False,
+                        reply_completed=False,
+                        exit_status=run.status,
+                        execution_state=run.status,
+                    )
+                if result["ok"] and result["output"]:
+                    result["session_messages"].append(
+                        {"role": "assistant", "content": result["output"]}
+                    )
+                run.error = str(result.get("error") or run.error or "")
+                result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
+                run.final_output = {**run.final_output, "codex_result": copy.deepcopy(result)}
+                metadata["runtime_status"] = runtime_status
+                if result.get("reconciliation_required"):
+                    run.metadata["non_retryable"] = True
+                    run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+                run.add_event(
+                    "runtime.codex.finished",
+                    "Codex 轮次与业务回执已核对",
+                    {
+                        "runtime_status": runtime_status,
+                        "business_completed": result["business_completed"],
+                        "receipt_count": len(rows),
+                    },
+                )
+
+            saved = mutate(finish)
+            from app.application.agent_orchestrator.execution_lease import (
+                DurableExecutionLeaseMixin,
+            )
+
+            await asyncio.to_thread(
+                DurableExecutionLeaseMixin._release_browser_run_resources,
+                saved.run,
+                runtime_context=saved.run.metadata.get("runtime_context") or {},
+            )
+            result["run_events"] = [
+                event.to_dict()
+                for event in saved.run.events
+                if event.event_type.startswith("runtime.")
+            ]
+            # Repository-level Business Harness may further reject a purported success.
+            if result["ok"] and saved.run.status != "completed":
+                withhold_runtime_output(result, status=saved.run.status, error="业务结果未通过核验")
+        except asyncio.CancelledError as exc:
+            # A disconnect can arrive during browser disposal after the business
+            # receipt is already durable. Preserve it across a failed lease write.
+            cancelled = cancelled or exc
+            raise
+        finally:
+            try:
+                revoke(runtime_status, release_coordinator=True)
+            finally:
+                if cancelled is not None:
+                    raise cancelled
+                if fatal_error is not None:
+                    raise fatal_error
 
     try:
         try:
@@ -478,8 +599,8 @@ async def run_xiaox_agent(
                 _classify(
                     result,
                     rows,
-                    _classification_metadata(previous),
-                    _completion_mode(previous, completion_mode),
+                    classification_metadata(previous.run),
+                    completion_mode,
                     "completed",
                 )
                 result["thread_id"] = previous.thread_id
@@ -488,8 +609,8 @@ async def run_xiaox_agent(
                 _classify(
                     result,
                     rows,
-                    _classification_metadata(previous),
-                    _completion_mode(previous, completion_mode),
+                    classification_metadata(previous.run),
+                    completion_mode,
                     "completed",
                 )
                 return result
@@ -876,7 +997,9 @@ async def run_xiaox_agent(
                     cancelled = exc
                     await stop("cancelled")
                     raise
-                except RECOVERABLE_ERRORS:
+                except BOUNDARY_ERRORS as exc:
+                    if not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+                        fatal_error = exc
                     await stop("interrupted")
                     raise
 
@@ -884,7 +1007,12 @@ async def run_xiaox_agent(
         cancelled = exc
         runtime_status = "cancelled"
         await stop("cancelled")
-    except RECOVERABLE_ERRORS as exc:
+    except BOUNDARY_ERRORS as exc:
+        # This task boundary must finalize ownership even for a programming bug.
+        # Preserve that exception for the HTTP/task caller after durable cleanup;
+        # do not translate it into a successful or retriable business result.
+        if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+            fatal_error = exc
         result.update(
             error_code=getattr(exc, "code", "xiaox_runtime_failed"),
             error="Xiaox 运行未完成，原任务和执行回执已保留",
@@ -893,6 +1021,8 @@ async def run_xiaox_agent(
         if isinstance(exc, XiaoxBindingError) and exc.code in {"cancelled", "paused"}:
             runtime_status = exc.code
         if grant is None:
+            if fatal_error is not None:
+                raise fatal_error
             return {
                 **result,
                 "exit_status": getattr(exc, "code", "failed"),
@@ -1011,10 +1141,10 @@ async def run_xiaox_agent(
             withhold_runtime_output(result, status=saved.run.status, error="业务结果未通过核验")
     finally:
         try:
-            revoke(runtime_status, release_coordinator=True)
+            revoke(runtime_status)
         finally:
-            if cancelled is not None:
-                raise cancelled
+            if grant is not None:
+                await finalize()
     return result
 
 

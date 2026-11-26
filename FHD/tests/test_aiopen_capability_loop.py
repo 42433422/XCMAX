@@ -1,104 +1,84 @@
-"""AIOPEN 全调用闭环：白名单前缀匹配、seed、capability_loop。"""
+"""A self-check must verify the original read receipt and never run a write/chat."""
 
-from __future__ import annotations
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from app.application.aiopen.service import (
-    AIOPEN_STATE,
-    is_path_whitelisted,
-    normalize_api_path,
-    seed_capability_whitelist,
-)
-from app.fastapi_routes.ai_open import router as ai_open_router
-from app.infrastructure.auth.dependencies import require_admin_user
+from app.application.aiopen.capability_probe import CapabilityProbe
+from app.application.aiopen.runtime import RuntimeState
 
 
-@pytest.fixture()
-def client(monkeypatch):
-    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
-    app = FastAPI()
-
-    @app.get("/api/products/list")
-    def products_list():
-        return {"success": True, "items": [{"id": 1}]}
-
-    @app.post("/api/ai/unified_chat")
-    def unified_chat(body: dict):
-        return {"success": True, "reply": f"echo:{body.get('message', '')}"}
-
-    app.include_router(ai_open_router)
-    app.dependency_overrides[require_admin_user] = lambda: object()
-    return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
+def _probe(catalog, execute):
+    return CapabilityProbe(
+        RuntimeState({"remote_control_enabled": True}),
+        lambda: catalog,
+        execute,
+        lambda: SimpleNamespace(sessions_info=lambda: [{"id": "screen"}]),
+    )
 
 
-@pytest.fixture(autouse=True)
-def _reset_whitelist_and_keys():
-    original = dict(AIOPEN_STATE.get("whitelist") or {})
-    AIOPEN_STATE["runtime_keys"] = {}
-    AIOPEN_STATE["whitelist"] = {
-        "/api/products": True,
-        "/api/ai/unified_chat": True,
+def test_probe_uses_authorized_read_and_preserves_business_receipt():
+    execute = Mock(
+        return_value={
+            "success": True,
+            "execution_state": "completed",
+            "run_id": "read-run",
+            "task_id": "read-task",
+        }
+    )
+    rows = [
+        {"operation_id": "capability.customers.create", "risk": "high", "read_only": False},
+        {
+            "operation_id": "capability.customers.query",
+            "risk": "low",
+            "read_only": True,
+            "required_params": [],
+        },
+    ]
+    result = _probe({"success": True, "capabilities": rows}, execute).run(
+        None, {"request_id": "probe-key"}
+    )
+    assert result["closed_loop"] is True
+    assert result["verification_scope"] == "capability_discovery_read_execution_receipt"
+    assert result["steps"][1]["run_id"] == "read-run"
+    assert result["steps"][1]["task_id"] == "read-task"
+    assert execute.call_args.args[1] == {
+        "operation_id": "capability.customers.query",
+        "params": {},
+        "request_id": "probe-key",
     }
-    yield
-    AIOPEN_STATE["whitelist"] = original
-    AIOPEN_STATE["runtime_keys"] = {}
+    assert len(result["steps"]) == 2
 
 
-def test_normalize_and_prefix_whitelist():
-    assert normalize_api_path("/api/products/list?x=1") == "/api/products/list"
-    assert is_path_whitelisted("/api/products")
-    assert is_path_whitelisted("/api/products/list")
-    assert is_path_whitelisted("/api/products/list?limit=1")
-    assert not is_path_whitelisted("/api/product")
-    assert not is_path_whitelisted("/api/customers")
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {"success": True, "execution_state": "queued", "run_id": "r"},
+        {"success": True, "execution_state": "unknown", "run_id": "r"},
+        {"success": True, "execution_state": "completed"},
+        {"success": False, "execution_state": "completed", "run_id": "r"},
+    ],
+)
+def test_acceptance_or_unknown_is_not_closed_loop(receipt):
+    catalog = {
+        "success": True,
+        "capabilities": [
+            {"operation_id": "capability.customers.query", "risk": "low", "read_only": True}
+        ],
+    }
+    assert _probe(catalog, Mock(return_value=receipt)).run(None, {})["closed_loop"] is False
 
 
-def test_seed_capability_whitelist_enables_full_set():
-    out = seed_capability_whitelist(enable=True, merge=False)
-    assert out["success"] is True
-    assert out["enabled_count"] >= 10
-    assert is_path_whitelisted("/api/im/conversations")
-    assert is_path_whitelisted("/api/mod/xcagi-erp-domain-bridge/products/list")
-
-
-def test_api_call_allows_prefix_child(client):
-    resp = client.post(
-        "/api/aiopen/invoke",
-        json={"tool": "api_call", "args": {"path": "/api/products/list", "method": "GET"}},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["status_code"] == 200
-    assert data["data"]["items"][0]["id"] == 1
-
-
-@pytest.mark.parametrize("writes_enabled", [False, True])
-def test_whitelist_seed_and_loop_verify(client, monkeypatch, writes_enabled):
-    monkeypatch.setenv("AIOPEN_ENABLE_WRITES", "1" if writes_enabled else "0")
-    seeded = client.post("/api/aiopen/whitelist/seed", json={"enabled": True, "merge": True})
-    assert seeded.status_code == 200
-    assert seeded.json()["success"] is True
-
-    loop = client.post(
-        "/api/aiopen/loop/verify",
-        json={"probe_path": "/api/products/list", "message": "loop-ok"},
-    )
-    assert loop.status_code == 200
-    body = loop.json()
-    assert body["success"] is writes_enabled
-    assert body["closed_loop"] is writes_enabled
-    steps = {s["step"]: s for s in body["steps"]}
-    assert steps["api_catalog"]["ok"] is True
-    assert steps["api_call"]["ok"] is True
-    assert steps["chat"]["ok"] is writes_enabled
-    if not writes_enabled:
-        assert "写操作未启用" in steps["chat"]["message"]
-
-
-def test_manifest_includes_capability_loop(client):
-    names = {t["name"] for t in client.get("/api/aiopen/manifest").json()["tools"]}
-    assert "capability_loop" in names
+@pytest.mark.parametrize("authorized", [False, True])
+def test_requested_write_never_runs_as_self_check(authorized):
+    execute = Mock()
+    catalog = {
+        "success": authorized,
+        "capabilities": [
+            {"operation_id": "capability.customers.delete", "risk": "high", "read_only": False}
+        ],
+    }
+    result = _probe(catalog, execute).run(None, {"operation_id": "capability.customers.delete"})
+    assert result["closed_loop"] is False
+    execute.assert_not_called()

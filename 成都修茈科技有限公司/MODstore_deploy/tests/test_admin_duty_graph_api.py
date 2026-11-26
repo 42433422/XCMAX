@@ -43,6 +43,13 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
     app, client = _new_client(tmp_path, monkeypatch)
 
     import modstore_server.admin_duty_graph_api as duty_api
+    from modstore_server.models import User, get_session_factory
+
+    with get_session_factory()() as session:
+        session.add(
+            User(id=99, username="admin", password_hash="test-only", is_admin=True, email="a@a")
+        )
+        session.commit()
 
     rows = [
         {"id": "dep-a", "name": "依赖A", "source": "catalog"},

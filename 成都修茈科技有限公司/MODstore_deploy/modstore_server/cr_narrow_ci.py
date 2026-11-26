@@ -104,6 +104,28 @@ def _prepare_overlay_root(
     tmp = tempfile.TemporaryDirectory(prefix="modstore_narrow_ci_")
     try:
         overlay = Path(tmp.name) / "repo"
+        # Keep the checkout-relative layout even when repo_root() returns the
+        # company directory or MODstore_deploy. Employee contracts resolve FHD
+        # relative to their source file, not the subprocess working directory.
+        manifests = Path("FHD/mods/_employees")
+        checkout = next(
+            (
+                ancestor
+                for ancestor in (root, root.parent, root.parent.parent)
+                if (ancestor / manifests).is_dir()
+            ),
+            None,
+        )
+        if checkout is not None:
+            for manifest in (checkout / manifests).glob("*/manifest.json"):
+                if not manifest.is_file() or manifest.is_symlink() or manifest.parent.is_symlink():
+                    continue
+                if not manifest.resolve().is_relative_to(checkout.resolve()):
+                    continue
+                copied = overlay / manifest.relative_to(checkout)
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(manifest, copied)
+            overlay = overlay / root.relative_to(checkout)
         overlay.mkdir(parents=True, exist_ok=True)
 
         rel = rel_path.replace("\\", "/").lstrip("/")
@@ -155,7 +177,8 @@ def infer_related_test_files(rel_path: str, *, root: Optional[Path] = None) -> L
     patterns = [
         f"test_{module_hint}.py",
         f"test_{module_hint}_*.py",
-        f"test_*{module_hint}*.py",
+        f"test_*_{module_hint}.py",
+        f"test_*_{module_hint}_*.py",
     ]
     found: List[str] = []
     for pat in patterns:

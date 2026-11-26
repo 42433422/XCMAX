@@ -16,9 +16,9 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
-from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.fastapi_routes.tools_execute import run_tools_execute_agent
 from app.schemas.finance_schema import FinanceTransactionCreate, FinanceTransactionUpdate
 
 logger = logging.getLogger(__name__)
@@ -36,93 +36,19 @@ def _parse_dt(s: str | None) -> datetime | None:
     return datetime.fromisoformat(s) if s else None
 
 
-def _finance_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "finance-route"
-    ).strip()
-
-
 def _run_finance_agent(
     *,
     request: Request,
     action: str,
     params: dict[str, Any],
     route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
-    from app.infrastructure.auth.agent_principal import require_agent_principal
-
-    principal = require_agent_principal(request, x_user_id=None)
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("finance") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 finance 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"finance_{action}"
-    user_id = _finance_agent_user_id(request, params)
-    # 租户归属来自已认证会话，不接受请求体里的 tenant_id 别名。
-    params = {
-        key: value
-        for key, value in params.items()
-        if key not in {"tenant_id", "tenantId", "user_id", "userId"}
-    }
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 finance.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="finance",
-                action=action,
-                params=dict(params or {}),
-                risk=normalize_workflow_risk(str(action_meta.get("risk") or "high")),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute finance.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "high")),
-        metadata={"source": "finance_route", "route": route_path},
+) -> JSONResponse:
+    result, status = run_tools_execute_agent(
+        request=request,
+        body={"tool_id": "finance", "action": action, "params": params},
+        route_path=route_path,
     )
-    runtime_context = {
-        "source": "finance_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_finance_route",
-    }
-    # 与其他 agent 路由一致：由已认证 principal 注入 tenant_id/actor_id，
-    # 否则 SQL 租户作用域工具会因缺少 tenant 上下文拒绝写入。
-    runtime_context = authenticated_runtime_context(runtime_context, principal)
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Finance {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "finance-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
+    return JSONResponse(result, status_code=status)
 
 
 # ── 财务看板 ─────────────────────────────────────────────────────

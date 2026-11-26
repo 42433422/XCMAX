@@ -213,10 +213,10 @@ class TestInstalledModIds:
         ):
             assert _installed_mod_ids() == []
 
-    def test_mod_manager_runtime_error_returns_empty(self) -> None:
+    def test_mod_root_resolution_failure_returns_empty(self) -> None:
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("boom"),
+            side_effect=FileNotFoundError("mod root missing"),
         ):
             assert _installed_mod_ids() == []
 
@@ -420,10 +420,10 @@ class TestReadModManifestJson:
         ):
             assert _read_mod_manifest_json("m1") == {}
 
-    def test_mod_manager_runtime_error_returns_empty(self) -> None:
+    def test_mod_root_resolution_failure_returns_empty_manifest(self) -> None:
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=RuntimeError("boom"),
+            side_effect=FileNotFoundError("mod root missing"),
         ):
             assert _read_mod_manifest_json("m1") == {}
 
@@ -871,7 +871,7 @@ class TestBuildOnboardingIndustryCatalog:
             ),
             patch(
                 "app.mod_sdk.host_profile.load_industry_presets_document",
-                side_effect=RuntimeError("presets load failed"),
+                side_effect=FileNotFoundError("presets load failed"),
             ),
         ):
             catalog = build_onboarding_industry_catalog()
@@ -1402,7 +1402,7 @@ class TestAnalyzeColors:
 
     def test_convert_failure_returns_default(self) -> None:
         img = MagicMock()
-        img.convert.side_effect = RuntimeError("convert failed")
+        img.convert.side_effect = OSError("convert failed")
         result = _analyze_colors(img)
         assert result["background"] == "#FFFFFF"
         assert result["is_consistent_background"] is True
@@ -1791,7 +1791,7 @@ class TestLabelTemplateGeneratorSkill:
         skill = LabelTemplateGeneratorSkill()
         with patch(
             "app.services.skills.label_template_generator.label_template_generator.analyze_image",
-            side_effect=RuntimeError("unexpected"),
+            side_effect=OSError("unexpected image read failure"),
         ):
             result = skill.execute(str(img_path))
         assert result["success"] is False

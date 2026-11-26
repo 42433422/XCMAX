@@ -391,7 +391,7 @@ class TestLocalSurfacePage:
     async def test_exception_returns_none(self):
         with patch(
             "app.application.aibiz_web_terminal_service._local_lane_pages",
-            side_effect=RuntimeError("fail"),
+            side_effect=OSError("fail"),
         ):
             result = await _local_surface_page("P-W", 0)
         assert result is None

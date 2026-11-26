@@ -38,6 +38,8 @@ def test_environment_and_configuration_do_not_inherit_host_authority(config, mon
     monkeypatch.setenv("OPENAI_API_KEY", "host-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "host-secret")
     monkeypatch.setenv("HTTP_PROXY", "http://untrusted-proxy")
+    monkeypatch.setenv("NO_PROXY", "host.example")
+    monkeypatch.setenv("no_proxy", "host.example")
     monkeypatch.setenv("CODEX_HOME", "/host/config-with-mcp")
     transport = XiaoxTransport(config)
     transport._prepare()
@@ -94,6 +96,8 @@ def test_environment_and_configuration_do_not_inherit_host_authority(config, mon
         {"OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY", "HTTP_PROXY", "PYTHONPATH"} & env.keys()
     )
     assert env["CODEX_HOME"] == str(transport.runtime_dir)
+    assert env["NO_PROXY"] == env["no_proxy"] == "127.0.0.1,localhost,::1"
+    assert os.environ["NO_PROXY"] == os.environ["no_proxy"] == "host.example"
     assert os.environ["CODEX_HOME"] == "/host/config-with-mcp"
     assert "scoped-model-token" not in (transport.runtime_dir / "config.toml").read_text()
     assert "scoped-mcp-token" not in repr(config)
@@ -181,6 +185,9 @@ for line in sys.stdin:
     elif method == "turn/start":
         inputs = msg["params"]["input"]
         mode = inputs[0]["text"] if inputs else "tool-output"
+        if mode == "tool-output" and msg["params"].get("toolOutput", {}).get("output") == "__reject_tool_output__":
+            send({"id":msg["id"],"error":{"code":-32602,"message":"Unsupported toolOutput"}})
+            continue
         send({"id":msg["id"],"result":{"turn":turn()}})
         if mode == "disconnect":
             sys.exit(0)

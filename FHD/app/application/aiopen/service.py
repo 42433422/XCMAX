@@ -1,9 +1,4 @@
-"""AIOPEN composition root and stable application API.
-
-The legacy qclaw panel retains the identical AIOPEN_STATE dictionary. Explicit
-forwarders resolve callbacks when called, preserving runtime patches without
-components importing this module or depending on a generic facade.
-"""
+"""AIOPEN transport composition root over the shared capability execution chain."""
 
 from __future__ import annotations
 
@@ -21,12 +16,8 @@ from app.domain.aiopen.principal import ScreenPrincipal
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
 from app.infrastructure.mods.manifest import host_xcagi_version
 
-from .api_gateway import InternalApiGateway
 from .capability_probe import CapabilityProbe
 from .catalog import CatalogGuide
-from .definitions import (
-    _API_CALL_METHODS as _API_CALL_METHODS,
-)
 from .definitions import (
     _UI_ACTION_TIMEOUTS as _UI_ACTION_TIMEOUTS,
 )
@@ -54,8 +45,7 @@ from .definitions import (
 from .definitions import (
     TOOL_DEFINITIONS as TOOL_DEFINITIONS,
 )
-from .dispatch import ToolDispatcher, call_chat
-from .generated_tools import guarded_api_call as _guarded_api_call
+from .dispatch import ToolDispatcher
 from .generated_tools import operation_call as _operation_call_impl
 from .generated_tools import required_scope as _required_scope
 from .installation import (
@@ -73,7 +63,7 @@ from .installation import (
 from .knowledge import knowledge_search as _knowledge_search
 from .knowledge import operation_describe as _operation_describe
 from .openclaw import OpenClawProxy
-from .protocols import InstallationBuilders, InternalHttpClient, UpstreamResponse
+from .protocols import InstallationBuilders, UpstreamResponse
 from .result_text import format_tool_result_text as format_tool_result_text
 from .route_policy import RoutePolicy
 from .route_policy import normalize_api_path as normalize_api_path
@@ -114,12 +104,6 @@ def _aiopen_storage_path(name: str) -> Path | None:
         return None
 
 
-def _api_client(app: ASGIApp) -> InternalHttpClient:
-    from starlette.testclient import TestClient
-
-    return TestClient(app, follow_redirects=False)
-
-
 def _upstream_open(
     request: urllib.request.Request, *, timeout: float
 ) -> AbstractContextManager[UpstreamResponse]:
@@ -158,25 +142,19 @@ _catalog = CatalogGuide(
     lambda: aiopen_cursor_hub,
     lambda: host_xcagi_version(),
 )
-_gateway = InternalApiGateway(
-    lambda app: _api_client(app), lambda path: is_path_whitelisted(path), lambda: _API_CALL_METHODS
-)
 _probe = CapabilityProbe(
     _state,
     lambda: _tool_api_catalog(),
-    lambda routes, path: _pick_probe_path(routes, path),
-    lambda app, args: _tool_api_call(app, args),
-    lambda app, args: _tool_chat(app, args),
+    lambda app, args: _operation_call_impl(app, args),
     lambda: aiopen_cursor_hub,
 )
 _dispatcher = ToolDispatcher(
     _state,
     lambda: _tool_api_catalog(),
     {
-        "api_call": lambda app, args: _tool_api_call(app, args),
         "knowledge_search": lambda app, args: _knowledge_search(app, args),
         "operation_describe": lambda app, args: _operation_describe(app, args),
-        "operation_call": lambda app, args: _operation_call_impl(app, args, _gateway.call),
+        "operation_call": lambda app, args: _operation_call_impl(app, args),
         "chat": lambda app, args: _tool_chat(app, args),
         "capability_loop": lambda app, args: _tool_capability_loop(app, args),
     },
@@ -324,15 +302,16 @@ def seed_capability_whitelist(*, enable: bool = True, merge: bool = True) -> dic
 
 
 def _tool_api_catalog() -> dict[str, Any]:
-    return _policy.catalog()
+    from app.application.capability_catalog import discover_capabilities
+    from app.infrastructure.aiopen.principal_context import current_execution_context
 
-
-def _tool_api_call(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-    return _guarded_api_call(app, args, _gateway.call)
+    return discover_capabilities(current_execution_context())
 
 
 def _tool_chat(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-    return call_chat(app, args, _tool_api_call)
+    from .generated_tools import execute_message
+
+    return execute_message(args)
 
 
 def _pick_probe_path(routes: list[dict[str, Any]], preferred: str = "") -> str | None:
@@ -347,5 +326,12 @@ async def invoke_tool(name: str, args: dict[str, Any] | None, app: ASGIApp) -> d
     return await _dispatcher.invoke(name, args, app)
 
 
-def openclaw_chat_proxy(message: str) -> tuple[dict[str, Any], int]:
-    return _openclaw.chat(message)
+def dispatch_openclaw_chat(
+    params: dict[str, Any], runtime_context: dict[str, Any]
+) -> dict[str, Any]:
+    """Private adapter called after the shared capability permission/approval gates."""
+    return _openclaw.chat(
+        str(params.get("message") or ""),
+        request_id=str(runtime_context.get("idempotency_key") or ""),
+        gateway_url=str(params.get("gateway_url") or ""),
+    )

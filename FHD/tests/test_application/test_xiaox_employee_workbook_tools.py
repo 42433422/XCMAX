@@ -40,7 +40,7 @@ def test_aggregate_and_structure_return_observed_workbook_data(owned_workbooks):
     opened, context = owned_workbooks
     aggregate = _registered_router_excel_analysis(
         "aggregate",
-        {"file_path": "left.xlsx", "metrics": [{"column": "amount", "op": "sum"}]},
+        {"file_path": "left.xlsx", "header_row": 1, "metrics": [{"column": "amount", "op": "sum"}]},
         context,
         "shared",
         "汇总金额",
@@ -48,7 +48,7 @@ def test_aggregate_and_structure_return_observed_workbook_data(owned_workbooks):
     assert aggregate["success"] is True
     assert aggregate["records"] == [{"amount_sum": 30}]
     structure = _registered_router_excel_analysis(
-        "structure", {"file_path": "left.xlsx"}, context, "shared", "结构"
+        "structure", {"file_path": "left.xlsx", "header_row": 1}, context, "shared", "结构"
     )
     assert structure["success"] is True
     assert structure["data"]["row_count"] == 2
@@ -94,11 +94,11 @@ def test_foreign_workbook_is_rejected_before_legacy_file_reader(owned_workbooks,
     read.assert_not_called()
 
 
-def test_diff_and_schema_alias_keep_employee_forbidden_paths(tmp_path):
+def test_diff_and_structure_keep_employee_forbidden_paths(tmp_path):
     declared = [
         tool
         for tool in excel_tool_specs()
-        if tool["function"]["name"] in {"excel_schema_understand", "excel_join_compare"}
+        if tool["function"]["name"] in {"excel_analysis", "excel_join_compare"}
     ]
     gate = build_employee_gate(
         "clerk", {}, {"workspace_policy": {"forbidden_globs": ["secret/**"]}}, str(tmp_path)

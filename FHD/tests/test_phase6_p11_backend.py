@@ -13,19 +13,24 @@ Coverage scenarios per 铁律3:
 - Happy path (valid input)
 - Empty / None input
 - Boundary values (empty list, empty dict)
-- Exception paths (RECOVERABLE_ERRORS: RuntimeError, ValueError, etc.)
+- Exception paths (database, filesystem, network and data-shape failures)
 """
 
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import ConnectError
+from sqlalchemy.exc import OperationalError
 
+from app.db.models.user import Session as UserSession
+from app.db.models.user import User
 from app.enterprise import mod_entitlements
 from app.enterprise.mod_entitlements import (
     _parse_mod_ids_from_market_payload,
@@ -49,6 +54,7 @@ from app.enterprise.mod_entitlements import (
     sync_entitlements_for_session,
     sync_entitlements_from_request,
 )
+from app.utils.time import utc_now_naive
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -328,7 +334,7 @@ def test_is_mod_visible_client_primary_mod_on_disk_visible_raises_recoverable(
     )
 
     def _raise(mid: str) -> bool:
-        raise RuntimeError("disk check boom")
+        raise OSError("disk check boom")
 
     monkeypatch.setattr(
         "app.mod_sdk.client_primary_erp.client_primary_mod_on_disk_visible",
@@ -806,7 +812,7 @@ async def test_refresh_session_meta_load_raises_recoverable(
         return {"taiyangniao-pro"}
 
     def _raise(sid: str) -> dict[str, Any]:
-        raise RuntimeError("meta load boom")
+        raise OperationalError("read session metadata", None, ConnectionError("db down"))
 
     monkeypatch.setattr(
         "app.enterprise.mod_entitlements.fetch_entitled_client_mod_ids_from_market",
@@ -920,7 +926,7 @@ def test_persist_recoverable_error_swallowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def _fail() -> None:
-        raise RuntimeError("db down")
+        raise OperationalError("persist entitlements", None, ConnectionError("db down"))
 
     monkeypatch.setattr("app.db.session.get_db", _fail)
     monkeypatch.setattr("app.db.models.user.Session", MagicMock())
@@ -970,12 +976,16 @@ def test_restore_row_found_sets_session(monkeypatch: pytest.MonkeyPatch) -> None
         "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
         lambda: True,
     )
-    mock_row = MagicMock()
-    mock_row.market_user_id = 7
-    mock_row.entitled_mod_ids_json = '["a", "b"]'
-    mock_row.account_kind = "enterprise"
-    mock_row.market_is_admin = False
-    mock_row.impersonating_username = "alice"
+    mock_row = UserSession(
+        market_user_id=7,
+        entitled_mod_ids_json='["a", "b"]',
+        account_kind="enterprise",
+        market_is_admin=False,
+        impersonating_username="alice",
+        expires_at=utc_now_naive() + timedelta(hours=1),
+        verified_trial_expires_at=None,
+        user=User(role="user", tier="personal"),
+    )
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = mock_row
 
@@ -1003,7 +1013,7 @@ def test_restore_recoverable_error_returns_false(
     )
 
     def _fail() -> None:
-        raise RuntimeError("db down")
+        raise OperationalError("restore entitlements", None, ConnectionError("db down"))
 
     monkeypatch.setattr("app.db.session.get_db", _fail)
     assert restore_entitlements_from_session_row("sid") is False
@@ -1014,12 +1024,16 @@ def test_restore_invalid_json_returns_false(monkeypatch: pytest.MonkeyPatch) -> 
         "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
         lambda: True,
     )
-    mock_row = MagicMock()
-    mock_row.market_user_id = 7
-    mock_row.entitled_mod_ids_json = "not-json"
-    mock_row.account_kind = "enterprise"
-    mock_row.market_is_admin = False
-    mock_row.impersonating_username = ""
+    mock_row = UserSession(
+        market_user_id=7,
+        entitled_mod_ids_json="not-json",
+        account_kind="enterprise",
+        market_is_admin=False,
+        impersonating_username="",
+        expires_at=utc_now_naive() + timedelta(hours=1),
+        verified_trial_expires_at=None,
+        user=User(role="user", tier="personal"),
+    )
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = mock_row
 
@@ -1168,7 +1182,7 @@ async def test_sync_resolve_raises_recoverable_falls_back(
     )
 
     async def _resolve(sid: str) -> str:
-        raise RuntimeError("market down")
+        raise ConnectError("market down")
 
     monkeypatch.setattr(
         "app.fastapi_routes.market_account.resolve_valid_market_access_token",
@@ -1249,7 +1263,7 @@ async def test_reload_recoverable_error_swallowed(
     )
 
     def _fail() -> None:
-        raise RuntimeError("mod manager boom")
+        raise OSError("mod directory unavailable")
 
     monkeypatch.setattr(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -1338,9 +1352,14 @@ async def test_sync_from_request_recoverable_error_swallowed(
     )
     monkeypatch.delenv("SESSION_COOKIE_NAME", raising=False)
     request = MagicMock()
-    request.cookies.get.side_effect = RuntimeError("cookie boom")
-    # 不应抛出
+    request.cookies.get.return_value = "sid"
+    sync = AsyncMock(
+        side_effect=OperationalError("sync entitlements", None, ConnectionError("db down"))
+    )
+    monkeypatch.setattr("app.enterprise.mod_entitlements.sync_entitlements_for_session", sync)
+    # The cookie mapping is local; recovery applies to the subsequent database I/O.
     await sync_entitlements_from_request(request)
+    sync.assert_awaited_once_with("sid")
 
 
 # ---------------------------------------------------------------------------
@@ -1536,7 +1555,7 @@ def test_loading_status_recoverable_error() -> None:
     app = _build_mods_app()
 
     def _fail() -> None:
-        raise RuntimeError("mod manager boom")
+        raise OSError("mod directory unavailable")
 
     with (
         patch(
@@ -1625,7 +1644,7 @@ def test_list_mods_recoverable_error() -> None:
     app = _build_mods_app()
 
     def _fail() -> None:
-        raise RuntimeError("list boom")
+        raise OSError("mod directory unavailable")
 
     with (
         patch(
@@ -1668,7 +1687,7 @@ def test_list_routes_recoverable_error() -> None:
     app = _build_mods_app()
 
     def _fail() -> None:
-        raise RuntimeError("routes boom")
+        raise OSError("mod directory unavailable")
 
     with patch(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -1699,13 +1718,7 @@ def test_list_comms_endpoints_happy_path() -> None:
 def test_list_comms_endpoints_recoverable_error() -> None:
     app = _build_mods_app()
 
-    def _fail() -> None:
-        raise RuntimeError("comms boom")
-
-    with patch(
-        "app.infrastructure.mods.comms.get_mod_comms",
-        side_effect=_fail,
-    ):
+    with patch.dict("sys.modules", {"app.infrastructure.mods.comms": None}):
         client = TestClient(app)
         resp = client.get("/api/mods/comms/endpoints")
     body = resp.json()
@@ -1862,7 +1875,7 @@ def test_get_mod_detail_recoverable_error() -> None:
     app = _build_mods_app()
 
     def _fail() -> None:
-        raise RuntimeError("detail boom")
+        raise OSError("mod directory unavailable")
 
     with (
         patch(
@@ -1949,7 +1962,7 @@ def test_uninstall_mod_recoverable_error() -> None:
         ),
         patch(
             "app.application.mod_uninstall.uninstall_mod_for_request",
-            side_effect=RuntimeError("uninstall boom"),
+            side_effect=OSError("uninstall disk unavailable"),
         ),
     ):
         client = TestClient(app)
@@ -1993,7 +2006,7 @@ async def test_sync_enterprise_entitlements_helper_recoverable_error() -> None:
     request = MagicMock()
 
     async def _sync(req: Any) -> None:
-        raise RuntimeError("sync boom")
+        raise OperationalError("sync entitlements", None, ConnectionError("db down"))
 
     with (
         patch(

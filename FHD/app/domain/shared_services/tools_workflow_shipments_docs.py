@@ -100,14 +100,9 @@ def _registered_router_suppliers(
 def _registered_router_shipment_records(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_shipment_records_route":
-        from app.fastapi_routes import shipment_orders
+    from app.bootstrap import get_shipment_application_service_core
 
-        svc = shipment_orders._svc()
-    else:
-        from app.bootstrap import get_shipment_app_service
-
-        svc = get_shipment_app_service()
+    svc = get_shipment_application_service_core()
     if action in ("list", "query"):
         unit = str(params.get("unit") or params.get("unit_name") or "").strip() or None
         return {"success": True, "data": svc.get_shipment_records(unit)}
@@ -118,14 +113,14 @@ def _registered_router_shipment_records(
         if missing:
             return {"success": False, "message": "缺少有效出货参数：" + "、".join(missing)}
         unit_name = str(params.get("unit_name") or params.get("purchase_unit")).strip()
-        products = params.get("products") or params.get("items")
+        products = cast("list[dict[str, Any]]", params.get("products") or params.get("items"))
         return cast(
             "dict[Any, Any]",
             svc.create_shipment(
                 unit_name=unit_name,
                 items_data=products,
-                contact_person=params.get("contact_person"),
-                contact_phone=params.get("contact_phone"),
+                contact_person=str(params.get("contact_person") or ""),
+                contact_phone=str(params.get("contact_phone") or ""),
             ),
         )
     if action == "update":
@@ -135,30 +130,7 @@ def _registered_router_shipment_records(
     if action == "delete":
         return cast("dict[Any, Any]", svc.delete_shipment_record(int(params.get("id") or 0)))
     if action == "clear":
-        listed = svc.get_shipment_records(None) or {}
-        rows = listed.get("data") if isinstance(listed, dict) else None
-        deleted = 0
-        failed = 0
-        for row in rows if isinstance(rows, list) else []:
-            if not isinstance(row, dict):
-                continue
-            try:
-                record_id = int(row.get("id") or 0)
-            except (TypeError, ValueError):
-                continue
-            if record_id <= 0:
-                continue
-            result = svc.delete_shipment_record(record_id) or {}
-            if isinstance(result, dict) and result.get("success"):
-                deleted += 1
-            else:
-                failed += 1
-        return {
-            "success": True,
-            "message": f"已清空 {deleted} 条出货记录",
-            "deleted_count": deleted,
-            "failed_count": failed,
-        }
+        return svc.clear_all_orders()
     if action == "export":
         return cast(
             "dict[Any, Any]",
@@ -166,7 +138,7 @@ def _registered_router_shipment_records(
                 unit_name=str(params.get("unit") or params.get("unit_name") or "").strip() or None,
                 template_id=params.get("template_id"),
                 status_filter=params.get("status"),
-                **({"runtime_context": runtime_context} if runtime_context.get("run_id") else {}),
+                runtime_context=runtime_context if runtime_context.get("run_id") else None,
             ),
         )
     return {"success": False, "message": f"未注册的 shipment_records 动作: {action}"}
@@ -175,14 +147,9 @@ def _registered_router_shipment_records(
 def _registered_router_shipment_orders(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    if str(runtime_context.get("service_source") or "") == "fastapi_shipment_orders_route":
-        from app.fastapi_routes import shipment_orders
+    from app.bootstrap import get_shipment_application_service_core
 
-        svc = shipment_orders._svc()
-    else:
-        from app.bootstrap import get_shipment_app_service
-
-        svc = get_shipment_app_service()
+    svc = get_shipment_application_service_core()
     if action == "generate":
         unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
         products = params.get("products") or params.get("items") or []
@@ -328,19 +295,38 @@ def _registered_router_business_docking_family(
         _extract_structured_excel_preview,
         _list_excel_sheet_names,
     )
+    from app.domain.shared_services.tools_workflow_shipments_docs_ops import (
+        _read_owned_template_input,
+    )
 
-    if not os.path.exists(file_path):
+    try:
+        frozen_content = _read_owned_template_input(file_path, runtime_context)
+    except (ValueError, PermissionError, OSError):
+        return {
+            "success": False,
+            "error_code": "template_input_unavailable",
+            "message": "原始模板输入不可用或已变化，请重新上传",
+            "execution_status": "not_started",
+            "retryable": False,
+        }
+
+    from io import BytesIO
+
+    def source() -> str | BytesIO:
+        return BytesIO(frozen_content) if frozen_content is not None else file_path
+
+    if frozen_content is None and not os.path.exists(file_path):
         return {"success": False, "message": f"文件不存在：{file_path}"}
     sheet_name = str(params.get("sheet_name") or "").strip() or None
-    structured = _extract_structured_excel_preview(file_path, sheet_name=sheet_name, sample_limit=8)
+    structured = _extract_structured_excel_preview(source(), sheet_name=sheet_name, sample_limit=8)
     grid_preview = _extract_excel_grid_preview(
-        file_path, sheet_name=sheet_name, max_rows=24, max_cols=14
+        source(), sheet_name=sheet_name, max_rows=24, max_cols=14
     )
     style_cache = _extract_excel_grid_style_cache(
-        file_path, sheet_name=sheet_name, max_rows=24, max_cols=14
+        source(), sheet_name=sheet_name, max_rows=24, max_cols=14
     )
     all_sheets = _extract_excel_all_sheets_preview(
-        file_path, sample_limit=8, max_rows=24, max_cols=14
+        source(), sample_limit=8, max_rows=24, max_cols=14
     )
     artifact: dict[str, Any] = {
         "artifact_type": "template_analysis",
@@ -353,7 +339,7 @@ def _registered_router_business_docking_family(
         "preview": {
             "sample_rows": structured.get("sample_rows") or [],
             "grid_preview": grid_preview,
-            "sheet_names": _list_excel_sheet_names(file_path),
+            "sheet_names": _list_excel_sheet_names(source()),
         },
         "metadata": {"parser_used": "template_extract", "sheet_name": sheet_name or ""},
     }

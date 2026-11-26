@@ -3,6 +3,7 @@
 import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Event
@@ -144,7 +145,9 @@ def billed(monkeypatch, db):
         )
         return _frames([frame async for frame in response.body_iterator])
 
-    return SimpleNamespace(call=call, wallet=wallet, sent=sent, monkeypatch=monkeypatch)
+    return SimpleNamespace(
+        call=call, wallet=wallet, sent=sent, monkeypatch=monkeypatch, route=route
+    )
 
 
 @pytest.mark.asyncio
@@ -173,6 +176,83 @@ async def test_an_upstream_timeout_keeps_the_key_for_reconciliation(billed, db):
     assert ledger.lookup(db, 7, KEY, 90) == "settling"
     billed.wallet.settle.assert_not_awaited()
     billed.wallet.release.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["event", "exception"])
+@pytest.mark.parametrize("keyed", [False, True])
+@pytest.mark.parametrize("funding", ["wallet", "disabled", "byok"])
+async def test_stream_limit_retains_original_hold_without_failover(
+    billed, db, kind, keyed, funding
+):
+    from modstore_server.llm_gateway_contract import StreamLimitError
+
+    route = billed.route
+    if funding == "byok":
+        route = replace(route, key_source="user_override")
+    elif funding == "disabled":
+        billed.wallet.enabled = False
+        billed.wallet.preauthorize.return_value = WalletHold("synthetic-hold", Decimal("0"), False)
+    backup = replace(route, provider="openai", model="gpt-4o-mini")
+    billed.monkeypatch.setattr(
+        llm_billed_chat,
+        "resolve_chat_route_snapshot",
+        lambda _db, _uid, provider, _model, **_kwargs: (
+            route if provider == route.provider else backup
+        ),
+    )
+    candidates = AsyncMock(
+        return_value=[(route.provider, route.model), (backup.provider, backup.model)]
+    )
+    billed.monkeypatch.setattr(llm_billed_chat, "list_chat_failover_candidates", candidates)
+
+    async def overflow(provider, **kwargs):
+        billed.sent.append((provider, kwargs["model"]))
+        if len(billed.sent) > 1:
+            yield {"type": "delta", "delta": "must not request a second answer"}
+            yield {"type": "finish", "finish_reason": "stop"}
+        elif kind == "exception":
+            raise StreamLimitError(f"model stream wire byte limit exceeded: {route.api_key}")
+        else:
+            yield {
+                "type": "error",
+                "code": "model_stream_limit_exceeded",
+                "status": 502,
+                "error": f"model stream wire byte limit exceeded: {route.api_key}",
+                "outcome_unknown": True,
+                "non_retryable": True,
+            }
+
+    billed.monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", overflow)
+    arguments = dict(
+        request=SimpleNamespace(state=SimpleNamespace(), headers={}),
+        db=db,
+        user=SimpleNamespace(id=7),
+        provider=route.provider,
+        model=route.model,
+        messages=[{"role": "user", "content": "synthetic"}],
+        client_request_id=KEY if keyed else None,
+    )
+    response = await llm_billed_chat.stream_billed_llm_chat(**arguments)
+    frames = _frames([frame async for frame in response.body_iterator])
+    meta = next(data for event, data in frames if event == "meta")
+    error = frames[-1][1]
+    assert frames[-1][0] == "error" and not any(event == "done" for event, _ in frames)
+    assert billed.sent == [(route.provider, route.model)]
+    assert billed.wallet.preauthorize.await_count == (0 if funding == "byok" else 1)
+    billed.wallet.settle.assert_not_awaited()
+    billed.wallet.release.assert_not_awaited()
+    assert error["status"] == 409 and error["code"] == "model_stream_limit_exceeded"
+    assert error["outcome_unknown"] is True and error["non_retryable"] is True
+    assert error["request_id"] == meta["request_id"] and error["hold_no"] == meta["hold_no"]
+    assert route.api_key not in json.dumps(error)
+    candidates.assert_awaited_once()
+    if keyed:
+        assert ledger.lookup(db, 7, KEY, 90) == "settling"
+        with pytest.raises(HTTPException) as rejected:
+            await llm_billed_chat.stream_billed_llm_chat(**arguments)
+        assert rejected.value.status_code == 409
+        assert billed.sent == [(route.provider, route.model)]
 
 
 @pytest.mark.asyncio

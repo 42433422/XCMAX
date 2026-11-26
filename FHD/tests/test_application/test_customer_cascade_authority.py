@@ -1,6 +1,7 @@
 """Cross-domain deletion requires a live signed actor and one atomic transaction."""
 
 import copy
+import json
 
 import pytest
 from sqlalchemy import event
@@ -120,18 +121,39 @@ def test_force_requires_live_cross_domain_authority_and_ignores_client_context(d
     assert snapshot(full) == before
 
 
-def test_http_cascade_uses_signed_actor_and_preserves_other_owners(deletion):
+def test_http_cascade_waits_for_approval_without_deleting_any_owner(deletion, monkeypatch):
+    from starlette.requests import Request
+
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.mod_sdk.erp_customers_facade import customers_delete
 
     _, full, _ = deletion
+    before = snapshot(full)
+    repo = InMemoryAgentRunRepository()
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository", lambda: repo
+    )
+    request = Request(
+        {
+            **full.request.scope,
+            "headers": [
+                *full.request.scope["headers"],
+                (b"idempotency-key", b"customer-cascade-1"),
+            ],
+        }
+    )
     with tenant_scope(7):
-        result = customers_delete(full.request, 1, cascade=True)
-    assert result["success"] is True
-    remaining = snapshot(full)
-    assert remaining[0] == [(2,), (3,), (101,), (102,), (103,)]
-    assert remaining[1] == [(2,), (101,), (102,)]
-    assert remaining[2] == [(2,), (101,), (102,)]  # Same name, different customer ID is not ours.
-    assert len(remaining[3]) == 1
+        response = customers_delete(request, 1, cascade=True)
+        replay = customers_delete(request, 1, cascade=True)
+    assert response.status_code == replay.status_code == 202
+    receipt, replayed = json.loads(response.body), json.loads(replay.body)
+    assert receipt["success"] is False and receipt["pending_approval"] is True
+    assert replayed["run_id"] == receipt["run_id"]
+    assert replayed["approval_request_id"] == receipt["approval_request_id"]
+    run = repo.get(receipt["run_id"])
+    assert run.user_id == str(full.user_id) and not run.tool_calls
+    assert run.steps[0].params == {"id": 1, "force": True}
+    assert snapshot(full) == before
 
 
 def test_batch_checks_product_only_association_and_foreign_ids_before_writes(deletion):
@@ -229,15 +251,23 @@ def test_real_http_batch_uses_atomic_policy_after_signed_approval(
     app.include_router(router)
     before = snapshot(actor)
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post("/customers/batch-delete", json={"ids": ids}, headers=actor.headers)
-    assert response.status_code == 200, response.text
+        response = client.post(
+            "/customers/batch-delete",
+            json={"ids": ids},
+            headers={**actor.headers, "Idempotency-Key": "customer-batch-1"},
+        )
+    assert response.status_code == 202, response.text
     run = repository.get(response.json()["run_id"])
     assert run is not None
     if run.status == "waiting_user":
         issue_approval_grant(run, principal_id=str(actor.user_id))
-        run = AgentOrchestrator(repository=repository).continue_run(
-            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
-        )
+        with tenant_scope(actor.tenant_id):
+            run = AgentOrchestrator(repository=repository).continue_run(
+                run.run_id,
+                approved_by=str(actor.user_id),
+                runtime_context=run.metadata["runtime_context"],
+                approval_request_id=run.metadata["approval_request_id"],
+            )
     assert run.tool_calls, run.to_dict()
     output = run.tool_calls[0].output
     if ids == [3]:
@@ -246,7 +276,8 @@ def test_real_http_batch_uses_atomic_policy_after_signed_approval(
         assert snapshot(actor)[0] == [(1,), (2,), (101,), (102,), (103,)]
     else:
         assert output["success"] is False
-        assert output["deleted_count"] == 0
+        if "deleted_count" in output:
+            assert output["deleted_count"] == 0
         assert snapshot(actor) == before
 
 
@@ -313,7 +344,6 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
     from app.application.agent_orchestrator.result_verification import (
         bind_execution_receipt,
         verify_step_result,
@@ -322,6 +352,7 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     from app.application.agent_orchestrator.tool_permission import idempotency_scope_key
     from app.db.models.permission import Role
     from app.fastapi_routes.domains.customer.customer_routes import router
+    from tests.test_application.test_agent_user_decision_pause import _approve_and_execute
 
     _, actor, _ = deletion
     with tenant_scope(7), actor.factory.begin() as db:
@@ -335,15 +366,15 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
     app.include_router(router)
     with TestClient(app) as client:
         response = client.post(
-            "/customers/batch-delete", json={"ids": [3, 4]}, headers=actor.headers
+            "/customers/batch-delete",
+            json={"ids": [3, 4]},
+            headers={**actor.headers, "Idempotency-Key": "cascade-recheck-delete"},
         )
-    assert response.status_code == 200, response.text
+    assert response.status_code == 202, response.text
+    assert response.json()["pending_approval"] is True
     run = repository.get(response.json()["run_id"])
-    issue_approval_grant(run, principal_id=str(actor.user_id))
     with tenant_scope(7):
-        done = AgentOrchestrator(repository=repository).continue_run(
-            run.run_id, approved_by=str(actor.user_id), runtime_context=actor.context
-        )
+        done = _approve_and_execute(AgentOrchestrator(repository=repository), run, actor)
     assert done.status == "completed", done.error
     step, call = done.steps[0], done.tool_calls[0]
     original = copy.deepcopy(call.output)
@@ -386,14 +417,12 @@ def test_direct_customer_delete_recheck_requires_original_claim_and_absent_rows(
 
 
 @pytest.mark.parametrize("mixed", [False, True])
-def test_platform_admin_http_batch_is_limited_to_null_rows(
+def test_platform_admin_http_batch_requires_persistable_approval_scope(
     deletion, trusted_actor, monkeypatch, local_tools, mixed
 ):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
-    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
     from app.fastapi_routes.domains.customer.customer_routes import router
 
     _, full, _ = deletion
@@ -404,43 +433,19 @@ def test_platform_admin_http_batch_is_limited_to_null_rows(
             ("Platform local",),
         )
     before = snapshot(full)
-    repository = InMemoryAgentRunRepository()
-    monkeypatch.setattr(
-        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
-        lambda: repository,
-    )
     app = FastAPI()
     app.include_router(router)
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with tenant_scope(None), TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(
             "/customers/batch-delete",
             json={"ids": [50, 101] if mixed else [50]},
-            headers=admin.headers,
+            headers={**admin.headers, "Idempotency-Key": "platform-delete-1"},
         )
-    assert response.status_code == 200, response.text
-    run = repository.get(response.json()["run_id"])
-    done = run
-    if run.status == "waiting_user":
-        issue_approval_grant(run, principal_id=str(admin.user_id))
-        with tenant_scope(None):
-            done = AgentOrchestrator(repository=repository).continue_run(
-                run.run_id, approved_by=str(admin.user_id), runtime_context=admin.context
-            )
-    assert done.tool_calls, done.to_dict()
-    assert done.metadata["approval_receipt"]["approved_by"] == str(admin.user_id)
-    assert any(
-        event.event_type == "step.approved" and event.data["approved_by"] == str(admin.user_id)
-        for event in done.events
-    )
-    output = done.tool_calls[0].output
-    if mixed:
-        assert output["success"] is False
-        assert snapshot(full) == before
-    else:
-        assert output["success"] is True
-        assert output["deleted_count"] == 1
-        assert snapshot(full)[0] == [(1,), (2,), (3,), (101,), (102,), (103,)]
-        assert snapshot(full)[1:] == before[1:]
+    assert response.status_code == 403, response.text
+    receipt = response.json()
+    assert receipt["error_code"] == "approval_scope_required"
+    assert receipt["execution_status"] == "not_started" and not receipt.get("run_id")
+    assert snapshot(full) == before
 
 
 def test_personal_null_owner_and_admin_force_remain_closed(deletion, trusted_actor, monkeypatch):

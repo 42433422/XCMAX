@@ -185,10 +185,10 @@ PR Fast CI
 | 环节 | 执行与验证口径 |
 | --- | --- |
 | 事件去重 | Flutter、Android smoke、Market E2E 和 Retort 的分支 push 限定 main/develop/master，特性分支由 PR 验证；保留 tag、手动及既有定时入口。源 workflow 与根镜像的触发路径分别保留，生成器仅重写精确的根路径。 |
-| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据，仅对同 PR、同主 CI、旧 head、已有 cancelled job 且仍未完成的运行使用官方 force-cancel；取消前复查事件 head、live PR、run/attempt 和完整 jobs，身份缺失或漂移即停止。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
+| 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据：新 head 冲突等原因未触发原生取消时，对同 PR、同主 CI、旧 head 的原始 attempt 请求官方普通 cancel；只有同 attempt 已有 cancelled job 且仍未完成时才使用 force-cancel 收尾。取消前复查事件 head、live PR、run/attempt、时间边界和完整 jobs，身份缺失或漂移即停止；没有取消证据的人工重跑不启动清理。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
 | 后端分片 | 默认 8 片，最多同时 8 片；手动 `backend_shards` 可选 4/8/16/24。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
-| 后端安装 | uv 使用同一 Python 安装现有 requirements 和锁定 pytest；缓存绑定 requirements、uv.lock 及本地包声明。安装后校验依赖一致性，每片保存解析版本。更换解析器不代表间接依赖版本必然相同，以实际清单和回归为准。 |
+| 后端安装 | uv 使用同一 Python 安装现有 requirements，并从同一 uv.lock 同时固定 pytest、pytest-cov、coverage；锁缺失或歧义时在安装前停止。缓存绑定 requirements、uv.lock 及本地包声明，安装后校验依赖一致性，每片保存解析版本。其余间接依赖仍以实际清单和回归为准。 |
 | 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
 | 前端分片 | 全集只运行 4 片 Vitest，合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。源码与测试 ESLint、stub/any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
@@ -309,27 +309,20 @@ FHD_AUTO_UPDATE_LOCK=/tmp/fhd-staging-auto-update.lock \
 bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 ```
 
-## CVM 自动 CD（GitHub Actions）
+## CVM 制品上传（GitHub Actions 手动触发）
 
-`fhd-ci-cd.yml` job **`cvm-push-release`**：`main` push 且 `docker-build-fhd-api` 成功后，若配置了 secrets 则自动 scp 制品；**无 secrets 时跳过（不失败）**。
+`fhd-ci-cd.yml` job **`cvm-push-release`**：仅在 `workflow_dispatch` 明确设置 `push_to_cvm=true` 且 `docker-build-fhd-api` 成功后上传制品。服务器上传采用严格模式，缺少目标或 SSH 配置即失败。stable 上传绑定同一 main SHA 的原安全证据，并设置 `FHD_PUSH_APPLY_NOW=0` 等待部署审批；staging 可立即应用。
 
-| Secret / 变量 | 说明 |
-|---------------|------|
-| `FHD_PUSH_HOST` | 默认 `119.27.178.147` |
-| `FHD_PUSH_SSH_KEY` | SSH 私钥（**勿入库**） |
-| `FHD_PUSH_USER` | 可选，默认 `root` |
-| GitHub Environment `production` / `staging` | 可选审批门；`workflow_dispatch` 可选 channel |
-
-手动触发：`Actions → CI/CD Pipeline → Run workflow` → 勾选 **Push release artifacts to CVM**，选 channel。
+手动触发：`Actions → CI/CD Pipeline → Run workflow` → 勾选 **Push release artifacts to CVM**，选 channel；所需 `FHD_PUSH_*` 配置统一见下方 Secrets / Variables 清单。
 
 **仍需人工（仓外）**：GHCR `read:packages` PAT 写入服务器、`/root/fhd-full.env`、首次 cron 安装、branch protection。
 
 ## 单机 CVM 手动 rolling（`fhd-deploy.yml`）
 
 生产唯一路径：单台腾讯云 CVM（`119.27.178.147`）上的 **tarball + docker compose**。
-自动 CD 见上文 `cvm-push-release` → 服务器 cron `fhd-auto-update.sh`。
+制品上传见上文 `cvm-push-release`；stable 的应用由 `fhd-deploy.yml` 原审批链核验发布身份后执行。
 
-`fhd-deploy.yml` 仅为 **break-glass**：SSH 到该机执行 `apply-latest`（强制跑 `fhd-auto-update.sh`）或 `restart-only`（`docker compose restart`）。
+`fhd-deploy.yml` 使用所选 GitHub Environment，通过 SSH 执行 `apply-latest` 或 `restart-only`；环境审批要求以对应配置为准。生产应用必须提供完整 `release_sha` 与 `release:<同一 SHA>` action ID，经过原发布审批并核对 stable manifest；应用后核对部署标记及健康接口中的实际 SHA。
 
 > 2026-07-14：已删除 `FHD/k8s/`、`FHD/helm/` 及 blue-green/canary/GitOps/预览环境等从未接通真实集群的清单与文档路径。
 > 历史脚本已外置归档（见根 `ARCHIVE_POINTER.md` 第六批 `docs-20260917-batch6/`）；需要时从归档或 git 历史取回。
@@ -342,8 +335,8 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 | 名称 | 类型 | 用途 | 缺失行为 |
 |------|------|------|---------|
 | `GITHUB_TOKEN` | 自动 | GHCR 推送、`gh workflow run` dispatch、GitHub Release | 自动注入 |
-| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标（默认 `119.27.178.147`） | CVM/桌面推送跳过 |
-| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | CVM 推送跳过 |
+| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标 | Actions 服务器上传失败；桌面按对应工作流处理 |
+| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | Actions 服务器上传失败 |
 | `FHD_PUSH_USER` | Secret | CVM SSH 用户（默认 `root`） | 用默认 |
 | `SERVER_SSH_KEY` | Secret | 桌面安装包上传 SSH 私钥（缺失则回退 `FHD_PUSH_SSH_KEY`） | 桌面上传跳过 |
 | `CODECOV_TOKEN` | Secret | 覆盖率上传 | 步骤 `continue-on-error` |
@@ -355,6 +348,26 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 | `COSIGN_VERIFY_DISABLE` | Var | 置 `1` 临时跳过部署前 `cosign verify`（break-glass） | 不设=强制验证 |
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥。生产部署不依赖 kubeconfig。
+
+## 生产 SLO 采样链
+
+`fhd-slo-metrics-collect.yml` 在采集前核对既有 `automation/slo-metrics-` 发布记录：未合并的采样 PR、最新记录关闭但未合并、来源不明或当前检出未包含上一份合并提交时停止。作业串行执行不能替代证据已合入主线，后续采集与发布不得越过该检查。
+
+采集器与验证器共用原始证据链校验。只有全部历史记录都属于未绑定版本的 `preflight`、原始摘要有效且全部可从创世记录到达时，才允许对历史分叉建立一次审计 epoch；首条新记录绑定每份历史原始文件的摘要、分叉点和末端，历史文件保持原样。历史缺失、改写、正式记录分叉或新 epoch 再分叉继续阻断。旧预检不计入正式观察天数；正式 Day 0 仍须线上版本收敛，持续天数、同一 release、指标样本、时效和采样覆盖继续按原发布门禁验收。
+
+## 桌面三架构长时运行
+
+手动 `fhd-desktop-soak.yml` 使用 `main` 的验收控制代码，分别在已登记的 Windows x64、macOS arm64、macOS x64 三台专用交互桌面执行安装版。输入的完整 `release_sha` 必须已在 main，`product_version` 必须在既有版本目录；预装应用的 build-info、后端运行 SHA、窗口版本和实测文件摘要必须一致。Windows/macOS 账号使用各自的专用测试身份，普通 PR 不在有凭据的 self-hosted 设备上执行。
+
+设备需有 `self-hosted`、对应 OS、对应 `X64` / `ARM64` 架构、`xcagi-physical` 标签及可用的交互桌面；标签由维护者按设备登记赋予，本身不是物理硬件的加密证明。仓库变量 `XCAGI_SOAK_WINDOWS_BINARY`、`XCAGI_SOAK_MACOS_ARM64_BINARY`、`XCAGI_SOAK_MACOS_X64_BINARY` 分别指向实际可执行文件。对应 secrets 为 `XCAGI_SOAK_WINDOWS_USER` / `XCAGI_SOAK_WINDOWS_PASS` 和 `XCAGI_SOAK_MACOS_USER` / `XCAGI_SOAK_MACOS_PASS`。采集器还核对机器架构、原始 PE / Mach-O 包头及 macOS 原生执行状态，不能以 Rosetta 翻译执行替代 Intel 原生验收。缺设备、安装包或凭据时保留阻断，不能用托管虚拟机或 Linux 短测替代。
+
+唯一采集入口为 `FHD/scripts/release/desktop_soak.py`；旧 `desktop-soak.sh` 已移除。脚本使用独立临时 userData 和回环端口，真实登录后交替打开设置、聊天、客户、产品页，持续至少 28,800 秒。稳定性策略统一在 `verify_desktop_soak.py`：采样缺口最多 90 秒，整棵进程树 RSS 最多 2 GiB、稳定窗口增长最多 256 MiB，句柄/文件描述符最多 16,384、增长最多 512，按主机逻辑 CPU 归一化的平均利用率最多 80%，95% 以上持续超过 180 秒阻断。这是当前桌面验收预算，不是实际测得结果或全部部署方式的容量承诺。
+
+长跑后实际执行渲染网络离线恢复、渲染进程崩溃恢复、后端崩溃恢复、桌面正常重启、附加窗口创建/关闭、正常退出；故障仅作用于本次启动的进程与隔离数据。正常退出必须留下本进程的干净退出标记且没有残留进程；失败清理无法确认完成时保留私有测试目录。主进程、后端、GUI、资源和版本任何必要观测缺失均不能通过。此流程覆盖桌面生命周期与界面活性；真实模型业务、系统睡眠唤醒和安装升级回滚仍使用各自的原始验收证据。
+
+每轮和每个故障阶段保存原始 JSON，取消或失败也上传；渲染崩溃和未处理页面错误即时落盘，采样间隙发生后自行恢复也不能漏报，错误内容仅保留摘要。三架构原始文件 `windows.json`、`macos-arm64.json`、`macos-x64.json` 聚合为 `xcagi-desktop-soak`，旧双平台报告仍保留，但缺少第三架构时不能取得完整资格。独立验证器从原始样本重算时长、资源、页面覆盖和故障结果；缺架构、短测、重复 PID 身份、静态窗口、非预期崩溃、伪 `passed` 字段及缺失证据均被拒绝。`--measurements-only` 的成功退出仅表示测量格式和内容合格，不能认证设备来源。
+
+既有 `closure-evidence-report` 使用 `desktop_soak_run_id`，由 `build_closure_reports.py collect` 核对原始工作流、当前 attempt、main 祖先、原始制品摘要以及三个不同的登记 runner 作业，再将报告字节摘要绑定到可靠性报告。缺少任一架构长跑证据时，原生产可靠性报告继续阻断；既有 SLO、安装升级回滚、安全与客户验收条件同时保留。原生 runtime-contract 矩阵执行采集器和验证器回归，这些短测不产生八小时实机资格。
 
 ## 超大源码增长审查
 
@@ -389,6 +402,8 @@ part/mixin 分片、动态 facade 回调和同职责搬家。PR 正文列出触�
 > 合入顺序与**快车道**（小修复类 PR 可优先于主序列合入的条件、判定权与合入后流程）以仓根 [AGENTS.md](../AGENTS.md#合入顺序与快车道2026-10-19-0337-用户定) 为准；快车道不豁免下列 required checks。
 
 GitHub 实配 11 项 required status checks（2026-10-21 API 复核）：`guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、`mutation-smoke`。本轮不调整此清单或 App 绑定。
+
+`arch-fitness` 的源码增长登记绑定当次实际检出的 PR merge SHA：先确认 checkout 等于 `github.sha`、提交恰有两个父节点且第二父节点等于事件 head，再以第一父节点和 head 的 merge-base 比较。事件 base SHA 仅留作诊断，不用已过期的事件基点或会移动的 `origin/main` 代替被测合并；身份或历史缺失仍阻断。登记继续读取精确 head 的已提交目录，不表示架构评审已批准。
 
 `backend-quality` 的 mypy/lint 失败由 `backend-test` 汇总阻断；`frontend-quality` 的 ESLint/any 棘轮失败由 `frontend-test` 汇总阻断。普通 CI 的 vue-tsc 保持 advisory；发布验证中的严格构建仍按原流程执行。后端同时检查 full 和 behavior 两个口径；前端在合并原生覆盖率后执行全局阈值与 ratchet。数值以 `FHD/metrics/coverage_ratchet_baseline.json` 及测试配置为准，不在此复制历史地板值。本地发布验证入口为 `bash FHD/scripts/dev/release_verify.sh`。
 
@@ -493,6 +508,14 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
 手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
+
+发布消费者同时传入仓库与原始扫描 run ID，复用 `verify_modstore_release_approval` 回读成功的主线手动扫描、当前 attempt、原始 artifact 元数据及归档摘要，再逐文件比较下载内容。读取期间 attempt 变化、旧尝试制品、错误工作流、跨仓来源或扫描报告结构异常均阻断。扫描生产者在上传前可做本地自检；本地自检结果本身不能代替消费者的来源核验。
+
+正式 orchestrator 复用 `measure_required_checks.py --repository … --release-sha …` 读取当前 main 的完整 App 绑定规则、checks 和最新 workflow/jobs。保留真实事件及 run/attempt，拒绝同名工作流歧义、非成功的最新尝试和读取期间身份变化；历史 commit status 不能覆盖失败的 required check。该结果仅证明检查身份与状态，实际测试源码、安装包及生产读回由各自原有门禁核对。
+
+macOS 冻结双架构修复保留原发布开关和精确 SHA 授权：由主线控制器传 `--authorized-frozen-sha`，核对该 SHA 是当前 main 祖先，并执行相同的完整检查。门禁代码从控制器提交独立检出；原安装包、产品源及版本仍来自已授权的冻结提交。该参数携带原授权身份，不授予发布权限，也不适用于普通 orchestrator。
+
+冻结桌面、稳定制品上传、生产 apply 与 Windows hotfix 同样从触发工作流的主线 `github.sha` 独立检出校验器，并核对实际控制器提交；产品构建和原包仍绑定 `release_sha`，因此旧产品提交无需具备新版校验 CLI。正式桌面流程只允许当前 run/attempt 读取本次已完成作业的原制品，并核对调用工作流、控制器 SHA 和 `release_sha → controller → main` 祖先关系，不能沿用其他进行中的运行。Windows 临时下载指针分别核对原安装包、交付回执和摘要旁文件，任一不符均在发布前失败。
 
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 

@@ -535,7 +535,7 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
 <div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">mobile_jwt.py mobile_pairing.py</span><span class="tree-comment">← 移动端认证</span></div>
 <div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">license_token.py license_store.py</span><span class="tree-comment">← 许可证持久化</span></div>
 <div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">middleware/</span><span class="tree-comment">← 中间件</span></div>
-<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">csrf.py security_headers.py xss_sanitizer.py error_handler.py</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">csrf.py security_headers.py error_handler.py</span></div>
 <div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">di/</span><span class="tree-comment">← 依赖注入</span></div>
 <div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">registry.py</span><span class="tree-comment">← ServiceContainer（重型单例）</span></div>
 <div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">fastapi_deps.py</span><span class="tree-comment">← FastAPI Depends</span></div>
@@ -710,7 +710,7 @@ header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing
     <div class="flow-path">POST /api/chat → fastapi_app.py → middleware链</div>
     <div class="flow-desc">
       <code>XCAGI/run.py</code> 启动 uvicorn → <code>app/fastapi_app.py:get_fastapi_app()</code> 工厂创建应用<br>
-      请求依次经过: <code>CSRFMiddleware</code> → <code>SecurityHeadersMiddleware</code> → <code>XSSSanitizerMiddleware</code> → <code>ModContextMiddleware</code> → <code>LanCidrGuard</code> → <code>LanLicenseGuard</code><br>
+      请求依次经过: <code>CSRFMiddleware</code> → <code>SecurityHeadersMiddleware</code> → <code>ModContextMiddleware</code> → <code>LanCidrGuard</code> → <code>LanLicenseGuard</code>；JSON 原文保留，HTML 转义在显示边界处理。<br>
       最终路由到 <code>app/fastapi_routes/ai_assistant.py</code>
     </div>
   </div>

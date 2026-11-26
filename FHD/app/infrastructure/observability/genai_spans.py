@@ -1,7 +1,7 @@
 """OpenTelemetry GenAI 语义约定：工具执行 span 埋点。
 
-只提供最小埋点能力：SDK 未初始化时 ``get_tracer`` 返回 NoOpTracer，
-埋点自身失败一律降级为 no-op，不影响工具调用与业务异常语义。
+沿用应用所有的 SDK provider 和批处理；关闭遥测时返回 NoOpTracer。
+埋点自身失败不影响工具调用与业务异常语义。
 """
 
 from __future__ import annotations
@@ -14,16 +14,16 @@ from typing import Any
 
 from opentelemetry import context as otel_context
 from opentelemetry.trace import Span, Status, StatusCode, get_current_span, set_span_in_context
-from opentelemetry.trace import get_tracer as _otel_get_tracer
 
+from app.infrastructure.llm.trace_store import get_runtime_tracer
 from app.neuro_bus.tracer import TraceContext, get_trace_context
 from app.security.log_redaction import redact_log_text
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
 def get_tracer() -> Any:
-    """返回本模块 tracer；未配置 TracerProvider 时即 NoOpTracer。"""
-    return _otel_get_tracer(__name__)
+    """Use the same SDK lifecycle and exporters as the existing GenAI trace view."""
+    return get_runtime_tracer(__name__)
 
 
 def _set_attribute(span: Span, key: str, value: Any) -> None:

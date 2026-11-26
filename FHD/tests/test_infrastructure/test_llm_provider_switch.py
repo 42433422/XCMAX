@@ -24,6 +24,27 @@ def _provider(provider_id: str, configured: bool) -> SimpleNamespace:
     )
 
 
+@pytest.mark.parametrize(("mode", "configured"), [("online", True), ("offline", False)])
+def test_sdk_configuration_does_not_resolve_scoped_factory(monkeypatch, mode, configured):
+    from app.infrastructure.llm import client
+    from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
+
+    monkeypatch.setattr(client, "_mode", mode)
+    calls = []
+
+    def unavailable_account_client():
+        calls.append("resolve")
+        raise RuntimeError("account authorization expired")
+
+    with client.llm_client_factory_scope(unavailable_account_client):
+        assert OpenAISdkProvider().is_configured is configured
+        assert calls == []
+        if configured:
+            with pytest.raises(RuntimeError, match="account authorization expired"):
+                client.get_llm_client()
+            assert calls == ["resolve"]
+
+
 class TestLLMProviderRegistry:
     @pytest.fixture(autouse=True)
     def _disable_instrumentation(self, monkeypatch) -> None:

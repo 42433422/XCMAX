@@ -64,7 +64,7 @@ def _shared_keys(
 
 @dataclass
 class RuntimeState:
-    # The legacy qclaw panel and AIOPEN routes retain this same dictionary object.
+    # AIOPEN control surfaces share this single runtime state.
     values: dict[str, Any]
 
     @property
@@ -349,7 +349,7 @@ class ApiKeyRegistry:
     @staticmethod
     def _client_key_expired(meta: dict[str, Any], now: float) -> bool:
         expires_at = meta.get("expires_at")
-        if expires_at is None:
+        if isinstance(expires_at, bool) or not isinstance(expires_at, (str, int, float)):
             return True
         try:
             return not float(expires_at) > now

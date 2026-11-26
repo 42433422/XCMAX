@@ -108,6 +108,13 @@ language adapters (TypeScript / Vue / JSX adapters ship in tree).
   inherit a curated allow-list (`PATH` / `HOME` / `LANG` / …); secrets like
   `OPENAI_API_KEY` no longer leak into spawned tools. `function` jobs run
   with `cwd=tempdir` and `stdin=DEVNULL`.
+- **POSIX command cleanup** reuses CPython 3.11's standard-library
+  [`subprocess`](https://docs.python.org/3.11/library/subprocess.html) and
+  process groups (PSF-2.0 license; existing CI runtime, no new dependency).
+  Success, failure, timeout and interruption all stop the invocation's group
+  before returning; timeout receipts carry exit code 124 and bounded output.
+  The Windows subprocess backend still terminates only its direct child and
+  does not provide the Codex runtime's Windows Job Object containment.
 - **Tolerant LLM JSON parser** (`nl/parsing.py`) — strips fences, comments,
   trailing commas, smart quotes, BOM/zero-width chars, auto-balances
   truncated braces, recovers from chatter prefixes. Replaces ad-hoc parsers
