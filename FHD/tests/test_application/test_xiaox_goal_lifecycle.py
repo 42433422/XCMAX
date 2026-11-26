@@ -223,7 +223,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
         first = execute("rejected-customer", "rejected-attempt")
         if adapter_failure:
             assert first["status"] == "unknown" and first["success"] is False, first
-            with pytest.raises(CodexBindingError) as rejected:
+            with pytest.raises(XiaoxBindingError) as rejected:
                 state.execute(
                     "customers", "create", {"unit_name": "recovered-customer"}, "changed-call"
                 )
@@ -302,7 +302,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
     assert result["execution_state"] == (
         "unknown" if unresolved else "completed" if failure == "no_effect" else "partial"
     )
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=state.actor.factory))
     rows = reopened.receipt_snapshot(parent.run_id)
     assert len(rows) == (1 if adapter_failure else 2)
     assert rows[0]["receipt"]["success"] is False

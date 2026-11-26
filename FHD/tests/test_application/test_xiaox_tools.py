@@ -248,7 +248,7 @@ def test_acknowledged_child_completion_uses_original_independent_readback(
     args = {"tool_id": "customers", "action": "query", "params": {}, "call_id": "original"}
     first = _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", args)
     assert first["status"] == "running" and first["verified"] is False
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         _invoke(setup.bridge, setup.grant.mcp_token, "execute_action", {**args, "call_id": "next"})
     assert error.value.code == "call_in_progress"
     original = copy.deepcopy(setup.store.repository.get(first["run_id"]).tool_calls[0].output)
@@ -356,7 +356,7 @@ def test_original_child_receipt_never_follows_a_replacement_attempt(bridge_setup
             setup.run.run_id,
             lambda _run, metadata: metadata["calls"]["original"].update(child_run_id=""),
         )
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     binding = reopened.get(setup.run.run_id)
     call = binding.metadata["calls"]["original"]
     result = read_call_receipt(reopened, binding, call)
@@ -398,7 +398,7 @@ def test_receipt_identity_mismatch_cannot_release_original_reservation(
         foreign.pop(field)
     else:
         foreign[field] = "another-original-identity"
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         setup.store.record_call(
             setup.run.run_id, "original", child_run_id=receipt["run_id"], receipt=foreign
         )
@@ -428,7 +428,7 @@ def test_lost_child_binding_ack_recovers_only_original_sql_admission(bridge_setu
         setup.run.run_id,
         lambda _run, metadata: metadata["calls"]["original"].update(child_run_id=""),
     )
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=setup.actor.factory))
     recovered = reopened.receipt_snapshot(setup.run.run_id)[0]
     assert recovered["child_run_id"] == recovered["receipt"]["run_id"] == original["run_id"]
     assert recovered["receipt"]["status"] == "waiting_user"
@@ -468,7 +468,7 @@ def test_evidence_consumers_reject_an_unsupported_parent_binding(
     )
     setup.store.update(setup.run.run_id, lambda _run, metadata: metadata.update(version=2))
     binding = setup.store.get(setup.run.run_id)
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         if consumer == "receipt":
             read_call_receipt(setup.store, binding, binding.metadata["calls"]["original"])
         elif consumer == "browser":

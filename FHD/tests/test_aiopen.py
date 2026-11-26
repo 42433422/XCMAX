@@ -513,6 +513,8 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
         return {"success": True, "source": "smoke"}
 
     app.include_router(ai_open_router)
+    from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
+
     app.include_router(ai_qclaw_router)
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
         id=73,

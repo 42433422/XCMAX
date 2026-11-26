@@ -289,7 +289,7 @@ def test_workspace_review_resumes_the_original_screen_action(dynamic_screen, ses
     assert done.metadata["approval_receipt"]["plan_sha256"] == plan_fingerprint(plan)
     assert [row["action"] for row in state.screen.own.sent] == ["type", "verify"]
     assert not state.screen.foreign.sent
-    reopened = CodexBindingStore(SQLAlchemyAgentRunRepository(session_factory=sessions))
+    reopened = XiaoxBindingStore(SQLAlchemyAgentRunRepository(session_factory=sessions))
     receipt = reopened.receipt_snapshot(state.parent.run_id)[0]["receipt"]
     assert receipt["run_id"] == child.run_id and receipt["verified"] is True
     with tenant_scope(7), sessions() as db:

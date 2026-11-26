@@ -285,7 +285,7 @@ def test_batch_write_binds_call_identity_and_objects_to_original_sql_approval(
     params = {"ids": [11, 22]}
     # Exercise the tenant-owned batch contract; global legacy product writes
     # remain unavailable to this same authenticated enterprise actor.
-    with pytest.raises(CodexBindingError) as legacy:
+    with pytest.raises(XiaoxBindingError) as legacy:
         state.describe("products", "batch_delete")
     assert legacy.value.code == "permission_denied"
     first = state.execute("batch-original", params, "customers", "batch_delete")

@@ -85,7 +85,7 @@ def test_read_alias_cannot_grant_write_or_change_original_entity_scope(runtime_b
         calls.append((name, arguments))
         return {"ok": True}
 
-    result = _run(tools=[business_db_tool_specs()[0]], gate=gate)
+    result = _run(tools=[_read_contract()], gate=gate)
     assert result["runtime"] == "xiaox"
     submitted = runtime_boundary[0]
     assert submitted["allowed_actions"] == ["business_db.read"]
