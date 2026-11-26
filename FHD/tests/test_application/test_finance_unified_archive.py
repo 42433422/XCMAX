@@ -90,9 +90,11 @@ def test_same_reference_with_changed_amount_or_status_is_conflict(db_factory):
 
 
 def test_no_tenant_and_foreign_tenant_invoice_are_refused(db_factory):
-    assert archive.archive_from_crm_invoice(invoice()) == {
-        "archived": False, "reason_code": "tenant_context_required"
-    }
+    with tenant_scope(None):
+        assert archive.archive_from_crm_invoice(invoice()) == {
+            "archived": False,
+            "reason_code": "tenant_context_required",
+        }
     with tenant_scope(7):
         assert archive.archive_from_crm_invoice(invoice())["archived"] is True
     with tenant_scope(8):
