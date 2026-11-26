@@ -20,10 +20,8 @@ jobs:
     if: github.repository == 'xcagi/XCMAX'
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    environment: ${{ github.ref_name == 'codex/integrate-open-prs-20261126' && 'xcmax-integration-holdout-3680' || 'xcmax-model-holdout' }}
     env:
-      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
-      OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
-      OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
       TASK_BENCHMARK_RUN: "1"
       TASK_BENCHMARK_SET: holdout
       TASK_BENCHMARK_TRIALS: "3"
@@ -63,11 +61,80 @@ jobs:
             -r ops/deploy/requirements-dev.txt "${requirements[@]}"
           uv pip check --system --python "$(command -v python)"
 
+      - name: Bind the existing holdout route
+        if: github.ref_name != 'codex/integrate-open-prs-20261126'
+        env:
+          OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+          HOLDOUT_ROUTE_METADATA: ${{ vars.XCAGI_HOLDOUT_RUNTIME_ROUTE_JSON }}
+        run: |
+          set -euo pipefail
+          printf 'OPENAI_API_KEY=%s\nOPENAI_BASE_URL=%s\nOPENAI_MODEL=%s\n' \
+            "$OPENAI_API_KEY" "$OPENAI_BASE_URL" "$OPENAI_MODEL" >> "$GITHUB_ENV"
+          separator="$(python -c 'import uuid; print(uuid.uuid4().hex)')"
+          printf 'HOLDOUT_ROUTE_METADATA<<%s\n%s\n%s\n' \
+            "$separator" "$HOLDOUT_ROUTE_METADATA" "$separator" >> "$GITHUB_ENV"
+
+      - name: Start the isolated MiMo Token Plan holdout gateway
+        if: github.ref_name == 'codex/integrate-open-prs-20261126'
+        env:
+          MIMO_API_KEY: ${{ secrets.XCAGI_INTEGRATION_HOLDOUT_MIMO_KEY }}
+          LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "$MIMO_API_KEY" ]; then
+            echo '::error::Missing integration-only MiMo holdout secret'
+            exit 1
+          fi
+          gateway="$RUNNER_TEMP/holdout-mimo"
+          mkdir "$gateway"
+          uv venv --python "$(command -v python)" "$gateway/venv"
+          uv pip install --python "$gateway/venv/bin/python" 'litellm[proxy]==1.109.3'
+          export LITELLM_MASTER_KEY="$(python -c 'import secrets; print("sk-" + secrets.token_hex(32))')"
+          echo "::add-mask::$LITELLM_MASTER_KEY"
+          cat > "$gateway/config.yaml" <<'YAML'
+          model_list:
+            - model_name: mimo-v2.6-pro
+              litellm_params:
+                model: openai/mimo-v2.6-pro
+                api_base: https://token-plan-cn.xiaomimimo.com/v1
+                api_key: os.environ/MIMO_API_KEY
+                max_retries: 0
+              model_info:
+                mode: responses
+          router_settings:
+            num_retries: 0
+            fallbacks: []
+            context_window_fallbacks: []
+            content_policy_fallbacks: []
+          general_settings:
+            master_key: os.environ/LITELLM_MASTER_KEY
+          litellm_settings:
+            telemetry: false
+          YAML
+          nohup "$gateway/venv/bin/litellm" --config "$gateway/config.yaml" \
+            --host 127.0.0.1 --port 43981 </dev/null > "$gateway/private.log" 2>&1 &
+          echo "$!" > "$gateway/pid"
+          ready_url='http://127.0.0.1:43981/health/liveliness'
+          for attempt in {1..90}; do
+            curl --noproxy '*' -fs "$ready_url" >/dev/null && break
+            kill -0 "$(cat "$gateway/pid")"
+            sleep 1
+          done
+          curl --noproxy '*' -fs "$ready_url" >/dev/null
+          {
+            printf 'OPENAI_API_KEY=%s\n' "$LITELLM_MASTER_KEY"
+            printf '%s\n' 'OPENAI_BASE_URL=http://127.0.0.1:43981/v1' 'OPENAI_MODEL=mimo-v2.6-pro'
+            printf '%s\n' 'HOLDOUT_ROUTE_METADATA={"provider_id":"xiaomi-mimo-token-plan","upstream_vendor":"xiaomi","context_window":1048576,"max_output_tokens":131072,"response_model":"mimo-v2.6-pro","gateway_kind":"litellm"}'
+          } >> "$GITHUB_ENV"
+
       - name: Require real model credentials rather than rule fallback
         run: |
           set -euo pipefail
-          if [ -z "${OPENAI_API_KEY}" ] || [ -z "${OPENAI_MODEL}" ]; then
-            echo "::error::BLOCKED_MODEL_CREDENTIALS: XCAGI_LLM_API_KEY and XCAGI_LLM_MODEL must be configured; no rule-only fallback"
+          if [ -z "${OPENAI_API_KEY:-}" ] || [ -z "${OPENAI_MODEL:-}" ]; then
+            echo "::error::BLOCKED_MODEL_CREDENTIALS: the selected holdout route must have credentials and a model"
             exit 1
           fi
 
@@ -75,8 +142,6 @@ jobs:
       # account. Use the original deployment route qualification, not a fake
       # Market login, an injected principal or a generated PASS receipt.
       - name: Qualify the explicit independent deployment route before holdout
-        env:
-          HOLDOUT_ROUTE_METADATA: ${{ vars.XCAGI_HOLDOUT_RUNTIME_ROUTE_JSON }}
         run: |
           set -euo pipefail
           umask 077
@@ -263,3 +328,11 @@ jobs:
             FHD/holdout-13x3-junit.xml
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Stop the isolated MiMo gateway
+        if: always() && github.ref_name == 'codex/integrate-open-prs-20261126'
+        run: |
+          pid_file="$RUNNER_TEMP/holdout-mimo/pid"
+          if [ -f "$pid_file" ]; then
+            kill "$(cat "$pid_file")" 2>/dev/null || true
+          fi
