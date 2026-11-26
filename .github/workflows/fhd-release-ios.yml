@@ -1,22 +1,31 @@
 # CI SSOT: generated from FHD/.github/workflows/release-ios.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release iOS
+run-name: Release iOS ${{ inputs.release_sha }}
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: App Store marketing version
+      release_sha:
+        description: Immutable 40-character mainline source SHA
         required: true
         type: string
-        default: "10.0.0"
+      version:
+        description: Explicit App Store Connect marketing version (x.y.z); not derived from desktop
+        required: true
+        type: string
       build_number:
-        description: iOS build number; empty uses the Actions run number
-        required: false
+        description: Explicit App Store Connect build number; no automatic fallback
+        required: true
         type: string
       bootstrap_match:
         description: One-time import of the existing certificate/profile into match
         required: true
+        default: false
+        type: boolean
+      distribute_to_testflight:
+        description: Explicitly approve TestFlight distribution after the signed candidate is archived
+        required: false
         default: false
         type: boolean
       submit_for_review:
@@ -39,6 +48,7 @@ defaults:
 
 jobs:
   build-and-distribute:
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-26
     defaults:
       run:
@@ -53,6 +63,56 @@ jobs:
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Reject an unfrozen or non-main iOS release source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$RELEASE_SHA"
+
+      - name: Reject unverified personal iOS App Store identity
+        id: personal_identity
+        env:
+          PERSONAL_BUNDLE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}
+          PERSONAL_APP_STORE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_APP_ID }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          release = json.loads(Path('../config/download_release.json').read_text(encoding='utf-8'))
+          if 'personal' not in release.get('active_skus', []):
+              raise SystemExit('BLOCKED: personal SKU is not active in the product catalog')
+          if 'personal' in release.get('frozen_skus', []):
+              raise SystemExit('BLOCKED: personal SKU remains frozen in the product catalog')
+          bundle = os.environ.get('PERSONAL_BUNDLE_ID', '').strip()
+          app_id = os.environ.get('PERSONAL_APP_STORE_ID', '').strip()
+          if not re.fullmatch(r'[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+', bundle):
+              raise SystemExit('BLOCKED: missing valid original personal App Store bundle ID')
+          if not re.fullmatch(r'[0-9]+', app_id):
+              raise SystemExit('BLOCKED: missing original personal App Store app ID')
+          fastfile = Path('ios/fastlane/Fastfile').read_text(encoding='utf-8')
+          matchfile = Path('ios/fastlane/Matchfile').read_text(encoding='utf-8')
+          project = Path('ios/Runner.xcodeproj/project.pbxproj').read_text(encoding='utf-8')
+          if f'APP_IDENTIFIER = "{bundle}"' not in fastfile:
+              raise SystemExit('BLOCKED: Fastlane targets a different bundle ID')
+          if f'APP_STORE_ID = "{app_id}"' not in fastfile:
+              raise SystemExit('BLOCKED: Fastlane targets a different App Store app')
+          if f'app_identifier("{bundle}")' not in matchfile:
+              raise SystemExit('BLOCKED: signing profile targets another bundle ID')
+          if f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};' not in project:
+              raise SystemExit('BLOCKED: Xcode project targets another bundle ID')
+          print('Personal SKU source identity consistent; App Store Connect and signing evidence still required')
+          PY
 
       - name: Verify Xcode SDK
         run: |
@@ -62,13 +122,13 @@ jobs:
 
       - name: Resolve release version
         id: version
+        env:
+          REQUESTED_MARKETING_VERSION: ${{ inputs.version }}
+          REQUESTED_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
           set -euo pipefail
-          marketing_version="${{ inputs.version }}"
-          build_number="${{ inputs.build_number }}"
-          if [[ -z "${build_number}" ]]; then
-            build_number="${{ github.run_number }}"
-          fi
+          marketing_version="$REQUESTED_MARKETING_VERSION"
+          build_number="$REQUESTED_BUILD_NUMBER"
           if [[ ! "${marketing_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::version must use x.y.z format"
             exit 2
@@ -176,14 +236,89 @@ jobs:
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: bundle exec fastlane ios build_ipa
 
+      - name: Freeze signed IPA bytes and original build identity
+        id: ipa_provenance
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          PERSONAL_BUNDLE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}
+          PERSONAL_APP_STORE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_APP_ID }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, plistlib, re, subprocess, tempfile, zipfile
+          from pathlib import Path
+          archive_dir = Path('build/ios/ipa')
+          archives = list(archive_dir.glob('*.ipa'))
+          if len(archives) != 1:
+              raise SystemExit('Exactly one signed IPA candidate is required')
+          archive = archives[0]
+          with zipfile.ZipFile(archive) as ipa:
+              plist_names = [n for n in ipa.namelist()
+                             if re.fullmatch(r'Payload/[^/]+\.app/Info\.plist', n)]
+              if len(plist_names) != 1:
+                  raise SystemExit('IPA must contain exactly one app Info.plist')
+              app_info = plistlib.loads(ipa.read(plist_names[0]))
+          bundle_id = app_info.get('CFBundleIdentifier')
+          if bundle_id != os.environ['PERSONAL_BUNDLE_ID']:
+              raise SystemExit('IPA bundle ID does not match approved personal app')
+          if str(app_info.get('CFBundleShortVersionString')) != os.environ['IOS_MARKETING_VERSION']:
+              raise SystemExit('IPA marketing version does not match explicit App Store version')
+          if str(app_info.get('CFBundleVersion')) != os.environ['IOS_BUILD_NUMBER']:
+              raise SystemExit('IPA build number does not match explicit App Store build')
+          with tempfile.TemporaryDirectory(prefix='xcagi-signed-ipa-') as temp_dir:
+              subprocess.run(['ditto', '-x', '-k', str(archive), temp_dir], check=True)
+              apps = list((Path(temp_dir) / 'Payload').glob('*.app'))
+              if len(apps) != 1:
+                  raise SystemExit('IPA must contain exactly one signed app')
+              subprocess.run(['codesign', '--verify', '--deep', '--strict', str(apps[0])], check=True)
+              signed = subprocess.run(['codesign', '-dv', '--verbose=4', str(apps[0])],
+                                      check=True, text=True, capture_output=True)
+              team = re.search(r'^TeamIdentifier=(\S+)$', signed.stderr, re.MULTILINE)
+              if not team:
+                  raise SystemExit('Signed IPA lacks Apple TeamIdentifier')
+              signing_team = team.group(1)
+              if signing_team != os.environ['APPLE_TEAM_ID']:
+                  raise SystemExit('Signed IPA Apple TeamIdentifier does not match configured team')
+          with archive.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          (archive_dir / (archive.name + '.sha256')).write_text(
+              f'{digest}  {archive.name}\n', encoding='utf-8')
+          receipt = {
+              'schema': 'xcagi.ios_candidate_build_identity/v1',
+              'source_sha': os.environ['RELEASE_SHA'],
+              'sku': 'personal',
+              'bundle_id': bundle_id,
+              'app_store_id': os.environ['PERSONAL_APP_STORE_ID'],
+              'signing_team_id': signing_team,
+              'marketing_version': os.environ['IOS_MARKETING_VERSION'],
+              'build_number': os.environ['IOS_BUILD_NUMBER'],
+              'ipa_filename': archive.name,
+              'ipa_sha256': digest,
+              'verification_scope': 'build_artifact_not_physical_device',
+          }
+          (archive_dir / 'xcagi-ios-build-info.json').write_text(
+              json.dumps(receipt, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
-          path: FHD/mobile-flutter-poc/build/ios/ipa/*.ipa
+          path: FHD/mobile-flutter-poc/build/ios/ipa/
           if-no-files-found: error
 
+      - name: Require explicit distribution approval for App Review
+        env:
+          DISTRIBUTE_TO_TESTFLIGHT: ${{ inputs.distribute_to_testflight }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+        run: |
+          if [[ "$SUBMIT_FOR_REVIEW" == "true" && "$DISTRIBUTE_TO_TESTFLIGHT" != "true" ]]; then
+            echo "::error::App Review requires explicit TestFlight distribution authorization"
+            exit 1
+          fi
       - name: Decode App Store Connect API key
+        if: inputs.distribute_to_testflight
         env:
           APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
         run: |
@@ -197,6 +332,8 @@ jobs:
           echo "APP_STORE_CONNECT_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
 
       - name: Upload to TestFlight or submit for review
+        id: store_distribution
+        if: inputs.distribute_to_testflight
         working-directory: FHD/mobile-flutter-poc/ios
         env:
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
@@ -206,12 +343,23 @@ jobs:
 
       - name: Release summary
         if: always()
+        env:
+          PERSONAL_BUNDLE_ID: ${{ vars.IOS_PERSONAL_APP_STORE_BUNDLE_ID }}
+          PERSONAL_IDENTITY_RESULT: ${{ steps.personal_identity.outcome }}
+          IPA_PROVENANCE_RESULT: ${{ steps.ipa_provenance.outcome }}
+          DISTRIBUTION_RESULT: ${{ steps.store_distribution.outcome }}
+          TESTFLIGHT_REQUESTED: ${{ inputs.distribute_to_testflight }}
+          APP_REVIEW_REQUESTED: ${{ inputs.submit_for_review }}
         run: |
           {
-            echo "### XCAGI Flutter iOS"
-            echo ""
-            echo "- Version: \`${{ steps.version.outputs.marketing_version }} (${{ steps.version.outputs.build_number }})\`"
-            echo "- Bundle ID: \`com.xiuci.xcagi.mobile.enterprise\`"
-            echo "- Signing: Fastlane match, App Store profile"
-            echo "- Submitted for review: \`${{ inputs.submit_for_review }}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
+            echo '### XCAGI Flutter iOS personal release candidate'
+            echo ''
+            printf -- '- Version input: `%s (%s)`\n' "${{ steps.version.outputs.marketing_version }}" "${{ steps.version.outputs.build_number }}"
+            printf -- '- Personal Bundle ID input: `%s`\n' "$PERSONAL_BUNDLE_ID"
+            printf -- '- Personal identity gate: `%s`\n' "$PERSONAL_IDENTITY_RESULT"
+            printf -- '- Signed IPA verification step: `%s`\n' "$IPA_PROVENANCE_RESULT"
+            printf -- '- TestFlight requested: `%s`\n' "$TESTFLIGHT_REQUESTED"
+            printf -- '- App Review requested: `%s`\n' "$APP_REVIEW_REQUESTED"
+            printf -- '- Distribution step outcome: `%s`\n' "$DISTRIBUTION_RESULT"
+            echo '- iPhone physical-device acceptance: BLOCKED unless a separate device receipt proves it'
+          } >> "$GITHUB_STEP_SUMMARY"
