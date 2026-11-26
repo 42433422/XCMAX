@@ -1,34 +1,13 @@
-"""通用 Excel 模板写入员：模板 xlsx + 写入计划 plan.json → 回填结果 xlsx。
+"""按声明式 plan.json 填充 XLSX，输出工作簿及独立质检所需的写入报告。
 
-哑执行器定位：不含任何领域规则；「写哪个格、写什么值、什么格式」全部由上游
-（规则映射员 / 人工）在 plan.json 里声明。模板样式、合并单元格、既有公式原样保留。
+plan_version=1，phases 按顺序执行；顶层 writes 等价于 cell_writes。
+支持清除、值/公式写入、样式、插行、合并、行高、冻结、工作表裁剪及原生表格/图表。
+字段契约见既有 workbook_write_contract.WORKBOOK_WRITE_INPUT；本执行器不推断业务规则。
 
-plan.json 契约（plan_version=1）：
-
-- ``template.sheet_names``：可选；声明模板必须包含的 sheet，缺失即失败（计划-模板匹配保险）。
-- ``protected_ranges``：可选；如 ``["明细!BR1:CC500", "明细!CE:CG"]``。任何写入/清除落入
-  保护区默认跳过并记 violation；``payload.strict_protected`` 为真时直接失败。
-- ``phases``：按顺序执行的阶段列表，支持：
-  - ``clear_ranges``：``{"phase": "clear_ranges", "ranges": ["明细!E4:BM9"]}`` 清值不动样式/合并。
-  - ``cell_writes``：``{"phase": "cell_writes", "writes": [{"sheet", "ref"|"row"+"col",
-    "value", "value_type"?, "number_format"?}]}``；``value_type`` 支持
-    ``date``/``datetime``/``number``/``string``（缺省原样写入）。
-  - ``formula_writes``：``{"phase": "formula_writes", "writes": [{"sheet", "ref",
-    "formula", "number_format"?}]}``；公式串原样写入，不求值。
-  - ``create_table``：已有标题和数据范围转换为原生表格，计算指定列并在空白下一行合计。
-  - ``create_combo_chart``：从已有工作表的三个对齐列创建新工作表中的双轴柱线图。
-  - ``cell_styles``：``{"phase": "cell_styles", "sheet", "range",
-    "bold"?, "font_size"?, "horizontal"?, "vertical"?, "fill_color"?, "border"?}``；
-    只设置显式给出的样式字段。
-  - ``insert_rows``：``{"phase": "insert_rows", "sheet", "row", "count"}``；在指定行上方
-    插入空行，已有数据、样式、合并区与行高随之下移，公式行引用同步改写。
-  - ``merge_cells``：``{"phase": "merge_cells", "sheet", "range"}``；合并前拒绝覆盖非左上角数据。
-  - ``set_row_height``：``{"phase": "set_row_height", "sheet", "row", "height"}``。
-  - ``freeze_panes``：``{"phase": "freeze_panes", "sheet", "ref"}``，如 ``A3`` 冻结前两行。
-  - ``retain_sheets`` / ``remove_sheets``：裁剪输出工作簿的 sheet。
-- ``expected``：可选；写入员不消费，原样带回 ``meta.expected`` 与 write_report.json，供质检员对账。
-
-顶层直接给 ``writes`` 时视为单一 ``cell_writes`` 阶段（便于最简调用）。
+template.sheet_names 声明必需工作表；protected_ranges 使用带表名的范围。
+保护区违规记录并跳过，strict_protected 模式拒绝输出。清值不清样式；样式只改显式字段。
+插行迁移数据、样式、合并区、行高和目标表引用；合并拒绝覆盖非锚点数据。
+公式文本保存但不求值。expected 原样交给质检员，不作为写入成功依据。
 """
 
 from __future__ import annotations

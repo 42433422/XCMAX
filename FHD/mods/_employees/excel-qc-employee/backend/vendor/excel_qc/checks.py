@@ -1,23 +1,7 @@
-"""通用 Excel 质检：对回填结果做独立结构对账，产出 verdict + 问责路由。
+"""独立 Excel 质检：核对计划、保护区、统计、公式、追溯及结构。
 
-独立性原则（复式记账）：本模块**不 import** 规则映射员/模板写入员的任何代码，
-只依赖三方契约文件（plan.json / rules.json / write_report.json）与输出 xlsx 本身，
-从独立路径重算不变量——写入员或映射员的 bug 无法「自证清白」。
-
-六节检查（缺输入的节自动跳过并记 warning，绝不假装通过）：
-
-1. conformance   计划符合性：plan 每条 cell/formula 写入逐格比对输出文件；
-                 clear 范围内非计划格必须无残值；retain_sheets 生效。
-2. protection    保护区完整性：提供原模板时，protected_ranges 逐格与模板 diff。
-3. expected      映射员自洽性：从 plan 独立重算 per_key 数值合计 / 计划格数，
-                 与 plan.expected 自述比对；再与输出文件实际值二次对账。
-4. formulas      公式健康：全簿扫描 #REF! 与悬空 sheet 引用。
-5. traceability  追溯：重算 rules.json 哈希与 plan.meta.rules_ref 比对。
-6. structure     结构漂移：rules.blocks 的键 → 输出文件键列实际值逐块比对。
-
-verdict：任一 fail → FAIL；无 fail 有 warn → WARN；否则 PASS。
-blame 路由：conformance/protection → writer；expected → mapper；
-traceability → pipeline；structure → rules_stale；formulas → template_or_plan。
+只读取 plan/rules/write_report 和 XLSX，不导入映射员或写入员代码。
+缺少核验输入时明确跳过或警告；失败优先于警告，问责路由见 _BLAME。
 """
 
 from __future__ import annotations
@@ -184,90 +168,7 @@ def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
     return sheet, min_row, min_col, max_row, max_col
 
 
-# ---------------------------------------------------------------------------
 # 六节检查
-# ---------------------------------------------------------------------------
-
-
-def _check_native_table(ws, phase: Dict[str, Any], f: _Finding, targets: set) -> None:
-    from openpyxl.utils.cell import get_column_letter, range_boundaries
-
-    left, top, right, bottom = range_boundaries(phase["range"].upper())
-    columns = [ws.cell(top, col).value for col in range(left, right + 1)]
-    heading, formula = phase["sum_column"], phase["calculated_formula"]
-    table = ws.tables.get(phase["name"])
-    if table is None or heading not in columns:
-        f.fail("输出缺少计划的原生 Excel 表格或合计列", sheet=ws.title)
-        return
-    start, end = f"{get_column_letter(left)}{top}", get_column_letter(right)
-    if (table.ref != f"{start}:{end}{bottom + 1}" or table.totalsRowCount != 1
-            or table.totalsRowShown is False or table.autoFilter is None
-            or table.autoFilter.ref != f"{start}:{end}{bottom}"
-            or [column.name for column in table.tableColumns] != columns):
-        f.fail("原生表格范围、合计行、筛选范围或列标题与计划不符", sheet=ws.title)
-        return
-    idx = columns.index(heading)
-    amount, label = table.tableColumns[idx], 0 if idx else 1
-    if (amount.calculatedColumnFormula is None
-            or amount.calculatedColumnFormula.attr_text != formula[1:]
-            or amount.totalsRowFunction != "sum"
-            or table.tableColumns[label].totalsRowLabel != "合计"
-            or ws.cell(bottom + 1, left + label).value != "合计"):
-        f.fail("原生表格计算列或合计行元数据与计划不符", sheet=ws.title)
-    targets.add((ws.title, bottom + 1, left + label))
-    for row in range(top + 1, bottom + 2):
-        targets.add((ws.title, row, left + idx))
-        cell = ws.cell(row, left + idx)
-        expected = formula if row <= bottom else f"=SUBTOTAL(109,{table.displayName}[{heading}])"
-        if cell.data_type != "f" or cell.value != expected:
-            f.fail("表格计算列或合计公式与计划不符", sheet=ws.title, ref=cell.coordinate)
-
-
-def _chart_title_text(title) -> str:
-    rich = title.tx.rich if title and title.tx else None
-    return "" if rich is None else "".join(run.t for para in rich.p for run in para.r)
-
-
-def _check_native_chart(wb, ws, phase: Dict[str, Any], f: _Finding) -> None:
-    from openpyxl.chart import BarChart, LineChart, Reference
-    from openpyxl.utils.cell import range_boundaries
-
-    source = phase["source_sheet"]
-    if source not in wb.sheetnames or wb[source] not in wb.worksheets:
-        f.fail("图表源工作表不存在", sheet=source)
-        return
-
-    def expected_ref(key):
-        left, top, right, bottom = range_boundaries(phase[key].upper())
-        if any(wb[source].cell(row, left).value is None for row in range(top, bottom + 1)):
-            raise ValueError("图表源存在空值")
-        return str(Reference(wb[source], min_col=left, min_row=top, max_col=right, max_row=bottom))
-
-    categories, bar_values, line_values = map(expected_ref, ("categories", "bar_values", "line_values"))
-    for chart in ws._charts:
-        parts = chart._charts
-        if (len(parts) != 2 or not isinstance(parts[0], BarChart)
-                or not isinstance(parts[1], LineChart) or any(len(part.series) != 1 for part in parts)):
-            continue
-        bar, line = parts
-        if (bar.type != "col" or chart.legend is None or chart.legend.position != "b"
-                or _chart_title_text(chart.title) != phase["title"]
-                or bar.y_axis.axId == line.y_axis.axId or bar.y_axis.axPos != "l"
-                or line.y_axis.axPos != "r" or line.y_axis.crosses != "max"
-                or line.y_axis.crossAx != bar.x_axis.axId or line.y_axis.numFmt.formatCode != "0.00%"
-                or line.dLbls is None or not line.dLbls.showVal or line.dLbls.numFmt != "0.00%"):
-            continue
-        for part, values, title in ((bar, bar_values, phase["bar_title"]),
-                                    (line, line_values, phase["line_title"])):
-            series = part.series[0]
-            if (series.cat is None or series.cat.strRef is None or series.cat.strRef.f != categories
-                    or series.val is None or series.val.numRef is None or series.val.numRef.f != values
-                    or series.title is None or series.title.v != title
-                    or _chart_title_text(part.y_axis.title) != title):
-                break
-        else:
-            return
-    f.fail("输出缺少符合计划的原生双轴柱线组合图", sheet=ws.title)
 
 
 def _check_cell_styles(wb, plan: Dict[str, Any], f: _Finding) -> int:
@@ -293,27 +194,32 @@ def _check_cell_styles(wb, plan: Dict[str, Any], f: _Finding) -> int:
             for col in range(min_col, max_col + 1):
                 cell = ws.cell(row, col)
                 checked += 1
-                if ph.get("bold") is not None and bool(cell.font.bold) != bool(ph.get("bold")):
-                    f.fail("bold 与计划不符", sheet=sheet, row=row, col=col,
-                           planned=str(ph.get("bold")), actual=str(cell.font.bold))
-                if ph.get("horizontal") and (cell.alignment.horizontal or "") != str(ph.get("horizontal")):
-                    f.fail("horizontal 对齐与计划不符", sheet=sheet, row=row, col=col,
-                           planned=str(ph.get("horizontal")), actual=str(cell.alignment.horizontal))
-                if ph.get("vertical") and (cell.alignment.vertical or "") != str(ph.get("vertical")):
-                    f.fail("vertical 对齐与计划不符", sheet=sheet, row=row, col=col,
-                           planned=str(ph.get("vertical")), actual=str(cell.alignment.vertical))
-                if ph.get("font_size") is not None and abs(float(cell.font.sz or 0) - float(ph.get("font_size"))) > _NUM_TOL:
-                    f.fail("font_size 与计划不符", sheet=sheet, row=row, col=col,
-                           planned=str(ph.get("font_size")), actual=str(cell.font.sz))
+                location = {"sheet": sheet, "row": row, "col": col}
+                for key, actual in (("bold", cell.font.bold), ("horizontal", cell.alignment.horizontal),
+                                    ("vertical", cell.alignment.vertical), ("font_size", cell.font.sz)):
+                    planned = ph.get(key)
+                    if key in ("bold", "font_size"):
+                        if planned is None:
+                            continue
+                        mismatch = (bool(actual) != bool(planned) if key == "bold" else
+                                    abs(float(actual or 0) - float(planned)) > _NUM_TOL)
+                        label = f"{key} 与计划不符"
+                    else:
+                        if not planned:
+                            continue
+                        mismatch, label = (actual or "") != str(planned), f"{key} 对齐与计划不符"
+                    if mismatch:
+                        f.fail(label, **location,
+                               planned=str(planned), actual=str(actual))
                 if fill_color:
                     actual_color = str(cell.fill.fgColor.rgb or "").upper()
                     if cell.fill.patternType != "solid" or not actual_color.endswith(fill_color):
-                        f.fail("填充色与计划不符", sheet=sheet, row=row, col=col,
+                        f.fail("填充色与计划不符", **location,
                                planned=fill_color, actual=f"{cell.fill.patternType}:{actual_color}")
                 if border:
                     sides = (cell.border.left, cell.border.right, cell.border.top, cell.border.bottom)
                     if any(side.style != border for side in sides):
-                        f.fail("边框与计划不符", sheet=sheet, row=row, col=col,
+                        f.fail("边框与计划不符", **location,
                                planned=border,
                                actual=",".join(str(side.style) for side in sides))
     return checked
@@ -608,66 +514,39 @@ def _check_conformance(
     planned_targets: set[Tuple[str, int, int]] = set()
 
     checked = 0
-    for w in cell_writes:
-        try:
-            sheet, row, col = _target(w)
-        except (TypeError, ValueError, KeyError) as exc:
-            f.fail(f"计划 cell_writes 条目非法：{exc}", write=w)
-            continue
-        planned_targets.add((sheet, row, col))
-        if sheet not in wb.sheetnames:
-            f.fail(f"计划写入的 sheet 不在输出中：{sheet!r}", row=row, col=col)
-            continue
-        planned = _coerce_planned(w.get("value"), str(w.get("value_type") or ""))
-        actual = wb[sheet].cell(row, col).value
-        checked += 1
-        if not _values_match(planned, actual):
-            f.fail(
-                "格值与计划不符",
-                sheet=sheet,
-                row=row,
-                col=col,
-                planned=str(w.get("value")),
-                actual=str(actual),
-            )
-        nf = w.get("number_format")
-        if nf and wb[sheet].cell(row, col).number_format != str(nf):
-            f.warn(
-                "number_format 与计划不符",
-                sheet=sheet,
-                row=row,
-                col=col,
-                planned=str(nf),
-                actual=str(wb[sheet].cell(row, col).number_format),
-            )
-
-    for w in formula_writes:
-        try:
-            sheet, row, col = _target(w)
-        except (TypeError, ValueError, KeyError) as exc:
-            f.fail(f"计划 formula_writes 条目非法：{exc}", write=w)
-            continue
-        planned_targets.add((sheet, row, col))
-        if sheet not in wb.sheetnames:
-            f.fail(f"计划公式的 sheet 不在输出中：{sheet!r}", row=row, col=col)
-            continue
-        actual = wb[sheet].cell(row, col).value
-        checked += 1
-        if str(actual) != str(w.get("formula")):
-            f.fail(
-                "公式与计划不符",
-                sheet=sheet,
-                row=row,
-                col=col,
-                planned=str(w.get("formula"))[:80],
-                actual=str(actual)[:80],
-            )
+    for kind, writes in (("cell_writes", cell_writes), ("formula_writes", formula_writes)):
+        formula = kind == "formula_writes"
+        for w in writes:
+            try:
+                sheet, row, col = _target(w)
+            except (TypeError, ValueError, KeyError) as exc:
+                f.fail(f"计划 {kind} 条目非法：{exc}", write=w)
+                continue
+            planned_targets.add((sheet, row, col))
+            location = {"sheet": sheet, "row": row, "col": col}
+            if sheet not in wb.sheetnames:
+                noun = "公式" if formula else "写入"
+                f.fail(f"计划{noun}的 sheet 不在输出中：{sheet!r}", row=row, col=col)
+                continue
+            cell = wb[sheet].cell(row, col)
+            actual, raw = cell.value, w.get("formula" if formula else "value")
+            planned = raw if formula else _coerce_planned(raw, str(w.get("value_type") or ""))
+            matches = str(actual) == str(planned) if formula else _values_match(planned, actual)
+            checked += 1
+            if not matches:
+                detail, limit = ("公式与计划不符", 80) if formula else ("格值与计划不符", None)
+                f.fail(detail, **location, planned=str(raw)[:limit], actual=str(actual)[:limit])
+            nf = w.get("number_format")
+            if not formula and nf and cell.number_format != str(nf):
+                f.warn("number_format 与计划不符", **location,
+                       planned=str(nf), actual=str(cell.number_format))
 
     from app.mod_sdk.workbook_controls import (
         WORKBOOK_CONTROL_PHASES,
         WORKBOOK_NATIVE_PHASES,
         control_matches,
     )
+    from app.mod_sdk.workbook_qc_objects import check_native_chart, check_native_table
 
     native_checked = 0
     for ph in _plan_phases(plan):
@@ -683,13 +562,13 @@ def _check_conformance(
                 if not control_matches(wb, ph):
                     f.fail("工作表控制规则与计划不符", phase=kind, sheet=ws.title)
             elif kind == "create_table":
-                _check_native_table(ws, ph, f, planned_targets)
+                check_native_table(ws, ph, f, planned_targets)
             elif template_wb is not None and ws.title.casefold() in {
                 name.casefold() for name in template_wb.sheetnames
             }:
                 f.fail("图表未放在新工作表", sheet=ws.title)
             else:
-                _check_native_chart(wb, ws, ph, f)
+                check_native_chart(wb, ws, ph, f)
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             f.fail("工作簿原生对象缺失或无法核验", phase=kind, sheet=ph.get("sheet"))
 
@@ -959,9 +838,7 @@ def _check_structure(wb, rules: Optional[Dict[str, Any]]) -> _Finding:
     return f
 
 
-# ---------------------------------------------------------------------------
 # 汇总
-# ---------------------------------------------------------------------------
 
 _BLAME = {
     "conformance": "writer_or_plan",
@@ -974,9 +851,7 @@ _BLAME = {
 }
 
 
-def merge_semantic_section(report: Dict[str, Any], semantic: Dict[str, Any]) -> Dict[str, Any]:
-    """把 LLM 语义审查节并入报告并重算 verdict/blame（确定性节结论不受影响）。"""
-    report["sections"]["semantic"] = semantic
+def _summarize(report):
     statuses = {name: s.get("status") for name, s in report["sections"].items()}
     if any(s == "fail" for s in statuses.values()):
         report["verdict"] = "FAIL"
@@ -987,11 +862,17 @@ def merge_semantic_section(report: Dict[str, Any], semantic: Dict[str, Any]) -> 
     report["blame"] = sorted(
         {_BLAME[name] for name, s in statuses.items() if s == "fail" and name in _BLAME}
     )
-    if semantic.get("human_summary"):
-        report["human_summary"] = semantic["human_summary"]
     summary_bits = [f"{name}:{status}" for name, status in statuses.items()]
     report["summary"] = f"QC {report['verdict']}（" + "，".join(summary_bits) + "）"
     return report
+
+
+def merge_semantic_section(report: Dict[str, Any], semantic: Dict[str, Any]) -> Dict[str, Any]:
+    """并入语义审查，保留各确定性节的原结论。"""
+    report["sections"]["semantic"] = semantic
+    if semantic.get("human_summary"):
+        report["human_summary"] = semantic["human_summary"]
+    return _summarize(report)
 
 
 def run_qc(
@@ -1023,25 +904,12 @@ def run_qc(
         if template_wb is not None:
             template_wb.close()
 
-    statuses = {name: s.status for name, s in sections.items()}
-    if any(s == "fail" for s in statuses.values()):
-        verdict = "FAIL"
-    elif any(s == "warn" for s in statuses.values()):
-        verdict = "WARN"
-    else:
-        verdict = "PASS"
-    blame = sorted({_BLAME[name] for name, s in statuses.items() if s == "fail"})
-
-    summary_bits = [f"{name}:{status}" for name, status in statuses.items()]
-    return {
-        "verdict": verdict,
-        "blame": blame,
+    return _summarize({
         "sections": {name: s.as_dict() for name, s in sections.items()},
-        "summary": f"QC {verdict}（" + "，".join(summary_bits) + "）",
         "inputs": {
             "filled": str(filled_path),
             "template": str(template_path or ""),
             "rules_provided": rules is not None,
             "write_report_provided": write_report is not None,
         },
-    }
+    })
