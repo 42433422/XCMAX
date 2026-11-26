@@ -4,8 +4,8 @@
 - import / 端口兼容（``EventBusPort`` + ``StateEventPublisher``，均 runtime_checkable）
 - recording bus smoke：``state.update`` 事件类型、payload 字段（plan_id/node_id/status/
   output_summary/runtime）、fail-soft
-- ``app/neuro_bus/bus.py`` 已审阅字节基线（SHA256 锚点），legacy 46 用例由
-  ``test_legacy_runtime_contract.py`` 单独回归
+- ``app/neuro_bus/bus.py`` 已审阅字节基线（SHA256 锚点）；独立行为回归见
+  ``test_langgraph_runtime_contract.py`` 与 ``tests/test_neuro_bus_core.py``。
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-# Reviewed with PR #2749 bounded entity dispatch, the desktop buffer cap,
-# and PR #3532 event outcomes. Combined A03/A04/A05 + retry/DLQ candidate bytes.
+# Reviewed with PR #2749 bounded entity dispatch, desktop buffer cap and PR #3532 outcomes.
+# A03/A04/A05 + retry/DLQ bytes; PR #3681 keeps correlated replies in their origin process.
 # Pin the exact candidate, not approval: independent review and original regressions remain required.
-_BUS_SHA256 = "d3b8e42c35df6dec3ab94636977a443518285fc0640f0dfd7368c484344f15ca"
+_BUS_SHA256 = "769ec8c10a9ead5578930d4addca5b4af41e472336b16771078fbbe7656ff6e5"
 
 
 class RecordingBus:
