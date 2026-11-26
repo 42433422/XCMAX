@@ -286,5 +286,21 @@ for (const status of ['paid', 'pending']) {
     () => orderTokenColor('.order-status.' + status, 'color'),
     () => marketDeclaration(orderStyle('.order-status'), 'background'));
 }
+// Keyboard focus must remain distinguishable on both theme surfaces.
+const orderFocusSelector = '.order-card:focus-visible, .retry-btn:focus-visible';
+const orderLightFocusSelector = orderLight + '.order-card:focus-visible,\n' + orderLight + '.retry-btn:focus-visible';
+const orderFocusValue = /(?:^|;)\s*outline\s*:\s*[\d.]+px\s+solid\s+([^;]+);/.exec(orderStyle(orderFocusSelector))?.[1]?.trim();
+for (const mode of ['dark', 'light']) {
+  const prefix = mode === 'light' ? orderLight : '';
+  for (const surface of ['.order-list-page', '.order-card']) {
+    pair('Market order list ' + mode + ' focus / ' + surface,
+      () => {
+        if (mode === 'light') return orderTokenColor(orderLightFocusSelector, 'outline-color');
+        if (!orderFocusValue?.startsWith('var(--xc-token-')) throw Error('Order-list focus must use a generated token');
+        return resolveColor(orderFocusValue, [], marketGeneratedCss);
+      },
+      () => marketDeclaration(orderStyle(prefix + surface), 'background'), 3);
+  }
+}
 console.log(JSON.stringify({ scope: 'static source pairs only (explicit alpha backgrounds included)', rows }, null, 2));
 if (rows.some((row) => row.result !== 'PASS_STATIC_PAIR')) process.exitCode = 1;

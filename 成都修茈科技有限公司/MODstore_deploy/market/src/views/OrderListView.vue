@@ -241,7 +241,14 @@ onBeforeUnmount(() => { ++readSequence })
 .order-card:hover {
   border-color: #3f3f46;
 }
-.order-card:focus-visible, .retry-btn:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+.order-card:focus-visible, .retry-btn:focus-visible {
+  outline: 2px solid var(--xc-token-colors-brand-primary-light);
+  outline-offset: 2px;
+}
+html[data-workbench-theme='light'] .order-card:focus-visible,
+html[data-workbench-theme='light'] .retry-btn:focus-visible {
+  outline-color: var(--xc-token-market-global-light-primary-hover);
+}
 .retry-btn { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; cursor: pointer; padding: 4px 8px; }
 .btn-cancel:disabled { opacity: .55; cursor: wait; }
 .order-header {
