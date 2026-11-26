@@ -15,9 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 生产镜像用 server-api 锁定依赖；XCAGI/requirements.txt 含 -e .. 仅适合本地 editable 安装
 COPY requirements-server-api.txt requirements.txt
 COPY packages /build/packages
+COPY ops/deploy/requirements-memory-runtime.txt memory-requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt -r memory-requirements.txt
 
 # ============================================
 # Stage 2: Production
@@ -49,6 +50,8 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels \
     && pip install --no-cache-dir --upgrade 'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
 COPY --chown=appuser:appuser . .
+RUN python scripts/dev/provision_memory_model.py \
+    && chown -R appuser:appuser /app/resources/models
 
 RUN mkdir -p /app/data /app/uploads /app/logs \
     && chown -R appuser:appuser /app/data /app/uploads /app/logs

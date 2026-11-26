@@ -111,7 +111,7 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP="$BACKUP_ROOT/pre-$TS"
 mkdir -p "$BACKUP"
 
-for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources packages requirements-langgraph-runtime.txt requirements-memory-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$DEPLOY_ROOT/$item" ]]; then
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
@@ -146,7 +146,7 @@ rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}" || return $?
   fhd_stop_service_for_release "$SERVICE" "restart:rollback:${TARBALL_SHA256:0:16}" || return $?
   log "执行回滚: $BACKUP"
-  for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
+  for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-memory-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/" || return $?
     fi
@@ -275,7 +275,7 @@ python3 "$MODS_GUARD" apply \
   --state "$MODS_UPDATE_STATE" \
   --previous-archive "$DEPLOY_ROOT/.deploy-last.tar.gz" \
   --deploy-root "$DEPLOY_ROOT"
-for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config xcagi_common packages requirements-langgraph-runtime.txt requirements-memory-runtime.txt requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
@@ -289,6 +289,11 @@ if [[ -d "$TMP/resources" ]]; then
 fi
 mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
 rsync -a --delete "$TMP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
+if [[ -f "$TMP/scripts/dev/provision_memory_model.py" ]]; then
+  mkdir -p "$DEPLOY_ROOT/scripts/dev"
+  install -m 0644 "$TMP/scripts/dev/provision_memory_model.py" \
+    "$DEPLOY_ROOT/scripts/dev/provision_memory_model.py"
+fi
 if [[ -d "$TMP/scripts/deploy" ]]; then
   mkdir -p "$DEPLOY_ROOT/scripts"
   rsync -a --delete "$TMP/scripts/deploy/" "$DEPLOY_ROOT/scripts/deploy/"
@@ -338,6 +343,10 @@ bootstrap_vendored_langgraph() {
   deploy_emit pip started "scope=vendored_langgraph python=$service_python"
   PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
     "$service_python" -m pip install --quiet --no-cache-dir -r "$requirements"
+  "$service_python" -m pip install --quiet --no-cache-dir \
+    -r "$DEPLOY_ROOT/requirements-memory-runtime.txt"
+  "$service_python" "$DEPLOY_ROOT/scripts/dev/provision_memory_model.py" --verify-only \
+    --output "$DEPLOY_ROOT/resources/models/fastembed"
 
   local purelib
   purelib="$($service_python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"

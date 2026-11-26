@@ -685,6 +685,22 @@ def test_world_reads_inventory_movements_and_manufacturing_rows(world, observer)
     assert movement["knowledge_kind"] == "fact"
     assert Decimal(movement["state"]["after_quantity"]) == 4
     assert movement["source_last_changed"] is None
+    # Same source row edited within the TTL: an old memory reference cannot win.
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
+
+    with sessions.begin() as db:
+        db.get(InventoryTransaction, 504).after_quantity = Decimal(6)
+    clock[0] += 1
+    changed_movement = get(service, "inventory", "504", force_refresh=True)
+    assert changed_movement["source_version"] != movement["source_version"]
+    assert verify_source_reference(
+        changed_movement,
+        movement["source_version"],
+        make_fact_reference(movement)["fact_token"],
+    )["status"] == "superseded"
     assert get(service, "production", "505")["state"]["status"] == "confirmed"
     with sessions.begin() as db:
         db.get(ManufacturingOrderLine, 506).consumed_quantity = Decimal(1)
