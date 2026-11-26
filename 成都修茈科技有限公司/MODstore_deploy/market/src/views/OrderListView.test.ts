@@ -17,7 +17,7 @@ describe('OrderListView', () => {
   let router: ReturnType<typeof createRouter>
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
