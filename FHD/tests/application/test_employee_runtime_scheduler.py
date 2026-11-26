@@ -314,6 +314,8 @@ def test_unfinished_receipt_holds_original_job_across_refresh(monkeypatch, state
     """An unfinished/uncertain effect is never a new cron attempt, including manual retry."""
     monkeypatch.setenv("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", "3")
     scheduler.refresh_employee_scheduler_jobs()
+    alerts = []
+    monkeypatch.setattr(scheduler, "_alert_hook", lambda *args: alerts.append(args))
     receipt = {
         "success": reported_success,
         "result": {"execution_state": state, "run_id": "original-run", "task_id": "original-task"},
@@ -343,6 +345,7 @@ def test_unfinished_receipt_holds_original_job_across_refresh(monkeypatch, state
         assert second["job"]["pending_execution"] == job["pending_execution"]
         assert second["job"]["runs_total"] == 1
         assert execute.call_count == 1
+        assert alerts == [("daily-orchestrator", job["last_error"], job)]
 
 
 @pytest.mark.parametrize(
@@ -459,7 +462,9 @@ def test_runtime_missing_before_invocation_keeps_no_effect_proof(monkeypatch):
     from app.application.employee_runtime import executor
 
     execute = Mock()
+    alert = Mock()
     monkeypatch.setattr(executor, "execute_employee_task_local", execute)
+    monkeypatch.setattr(scheduler, "_alert_hook", alert)
     original_import = builtins.__import__
 
     def runtime_unavailable(name, *args, **kwargs):
@@ -473,4 +478,7 @@ def test_runtime_missing_before_invocation_keeps_no_effect_proof(monkeypatch):
     assert result["job"]["last_status"] == "blocked_config"
     assert result["job"]["next_retry_at"] is None
     assert result["job"]["pending_execution"] == {}
+    alert.assert_called_once()
+    assert alert.call_args.args[:2] == ("daily-orchestrator", result["job"]["last_error"])
+    assert alert.call_args.args[2]["last_status"] == "blocked_config"
     execute.assert_not_called()

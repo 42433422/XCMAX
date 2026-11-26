@@ -112,7 +112,7 @@ def _require_reconciled_mod_databases(data_root: Path, local_sqlite_url: str) ->
 
     from app.db.xcmax_sync import _DB_FILENAME as sync_database_filename
 
-    candidates = set()
+    candidates: set[Path] = set()
     for directory in (data_root, data_root / "data"):
         for suffix in ("db", "sqlite", "sqlite3"):
             candidates.update(directory.glob(f"*__*.{suffix}"))

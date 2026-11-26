@@ -127,9 +127,7 @@ def _apply_job_outcome(
                 value = envelope.get(key)
                 if isinstance(value, (str, int)) and not isinstance(value, bool) and value:
                     job.pending_execution.setdefault(key, str(value))
-        _facade()._invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
-        return
-    if ok:
+    elif ok:
         job.success_count += 1
         job.last_status = "success"
         job.last_error = ""
@@ -145,7 +143,6 @@ def _apply_job_outcome(
             job.retry_count = 0
             job.next_retry_at = None
             logger.warning("employee cron job blocked by configuration job_id=%s", job.job_id)
-            _facade()._invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
         elif job.max_retries > 0 and job.retry_count < job.max_retries:
             job.retry_count += 1
             job.last_status = "retrying"
@@ -162,7 +159,10 @@ def _apply_job_outcome(
             job.last_status = "failed"
             job.retry_count = 0
             job.next_retry_at = None
-            _facade()._invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
+    if pending or job.last_status in {"blocked_config", "failed"}:
+        _facade()._invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
+    if pending:
+        return
     if job.enabled:
         try:
             tz = ZoneInfo(job.timezone or "UTC")

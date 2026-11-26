@@ -122,18 +122,13 @@ void main() {
         await tester.pumpAndSettle();
         // Verify the actual editable text, not the Text widget finder.
         final field = tester.widget<TextField>(find.byType(TextField));
-        // Verify each revision against its actual supported composer contract.
-        // The baseline only supports a single line; the candidate must be multiline.
+        // Both maintained revisions use the same four-line composer contract.
         final captureSide = Platform.environment['VISUAL_CAPTURE_SIDE'] ?? 'candidate';
-        if (captureSide == 'baseline') {
-          expect(field.maxLines, 1);
-          expect(field.controller?.text, '整理订单核对库存列出异常');
-        } else if (captureSide == 'candidate') {
-          expect(field.maxLines, greaterThan(1));
-          expect(field.controller?.text, '整理订单\n核对库存\n列出异常');
-        } else {
+        if (captureSide != 'baseline' && captureSide != 'candidate') {
           throw StateError('Unknown VISUAL_CAPTURE_SIDE: $captureSide');
         }
+        expect(field.maxLines, 4);
+        expect(field.controller?.text, '整理订单\n核对库存\n列出异常');
         await capture(tester, 'chat-multiline-draft-$name');
         await tester.tap(find.byTooltip('更多工具'));
         await tester.pumpAndSettle();
