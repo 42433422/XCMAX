@@ -216,12 +216,7 @@ class ConcurrencyController:
         db.commit()
 
     def _locked_row(self, db: Session, key: str) -> LlmModelConcurrency:
-        row = (
-            db.query(LlmModelConcurrency)
-            .filter_by(model_key=key)
-            .with_for_update()
-            .one_or_none()
-        )
+        row = db.query(LlmModelConcurrency).filter_by(model_key=key).with_for_update().one_or_none()
         if row is not None:
             return row
         db.add(
@@ -236,12 +231,7 @@ class ConcurrencyController:
             db.commit()
         except IntegrityError:
             db.rollback()
-        row = (
-            db.query(LlmModelConcurrency)
-            .filter_by(model_key=key)
-            .with_for_update()
-            .one_or_none()
-        )
+        row = db.query(LlmModelConcurrency).filter_by(model_key=key).with_for_update().one_or_none()
         if row is None:
             raise SQLAlchemyError(f"concurrency row missing for {key}")
         return row
@@ -255,7 +245,8 @@ class ConcurrencyController:
             .delete(synchronize_session=False)
         )
         inflight = db.query(LlmModelLease).filter(LlmModelLease.model_key == key).count()
-        if inflight >= int(row.limit_value):
+        cooling = row.cooldown_until is not None and _aware(row.cooldown_until) > now
+        if cooling or inflight >= int(row.limit_value):
             db.commit()
             return None
         lease_id = uuid4().hex

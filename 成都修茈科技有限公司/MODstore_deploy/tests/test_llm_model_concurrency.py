@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from threading import Barrier
+from uuid import uuid4
 
-from sqlalchemy import create_engine
+import pytest
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from modstore_server.db.llm_chat import LlmModelConcurrency, LlmModelLease
 from modstore_server.llm_model_concurrency import (
     SUCCESS_STREAK_TO_GROW,
@@ -45,6 +54,71 @@ async def test_acquire_enforces_the_shared_limit_and_releases(db):
     assert controller.inflight(db, KEY) == 2
     controller.release(db, second)
     assert controller.inflight(db, KEY) == 1
+
+
+@pytest.mark.skipif(
+    not os.environ.get("RETORT_TEST_POSTGRES_DSN"), reason="isolated PostgreSQL required"
+)
+def test_postgres_migrated_limit_admits_one_of_two_sessions():
+    path = Path(__file__).parents[1] / "alembic/versions/20261124_model_concurrency.py"
+    spec = importlib.util.spec_from_file_location("model_concurrency_migration", path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    url = os.environ["RETORT_TEST_POSTGRES_DSN"]
+    schema = f"model_concurrency_{uuid4().hex}"
+    admin = create_engine(url)
+    engine = create_engine(
+        url, connect_args={"options": f"-csearch_path={schema} -cstatement_timeout=10000"}
+    )
+    created = False
+    try:
+        assert admin.dialect.name == "postgresql"
+        with admin.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        created = True
+        with engine.begin() as connection:
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+            assert {"llm_model_concurrency", "llm_model_leases"} <= set(
+                inspect(connection).get_table_names(schema=schema)
+            )
+
+        sessions = sessionmaker(bind=engine)
+        with sessions() as session:
+            _controller().seed(session, KEY, 1)
+        barrier = Barrier(2)
+
+        def compete(_):
+            controller = _controller()
+            with sessions() as session:
+                session.connection()
+                barrier.wait(timeout=15)
+                lease = asyncio.run(_acquire(controller, session))
+                # Preserve the winning lease until both attempts have returned.
+                barrier.wait(timeout=15)
+                if lease is not None:
+                    controller.release(session, lease)
+                barrier.wait(timeout=15)
+                retry = asyncio.run(_acquire(controller, session)) if lease is None else None
+                return lease, retry
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            outcomes = list(workers.map(compete, range(2)))
+        assert sum(lease is None for lease, _ in outcomes) == 1
+        winner = next(lease for lease, _ in outcomes if lease is not None)
+        assert winner.enforced
+        retry = next(retry for lease, retry in outcomes if lease is None)
+        assert retry is not None and retry.enforced and retry.lease_id != winner.lease_id
+    finally:
+        engine.dispose()
+        try:
+            if created:
+                with admin.begin() as connection:
+                    connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        finally:
+            admin.dispose()
 
 
 async def test_bounded_wait_returns_none_instead_of_queueing_forever(db):

@@ -39,7 +39,9 @@ from modstore_server.llm_gateway_contract import (
 from modstore_server.llm_key_resolver import read_chat_route_token
 from modstore_server.llm_model_concurrency import (
     concurrency_key,
-    controller as concurrency,
+)
+from modstore_server.llm_model_concurrency import controller as concurrency
+from modstore_server.llm_model_concurrency import (
     is_throttled,
     retry_after_seconds,
 )
@@ -249,17 +251,19 @@ async def run_billed_responses(
             slot_held = False
             concurrency.release(db, lease)
 
+    dispatch = False
     try:
         outcome, row = ledger.begin(db, uid, key, digest, timeout)
-    except BaseException:
-        release_slot()
-        raise
-    if outcome == "replay":
-        release_slot()
-        return _replay(row)
-    if outcome != "run":
-        release_slot()
-        raise _error("CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome)
+        if outcome == "replay":
+            return _replay(row)
+        if outcome != "run":
+            raise _error(
+                "CODEX_REQUEST_UNRESOLVED", "原请求已经受理，请保留原请求键。", state=outcome
+            )
+        dispatch = True
+    finally:
+        if not dispatch:
+            release_slot()
     request_id = ledger.attempt_request_id(uid, key, row.attempts)
     hold = WalletHold(f"byok-{request_id}", Decimal("0"), False)
     transport = None
@@ -416,9 +420,7 @@ async def run_billed_responses(
                 except _ERRORS as exc:
                     db.rollback()
                     if is_throttled(exc):
-                        concurrency.report_throttled(
-                            db, model_key, retry_after_seconds(exc)
-                        )
+                        concurrency.report_throttled(db, model_key, retry_after_seconds(exc))
                     yield _sse(
                         {
                             "type": "error",

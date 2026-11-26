@@ -341,7 +341,7 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
     memberships = client.get("/api/payment/plans").json()["plans"]
     account_catalog = client.get("/api/payment/account-plans").json()
     licenses = account_catalog["plans"]
-    assert account_catalog["commercial_terms"]["customization_from_cents"] == 298000
+    assert account_catalog["commercial_terms"]["customization_from_cents"] == 99900
     membership_ids = {row["id"] for row in memberships}
     license_ids = {row["id"] for row in licenses}
     expected_license_ids = {str(row["id"]) for row in ACCOUNT_LICENSE_PLANS}
@@ -359,7 +359,7 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
     expected_prices = {
         "saas-personal-free": 0.0,
         "saas-trial-30": 99.0,
-        "saas-permanent-standard": 6800.0,
+        "saas-permanent-standard": 3000.0,
     }
     by_id = {row["id"]: row for row in licenses}
     assert {plan_id: by_id[plan_id]["name"] for plan_id in expected_titles} == expected_titles

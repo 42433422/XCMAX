@@ -101,9 +101,7 @@ class LlmModelConcurrency(Base):
     min_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     max_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     success_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    cooldown_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

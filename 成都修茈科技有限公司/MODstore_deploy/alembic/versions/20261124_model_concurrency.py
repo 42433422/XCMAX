@@ -57,6 +57,7 @@ def upgrade() -> None:
         sa.column("limit_value", sa.Integer),
         sa.column("min_limit", sa.Integer),
         sa.column("max_limit", sa.Integer),
+        sa.column("success_streak", sa.Integer),
         sa.column("updated_at", sa.DateTime),
     )
     bind = op.get_bind()
@@ -73,6 +74,7 @@ def upgrade() -> None:
                 limit_value=limit,
                 min_limit=1,
                 max_limit=limit,
+                success_streak=0,
                 updated_at=sa.func.now(),
             )
         )
