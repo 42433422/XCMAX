@@ -11,7 +11,7 @@ import json
 import math
 from datetime import UTC, datetime, timedelta
 from statistics import mean
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -607,8 +607,8 @@ def decision_quality_report(owner_user_id: int, *, as_of: datetime | None = None
             if row.decided_by not in {"user", "council-vote"}:
                 continue
             try:
-                proposal = json.loads(row.decision_payload_json or "{}")
-                state = json.loads(row.execution_result_json or "{}")
+                proposal = json.loads(cast("str | None", row.decision_payload_json) or "{}")
+                state = json.loads(cast("str | None", row.execution_result_json) or "{}")
                 if (
                     not isinstance(proposal, dict)
                     or not isinstance(state, dict)

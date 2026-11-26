@@ -139,6 +139,7 @@ def _record(decision_id, proposal, state, *, scope_owner=7):
     return StrategicDecision(
         decision_id=decision_id,
         title="Original strategy review",
+        proposed_by="portfolio",
         scope="strategy_portfolio",
         scope_ref=f"user:{scope_owner}:2025-Q1",
         status="executing",

@@ -291,7 +291,7 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
     facts = []
     for event, fact, scope, status in selected:
         if status == "confirmed":
-            key = (
+            scope_key = (
                 tuple(
                     scope[field]
                     for field in (
@@ -307,7 +307,7 @@ def review_facts(session: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
             )
             blocked = (
                 "conflicting_measured_outcomes"
-                if key in conflicts
+                if scope_key in conflicts
                 else (
                     "unverified_or_truncated_review_history"
                     if not history_complete

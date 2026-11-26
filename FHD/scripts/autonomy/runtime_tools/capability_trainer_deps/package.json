@@ -5,5 +5,10 @@
     "@anthropic-ai/sandbox-runtime": "0.0.83",
     "promptfoo": "0.126.0",
     "zod": "4.6.6"
+  },
+  "overrides": {
+    "@anthropic-ai/sandbox-runtime": {
+      "zod": "$zod"
+    }
   }
 }
