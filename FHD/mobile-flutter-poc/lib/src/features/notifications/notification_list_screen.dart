@@ -153,7 +153,9 @@ class _NotificationListScreenState extends State<NotificationListScreen>
     if (!mounted || _revoked || _loading || _marking) return;
     _loading = true;
     final future = _load();
-    setState(() => _future = future);
+    setState(() {
+      _future = future;
+    });
     try { await future; } catch (_) {
       // FutureBuilder renders the real error.
     } finally { _loading = false; }
