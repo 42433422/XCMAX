@@ -10,7 +10,6 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.db.models.user import User
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -19,6 +18,7 @@ from app.db.models.approval import (
     ApprovalRequest,
     ApprovalStatus,
 )
+from app.db.models.user import User
 
 from .access import FINAL_STATUSES, normalize_statuses
 from .protocols import ApprovalAccess, AuditWriter, JsonObject, RequestView, WorkspaceResponse
@@ -253,7 +253,7 @@ class RequestLifecycle:
                     business = json.loads(req.business_data or "{}")
                 except (ValueError, TypeError):
                     business = {}
-                snapshot = (
+                (
                     business.get("durable_workflow_snapshot")
                     if isinstance(business, dict)
                     else None

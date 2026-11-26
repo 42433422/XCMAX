@@ -272,8 +272,8 @@ def test_delegated_credential_cannot_be_injected_or_replaced(roots):
 
 @pytest.mark.parametrize("registry_error", [False, True])
 def test_delegated_tool_denial_precedes_other_authority(monkeypatch, registry_error):
-    from app.application.aiopen import service
     from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+    from app.application.aiopen import service
 
     def deny(*args):
         if registry_error:

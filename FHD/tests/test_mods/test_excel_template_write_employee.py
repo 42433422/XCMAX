@@ -272,8 +272,8 @@ def test_native_qc_rejects_tampered_header_style(native_workbook):
 
 
 def test_writer_creates_native_table_with_calculation_and_total(native_workbook):
-    from zipfile import ZipFile
     from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
 
     run, template, qc, _ = native_workbook
     phase = _sales_table_phase()
@@ -304,8 +304,8 @@ def test_writer_rejects_table_overlap_with_protected_range(native_workbook):
 
 
 def test_writer_creates_native_dual_axis_chart(native_workbook):
-    from zipfile import ZipFile
     from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
 
     run, template, qc, _ = native_workbook
     out, plan = run([_sales_chart_phase()])

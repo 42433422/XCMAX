@@ -8,13 +8,11 @@ import json
 import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func
 
 from app.application.agent_orchestrator.business_write_guard import worker_write_guard
-
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")

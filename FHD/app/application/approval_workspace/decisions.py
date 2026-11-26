@@ -343,7 +343,7 @@ class ApprovalDecisions:
                     business = json.loads(req.business_data or "{}")
                 except (ValueError, TypeError):
                     business = {}
-                snapshot = (
+                (
                     business.get("durable_workflow_snapshot")
                     if isinstance(business, dict)
                     else None

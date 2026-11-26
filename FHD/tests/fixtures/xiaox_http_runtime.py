@@ -174,7 +174,7 @@ def dynamic_chat_runtime(runtime_entry, monkeypatch):
     import httpx
     import openai
 
-    from app.application.agent_runtime import xiaox_runtime, goal_admission
+    from app.application.agent_runtime import goal_admission, xiaox_runtime
     from app.infrastructure.xiaox.model_gateway import MODEL_PATH
 
     state = runtime_entry

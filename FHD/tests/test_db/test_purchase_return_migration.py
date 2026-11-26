@@ -9,7 +9,6 @@ from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
-
 _SOURCE_TABLES = (
     "purchase_inbounds", "purchase_inbound_items", "approval_requests",
     "journal_entries", "products", "suppliers", "warehouses", "storage_locations",
@@ -90,8 +89,8 @@ def test_partial_legacy_schema_refuses_lossy_recovery(old_database):
 
 
 def test_new_orm_initialized_schema_not_recreated(tmp_path):
+    import app.db.models
     from app.db.db_base import Base
-    import app.db.models  # noqa: F401
 
     engine = create_engine(f"sqlite:///{tmp_path / 'fresh-purchase.sqlite'}")
     try:

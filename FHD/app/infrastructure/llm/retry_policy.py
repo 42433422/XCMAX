@@ -57,7 +57,7 @@ def _upstream_settlement_unresolved(error: BaseException) -> bool:
         return False
     try:
         text = str(getattr(response, "text", "") or "")
-    except Exception:
+    except (AttributeError, TypeError, ValueError, RuntimeError):
         return False
     return "REQUEST_UNRESOLVED" in text or '"state":"settling"' in text.replace(" ", "")
 

@@ -65,8 +65,8 @@ def test_neuro_failure_does_not_replace_fixed_executor(event):
 @pytest.mark.parametrize("sheet_name", [None, "Sheet2"])
 def test_registered_upload_reaches_runtime_goal_without_implicit_import(owned, sheet_name):
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.agent_runtime.xiaox_runtime import _input_text
     from app.application.agent_runtime.goal_admission import prepare_runtime_goal
+    from app.application.agent_runtime.xiaox_runtime import _input_text
 
     context, _ = owned
     context = {**context, "file_context": {"sheet_name": sheet_name}}

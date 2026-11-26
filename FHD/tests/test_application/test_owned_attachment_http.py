@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_runtime import xiaox_runtime, gateway
+from app.application.agent_runtime import gateway, xiaox_runtime
 from app.application.elt.service_uploads import UploadServiceMixin
 from app.db.models.elt import EltUpload
 from app.db.session import get_db

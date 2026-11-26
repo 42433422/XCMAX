@@ -15,8 +15,14 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import (
-    InventoryLedger, InventoryTransaction, PurchaseInbound, PurchaseInboundItem,
-    PurchaseReturn, PurchaseReturnItem, Supplier, Warehouse,
+    InventoryLedger,
+    InventoryTransaction,
+    PurchaseInbound,
+    PurchaseInboundItem,
+    PurchaseReturn,
+    PurchaseReturnItem,
+    Supplier,
+    Warehouse,
 )
 from app.db.models.approval import ApprovalAction, ApprovalRecord, ApprovalRequest, ApprovalStatus
 from app.db.session import get_db

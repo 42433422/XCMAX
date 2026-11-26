@@ -383,8 +383,8 @@ async def forward_responses(request: Request):
         ModelReservationError,
         reserve_model_usage,
     )
-    from app.infrastructure.xiaox.binding import XiaoxBindingError
     from app.infrastructure.llm.model_admission import model_call_slot, model_rate_limit_scope
+    from app.infrastructure.xiaox.binding import XiaoxBindingError
     from app.utils.operational_errors import BOUNDARY_ERRORS
 
     store = request.app.state.xiaox_binding_store

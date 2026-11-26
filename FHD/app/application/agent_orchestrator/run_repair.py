@@ -275,7 +275,11 @@ class RunRepair:
         if str(context.get("chat_approval_mode") or "").strip() != "auto":
             return None
         from app.domain.autonomy.autonomy_guard import evaluate_risk
-        from app.domain.autonomy.risk_types import ProhibitedActionError, RiskLevel, parse_risk_level
+        from app.domain.autonomy.risk_types import (
+            ProhibitedActionError,
+            RiskLevel,
+            parse_risk_level,
+        )
 
         try:
             decision = evaluate_risk(

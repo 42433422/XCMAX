@@ -5,8 +5,17 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric,
-    String, Text, UniqueConstraint, text,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

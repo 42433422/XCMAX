@@ -26,9 +26,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.infrastructure.tenant_scope import tenant_scope
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.tools import XiaoxToolBridge
-from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 

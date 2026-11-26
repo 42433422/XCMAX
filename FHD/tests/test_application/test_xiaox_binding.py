@@ -423,14 +423,14 @@ def test_missing_ancestor_cannot_create_a_runtime_grant(trusted_actor):
 @pytest.mark.parametrize("prefix", ["codex_", "xiaox_"])
 def test_child_identity_alias_reuses_original_reservation(trusted_actor, prefix):
     store, run, grant = make_binding(trusted_actor())
-    kwargs = dict(
-        tool_id="customers",
-        action="create",
-        params={"unit_name": "legacy"},
-        read_only=False,
-        generation=grant.binding.metadata["generation"],
-        cost_units=5,
-    )
+    kwargs = {
+        "tool_id": "customers",
+        "action": "create",
+        "params": {"unit_name": "legacy"},
+        "read_only": False,
+        "generation": grant.binding.metadata["generation"],
+        "cost_units": 5,
+    }
     first, created = store.claim_call(run.run_id, "a", **kwargs)
     assert created and first["child_task_id"].startswith("codex_")
 
@@ -450,13 +450,13 @@ def test_child_identity_alias_reuses_original_reservation(trusted_actor, prefix)
 
 def test_split_child_identities_block_replay_without_mutation(trusted_actor):
     store, run, grant = make_binding(trusted_actor())
-    kwargs = dict(
-        tool_id="customers",
-        action="create",
-        params={"unit_name": "split"},
-        read_only=False,
-        generation=grant.binding.metadata["generation"],
-    )
+    kwargs = {
+        "tool_id": "customers",
+        "action": "create",
+        "params": {"unit_name": "split"},
+        "read_only": False,
+        "generation": grant.binding.metadata["generation"],
+    }
     first, _ = store.claim_call(run.run_id, "a", **kwargs)
 
     def split(_run, metadata):

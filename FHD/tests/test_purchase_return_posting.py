@@ -16,17 +16,28 @@ from sqlalchemy.orm import Session
 
 from app.db.db_base import Base
 from app.db.models import (
-    InventoryLedger, InventoryTransaction, Product, PurchaseInbound,
-    PurchaseInboundItem, PurchaseReturn, PurchaseReturnItem, Supplier, Warehouse,
+    InventoryLedger,
+    InventoryTransaction,
+    Product,
+    PurchaseInbound,
+    PurchaseInboundItem,
+    PurchaseReturn,
+    PurchaseReturnItem,
+    Supplier,
+    Warehouse,
 )
 from app.db.models.accounting import JournalEntry, JournalEntryLine
 from app.db.models.approval import (
-    ApprovalAction, ApprovalFlow, ApprovalFlowNode,
-    ApprovalRecord, ApprovalRequest, ApprovalStatus,
+    ApprovalAction,
+    ApprovalFlow,
+    ApprovalFlowNode,
+    ApprovalRecord,
+    ApprovalRequest,
+    ApprovalStatus,
 )
 from app.db.models.user import User
-from app.domain.shared_services.purchase_service import PurchaseService
 from app.domain.shared_services import purchase_return_posting
+from app.domain.shared_services.purchase_service import PurchaseService
 from app.infrastructure.tenant_scope import tenant_scope
 
 

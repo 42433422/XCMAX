@@ -24,6 +24,7 @@ from app.application.agent_runtime.runtime_error_surface import (
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route
+from app.infrastructure.modstore_transport import MarketModelError, httpx_sync_client
 from app.infrastructure.xiaox.policy import (
     CODEX_VERSION,
     QUALIFICATION_CHECKS,
@@ -35,7 +36,6 @@ from app.infrastructure.xiaox.policy import (
     runtime_settings,
 )
 from app.infrastructure.xiaox.transport import _write_private
-from app.infrastructure.modstore_transport import MarketModelError, httpx_sync_client
 from app.utils.path_io.path_utils import get_desktop_state_dir
 
 _ROUTE_READ_ATTEMPTS = 3

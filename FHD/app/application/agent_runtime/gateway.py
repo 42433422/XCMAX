@@ -23,11 +23,11 @@ from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgen
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_permission import redact
-from app.application.agent_runtime.xiaox_runtime import run_xiaox_agent
 from app.application.agent_runtime.configuration import (
     RuntimeSetupError,
     get_account_runtime_settings,
 )
+from app.application.agent_runtime.xiaox_runtime import run_xiaox_agent
 from app.domain.task_lifecycle.agent_runtime_contract import (
     canonical_digest,
 )

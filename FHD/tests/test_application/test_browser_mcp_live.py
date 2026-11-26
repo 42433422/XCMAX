@@ -41,9 +41,9 @@ from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_c
 from app.application.tools.mcp import registry
 from app.db.models.user import Session as UserSession
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+from app.infrastructure.mcp.config import McpServerConfig
 from app.infrastructure.xiaox.binding import XiaoxBindingStore
 from app.infrastructure.xiaox.tools import XiaoxToolBridge
-from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.time import utc_now_naive
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 

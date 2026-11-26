@@ -9,13 +9,13 @@ import pytest
 from starlette.requests import ClientDisconnect, Request
 
 from app.infrastructure.billing import model_usage as ledger
+from app.infrastructure.llm import model_admission
 from app.infrastructure.xiaox.model_gateway import (
     MODEL_PATH,
     _finish,
     forward_responses,
     response_usage,
 )
-from app.infrastructure.llm import model_admission
 from tests.test_application.test_xiaox_model_gateway import gateway as gateway
 from tests.test_application.test_xiaox_model_gateway import post
 

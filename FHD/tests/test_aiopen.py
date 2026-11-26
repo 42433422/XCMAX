@@ -736,47 +736,6 @@ def test_issued_delegated_key_binds_request_scope_and_revocation(trusted_actor, 
         }
 
 
-def test_key_revocation_failure_is_not_reported_as_revoked(client, monkeypatch):
-    def fail(_key):
-        raise OSError("private persistence details")
-
-    monkeypatch.setattr("app.fastapi_routes.ai_open.revoke_api_key", fail)
-    response = client.request("DELETE", "/api/aiopen/keys", json={"key": "original-key"})
-    assert response.status_code == 503
-    assert response.json()["success"] is False and response.json()["revoked"] is False
-    assert response.json()["error_code"] == "key_revocation_unavailable"
-    assert "private" not in response.text and "original-key" not in response.text
-
-
-def test_probe_alias_uses_shared_key_scope_and_rate_limit(client, monkeypatch):
-    from app.application.aiopen import service
-
-    calls = []
-
-    async def probe(*args):
-        calls.append(args)
-        return {"success": True, "checks": []}
-
-    monkeypatch.setattr("app.fastapi_routes.ai_open.invoke_tool", probe)
-    wrong_scope = service.generate_api_key("other", scopes=["ui_snapshot"])["key"]
-    denied = client.post("/api/aiopen/loop/verify", headers={"X-AIOPEN-Key": wrong_scope}, json={})
-    assert denied.status_code == 403 and denied.json()["code"] == "AIOPEN_SCOPE_DENIED"
-    assert calls == []
-
-    limited = service.generate_api_key("probe", scopes=["capability_loop"], rate_limit_per_min=1)[
-        "key"
-    ]
-    first = client.post("/api/aiopen/loop/verify", headers={"X-AIOPEN-Key": limited}, json={})
-    assert first.status_code == 200
-    replay = client.post(
-        "/api/aiopen/invoke",
-        headers={"X-AIOPEN-Key": limited},
-        json={"tool": "capability_loop", "args": {}},
-    )
-    assert replay.status_code == 429 and replay.json()["code"] == "AIOPEN_RATE_LIMITED"
-    assert len(calls) == 1
-
-
 def test_aiopen_tool_trace_uses_bound_execution_identity(monkeypatch):
     from app.fastapi_routes import ai_open
     from app.infrastructure.aiopen.principal_context import execution_context_scope

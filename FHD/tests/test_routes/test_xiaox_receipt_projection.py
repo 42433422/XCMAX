@@ -441,31 +441,6 @@ def test_repository_rejection_keeps_candidate_out_of_durable_public_result(recei
     assert candidate not in json.dumps(public, ensure_ascii=False)
 
 
-def test_repository_rejection_keeps_candidate_out_of_durable_public_result(receipt_task):
-    from app.application.agent_orchestrator.business_harness import UNEXECUTED_ORDER_ERROR
-
-    state = receipt_task
-    parent = AgentRun(user_id=str(state.actor.user_id), message="创建销售订单", status="completed")
-    parent.metadata["runtime_type"] = "codex"
-    candidate = "候选正文：销售订单已经创建。"
-    parent.final_output["codex_result"] = {
-        **base_runtime_result(parent.run_id),
-        "ok": True,
-        "business_completed": True,
-        "output": candidate,
-        "goal_response": candidate,
-        "session_messages": [{"role": "assistant", "content": candidate}],
-    }
-    state.repository.save(parent)
-    stored = state.repository.get(parent.run_id)
-    result = stored.final_output["codex_result"]
-    assert stored.status == "failed" and stored.error == UNEXECUTED_ORDER_ERROR
-    assert result["ok"] is False and result["business_completed"] is False
-    assert result["goal_response"] == candidate and result["session_messages"] == []
-    public = gateway.public_runtime_result(stored.to_dict())
-    assert candidate not in json.dumps(public, ensure_ascii=False)
-
-
 @pytest.mark.parametrize(
     "pending",
     ["coordinator", "model_reserved", "model_unknown", "lease", "open_effect", "queue_unknown"],

@@ -25,10 +25,10 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
 from app.application.tools.mcp import registry
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
-from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
-from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from app.infrastructure.mcp.client import McpToolInfo
 from app.infrastructure.mcp.config import McpServerConfig
+from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 GOAL = "使用浏览器点击保存，确认页面显示保存成功 #42"

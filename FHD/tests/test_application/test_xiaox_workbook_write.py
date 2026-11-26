@@ -35,9 +35,9 @@ from app.db.session import get_db
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
 from app.domain.workbook_write_contract import WORKBOOK_WRITER
 from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
+from app.infrastructure.tenant_scope import tenant_scope
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
 from app.infrastructure.xiaox.tools import XiaoxToolBridge
-from app.infrastructure.tenant_scope import tenant_scope
 from app.mod_sdk.employee_tool_registry import office_output_paths
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 

@@ -831,7 +831,7 @@ class TestInventoryCountConfirmed:
                 db.commit()
 
         svc = InventoryService()
-        params = dict(product_id=product_id, warehouse_id=warehouse_id, actual_quantity=110)
+        params = {"product_id": product_id, "warehouse_id": warehouse_id, "actual_quantity": 110}
         with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
             missing = svc.inventory_count(**params, confirmed=True)
             assert missing["error_code"] == "inventory_count_baseline_required"

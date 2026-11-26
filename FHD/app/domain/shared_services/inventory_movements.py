@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib
 import logging
 import math
-from decimal import Decimal
 from contextlib import nullcontext
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import IntegrityError
