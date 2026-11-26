@@ -480,7 +480,12 @@ def _authorized_scope(
         parsed = _split_tool(token)
         if parsed is None:
             return [], _rejected("handoff_unauthorized", "父员工不能委托该工具")
-        denial = actor_tool_denial(parsed[0], parsed[1], context), params=params if token == delegated else None
+        denial = actor_tool_denial(
+            parsed[0],
+            parsed[1],
+            context,
+            params=params if token == delegated else None,
+        )
         if denial is not None:
             return [], _rejected(
                 str(denial.get("error_code") or "handoff_unauthorized"),
