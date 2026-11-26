@@ -738,6 +738,7 @@ def test_transport_unknown_does_not_trigger_automatic_model_retry(verifier):
     report = verifier.verify()
     assert report["status"] == "unavailable" and len(verifier.requests) == 1
     assert report["error_code"] == "goal_verification_transport_error"
+    assert report["attempts"][0]["state"] == "request_timeout"
 
 
 @pytest.mark.parametrize(("capacity", "expected"), [(6000, 6000), (16000, 8192)])
@@ -750,6 +751,23 @@ def test_mimo_review_reserves_reasoning_output_within_qualified_capacity(
     verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
     assert verifier.verify()["accepted"]
     assert [json.loads(req.content)["max_output_tokens"] for req in verifier.requests] == [expected]
+
+
+@pytest.mark.parametrize(("remaining", "expected"), [(75, 75), (150, 90)])
+def test_mimo_review_wait_uses_only_the_remaining_task_and_review_budget(
+    verifier, remaining, expected
+):
+    verifier.config.model = "mimo-v2.6-pro"
+    verifier.config.timeout_seconds = 60
+    verifier.config.turn_timeout_seconds = 180
+    runtime = verifier.run.metadata["xiaox_runtime"]
+    runtime.update(
+        runtime_config={"upstream_vendor": "xiaomi"}, deadline_at=time.time() + remaining
+    )
+    verifier.replies = [response(review(goal(), goal("再查询second", goal_id="second")))]
+
+    assert verifier.verify()["accepted"]
+    assert verifier.requests[0].extensions["timeout"]["read"] == pytest.approx(expected, abs=1)
 
 
 def test_long_request_reserves_more_than_8192_on_qualified_route_first_attempt(verifier):

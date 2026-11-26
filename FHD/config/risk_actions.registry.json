@@ -803,7 +803,7 @@
       "availability": "shared",
       "actions": {
         "query": {
-          "description": "按指定型号查询产品档案，也可确认该型号是否存在。返回当前企业的产品、单价和规格。",
+          "description": "按产品型号查询档案，确认该型号是否建档。也支持按名称搜索，返回当前企业的产品、单价和规格。",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -1446,7 +1446,7 @@
           "availability": "shared"
         },
         "inventory_summary": {
-          "description": "按仓库或产品汇总库存数量和可用余量，适用于明确的库存和现货查询。",
+          "description": "按仓库或产品汇总库存数量和可用余量，适用于明确的库存和现货查询。确认产品型号是否建档时使用产品档案查询。",
           "risk": "low",
           "idempotent": true,
           "read_only": true,

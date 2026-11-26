@@ -160,7 +160,7 @@
     "FHD/app/application/agent_runtime/gateway.py": {
       "base_file": "FHD/app/application/agent_runtime/gateway.py",
       "base_blob": "ea56beef93ac7626b32c57bd7b5798573a3fda8b",
-      "head_blob": "b77054dd921417c310f87583525cce9babf36a10",
+      "head_blob": "becdc5860b5812bb9b0bce2f1b631ccf75ce6133",
       "before_lines": 747,
       "after_lines": 833,
       "reason": "把单一 Xiaox 网关与原会话绑定，并明确动态业务能力的检索与缺省值规则",
