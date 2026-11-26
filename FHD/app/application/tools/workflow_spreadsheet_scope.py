@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.application import excel_export_limits
 from app.application.agent_orchestrator.artifact_files import (
     RUN_FILE_MIME_TYPES,
     artifact_path,
@@ -370,13 +371,20 @@ def export_workflow_spreadsheet(
     run_id = str(context.get("run_id") or "")
     if not run_id:
         raise PermissionError("导出表格需要当前任务")
+    if error := excel_export_limits.export_input_error(payload):
+        return error
     with TemporaryDirectory(prefix="workflow-export-", dir=_staging_root()) as directory:
         result = export(payload, workspace_root=directory)
         if result.get("success") is True:
             data = result["data"]
             path = Path(data["file_path"])
             with open_elt_input_file(path, workspace_root=directory) as source:
-                receipt = store_spreadsheet(run_id, source.read(), name=path.name)
+                content = source.read(excel_export_limits.MAX_EXPORT_FILE_BYTES + 1)
+                if len(content) > excel_export_limits.MAX_EXPORT_FILE_BYTES:
+                    return excel_export_limits.ExcelExportLimitError(
+                        "导出文件超过产物大小预算"
+                    ).result()
+                receipt = store_spreadsheet(run_id, content, name=path.name)
             result["artifacts"] = [receipt]
             data["file_path"] = receipt["uri"]
     return result

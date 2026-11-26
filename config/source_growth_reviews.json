@@ -100,12 +100,12 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
       "base_blob": "012f67f48d91ecbb411e8e6e2f8c4840a0c82f62",
-      "head_blob": "1fde667f2a9928d9d03d8301753fccf2e6970ce3",
+      "head_blob": "5dae15e601a42cc00930f9cacf1c45ed4366f3ae",
       "before_lines": 1255,
-      "after_lines": 1276,
-      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。对齐统一能力的参数结构与当前主线owned文件、ELT预演及受控Excel查询契约。",
-      "boundary": "仅声明现役输入合同，继续拒绝越权文件、任意Pandas执行与未绑定预演参数。",
-      "validation": "输入schema、Excel查询、ELT审批与owned文件负例已执行；最终类型和SSOT门禁须通过。",
+      "after_lines": 1285,
+      "reason": "本记录为本次全部开放PR集成的精确架构评审请求。对齐统一能力的参数结构与当前主线owned文件、ELT预演及受控Excel查询契约；补充导出行数、对象类型和每行字段上限，真实稀疏并集及内容预算由独立轻量guard在物化前核验。",
+      "boundary": "仅声明现役输入合同，继续拒绝越权文件、任意Pandas执行与未绑定预演参数；默认工具权限和审批合同保持，新增导出预算不代表全局HTTP body限制。",
+      "validation": "输入schema、Excel查询、ELT审批与owned文件负例已执行；导出62项定向回归通过，新增25项经独立重跑，包含DataFrame前拒绝、稀疏并集、UTF-8预算、原子发布及失败清理；最终类型和SSOT门禁须通过。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },

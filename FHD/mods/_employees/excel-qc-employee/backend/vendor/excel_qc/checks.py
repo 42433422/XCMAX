@@ -13,6 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .conditional_formats import check_inserted_conditionals
 from .plan_coordinates import (
     affected_reserved_names as _affected_reserved_names,
 )
@@ -304,6 +305,7 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
         return
     insertions = tuple(_insertions(plan))
     _check_defined_names(wb, template_wb, plan, f)
+    check_inserted_conditionals(wb, template_wb, plan, f)
     check_inserted_tables(wb, template_wb, plan, f)
     style_ranges = _declared_ranges(plan, "cell_styles", wb)
     for target, _, _ in insertions:

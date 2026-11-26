@@ -3,6 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.application.excel_export_limits import (
+    MAX_EXPORT_COLUMNS,
+    MAX_EXPORT_ROWS,
+)
 from app.domain.browser_contract import BROWSER_INPUT_SCHEMAS
 from app.domain.enterprise_cognition.contracts import ENTERPRISE_INPUT_SCHEMAS
 from app.domain.shared_services.kellai_tool_contract import KELLAI_INPUT_SCHEMAS
@@ -824,7 +828,12 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         ["file_path", "rows"],
         {
             "file_path": {"type": "string"},
-            "rows": {"type": "array", "minItems": 1},
+            "rows": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": MAX_EXPORT_ROWS,
+                "items": {"type": "object", "maxProperties": MAX_EXPORT_COLUMNS},
+            },
         },
     ),
     ("excel_analysis", "read"): _object_schema(

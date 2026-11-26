@@ -11,10 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import groupby, islice
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, cast
 
 import pandas as pd
 
+from app.application import excel_export_limits
 from app.application.tools.workflow_tools.contracts import ExcelIO, Payload
 from app.infrastructure.excel.date_norm import cn_date, date_like_columns, to_number
 from app.infrastructure.excel.schema_service import dataframe_schema_snapshot
@@ -550,13 +552,9 @@ class ExcelAnalysis:
 
     def export_table(self, args: Payload, workspace_root: str) -> Payload:
         """Write a small csv or xlsx under the task workspace and return its on-disk path."""
+        if error := excel_export_limits.export_input_error(args):
+            return error
         rows = args.get("rows")
-        if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
-            return {
-                "success": False,
-                "error_code": "empty_business_result",
-                "message": "没有可写入的行",
-            }
         relative = str(args.get("file_path") or "").strip()
         if not relative or Path(relative).is_absolute():
             return {"success": False, "error": "invalid_excel_path", "message": "文件路径无效"}
@@ -564,13 +562,23 @@ class ExcelAnalysis:
         path = (root / relative).resolve()
         if root != path and root not in path.parents:
             return {"success": False, "error": "invalid_excel_path", "message": "文件路径无效"}
+        staging: Path | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             frame = pd.DataFrame(rows)
+            with NamedTemporaryFile(
+                dir=path.parent, prefix=".excel-export-", suffix=path.suffix, delete=False
+            ) as temporary:
+                staging = Path(temporary.name)
             if path.suffix.lower() == ".csv":
-                frame.to_csv(path, index=False)
+                frame.to_csv(staging, index=False)
             else:
-                frame.to_excel(path, index=False)
+                frame.to_excel(staging, index=False)
+            if staging.stat().st_size > excel_export_limits.MAX_EXPORT_FILE_BYTES:
+                raise excel_export_limits.ExcelExportLimitError("导出文件超过产物大小预算")
+            os.replace(staging, path)
+        except excel_export_limits.ExcelExportLimitError as exc:
+            return exc.result()
         except RECOVERABLE_ERRORS as exc:
             self.logger.exception("excel export failed")
             return {
@@ -579,6 +587,9 @@ class ExcelAnalysis:
                 "message": "文件写入失败",
                 "exception_type": type(exc).__name__,
             }
+        finally:
+            if staging is not None:
+                staging.unlink(missing_ok=True)
         return {
             "success": True,
             "data": {

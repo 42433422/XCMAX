@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
 
+from .conditional_formats import ConditionalFormatError, validate_conditional_insert
 from .references import (
     XLSX_MAX_COL,
     XLSX_MAX_ROW,
@@ -362,6 +363,7 @@ def _run_insert_rows(
         raise PlanError("insert_rows 会使现有单元格超出工作表行数上限。")
     # openpyxl 只移动单元格，不迁移合并区、行高与公式引用，这里逐项补齐。
     try:
+        validate_conditional_insert(wb, sheet, row, count)
         tables = shifted_table_ranges(wb, row, count, sheet)
         defined_names = shifted_defined_names(wb, row, count, sheet)
         formulas = [
@@ -377,7 +379,12 @@ def _run_insert_rows(
             for cell in source._cells.values()
             if isinstance(cell.value, str) and cell.value.startswith("=")
         ]
-    except (ReferenceOverflowError, DefinedNameError, TableRangeError) as exc:
+    except (
+        ReferenceOverflowError,
+        DefinedNameError,
+        TableRangeError,
+        ConditionalFormatError,
+    ) as exc:
         raise PlanError(str(exc)) from exc
     merges = [
         (rng.min_row, rng.min_col, rng.max_row, rng.max_col)
