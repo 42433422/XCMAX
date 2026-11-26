@@ -6,6 +6,7 @@ import asyncio
 import hashlib as hashlib
 import json as json
 import logging
+import os
 import random
 import sqlite3
 import threading
@@ -157,7 +158,7 @@ class DeadLetterQueue:
         Args:
             max_size: 最大条目数
             retention_hours: 保留时间（小时，默认 7 天）
-            storage_path: SQLITE 持久化路径；None 表示纯内存模式（默认）
+            storage_path: SQLITE 持久化路径；None 为显式构造的内存模式（测试/临时使用）
             alert_suppress_window: 告警抑制窗口（秒，默认 5 分钟）
             alert_threshold: 触发告警的最小同类事件数（默认 1）
         """
@@ -166,11 +167,12 @@ class DeadLetterQueue:
         self._storage_path = storage_path
         self._lock = threading.RLock()
         self._storage = SQLiteOwner(self._lock)
+        self._closed = False
         self._state = DeadLetterState()
         self._entries = self._state.entries
         self._stats = self._state.stats
         self._alert_callbacks: list[Callable[[DeadLetterEntry], None]] = []
-        self._replay_callbacks: list[Callable[[NeuroEvent], None]] = []
+        self._replay_callbacks: list[Callable[[NeuroEvent], bool | None]] = []
         self._replay_paused = False
         self._runtime = _runtime()
         initialized = False
@@ -402,6 +404,20 @@ class DeadLetterQueue:
         """清理过期条目"""
         return self._management.cleanup_expired()
 
+    def get_archived_entries(self, limit: int = 100) -> list[DeadLetterEntry]:
+        """List retained inactive dead letters for supervised recovery."""
+        return self._repository.archived_entries(limit)
+
+    def restore_archived(self, entry_id: str, restored_by: str) -> bool:
+        """Restore the same event identity; this never dispatches the event."""
+        return self._repository.restore_archived(entry_id, restored_by)
+
+    def get_audit_history(
+        self, entry_id: str, *, after_audit_id: int = 0, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        """Read one durable audit page; resume using the last row's audit_id."""
+        return self._repository.audit_history(entry_id, after_audit_id=after_audit_id, limit=limit)
+
     def get_all_entries(self) -> list[DeadLetterEntry]:
         """获取所有条目"""
         return self._repository.entries()
@@ -436,8 +452,8 @@ class DeadLetterQueue:
         """注册告警回调"""
         self._alert_callbacks.append(callback)
 
-    def on_replay(self, callback: Callable[[NeuroEvent], None]) -> None:
-        """注册重播回调"""
+    def on_replay(self, callback: Callable[[NeuroEvent], bool | None]) -> None:
+        """注册重播回调；显式 False 表示未接受，None 兼容旧回调。"""
         self._replay_callbacks.append(callback)
 
     def _trigger_alert(self, entry: DeadLetterEntry) -> None:
@@ -500,7 +516,10 @@ class DeadLetterQueue:
 
     def close(self) -> None:
         """Release the owned SQLite connection; subsequent SQLite operations fail."""
-        self._storage.close()
+        with self._lock:
+            if not self._closed:
+                self._storage.close()
+                self._closed = True
 
 
 class EventPublisher(Protocol):
@@ -515,7 +534,7 @@ class NeuroBusDLQIntegration:
     """
 
     def __init__(self, dlq: DeadLetterQueue | None = None):
-        self._dlq = dlq or DeadLetterQueue()
+        self._dlq = dlq if dlq is not None else get_dead_letter_queue()
         self._max_retries = 3
 
     @property
@@ -523,7 +542,13 @@ class NeuroBusDLQIntegration:
         return self._dlq
 
     def handle_failure(
-        self, event: NeuroEvent, error: Exception, retry_count: int, handler_name: str | None = None
+        self,
+        event: NeuroEvent,
+        error: Exception,
+        retry_count: int,
+        handler_name: str | None = None,
+        *,
+        retry_exhausted: bool | None = None,
     ) -> str:
         """
         处理失败，决定进入死信队列
@@ -531,7 +556,10 @@ class NeuroBusDLQIntegration:
         Returns:
             死信条目 ID
         """
-        if retry_count >= self._max_retries:
+        # Legacy callers may omit the explicit terminal outcome. The bus always
+        # supplies it because a numeric count cannot prove why execution stopped.
+        exhausted = retry_count >= self._max_retries if retry_exhausted is None else retry_exhausted
+        if exhausted:
             reason = DeadLetterReason.RETRY_EXHAUSTED
         elif isinstance(error, (TimeoutError, asyncio.TimeoutError)):
             reason = DeadLetterReason.TIMEOUT
@@ -554,30 +582,54 @@ class NeuroBusDLQIntegration:
     def setup_replay_to_bus(self, bus: EventPublisher) -> None:
         """设置重播到 NeuroBus"""
 
-        def replay_callback(event: NeuroEvent) -> None:
-            bus.publish(event)
+        def replay_callback(event: NeuroEvent) -> bool:
+            return bus.publish(event)
 
         self._dlq.on_replay(replay_callback)
 
 
 _dlq_instance: DeadLetterQueue | None = None
+_dlq_instance_lock = threading.Lock()
+
+
+def _default_dlq_path() -> str:
+    """Resolve a stable on-disk path, never a process-local temporary file."""
+    configured = os.environ.get("XCAGI_NEURO_BUS_DLQ_PATH", "").strip()
+    if configured:
+        if configured == ":memory:":
+            raise ValueError("Global NeuroBus DLQ requires persistent storage")
+        return str(Path(configured).expanduser().resolve())
+    desktop_data = os.environ.get("XCAGI_DATA_DIR", "").strip()
+    database_path = os.environ.get("DATABASE_PATH", "").strip()
+    if desktop_data:
+        root = Path(desktop_data) / "data"
+    elif database_path:
+        root = Path(database_path)
+    else:
+        root = Path(__file__).resolve().parents[2] / "data"
+    return str((root / "neurobus_dlq.sqlite3").expanduser().resolve())
 
 
 def get_dead_letter_queue(storage_path: str | None = None) -> DeadLetterQueue:
-    """
-    获取全局死信队列实例
-
-    Args:
-        storage_path: 可选 SQLITE 持久化路径；仅在首次创建实例时生效。
-            若实例已存在则忽略该参数（保持向后兼容）。
-
-    Returns:
-        全局 DeadLetterQueue 实例
-    """
+    """Return the durable process singleton; reject conflicting explicit paths."""
     global _dlq_instance
-    if _dlq_instance is None:
-        _dlq_instance = DeadLetterQueue(storage_path=storage_path)
-    return _dlq_instance
+    with _dlq_instance_lock:
+        if storage_path is not None:
+            if not storage_path.strip() or storage_path == ":memory:":
+                raise ValueError("Global NeuroBus DLQ requires persistent storage")
+            storage_path = str(Path(storage_path).expanduser().resolve())
+        if _dlq_instance is None:
+            _dlq_instance = DeadLetterQueue(storage_path=storage_path or _default_dlq_path())
+        else:
+            if storage_path is not None and _dlq_instance._storage_path != storage_path:
+                raise ValueError("Global NeuroBus DLQ already uses a different storage path")
+            with _dlq_instance._lock:
+                if _dlq_instance._closed:
+                    previous_path = _dlq_instance._storage_path
+                    if previous_path is None:
+                        raise ValueError("Global NeuroBus DLQ requires persistent storage")
+                    _dlq_instance = DeadLetterQueue(storage_path=previous_path)
+        return _dlq_instance
 
 
 def enqueue_dead_letter(

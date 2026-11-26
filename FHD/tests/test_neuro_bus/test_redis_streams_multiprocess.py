@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -39,6 +40,16 @@ _PORT = 5490
 
 @pytest.fixture(scope="module")
 def redis_url():
+    configured = os.environ.get("XCAGI_NEUROBUS_TEST_REDIS_URL")
+    if configured:
+        # CI must prove a running Redis, not skip when misconfigured.
+        probe = redis_lib.Redis.from_url(configured, socket_connect_timeout=3)
+        try:
+            assert probe.ping(), "configured real Redis service is unreachable"
+        finally:
+            probe.close()
+        yield configured
+        return
     url = f"redis://127.0.0.1:{_PORT}/0"
     # 优先复用已运行的 Redis（如 docker 容器）；否则尝试本机 redis-server。
     try:
@@ -85,6 +96,26 @@ def redis_url():
             server.wait(timeout=5)
 
 
+@pytest.fixture(autouse=True)
+def isolated_stream_namespace(redis_url, monkeypatch):
+    """Use unique keys even when a test Redis service is shared across jobs."""
+    from app.neuro_bus.transports import redis_streams as streams
+
+    tag = uuid.uuid4().hex
+    stream_key = f"neurobus:test:{{{tag}}}:events"
+    dlq_key = f"neurobus:test:{{{tag}}}:dlq"
+    monkeypatch.setattr(streams, "STREAM_KEY", stream_key)
+    monkeypatch.setattr(streams, "DLQ_KEY", dlq_key)
+    monkeypatch.setitem(globals(), "STREAM_KEY", stream_key)
+    monkeypatch.setitem(globals(), "DLQ_KEY", dlq_key)
+    try:
+        yield
+    finally:
+        # Never FLUSHDB or delete the shared production/default stream names.
+        with redis_lib.Redis.from_url(redis_url) as client:
+            client.delete(stream_key, dlq_key)
+
+
 def _client(url):
     return redis_lib.Redis.from_url(url, decode_responses=False)
 
@@ -106,7 +137,10 @@ def test_cross_process_publish_and_consume(redis_url) -> None:
 
     code = (
         "import redis, json, sys\n"
-        "from app.neuro_bus.transports.redis_streams import RedisStreamsBridge\n"
+        "from app.neuro_bus.transports import redis_streams as streams\n"
+        f"streams.STREAM_KEY = {STREAM_KEY!r}\n"
+        f"streams.DLQ_KEY = {DLQ_KEY!r}\n"
+        "RedisStreamsBridge = streams.RedisStreamsBridge\n"
         f"c = redis.Redis.from_url({redis_url!r})\n"
         "b = RedisStreamsBridge(bus=None, redis_client=c, consumer_id='publisher-proc')\n"
         f"b.publish(json.loads(sys.argv[1]))\n"
@@ -167,11 +201,18 @@ def test_unacked_pending_message_recovered_by_new_consumer(redis_url) -> None:
     assert len(pending) == 1
     # 模拟 worker 崩溃：不 ack
 
-    # 恢复：同组新 worker 直接读 PEL（xreadgroup '0'）
-    entries = client.xreadgroup(CONSUMER_GROUP, "worker-crashed", {STREAM_KEY: "0"}, count=10)
-    recovered_ids = [mid.decode() for _s, msgs in entries for mid, _f in msgs]
+    # Reclaim using a distinct consumer; only the new owner can acknowledge it.
+    successor = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="worker-recovered")
+    _, claimed, *_ = client.xautoclaim(
+        STREAM_KEY, CONSUMER_GROUP, "worker-recovered",
+        min_idle_time=0, start_id="0-0", count=10,
+    )
+    recovered_ids = [msg_id.decode() for msg_id, _ in claimed]
     assert recovered_ids == [pending[0]["_msg_id"]]
-    client.xack(STREAM_KEY, CONSUMER_GROUP, *recovered_ids)
+    assert not crashed.ack(recovered_ids[0])
+    assert client.xpending(STREAM_KEY, CONSUMER_GROUP)["pending"] == 1
+    assert successor.ack(recovered_ids[0])
+    assert client.xpending(STREAM_KEY, CONSUMER_GROUP)["pending"] == 0
     client.close()
 
 
@@ -183,7 +224,8 @@ def test_failed_message_routed_to_dlq(redis_url) -> None:
     bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="worker-dlq")
     msg_id = bridge.publish(event)
     assert msg_id is not None
-    bridge.send_to_dlq(event, msg_id)
+    assert [row["_msg_id"] for row in bridge.consume(count=1, block_ms=1000)] == [msg_id]
+    assert bridge.send_to_dlq(event, msg_id)
 
     assert client.xlen(DLQ_KEY) == 1
     dlq_entries = client.xrange(DLQ_KEY)
@@ -194,3 +236,140 @@ def test_failed_message_routed_to_dlq(redis_url) -> None:
     pending = client.xpending(STREAM_KEY, CONSUMER_GROUP)
     assert pending["pending"] == 0
     client.close()
+
+
+def test_safe_trim_preserves_slowest_group_and_pending_payload(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 3)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="fast")
+        bridge._ensure_group()
+        client.xgroup_create(STREAM_KEY, "slow", id="0-0")
+        ids = [bridge.publish({"n": i}) for i in range(12)]
+        assert client.xlen(STREAM_KEY) == 12
+
+        received = bridge.consume(count=12, block_ms=1000)
+        assert [m["_msg_id"] for m in received] == ids
+        for msg_id in ids[1:]:
+            bridge.ack(msg_id)
+        # Unread group plus oldest unacknowledged fast worker block trimming.
+        assert client.xlen(STREAM_KEY) == 12
+
+        client.xreadgroup("slow", "crashed", {STREAM_KEY: ">"}, count=5)
+        client.xack(STREAM_KEY, "slow", *ids[:4])
+        assert bridge.trim_acknowledged() == 0
+        bridge.ack(ids[0])
+        assert [mid.decode() for mid, _ in client.xrange(STREAM_KEY)] == ids[4:]
+
+        # Recover the pending message, including its original payload.
+        _, claimed, *_ = client.xautoclaim(
+            STREAM_KEY, "slow", "restarted", min_idle_time=0, start_id="0-0", count=10
+        )
+        assert len(claimed) == 1
+        assert claimed[0][0].decode() == ids[4]
+        assert json.loads(claimed[0][1][b"payload"]) == {"n": 4}
+        client.xack(STREAM_KEY, "slow", ids[4])
+        client.xreadgroup("slow", "restarted", {STREAM_KEY: ">"}, count=12)
+        client.xack(STREAM_KEY, "slow", *ids[5:])
+        assert bridge.trim_acknowledged() == 5
+        assert [mid.decode() for mid, _ in client.xrange(STREAM_KEY)] == ids[-3:]
+    finally:
+        _fresh_stream(client)
+        client.close()
+
+
+def test_safe_trim_retains_without_group_and_bounds_each_batch(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 1)
+    monkeypatch.setattr(streams, "TRIM_BATCH", 2)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="worker")
+        bridge._ensure_group()
+        ids = [bridge.publish({"n": i}) for i in range(7)]
+        client.xgroup_destroy(STREAM_KEY, CONSUMER_GROUP)
+        assert bridge.trim_acknowledged() == 0
+        assert client.xlen(STREAM_KEY) == 7
+
+        client.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="0-0")
+        assert bridge.trim_acknowledged() == 0
+        bridge.consume(count=7, block_ms=1000)
+        client.xack(STREAM_KEY, CONSUMER_GROUP, *ids)
+        for remaining in (5, 3, 1):
+            assert bridge.trim_acknowledged() == 2
+            assert client.xlen(STREAM_KEY) == remaining
+        assert bridge.trim_acknowledged() == 0
+        assert client.xrange(STREAM_KEY)[0][0].decode() == ids[-1]
+    finally:
+        _fresh_stream(client)
+        client.close()
+
+
+def test_safe_trim_compares_full_uint64_stream_ids(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 1)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="worker")
+        ids = ["100-9007199254740992", "100-9007199254740993", "101-0"]
+        for msg_id in ids:
+            client.xadd(STREAM_KEY, {"payload": "{}"}, id=msg_id)
+        bridge.consume(count=3, block_ms=1000)
+        bridge.ack(ids[-1])
+        assert client.xlen(STREAM_KEY) == 3
+        bridge.ack(ids[0])
+        assert [mid.decode() for mid, _ in client.xrange(STREAM_KEY)] == ids[1:]
+        bridge.ack(ids[1])
+        assert [mid.decode() for mid, _ in client.xrange(STREAM_KEY)] == ids[-1:]
+    finally:
+        _fresh_stream(client)
+        client.close()
+
+
+def test_dlq_soft_limit_never_drops_unconsumed_failures(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 2)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="worker")
+        ids = [bridge.publish({"n": i}) for i in range(8)]
+        bridge.consume(count=8, block_ms=1000)
+        for i, msg_id in enumerate(ids):
+            bridge.send_to_dlq({"n": i}, msg_id)
+        assert [fields[b"original_id"].decode() for _, fields in client.xrange(DLQ_KEY)] == ids
+        assert client.xpending(STREAM_KEY, CONSUMER_GROUP)["pending"] == 0
+    finally:
+        _fresh_stream(client)
+        client.close()
+
+
+def test_new_group_reads_preexisting_backlog_instead_of_skipping(redis_url, monkeypatch):
+    from app.neuro_bus.transports import redis_streams as streams
+
+    monkeypatch.setattr(streams, "MAXLEN", 1)
+    client = _client(redis_url)
+    try:
+        _fresh_stream(client)
+        ids = [
+            client.xadd(STREAM_KEY, {"payload": json.dumps({"n": i})}).decode()
+            for i in range(5)
+        ]
+        bridge = RedisStreamsBridge(bus=None, redis_client=client, consumer_id="new")
+        assert bridge.trim_acknowledged() == 0
+        messages = bridge.consume(count=5, block_ms=1000)
+        assert [message["_msg_id"] for message in messages] == ids
+        for msg_id in ids:
+            bridge.ack(msg_id)
+        assert client.xlen(STREAM_KEY) == 1
+    finally:
+        _fresh_stream(client)
+        client.close()

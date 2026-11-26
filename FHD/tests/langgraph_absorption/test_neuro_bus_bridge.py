@@ -26,8 +26,9 @@ from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
 # Reviewed with PR #2749 bounded entity dispatch, the desktop buffer cap,
-# and PR #3532 event outcomes; original dispatch contracts remain separately tested.
-_BUS_SHA256 = "be65564048745fe2ed2e036502f45526b53a5a06cd81cce6a0f9e261a4bb2025"
+# and PR #3532 event outcomes. Combined A03/A04/A05 + retry/DLQ candidate bytes.
+# Pin the exact candidate, not approval: independent review and original regressions remain required.
+_BUS_SHA256 = "d2bbadb1af57eab0708c6e240a44027fefe8e24409ed2058ad52296d32806476"
 
 
 class RecordingBus:

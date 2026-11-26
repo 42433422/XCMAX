@@ -429,7 +429,7 @@ def test_event_and_snapshot_removal_is_one_transaction(owned_stores, operation):
 
 
 @pytest.mark.parametrize("mode", ["memory", "sqlite"])
-def test_unexpected_callback_failure_releases_live_claim(owned_stores, mode):
+def test_unexpected_callback_failure_releases_live_claim_but_quarantines_outcome(owned_stores, mode):
     queue = DeadLetterQueue() if mode == "memory" else owned_stores("dlq")
     entry_id = queue.enqueue(event(), DeadLetterReason.TIMEOUT, "timeout", 0)
     attempts = []
@@ -444,8 +444,12 @@ def test_unexpected_callback_failure_releases_live_claim(owned_stores, mode):
         queue.replay(entry_id)
     assert queue.get_stats()["replayed"] == 0
     assert queue.dequeue(entry_id).retry_count == 0
-    assert queue.replay(entry_id) == (True, "")
-    assert len(attempts) == 2
+    # The live claim is released, but the callback might have caused a side
+    # effect before raising. Never turn the unknown outcome into a new send.
+    assert queue.replay(entry_id) == (False, "replay_outcome_unknown")
+    assert len(attempts) == 1
+    assert queue.get_stats()["replayed"] == 0
+    assert queue._deduplicator.is_replayed(entry_id, 0) is False
 
 
 def test_replay_refuses_a_symlink_lock_without_touching_its_target(owned_stores, tmp_path):
@@ -481,7 +485,7 @@ def test_handler_can_replay_a_different_entry_in_the_same_thread(owned_stores, m
     assert queue.get_stats()["replayed"] == 2
 
 
-def test_process_exit_releases_claim_but_does_not_promise_exactly_once(owned_stores, tmp_path):
+def test_process_exit_releases_claim_but_quarantines_unknown_outcome(owned_stores, tmp_path):
     queue = owned_stores("dlq")
     entry_id = queue.enqueue(event(), DeadLetterReason.TIMEOUT, "timeout", 0)
     side_effect = tmp_path / "delivered.txt"
@@ -507,9 +511,14 @@ raise AssertionError('callback did not exit the process')
     assert side_effect.read_text() == "first delivery"
     assert queue._deduplicator.is_replayed(entry_id, 0) is False
     queue.on_replay(lambda _event: side_effect.write_text("delivery after crash"))
-    assert queue.replay(entry_id) == (True, "")
-    assert side_effect.read_text() == "delivery after crash"
-    assert queue._deduplicator.is_replayed(entry_id, 0) is True
+    assert queue.replay(entry_id) == (False, "replay_outcome_unknown")
+    assert side_effect.read_text() == "first delivery"
+    assert queue._deduplicator.is_replayed(entry_id, 0) is False
+    assert queue.get_stats()["replayed"] == 0
+    reopened = owned_stores("dlq")
+    reopened.on_replay(lambda _event: side_effect.write_text("delivery after reopening"))
+    assert reopened.replay(entry_id) == (False, "replay_outcome_unknown")
+    assert side_effect.read_text() == "first delivery"
 
 
 @pytest.mark.parametrize("kind", ["events", "dlq"])
