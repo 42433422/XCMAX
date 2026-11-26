@@ -3,9 +3,24 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey, defaultWorkflowBuiltinEnabled } from './workflowAiEmployees'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { fetchWorkspacePrefs, flushWorkspacePrefsSync, patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+
+vi.mock('@/utils/workspacePrefsApi', () => ({
+  fetchWorkspacePrefs: vi.fn(),
+  flushWorkspacePrefsSync: vi.fn(async () => {}),
+  patchWorkspacePrefs: vi.fn(),
+  queueWorkspacePrefsSync: vi.fn(),
+}))
+
+const confirmed = (enabled: boolean) => ({
+  success: true,
+  owner_id: 'tenant-owner',
+  data: { workflow_ai_employees: { label_print: enabled } },
+})
 
 describe('workflowAiEmployees store', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     localStorage.clear()
     setTenantStorageScopeCache('tenant:1')
     setActivePinia(createPinia())
@@ -135,5 +150,63 @@ describe('workflowAiEmployees store', () => {
     expect(store.confirmedEnabled).toEqual({})
     expect(store.enabled.label_print).toBeUndefined()
     expect(store.prefsReady).toBe(false)
+  })
+
+  it('reads the owning workspace and waits for one confirmed change', async () => {
+    const store = useWorkflowAiEmployeesStore()
+    store.registerEmployee({ id: 'label_print', label: '标签打印', kind: 'core', order: 1, source: 'json' })
+    await store.setEmployeeEnabledConfirmed('label_print', true)
+    expect(patchWorkspacePrefs).not.toHaveBeenCalled()
+    vi.mocked(fetchWorkspacePrefs).mockResolvedValueOnce(confirmed(false))
+    await store.refreshConfirmedPreferences()
+    expect(store.prefsReady).toBe(true)
+    expect(store.confirmedEnabled.label_print).toBe(false)
+
+    let ack!: (receipt: ReturnType<typeof confirmed>) => void
+    vi.mocked(patchWorkspacePrefs).mockImplementationOnce(() => new Promise(resolve => { ack = resolve }))
+    const save = store.setEmployeeEnabledConfirmed('label_print', true)
+    await vi.waitFor(() => expect(patchWorkspacePrefs).toHaveBeenCalledOnce())
+    await store.setEmployeeEnabledConfirmed('label_print', false)
+    await store.refreshConfirmedPreferences()
+    expect(fetchWorkspacePrefs).toHaveBeenCalledOnce()
+    expect(patchWorkspacePrefs).toHaveBeenCalledExactlyOnceWith({ workflow_ai_employees: { label_print: true } })
+    expect(store.confirmedEnabled.label_print).toBe(false)
+    ack(confirmed(true))
+    await save
+    expect(store.confirmedEnabled.label_print).toBe(true)
+    expect(store.prefsSaving).toBe('')
+    expect(localStorage.getItem(workflowAiEmployeesStorageKey('tenant:1'))).toBe('{"label_print":false}')
+  })
+
+  it('invalidates stale reads on account switch and handles unavailable ownership', async () => {
+    const store = useWorkflowAiEmployeesStore()
+    let ack!: (receipt: ReturnType<typeof confirmed>) => void
+    vi.mocked(fetchWorkspacePrefs).mockImplementationOnce(() => new Promise(resolve => { ack = resolve }))
+    const read = store.refreshConfirmedPreferences()
+    await vi.waitFor(() => expect(fetchWorkspacePrefs).toHaveBeenCalledOnce())
+    productReadAccountEpoch.value++
+    store.reloadForTenantScope('tenant:2')
+    ack(confirmed(true))
+    await read
+    expect(store.prefsReady).toBe(false)
+    expect(store.confirmedEnabled).toEqual({})
+
+    vi.mocked(fetchWorkspacePrefs).mockResolvedValueOnce({ success: true, owner_id: null })
+    await store.refreshConfirmedPreferences()
+    expect(store.prefsReady).toBe(false)
+    expect(store.prefsError).toContain('无法确认工作区归属')
+  })
+
+  it('treats a mismatched change receipt as unconfirmed and does not change the cached state', async () => {
+    const store = useWorkflowAiEmployeesStore()
+    store.registerEmployee({ id: 'label_print', label: '标签打印', kind: 'core', order: 1, source: 'json' })
+    store.acceptConfirmedPreferences({ label_print: false })
+    vi.mocked(patchWorkspacePrefs).mockResolvedValueOnce(confirmed(false))
+    await store.setEmployeeEnabledConfirmed('label_print', true)
+    expect(flushWorkspacePrefsSync).toHaveBeenCalledOnce()
+    expect(store.prefsReady).toBe(false)
+    expect(store.prefsError).toContain('服务器未确认')
+    expect(store.confirmedEnabled.label_print).toBe(false)
+    expect(store.prefsSaving).toBe('')
   })
 })

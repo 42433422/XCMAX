@@ -6,6 +6,10 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import TopQuickNav from './TopQuickNav.vue'
 import { resolveErpPagePath } from '@/utils/erpPagePaths'
+import {
+  defaultWorkspaceCommandPreferences, readWorkspaceCommandPreferences, workspaceCommandStorageKey,
+  writeWorkspaceCommandPreferences,
+} from '@/utils/workspaceCommandShortcuts'
 
 const searchProducts = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
 const getCustomers = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
@@ -326,6 +330,95 @@ describe('TopQuickNav', () => {
   })
 
   describe('desktop command entry', () => {
+    it('accepts commands from the native bridge only while their destination is available', async () => {
+      const unregister = vi.fn()
+      let dispatch!: (command: string) => void
+      vi.stubGlobal('xcagiDesktop', {
+        onWorkspaceCommand(listener: typeof dispatch) { dispatch = listener; return unregister },
+      })
+      const wrapper = await mountNav()
+      const chat = navItems[0]
+      const outsideDialog = document.createElement('button')
+      outsideDialog.setAttribute('role', 'dialog')
+      document.body.append(outsideDialog)
+      try {
+        outsideDialog.focus()
+        dispatch('palette')
+        await wrapper.vm.$nextTick()
+        expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
+        outsideDialog.remove()
+        dispatch('palette')
+        await wrapper.vm.$nextTick()
+        expect(document.querySelector('.top-quick-nav--palette')).toBeTruthy()
+        dispatch('tasks')
+        expect(wrapper.emitted('command')).toEqual([['tasks']])
+        navItems.shift()
+        dispatch('chat')
+        expect(wrapper.emitted('command')).toEqual([['tasks']])
+      } finally {
+        if (!navItems.includes(chat)) navItems.unshift(chat)
+        outsideDialog.remove()
+        wrapper.unmount()
+        vi.unstubAllGlobals()
+      }
+      expect(unregister).toHaveBeenCalledOnce()
+    })
+
+    it('traps keyboard focus and persists only the current account’s favorites and shortcuts', async () => {
+      vi.stubGlobal('xcagiDesktop', {})
+      setRuntimeTenantStorageScopeInput({ localUserId: 11, tenantId: 1 })
+      const firstKey = workspaceCommandStorageKey()
+      const geometry = vi.spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 20, 20)] as unknown as DOMRectList)
+      const wrapper = await mountNav()
+      try {
+        await wrapper.get('.top-quick-nav__narrow-trigger').trigger('click')
+        const palette = document.querySelector<HTMLElement>('.top-quick-nav--palette')!
+        const input = palette.querySelector('input')!
+        const button = (label: string) => new DOMWrapper(
+          [...palette.querySelectorAll('button')].find(item => item.textContent?.includes(label))!,
+        )
+        const q = new DOMWrapper(input)
+        await q.setValue('客户管理')
+        await button('设为常用').trigger('click')
+        expect(readWorkspaceCommandPreferences(firstKey).favorites).toEqual(['customers'])
+        await button('取消常用').trigger('click')
+        expect(readWorkspaceCommandPreferences(firstKey).favorites).toEqual([])
+
+        input.focus()
+        await q.trigger('keydown', { key: 'Tab', shiftKey: true })
+        expect(document.activeElement).toBe(button('Esc 关闭').element)
+        await button('Esc 关闭').trigger('keydown', { key: 'Tab' })
+        expect(document.activeElement).toBe(input)
+        await button('快捷键设置').trigger('click')
+        const shortcut = new DOMWrapper(palette.querySelector<HTMLSelectElement>('select[aria-label="打开智能对话快捷键"]')!)
+        await shortcut.setValue('Mod+Alt+K')
+        expect(readWorkspaceCommandPreferences(firstKey).shortcuts.chat).toBe('Mod+Alt+K')
+
+        window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', { detail: { key: 'customers' } }))
+        expect(readWorkspaceCommandPreferences(firstKey).recent).toEqual(['customers'])
+        setRuntimeTenantStorageScopeInput({ localUserId: 12, tenantId: 1 })
+        const secondKey = workspaceCommandStorageKey()
+        window.dispatchEvent(new CustomEvent('xcagi:workspace-nav-visited', { detail: { key: 'products' } }))
+        expect(readWorkspaceCommandPreferences(secondKey).recent).toEqual(['products'])
+        expect(readWorkspaceCommandPreferences(secondKey).shortcuts.chat).toBe('Mod+Alt+J')
+        writeWorkspaceCommandPreferences(secondKey, { ...defaultWorkspaceCommandPreferences(), favorites: ['customers'] })
+        window.dispatchEvent(new StorageEvent('storage', { key: secondKey, storageArea: localStorage }))
+        await wrapper.vm.$nextTick()
+        expect(document.querySelector('.top-quick-nav--palette')).toBeNull()
+        await wrapper.get('.top-quick-nav__narrow-trigger').trigger('click')
+        await q.setValue('客户管理')
+        expect(button('取消常用').exists()).toBe(true)
+        localStorage.removeItem(secondKey)
+      } finally {
+        wrapper.unmount()
+        localStorage.removeItem(firstKey)
+        setRuntimeTenantStorageScopeInput(null)
+        geometry.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    })
+
     it.each([
       ['Win32', { ctrlKey: true }, 'Control+K'],
       ['MacIntel', { metaKey: true }, 'Meta+K'],

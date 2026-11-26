@@ -9,6 +9,11 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { flushPromises } from '@vue/test-utils'
+import TopQuickNav from './TopQuickNav.vue'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import { defaultWorkspaceCommandPreferences, readWorkspaceCommandPreferences, workspaceCommandStorageKey, writeWorkspaceCommandPreferences } from '@/utils/workspaceCommandShortcuts'
 
 // ── 外部依赖 mock ─────────────────────────────────────────
 
@@ -253,6 +258,94 @@ async function mountMainLayout(props = {}) {
 }
 
 // ── test suites ────────────────────────────────────────────
+
+describe('MainLayout desktop workspace commands', () => {
+  it('navigates to the composer before dispatching commands and releases deferred commands on account change', async () => {
+    const { wrapper, router } = await mountMainLayout()
+    const nav = wrapper.getComponent(TopQuickNav)
+    const composer = document.createElement('textarea')
+    composer.id = 'messageInput'
+    document.body.append(composer)
+    const commands = [
+      ['new-chat', 'xcagi:workspace-new-conversation'],
+      ['new-task', 'xcagi:workspace-new-task'],
+      ['sessions', 'xcagi:workspace-open-sessions'],
+    ] as const
+    const received = vi.fn()
+    for (const [, name] of commands) window.addEventListener(name, received)
+    try {
+      await router.push('/settings')
+      for (const [command, event] of commands) {
+        nav.vm.$emit('command', command)
+        await flushPromises()
+        expect(router.currentRoute.value.name).toBe('chat')
+        expect(received).toHaveBeenLastCalledWith(expect.objectContaining({ type: event }))
+      }
+      nav.vm.$emit('command', 'chat')
+      await flushPromises()
+      expect(document.activeElement).toBe(composer)
+
+      const taskCenter = useAgentTaskCenterStore()
+      const refresh = vi.spyOn(taskCenter, 'refresh').mockResolvedValue(undefined)
+      nav.vm.$emit('command', 'tasks')
+      expect(taskCenter.drawerOpen).toBe(true)
+      expect(refresh).toHaveBeenCalledOnce()
+      refresh.mockRestore()
+
+      vi.useFakeTimers()
+      composer.remove()
+      nav.vm.$emit('command', 'new-task')
+      await flushPromises()
+      document.body.append(composer)
+      productReadAccountEpoch.value++
+      await vi.advanceTimersByTimeAsync(100)
+      expect(received).toHaveBeenCalledTimes(3)
+
+      composer.remove()
+      nav.vm.$emit('command', 'new-task')
+      await flushPromises()
+      document.body.append(composer)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(received).toHaveBeenCalledTimes(4)
+    } finally {
+      composer.remove()
+      for (const [, name] of commands) window.removeEventListener(name, received)
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('restores sidebar preferences only for the current account', async () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 11 })
+    const firstKey = workspaceCommandStorageKey()
+    const { wrapper } = await mountMainLayout()
+    try {
+      const nav = wrapper.getComponent(TopQuickNav)
+      wrapper.vm.isSidebarFeatureEnabled = false
+      nav.vm.$emit('command', 'sidebar')
+      expect(readWorkspaceCommandPreferences(firstKey).sidebarCollapsed).toBeNull()
+      wrapper.vm.isSidebarFeatureEnabled = true
+      nav.vm.$emit('command', 'sidebar')
+      expect(readWorkspaceCommandPreferences(firstKey).sidebarCollapsed).toBe(true)
+
+      setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 12 })
+      const secondKey = workspaceCommandStorageKey()
+      productReadAccountEpoch.value++
+      await flushPromises()
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      writeWorkspaceCommandPreferences(secondKey, { ...defaultWorkspaceCommandPreferences(), sidebarCollapsed: true })
+      window.dispatchEvent(new StorageEvent('storage', { key: firstKey, storageArea: localStorage }))
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      window.dispatchEvent(new StorageEvent('storage', { key: secondKey, storageArea: localStorage }))
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
+      localStorage.removeItem(secondKey)
+    } finally {
+      wrapper.unmount()
+      localStorage.removeItem(firstKey)
+      setRuntimeTenantStorageScopeInput(null)
+    }
+  })
+})
 
 describe('MainLayout.vue – component structure', () => {
   it('keeps the floating assistant away from customer-service controls across repeated navigation', async () => {

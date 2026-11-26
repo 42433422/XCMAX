@@ -833,8 +833,10 @@ app = FastAPI()
 app.include_router(mobile_api.router)
 schema = app.openapi()
 operations = [op for path in schema["paths"].values() for verb, op in path.items() if verb in {{"get", "post", "put", "delete", "patch"}}]
-assert len(operations) == 123
-assert len({{op["operationId"] for op in operations}}) == 123
+assert len(operations) == 125
+assert len({{op["operationId"] for op in operations}}) == 125
+assert set(schema["paths"]["/api/mobile/v1/notifications/inbox"]) == {{"get"}}
+assert set(schema["paths"]["/api/mobile/v1/notifications/{{notification_id}}/read"]) == {{"post"}}
 workspace = {{path: set(methods) for path, methods in schema["paths"].items() if "/workspace/" in path}}
 assert sum(len(methods) for methods in workspace.values()) == 18
 assert workspace["/api/mobile/v1/workspace/shipment/shipment-records/record"] == {{"post", "patch", "delete"}}
