@@ -1,16 +1,40 @@
 {
+  "schema_version": 1,
   "mode": "task_holdout",
+  "acceptance_mode": "observe",
+  "execution_mode": "rule_only",
   "llm_verified": false,
+  "gate_passed": false,
   "status": "UNVERIFIED",
+  "source_sha": "8301cad9ede1dbe2cb09345e9a63b0cf5e8cc4ed",
+  "dataset_sha256": "a093e325c9fe69473b69ce866d21c507b119864c74eddbe72f0aa62b635752f4",
+  "captured_at": "2026-11-25T10:32:11.333229+00:00",
   "evidence": {
-    "report": "test_reports/task_holdout_report.json",
+    "report": "task_holdout_report.json",
+    "report_sha256": "448f60e223448b0d99863d32cee4e96b5dc4aeb99b3377379cfc136a4b594233",
     "model_responses": 0,
     "total_tasks": 13,
     "trials": 3,
     "pass_1": 0.0,
-    "pass_k": 0.0
+    "pass_k": 0.0,
+    "min_pass": 0.0,
+    "trial_artifacts": [
+      {
+        "path": "task_benchmark_trial_0.jsonl",
+        "sha256": "a789d1e3aa62656bc7ebfee419559147a191c6059f77b5169faacbc59b5a5438"
+      },
+      {
+        "path": "task_benchmark_trial_1.jsonl",
+        "sha256": "15a75aeb9d206fd797338378fd7f20f8fefbb31f253d0b22dd756bda131f3269"
+      },
+      {
+        "path": "task_benchmark_trial_2.jsonl",
+        "sha256": "804e4a24078a3edcf5b5b3294655307c13d430098a8176870eda2cdd97d072f3"
+      }
+    ]
   },
-  "run_id": "45312878748",
-  "sha": "1a5e1d194f1b361ea488bf9bd781a788f767419f",
+  "run_id": "45592437177",
+  "run_attempt": "1",
+  "sha": "8301cad9ede1dbe2cb09345e9a63b0cf5e8cc4ed",
   "actor": "42433422"
 }

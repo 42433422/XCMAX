@@ -388,3 +388,32 @@ def test_existing_im_revision_keeps_its_upgrade_and_downgrade_behavior():
         }
         assert connection.execute(text("SELECT * FROM im_messages")).fetchall() == [(1, "retained")]
     engine.dispose()
+
+
+def test_benchmark_factory_pins_real_engine_across_mapper_writes(tmp_path, monkeypatch):
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import NullPool
+
+    from app.db.models.permission import Permission, Role
+    from tests.benchmarks.task_success_runner import _trial_session_factory
+
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'benchmark-engine.sqlite3'}",
+        connect_args={"timeout": 1},
+        poolclass=NullPool,
+    )
+    try:
+        init_db.ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
+        monkeypatch.setattr(database, "_get_engine", lambda: engine)
+        factory = _trial_session_factory()
+        assert factory.kw["bind"] is engine
+        with factory.begin() as session:
+            role = Role(name="benchmark-engine-regression")
+            role.permissions.append(Permission(name="Regression", code="test.engine.bind"))
+            session.add(role)
+            session.flush()
+        with Session(engine) as session:
+            role = session.query(Role).filter_by(name="benchmark-engine-regression").one()
+            assert {permission.code for permission in role.permissions} == {"test.engine.bind"}
+    finally:
+        engine.dispose()
