@@ -5,8 +5,15 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from app.application.agent_runtime.configuration import RuntimePolicyError
+from app.application.agent_runtime.runtime_error_surface import public_runtime_failure
 from app.application.agent_task_context import authenticated_task_owner
-from app.infrastructure.codex.policy import RuntimePolicyError
+
+# RuntimePolicyError is supplied by the configured fixed runtime package.
+# After #3606 migration the same surface advertises Xiaox, not a retired Codex label.
+_RUNTIME_KIND = (
+    "xiaox" if RuntimePolicyError.__module__.startswith("app.infrastructure.xiaox.") else "codex"
+)
 
 _INSTRUCTIONS = (
     "你是 XCMAX 企业助手小C。只有确需企业数据、实际操作或续办原业务任务时，才发现当前账号的企业能力并按契约调用。"
@@ -63,7 +70,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "success": bool(result.get("ok")),
         "response": text,
         "message": text,
-        "runtime": "codex",
+        "runtime": _RUNTIME_KIND,
         "run_id": result.get("run_id"),
         "agent_run_id": result.get("run_id"),
         "execution_state": state,
@@ -81,7 +88,7 @@ def runtime_chat_payload(result: dict[str, Any], *, conversation_id: str = "") -
         "data": {
             "action": "approval_pending" if card else "runtime_reply",
             "text": text,
-            "runtime": "codex",
+            "runtime": _RUNTIME_KIND,
             "run_id": result.get("run_id"),
             "execution_state": state,
             "business_completed": result.get("business_completed") is True,
@@ -125,7 +132,7 @@ def run_runtime_chat(
         if not busy:
             _ACTIVE_SLOTS.add(owner)
     if busy:
-        # Two Codex runtimes for one account used to fail as an unexplained
+        # Two fixed runtimes for one account used to fail as an unexplained
         # `unknown` state; report an explicit, retryable admission result instead.
         run_id = str(context.get("agent_runtime_run_id") or "") or None
         return runtime_chat_payload(
@@ -159,7 +166,7 @@ def _run_runtime_chat(
     context: dict[str, Any],
     file_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run every general chat through the authenticated Codex task gateway."""
+    """Run every general chat through the authenticated fixed task gateway."""
     run_id = str(context.get("agent_runtime_run_id") or "")
     session = str(context.get("session_id") or context.get("conversation_id") or "")
     try:
@@ -206,14 +213,16 @@ def _run_runtime_chat(
             # and let the following chat turn create a duplicate business task.
             result.update(run_id=run_id, resume_required=True, execution_state="blocked")
         return runtime_chat_payload(result, conversation_id=session)
-    except RuntimePolicyError:
+    except RuntimePolicyError as exc:
+        failure = public_runtime_failure(exc)
         return runtime_chat_payload(
             {
                 "ok": False,
                 "run_id": run_id,
-                "exit_status": "runtime_not_qualified",
-                "error_code": "runtime_not_qualified",
-                "error": "配置的独立运行时尚未通过当前模型路由验收，本轮未启动业务执行。",
+                "exit_status": failure["error_code"],
+                "error_code": failure["error_code"],
+                "error": failure["message"],
+                "failure_stage": "runtime_setup",
                 "resume_required": bool(run_id),
                 "execution_state": "blocked",
             },

@@ -17,6 +17,9 @@ from typing import Any
 import httpx
 from filelock import FileLock, Timeout
 
+from app.application.agent_runtime.runtime_error_surface import (
+    public_runtime_failure as public_runtime_failure,
+)
 from app.application.market_llm.authentication import validate_demo_destination
 from app.application.market_llm.protocols import Connection, PreparedChatRoute
 from app.application.market_llm.routing import resolve_account_route
@@ -62,37 +65,6 @@ class RuntimeSetupError(RuntimePolicyError):
         self.checks = checks or {}
         self.public_message = message
         super().__init__(message)
-
-
-def public_runtime_failure(error: RuntimePolicyError) -> dict[str, Any]:
-    """Expose reviewed recovery guidance and check states, never exception text."""
-    messages = {
-        **_QUALIFICATION_ERRORS,
-        "runtime_not_qualified": "运行配置尚未通过核验，请检查模型设置或联系部署管理员。",
-        "runtime_configuration_required": "请核对模型设置",
-        "runtime_login_required": "当前账号登录已失效，请重新登录后继续原任务。",
-        "runtime_account_model_required": "请在模型设置中选择当前账号可用的平台模型或自带密钥模型。",
-        "runtime_storage_invalid": "运行验收状态无法读取，请检查本机数据目录权限。",
-        "runtime_qualification_in_progress": "当前模型正在完成运行验收，请稍后继续。",
-        "runtime_changed": "原任务的模型配置已变化，请恢复原路由后继续；任务和回执已保留。",
-        "runtime_platform_unavailable": "平台模型配置暂时无法读取，请检查网络后重试。",
-        "runtime_host_unverified": "本机版本身份无法核验，请检查安装包或部署版本记录。",
-    }
-    code = next(
-        (name for name in messages if name == getattr(error, "code", None)),
-        "runtime_not_qualified",
-    )
-    checks = getattr(error, "checks", {})
-    return {
-        "error_code": code,
-        "message": messages[code],
-        "checks": {
-            name: state
-            for name in QUALIFICATION_CHECKS
-            for state in ("PASS", "FAIL")
-            if isinstance(checks, dict) and checks.get(name) == state
-        },
-    }
 
 
 def _qualification_failure(result: dict, *, retry_hint: str | None = None) -> RuntimeSetupError:
