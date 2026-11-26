@@ -425,3 +425,38 @@ def test_qc_on_synthetic_attendance_chain(tmp_path: Path) -> None:
     assert write_result["violations"] == []
     # 数值对账命中
     assert sections["expected"]["stats"]["file_sum"]["SYNTHETIC-001"] == 4.0
+
+
+def test_qc_protection_accepts_absolute_range_tokens(tmp_path: Path) -> None:
+    """计划用 $A$1:$B$10 声明保护区时，核验必须按同一语法解析而非判为无法对照。"""
+    _, _, qc = _load_vendor_pkgs()
+    from openpyxl import Workbook
+
+    template = tmp_path / "template.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "明细"
+    ws["A1"], ws["B1"] = "日期", 10
+    ws["A2"], ws["B2"] = "2026-09-01", 20
+    wb.save(template)
+
+    filled = tmp_path / "filled.xlsx"
+    wb = Workbook()
+    out = wb.active
+    out.title = "明细"
+    out["A1"], out["B1"] = "日期", 10
+    out["A2"], out["B2"] = "2026-09-01", 20
+    wb.save(filled)
+
+    plan = {"plan_version": 1, "protected_ranges": ["明细!$A$1:$B$10"], "phases": []}
+    report = qc.run_qc(filled, plan, template_path=template)
+    assert report["sections"]["protection"]["status"] == "pass", report["sections"]["protection"]
+
+    wb = Workbook()
+    out = wb.active
+    out.title = "明细"
+    out["A1"], out["B1"] = "日期", 10
+    out["A2"], out["B2"] = "2026-09-01", 99
+    wb.save(filled)
+    report2 = qc.run_qc(filled, plan, template_path=template)
+    assert report2["sections"]["protection"]["status"] == "fail"

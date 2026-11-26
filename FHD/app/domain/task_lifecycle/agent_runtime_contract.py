@@ -203,6 +203,23 @@ def goal_evidence_snapshot(
     return {**snapshot, "digest": canonical_digest(snapshot)}
 
 
+def _batch_goal_capacity(row: dict[str, Any]) -> int:
+    """一条已核验批量写入回执最多可核对的原子目标数。
+
+    一次 employee.execute 可声明多个 phase（写值、公式、样式等）。模型会按题面把
+    每个子要求列成独立目标，却只能引用这一条批量回执。宿主禁止“一个写入回执重复
+    充当不同操作”，但同一次批量动作真实覆盖的原子操作数就是其 phase 数；超过 phase
+    数的重复引用仍按原规则拒绝。
+    """
+    params = row.get("params")
+    if not isinstance(params, dict):
+        return 1
+    payload = params.get("input") if isinstance(params.get("input"), dict) else params
+    plan = payload.get("plan") if isinstance(payload, dict) else None
+    phases = plan.get("phases") if isinstance(plan, dict) else None
+    return len(phases) if isinstance(phases, list) and phases else 1
+
+
 def validate_goal_review(
     raw: Any, contract: dict[str, Any], snapshot: dict[str, Any], output: str
 ) -> tuple[dict[str, Any], list[str]]:
@@ -229,7 +246,7 @@ def validate_goal_review(
     errors = list(snapshot["conflicts"])
     seen: set[str] = set()
     used_writes: set[str] = set()
-    assigned: dict[str, str] = {}
+    assigned: dict[str, list[str]] = {}
     for goal in review.goals:
         if goal.goal_id in seen or goal.source not in sources.get(goal.source_id, ""):
             errors.append(f"目标 {goal.goal_id} 缺少唯一标识或原始请求证据")
@@ -258,9 +275,13 @@ def validate_goal_review(
                     errors.append(f"写入目标 {goal.goal_id} 不能用只读结果冒充完成")
                 used_writes.update(writes)
                 for key in writes:
-                    if key in assigned:
-                        errors.append(f"目标 {goal.goal_id} 重用了 {assigned[key]} 的同一写入回执")
-                    assigned[key] = goal.goal_id
+                    owners = assigned.get(key)
+                    if owners is None:
+                        assigned[key] = [goal.goal_id]
+                    elif len(owners) < _batch_goal_capacity(evidence.get(key, {})):
+                        owners.append(goal.goal_id)
+                    else:
+                        errors.append(f"目标 {goal.goal_id} 重用了 {owners[0]} 的同一写入回执")
             elif any(not verified.get(key, {}).get("read_only", True) for key in selected):
                 errors.append(f"只读目标 {goal.goal_id} 包含额外写入")
         elif goal.status != "satisfied" or selected - verified.keys():

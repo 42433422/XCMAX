@@ -174,7 +174,9 @@ def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
     if "!" in text:
         sheet, _, text = text.partition("!")
         sheet = sheet.strip().strip("'")
-    m = _RANGE_RE.match(text.upper())
+    # 写入员用 openpyxl 的 range_boundaries 解析绝对引用（$A$2:$F$13），核验必须
+    # 接受同一语法，否则合法计划会被误判成“保护区无法对照”。
+    m = _RANGE_RE.match(text.upper().replace("$", ""))
     if not m:
         raise ValueError(f"非法范围：{token!r}")
     _, c1, r1, c2, r2 = m.groups()
