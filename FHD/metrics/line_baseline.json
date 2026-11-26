@@ -1,5 +1,5 @@
 {
-  "lines": 2733573,
+  "lines": 2733514,
   "updated": "2026-11-26",
-  "note": "#3596/#3556 unified upload-ID roundtrip, authenticated downloads, original-file/QC and legacy-name ownership regression. Combine original +51 and +388 reviewed candidate line deltas against 21c7225; no threshold relaxation beyond those source PR registrations. Full repository line count, caller evidence for legacy basename compatibility and exact-SHA CI remain required."
+  "note": "M07 持续运行可验证：监控回执可验证证据与失败告警重试（main #3593 净 +113 行）；A08/M07 NeuroBus 准入与终态计数及回归测试（#3595 净 +267 行）。合并累计增量 +380 行，保留原 SLO、调度、质量门禁；待新 SHA 正式计数和 CI 核验。"
 }
