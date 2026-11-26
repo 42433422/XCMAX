@@ -385,13 +385,6 @@ async def run_runtime_task_async(
         ):
             raise CodexBindingError("invalid_request", "任务或完成模式无效")
         context, owner = _trusted_context(runtime_context)
-        from app.domain.task_lifecycle.execution_mode import (
-            CONTEXT_KEY,
-            METADATA_KEY,
-            normalize_mode,
-        )
-
-        mode = normalize_mode(context.get(CONTEXT_KEY))
         actions = _actions(allowed_actions)
         repository = _repository or get_agent_run_repository()
         if not isinstance(repository, SQLAlchemyAgentRunRepository):
@@ -452,8 +445,6 @@ async def run_runtime_task_async(
                 raise CodexBindingError("runtime_changed", "原任务的运行指令不能改变")
             if parent.metadata.get("runtime_completion_mode") != completion_mode:
                 raise CodexBindingError("runtime_changed", "原任务的完成判定不能改变")
-            if parent.metadata.get(METADATA_KEY, "execute") != mode:
-                raise CodexBindingError("runtime_changed", "原任务的执行模式不能改变")
             stored_actions = parent.metadata.get("runtime_allowed_actions")
             if actions is None:
                 actions = copy.deepcopy(stored_actions)
@@ -559,7 +550,6 @@ async def run_runtime_task_async(
                 runtime_gate_required=gate is not None,
                 runtime_instruction_digest=instruction_digest,
                 runtime_completion_mode=completion_mode,
-                **{METADATA_KEY: mode},
                 runtime_allowed_actions=actions,
                 _codex_system_prompt=system_prompt,
                 _codex_input_data=copy.deepcopy(input_data),
