@@ -680,3 +680,87 @@ def test_read_plan_write_reread_roundtrip(tmp_path: Path) -> None:
     # 模板公式与合并在输出中保持
     assert "A1:D1" in detail_out["merged_ranges"]
     assert any((c.get("formula") or "").startswith("=SUMIF") for c in detail_out["cells"])
+
+
+@pytest.mark.parametrize("change", ["conditional", "validation", "defined_name", "print"])
+def test_workbook_controls_survive_save_and_qc_rejects_tampering(native_workbook, change):
+    run, template, qc, _ = native_workbook
+    sheet = "销售明细"
+    out, plan = run(
+        [
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "D2:D3",
+                "rule": "top_percent",
+                "percent": 10,
+                "color": "C6EFCE",
+            },
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "D2:D3",
+                "rule": "less_than",
+                "threshold": 1000,
+                "color": "9C0006",
+            },
+            {
+                "phase": "conditional_format",
+                "sheet": sheet,
+                "range": "A2:D3",
+                "rule": "duplicate_rows",
+                "key_column": "A",
+                "color": "FFC7CE",
+            },
+            {
+                "phase": "data_validation",
+                "sheet": sheet,
+                "range": "A2:A3",
+                "rule": "list",
+                "source_sheet": "产品汇总",
+                "source_range": "A2:A3",
+                "name": "ProductNames",
+                "error": "请选择有效产品",
+            },
+            {
+                "phase": "data_validation",
+                "sheet": sheet,
+                "range": "B2:B3",
+                "rule": "whole",
+                "minimum": 1,
+                "maximum": 999,
+                "error": "数量必须为 1-999 的整数",
+            },
+            {
+                "phase": "print_layout",
+                "sheet": sheet,
+                "range": "A1:H40",
+                "orientation": "landscape",
+                "paper": "A4",
+                "margins": "narrow",
+                "title_first_row": 1,
+                "title_last_row": 2,
+                "fit_width": 1,
+                "footer": "第 &P 页，共 &N 页",
+            },
+        ]
+    )
+    report = qc.run_qc(out, plan, template_path=template)
+    assert report["verdict"] == "PASS", report["sections"]
+    assert report["sections"]["conformance"]["stats"]["native_phases_checked"] == 6
+
+    wb = load_workbook(out)
+    ws = wb[sheet]
+    if change == "conditional":
+        ws.conditional_formatting["D2:D3"][0].rank = 20
+    elif change == "validation":
+        ws.data_validations.dataValidation[-1].showErrorMessage = False
+    elif change == "defined_name":
+        wb.defined_names["ProductNames"].attr_text = "'产品汇总'!$A$2:$A$2"
+    else:
+        ws.page_setup.fitToWidth = 2
+    wb.save(out)
+    wb.close()
+    assert (
+        qc.run_qc(out, plan, template_path=template)["sections"]["conformance"]["status"] == "fail"
+    )

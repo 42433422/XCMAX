@@ -542,17 +542,23 @@ def _check_conformance(
                 actual=str(actual)[:80],
             )
 
+    from app.domain.workbook_write_contract import WORKBOOK_CONTROL_PHASES, WORKBOOK_NATIVE_PHASES
+    from app.mod_sdk.workbook_controls import control_matches
+
     native_checked = 0
     for ph in _plan_phases(plan):
         kind = ph.get("phase")
-        if kind not in {"create_table", "create_combo_chart"}:
+        if kind not in WORKBOOK_NATIVE_PHASES:
             continue
         native_checked += 1
         try:
             ws = wb[ph["sheet"]]
             if ws not in wb.worksheets:
                 raise ValueError("目标不是工作表")
-            if kind == "create_table":
+            if kind in WORKBOOK_CONTROL_PHASES:
+                if not control_matches(wb, ph):
+                    f.fail("工作表控制规则与计划不符", phase=kind, sheet=ws.title)
+            elif kind == "create_table":
                 _check_native_table(ws, ph, f, planned_targets)
             elif template_wb is not None and ws.title.casefold() in {
                 name.casefold() for name in template_wb.sheetnames
@@ -561,7 +567,7 @@ def _check_conformance(
             else:
                 _check_native_chart(wb, ws, ph, f)
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
-            f.fail("原生表格或组合图缺失或无法核验", phase=kind, sheet=ph.get("sheet"))
+            f.fail("工作簿原生对象缺失或无法核验", phase=kind, sheet=ph.get("sheet"))
 
     residues = 0
     for ph in _plan_phases(plan):

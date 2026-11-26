@@ -39,7 +39,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.domain.workbook_write_contract import WORKBOOK_CONTROL_PHASES
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
+from app.mod_sdk.workbook_controls import write_control
 
 PLAN_VERSION = 1
 
@@ -60,7 +62,7 @@ KNOWN_PHASES = {
     "merge_cells",
     "set_row_height",
     "freeze_panes",
-}
+} | WORKBOOK_CONTROL_PHASES
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d")
 _DATETIME_FORMATS = (
@@ -878,6 +880,11 @@ def convert_file(
                 _run_set_row_height(wb, ph, stats)
             elif kind == "freeze_panes":
                 _run_freeze_panes(wb, ph, stats)
+            elif kind in WORKBOOK_CONTROL_PHASES:
+                try:
+                    write_control(wb, ph)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise PlanError(f"{kind}：{exc}") from exc
             else:
                 _run_sheet_prune(wb, ph, stats)
 

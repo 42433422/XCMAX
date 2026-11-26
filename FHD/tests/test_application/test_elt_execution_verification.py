@@ -267,10 +267,18 @@ def test_real_native_sql_import_is_independently_verified(native_execution, targ
     params = _prepare_native(case, target)
     result = case.dispatch(params)
     assert result.run.status == "completed", result.run.final_output.get("verification")
-    assert result.run.tool_calls[0].metadata["verification"]["accepted"] is True
+    verification = result.run.tool_calls[0].metadata["verification"]
+    assert verification["accepted"] is True
+    evidence = next(
+        check["evidence"] for check in verification["checks"] if check["source"] == "elt_execution"
+    )
     with tenant_scope(case.actor.tenant_id), case.actor.factory() as db:
         native = db.get(EltRun, params["run_id"])
         assert native.status == "completed" and native.executed_rows > 0
+        assert evidence["file_sha256"] == native.file_sha256
+        assert evidence["readback"]["rows_checked"] == native.executed_rows
+        if target in {"products", "customer_products"}:
+            assert sum(evidence["readback"]["verified_products_by_unit"].values()) > 0
         assert load_json(native.receipt_json, {})["executed_rows"] == native.executed_rows
     assert result.executor.execute_with_deadline.call_count == 1
 
