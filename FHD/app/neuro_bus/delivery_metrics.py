@@ -22,3 +22,15 @@ def record_delivery_metric(enabled: bool, outcome: str) -> None:
             record_neurobus_lost()
     except RECOVERABLE_ERRORS:
         pass
+
+
+def record_event_outcome(enabled: bool, outcome: str) -> None:
+    """Record event-level outcomes separately from legacy handler counters."""
+    if not enabled:
+        return
+    try:
+        from app.utils.metrics import record_neurobus_event_outcome
+
+        record_neurobus_event_outcome(outcome)
+    except RECOVERABLE_ERRORS:
+        pass

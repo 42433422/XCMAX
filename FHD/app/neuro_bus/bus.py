@@ -33,7 +33,7 @@ from app.neuro_bus.bus_primitives import _deployment_is_production as _deploymen
 from app.neuro_bus.bus_primitives import _deployment_is_staging as _deployment_is_staging
 from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trace_sample_rate
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
-from app.neuro_bus.delivery_metrics import record_delivery_metric
+from app.neuro_bus.delivery_metrics import record_delivery_metric, record_event_outcome
 from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -307,6 +307,8 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 self.dropped_recent(),
             )
         record_delivery_metric(self._enable_metrics, "lost")
+        outcome = "rejected" if reason == "enqueue_rejected" else "failed"
+        record_event_outcome(self._enable_metrics, outcome)
         if self._rel_dedup is not None:
             self._rel_dedup.remove(event)
         sid = self._trace_by_event_id.pop(event.metadata.event_id, None)
@@ -315,16 +317,29 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
             self._rel_tracer.end_span(sid, SpanStatus.ERROR)
 
-    async def _process_partition_event(self, event: NeuroEvent) -> None:
+    async def _process_partition_event(self, event: NeuroEvent) -> str:
         key = event_partition_key(event)
         try:
-            await self._dispatch_event(event)
+            return await self._dispatch_event(event)
         except BOUNDARY_ERRORS:
             self._error_count += 1
             logger.exception("Error dispatching %s", event)
+            return "failed"
         finally:
             self._active_partitions.discard(key)
             self._wake_processor()
+
+    def _record_partition_outcome(self, task: asyncio.Task[str]) -> None:
+        # Count even tasks cancelled before their coroutine starts.
+        if task.cancelled():
+            outcome = "cancelled"
+        elif task.exception() is not None:
+            outcome = "failed"
+        else:
+            outcome = task.result()
+        if outcome not in ("delivered", "failed", "unhandled", "cancelled"):
+            outcome = "failed"
+        record_event_outcome(self._enable_metrics, outcome)
 
     async def _processing_loop(self):
         """Admit at most worker_threads events; never queue work in the executor."""
@@ -347,7 +362,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         self._discard_event(event, "expired")
                         continue
                     self._active_partitions.add(event_partition_key(event))
-                    self._inflight.add(asyncio.create_task(self._process_partition_event(event)))
+                    task = asyncio.create_task(self._process_partition_event(event))
+                    task.add_done_callback(self._record_partition_outcome)
+                    self._inflight.add(task)
                 await self._event_available.wait()
             except asyncio.CancelledError:
                 break
@@ -355,7 +372,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                 logger.exception("Error in processing loop")
                 self._error_count += 1
 
-    async def _dispatch_event(self, event: NeuroEvent):
+    async def _dispatch_event(self, event: NeuroEvent) -> str:
         """分发事件到处理器"""
         handlers_called = 0
         any_failed = False
@@ -385,6 +402,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             logger.debug("No handlers for event: %s", event)
 
         self._processed_count += 1
+        if any_failed:
+            return "failed"
+        return "delivered" if handlers_called else "unhandled"
 
     def _finish_event(self, event: NeuroEvent, *, failed: bool) -> None:
         if self._rel_dedup is not None:
@@ -472,17 +492,20 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
     def _preflight_publish(self, event: NeuroEvent) -> bool:
         if self._rel_dedup is not None:
             if not self._rel_dedup.mark_processing(event):
+                record_event_outcome(self._enable_metrics, "deduplicated")
                 return False
         if self._rel_rate is not None:
             if not self._rel_rate.check_rate(event):
                 if self._rel_dedup is not None:
                     self._rel_dedup.remove(event)
+                record_event_outcome(self._enable_metrics, "rejected")
                 return False
         if self._rel_lifeline is not None:
             qd = self._event_queue.size()
             if not self._rel_lifeline.should_process(event, qd):
                 if self._rel_dedup is not None:
                     self._rel_dedup.remove(event)
+                record_event_outcome(self._enable_metrics, "rejected")
                 return False
         return True
 
@@ -496,6 +519,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if not self._running or self._shutdown:
             logger.warning("Cannot publish: NeuroBus not running")
             record_delivery_metric(self._enable_metrics, "lost")
+            record_event_outcome(self._enable_metrics, "rejected")
             return False
 
         if not self._preflight_publish(event):
@@ -524,12 +548,14 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
+            record_event_outcome(self._enable_metrics, "accepted")
             if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
             self._wake_processor()
         else:
             self._record_drop("enqueue_rejected")
             record_delivery_metric(self._enable_metrics, "lost")
+            record_event_outcome(self._enable_metrics, "rejected")
             if self._rel_dedup is not None:
                 self._rel_dedup.remove(event)
             if span_id is not None and self._rel_tracer is not None:
@@ -544,6 +570,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         """跨进程 Redis 订阅 ingest — 不再向外广播。"""
         if not self._running or self._shutdown:
             record_delivery_metric(self._enable_metrics, "lost")
+            record_event_outcome(self._enable_metrics, "rejected")
             return False
         if not self._preflight_publish(event):
             record_delivery_metric(self._enable_metrics, "lost")
@@ -552,6 +579,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
+            record_event_outcome(self._enable_metrics, "accepted")
             self._wake_processor()
         else:
             self._discard_event(event, "enqueue_rejected")
