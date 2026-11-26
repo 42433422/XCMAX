@@ -391,7 +391,7 @@ def test_qc_preserves_unaffected_existing_dropdown_metadata(tmp_path, engines, a
     saved.close()
     section = engines[1].run_qc(output, plan, template_path=template)["sections"]["conformance"]
     assert section["status"] == "fail"
-    assert any("下拉验证元数据" in item["detail"] for item in section["issues"])
+    assert any("验证元数据" in item["detail"] for item in section["issues"])
 
 
 def test_declared_dropdown_can_be_appended_without_hiding_existing_metadata(tmp_path, engines):
@@ -402,3 +402,180 @@ def test_declared_dropdown_can_be_appended_without_hiding_existing_metadata(tmp_
     phases = [_insert(), _dropdown("Other", "Other", "A1:A2", "D1:D2")]
     template, output, plan = _run(tmp_path, engines, book, phases)
     assert engines[1].run_qc(output, plan, template_path=template)["verdict"] == "PASS"
+
+
+def _existing_validation(book, kind, sheet="Data", area="B3:B4"):
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    options = (
+        {"formula1": "ISNUMBER(B3)"}
+        if kind == "custom"
+        else {"operator": "between", "formula1": "1", "formula2": "100"}
+    )
+    validation = DataValidation(
+        type=kind, showErrorMessage=True, errorStyle="stop", error="Invalid value", **options
+    )
+    validation.add(area)
+    book[sheet].add_data_validation(validation)
+
+
+@pytest.mark.parametrize("kind", ["whole", "decimal", "date", "custom"])
+def test_affected_non_list_validation_is_rejected_and_cannot_pass_qc(tmp_path, engines, kind):
+    book = Workbook()
+    book.active.title = "Data"
+    book["Data"]["B3"], book["Data"]["B4"] = 10, 20
+    _existing_validation(book, kind)
+    template, output = tmp_path / "template.xlsx", tmp_path / "filled.xlsx"
+    book.save(template)
+    book.close()
+    plan = {"phases": [_insert()]}
+    with pytest.raises(engines[0].PlanError, match="既有.*验证"):
+        engines[0].convert_file(
+            None, output, template_path=template, payload={"plan": plan}, ctx={}, rule_spec={}
+        )
+    assert not output.exists()
+    broken = load_workbook(template)
+    broken["Data"].insert_rows(3)
+    broken.save(output)
+    broken.close()
+    section = engines[1].run_qc(output, plan, template_path=template)["sections"]["conformance"]
+    assert section["status"] == "fail"
+    assert any(
+        "验证" in item["detail"] and "应用范围" in item["detail"] for item in section["issues"]
+    )
+
+
+@pytest.mark.parametrize(
+    "kind,attribute,value",
+    [
+        ("whole", "sqref", "B3:B99"),
+        ("decimal", "formula1", "999"),
+        ("date", "showErrorMessage", False),
+        ("custom", "error", "tampered"),
+    ],
+)
+def test_qc_preserves_non_list_validation_metadata(tmp_path, engines, kind, attribute, value):
+    book = _book()
+    _existing_validation(book, kind, "Other")
+    template, output, plan = _run(tmp_path, engines, book, [_insert()])
+    assert engines[1].run_qc(output, plan, template_path=template)["verdict"] == "PASS"
+    saved = load_workbook(output)
+    setattr(saved["Other"].data_validations.dataValidation[0], attribute, value)
+    saved.save(output)
+    saved.close()
+    section = engines[1].run_qc(output, plan, template_path=template)["sections"]["conformance"]
+    assert section["status"] == "fail"
+    assert any("验证元数据" in item["detail"] for item in section["issues"])
+
+
+def _whole_validation(area="D3:D4"):
+    return {
+        "phase": "data_validation",
+        "rule": "whole",
+        "sheet": "Data",
+        "range": area,
+        "minimum": 1,
+        "maximum": 100,
+        "error": "Quantity must be 1-100",
+    }
+
+
+def test_declared_integer_and_list_validations_preserve_existing_rules(tmp_path, engines):
+    book = _book()
+    _existing_validation(book, "decimal", "Data", "C1:C2")
+    _existing_validation(book, "custom", "Other")
+    phases = [
+        _whole_validation("D1:D2"),
+        _insert(),
+        _whole_validation(),
+        _dropdown("Other", "Other", "A1:A2", "D1:D2"),
+    ]
+    template, output, plan = _run(tmp_path, engines, book, phases)
+    assert engines[1].run_qc(output, plan, template_path=template)["verdict"] == "PASS"
+
+
+def test_declared_integer_validation_cannot_precede_affected_insertion(tmp_path, engines):
+    from app.mod_sdk.workbook_controls import write_control
+
+    book = Workbook()
+    book.active.title = "Data"
+    template, output = tmp_path / "template.xlsx", tmp_path / "filled.xlsx"
+    book.save(template)
+    book.close()
+    plan = {"phases": [_whole_validation(), _insert()]}
+    with pytest.raises(engines[0].PlanError, match="验证"):
+        engines[0].convert_file(
+            None, output, template_path=template, payload={"plan": plan}, ctx={}, rule_spec={}
+        )
+    assert not output.exists()
+    broken = load_workbook(template)
+    write_control(broken, _whole_validation())
+    broken["Data"].insert_rows(3)
+    broken.save(output)
+    broken.close()
+    section = engines[1].run_qc(output, plan, template_path=template)["sections"]["conformance"]
+    assert section["status"] == "fail"
+    assert any(
+        "验证" in item["detail"] and "应用范围" in item["detail"] for item in section["issues"]
+    )
+
+
+@pytest.mark.parametrize(
+    "sheet,kind,attribute,formula",
+    [
+        ("Data", "custom", "formula1", "A4>0"),
+        ("Other", "custom", "formula1", "'Data'!$A$4>0"),
+        ("Data", "whole", "formula2", "$A$4"),
+        ("Other", "decimal", "formula2", "Data!$A$4"),
+    ],
+)
+def test_validation_formula_cannot_silently_keep_shifted_cell_reference(
+    tmp_path, engines, sheet, kind, attribute, formula
+):
+    book = Workbook()
+    book.active.title = "Data"
+    book.create_sheet("Other")
+    book["Data"]["A4"] = 10
+    _existing_validation(book, kind, sheet, "B1:B2")
+    setattr(book[sheet].data_validations.dataValidation[0], attribute, formula)
+    template, output = tmp_path / "template.xlsx", tmp_path / "filled.xlsx"
+    book.save(template)
+    book.close()
+    plan = {"phases": [_insert()]}
+    with pytest.raises(engines[0].PlanError, match="验证.*公式引用"):
+        engines[0].convert_file(
+            None, output, template_path=template, payload={"plan": plan}, ctx={}, rule_spec={}
+        )
+    assert not output.exists()
+    broken = load_workbook(template)
+    broken["Data"].insert_rows(3)
+    broken.save(output)
+    broken.close()
+    section = engines[1].run_qc(output, plan, template_path=template)["sections"]["conformance"]
+    assert section["status"] == "fail"
+    assert any(
+        "验证" in item["detail"] and "公式引用" in item["detail"] for item in section["issues"]
+    )
+
+
+@pytest.mark.parametrize(
+    "sheet,formula",
+    [
+        ("Data", "SUM(Amounts)>0"),
+        ("Data", "Other!$A$4>0"),
+        ("Other", "A4>0"),
+        ("Data", '"A4"="A4"'),
+    ],
+)
+def test_validation_preserves_names_constants_and_unaffected_references(
+    tmp_path, engines, sheet, formula
+):
+    book = _book()
+    _existing_validation(book, "custom", sheet, "B1:B2")
+    book[sheet].data_validations.dataValidation[0].formula1 = formula
+    template, output, plan = _run(tmp_path, engines, book, [_insert()])
+    assert engines[1].run_qc(output, plan, template_path=template)["verdict"] == "PASS"
+    saved = load_workbook(output)
+    assert saved[sheet].data_validations.dataValidation[0].formula1 == formula
+    assert saved.defined_names["Amounts"].attr_text == "Data!$A$4:$A$5"
+    saved.close()

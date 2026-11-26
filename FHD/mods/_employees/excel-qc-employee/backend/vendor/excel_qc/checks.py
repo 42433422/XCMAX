@@ -169,63 +169,76 @@ def _values_match(planned: Any, actual: Any) -> bool:
 _STRUCTURAL_PHASES = {"insert_rows", "merge_cells", "set_row_height", "freeze_panes"}
 
 
-def _check_named_validations(wb, template_wb, plan, finding):
+def _check_validations(wb, template_wb, plan, finding):
     from collections import Counter
 
     from openpyxl.worksheet.datavalidation import DataValidation
     from openpyxl.xml.functions import tostring
 
-    changes = tuple(_insertions(plan))
     for ws in wb.worksheets:
         original = template_wb[ws.title] if ws.title in template_wb.sheetnames else None
-        validations = (
-            [item for item in original.data_validations.dataValidation if item.type == "list"]
-            if original is not None
-            else []
-        )
-        for item in validations:
-            if any(
-                target.casefold() == ws.title.casefold() and row <= area.max_row
-                for target, row, _ in changes
-                for area in item.sqref.ranges
-            ):
-                finding.fail(
-                    "既有定义名称下拉的应用范围受插行影响，暂不支持迁移",
-                    sheet=ws.title,
-                    range=str(item.sqref),
-                )
-        expected = Counter(tostring(item.to_tree()) for item in validations)
+        validations = list(original.data_validations.dataValidation) if original is not None else []
         for phase in _plan_phases(plan):
-            if (
-                phase.get("phase") == "data_validation"
-                and phase.get("rule") == "list"
-                and phase.get("sheet") == ws.title
-            ):
+            for target, row, count in _insertions({"phases": [phase]}):
+                for item in validations:
+                    if target.casefold() == ws.title.casefold() and any(
+                        row <= area.max_row for area in item.sqref.ranges
+                    ):
+                        label = "下拉验证" if item.type == "list" else "数据验证"
+                        finding.fail(
+                            f"既有{label}的应用范围受插行影响，暂不支持迁移",
+                            sheet=ws.title,
+                            range=str(item.sqref),
+                        )
+                    for value in (item.formula1, item.formula2):
+                        if value is None:
+                            continue
+                        formula = str(value)
+                        formula = formula if formula.startswith("=") else "=" + formula
+                        if (
+                            _shift_formula_rows(formula, ws.title, [(target, row, count)])
+                            != formula
+                        ):
+                            finding.fail(
+                                "既有数据验证的公式引用受插行影响，暂不支持迁移",
+                                sheet=ws.title,
+                                range=str(item.sqref),
+                            )
+            if phase.get("phase") == "data_validation" and phase.get("sheet") == ws.title:
                 try:
+                    if phase["rule"] == "list":
+                        options = {"formula1": phase["name"]}
+                    elif phase["rule"] == "whole":
+                        if phase["minimum"] > phase["maximum"]:
+                            raise ValueError("整数验证下限不得大于上限")
+                        options = {
+                            "operator": "between",
+                            "formula1": str(phase["minimum"]),
+                            "formula2": str(phase["maximum"]),
+                        }
+                    else:
+                        raise ValueError("未知数据验证规则")
                     item = DataValidation(
-                        type="list",
-                        formula1=phase["name"],
+                        type=phase["rule"],
                         showErrorMessage=True,
                         errorStyle="stop",
                         error=phase["error"],
+                        **options,
                     )
                     item.add(str(phase["range"]).upper().replace("$", ""))
-                    expected[tostring(item.to_tree())] += 1
+                    validations.append(item)
                 except (KeyError, TypeError, ValueError) as exc:
-                    finding.fail("声明的下拉验证元数据无法核验", sheet=ws.title, reason=str(exc))
-        actual = Counter(
-            tostring(item.to_tree())
-            for item in ws.data_validations.dataValidation
-            if item.type == "list"
-        )
+                    finding.fail("声明的数据验证元数据无法核验", sheet=ws.title, reason=str(exc))
+        expected = Counter(tostring(item.to_tree()) for item in validations)
+        actual = Counter(tostring(item.to_tree()) for item in ws.data_validations.dataValidation)
         if actual != expected:
-            finding.fail("既有下拉验证元数据改变、缺失或出现未声明追加", sheet=ws.title)
+            finding.fail("既有数据验证元数据改变、缺失或出现未声明追加", sheet=ws.title)
 
 
 def _check_defined_names(wb, template_wb, plan, finding):
     from openpyxl.formula.tokenizer import TokenizerError
 
-    _check_named_validations(wb, template_wb, plan, finding)
+    _check_validations(wb, template_wb, plan, finding)
     for sheet, name in _unsafe_named_control_order(plan):
         finding.fail("定义名称下拉创建后的受影响插行暂不支持", sheet=sheet, name=name)
     for sheet, name in _affected_reserved_names(template_wb, plan):

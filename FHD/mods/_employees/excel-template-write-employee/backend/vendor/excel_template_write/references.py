@@ -160,13 +160,31 @@ def shifted_defined_names(wb, insert_row: int, count: int, target_sheet: str):
     from openpyxl.utils import FORMULAE
 
     ws = wb[target_sheet]
-    for validation in ws.data_validations.dataValidation:
-        if validation.type == "list" and any(
-            insert_row <= area.max_row for area in validation.sqref.ranges
-        ):
-            raise DefinedNameError(
-                f"既有定义名称下拉 {ws.title}!{validation.sqref} 暂不支持插行迁移应用范围"
-            )
+    for owner in wb.worksheets:
+        for validation in owner.data_validations.dataValidation:
+            if owner is ws and any(insert_row <= area.max_row for area in validation.sqref.ranges):
+                label = "下拉验证" if validation.type == "list" else "数据验证"
+                raise DefinedNameError(
+                    f"既有{label} {owner.title}!{validation.sqref} 暂不支持插行迁移应用范围"
+                )
+            for value in (validation.formula1, validation.formula2):
+                if value is None:
+                    continue
+                formula = str(value)
+                formula = formula if formula.startswith("=") else "=" + formula
+                if (
+                    shift_formula_rows(
+                        formula,
+                        insert_row,
+                        count,
+                        formula_sheet=owner.title,
+                        target_sheet=target_sheet,
+                    )
+                    != formula
+                ):
+                    raise DefinedNameError(
+                        f"既有数据验证 {owner.title}!{validation.sqref} 的公式引用暂不支持插行迁移"
+                    )
     for name, value in (
         ("Print_Area", ws.print_area),
         ("Print_Titles", ws.print_title_rows),
