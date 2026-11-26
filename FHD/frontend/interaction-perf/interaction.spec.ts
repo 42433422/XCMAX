@@ -172,8 +172,20 @@ test('timed SSE through the existing chat runtime and real message DOM', async (
       requestAnimationFrame(tick)
     }, true)
   })
+  let idleIntervals: number[] = []
   try {
     await ready(page)
+    idleIntervals = await page.evaluate(() => new Promise<number[]>(resolve => {
+      const intervals: number[] = []
+      let previous: number | undefined
+      const tick = (now: number) => {
+        if (previous !== undefined) intervals.push(now - previous)
+        previous = now
+        if (intervals.length === 60) resolve(intervals)
+        else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }))
     await page.locator('#messageInput').fill('请用 Markdown 详细介绍库存管理流程，仅解释概念，不执行任务。')
     await page.locator('#sendMessageBtn').click()
     await expect(page.locator('#chatMessages .message.ai .message-html').last()).toContainText('XCMAXBENCHEND', { timeout: 30000 })
@@ -191,7 +203,7 @@ test('timed SSE through the existing chat runtime and real message DOM', async (
       input_to_request_ms: s?.request && s?.sendClick ? s.request - s.sendClick : null,
       fixture_wait_ms: s?.firstEnqueue && s?.request ? s.firstEnqueue - s.request : null,
       first_token_to_visible_frame_ms: s?.firstPaint && s?.firstEnqueue ? s.firstPaint - s.firstEnqueue : null,
-      frame_intervals: distribution(s?.frameIntervals || []),
+      frame_intervals: distribution(s?.frameIntervals || []), idle_frame_intervals: distribution(idleIntervals),
       frame_budget_ms: frameBudget, network_ms: null, model_inference_ms: null })
   }
 })

@@ -107,6 +107,8 @@ jobs:
                     src/components/floating-agent/XiaoCLife.test.ts \
                     src/components/floating-agent/floating-agent-panel/PanelComposer.test.ts
                 fi
+              elif [[ "$SURFACE" == desktop ]]; then
+                npm run build
               fi
               VISUAL_CAPTURE_SIDE="$side" VISUAL_CAPTURE_DIR="$RUNNER_TEMP/visual/$side" \
                 npx playwright test --config playwright.visual.config.ts --trace retain-on-failure \

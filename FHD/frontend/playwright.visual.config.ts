@@ -9,8 +9,7 @@ export default defineConfig({
     launchOptions: { args: ['--no-proxy-server'] },
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5001 --strictPort',
+    command: 'npm run preview -- --host 127.0.0.1 --port 5001 --strictPort',
     url: 'http://127.0.0.1:5001', reuseExistingServer: false, timeout: 180000,
-    env: { E2E_VITE_MOCK_API: '1' },
   },
 })

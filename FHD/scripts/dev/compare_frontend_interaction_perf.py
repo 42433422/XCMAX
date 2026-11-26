@@ -20,6 +20,7 @@ SCENARIOS = {
 METRICS = (
     ("route", "settings_click", "p95_ms", 200.0, "Warm click to settings P95"),
     ("route", "history_back", "p95_ms", 200.0, "Warm history back P95"),
+    ("stream", "idle_frame_intervals", "p95_ms", None, "Idle rAF interval P95"),
     ("stream", "frame_intervals", "p95_ms", 1000.0 / 60.0, "Stream rAF interval P95"),
     ("stream", None, "first_token_to_visible_frame_ms", None, "First token to visible frame"),
     ("stream", None, "input_to_request_ms", None, "Input click to stream request"),
@@ -34,6 +35,18 @@ def percentile(samples: list[float], percent: int) -> float:
     return ordered[math.ceil(percent * len(ordered) / 100) - 1]
 
 
+def inspect_distribution(report: dict, field: str, count: int | None = None) -> None:
+    data = report.get(field) or {}
+    samples = data.get("samples_ms") or []
+    if data.get("count") != len(samples) or (count is not None and len(samples) != count):
+        raise ValueError(f"{field}: measured sample count mismatch")
+    for percent in (50, 95):
+        measured = data.get(f"p{percent}_ms")
+        if (not isinstance(measured, (int, float)) or not math.isfinite(measured)
+                or abs(percentile(samples, percent) - measured) > .001):
+            raise ValueError(f"{field}: reported P{percent} doesn't match samples")
+
+
 def inspect_report(report: dict, expected_sha: str) -> None:
     if report.get("source_sha") != expected_sha:
         raise ValueError("source SHA mismatch; stale or wrong build")
@@ -46,23 +59,10 @@ def inspect_report(report: dict, expected_sha: str) -> None:
         raise ValueError("browser does not match fixed fixture")
     if report.get("scenario") == "local synthetic API, cold and warm separated":
         for field in ("settings_click", "history_back"):
-            data = report.get(field) or {}
-            samples = data.get("samples_ms") or []
-            if len(samples) != 30 or data.get("count") != 30:
-                raise ValueError(f"{field}: need 30 measured warm samples")
-            for percent in (50, 95):
-                measured = data.get(f"p{percent}_ms")
-                if not isinstance(measured, (int, float)) or abs(percentile(samples, percent) - measured) > .001:
-                    raise ValueError(f"{field}: reported percentile doesn't match samples")
+            inspect_distribution(report, field, count=30)
     else:
-        frame = report.get("frame_intervals") or {}
-        samples = frame.get("samples_ms") or []
-        if len(samples) < 20 or frame.get("count") != len(samples):
-            raise ValueError("missing frame interval samples")
-        for percent in (50, 95):
-            measured = frame.get(f"p{percent}_ms")
-            if not isinstance(measured, (int, float)) or abs(percentile(samples, percent) - measured) > .001:
-                raise ValueError(f"frame interval P{percent} mismatch")
+        inspect_distribution(report, "idle_frame_intervals", count=60)
+        inspect_distribution(report, "frame_intervals")
         raw = report.get("raw") or {}
         if raw.get("tokens") != 242 or not (
             0 < raw.get("request", 0) < raw.get("firstEnqueue", 0)
@@ -182,9 +182,12 @@ def self_test() -> None:
                                        "p50_ms": percentile(route_samples, 50),
                                        "p95_ms": percentile(route_samples, 95)}
                 else:
+                    idle = [16.6] * 60
                     data.update({
                         "frame_intervals": {"samples_ms": frame, "count": 40,
                                             "p50_ms": percentile(frame, 50), "p95_ms": percentile(frame, 95)},
+                        "idle_frame_intervals": {"samples_ms": idle, "count": 60,
+                                                 "p50_ms": percentile(idle, 50), "p95_ms": percentile(idle, 95)},
                         "raw": {"tokens": 242, "request": 1, "firstEnqueue": 2, "firstPaint": 3,
                                 "done": 4, "finalPaint": 5},
                         "first_token_to_visible_frame_ms": 1, "input_to_request_ms": 1,
@@ -193,7 +196,7 @@ def self_test() -> None:
                 (folder / "measurements.json").write_text(json.dumps(data), encoding="utf-8")
         report = compare(root, "a" * 40, "b" * 40)
         assert report["all_navigation_targets_met"]
-        assert len(report["measurements"]) == 5
+        assert len(report["measurements"]) == 6
         assert "| N/A | N/A |" in render_markdown(report)
         bad = root / "candidate" / "results" / "route" / "measurements.json"
         raw = json.loads(bad.read_text(encoding="utf-8"))
