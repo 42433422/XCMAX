@@ -343,10 +343,11 @@ def test_legacy_preference_duplicates_migrate_without_discarding_conflicts(tmp_p
             text(
                 "INSERT INTO user_preferences "
                 "(id, user_id, preference_key, preference_value) VALUES "
-                "(1, 'tenant:42', 'workspace_prefs', '{\"ok\":true}'), "
-                "(2, 'tenant:42', 'workspace_prefs', '{\"ok\":true}'), "
+                "(1, 'tenant:42', 'workspace_prefs', :value), "
+                "(2, 'tenant:42', 'workspace_prefs', :value), "
                 "(3, 'tenant:42', 'other', 'safe')"
-            )
+            ),
+            {"value": '{"ok":true}'},
         )
         _run_preference_uniqueness_migration(db)
         rows = db.execute(

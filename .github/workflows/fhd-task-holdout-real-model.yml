@@ -4,7 +4,7 @@ name: XCMAX Holdout 13x3 Real Model and Database Evidence
 
 on:
   push:
-    branches: [fix/sqlite-bootstrap-holdout-20261125]
+    branches: [fix/sqlite-bootstrap-holdout-20261125, integration/backend-core-11wg-20261126]
 
 permissions:
   contents: read
@@ -89,7 +89,7 @@ jobs:
           from pathlib import Path
 
           from app.application.agent_runtime.configuration import get_deployment_runtime_settings
-          from app.infrastructure.codex.policy import ModelRoute, RuntimePolicyError
+          from app.infrastructure.xiaox.policy import ModelRoute, RuntimePolicyError
 
           reports = Path("test_reports")
           reports.mkdir(exist_ok=True)
@@ -134,7 +134,7 @@ jobs:
           root.mkdir(mode=0o700, exist_ok=False)
           config = root / "runtime.json"
           config.write_text(json.dumps({
-              "engine": "codex", "surfaces": ["chat", "employee"],
+              "engine": "xiaox", "surfaces": ["chat", "employee"],
               "route": route, "runtime_root": str(root),
               "qualification_file": str(qualification),
           }) + "\n")
