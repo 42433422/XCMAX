@@ -16,6 +16,54 @@ def test_requested_mode_prefers_execution_and_ignores_plain_continuation():
     assert requested_mode_from_text("继续细化") is None
 
 
+@pytest.mark.parametrize(
+    "message", ["不要立即执行，先给我方案", "不要按方案执行，继续细化", "别直接执行"]
+)
+def test_negated_execution_keeps_plan_mode(message):
+    from app.domain.task_lifecycle.execution_mode import requested_mode_from_text
+
+    assert requested_mode_from_text(message) == "plan"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "为什么要直接执行？",
+        "直接执行是什么意思？",
+        "按钮写着“按方案执行”",
+        "如果同意就直接执行",
+        "开始执行，但要等我批准",
+        "按方案执行，先不要真正动手",
+        "立即执行；得到我书面批准后才可以操作",
+        "直接执行这个任务是否合适",
+        "按计划执行之前，请先问我",
+    ],
+)
+def test_quoted_or_conditional_execution_does_not_authorize(message):
+    from app.application.ai_chat.dialogue_memory import apply_turn_execution_mode
+    from app.domain.task_lifecycle.execution_mode import requested_mode_from_text
+
+    assert requested_mode_from_text(message) != "execute"
+    assert apply_turn_execution_mode({"execution_mode": "plan"}, {}, message) == "plan"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "执行方案",
+        "按计划执行",
+        "请按方案执行。",
+        "现在开始执行吧！",
+        "我确认，直接执行",
+        "照这个做",
+    ],
+)
+def test_complete_affirmative_command_releases_saved_plan(message):
+    from app.application.ai_chat.dialogue_memory import apply_turn_execution_mode
+
+    assert apply_turn_execution_mode({"execution_mode": "plan"}, {}, message) == "execute"
+
+
 def test_stored_plan_cannot_be_released_by_request_fields():
     from app.domain.task_lifecycle.execution_mode import ExecutionModeError, tighten
 

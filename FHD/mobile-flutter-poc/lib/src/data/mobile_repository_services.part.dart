@@ -80,11 +80,31 @@ abstract class _RepoServicesBase extends _RepoChatBase {
   }
 
   Future<List<PendingNotification>> loadNotificationInbox() async {
-    final response = await _client.notificationInbox();
-    if (!response.success || response.data == null) {
-      throw MobileRepositoryException(response.message.ifEmpty('通知加载失败'));
-    }
-    return response.data!.notifications;
+    final generation = _client.authGeneration;
+    final notifications = <PendingNotification>[];
+    int? beforeId;
+    do {
+      if (generation != _client.authGeneration) {
+        throw const MobileRepositoryException('账号已切换，请重新加载通知');
+      }
+      final response = await _client.notificationInbox(beforeId: beforeId);
+      if (generation != _client.authGeneration) {
+        throw const MobileRepositoryException('账号已切换，请重新加载通知');
+      }
+      if (!response.success || response.data == null) {
+        throw MobileRepositoryException(response.message.ifEmpty('通知加载失败'));
+      }
+      final page = response.data!;
+      notifications.addAll(page.notifications);
+      final next = page.nextBeforeId;
+      if (next != null &&
+          (next <= 0 || page.notifications.isEmpty ||
+              (beforeId != null && next >= beforeId))) {
+        throw const MobileRepositoryException('通知分页游标无效，请重新加载');
+      }
+      beforeId = next;
+    } while (beforeId != null);
+    return notifications;
   }
 
   Future<void> markNotificationRead(int id) async {

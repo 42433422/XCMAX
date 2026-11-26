@@ -417,8 +417,9 @@ export function useMaterials() {
     if (!supplierForm.value.code || !supplierForm.value.name) { await appAlert('请填写必填项'); return }
     saving.value = true
     try {
+      const { name, contact_person, contact_phone, rating } = supplierForm.value
       const res = isEditSupplier.value
-        ? await api.put<ApiWriteResponse>(`/api/purchase/suppliers/${supplierForm.value.id}`, supplierForm.value)
+        ? await api.put<ApiWriteResponse>(`/api/purchase/suppliers/${supplierForm.value.id}`, { name, contact_person, contact_phone, rating })
         : await post<ApiWriteResponse>('/api/purchase/suppliers', supplierForm.value)
       if (res.success) { showSupplierModalFlag.value = false; await loadSuppliers() }
       else await appAlert(res.message || '保存失败')

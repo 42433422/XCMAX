@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -355,7 +355,7 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
             for line_id, quantity in sorted(source.items()):
                 origin = inbound_lines[line_id]
                 previous = (
-                    db.query(PurchaseReturnItem.quantity)
+                    db.query(PurchaseReturnItem.quantity, PurchaseReturnItem.amount)
                     .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.return_id)
                     .filter(
                         PurchaseReturn.tenant_id == tenant_id,
@@ -366,7 +366,8 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                     .all()
                 )
                 returned = sum((Decimal(str(row[0])) for row in previous), Decimal("0"))
-                if returned + quantity > Decimal(str(origin.quantity)):
+                original_quantity = Decimal(str(origin.quantity))
+                if original_quantity <= 0 or returned + quantity > original_quantity:
                     raise PurchaseReturnRefused("累计退货数量超出原入库行")
                 ledgers = (
                     db.query(InventoryLedger)
@@ -388,7 +389,20 @@ def post_purchase_return(data: dict[str, Any]) -> dict[str, Any]:
                 if not _move_available(db, ledger, -quantity, now):
                     raise PurchaseReturnRefused("原库存已预留、数量不足或并发改变")
                 unit_price = Decimal(str(origin.unit_price or 0))
-                amount = _line_amount(quantity, unit_price)
+                original_amount = _line_amount(original_quantity, unit_price)
+                already_reversed = sum((Decimal(str(row[1])) for row in previous), Decimal("0"))
+                # Allocate from the original rounded payable, then remove the
+                # actual prior postings; the final return consumes its remainder.
+                # Multiply before dividing so recurring ratios cannot round an
+                # exact half-cent down; retain all NUMERIC(18, *) operand digits.
+                with localcontext() as money_context:
+                    money_context.prec = 60
+                    cumulative_amount = (
+                        (returned + quantity) * original_amount / original_quantity
+                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                amount = cumulative_amount - already_reversed
+                if already_reversed < 0 or amount < 0:
+                    raise PurchaseReturnRefused("历史退货金额与原入库金额不一致")
                 total += amount
                 db.add(
                     PurchaseReturnItem(

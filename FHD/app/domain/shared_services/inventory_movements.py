@@ -8,6 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,13 @@ def _posted_stock_out(db, model, product_id, reference_type, reference_id):
     return query.first()
 
 
+def _stock_balance_matches(db: Any, column: Any, observed: Decimal) -> Any:
+    """Compare SQLite's stored floats at the ledger's declared NUMERIC(18, 4) scale."""
+    if db.get_bind().dialect.name == "sqlite":
+        column = func.round(column, 4, type_=column.type)
+    return column == observed
+
+
 def _move_available(db: Any, ledger: Any, delta: Decimal, now: datetime) -> bool:
     """Atomic physical/free-stock movement bound to the original tenant and row."""
     model = _facade().InventoryLedger
@@ -50,14 +58,14 @@ def _move_available(db: Any, ledger: Any, delta: Decimal, now: datetime) -> bool
         .filter(
             model.id == ledger.id,
             model.tenant_id == ledger.tenant_id,
-            model.quantity == physical,
-            model.available_quantity == available,
-            model.reserved_quantity == reserved,
+            _stock_balance_matches(db, model.quantity, physical),
+            _stock_balance_matches(db, model.available_quantity, available),
+            _stock_balance_matches(db, model.reserved_quantity, reserved),
         )
         .update(
             {
-                model.quantity: model.quantity + delta,
-                model.available_quantity: model.available_quantity + delta,
+                model.quantity: (physical + delta).quantize(Decimal("0.0001")),
+                model.available_quantity: (available + delta).quantize(Decimal("0.0001")),
                 model.updated_at: now,
             },
             synchronize_session=False,

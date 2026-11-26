@@ -13,25 +13,49 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .plan_coordinates import (
+    declared_ranges as _declared_ranges,
+)
+from .plan_coordinates import (
+    final_writes as _final_writes,
+)
+from .plan_coordinates import (
+    in_ranges as _in_ranges,
+)
+from .plan_coordinates import (
+    insertions as _insertions,
+)
+from .plan_coordinates import (
+    iter_writes as _iter_writes,
+)
+from .plan_coordinates import (
+    moved_row as _moved_row,
+)
+from .plan_coordinates import (
+    original_row as _original_row,
+)
+from .plan_coordinates import (
+    plan_phases as _plan_phases,
+)
+from .plan_coordinates import (
+    range_bounds as _range_bounds,
+)
+from .plan_coordinates import (
+    reference_sheet as _reference_sheet,
+)
+from .plan_coordinates import (
+    shift_formula_rows as _shift_formula_rows,
+)
+from .plan_coordinates import (
+    target as _target,
+)
+from .styles import check_cell_styles as _check_cell_styles
+from .styles import style_signature as _style_signature
+
 _MAX_SAMPLES = 8
 _NUM_TOL = 1e-6
 
 _REF_ERR_RE = re.compile(r"#REF!")
-_RANGE_RE = re.compile(r"^(?:'?([^'!]+)'?!)?([A-Z]{1,3})?(\d+)?(?::([A-Z]{1,3})?(\d+)?)?$")
-
-
-def _col_to_index(letters: str) -> int:
-    idx = 0
-    for ch in letters:
-        idx = idx * 26 + (ord(ch) - ord("A") + 1)
-    return idx
-
-
-def _ref_to_tuple(ref: str) -> Tuple[int, int]:
-    m = re.match(r"^([A-Z]{1,3})(\d+)$", ref.strip().upper())
-    if not m:
-        raise ValueError(f"非法单元格引用：{ref!r}")
-    return int(m.group(2)), _col_to_index(m.group(1))
 
 
 def canonical_rules_sha256(rules: Dict[str, Any]) -> str:
@@ -69,33 +93,6 @@ class _Finding:
         if self.skipped_reason:
             out["skipped_reason"] = self.skipped_reason
         return out
-
-
-def _plan_phases(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
-    phases = plan.get("phases")
-    if isinstance(phases, list):
-        return [p for p in phases if isinstance(p, dict)]
-    if isinstance(plan.get("writes"), list):
-        return [{"phase": "cell_writes", "writes": plan["writes"]}]
-    return []
-
-
-def _iter_writes(plan: Dict[str, Any], kind: str) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    for ph in _plan_phases(plan):
-        if str(ph.get("phase")) == kind:
-            out.extend(w for w in (ph.get("writes") or []) if isinstance(w, dict))
-    return out
-
-
-def _target(write: Dict[str, Any]) -> Tuple[str, int, int]:
-    sheet = str(write.get("sheet") or "").strip().strip("'")
-    ref = str(write.get("ref") or "").strip()
-    if ref:
-        row, col = _ref_to_tuple(ref)
-    else:
-        row, col = int(write.get("row")), int(write.get("col"))
-    return sheet, row, col
 
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d")
@@ -150,243 +147,10 @@ def _values_match(planned: Any, actual: Any) -> bool:
     return str(planned) == str(actual) if planned is not None else actual is None
 
 
-def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
-    """``Sheet!A1:B2`` → (sheet, min_row, min_col, max_row, max_col)；无界用已用范围兜底。"""
-    text = str(token).strip()
-    sheet = ""
-    if "!" in text:
-        sheet, _, text = text.partition("!")
-        sheet = sheet.strip().strip("'")
-    m = _RANGE_RE.match(text.upper().replace("$", ""))
-    if not m:
-        raise ValueError(f"非法范围：{token!r}")
-    _, c1, r1, c2, r2 = m.groups()
-    min_col = _col_to_index(c1) if c1 else 1
-    max_col = _col_to_index(c2) if c2 else (_col_to_index(c1) if c1 else ws.max_column or 1)
-    min_row = int(r1) if r1 else 1
-    max_row = int(r2) if r2 else (int(r1) if r1 else ws.max_row or 1)
-    return sheet, min_row, min_col, max_row, max_col
-
-
 # 六节检查
 
 
-def _check_cell_styles(wb, plan: Dict[str, Any], f: _Finding) -> int:
-    checked = 0
-    for index, ph in enumerate(_plan_phases(plan)):
-        if str(ph.get("phase")) != "cell_styles":
-            continue
-        sheet = str(ph.get("sheet") or "").strip("'")
-        if sheet not in wb.sheetnames:
-            f.fail(f"cell_styles 的 sheet 不在输出中：{sheet!r}")
-            continue
-        ws = wb[sheet]
-        try:
-            _, min_row, min_col, max_row, max_col = _range_bounds(ws, str(ph.get("range") or ""))
-        except (TypeError, ValueError) as exc:
-            f.fail(f"cell_styles range 非法：{exc}", sheet=sheet)
-            continue
-        fill_color = str(ph.get("fill_color") or "").strip().upper()
-        border = str(ph.get("border") or "").strip()
-        later = tuple(_insertions(plan, index + 1))
-        for original_row in range(min_row, max_row + 1):
-            row = _moved_row(sheet, original_row, later)
-            for col in range(min_col, max_col + 1):
-                cell = ws.cell(row, col)
-                checked += 1
-                location = {"sheet": sheet, "row": row, "col": col}
-                for key, actual in (("bold", cell.font.bold), ("horizontal", cell.alignment.horizontal),
-                                    ("vertical", cell.alignment.vertical), ("font_size", cell.font.sz)):
-                    planned = ph.get(key)
-                    if key in ("bold", "font_size"):
-                        if planned is None:
-                            continue
-                        mismatch = (bool(actual) != bool(planned) if key == "bold" else
-                                    abs(float(actual or 0) - float(planned)) > _NUM_TOL)
-                        label = f"{key} 与计划不符"
-                    else:
-                        if not planned:
-                            continue
-                        mismatch, label = (actual or "") != str(planned), f"{key} 对齐与计划不符"
-                    if mismatch:
-                        f.fail(label, **location,
-                               planned=str(planned), actual=str(actual))
-                if fill_color:
-                    actual_color = str(cell.fill.fgColor.rgb or "").upper()
-                    if cell.fill.patternType != "solid" or not actual_color.endswith(fill_color):
-                        f.fail("填充色与计划不符", **location,
-                               planned=fill_color, actual=f"{cell.fill.patternType}:{actual_color}")
-                if border:
-                    sides = (cell.border.left, cell.border.right, cell.border.top, cell.border.bottom)
-                    if any(side.style != border for side in sides):
-                        f.fail("边框与计划不符", **location,
-                               planned=border,
-                               actual=",".join(str(side.style) for side in sides))
-    return checked
-
-
-_A1_REFERENCE_RE = re.compile(
-    r"(?:\$?[A-Za-z]{1,3}\$?[1-9]\d*(?::\$?[A-Za-z]{1,3}\$?[1-9]\d*)?"
-    r"|\$?[1-9]\d*:\$?[1-9]\d*)\Z"
-)
 _STRUCTURAL_PHASES = {"insert_rows", "merge_cells", "set_row_height", "freeze_panes"}
-
-
-def _insertions(plan, start=0):
-    for phase in _plan_phases(plan)[start:]:
-        if phase.get("phase") == "insert_rows":
-            try:
-                row, count = int(phase.get("row")), int(phase.get("count"))
-            except (TypeError, ValueError):
-                continue  # _check_structural reports invalid phases.
-            if row > 0 and count > 0:
-                yield str(phase.get("sheet") or "").strip().strip("'"), row, count
-
-
-def _moved_row(sheet, row, insertions):
-    for target, start, count in insertions:
-        if target.casefold() == sheet.casefold() and row >= start:
-            row += count
-    return row
-
-
-def _original_row(sheet, row, insertions):
-    for target, start, count in reversed(insertions):
-        if target.casefold() == sheet.casefold():
-            if start <= row < start + count:
-                return None
-            if row >= start + count:
-                row -= count
-    return row
-
-
-def _reference_sheet(token, formula_sheet):
-    prefix, separator, body = token.rpartition("!")
-    name = prefix[1:-1].replace("''", "'") if prefix.startswith("'") and prefix.endswith("'") else prefix
-    if "[" in name or "]" in name or ":" in name:
-        return None, prefix + separator, body
-    return name if separator else formula_sheet, prefix + separator, body
-
-
-def _shift_formula_rows(formula, formula_sheet, insertions):
-    """按目标表及全部插行阶段独立变换 A1 引用，不平移公式所在格的相对偏移。"""
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-    from openpyxl.utils.cell import range_boundaries
-
-    try:
-        tokens = Tokenizer(formula).items
-    except TokenizerError:
-        return formula
-    changed = False
-    for token in tokens:
-        if token.type != "OPERAND" or token.subtype != "RANGE":
-            continue
-        sheet, prefix, reference = _reference_sheet(token.value, formula_sheet)
-        if sheet is not None and _A1_REFERENCE_RE.fullmatch(reference):
-            left, top, right, bottom = range_boundaries(reference.upper())
-            if any(col is not None and col > 16_384 for col in (left, right)) or any(
-                row is not None and row > 1_048_576 for row in (top, bottom)
-            ):
-                continue  # Cell-like names outside the worksheet grid are not A1 references.
-            updated = prefix + re.sub(
-                r"\d+", lambda match: str(_moved_row(sheet, int(match[0]), insertions)), reference
-            )
-            changed |= updated != token.value
-            token.value = updated
-    if not changed:
-        return formula
-    body = "".join(token.value for token in tokens)
-    return "=" + body if formula.startswith("=") else body
-
-
-def _declared_ranges(plan, kind, wb, finding=None):
-    """各阶段涉及的原格最终落点；后续插入的空白行不继承早先样式。"""
-    out = []
-    for index, ph in enumerate(_plan_phases(plan)):
-        if str(ph.get("phase")) != kind:
-            continue
-        tokens = ph.get("ranges") if kind == "clear_ranges" else [ph.get("range")]
-        for token in tokens or []:
-            text = str(token).strip()
-            sheet = str(ph.get("sheet") or wb.active.title).strip("'")
-            if "!" in text:
-                sheet, _, text = text.partition("!")
-                sheet = sheet.strip().strip("'")
-            if sheet not in wb.sheetnames:
-                if finding is not None:
-                    finding.warn(f"{kind} 范围 sheet 不在输出中：{sheet!r}")
-                continue
-            try:
-                _, top, left, bottom, right = _range_bounds(wb[sheet], text)
-            except (TypeError, ValueError):
-                if finding is not None:
-                    finding.warn(f"{kind} 范围无法解析：{token!r}")
-                continue
-            spans = [(top, bottom)]
-            for target, row, count in _insertions(plan, index + 1):
-                if target != sheet:
-                    continue
-                shifted = []
-                for first, last in spans:
-                    if first >= row:
-                        shifted.append((first + count, last + count))
-                    elif last >= row:
-                        shifted.extend(((first, row - 1), (row + count, last + count)))
-                    else:
-                        shifted.append((first, last))
-                spans = shifted
-            out.extend((sheet, first, left, last, right, ph) for first, last in spans)
-    return out
-
-
-def _final_writes(plan, kind):
-    out = []
-    for index, phase in enumerate(_plan_phases(plan)):
-        if phase.get("phase") != kind:
-            continue
-        later = tuple(_insertions(plan, index + 1))
-        for original in phase.get("writes") or []:
-            if not isinstance(original, dict):
-                continue
-            write = dict(original)
-            try:
-                sheet, row, col = _target(write)
-            except (TypeError, ValueError, KeyError):
-                out.append(write)
-                continue
-            write.pop("ref", None)
-            write.update(row=_moved_row(sheet, row, later), col=col)
-            field = "formula" if kind == "formula_writes" else "value"
-            if isinstance(write.get(field), str) and write[field].startswith("="):
-                write[field] = _shift_formula_rows(write[field], sheet, later)
-            out.append(write)
-    return out
-
-
-def _in_ranges(ranges, sheet: str, row: int, col: int) -> bool:
-    return any(
-        (not name or name == sheet) and top <= row <= bottom and left <= col <= right
-        for name, top, left, bottom, right, *_ in ranges
-    )
-
-
-def _style_signature(cell, changed=()) -> Tuple[Any, ...]:
-    from copy import copy
-
-    font, alignment = copy(cell.font), copy(cell.alignment)
-    for key, attr in (("bold", "bold"), ("font_size", "sz")):
-        if key in changed:
-            setattr(font, attr, None)
-    for key in ("horizontal", "vertical"):
-        if key in changed:
-            setattr(alignment, key, None)
-    return (
-        None if "number_format" in changed else cell.number_format,
-        font, alignment,
-        None if "fill_color" in changed else copy(cell.fill),
-        None if "border" in changed else copy(cell.border),
-        copy(cell.protection),
-    )
 
 
 def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
@@ -399,8 +163,12 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
         if target not in template_wb.sheetnames:
             f.fail("插入行的 sheet 不在原模板中", sheet=target)
     clear_ranges = _declared_ranges(plan, "clear_ranges", wb)
-    formats = {_target(w) for kind in ("cell_writes", "formula_writes")
-               for w in _final_writes(plan, kind) if w.get("number_format")}
+    formats = {
+        _target(w)
+        for kind in ("cell_writes", "formula_writes")
+        for w in _final_writes(plan, kind)
+        if w.get("number_format")
+    }
     issues = 0
     for tpl in template_wb.worksheets:
         sheet = tpl.title
@@ -427,9 +195,14 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
             changed = {"number_format"} if target in formats else set()
             for *bounds, style in style_ranges:
                 if _in_ranges([bounds], sheet, r, c):
-                    changed.update(key for key in ("bold", "font_size") if style.get(key) is not None)
-                    changed.update(key for key in ("horizontal", "vertical", "fill_color", "border")
-                                   if str(style.get(key) or "").strip())
+                    changed.update(
+                        key for key in ("bold", "font_size") if style.get(key) is not None
+                    )
+                    changed.update(
+                        key
+                        for key in ("horizontal", "vertical", "fill_color", "border")
+                        if str(style.get(key) or "").strip()
+                    )
             if _style_signature(original, changed) != _style_signature(actual, changed):
                 issues += 1
                 f.fail(
@@ -441,21 +214,33 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
             if issues >= _MAX_SAMPLES * 4:
                 return
         for cell in tuple(out._cells.values()):
-            if (cell.value is not None and _original_row(sheet, cell.row, insertions) is None
-                    and (sheet, cell.row, cell.column) not in planned_targets):
+            if (
+                cell.value is not None
+                and _original_row(sheet, cell.row, insertions) is None
+                and (sheet, cell.row, cell.column) not in planned_targets
+            ):
                 f.fail("插入空行出现计划外数据", sheet=sheet, ref=cell.coordinate)
         merged = {(r.min_row, r.min_col, r.max_row, r.max_col) for r in out.merged_cells.ranges}
         for region in tpl.merged_cells.ranges:
-            bounds = (_moved_row(sheet, region.min_row, insertions), region.min_col,
-                      _moved_row(sheet, region.max_row, insertions), region.max_col)
+            bounds = (
+                _moved_row(sheet, region.min_row, insertions),
+                region.min_col,
+                _moved_row(sheet, region.max_row, insertions),
+                region.max_col,
+            )
             if bounds not in merged:
                 f.fail("插入行后原合并区域未保留", sheet=sheet, range=str(region))
-        heights = {_moved_row(sheet, int(ph["row"]), _insertions(plan, index + 1))
-                   for index, ph in enumerate(_plan_phases(plan))
-                   if ph.get("phase") == "set_row_height" and ph.get("sheet") == sheet}
+        heights = {
+            _moved_row(sheet, int(ph["row"]), _insertions(plan, index + 1))
+            for index, ph in enumerate(_plan_phases(plan))
+            if ph.get("phase") == "set_row_height" and ph.get("sheet") == sheet
+        }
         for row, dimension in tpl.row_dimensions.items():
             target_row = _moved_row(sheet, row, insertions)
-            if target_row not in heights and dimension.height != out.row_dimensions[target_row].height:
+            if (
+                target_row not in heights
+                and dimension.height != out.row_dimensions[target_row].height
+            ):
                 f.fail("插入行后原行高未保留", sheet=sheet, row=target_row)
 
 
@@ -486,20 +271,28 @@ def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
                 left, top, right, bottom = range_boundaries(str(ph.get("range")).upper())
                 later = tuple(_insertions(plan, index + 1))
                 top, bottom = _moved_row(sheet, top, later), _moved_row(sheet, bottom, later)
-                merged = {(r.min_row, r.min_col, r.max_row, r.max_col) for r in ws.merged_cells.ranges}
+                merged = {
+                    (r.min_row, r.min_col, r.max_row, r.max_col) for r in ws.merged_cells.ranges
+                }
                 if (top, left, bottom, right) not in merged:
                     f.fail("计划合并区域在输出中不存在", sheet=sheet, range=str(ph.get("range")))
             elif kind == "set_row_height":
                 row = _moved_row(sheet, int(ph.get("row")), _insertions(plan, index + 1))
                 height = ws.row_dimensions[row].height
                 if height is None or abs(float(height) - float(ph.get("height"))) > _NUM_TOL:
-                    f.fail("行高与计划不符", sheet=sheet, row=row,
-                           planned=str(ph.get("height")), actual=str(height))
+                    f.fail(
+                        "行高与计划不符",
+                        sheet=sheet,
+                        row=row,
+                        planned=str(ph.get("height")),
+                        actual=str(height),
+                    )
             else:
                 ref = str(ph.get("ref") or "").strip().upper()
                 if str(ws.freeze_panes or "").upper() != ref:
-                    f.fail("冻结窗格与计划不符", sheet=sheet,
-                           planned=ref, actual=str(ws.freeze_panes))
+                    f.fail(
+                        "冻结窗格与计划不符", sheet=sheet, planned=ref, actual=str(ws.freeze_panes)
+                    )
         except (TypeError, ValueError, KeyError) as exc:
             f.fail(f"{kind} 计划无法核验：{exc}", sheet=sheet)
     return checked
@@ -538,8 +331,12 @@ def _check_conformance(
                 f.fail(detail, **location, planned=str(raw)[:limit], actual=str(actual)[:limit])
             nf = w.get("number_format")
             if not formula and nf and cell.number_format != str(nf):
-                f.warn("number_format 与计划不符", **location,
-                       planned=str(nf), actual=str(cell.number_format))
+                f.warn(
+                    "number_format 与计划不符",
+                    **location,
+                    planned=str(nf),
+                    actual=str(cell.number_format),
+                )
 
     from app.mod_sdk.workbook_controls import (
         WORKBOOK_CONTROL_PHASES,
@@ -573,7 +370,9 @@ def _check_conformance(
             f.fail("工作簿原生对象缺失或无法核验", phase=kind, sheet=ph.get("sheet"))
 
     residues = 0
-    for sheet, min_row, min_col, max_row, max_col, _ in _declared_ranges(plan, "clear_ranges", wb, f):
+    for sheet, min_row, min_col, max_row, max_col, _ in _declared_ranges(
+        plan, "clear_ranges", wb, f
+    ):
         ws = wb[sheet]
         for r in range(min_row, min(max_row, ws.max_row or max_row) + 1):
             for c in range(min_col, max_col + 1):
@@ -582,8 +381,13 @@ def _check_conformance(
                 if ws.cell(r, c).value is not None:
                     residues += 1
                     if residues <= _MAX_SAMPLES:
-                        f.fail("clear 范围内存在计划外残值", sheet=sheet, row=r, col=c,
-                               actual=str(ws.cell(r, c).value)[:40])
+                        f.fail(
+                            "clear 范围内存在计划外残值",
+                            sheet=sheet,
+                            row=r,
+                            col=c,
+                            actual=str(ws.cell(r, c).value)[:40],
+                        )
 
     for ph in _plan_phases(plan):
         if str(ph.get("phase")) == "retain_sheets":
@@ -904,12 +708,14 @@ def run_qc(
         if template_wb is not None:
             template_wb.close()
 
-    return _summarize({
-        "sections": {name: s.as_dict() for name, s in sections.items()},
-        "inputs": {
-            "filled": str(filled_path),
-            "template": str(template_path or ""),
-            "rules_provided": rules is not None,
-            "write_report_provided": write_report is not None,
-        },
-    })
+    return _summarize(
+        {
+            "sections": {name: s.as_dict() for name, s in sections.items()},
+            "inputs": {
+                "filled": str(filled_path),
+                "template": str(template_path or ""),
+                "rules_provided": rules is not None,
+                "write_report_provided": write_report is not None,
+            },
+        }
+    )

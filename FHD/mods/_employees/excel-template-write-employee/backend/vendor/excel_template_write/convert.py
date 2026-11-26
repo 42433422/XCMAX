@@ -21,11 +21,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
 
+from .references import XLSX_MAX_COL, XLSX_MAX_ROW, ReferenceOverflowError
+from .references import shift_formula_rows as _shift_formula_rows
+
 PLAN_VERSION = 1
 
-# xlsx 规格上限；无界范围（如 ``BR:CC``）在保护区语义下必须覆盖全部行/列。
-XLSX_MAX_ROW = 1_048_576
-XLSX_MAX_COL = 16_384
 
 KNOWN_PHASES = {
     "clear_ranges",
@@ -109,7 +109,7 @@ def _range_bounds(
 
     try:
         min_col, min_row, max_col, max_row = range_boundaries(rng)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         raise PlanError(f"非法范围：{rng!r}（{exc}）") from exc
     return (
         int(min_row or 1),
@@ -171,7 +171,7 @@ def _resolve_target(
     if ref:
         try:
             row, col = coordinate_to_tuple(ref.upper())
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:
             raise PlanError(f"{phase}[{idx}] 非法单元格引用：{ref!r}") from exc
         return sheet, int(row), int(col)
     try:
@@ -318,63 +318,6 @@ def _run_formula_writes(
         stats["formulas_written"] += 1
 
 
-_REF_ROW_RE = re.compile(r"(\$?[A-Za-z]{1,3}\$?)([1-9][0-9]*)")
-
-
-def _shift_ref_rows(
-    token: str, insert_row: int, count: int, *, formula_sheet: str, target_sheet: str
-) -> str:
-    from openpyxl.utils.cell import column_index_from_string
-
-    prefix, sep, body = token.rpartition("!")
-    reference_sheet = prefix if sep else formula_sheet
-    if reference_sheet.startswith("'") and reference_sheet.endswith("'"):
-        reference_sheet = reference_sheet[1:-1].replace("''", "'")
-    if reference_sheet.casefold() != target_sheet.casefold():
-        return token
-    parts = body.split(":")
-    cells = [_REF_ROW_RE.fullmatch(part) for part in parts]
-    whole_rows = len(parts) == 2 and all(re.fullmatch(r"\$?[1-9][0-9]*", p) for p in parts)
-    if len(parts) > 2 or not (all(cells) or whole_rows):
-        return token  # 名称、结构化引用、整列引用不能按单元格地址替换。
-    shifted = []
-    for part, cell in zip(parts, cells):
-        label, number = (
-            cell.groups() if cell else ("$" if part.startswith("$") else "", part.lstrip("$"))
-        )
-        row = int(number)
-        if row > XLSX_MAX_ROW or (
-            cell and column_index_from_string(label.replace("$", "")) > XLSX_MAX_COL
-        ):
-            return token
-        row += count if row >= insert_row else 0
-        if row > XLSX_MAX_ROW:
-            raise PlanError("insert_rows 会使公式引用超出工作表行数上限。")
-        shifted.append(f"{label}{row}")
-    return f"{prefix}{sep}{':'.join(shifted)}"
-
-
-def _shift_formula_rows(
-    formula: str, insert_row: int, count: int, *, formula_sheet: str, target_sheet: str
-) -> str:
-    """插入行时按 Excel 语义改写公式中的行引用（绝对引用同样随行移动）。"""
-    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-
-    try:
-        tokens = Tokenizer(formula).items
-    except TokenizerError:
-        return formula
-    changed = False
-    for tok in tokens:
-        if tok.type == "OPERAND" and tok.subtype == "RANGE":
-            shifted = _shift_ref_rows(
-                tok.value, insert_row, count, formula_sheet=formula_sheet, target_sheet=target_sheet
-            )
-            changed |= shifted != tok.value
-            tok.value = shifted
-    return "=" + "".join(tok.value for tok in tokens) if changed else formula
-
-
 def _sheet_of(phase: Dict[str, Any], kind: str) -> str:
     sheet = str(phase.get("sheet") or "").strip().strip("'")
     if not sheet:
@@ -406,19 +349,22 @@ def _run_insert_rows(
     if last_row >= row and last_row + count > XLSX_MAX_ROW:
         raise PlanError("insert_rows 会使现有单元格超出工作表行数上限。")
     # openpyxl 只移动单元格，不迁移合并区、行高与公式引用，这里逐项补齐。
-    formulas = [
-        (
-            source,
-            cell.row + (count if source is ws and cell.row >= row else 0),
-            cell.column,
-            _shift_formula_rows(
-                cell.value, row, count, formula_sheet=source.title, target_sheet=sheet
-            ),
-        )
-        for source in wb.worksheets
-        for cell in source._cells.values()
-        if isinstance(cell.value, str) and cell.value.startswith("=")
-    ]
+    try:
+        formulas = [
+            (
+                source,
+                cell.row + (count if source is ws and cell.row >= row else 0),
+                cell.column,
+                _shift_formula_rows(
+                    cell.value, row, count, formula_sheet=source.title, target_sheet=sheet
+                ),
+            )
+            for source in wb.worksheets
+            for cell in source._cells.values()
+            if isinstance(cell.value, str) and cell.value.startswith("=")
+        ]
+    except ReferenceOverflowError as exc:
+        raise PlanError(str(exc)) from exc
     merges = [
         (rng.min_row, rng.min_col, rng.max_row, rng.max_col)
         for rng in ws.merged_cells.ranges
@@ -521,7 +467,7 @@ def _run_freeze_panes(wb, phase: Dict[str, Any], stats: Dict[str, Any]) -> None:
     ref = str(phase.get("ref") or "").strip().upper()
     try:
         coordinate_to_tuple(ref)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:
         raise PlanError(f"freeze_panes 的 ref 非法：{ref!r}") from exc
     wb[sheet].freeze_panes = ref
     stats["frozen_sheets"] += 1
@@ -576,7 +522,13 @@ def _run_cell_styles(
             zone = protected.hit(sheet, row, col)
             if zone is not None:
                 stats["violations"].append(
-                    {"phase": "cell_styles", "sheet": sheet, "row": row, "col": col, "zone": list(zone)}
+                    {
+                        "phase": "cell_styles",
+                        "sheet": sheet,
+                        "row": row,
+                        "col": col,
+                        "zone": list(zone),
+                    }
                 )
                 continue
             cell = ws.cell(row, col)
@@ -600,10 +552,14 @@ def _run_cell_styles(
                 from openpyxl.styles import Border
 
                 cell.border = Border(
-                    left=thin, right=thin, top=thin, bottom=thin,
+                    left=thin,
+                    right=thin,
+                    top=thin,
+                    bottom=thin,
                     diagonal=cell.border.diagonal,
                     diagonal_direction=cell.border.diagonal_direction,
-                    outline=cell.border.outline, vertical=cell.border.vertical,
+                    outline=cell.border.outline,
+                    vertical=cell.border.vertical,
                     horizontal=cell.border.horizontal,
                 )
             styled += 1
@@ -636,15 +592,18 @@ def _native_sheet(wb, name: str):
 
 def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, stats) -> None:
     from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-    from openpyxl.utils.cell import get_column_letter, column_index_from_string
+    from openpyxl.utils.cell import column_index_from_string, get_column_letter
     from openpyxl.worksheet.filters import AutoFilter
     from openpyxl.worksheet.table import Table, TableColumn, TableFormula
 
     sheet, name = phase["sheet"], phase["name"]
     ws = _native_sheet(wb, sheet)
     top, left, bottom, right = _bounded_range(phase["range"])
-    if top == bottom or left == right or bottom == XLSX_MAX_ROW or (
-        (bottom - top + 2) * (right - left + 1) > 100_000
+    if (
+        top == bottom
+        or left == right
+        or bottom == XLSX_MAX_ROW
+        or ((bottom - top + 2) * (right - left + 1) > 100_000)
     ):
         raise PlanError("表格需要标题和数据行、至少两列，以及合计行空间（最多 100000 格）。")
     target = (top, left, bottom + 1, right)
@@ -657,9 +616,13 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
 
     cell_ref = re.fullmatch(r"([A-Z]{1,3})([1-9][0-9]{0,6})", name.upper())
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,254}", name) or (
-        name.upper() in {"R", "C"} or re.fullmatch(r"R[0-9]+C[0-9]+", name.upper())
-        or (cell_ref and column_index_from_string(cell_ref[1]) <= XLSX_MAX_COL
-            and int(cell_ref[2]) <= XLSX_MAX_ROW)
+        name.upper() in {"R", "C"}
+        or re.fullmatch(r"R[0-9]+C[0-9]+", name.upper())
+        or (
+            cell_ref
+            and column_index_from_string(cell_ref[1]) <= XLSX_MAX_COL
+            and int(cell_ref[2]) <= XLSX_MAX_ROW
+        )
     ):
         raise PlanError(f"非法 Excel 表格名称：{name!r}")
     existing_names = list(wb.defined_names)
@@ -670,7 +633,9 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
         raise PlanError(f"Excel 表格名称已存在：{name!r}")
 
     headers = [ws.cell(top, col) for col in range(left, right + 1)]
-    if any(cell.data_type != "s" or not cell.value.strip() or len(cell.value) > 255 for cell in headers):
+    if any(
+        cell.data_type != "s" or not cell.value.strip() or len(cell.value) > 255 for cell in headers
+    ):
         raise PlanError("表格标题必须是非空文本，最长 255 个字符。")
     headings = [cell.value for cell in headers]
     if len({value.casefold() for value in headings}) != len(headings):
@@ -690,9 +655,13 @@ def _run_create_table(wb, phase: Dict[str, Any], protected: _ProtectedZones, sta
 
     start = f"{get_column_letter(left)}{top}"
     end = get_column_letter(right)
-    table = Table(displayName=name, ref=f"{start}:{end}{bottom + 1}",
-                  totalsRowCount=1, totalsRowShown=True,
-                  autoFilter=AutoFilter(ref=f"{start}:{end}{bottom}"))
+    table = Table(
+        displayName=name,
+        ref=f"{start}:{end}{bottom + 1}",
+        totalsRowCount=1,
+        totalsRowShown=True,
+        autoFilter=AutoFilter(ref=f"{start}:{end}{bottom}"),
+    )
     amount = headings.index(heading)
     label = 0 if amount else 1
     for idx, value in enumerate(headings):
@@ -722,21 +691,31 @@ def _run_create_combo_chart(wb, phase: Dict[str, Any]) -> None:
 
     source = _native_sheet(wb, phase["source_sheet"])
     name = phase["sheet"]
-    if (not name.strip() or len(name) > 31 or re.search(r"[\\/*?:\[\]]", name)
-            or name.startswith("'") or name.endswith("'")
-            or name.casefold() in {item.casefold() for item in wb.sheetnames}):
+    if (
+        not name.strip()
+        or len(name) > 31
+        or re.search(r"[\\/*?:\[\]]", name)
+        or name.startswith("'")
+        or name.endswith("'")
+        or name.casefold() in {item.casefold() for item in wb.sheetnames}
+    ):
         raise PlanError(f"图表需要合法且未占用的新工作表名称：{name!r}")
     ranges = [_bounded_range(phase[key]) for key in ("categories", "bar_values", "line_values")]
     first, _, last, _ = ranges[0]
-    if last - first >= 10_000 or any(
-        (top, bottom) != (first, last) or left != right
-        for top, left, bottom, right in ranges
-    ) or len({bounds[1] for bounds in ranges}) != 3:
+    if (
+        last - first >= 10_000
+        or any(
+            (top, bottom) != (first, last) or left != right for top, left, bottom, right in ranges
+        )
+        or len({bounds[1] for bounds in ranges}) != 3
+    ):
         raise PlanError("图表源需要三个同行对齐的独立单列范围（每列最多 10000 格）。")
     for idx, (_, col, _, _) in enumerate(ranges):
         for row in range(first, last + 1):
             cell = source.cell(row, col)
-            if cell.value is None or cell.data_type not in ({"s", "n", "f"} if idx == 0 else {"n", "f"}):
+            if cell.value is None or cell.data_type not in (
+                {"s", "n", "f"} if idx == 0 else {"n", "f"}
+            ):
                 raise PlanError(f"图表源包含空单元格或不兼容值：{cell.coordinate}")
     categories, bars, lines = [
         Reference(source, min_row=top, min_col=left, max_row=bottom, max_col=right)

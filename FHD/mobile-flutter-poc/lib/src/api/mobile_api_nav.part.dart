@@ -141,8 +141,14 @@ abstract class _ApiNavBase extends _ApiSessionPersistBase {
     );
   }
 
-  Future<MobileEnvelope<PendingNotificationsData>> notificationInbox({int limit = 50}) async {
-    final json = await getJson(XcagiMobileEndpoints.notificationsInbox, query: {'limit': '$limit'});
+  Future<MobileEnvelope<PendingNotificationsData>> notificationInbox({
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    final json = await getJson(XcagiMobileEndpoints.notificationsInbox, query: {
+      'limit': '$limit',
+      if (beforeId != null) 'before_id': '$beforeId',
+    });
     return MobileEnvelope.fromJson(json, (value) => PendingNotificationsData.fromJson(_asObjectMap(value)));
   }
 

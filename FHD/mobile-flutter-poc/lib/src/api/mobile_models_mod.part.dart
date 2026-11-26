@@ -3,15 +3,17 @@
 part of 'mobile_models.dart';
 
 class PendingNotificationsData {
-  const PendingNotificationsData({required this.notifications});
+  const PendingNotificationsData({required this.notifications, this.nextBeforeId});
 
   final List<PendingNotification> notifications;
+  final int? nextBeforeId;
 
   factory PendingNotificationsData.fromJson(Map<String, Object?> json) {
     return PendingNotificationsData(
       notifications: _readList(
         json['notifications'] ?? json['items'],
       ).map(PendingNotification.fromJson).toList(growable: false),
+      nextBeforeId: _readIntOrNull(json, const ['next_before_id']),
     );
   }
 }

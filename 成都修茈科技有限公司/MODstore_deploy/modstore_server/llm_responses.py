@@ -234,7 +234,13 @@ async def run_billed_responses(
         )
     wallet.validate_pat(authorization_header(request))
     timeout = _chat_total_deadline_s()
-    model_key = concurrency_key(provider, model)
+    model_key = concurrency_key(
+        provider,
+        model,
+        key_source=route.key_source,
+        user_id=uid,
+        config_revision=route.config_revision,
+    )
     lease = await concurrency.acquire(db, model_key, wait_s=_CONCURRENCY_WAIT_S, timeout_s=timeout)
     if lease is None:
         # Saturated admission is a local decision: no journal row, no hold, no dispatch.

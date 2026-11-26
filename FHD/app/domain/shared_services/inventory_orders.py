@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.db.models.inventory import InventoryLedger, InventoryTransaction
 from app.db.session import get_db
+from app.domain.shared_services.inventory_movements import _stock_balance_matches
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.domain.shared_services.inventory_service")
@@ -61,9 +62,9 @@ def _order_ledger_cas(
         .filter(
             InventoryLedger.id == ledger.id,
             InventoryLedger.tenant_id == ledger.tenant_id,
-            InventoryLedger.quantity == physical,
-            InventoryLedger.available_quantity == available,
-            InventoryLedger.reserved_quantity == reserved,
+            _stock_balance_matches(db, InventoryLedger.quantity, physical),
+            _stock_balance_matches(db, InventoryLedger.available_quantity, available),
+            _stock_balance_matches(db, InventoryLedger.reserved_quantity, reserved),
         )
         .update(
             {
@@ -317,15 +318,14 @@ class InventoryOrdersMixin:
             return {"success": False, "message": "释放数量必须大于 0"}
 
         def _run(db):
-            ledger = (
-                db.query(InventoryLedger)
-                .filter(
-                    InventoryLedger.product_id == product_id,
-                    InventoryLedger.warehouse_id == warehouse_id,
-                    InventoryLedger.batch_no == batch_no,
-                )
-                .first()
+            rows = db.query(InventoryLedger).filter(
+                InventoryLedger.product_id == product_id,
+                InventoryLedger.warehouse_id == warehouse_id,
+                InventoryLedger.batch_no == batch_no,
             )
+            if location_id is not None:
+                rows = rows.filter(InventoryLedger.location_id == location_id)
+            ledger = rows.first()
             if not ledger:
                 return {"success": False, "message": "库存台账记录不存在"}
             reserved = Decimal(str(ledger.reserved_quantity or 0))

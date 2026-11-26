@@ -63,6 +63,18 @@ def test_business_and_smalltalk_turns_share_the_same_transcript(memory_dir: Path
     ]
 
 
+def test_plan_mode_survives_completed_turn_and_fresh_request_context(memory_dir: Path):
+    from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY
+
+    first = _context("persist-plan", "1")
+    message = "先不执行，给我一个方案"
+    assert prepare_chat_turn(message, first) is None
+    settle_chat_turn(message, first, {"success": True, "response": "方案"}, "completed")
+    second = _context("persist-plan", "2")
+    assert prepare_chat_turn("继续细化", second) is None
+    assert second[CONTEXT_KEY] == "plan"
+
+
 def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path) -> None:
     context = _context("retry", "same")
     text = "查询产品"

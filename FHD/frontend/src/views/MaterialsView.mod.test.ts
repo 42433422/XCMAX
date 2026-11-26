@@ -2,8 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }))
-vi.mock('@/api', () => ({ get: getMock, post: postMock, api: { put: vi.fn(), delete: vi.fn() } }))
+const { getMock, postMock, putMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn(), putMock: vi.fn() }))
+vi.mock('@/api', () => ({ get: getMock, post: postMock, api: { put: putMock, delete: vi.fn() } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn(), appConfirm: vi.fn() }))
 
 import MaterialsView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/MaterialsView.vue'
@@ -65,5 +65,30 @@ describe('ERP materials page contract', () => {
     await flushPromises()
     expect(page.get('[role="alert"]').text()).toContain('无权限读取数据')
     expect(page.text()).not.toContain('暂无数据')
+  })
+
+  it('saves an existing supplier using only editable fields', async () => {
+    getMock.mockImplementation((path: string) => Promise.resolve({
+      success: true,
+      data: path === '/api/purchase/suppliers' ? [{
+        id: 7, code: 'SUP-7', name: '原供应商', contact_person: '原联系人',
+        contact_phone: '100', rating: 3, tenant_id: 12, created_at: '2026-11-25',
+      }] : [],
+      total: 0,
+    }))
+    putMock.mockResolvedValue({ success: true })
+    const page = open()
+    await page.get('.tabs button:last-child').trigger('click')
+    await flushPromises()
+    await page.get('.card button.btn-secondary').trigger('click')
+    const fields = page.findAll('.modal input')
+    expect(fields[0].attributes('disabled')).toBeDefined()
+    await fields[2].setValue('新联系人')
+    await page.get('.modal .modal-footer .btn-primary').trigger('click')
+    await flushPromises()
+    expect(putMock).toHaveBeenCalledExactlyOnceWith('/api/purchase/suppliers/7', {
+      name: '原供应商', contact_person: '新联系人', contact_phone: '100', rating: 3,
+    })
+    expect(page.find('.modal').exists()).toBe(false)
   })
 })

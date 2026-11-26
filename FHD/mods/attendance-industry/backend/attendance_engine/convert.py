@@ -325,29 +325,23 @@ def _resolved_day_symbol(record: AttendanceDayRecord) -> str:
     from . import rules as _att_rules
 
     s = _regular_symbol(record)
-    if not _att_rules.ACTIVE_POLICY.get("sunday_map_sqrt_to_star", True):
+    if not (_att_rules.ACTIVE_POLICY.get() or {}).get("sunday_map_sqrt_to_star", True):
         return s
     if record.work_date.weekday() == 6 and s in ("√", "☆"):
         return "★"
     return s
 
 
-def _install_attendance_policy_from_host() -> None:
-    try:
-        from resources.config.approval_config import get_approval_config
-
-        pol = getattr(get_approval_config(), "attendance_policy", None) or {}
-    except RECOVERABLE_ERRORS:
-        pol = {}
+def _install_attendance_policy(policy):
     from . import rules as _att_rules
 
-    _att_rules.set_attendance_policy(pol if isinstance(pol, dict) else {})
+    return _att_rules.set_attendance_policy(policy)
 
 
-def _clear_attendance_policy() -> None:
+def _clear_attendance_policy(token) -> None:
     from . import rules as _att_rules
 
-    _att_rules.set_attendance_policy({})
+    _att_rules.ACTIVE_POLICY.reset(token)
 
 
 def _symbol_entry(symbol: str, value: float) -> DayBandEntry | None:
@@ -644,13 +638,14 @@ def convert_attendance_records(
     template_path: str | Path,
     month_label: str,
     personnel_roster: list[tuple[str, str, str]] | None = None,
+    attendance_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """将已解析的 ``AttendanceDayRecord`` 列表（如从 SQLite 还原）按与 ``convert_attendance_file`` 相同规则写入明细模板。"""
     out = Path(output_path)
     template = Path(template_path)
     if not records:
         return {"success": False, "error": "no attendance records"}
-    _install_attendance_policy_from_host()
+    policy_token = _install_attendance_policy(attendance_policy)
     try:
         workbook = open_output_workbook(out, template)
         detail_ws = workbook["明细"] if "明细" in workbook.sheetnames else workbook.active
@@ -706,7 +701,7 @@ def convert_attendance_records(
         logger.exception("Attendance conversion from record list failed")
         return {"success": False, "error": str(exc)}
     finally:
-        _clear_attendance_policy()
+        _clear_attendance_policy(policy_token)
 
 
 def convert_attendance_file(
@@ -718,6 +713,7 @@ def convert_attendance_file(
     header_row: int = 0,
     use_llm: bool | None = None,
     personnel_roster: list[tuple[str, str, str]] | None = None,
+    attendance_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """把钉钉考勤导出 xlsx 转换为考勤明细模板。
 
@@ -737,6 +733,7 @@ def convert_attendance_file(
     out = Path(output_path) if output_path else src.with_name(src.stem + "_converted.xlsx")
     template = Path(template_path) if template_path else (out if out.exists() else None)
 
+    policy_token = _install_attendance_policy(attendance_policy)
     try:
         parsed = parse_attendance_workbook(
             src,
@@ -810,4 +807,4 @@ def convert_attendance_file(
         logger.exception("Attendance conversion failed")
         return {"success": False, "error": str(exc)}
     finally:
-        _clear_attendance_policy()
+        _clear_attendance_policy(policy_token)

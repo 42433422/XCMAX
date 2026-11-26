@@ -24,6 +24,7 @@ from app.domain.shared_services.conversation_service import (
     begin_conversation_write,
     lock_conversation_session,
 )
+from app.domain.task_lifecycle.execution_mode import CONVERSATION_KEY
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         turn_id = str(context.get("turn_id") or "")
         data = _read(key, context)
         try:
-            apply_turn_execution_mode(data, context, text)
+            mode = apply_turn_execution_mode(data, context, text)
         except ConversationRevisionError:
             return {
                 **_payload(
@@ -192,6 +193,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
             return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
         _close_abandoned(key, data)
         data = _read(key, context)
+        data[CONVERSATION_KEY] = mode
         if turn_id:
             prior = _user_turn(data, turn_id)
             assistant = _assistant_for(data, turn_id) if prior is not None else None

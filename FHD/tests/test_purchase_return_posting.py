@@ -377,3 +377,100 @@ def test_approver_revocation_prevents_posting_and_does_not_change_stock(original
         assert all(
             row.quantity == Decimal("5") for row in db.scalars(select(InventoryLedger)).all()
         )
+
+
+@pytest.mark.parametrize(
+    "quantity,unit_price,original_amount,first_quantity,expected_amounts",
+    [
+        ("1", "0.0100", "0.01", "0.5", ["0.01", "0.00"]),
+        ("1", "0.0050", "0.01", "0.5", ["0.01", "0.00"]),
+        ("14", "0.0150", "0.21", "5", ["0.08", "0.13"]),
+        ("28", "0.0050", "0.14", "1", ["0.01", "0.13"]),
+    ],
+)
+def test_partial_returns_allocate_the_original_rounded_amount(
+    original_purchase, quantity, unit_price, original_amount, first_quantity, expected_amounts
+):
+    engine, data, receipt_id = original_purchase
+    line_id = data["items"][0]["inbound_item_id"]
+    quantity = Decimal(quantity)
+    original_amount = Decimal(original_amount)
+    first_quantity = Decimal(first_quantity)
+    total_amount = Decimal("35") + original_amount
+    with tenant_scope(3), Session(engine) as db:
+        line = db.get(PurchaseInboundItem, line_id)
+        line.quantity, line.unit_price, line.amount = (
+            quantity,
+            Decimal(unit_price),
+            original_amount,
+        )
+        receipt = db.get(PurchaseInbound, receipt_id)
+        receipt.total_amount = total_amount
+        ledger = db.scalar(select(InventoryLedger).where(InventoryLedger.batch_no == "batch-A"))
+        ledger.quantity = ledger.available_quantity = quantity
+        movement = db.scalar(
+            select(InventoryTransaction).where(InventoryTransaction.batch_no == "batch-A")
+        )
+        movement.quantity = quantity
+        journal = db.scalar(select(JournalEntry))
+        journal.debit_total = journal.credit_total = total_amount
+        for entry in journal.lines:
+            if entry.account_code == "1401":
+                entry.debit = total_amount
+            else:
+                entry.credit = total_amount
+        db.commit()
+
+    posted = []
+    with tenant_scope(3):
+        for part, part_quantity in enumerate([first_quantity, quantity - first_quantity]):
+            payload = {
+                "return_no": f"RET-ROUND-{part}",
+                "inbound_id": receipt_id,
+                "items": [{"inbound_item_id": line_id, "quantity": str(part_quantity)}],
+            }
+            with Session(engine) as db:
+                original = db.get(ApprovalRequest, data["approval_request_id"])
+                approval = ApprovalRequest(
+                    tenant_id=3,
+                    request_no=f"ROUND-APPROVAL-{part}",
+                    flow_id=original.flow_id,
+                    current_node_id=original.current_node_id,
+                    business_type="purchase_return",
+                    business_id=receipt_id,
+                    business_data=json.dumps(payload),
+                    applicant_id=101,
+                    approved_by=102,
+                    title="分批退货原件审批",
+                    status=ApprovalStatus.APPROVED.value,
+                )
+                db.add(approval)
+                db.flush()
+                db.add(
+                    ApprovalRecord(
+                        tenant_id=3,
+                        request_id=approval.id,
+                        node_id=original.current_node_id,
+                        approver_id=102,
+                        action=ApprovalAction.APPROVE.value,
+                        is_passed=True,
+                    )
+                )
+                payload["approval_request_id"] = approval.id
+                db.commit()
+            result = PurchaseService().post_purchase_return(payload)
+            assert result["success"], result
+            posted.append(Decimal(result["amount"]))
+            replay = PurchaseService().post_purchase_return(payload)
+            assert replay["success"] and replay["idempotent"]
+        assert posted == [Decimal(amount) for amount in expected_amounts]
+        with Session(engine) as db:
+            returns = db.scalars(select(PurchaseReturnItem)).all()
+            assert sum((row.quantity for row in returns), Decimal("0")) == quantity
+            assert sum((row.amount for row in returns), Decimal("0")) == original_amount
+            ledger = db.scalar(select(InventoryLedger).where(InventoryLedger.batch_no == "batch-A"))
+            assert ledger.quantity == ledger.available_quantity == 0
+            reversals = db.scalars(
+                select(JournalEntry).where(JournalEntry.reference_type == "purchase_return")
+            ).all()
+            assert sum((row.debit_total for row in reversals), Decimal("0")) == original_amount

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import Depends, File, Form, Request, UploadFile
+from fastapi import Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.mod_sdk.attendance_artifacts import allocate_file, owner_for_request, serve_output
@@ -14,8 +14,10 @@ from app.mod_sdk.customer_features import attendance_custom_features, require_at
 from app.mod_sdk.errors import BOUNDARY_ERRORS
 
 try:
+    from .attendance_storage import read_policy, save_policy, save_upload
     from .owner_scope import owner_from_request
 except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
+    from attendance_storage import read_policy, save_policy, save_upload
     from owner_scope import owner_from_request
 
 
@@ -37,13 +39,11 @@ def register(
     custom_access = [Depends(require_attendance_conversion)]
 
     @router.get("/attendance/policy", response_model=None, dependencies=custom_access)
-    async def attendance_policy_get() -> dict:
-        """通用考勤裁窗配置（读写 approval_config.yaml 的 attendance_policy 段）。"""
+    async def attendance_policy_get(owner: str = Depends(owner_for_request)) -> dict:
+        """Read only the authenticated account's conversion policy."""
         try:
-            from resources.config.approval_config import get_approval_config
-
-            pol = getattr(get_approval_config(), "attendance_policy", None) or {}
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
+            pol = read_policy(owner)
+        except BOUNDARY_ERRORS:
             logger.exception("读取考勤策略失败")
             return JSONResponse(
                 {"success": False, "message": "读取考勤策略失败"},
@@ -52,7 +52,7 @@ def register(
         return {"success": True, "attendance_policy": pol}
 
     @router.post("/attendance/policy", response_model=None, dependencies=custom_access)
-    async def attendance_policy_post(body: dict) -> dict:
+    async def attendance_policy_post(body: dict, owner: str = Depends(owner_for_request)) -> dict:
         payload = body if isinstance(body, dict) else {}
         raw = payload.get("attendance_policy")
         if not isinstance(raw, dict):
@@ -61,22 +61,13 @@ def register(
                 status_code=400,
             )
         try:
-            from resources.config.approval_config import (
-                get_approval_config,
-                normalize_attendance_policy,
-                reload_approval_config,
-            )
-
-            config = get_approval_config()
-            config.attendance_policy = normalize_attendance_policy(raw)
-            config.save()
-            reload_approval_config()
+            policy = save_policy(owner, raw)
             return {
                 "success": True,
                 "message": "考勤规则已保存",
-                "attendance_policy": config.attendance_policy,
+                "attendance_policy": policy,
             }
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:
             logger.exception("保存考勤策略失败")
             return JSONResponse(
                 {"success": False, "message": "保存考勤策略失败"},
@@ -114,21 +105,9 @@ def register(
         _ = output_relpath
 
         try:
-            src_path = allocate_file(owner, "upload", suffix)
-            content = await file.read()
-            with src_path.open("wb") as f:
-                f.write(content)
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
-            logger.exception("Failed to save attendance upload")
-            return JSONResponse(
-                {"success": False, "error": "保存上传文件失败"},
-                status_code=500,
-            )
-
-        try:
             out_path = allocate_file(owner, "output")
             out_rel = out_path.name
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:
             return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
@@ -158,7 +137,7 @@ def register(
                     {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                     status_code=400,
                 )
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
+        except BOUNDARY_ERRORS:
             return JSONResponse({"success": False, "error": "模板文件无效"}, status_code=400)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,7 +166,9 @@ def register(
                     status_code=400,
                 )
 
+        src_path = None
         try:
+            src_path = await save_upload(file, owner, suffix)
             result = convert_attendance_file(
                 str(src_path),
                 str(out_path),
@@ -196,14 +177,23 @@ def register(
                 header_row=max(0, int(header_row)),
                 use_llm=use_llm_flag or None,  # None -> 交给 env 开关决定
                 personnel_roster=roster,
+                attendance_policy=read_policy(owner),
             )
+        except HTTPException:
+            out_path.unlink(missing_ok=True)
+            raise
         except BOUNDARY_ERRORS:
+            out_path.unlink(missing_ok=True)
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
                 {"success": False, "error": "考勤转换失败"},
                 status_code=500,
             )
+        finally:
+            if src_path is not None:
+                src_path.unlink(missing_ok=True)
         if not result.get("success"):
+            out_path.unlink(missing_ok=True)
             return JSONResponse(
                 {"success": False, "error": str(result.get("error") or "convert failed")},
                 status_code=400,
@@ -212,6 +202,7 @@ def register(
         rows_in = int(result.get("rows_in") or 0)
         rows_stats = int(result.get("rows_stats") or 0)
         if rows_in == 0:
+            out_path.unlink(missing_ok=True)
             header_info = result.get("header_info") or {}
             msg = (
                 "未从 ‘每日统计’ 工作表中解析到任何数据行。"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from copy import copy
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -13,6 +12,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.table import Table
+
+from tests.test_mods._excel_runtime import load_module
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -26,10 +27,7 @@ def engines():
             FHD_ROOT
             / f"mods/_employees/{name}-employee/backend/vendor/{name.replace('-', '_')}/{filename}.py"
         )
-        spec = importlib.util.spec_from_file_location(f"integrity_{filename}", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        modules.append(module)
+        modules.append(load_module(f"integrity_{filename}", path))
     return modules
 
 

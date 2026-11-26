@@ -20,7 +20,7 @@ from app.utils.scalars import coerce_int as _to_int
 _SOURCE_LABELS = {
     "local": "FHD 本地账本",
     "cursor": "Cursor",
-    "xiaox": "Xiaox",
+    "codex": "Xiaox",
     "trae": "Trae",
     "mimo": "mimo",
 }
@@ -42,7 +42,7 @@ def build_public_snapshot(summary: Mapping[str, Any]) -> dict[str, Any]:
     """把管理端 token-usage 摘要收敛为官网可公开字段。"""
     sources_in = summary.get("sources") if isinstance(summary.get("sources"), Mapping) else {}
     sources_out: list[dict[str, Any]] = []
-    for key in ("local", "cursor", "xiaox", "trae", "mimo"):
+    for key in _SOURCE_LABELS:
         raw = sources_in.get(key) if isinstance(sources_in, Mapping) else None
         raw = raw if isinstance(raw, Mapping) else {}
         available = bool(raw.get("available"))

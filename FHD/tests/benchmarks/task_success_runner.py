@@ -261,6 +261,22 @@ def _trial_session_factory():
     return sessionmaker(bind=get_runtime_engine())
 
 
+def _scripted_input_reply(answer: dict[str, Any]) -> str:
+    """Deliver only the scenario's supplied answer through a native user turn."""
+    if isinstance(answer.get("reply"), str):
+        return answer["reply"]
+    if (
+        not isinstance(answer.get("tool_id"), str)
+        or not answer["tool_id"].strip()
+        or not isinstance(answer.get("action"), str)
+        or not answer["action"].strip()
+        or not isinstance(answer.get("parameters"), dict)
+    ):
+        raise ValueError("scripted input needs a reply or an action-bound parameter answer")
+    supplied = {key: answer[key] for key in ("tool_id", "action", "parameters")}
+    return "补充参数：" + json.dumps(supplied, ensure_ascii=False, allow_nan=False)
+
+
 def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
     """Use the same authenticated Xiaox/SQL queue as product requests.
 
@@ -385,14 +401,10 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         ]
         if not waiting:
             binding = store.get(parent.run_id)
-            if (
-                binding.metadata.get("waiting_input")
-                and answers
-                and isinstance(answers[0].get("reply"), str)
-            ):
+            if binding.metadata.get("waiting_input") and answers:
                 answer = answers.pop(0)
                 staged = run_runtime_task(
-                    task=answer["reply"],
+                    task=_scripted_input_reply(answer),
                     system_prompt="",
                     runtime_context={**context, "turn_id": uuid4().hex},
                     run_id=parent.run_id,

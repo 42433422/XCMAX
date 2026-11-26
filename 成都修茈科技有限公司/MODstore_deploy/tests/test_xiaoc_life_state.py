@@ -353,7 +353,8 @@ def test_revoked_principal_and_expired_authorization_stop_next_model_call(databa
 def test_late_lifecycle_receipt_settles_without_adopting_new_learning(
     database, monkeypatch, invalidate
 ):
-    now = store.utcnow()
+    now = datetime(2026, 11, 26, 8, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
     if invalidate == "authorization_expired":
         configure(authorization_expires_at=(now + timedelta(minutes=1)).isoformat())
     else:
@@ -384,6 +385,28 @@ def test_late_lifecycle_receipt_settles_without_adopting_new_learning(
     assert event["status"] == "policy_changed"
     assert event["actual_tokens"] == 50
     assert event["details"]["learning_applied"] is False
+
+
+def test_late_receipt_across_midnight_preserves_original_usage_and_daily_projection(
+    database, monkeypatch
+):
+    now = datetime(2026, 11, 26, 15, 59, tzinfo=UTC)
+    monkeypatch.setattr(store, "utcnow", lambda: now)
+    configure()
+    claim = store.claim_cycle(domain="reflection", reserve_tokens=200)
+    monkeypatch.setattr(store, "utcnow", lambda: now + timedelta(minutes=6))
+    assert not store.cycle_active(claim)
+    result = finish(claim, interests=[{"topic": "late", "evidence_refs": ["receipt:one"]}])
+    finish(claim)
+    with database() as session:
+        persisted = json.loads(session.get(XiaoCLifeState, store.IDENTITY_ID).state_json)
+        receipt = session.get(XiaoCLifeEvent, "cycle:" + claim["cycle_id"])
+        assert receipt.actual_tokens == 50 and receipt.status == "policy_changed"
+    assert persisted["budget"]["used_tokens"] == 50
+    assert persisted["budget"]["reserved_tokens"] == 0
+    assert result["budget"]["used_tokens"] == 0
+    assert result["budget"]["date"] == "2026-11-27"
+    assert result["interests"] == []
 
 
 def test_experiences_accumulate_and_hypotheses_never_become_verified_capability(database):

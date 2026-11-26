@@ -2,8 +2,8 @@
 
 Vendors do not publish a stable concurrency ceiling, and an upstream ``429`` lands
 in the journal as an unresolved attempt that still holds wallet money. This module
-keeps one shared limit per upstream model in the database, so every worker obeys
-the same number:
+keeps one shared limit per model and authenticated credential pool in the
+database, so workers sharing that pool obey the same number:
 
 * acquire a short lease before dispatch, release it when the attempt ends;
 * a vendor ``429`` halves the limit and starts a cooldown;
@@ -16,6 +16,8 @@ the chat path down.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -47,8 +49,27 @@ class Lease:
     enforced: bool
 
 
-def concurrency_key(provider: str, model: str) -> str:
-    return f"{provider}/{model}"
+def concurrency_key(
+    provider: str,
+    model: str,
+    *,
+    key_source: str = "platform",
+    user_id: int | None = None,
+    config_revision: str = "",
+) -> str:
+    """Separate feedback by authenticated credential pool without storing secrets."""
+    if key_source not in {"platform", "user_override"}:
+        raise ValueError("unknown model credential source")
+    if key_source == "user_override" and (type(user_id) is not int or user_id <= 0):
+        raise ValueError("BYOK concurrency requires its authenticated owner")
+    pool = [
+        provider,
+        model,
+        key_source,
+        user_id if key_source == "user_override" else None,
+        config_revision,
+    ]
+    return key_source + ":" + hashlib.sha256(json.dumps(pool).encode()).hexdigest()
 
 
 def retry_after_seconds(error: BaseException, default: float = _DEFAULT_COOLDOWN_S) -> float:

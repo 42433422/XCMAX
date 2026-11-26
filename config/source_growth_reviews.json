@@ -196,12 +196,12 @@
     "FHD/app/application/ai_chat/dialogue_memory.py": {
       "base_file": "FHD/app/application/ai_chat/dialogue_memory.py",
       "base_blob": "bebf08da4002b37d8b948ff1f0dd17e5a2bb0b8d",
-      "head_blob": "956593ce9ef69049a0de2d2a81b48caf0ee570b5",
+      "head_blob": "4536e7da421714653615293f865ad52d9f7088f9",
       "before_lines": 1028,
-      "after_lines": 1107,
-      "reason": "在现有 last_assistant_question 逆序扫描中遇到最近用户消息即停止，避免把已经回答过的更早助手问题重新当作当前待追问问题；净增 2 行。",
+      "after_lines": 1109,
+      "reason": "在现有 last_assistant_question 逆序扫描中遇到最近用户消息即停止，避免把已经回答过的更早助手问题重新当作当前待追问问题；净增 2 行。 本轮 #3680 修复在重新读取会话后保留本轮已解析执行模式，避免普通计划请求在下一轮丢失。",
       "boundary": "仅调整历史读取的停止条件；不改变消息保存顺序、摘要写入、历史截断或执行器行为。",
-      "validation": "逐行核对本次精确 diff；本轮未执行该函数专门测试，b7 backend-smoke 成功只作为集成证据，最终候选仍须原 CI。",
+      "validation": "逐行核对本次精确 diff；本轮未执行该函数专门测试，b7 backend-smoke 成功只作为集成证据，最终候选仍须原 CI。 本轮方案模式、原对话持久化、自动审批、Token统计及模型校验定向64项通过；新增持久化计划与否定/条件执行语句负控，最终提交仍以同SHA远端CI为准。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
@@ -808,12 +808,12 @@
     "FHD/mods/attendance-industry/backend/attendance_engine/convert.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "917010af49629fc9766ade62ae1f56284d987d4f",
+      "head_blob": "f47b3228ea7fa8a58bc68f1889461e9ce2ff87f9",
       "before_lines": 0,
-      "after_lines": 813,
-      "reason": "Review request only: Add the attendance converter that filters DingTalk records to the template roster, pairs punches, applies schedule and overtime policies and writes detail and monthly sheets.",
+      "after_lines": 810,
+      "reason": "Review request only: Add the attendance converter that filters DingTalk records to the template roster, pairs punches, applies schedule and overtime policies and writes detail and monthly sheets. 本轮 #3680 将转换配置从进程全局赋值改为当前转换的 ContextVar 安装/恢复，结合认证所有者私有策略存储隔离账号。",
       "boundary": "Odd punch counts fall back to one first-to-last interval, employees absent from the template roster are excluded, and aggregate attendance fills a full day only under explicit implemented thresholds.",
-      "validation": "Requires convert_attendance_file and convert_attendance_records roster, punch pairing, Saturday clipping, overtime rounding, aggregate fill and no-match error regressions.",
+      "validation": "Requires convert_attendance_file and convert_attendance_records roster, punch pairing, Saturday clipping, overtime rounding, aggregate fill and no-match error regressions. 本轮考勤隔离、上传上限、解压约束及原转换/管理路由24项通过；并发账号策略和失败清理负控保留，最终提交仍需同SHA远端CI。",
       "follow_up": "Add golden-workbook cases for odd punch sequences and template employees missing from DingTalk data to verify hours, warnings and zero-filled monthly rows.",
       "review_owner": "@42433422"
     },

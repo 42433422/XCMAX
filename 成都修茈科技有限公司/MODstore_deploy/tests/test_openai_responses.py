@@ -447,7 +447,7 @@ async def test_definite_wallet_rejection_is_not_an_unknown_paid_attempt(billed, 
     assert len(billed["requests"]) == billed["wallet"].settle.await_count == 1
 
 
-CONCURRENCY_KEY = concurrency_key("litellm", "account-model")
+CONCURRENCY_KEY = concurrency_key("litellm", "account-model", config_revision="revision-a")
 
 
 async def test_saturated_model_concurrency_rejects_before_journal_or_wallet(
@@ -495,6 +495,22 @@ async def test_upstream_429_halves_the_limit_and_keeps_the_attempt_unresolved(bi
     assert concurrency.inflight(db, CONCURRENCY_KEY) == 0
     billed["wallet"].release.assert_not_awaited()
     assert ledger.lookup(db, 7, KEY, 90) == "settling"
+
+
+async def test_byok_throttle_cannot_block_the_platform_route(billed, db, monkeypatch):
+    monkeypatch.setattr(responses, "_CONCURRENCY_WAIT_S", 0.0)
+    concurrency.seed(db, CONCURRENCY_KEY, 4)
+    billed["route"] = replace(billed["route"], key_source="user_override")
+    billed["status"] = 429
+    with pytest.raises(HTTPException) as error:
+        await billed["call"]()
+    assert error.value.detail["state"] == "settling"
+    assert concurrency.current_limit(db, CONCURRENCY_KEY) == 4
+    billed["route"] = replace(billed["route"], key_source="platform")
+    billed["status"] = 200
+    result, _ = await _consume(await billed["call"](key=KEY + "-platform"))
+    assert result["xcagi"]["billing_status"] == "settled"
+    assert len(billed["requests"]) == 2
 
 
 async def test_stream_completion_releases_the_slot(billed, db):

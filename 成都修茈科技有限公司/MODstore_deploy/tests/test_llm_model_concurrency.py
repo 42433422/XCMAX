@@ -215,3 +215,21 @@ def test_error_classification_helpers():
     assert not is_throttled(RuntimeError())
     assert retry_after_seconds(Throttled()) == 7.0
     assert retry_after_seconds(RuntimeError()) == 2.0
+
+
+async def test_byok_cooldown_is_isolated_by_owner_and_route_revision(db):
+    controller = _controller()
+    keys = [
+        concurrency_key(
+            "litellm",
+            "account-model",
+            key_source="user_override",
+            user_id=owner,
+            config_revision=revision,
+        )
+        for owner, revision in [(7, "a"), (8, "a"), (7, "b")]
+    ]
+    controller.report_throttled(db, keys[0], 60)
+    assert await _acquire(controller, db, keys[0]) is None
+    for key in [KEY, *keys[1:]]:
+        assert await _acquire(controller, db, key) is not None

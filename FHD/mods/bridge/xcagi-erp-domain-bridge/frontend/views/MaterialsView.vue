@@ -207,7 +207,7 @@
       <div class="modal-content">
         <div class="modal-header">{{ isEditSupplier ? '编辑' : '添加' }}供应商</div>
         <div class="modal-body">
-          <div class="form-group"><label>编码 *</label><input v-model="supplierForm.code" type="text"></div>
+          <div class="form-group"><label>编码 *</label><input v-model="supplierForm.code" type="text" :disabled="isEditSupplier"></div>
           <div class="form-group"><label>名称 *</label><input v-model="supplierForm.name" type="text"></div>
           <div class="form-group"><label>联系人</label><input v-model="supplierForm.contact_person" type="text"></div>
           <div class="form-group"><label>电话</label><input v-model="supplierForm.contact_phone" type="text"></div>

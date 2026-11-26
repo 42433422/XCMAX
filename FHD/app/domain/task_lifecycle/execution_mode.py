@@ -54,15 +54,29 @@ _PLAN_PHRASES = ("先不执行", "不要执行", "暂不执行", "怎么做", "�
 _PLAN_REQUEST = re.compile(
     r"(做|制定|起草|写|整理|列|出|给|设计|规划).{0,8}(方案|计划|草案|规划|思路)"
 )
+_NEGATED_EXECUTION = re.compile(
+    r"(?:不要|别|不必|不准|禁止|暂不|先不|不想|不需要)[^，。！？；\n]{0,12}(?:执行|照这个做|就按这个来)"
+)
+_EXECUTE_REQUEST = re.compile(
+    r"(?:(?:请(?:你)?|现在|那就|我确认)[，,\s]*)*(?:"
+    + "|".join(_EXECUTE_PHRASES)
+    + r")(?:吧)?[。！!\s]*"
+)
 
 
 def requested_mode_from_text(text: str) -> ExecutionMode | None:
-    """Only the user's own wording may release plan mode; execution wins over planning."""
-    body = str(text or "")
-    if any(phrase in body for phrase in _EXECUTE_PHRASES):
-        return "execute"
-    if _PLAN_REQUEST.search(body) or any(phrase in body for phrase in _PLAN_PHRASES):
+    """Only an affirmative instruction may release plan mode; refusals stay locked."""
+    body = str(text or "").strip()
+    if (
+        _NEGATED_EXECUTION.search(body)
+        or _PLAN_REQUEST.search(body)
+        or any(phrase in body for phrase in _PLAN_PHRASES)
+    ):
         return "plan"
+    # Additional clauses may restrict permission (for example, "wait for my
+    # approval"). Only a complete affirmative command can release a saved plan.
+    if _EXECUTE_REQUEST.fullmatch(body):
+        return "execute"
     return None
 
 
