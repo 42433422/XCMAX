@@ -23,6 +23,7 @@ for (const [width, height] of [[1440, 900], [375, 812]]) {
     await page.goto('/workbench/home')
     const input = page.locator('#wb-home-input')
     await expect(input).toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.wb-direct-sub')).toHaveText('像聊天一样提问，我直接帮你分析、总结和给出可执行答案。')
     const box = await input.boundingBox()
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(200)
     await capture(page, 'workbench-empty-' + width)

@@ -12,9 +12,9 @@ export async function capture(page: Page, name: string, scale: 'css' | 'device' 
   let stable = false
   for (let attempt = 0; attempt < 12; attempt++) {
     const first = await page.screenshot(options)
+    await page.waitForTimeout(120)
     const second = await page.screenshot({ ...options, path: join(dir, name + '.png') })
     if (first.equals(second)) { stable = true; break }
-    await page.waitForTimeout(120)
   }
   expect(stable, 'unstable screenshot after bounded settle: ' + name).toBe(true)
 }
