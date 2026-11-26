@@ -536,6 +536,63 @@
         "evidence/n28.json"
       ],
       "attestation_sha256": "2e81843a29f72bf1be2636d1fc0a476e0be435c5d73e2b06a6c2126ca5bf8fec"
+    },
+    {
+      "n": 29,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 23,
+      "commit_sha": "4b41f8e418ccd46510395a1f0f023543590c97f4",
+      "author": "dot-agent:isolation_fixes",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T17:42:29Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|4b41f8e418ccd46510395a1f0f023543590c97f4|23",
+      "closed": true,
+      "evidence": "Public model file SHA256 independently reproduced by two AI agents from immutable revision 46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59; anonymous HTTP 200, exact digest match and integrity-only source use. See evidence/n29.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n29.json"
+      ],
+      "attestation_sha256": "4310464e71bc4de878513496f59c4116e88768ebe8eac1ac651d542e2bf9a2be"
+    },
+    {
+      "n": 30,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 24,
+      "commit_sha": "4b41f8e418ccd46510395a1f0f023543590c97f4",
+      "author": "dot-agent:isolation_fixes",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T17:42:29Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|4b41f8e418ccd46510395a1f0f023543590c97f4|24",
+      "closed": true,
+      "evidence": "Public model file SHA256 independently reproduced by two AI agents from immutable revision 46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59; anonymous HTTP 200, exact digest match and integrity-only source use. See evidence/n30.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n30.json"
+      ],
+      "attestation_sha256": "020d2eea5898083c2037317b3330178988329eeeb36699b8c7a5529854418f59"
+    },
+    {
+      "n": 31,
+      "disposition": "false-positive",
+      "rule": "generic-api-key",
+      "path": "FHD/scripts/dev/provision_memory_model.py",
+      "line": 25,
+      "commit_sha": "4b41f8e418ccd46510395a1f0f023543590c97f4",
+      "author": "dot-agent:isolation_fixes",
+      "reviewer": "dot-agent:erp_fixes",
+      "reviewed_at": "2026-11-26T17:42:29Z",
+      "review_due": "2027-02-24T00:00:00Z",
+      "key": "generic-api-key|FHD/scripts/dev/provision_memory_model.py|4b41f8e418ccd46510395a1f0f023543590c97f4|25",
+      "closed": true,
+      "evidence": "Public model file SHA256 independently reproduced by two AI agents from immutable revision 46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59; anonymous HTTP 200, exact digest match and integrity-only source use. See evidence/n31.json; not a human or owner approval.",
+      "evidence_files": [
+        "evidence/n31.json"
+      ],
+      "attestation_sha256": "dfd367d5174d9b788e2a215016d9d1fb6448d36017098811019fe45ba4cfc309"
     }
   ]
 }

@@ -21,8 +21,16 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
 
-from .references import XLSX_MAX_COL, XLSX_MAX_ROW, ReferenceOverflowError
+from .references import (
+    XLSX_MAX_COL,
+    XLSX_MAX_ROW,
+    DefinedNameError,
+    ReferenceOverflowError,
+    shifted_defined_names,
+    validate_named_control_order,
+)
 from .references import shift_formula_rows as _shift_formula_rows
+from .table_ranges import TableRangeError, apply_table_ranges, shifted_table_ranges
 
 PLAN_VERSION = 1
 
@@ -87,6 +95,10 @@ def _normalize_phases(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
         if kind not in KNOWN_PHASES:
             raise PlanError(f"phases[{i}] 未知阶段：{kind or '(空)'}；支持 {sorted(KNOWN_PHASES)}")
         out.append(ph)
+    try:
+        validate_named_control_order(out)
+    except DefinedNameError as exc:
+        raise PlanError(str(exc)) from exc
     return out
 
 
@@ -350,6 +362,8 @@ def _run_insert_rows(
         raise PlanError("insert_rows 会使现有单元格超出工作表行数上限。")
     # openpyxl 只移动单元格，不迁移合并区、行高与公式引用，这里逐项补齐。
     try:
+        tables = shifted_table_ranges(wb, row, count, sheet)
+        defined_names = shifted_defined_names(wb, row, count, sheet)
         formulas = [
             (
                 source,
@@ -363,7 +377,7 @@ def _run_insert_rows(
             for cell in source._cells.values()
             if isinstance(cell.value, str) and cell.value.startswith("=")
         ]
-    except ReferenceOverflowError as exc:
+    except (ReferenceOverflowError, DefinedNameError, TableRangeError) as exc:
         raise PlanError(str(exc)) from exc
     merges = [
         (rng.min_row, rng.min_col, rng.max_row, rng.max_col)
@@ -399,6 +413,9 @@ def _run_insert_rows(
         ws.row_dimensions[idx + count] = dimension
     for source, r, col, formula in formulas:
         source.cell(r, col).value = formula
+    for definition, text in defined_names:
+        definition.attr_text = text
+    apply_table_ranges(tables)
 
     protected.shift_rows(sheet, row, count)
     stats["rows_inserted"] += count

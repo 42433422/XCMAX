@@ -1,0 +1,30 @@
+{
+  "schema": "gitleaks-disposition-evidence/v1",
+  "n": 29,
+  "disposition": "false-positive",
+  "rule": "generic-api-key",
+  "path": "FHD/scripts/dev/provision_memory_model.py",
+  "line": 23,
+  "commit_sha": "4b41f8e418ccd46510395a1f0f023543590c97f4",
+  "fingerprint": "4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:23",
+  "note": "The detected literal is the SHA256 of a public model file at a fixed upstream revision, used only by verify_model_files for integrity comparison. It is not a service credential.",
+  "scope": "Only this exact historical commit, file, rule and line. No path, rule or future-commit exemption.",
+  "public_artifact": {
+    "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+    "size_bytes": 125,
+    "repository": "Qdrant/bge-small-zh-v1.5",
+    "revision": "46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59",
+    "file": "special_tokens_map.json",
+    "url": "https://huggingface.co/Qdrant/bge-small-zh-v1.5/resolve/46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59/special_tokens_map.json",
+    "http_status": 200,
+    "fetched_without_credentials": true,
+    "source_digest_matches_download": true
+  },
+  "ci_job": "https://github.com/xcagi/XCMAX/actions/runs/45868717254/job/140078231132",
+  "scanner_version": "8.18.4",
+  "author": "dot-agent:isolation_fixes",
+  "reviewer": "dot-agent:erp_fixes",
+  "review_method": "Two separate AI agents independently fetched the fixed public URLs without authentication, computed SHA256, compared the exact commit literals and reviewed their integrity-only use. This is not a human or GitHub owner approval.",
+  "reviewed_at": "2026-11-26T17:42:29Z",
+  "review_due": "2027-02-24T00:00:00Z"
+}

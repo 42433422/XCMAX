@@ -3,8 +3,9 @@
 import hashlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -25,8 +26,15 @@ def provisioner(tmp_path, monkeypatch):
     )
     download = Mock(return_value=str(downloaded))
     embedder = Mock(return_value=SimpleNamespace(embed=lambda _: [[1.0, 2.0]]))
-    monkeypatch.setattr("huggingface_hub.snapshot_download", download)
-    monkeypatch.setattr("fastembed.TextEmbedding", embedder)
+    # These tests replace the download/parser boundaries without requiring the
+    # optional native runtime to be installed or imported during fixture setup.
+    for name, symbol, implementation in (
+        ("huggingface_hub", "snapshot_download", download),
+        ("fastembed", "TextEmbedding", embedder),
+    ):
+        dependency = ModuleType(name)
+        setattr(dependency, symbol, implementation)
+        monkeypatch.setitem(sys.modules, name, dependency)
     return module, download, embedder
 
 

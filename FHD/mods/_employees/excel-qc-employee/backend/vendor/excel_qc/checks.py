@@ -14,7 +14,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .plan_coordinates import (
+    affected_reserved_names as _affected_reserved_names,
+)
+from .plan_coordinates import (
     declared_ranges as _declared_ranges,
+)
+from .plan_coordinates import (
+    declared_validation_name as _declared_validation_name,
+)
+from .plan_coordinates import (
+    defined_names as _defined_names,
 )
 from .plan_coordinates import (
     final_writes as _final_writes,
@@ -47,10 +56,17 @@ from .plan_coordinates import (
     shift_formula_rows as _shift_formula_rows,
 )
 from .plan_coordinates import (
+    shifted_name_definition as _shifted_name_definition,
+)
+from .plan_coordinates import (
     target as _target,
+)
+from .plan_coordinates import (
+    unsafe_named_control_order as _unsafe_named_control_order,
 )
 from .styles import check_cell_styles as _check_cell_styles
 from .styles import style_signature as _style_signature
+from .table_integrity import check_inserted_tables
 
 _MAX_SAMPLES = 8
 _NUM_TOL = 1e-6
@@ -153,11 +169,129 @@ def _values_match(planned: Any, actual: Any) -> bool:
 _STRUCTURAL_PHASES = {"insert_rows", "merge_cells", "set_row_height", "freeze_panes"}
 
 
+def _check_named_validations(wb, template_wb, plan, finding):
+    from collections import Counter
+
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from openpyxl.xml.functions import tostring
+
+    changes = tuple(_insertions(plan))
+    for ws in wb.worksheets:
+        original = template_wb[ws.title] if ws.title in template_wb.sheetnames else None
+        validations = (
+            [item for item in original.data_validations.dataValidation if item.type == "list"]
+            if original is not None
+            else []
+        )
+        for item in validations:
+            if any(
+                target.casefold() == ws.title.casefold() and row <= area.max_row
+                for target, row, _ in changes
+                for area in item.sqref.ranges
+            ):
+                finding.fail(
+                    "既有定义名称下拉的应用范围受插行影响，暂不支持迁移",
+                    sheet=ws.title,
+                    range=str(item.sqref),
+                )
+        expected = Counter(tostring(item.to_tree()) for item in validations)
+        for phase in _plan_phases(plan):
+            if (
+                phase.get("phase") == "data_validation"
+                and phase.get("rule") == "list"
+                and phase.get("sheet") == ws.title
+            ):
+                try:
+                    item = DataValidation(
+                        type="list",
+                        formula1=phase["name"],
+                        showErrorMessage=True,
+                        errorStyle="stop",
+                        error=phase["error"],
+                    )
+                    item.add(str(phase["range"]).upper().replace("$", ""))
+                    expected[tostring(item.to_tree())] += 1
+                except (KeyError, TypeError, ValueError) as exc:
+                    finding.fail("声明的下拉验证元数据无法核验", sheet=ws.title, reason=str(exc))
+        actual = Counter(
+            tostring(item.to_tree())
+            for item in ws.data_validations.dataValidation
+            if item.type == "list"
+        )
+        if actual != expected:
+            finding.fail("既有下拉验证元数据改变、缺失或出现未声明追加", sheet=ws.title)
+
+
+def _check_defined_names(wb, template_wb, plan, finding):
+    from openpyxl.formula.tokenizer import TokenizerError
+
+    _check_named_validations(wb, template_wb, plan, finding)
+    for sheet, name in _unsafe_named_control_order(plan):
+        finding.fail("定义名称下拉创建后的受影响插行暂不支持", sheet=sheet, name=name)
+    for sheet, name in _affected_reserved_names(template_wb, plan):
+        finding.fail("受影响的保留定义名称暂不支持插行迁移", sheet=sheet, name=name)
+    layouts = {
+        phase.get("sheet") for phase in _plan_phases(plan) if phase.get("phase") == "print_layout"
+    }
+    for sheet in wb.worksheets:
+        original = template_wb[sheet.title] if sheet.title in template_wb.sheetnames else None
+        for attribute in ("print_area", "print_title_rows", "print_title_cols"):
+            if sheet.title in layouts and attribute != "print_title_cols":
+                continue  # The declared fields are checked by control_matches.
+            before, after = (
+                str(getattr(original, attribute, None) or ""),
+                str(getattr(sheet, attribute) or ""),
+            )
+            if before != after:
+                finding.fail(
+                    "未经授权的保留定义名称改变",
+                    sheet=sheet.title,
+                    name=attribute,
+                    planned=before,
+                    actual=after,
+                )
+    expected = _defined_names(template_wb, wb.sheetnames)
+    for phase in _plan_phases(plan):
+        changes = tuple(_insertions({"phases": [phase]}))
+        if changes:
+            for (scope, name), text in list(expected.items()):
+                try:
+                    expected[scope, name] = _shifted_name_definition(
+                        text, scope, template_wb, changes
+                    )
+                except (ValueError, KeyError, TokenizerError) as exc:
+                    finding.fail(
+                        "定义名称无法独立核验插行迁移", sheet=scope, name=name, reason=str(exc)
+                    )
+        elif phase.get("phase") == "data_validation" and phase.get("rule") == "list":
+            try:
+                key, text = _declared_validation_name(phase, wb)
+                if key in expected and expected[key] != text:
+                    raise ValueError("计划定义名称覆盖既有绑定")
+                expected[key] = text
+            except (ValueError, KeyError, TypeError) as exc:
+                finding.fail("计划创建的定义名称无效", reason=str(exc))
+    actual = _defined_names(wb)
+    for scope, name in expected.keys() ^ actual.keys():
+        finding.fail("定义名称新增、缺失或作用域改变", sheet=scope, name=name)
+    for (scope, name), text in expected.items():
+        if actual.get((scope, name)) != text:
+            finding.fail(
+                "定义名称目的地未按插行迁移",
+                sheet=scope,
+                name=name,
+                planned=text,
+                actual=actual.get((scope, name)),
+            )
+
+
 def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
     if template_wb is None:
         f.warn("未提供原模板，插入行后的数据与公式迁移无法独立核验")
         return
     insertions = tuple(_insertions(plan))
+    _check_defined_names(wb, template_wb, plan, f)
+    check_inserted_tables(wb, template_wb, plan, f)
     style_ranges = _declared_ranges(plan, "cell_styles", wb)
     for target, _, _ in insertions:
         if target not in template_wb.sheetnames:

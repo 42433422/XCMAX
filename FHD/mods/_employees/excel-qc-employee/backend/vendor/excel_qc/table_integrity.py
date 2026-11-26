@@ -1,0 +1,131 @@
+"""Independently verify native tables after planned worksheet row insertions."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+
+from openpyxl.utils.cell import get_column_letter, range_boundaries
+from openpyxl.xml.functions import tostring
+
+from .plan_coordinates import insertions, plan_phases, shift_formula_rows
+
+
+def _rectangle(text):
+    bounds = range_boundaries(text)
+    left, first, right, last = bounds
+    if not (1 <= left <= right <= 16384 and 1 <= first <= last <= 1048576):
+        raise ValueError("非法表格范围")
+    return bounds
+
+
+def _expected_table(source, sheet, changes):
+    expected = deepcopy(source)
+    for column in source.tableColumns:
+        for definition in (column.calculatedColumnFormula, column.totalsRowFormula):
+            if definition is not None:
+                formula = "=" + str(definition.attr_text).lstrip("=")
+                if shift_formula_rows(formula, sheet, changes) != formula:
+                    raise ValueError("表格元数据公式含受插行影响的引用")
+    for changed_sheet, row, count in changes:
+        if sheet.casefold() != changed_sheet.casefold():
+            continue
+        left, first, right, last = _rectangle(expected.ref)
+        if row > last:
+            continue
+        header_count, total_count = expected.headerRowCount, expected.totalsRowCount or 0
+        columns = expected.tableColumns
+        if (
+            header_count not in (0, 1)
+            or total_count not in (0, 1)
+            or last - first + 1 < header_count + total_count
+            or len(columns) != right - left + 1
+            or expected.tableType not in (None, "worksheet")
+            or expected.connectionId is not None
+            or expected.sortState is not None
+            or any(
+                c.calculatedColumnFormula is not None
+                or c.totalsRowFormula is not None
+                or c.queryTableFieldId is not None
+                or c.xmlColumnPr is not None
+                for c in columns
+            )
+        ):
+            raise ValueError("计算列、连接、排序或表头/汇总定义无法独立核验")
+        filtering = expected.autoFilter
+        if filtering is not None and (
+            filtering.sortState is not None
+            or _rectangle(filtering.ref) != (left, first, right, last - total_count)
+        ):
+            raise ValueError("筛选范围或排序无法独立核验")
+        first += count if row <= first else 0
+        last += count
+        if last > 1048576:
+            raise ValueError("表格超出工作表行数上限")
+        start = f"{get_column_letter(left)}{first}"
+        expected.ref = f"{start}:{get_column_letter(right)}{last}"
+        if filtering is not None:
+            filtering.ref = f"{start}:{get_column_letter(right)}{last - total_count}"
+    return expected
+
+
+def _semantic_xml(table):
+    root = table.to_tree()
+    # openpyxl renumbers package table IDs when a sheet is removed or a new table
+    # is saved. Display names, column IDs and every other semantic field remain.
+    root.attrib.pop("id", None)
+    return tostring(root)
+
+
+def check_inserted_tables(wb, template_wb, plan, finding):
+    changes = tuple(insertions(plan))
+    for ws in template_wb.worksheets:
+        if ws.title not in wb.sheetnames:
+            continue
+        filtering = ws.auto_filter
+        try:
+            refs = [filtering.ref]
+            if filtering.sortState is not None:
+                refs.append(filtering.sortState.ref)
+            if any(
+                sheet.casefold() == ws.title.casefold() and row <= _rectangle(ref)[3]
+                for ref in refs
+                if ref
+                for sheet, row, _ in changes
+            ):
+                finding.fail("无法独立核验受插行影响的工作表级表格筛选/排序", sheet=ws.title)
+            if tostring(filtering.to_tree()) != tostring(wb[ws.title].auto_filter.to_tree()):
+                finding.fail("插行后工作表级表格筛选/排序元数据发生变化", sheet=ws.title)
+        except (TypeError, ValueError) as exc:
+            finding.fail("无法独立核验工作表级表格筛选范围", sheet=ws.title, error=str(exc))
+    originals = {
+        (ws.title, table.displayName): table
+        for ws in template_wb.worksheets
+        if ws.title in wb.sheetnames
+        for table in ws.tables.values()
+    }
+    actual = {
+        (ws.title, table.displayName): table for ws in wb.worksheets for table in ws.tables.values()
+    }
+    declared = {
+        (str(phase.get("sheet") or "").strip().strip("'"), str(phase.get("name") or "").strip())
+        for phase in plan_phases(plan)
+        if phase.get("phase") == "create_table"
+    }
+    for sheet, name in sorted(originals.keys() - actual.keys()):
+        finding.fail("插行后既有表格缺失或改名", sheet=sheet, table=name)
+    for sheet, name in sorted(actual.keys() - originals.keys() - declared):
+        finding.fail("插行后出现未声明的表格", sheet=sheet, table=name)
+    for key in originals.keys() & actual.keys():
+        sheet, name = key
+        try:
+            expected = _expected_table(originals[key], sheet, changes)
+            if _semantic_xml(actual[key]) != _semantic_xml(expected):
+                finding.fail(
+                    "插行后表格范围、筛选或语义元数据不符合模板与计划",
+                    sheet=sheet,
+                    table=name,
+                    expected=expected.ref,
+                    actual=actual[key].ref,
+                )
+        except (TypeError, ValueError) as exc:
+            finding.fail("无法独立核验插行后的表格", sheet=sheet, table=name, error=str(exc))
