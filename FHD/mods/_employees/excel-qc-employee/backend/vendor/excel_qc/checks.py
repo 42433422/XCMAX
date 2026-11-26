@@ -13,6 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .chart_integrity import check_inserted_charts
 from .conditional_formats import check_inserted_conditionals
 from .plan_coordinates import (
     affected_reserved_names as _affected_reserved_names,
@@ -68,6 +69,7 @@ from .plan_coordinates import (
 from .styles import check_cell_styles as _check_cell_styles
 from .styles import style_signature as _style_signature
 from .table_integrity import check_inserted_tables
+from .three_dimensional import check_three_dimensional_references
 
 _MAX_SAMPLES = 8
 _NUM_TOL = 1e-6
@@ -305,6 +307,8 @@ def _check_insert_rows(wb, plan, template_wb, planned_targets, f) -> None:
         return
     insertions = tuple(_insertions(plan))
     _check_defined_names(wb, template_wb, plan, f)
+    check_three_dimensional_references(wb, template_wb, plan, f)
+    check_inserted_charts(wb, template_wb, plan, f)
     check_inserted_conditionals(wb, template_wb, plan, f)
     check_inserted_tables(wb, template_wb, plan, f)
     style_ranges = _declared_ranges(plan, "cell_styles", wb)

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 from app.mod_sdk.workbook_controls import WORKBOOK_CONTROL_PHASES, write_control
 
+from .chart_references import ChartReferenceError, validate_chart_insert
 from .conditional_formats import ConditionalFormatError, validate_conditional_insert
 from .references import (
     XLSX_MAX_COL,
@@ -32,6 +33,10 @@ from .references import (
 )
 from .references import shift_formula_rows as _shift_formula_rows
 from .table_ranges import TableRangeError, apply_table_ranges, shifted_table_ranges
+from .three_dimensional import (
+    ThreeDimensionalReferenceError,
+    validate_three_dimensional_references,
+)
 
 PLAN_VERSION = 1
 
@@ -363,6 +368,8 @@ def _run_insert_rows(
         raise PlanError("insert_rows 会使现有单元格超出工作表行数上限。")
     # openpyxl 只移动单元格，不迁移合并区、行高与公式引用，这里逐项补齐。
     try:
+        validate_three_dimensional_references(wb, row, count, sheet)
+        validate_chart_insert(wb, sheet, row, count)
         validate_conditional_insert(wb, sheet, row, count)
         tables = shifted_table_ranges(wb, row, count, sheet)
         defined_names = shifted_defined_names(wb, row, count, sheet)
@@ -384,6 +391,8 @@ def _run_insert_rows(
         DefinedNameError,
         TableRangeError,
         ConditionalFormatError,
+        ThreeDimensionalReferenceError,
+        ChartReferenceError,
     ) as exc:
         raise PlanError(str(exc)) from exc
     merges = [
