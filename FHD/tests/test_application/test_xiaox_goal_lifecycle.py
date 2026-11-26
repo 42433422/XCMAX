@@ -243,7 +243,7 @@ def test_recovered_write_uses_bound_sql_receipts_and_independent_goal_review(
             import httpx
             from fastapi.testclient import TestClient
 
-            from app.infrastructure.codex.model_gateway import MODEL_PATH
+            from app.infrastructure.xiaox.model_gateway import MODEL_PATH
 
             upstream = httpx.MockTransport(
                 lambda request: httpx.Response(
@@ -364,7 +364,7 @@ def test_context_admission_cannot_freeze_after_same_generation_authority_change(
 @pytest.mark.parametrize("read_state", ["failed", "unknown"])
 def test_approval_readback_allows_settled_failed_exploration_but_never_unknown(read_state):
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
+    from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract, canonical_digest
     from app.infrastructure.xiaox.receipt_projection import project_receipt_state
 
     parent = AgentRun(
@@ -422,6 +422,10 @@ def test_approval_readback_allows_settled_failed_exploration_but_never_unknown(r
             "verified": True,
         },
     }
+    for row in (read, write):
+        row["fingerprint"] = canonical_digest(
+            {key: row[key] for key in ("tool_id", "action", "params")}
+        )
     waiting = copy.deepcopy(write)
     waiting.update(state="waiting_approval")
     waiting["receipt"].update(status="waiting_approval", success=False, verified=False)

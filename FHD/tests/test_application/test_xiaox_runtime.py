@@ -184,7 +184,7 @@ class Transport:
 
 @pytest.fixture
 def setup_runtime(tmp_path, monkeypatch):
-    monkeypatch.setattr(runtime, "continuation_conversation_error", lambda *_args: "")
+    monkeypatch.setattr(run_lifecycle, "continuation_conversation_error", lambda *_args: "")
     config = XiaoxTransportConfig(
         runtime_root=tmp_path.resolve(),
         scope_id="must-be-replaced",
@@ -336,6 +336,10 @@ def test_reply_is_completed_without_claiming_business_success(setup_runtime):
     assert transport.config.provider_token == "model-token"
     assert transport.config.mcp_token == "mcp-token"
     assert result["legacy_fallback_allowed"] is False
+    assert [event.event_type for event in store.run.events].count("runtime.xiaox.finished") == 1
+    assert "xiaox_result" in store.run.final_output
+    assert "codex_result" not in store.run.final_output
+    assert store.run.metadata["xiaox_runtime"]["coordinator_active"] is False
 
 
 def test_reply_delivers_final_answer_without_commentary(setup_runtime):
@@ -607,7 +611,9 @@ def test_verified_operations_do_not_satisfy_a_missing_original_goal(setup_runtim
     result = asyncio.run(invoke(store, Transport(store, completed("已全部完成"))))
     assert result["verified_operations"] is True and result["business_completed"] is False
     assert result["exit_status"] == "goal_verification_required"
-    assert result["output"] == "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。"
+    assert result["output"] == (
+        "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
+    )
     assert all(message["role"] == "user" for message in result["session_messages"])
     assert store.run.status == "blocked"
 
@@ -920,7 +926,9 @@ def test_malformed_child_receipt_preserves_unknown_during_final_projection(setup
     assert result["execution_state"] == "unknown" and result["reconciliation_required"] is True
     assert store.run.status == "blocked" and store.run.metadata["non_retryable"] is True
     assert store.run.tool_calls == []
-    assert store.run.final_output["codex_result"]["reconciliation_required"] is True
+    assert store.run.final_output["xiaox_result"]["reconciliation_required"] is True
+    assert "codex_result" not in store.run.final_output
+    assert [event.event_type for event in store.run.events].count("runtime.xiaox.finished") == 1
 
 
 def test_model_usage_uncertainty_blocks_completion(setup_runtime):

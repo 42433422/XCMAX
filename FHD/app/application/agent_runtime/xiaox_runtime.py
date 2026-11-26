@@ -20,11 +20,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from app.application.agent_orchestrator.run_lifecycle import (
-    continuation_conversation_error,
-    safe_continuation_error,
-)
-from app.application.agent_orchestrator.run_models import AgentRun, RunStatus, tool_call_from_dict
+from app.application.agent_orchestrator import run_lifecycle
+from app.application.agent_orchestrator.run_models import AgentRun, RunStatus
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 from app.domain.task_lifecycle.agent_runtime_results import (
     ACTIVE_STATES as _ACTIVE,
@@ -36,11 +33,6 @@ from app.domain.task_lifecycle.agent_runtime_results import (
     base_runtime_result as _base_result,
 )
 from app.domain.task_lifecycle.agent_runtime_results import (
-    classification_metadata,
-    failure_diagnostics,
-    withhold_runtime_output,
-)
-from app.domain.task_lifecycle.agent_runtime_results import (
     classify_runtime_result as _classify,
 )
 from app.domain.task_lifecycle.agent_runtime_results import (
@@ -49,8 +41,11 @@ from app.domain.task_lifecycle.agent_runtime_results import (
 from app.domain.task_lifecycle.agent_runtime_results import (
     receipt_state as _receipt_state,
 )
+from app.domain.task_lifecycle.agent_runtime_results import withhold_runtime_output
 from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
-from app.infrastructure.xiaox.transport import XiaoxTransportError as CodexTransportError
+from app.infrastructure.xiaox.receipts import project_child_calls as _project_child_calls
+from app.infrastructure.xiaox.receipts import resume_error as _resume_error
+from app.infrastructure.xiaox.transport import XiaoxTransportError
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -126,74 +121,6 @@ def _input_text(
         )
     sections.append("本轮用户请求：\n" + task)
     return "\n\n".join(sections)
-
-
-def _project_child_calls(run: AgentRun, rows: list[dict[str, Any]]) -> None:
-    """Display child receipts while retaining their original verification owner."""
-    known = {call.call_id for call in run.tool_calls}
-    # Historical display records remain immutable; only exact child provenance
-    # can identify a pre-rename projection of the same persisted receipt.
-    legacy = {
-        (call.call_id, call.metadata.get("child_run_id"), call.metadata.get("child_call_id"))
-        for call in run.tool_calls
-        if (call.metadata or {}).get("source") == "codex_child_receipt"
-    }
-    for row in rows:
-        child_id = str(row.get("child_run_id") or "")
-        if not child_id:
-            continue
-        for raw in (row.get("receipt") or {}).get("tool_calls") or []:
-            if not isinstance(raw, dict) or not raw.get("call_id"):
-                continue
-            suffix = hashlib.sha256(f"{child_id}:{raw['call_id']}".encode()).hexdigest()[:40]
-            projection_id = "xiaox_" + suffix
-            if projection_id in known or ("codex_" + suffix, child_id, raw["call_id"]) in legacy:
-                continue
-            payload = copy.deepcopy(raw)
-            payload["call_id"] = projection_id
-            child_metadata = payload.get("metadata") or {}
-            payload["metadata"] = {
-                **{
-                    key: value
-                    for key, value in child_metadata.items()
-                    if not key.startswith("verification")
-                },
-                "source": "xiaox_child_receipt",
-                "child_run_id": child_id,
-                "child_call_id": raw["call_id"],
-                # The redacted display payload is not the original child's
-                # output. Its hash/contract must never become a parent-step
-                # verification record. Completion re-reads the original child.
-                "child_verification": {
-                    "contract_sha256": (child_metadata.get("verification_contract") or {}).get(
-                        "contract_sha256"
-                    ),
-                    "output_sha256": child_metadata.get("verification_output_sha256"),
-                    "report_sha256": (child_metadata.get("verification") or {}).get(
-                        "report_sha256"
-                    ),
-                },
-            }
-            run.tool_calls.append(tool_call_from_dict(payload))
-            known.add(projection_id)
-
-
-def _resume_error(store: XiaoxBindingStore, binding: Any, rows: list[dict[str, Any]]) -> str:
-    if error := continuation_conversation_error(binding.run, binding.context):
-        return error
-    if _model_unsettled(binding.metadata):
-        return "原模型请求或计量结果尚待核对，禁止自动恢复"
-    for row in rows:
-        if _receipt_state(row) == "unknown":
-            return "业务结果尚未确定，禁止恢复模型执行或重放工具"
-        child_id = str(row.get("child_run_id") or "")
-        child = store.repository.get(child_id) if child_id else None
-        if child is not None and child.status in {"failed", "blocked"}:
-            # We never retry a child here; nevertheless enforce the existing
-            # continuation guard before allowing a model to propose more work.
-            if error := safe_continuation_error(child):
-                return error
-    return ""
 
 
 def _budget_stop_reason(binding: Any) -> str:
@@ -475,10 +402,10 @@ async def run_xiaox_agent(
                     if (
                         cancelled is None
                         and fatal_error is None
-                        and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError))
+                        and not isinstance(exc, (*RECOVERABLE_ERRORS, XiaoxTransportError))
                     ):
                         raise
-                    logger.warning("Codex runtime interrupt failed during shutdown", exc_info=True)
+                    logger.warning("Xiaox runtime interrupt failed during shutdown", exc_info=True)
 
     async def finalize() -> None:
         nonlocal cancelled
@@ -489,10 +416,25 @@ async def run_xiaox_agent(
             status: RunStatus = _classify(
                 result,
                 rows,
-                classification_metadata(binding.run),
-                completion_mode,
+                _classification_metadata(binding),
+                _completion_mode(binding, completion_mode),
                 runtime_status,
             )
+            if budget_stop := _budget_stop_reason(binding):
+                # A spent model-call budget is a host budget fact, not a business
+                # verification failure. Keep the reason readable and keep every
+                # confirmed receipt queryable.
+                status = "failed"
+                result.update(
+                    ok=False,
+                    business_completed=False,
+                    reply_completed=False,
+                    exit_status=budget_stop,
+                    execution_state="failed",
+                    error="本轮模型调用次数已达上限，任务未完成，已确认的业务回执与产物保留待核对",
+                    output="本轮模型调用次数已达上限，任务未完成。",
+                    error_code=budget_stop,
+                )
             if runtime_status in {"cancelled", "paused"}:
                 status = "cancelled" if runtime_status == "cancelled" else "paused"
                 result.update(
@@ -510,7 +452,13 @@ async def run_xiaox_agent(
                     )
                 result["active_seconds"] = float(metadata.get("active_seconds") or 0)
                 result["model_request_attempts"] = len(metadata.get("model_requests") or {})
-                result.update(failure_diagnostics(run, result))
+                if result.get("error_code") == "model_call_budget_exhausted":
+                    # The host budget fact is the stop reason; an earlier attempt's
+                    # business-verification wording must not mask it.
+                    run.metadata.pop("runtime_failure_kind", None)
+                    run.metadata.pop("runtime_failure_stage", None)
+                    run.metadata.pop("runtime_failure_reason", None)
+                result.update(_failure_diagnostics(run, result))
                 # Attempts remain in their original events/model ledger. A recovered
                 # transient failure must not label the final successful run as failed.
                 for key, value in (
@@ -536,19 +484,17 @@ async def run_xiaox_agent(
                         execution_state=run.status,
                     )
                 if result["ok"] and result["output"]:
-                    result["session_messages"].append(
-                        {"role": "assistant", "content": result["output"]}
-                    )
+                    result["session_messages"].append({"role": "assistant", "content": result["output"]})
                 run.error = str(result.get("error") or run.error or "")
                 result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
-                run.final_output = {**run.final_output, "codex_result": copy.deepcopy(result)}
+                run.final_output = {**run.final_output, "xiaox_result": copy.deepcopy(result)}
                 metadata["runtime_status"] = runtime_status
                 if result.get("reconciliation_required"):
                     run.metadata["non_retryable"] = True
                     run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
                 run.add_event(
-                    "runtime.codex.finished",
-                    "Codex 轮次与业务回执已核对",
+                    "runtime.xiaox.finished",
+                    "Xiaox 轮次与业务回执已核对",
                     {
                         "runtime_status": runtime_status,
                         "business_completed": result["business_completed"],
@@ -557,9 +503,7 @@ async def run_xiaox_agent(
                 )
 
             saved = mutate(finish)
-            from app.application.agent_orchestrator.execution_lease import (
-                DurableExecutionLeaseMixin,
-            )
+            from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
 
             await asyncio.to_thread(
                 DurableExecutionLeaseMixin._release_browser_run_resources,
@@ -567,9 +511,7 @@ async def run_xiaox_agent(
                 runtime_context=saved.run.metadata.get("runtime_context") or {},
             )
             result["run_events"] = [
-                event.to_dict()
-                for event in saved.run.events
-                if event.event_type.startswith("runtime.")
+                event.to_dict() for event in saved.run.events if event.event_type.startswith("runtime.")
             ]
             # Repository-level Business Harness may further reject a purported success.
             if result["ok"] and saved.run.status != "completed":
@@ -609,7 +551,7 @@ async def run_xiaox_agent(
                 _classify(
                     result,
                     rows,
-                    classification_metadata(previous.run),
+                    _classification_metadata(previous),
                     completion_mode,
                     "completed",
                 )
@@ -619,7 +561,7 @@ async def run_xiaox_agent(
                 _classify(
                     result,
                     rows,
-                    classification_metadata(previous.run),
+                    _classification_metadata(previous),
                     completion_mode,
                     "completed",
                 )
@@ -641,7 +583,7 @@ async def run_xiaox_agent(
         )
         generation = grant.binding.metadata["generation"]
         binding = grant.binding
-        if error := continuation_conversation_error(binding.run, binding.context):
+        if error := run_lifecycle.continuation_conversation_error(binding.run, binding.context):
             raise XiaoxBindingError("conversation_changed", error)
         if answer_to_waiting_input:
 
@@ -1008,7 +950,7 @@ async def run_xiaox_agent(
                     await stop("cancelled")
                     raise
                 except BOUNDARY_ERRORS as exc:
-                    if not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+                    if not isinstance(exc, (*RECOVERABLE_ERRORS, XiaoxTransportError)):
                         fatal_error = exc
                     await stop("interrupted")
                     raise
@@ -1021,7 +963,7 @@ async def run_xiaox_agent(
         # This task boundary must finalize ownership even for a programming bug.
         # Preserve that exception for the HTTP/task caller after durable cleanup;
         # do not translate it into a successful or retriable business result.
-        if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, CodexTransportError)):
+        if fatal_error is None and not isinstance(exc, (*RECOVERABLE_ERRORS, XiaoxTransportError)):
             fatal_error = exc
         result.update(
             error_code=getattr(exc, "code", "xiaox_runtime_failed"),
@@ -1039,116 +981,6 @@ async def run_xiaox_agent(
                 "reconciliation_required": getattr(exc, "code", "") == "reconciliation_required",
             }
         await stop(runtime_status)
-    finally:
-        revoke(runtime_status)
-
-    try:
-        rows = store.receipt_snapshot(run_id)
-        binding = store.get(run_id)
-        result["output"] = "\n\n".join(text for text in texts.values() if text.strip())
-        status: RunStatus = _classify(
-            result,
-            rows,
-            _classification_metadata(binding),
-            _completion_mode(binding, completion_mode),
-            runtime_status,
-        )
-        if budget_stop := _budget_stop_reason(binding):
-            # A spent model-call budget is a host budget fact, not a business
-            # verification failure. Keep the reason readable and keep every
-            # confirmed receipt queryable.
-            status = "failed"
-            result.update(
-                ok=False,
-                business_completed=False,
-                reply_completed=False,
-                exit_status=budget_stop,
-                execution_state="failed",
-                error="本轮模型调用次数已达上限，任务未完成，已确认的业务回执与产物保留待核对",
-                output="本轮模型调用次数已达上限，任务未完成。",
-                error_code=budget_stop,
-            )
-        if runtime_status in {"cancelled", "paused"}:
-            status = "cancelled" if runtime_status == "cancelled" else "paused"
-            result.update(
-                ok=False,
-                business_completed=False,
-                exit_status=status,
-                execution_state=status,
-                runtime_completed=False,
-            )
-
-        def finish(run: AgentRun, metadata: dict[str, Any]) -> None:
-            if started_at := metadata.pop("active_started_at", None):
-                metadata["active_seconds"] = float(metadata.get("active_seconds", 0)) + max(
-                    0.0, time.time() - float(started_at)
-                )
-            result["active_seconds"] = float(metadata.get("active_seconds") or 0)
-            result["model_request_attempts"] = len(metadata.get("model_requests") or {})
-            if result.get("error_code") == "model_call_budget_exhausted":
-                # The host budget fact is the stop reason; an earlier attempt's
-                # business-verification wording must not mask it.
-                run.metadata.pop("runtime_failure_kind", None)
-                run.metadata.pop("runtime_failure_stage", None)
-                run.metadata.pop("runtime_failure_reason", None)
-            result.update(_failure_diagnostics(run, result))
-            # Attempts remain in their original events/model ledger. A recovered
-            # transient failure must not label the final successful run as failed.
-            for key, value in (
-                ("runtime_failure_kind", result["failure_kind"]),
-                ("runtime_failure_reason", result["failure_reason"]),
-                ("runtime_failure_stage", result["failure_stage"]),
-            ):
-                if value:
-                    run.metadata[key] = value
-                else:
-                    run.metadata.pop(key, None)
-            _project_child_calls(run, rows)
-            if run.status not in _TERMINAL and run.status != "paused":
-                run.status = status
-            elif run.status != "completed" and result["ok"]:
-                withhold_runtime_output(result, status=run.status, error="业务结果未通过核验")
-            elif run.status != "completed":
-                result.update(
-                    ok=False,
-                    business_completed=False,
-                    reply_completed=False,
-                    exit_status=run.status,
-                    execution_state=run.status,
-                )
-            if result["ok"] and result["output"]:
-                result["session_messages"].append({"role": "assistant", "content": result["output"]})
-            run.error = str(result.get("error") or run.error or "")
-            result["artifacts"] = [artifact.to_dict() for artifact in run.artifacts]
-            run.final_output = {**run.final_output, "xiaox_result": copy.deepcopy(result)}
-            metadata["runtime_status"] = runtime_status
-            if result.get("reconciliation_required"):
-                run.metadata["non_retryable"] = True
-                run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
-            run.add_event(
-                "runtime.xiaox.finished",
-                "Xiaox 轮次与业务回执已核对",
-                {
-                    "runtime_status": runtime_status,
-                    "business_completed": result["business_completed"],
-                    "receipt_count": len(rows),
-                },
-            )
-
-        saved = mutate(finish)
-        from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
-
-        await asyncio.to_thread(
-            DurableExecutionLeaseMixin._release_browser_run_resources,
-            saved.run,
-            runtime_context=saved.run.metadata.get("runtime_context") or {},
-        )
-        result["run_events"] = [
-            event.to_dict() for event in saved.run.events if event.event_type.startswith("runtime.")
-        ]
-        # Repository-level Business Harness may further reject a purported success.
-        if result["ok"] and saved.run.status != "completed":
-            withhold_runtime_output(result, status=saved.run.status, error="业务结果未通过核验")
     finally:
         try:
             revoke(runtime_status)
