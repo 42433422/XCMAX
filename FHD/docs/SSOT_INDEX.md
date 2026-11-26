@@ -75,6 +75,7 @@
 
 | 日期 | 记录 | 结论 |
 |------|------|------|
+| 2026-11-24 | [evidence/audit-benchmark/e3-20261124/](evidence/audit-benchmark/e3-20261124/)（逐域 `01.json`–`18.json` + `harness-steps.json`，采集器 `/Users/Shared/XCMAX/.e3run/harness.py`） | rev.3 真实运行 E3：01/02/06/07/15 达 E3；其余 13 域保持 UNRATED 并附具体阻塞原因；因存在 UNRATED 不出总分 |
 | 2026-11-15 | [audit/xcmax-18-domain-evidence-audit-2026-11-15.md](audit/xcmax-18-domain-evidence-audit-2026-11-15.md) | 18 域全部 UNRATED，正式分 null；E2 为主，E3/E4 未采集（rev.2） |
 
 ## 机器注册表（ssot.yaml）

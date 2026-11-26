@@ -3,9 +3,9 @@ import { parseApprovalCardFromPayload, reconcileApprovalCards, restoreApprovalCa
 import type { ChatMessage } from '@/composables/useChatMessages'
 
 describe('parseApprovalCardFromPayload', () => {
-  it('approves only the explicit Codex business child and never falls back to its parent', () => {
-    const payload = { runtime: 'codex', run_id: 'parent', success: false,
-      data: { runtime: 'codex', action: 'approval_pending', data: { approval_card: { run_id: 'child', approval_required: true } } } }
+  it('approves only the explicit Xiaox business child and never falls back to its parent', () => {
+    const payload = { runtime: 'xiaox', run_id: 'parent', success: false,
+      data: { runtime: 'xiaox', action: 'approval_pending', data: { approval_card: { run_id: 'child', approval_required: true } } } }
     expect(parseApprovalCardFromPayload(payload)).toMatchObject({ run_id: 'child', agent_run_id: 'child', status: 'pending' })
     expect(parseApprovalCardFromPayload({ ...payload, data: { action: 'approval_pending', data: {} } })).toBeNull()
     expect(parseApprovalCardFromPayload({ ...payload, data: { action: 'approval_pending', data: { approval_card: { run_id: 'parent' } } } })).toBeNull()

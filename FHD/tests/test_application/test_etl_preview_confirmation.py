@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -13,7 +14,7 @@ from app.application.elt.errors import EltError
 from app.application.elt.preview_confirmation import REVIEW_KEY
 from app.application.elt.service_support import dump_json, load_json
 from app.application.elt.targets import get_adapter
-from app.db.models import PurchaseUnit
+from app.db.models import Product, PurchaseUnit
 from app.db.models.elt import EltRun, EltRunRow, EltTargetConfig, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_preview_task_boundaries import (
@@ -39,6 +40,148 @@ def execute(store, run_id, revision, *, valid_rows_only=False, db=None):
         valid_rows_only=valid_rows_only,
         preview_revision=revision,
     )
+
+
+@pytest.fixture
+def products_preview(preview_store, monkeypatch):
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
+
+    def preview(*rows):
+        csv = "购买单位,型号,产品名称,规格,价格,备注\n" + "\n".join(rows) + "\n"
+        run_id = create_preview(preview_store, target="products", csv=csv.encode())
+        preview_store.executor.futures[-1].result(timeout=10)
+        with preview_store.factory() as db:
+            preview_store.service.update_draft(
+                db,
+                run_id=run_id,
+                owner_user_id=7,
+                patch={"allowed_update_fields": ["specification", "price", "description"]},
+            )
+        preview_store.executor.futures[-1].result(timeout=10)
+        return run_id
+
+    return preview
+
+
+def product_preview_rows(store, run_id):
+    with store.factory() as db:
+        return store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10)[
+            "items"
+        ]
+
+
+@pytest.mark.parametrize(
+    ("specification", "price", "count", "field"),
+    [("B", "10", 1, "specification"), ("A", "11", 1, "price"), ("A", "10", 2, "model_number")],
+)
+def test_unmodeled_product_preview_reports_conflict(
+    preview_store, products_preview, specification, price, count, field
+):
+    store = preview_store
+    with store.factory.begin() as db:
+        db.add_all(
+            Product(tenant_id=1, unit="测试客户", name="垫片", specification="A", price=10)
+            for _ in range(count)
+        )
+    run_id = products_preview(f"测试客户,,垫片,{specification},{price},导入备注")
+    [row] = product_preview_rows(store, run_id)
+    assert row["final_action"] == "error"
+    assert [(issue["code"], issue["field"]) for issue in row["validation_issues"]] == [
+        ("ELT_PRODUCT_NO_MODEL_CONFLICT", field)
+    ]
+    with pytest.raises(EltError) as error:
+        execute(store, run_id, snapshot(store, run_id)["preview_revision"])
+    assert error.value.code == "ELT_INVALID_ROWS_BLOCKED"
+    with store.factory() as db:
+        assert [(p.specification, p.price, p.description) for p in db.query(Product)] == [
+            ("A", Decimal("10.00"), None)
+        ] * count
+
+
+def test_unmodeled_product_source_duplicates_are_not_overwritten(preview_store, products_preview):
+    store = preview_store
+    rows = ("测试客户,,垫片,A,10,原备注", "测试客户,,垫片,A,10.00,文件中重复")
+    for expected in (["new", "skip"], ["skip", "skip"]):
+        run_id = products_preview(*rows)
+        assert [row["final_action"] for row in product_preview_rows(store, run_id)] == expected
+        execute(store, run_id, snapshot(store, run_id)["preview_revision"])
+        store.executor.futures[-1].result(timeout=10)
+        assert snapshot(store, run_id)["summary"]["executed"] == expected.count("new")
+        with store.factory.begin() as db:
+            product = db.query(Product).one()
+            assert (product.specification, product.price) == ("A", Decimal("10.00"))
+            assert product.description == ("原备注" if "new" in expected else "人工维护")
+            product.description = "人工维护"
+
+
+def test_unmodeled_product_forced_update_cannot_overwrite(preview_store, products_preview):
+    store = preview_store
+    with store.factory.begin() as db:
+        db.add(Product(tenant_id=1, unit="测试客户", name="垫片", specification="A", price=10))
+    run_id = products_preview("测试客户,,垫片,A,10,导入备注")
+    [row] = product_preview_rows(store, run_id)
+    with store.factory() as db:
+        revised = store.service.update_draft(
+            db, run_id=run_id, owner_user_id=7, patch={"row_overrides": {str(row["id"]): "update"}}
+        )
+    execute(store, run_id, revised["preview_revision"])
+    store.executor.futures[-1].result(timeout=10)
+    [row] = product_preview_rows(store, run_id)
+    assert row["execution_status"] == "failed"
+    assert row["execution_error"]["code"] == "ELT_PRODUCT_NO_MODEL_CONFLICT"
+    with store.factory() as db:
+        assert db.query(Product).one().description is None
+
+
+def test_unmodeled_product_conflict_within_one_source(preview_store, products_preview):
+    run_id = products_preview("测试客户,,垫片,A,10,原备注", "测试客户,,垫片,B,10,冲突备注")
+    first, second = product_preview_rows(preview_store, run_id)
+    assert first["final_action"] == "new"
+    assert second["final_action"] == "error"
+    assert second["validation_issues"][0]["code"] == "ELT_PRODUCT_NO_MODEL_CONFLICT"
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_unmodeled_product_execute_rechecks_late_conflicts(preview_store, products_preview, count):
+    store = preview_store
+    run_id = products_preview("测试客户,,垫片,A,10,导入备注")
+    [row] = product_preview_rows(store, run_id)
+    assert row["final_action"] == "new"
+    with store.factory.begin() as db:
+        db.add_all(
+            Product(tenant_id=1, unit="测试客户", name="垫片", specification="B", price=20)
+            for _ in range(count)
+        )
+    execute(store, run_id, snapshot(store, run_id)["preview_revision"])
+    store.executor.futures[-1].result(timeout=10)
+    [row] = product_preview_rows(store, run_id)
+    assert row["execution_status"] == "failed"
+    assert row["execution_error"]["code"] == "ELT_PRODUCT_NO_MODEL_CONFLICT"
+    with store.factory() as db:
+        assert [(p.specification, p.price, p.description) for p in db.query(Product)] == [
+            ("B", Decimal("20.00"), None)
+        ] * count
+
+
+def test_modeled_product_import_still_updates_by_model(preview_store, products_preview):
+    store = preview_store
+    run_id = products_preview("测试客户,M-1,垫片,A,10,原备注", "测试客户,M-2,垫片,B,20,独立产品")
+    assert [row["final_action"] for row in product_preview_rows(store, run_id)] == ["new", "new"]
+    execute(store, run_id, snapshot(store, run_id)["preview_revision"])
+    store.executor.futures[-1].result(timeout=10)
+    run_id = products_preview("测试客户,M-1,垫片,C,30,更新备注")
+    assert [row["final_action"] for row in product_preview_rows(store, run_id)] == ["update"]
+    execute(store, run_id, snapshot(store, run_id)["preview_revision"])
+    store.executor.futures[-1].result(timeout=10)
+    assert snapshot(store, run_id)["summary"]["executed"] == 1
+    with store.factory() as db:
+        assert [
+            (p.model_number, p.specification, p.price)
+            for p in db.query(Product).order_by(Product.id)
+        ] == [
+            ("M-1", "C", Decimal("30.00")),
+            ("M-2", "B", Decimal("20.00")),
+        ]
 
 
 def assert_unwritten(store, run_id, *, status="preview_ready"):

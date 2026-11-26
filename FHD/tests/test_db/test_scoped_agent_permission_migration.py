@@ -17,8 +17,8 @@ CODES = {
 }
 
 
-def _migration():
-    path = Path(__file__).resolve().parents[2] / "alembic/versions/2026_11_11_agent_permissions.py"
+def _migration(filename="2026_11_11_agent_permissions.py"):
+    path = Path(__file__).resolve().parents[2] / "alembic/versions" / filename
     spec = spec_from_file_location("scoped_agent_permission_migration", path)
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -121,6 +121,51 @@ def test_revision_and_grant_scope_are_frozen():
     assert module.down_revision == "2026_11_07_read_tool_permissions"
     assert {code for code, _, _ in module.PERMISSIONS} == CODES
     assert len(module.PERMISSIONS) == 7
+
+
+def test_excel_export_is_seeded_only_for_the_default_user_role():
+    from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES
+
+    code = "tool.excel_analysis.export"
+    assert sum(permission["code"] == code for permission in DEFAULT_PERMISSIONS) == 1
+    assert {role["name"] for role in DEFAULT_ROLES if code in role["permissions"]} == {"user"}
+
+
+@pytest.mark.parametrize("system_user", [True, False])
+@pytest.mark.parametrize("existing_permission", [True, False])
+def test_excel_export_migration_adds_only_the_default_user_grant(
+    monkeypatch, system_user, existing_permission
+):
+    module = _migration("2026_11_24_excel_export_permission.py")
+    assert module.down_revision == "2026_11_21_enterprise_cognition"
+    engine = sa.create_engine("sqlite://")
+    code = "tool.excel_analysis.export"
+    with engine.begin() as connection:
+        _schema(connection)
+        connection.execute(
+            sa.text(
+                "INSERT INTO roles VALUES (1, 'user', :system), (2, 'viewer', TRUE), "
+                "(3, 'operator', TRUE), (4, 'custom', FALSE), (5, 'admin', TRUE)"
+            ),
+            {"system": system_user},
+        )
+        if existing_permission:
+            connection.execute(
+                sa.text("INSERT INTO permissions VALUES (1, 'Existing title', :code, 'custom', 'keep')"),
+                {"code": code},
+            )
+            connection.execute(sa.text("INSERT INTO role_permissions VALUES (4, 1)"))
+        before = _grants(connection)
+        monkeypatch.setattr(module.op, "get_bind", lambda: connection)
+        module.upgrade()
+        module.upgrade()
+        assert _grants(connection) == before | ({("user", code)} if system_user else set())
+        assert connection.execute(sa.text("SELECT code FROM permissions")).scalar_one() == code
+        if existing_permission:
+            assert connection.execute(
+                sa.text("SELECT name, module, description FROM permissions")
+            ).one() == ("Existing title", "custom", "keep")
+    engine.dispose()
 
 
 def test_partial_grant_failure_rolls_back_the_transaction(tmp_path, monkeypatch):

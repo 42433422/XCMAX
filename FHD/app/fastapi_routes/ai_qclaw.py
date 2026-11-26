@@ -1,0 +1,226 @@
+"""Qclaw 兼容路由（已升级为 AIOPEN，URL 契约保持不变）。
+
+Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出；现 Qclaw
+龙虾生态已升级为 AIOPEN 开放平台（:mod:`app.fastapi_routes.ai_open`），本模块
+仅保留旧 URL 兼容：
+
+- ``GET /api/ai/qclaw/routes`` / ``GET /api/ai/qclaw/panel``
+- ``POST /api/ai/qclaw/wechat-gateway``
+- ``POST /api/ai/qclaw/openclaw/config``
+- ``POST /api/ai/qclaw/whitelist``
+- ``POST /api/ai/qclaw/test-route``
+- ``POST /api/ai/qclaw/openclaw/chat``（迁移期间仅返回停用状态，不执行外发）
+
+运行时状态 SSOT 已迁至 :data:`app.application.aiopen.service.AIOPEN_STATE`；
+``_QCLOW_RUNTIME_STATE`` 保留为其别名，旧 batch2（wechat 相关）导入不受影响。
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Body, Depends, Header, Request
+from fastapi.responses import JSONResponse
+from starlette.testclient import TestClient
+
+from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+from app.application.aiopen.service import AIOPEN_STATE, verify_api_key
+from app.fastapi_routes.aiopen_route_support import retired_openclaw_chat_response
+from app.infrastructure.auth.dependencies import require_admin_user
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["ai-qclaw"])
+
+# 兼容别名：旧代码 `from app.fastapi_routes.ai_qclaw import _QCLOW_RUNTIME_STATE`
+_QCLOW_RUNTIME_STATE: dict[str, Any] = AIOPEN_STATE
+
+
+def _trace_qclaw_control_result(
+    payload: dict[str, Any],
+    *,
+    route: str,
+    action: str,
+    body: dict[str, Any] | None = None,
+    channel: str = "qclaw_control",
+    intent: str = "qclaw_control_update",
+    user_id: str = "",
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        message = str(payload.get("message") or action)
+        run = create_chat_trace_run(
+            {
+                "success": bool(payload.get("success", False)),
+                "response": message,
+                "data": {"text": message, "control_result": dict(payload)},
+            },
+            message=f"Qclaw {action}",
+            runtime_context={
+                "route": route,
+                "source": "qclaw",
+                "action": action,
+                "request": dict(body or {}),
+            },
+            user_id=user_id or "qclaw-control",
+            source="qclaw",
+            channel=channel,
+            intent=intent,
+        )
+        traced = dict(payload)
+        traced["run_id"] = run.run_id
+        traced["agent_run_id"] = run.run_id
+        return traced
+    except RECOVERABLE_ERRORS:
+        logger.exception("failed to attach AgentRun trace to Qclaw control action")
+        return payload
+
+
+@router.get("/api/ai/qclaw/routes")
+def ai_qclaw_routes():
+    return {
+        "success": True,
+        "source": "qclaw",
+        "permissions": {
+            "normal_routes": [
+                "/api/ai/unified_chat",
+                "/api/tools/execute",
+                "/api/products/*",
+                "/api/customers/*",
+                "/api/materials/*",
+            ],
+            "pro_routes": [
+                "/api/ai/chat",
+                "/api/ai/chat/stream",
+                "/api/wechat/*",
+                "/api/wechat_contacts/*",
+                "/api/shipment/*",
+                "/api/print/*",
+            ],
+        },
+        "note": "Qclaw/AIOPEN 来源允许同时访问普通版与专业版主链路。",
+    }
+
+
+@router.get("/api/ai/qclaw/panel")
+def ai_qclaw_panel(_admin: Any = Depends(require_admin_user)):
+    whitelist = _QCLOW_RUNTIME_STATE.get("whitelist", {})
+    routes = [{"path": path, "enabled": bool(enabled)} for path, enabled in whitelist.items()]
+    return {
+        "success": True,
+        "wechat_open": bool(_QCLOW_RUNTIME_STATE.get("wechat_open", False)),
+        "openclaw_base": str(_QCLOW_RUNTIME_STATE.get("openclaw_base", "http://127.0.0.1:28789")),
+        "routes": routes,
+    }
+
+
+@router.post("/api/ai/qclaw/wechat-gateway")
+def ai_qclaw_wechat_gateway(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
+    enabled = bool(body.get("enabled", False))
+    _QCLOW_RUNTIME_STATE["wechat_open"] = enabled
+    return _trace_qclaw_control_result(
+        {"success": True, "wechat_open": enabled},
+        route="/api/ai/qclaw/wechat-gateway",
+        action="wechat_gateway_update",
+        body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
+    )
+
+
+@router.post("/api/ai/qclaw/openclaw/config")
+def ai_qclaw_openclaw_config(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
+    base_url = str(body.get("base_url") or "").strip().rstrip("/")
+    if not base_url:
+        return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
+    _QCLOW_RUNTIME_STATE["openclaw_base"] = base_url
+    return _trace_qclaw_control_result(
+        {"success": True, "openclaw_base": base_url},
+        route="/api/ai/qclaw/openclaw/config",
+        action="openclaw_config_update",
+        body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
+    )
+
+
+@router.post("/api/ai/qclaw/whitelist")
+def ai_qclaw_whitelist(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
+    path = str(body.get("path") or "").strip()
+    enabled = bool(body.get("enabled", False))
+    if not path:
+        return JSONResponse({"success": False, "message": "path 不能为空"}, status_code=400)
+    whitelist = _QCLOW_RUNTIME_STATE.setdefault("whitelist", {})
+    whitelist[path] = enabled
+    return _trace_qclaw_control_result(
+        {"success": True, "path": path, "enabled": enabled},
+        route="/api/ai/qclaw/whitelist",
+        action="whitelist_update",
+        body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
+    )
+
+
+@router.post("/api/ai/qclaw/test-route")
+def ai_qclaw_test_route(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
+    path = str(body.get("path") or "").strip()
+    method = str(body.get("method") or "GET").upper()
+    if not path:
+        return JSONResponse({"success": False, "message": "path 不能为空"}, status_code=400)
+    whitelist = _QCLOW_RUNTIME_STATE.get("whitelist", {})
+    if not bool(whitelist.get(path, False)):
+        return JSONResponse({"success": False, "message": "该路由未在白名单启用"}, status_code=403)
+    try:
+        client = TestClient(request.app)
+        if method == "POST":
+            resp = client.post(path, json={"source": "qclaw", "message": "smoke"})
+        else:
+            resp = client.get(path)
+        ok = resp.status_code < 500
+        return _trace_qclaw_control_result(
+            {
+                "success": True,
+                "path": path,
+                "method": method,
+                "status_code": resp.status_code,
+                "result": "ok" if ok else "error",
+            },
+            route="/api/ai/qclaw/test-route",
+            action="test_route_smoke",
+            body=body,
+            user_id=str(getattr(_admin, "id", "") or ""),
+            channel="qclaw_route_smoke",
+            intent="qclaw_route_smoke",
+        )
+    except RECOVERABLE_ERRORS:
+        return JSONResponse(
+            {"success": False, "path": path, "method": method, "message": "请求执行失败"},
+            status_code=500,
+        )
+
+
+@router.post("/api/ai/qclaw/openclaw/chat")
+def ai_qclaw_openclaw_chat(
+    body: dict = Body(default_factory=dict),
+    x_aiopen_key: Annotated[str | None, Header(alias="X-AIOPEN-Key")] = None,
+):
+    if not verify_api_key(x_aiopen_key):
+        return JSONResponse({"success": False, "code": "AIOPEN_KEY_INVALID"}, status_code=401)
+    message = str(body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
+    return retired_openclaw_chat_response()

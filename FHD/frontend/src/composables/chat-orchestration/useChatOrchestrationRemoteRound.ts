@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
-import { extractAgentRunId, type useAgentRunEventSync } from '../useAgentRunEvents'
+import { chatPayloadFromRun, extractAgentRunId, waitForAgentRunTerminal, type useAgentRunEventSync } from '../useAgentRunEvents'
+import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
@@ -25,7 +26,7 @@ import { asPlannerPayload, errorMessage, requiresTurnReconciliation, plannerExec
 import { classifyRawError } from '@/utils/networkStability'
 import { activeChatTurnMessage, droppedRoundFromHistory, readActiveChatTurn, readDroppedRoundOutcome, type ActiveChatTurn } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
-import type { UiChatMessageExtras } from '@/types/chat-ui'
+import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { captureAuthSession, probeEnterpriseSession } from '@/utils/authSessionCache'
 import { noteModelPath } from '@/components/sidebar/modelPathHealth'
@@ -33,7 +34,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
+import { isRuntimeQueued, isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload, runtimeExecutionState } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -244,6 +245,52 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
     }
     const primaryText = remoteMessages[0] || ''
+    /**
+     * Follow one durable queued run and publish its terminal reply once.
+     * Reads persisted events only: a dropped or refreshed observer never
+     * re-submits the turn or creates a second run.
+     */
+    const followQueuedRun = async (
+      runId: string,
+      target?: UiChatMessage,
+    ): Promise<void> => {
+      if (!runId) return
+      const run = await waitForAgentRunTerminal(runId, () => round.isActive())
+      if (!round.isActive()) return
+      await syncAgentRunFromPayload(
+        { run_id: runId, agent_run_id: runId },
+        primaryText,
+        () => round.isActive(),
+      ).catch(() => undefined)
+      if (!round.isActive() || !run) return
+      const payload = chatPayloadFromRun(run)
+      if (!payload) return
+      const typed = asPlannerPayload(payload)
+      const text = String(typed.response || typed.message || '').trim()
+      if (!text) return
+      const extras = responseExtras(typed, typed.success === false)
+      let index = target ? messages.value.indexOf(target) : -1
+      if (index < 0) {
+        for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+          if (messages.value[i]?.role === 'ai' && messages.value[i]?.turnId === requestScope.turnId) {
+            index = i
+            break
+          }
+        }
+      }
+      // A replayed stream may hand back the same terminal state; publish once.
+      if (index >= 0 && messages.value[index]?.workflowAction === 'completed') return
+      if (index >= 0) {
+        applyPlainTextToMessageIndex(index, text, extras)
+        delete messages.value[index]?.streamingShell
+      } else {
+        await addRoundMessage(text, extras)
+      }
+      attachAgentRunTraceToLastAiMessage(runId)
+      attachBusinessResultToLastAiMessage(typed)
+      attachApprovalCardToLastAiMessage(typed)
+      await saveMessage('ai', text, requestScope.sessionId, extras)
+    }
     const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
     const aiModBrief = !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
 
@@ -497,6 +544,21 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         const donePayload = asPlannerPayload(doneResult)
         round.setStatus(conversationStatus(donePayload))
         consumeRoute(donePayload.route_metadata)
+        if (isRuntimeQueued(donePayload)) {
+          if (canUpdateStream() && streamMessage) {
+            const extras = responseExtras(donePayload, false, streamMessages.value)
+            applyStreamText(String(donePayload.response || '任务已受理，正在等待后台执行。'), extras)
+            streamMessage.workflowAction = 'queued'
+            delete streamMessage.streamingShell
+          }
+          const queuedRunId = extractAgentRunId(donePayload)
+          if (queuedRunId) {
+            syncTaskFromChatResponse(donePayload, primaryText)
+            syncStreamRun(donePayload, true)
+            void followQueuedRun(queuedRunId, streamMessage || undefined)
+          }
+          return
+        }
         const activeTurn = readActiveChatTurn(donePayload)
         if (activeTurn) {
           if (canUpdateStream() && streamMessage) {
@@ -897,6 +959,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       attachBusinessResultToLastAiMessage(part)
       const activeTurn = readActiveChatTurn(part)
       if (activeTurn) deps.observeActiveTurn?.(activeTurn)
+      if (isRuntimeQueued(part)) {
+        const queuedRunId = extractAgentRunId(part)
+        if (queuedRunId) void followQueuedRun(queuedRunId)
+      }
     }
     if (data.batch && Array.isArray(data.results)) {
       if (data.success || results.some(isUnfinishedResponse) || results.some(part => runtimeContinuationFromPayload(part))) {

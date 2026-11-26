@@ -43,7 +43,7 @@ def _scripted_model_response(task: dict, prompt: dict) -> dict | None:
     return result
 
 
-def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
+def xiaox_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
     """Real SQL admission, MCP, approval and reviewer; scripted external model I/O.
 
     This is explicitly a local fixture, not a real-model qualification or score.
@@ -65,14 +65,14 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
     from app.application.agent_runtime import gateway
     from app.application.ai_chat import dialogue_memory
     from app.fastapi_routes.domains.agent.agent_routes import router
-    from app.infrastructure.codex.binding import CodexBindingStore
-    from app.infrastructure.codex.local_server import LocalRuntimeServer
-    from app.infrastructure.codex.policy import ModelRoute, RuntimeSettings
-    from app.infrastructure.codex.receipt_projection import (
-        refresh_codex_receipts,
-        resume_ready_codex_runs,
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
+    from app.infrastructure.xiaox.local_server import LocalRuntimeServer
+    from app.infrastructure.xiaox.policy import ModelRoute, RuntimeSettings
+    from app.infrastructure.xiaox.receipt_projection import (
+        refresh_xiaox_receipts,
+        resume_ready_xiaox_runs,
     )
-    from tests.fixtures.codex_qualification import synthetic_qualification
+    from tests.fixtures.xiaox_qualification import synthetic_qualification
 
     repository = SQLAlchemyAgentRunRepository(session_factory=host_db.HostSessionLocal)
     stack.enter_context(
@@ -156,7 +156,7 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
     class Server(LocalRuntimeServer):
         def __init__(self, app):
             state.servers.append(app)
-            app.state.codex_http_client_factory = lambda **kwargs: httpx.AsyncClient(
+            app.state.xiaox_http_client_factory = lambda **kwargs: httpx.AsyncClient(
                 transport=httpx.MockTransport(upstream), **kwargs
             )
             super().__init__(app)
@@ -180,9 +180,9 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
         async def interrupt(self):
             return None
 
-        async def stream_turn(self, text):
+        async def stream_turn(self, text, *, goal_feedback=None, output_schema=None):
             state.inputs.append(text)
-            bridge = state.servers[-1].state.codex_tool_bridge
+            bridge = state.servers[-1].state.xiaox_tool_bridge
             for action in task.get("runtime_actions", []):
                 described = bridge.invoke(
                     self.config.mcp_token,
@@ -224,7 +224,7 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
                 }
 
     stack.enter_context(patch.object(gateway, "LocalRuntimeServer", Server))
-    stack.enter_context(patch("app.infrastructure.codex.CodexTransport", Transport))
+    stack.enter_context(patch("app.infrastructure.xiaox.XiaoxTransport", Transport))
     app = FastAPI()
     app.include_router(router)
     state.client = stack.enter_context(TestClient(app, headers=client.headers))
@@ -256,7 +256,7 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
         return drain(result["run_id"])
 
     def approve(parent):
-        store = CodexBindingStore(repository)
+        store = XiaoxBindingStore(repository)
         for row in store.receipt_snapshot(parent.run_id):
             child_id = row["child_run_id"]
             child = repository.get(child_id)
@@ -270,9 +270,9 @@ def codex_eval_runtime(stack: ExitStack, root: Path, client, task: dict):
             )
             assert approved.status_code == 202, approved.text
             drain(child_id)
-        if resume_ready_codex_runs(repository=repository):
+        if resume_ready_xiaox_runs(repository=repository):
             drain(parent.run_id)
-        return refresh_codex_receipts(repository.get(parent.run_id), repository=repository)
+        return refresh_xiaox_receipts(repository.get(parent.run_id), repository=repository)
 
     state.start, state.approve = start, approve
     return state
@@ -346,7 +346,7 @@ def run_owned_attachment_task(task):
         stack.enter_context(
             patch("app.application.elt.service_uploads.get_app_data_dir", return_value=root)
         )
-        runtime = codex_eval_runtime(stack, Path(root), client, task)
+        runtime = xiaox_eval_runtime(stack, Path(root), client, task)
         if kind == "image":
             stack.enter_context(
                 patch(
@@ -448,15 +448,15 @@ def run_owned_attachment_task(task):
         )
         _check_equal(checks, "initial_status", initial, expected["initial_status"])
         _check_equal(checks, "final_status", run.status, expected["final_status"])
-        from app.infrastructure.codex.binding import CodexBindingStore
+        from app.infrastructure.xiaox.binding import XiaoxBindingStore
 
         children = [
             runtime.repository.get(row["child_run_id"])
-            for row in CodexBindingStore(runtime.repository).receipt_snapshot(run.run_id)
+            for row in XiaoxBindingStore(runtime.repository).receipt_snapshot(run.run_id)
         ]
         calls = [call for child in children for call in child.tool_calls]
         events = [*run.events, *(event for child in children for event in child.events)]
-        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "codex")
+        _check_equal(checks, "runtime", run.metadata.get("runtime_type"), "xiaox")
         _check_equal(checks, "no_retired_plan", "runtime_frozen_plan" in run.metadata, False)
         _check_tool_calls(checks, calls, expected.get("tool_calls", []))
         _check_event_types(checks, events, expected["event_types"])

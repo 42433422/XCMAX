@@ -20,6 +20,7 @@ Exit codes: 0 PR created; 2 owner confirmation missing; 3 too large; 4 no label/
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -134,9 +135,19 @@ class DispatchClient:
         route = "github-pr-tasks" if "pull_request" in body else "tasks"
         return self._task(self._call("POST", f"/api/service/mac-control/{route}", body))
 
+    def find_issue(self, repo: str, number: int, base: str) -> dict | None:
+        query = urllib.parse.urlencode({"repository": repo, "base_branch": base})
+        response = self._call("GET", f"/api/service/mac-control/issues/{number}/task?{query}")
+        if response.get("success") is not True or "task" not in response:
+            raise ValueError("invalid issue lookup receipt")
+        return None if response["task"] is None else self._task(response)
+
     def get(self, task_id: str) -> dict:
         path = "/api/service/mac-control/tasks/" + urllib.parse.quote(task_id, safe="")
-        return self._task(self._call("GET", path))
+        task = self._task(self._call("GET", path))
+        if task.get("id") != task_id:
+            raise ValueError("dispatch task identity mismatch")
+        return task
 
     def publication(self, task_id: str) -> dict:
         request = str(uuid.UUID(task_id))
@@ -151,7 +162,12 @@ class DispatchClient:
 
 
 def build_message(
-    issue_number: int, issue: dict[str, Any], base_branch: str, *, cloud: bool = False
+    issue_number: int,
+    issue: dict[str, Any],
+    base_branch: str,
+    *,
+    cloud: bool = False,
+    repo: str = "42433422/XCMAX",
 ) -> str:
     title = str(issue.get("title") or "")
     body = str(issue.get("body") or "")[:8000]
@@ -167,7 +183,7 @@ def build_message(
         else "完成后回报 JSON：branch 为已推送分支，pushed 为 true，commit_sha 为该提交的完整 40 位 SHA。\n"
     )
     return (
-        f"修复 GitHub issue #{issue_number}（42433422/XCMAX）：{title}\n\n"
+        f"修复 GitHub issue #{issue_number}（{repo}）：{title}\n\n"
         f"基线分支：{base_branch}。只做 issue 要求的最小改动，{handoff}"
         f"真实改动最多 {impl.MAX_CHANGED_FILES} 个文件（含测试、配置和生成物），超过时停止并说明拆分方案；"
         f"提交信息里写 `Refs #{issue_number}`。不要合并、不要发布、不要改 CI 密钥。\n"
@@ -336,6 +352,52 @@ def _validated_resume(
     raise ValueError("恢复任务未匹配此 Issue、目标分支的可信工作流回执，拒绝重新派单")
 
 
+def _issue_request_key(repo: str, number: int) -> str:
+    # Branch, tool, event and run ID must not create another task for one issue.
+    return f"gh-issue-{number}-v2-{hashlib.sha256(repo.lower().encode()).hexdigest()}"
+
+
+def _ordinary_task(client: DispatchClient, args, comments: list[dict[str, Any]]) -> str:
+    """Reconcile durable service identity with all trusted workflow receipts."""
+    receipted: set[str] = set()
+    for comment in comments:
+        user = comment.get("user") or {}
+        if user.get("login") != "github-actions[bot]" or user.get("type") != "Bot":
+            continue
+        for raw in re.findall(
+            re.escape(RECEIPT_MARKER) + r"(\{[^\n]+\}) -->",
+            str(comment.get("body") or ""),
+        ):
+            try:
+                identity = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(identity, dict) or identity.get("source_sha"):
+                continue
+            if (
+                str(identity.get("repo", "")).lower() != args.repo.lower()
+                or identity.get("issue_number") != int(args.issue_number)
+            ):
+                continue
+            task_id = identity.get("control_task_id")
+            if not task_id:
+                continue
+            if not isinstance(task_id, str) or identity.get("base_branch") != args.base_branch:
+                raise ValueError("ordinary issue receipt scope conflicts")
+            receipted.add(task_id)
+    if len(receipted) > 1:
+        raise ValueError("multiple prior control tasks; independent reconciliation required")
+    task = client.find_issue(args.repo, int(args.issue_number), args.base_branch)
+    if task is None:
+        if receipted:
+            raise ValueError("prior control task absent from authoritative lookup")
+        return ""
+    task_id = task.get("id")
+    if not isinstance(task_id, str) or not task_id or (receipted and task_id not in receipted):
+        raise ValueError("authoritative control task differs from workflow receipt")
+    return task_id
+
+
 def _checked_diff(repo: str, base: str, head: str, token: str) -> int:
     """Count the real remote diff, including generated files; never trust an estimate."""
     base_sha = _branch_head(repo, base, token)
@@ -354,12 +416,14 @@ def _checked_diff(repo: str, base: str, head: str, token: str) -> int:
 
 def _existing_pr(repo: str, branch: str, base: str, token: str) -> dict:
     query = urllib.parse.urlencode(
-        {"state": "open", "head": f"{repo.split('/', maxsplit=1)[0]}:{branch}", "base": base}
+        {"state": "all", "head": f"{repo.split('/', maxsplit=1)[0]}:{branch}", "base": base}
     )
     pulls = impl._gh_get(f"https://api.github.com/repos/{repo}/pulls?{query}", token)
     if not isinstance(pulls, list):
         raise ValueError("无法核验已有 PR，拒绝重复创建")
-    return next((pr for pr in pulls if isinstance(pr, dict)), {})
+    if len(pulls) > 1 or any(not isinstance(pr, dict) for pr in pulls):
+        raise ValueError("已有 PR 身份不唯一，拒绝重复创建")
+    return pulls[0] if pulls else {}
 
 
 def _branch_head(repo: str, branch: str, token: str) -> str:
@@ -589,18 +653,20 @@ def run(args: argparse.Namespace) -> None:
         comments = impl._fetch_issue_comments(repo, number, args.token)
         page = 2
         batch = comments
-        while getattr(args, "control_task_id", "") and len(batch) == 100:
+        if not isinstance(batch, list) or any(not isinstance(c, dict) for c in batch):
+            raise ValueError("invalid comment page")
+        while len(batch) == 100:
             page_data: Any = impl._gh_get(
                 f"https://api.github.com/repos/{repo}/issues/{number}/comments?per_page=100&page={page}",
                 args.token,
             )
-            if not isinstance(page_data, list):
+            if not isinstance(page_data, list) or any(not isinstance(c, dict) for c in page_data):
                 raise ValueError("invalid comment page")
             batch = page_data
             comments.extend(batch)
             page += 1
     except (OSError, ValueError):
-        comments = []
+        finish("invalid_resume", "无法完整读取工单回执，拒绝派单", 6)
     authorized, auth_reason, _source = impl._is_authorized(issue, comments, repo)
     if not authorized:
         finish("waiting_confirmation", auth_reason, 2)
@@ -665,6 +731,28 @@ def run(args: argparse.Namespace) -> None:
         result.control_task_id = result.control_task_id or requested_task
     except ValueError as exc:
         finish("invalid_resume", str(exc), 6)
+    token = os.environ.get("MODSTORE_PARA_DISPATCH_TOKEN", "").strip()
+    if not token:
+        finish("para_unavailable", "MODSTORE_PARA_DISPATCH_TOKEN 未配置", 5)
+    client = DispatchClient(args.dispatch_base, token)
+    # Original PR repair remains bound to its exact failing SHA/run/attempt.
+    result.request_key = (
+        f"gh-issue-{number}-ci-{target.run_id}-attempt-{target.run_attempt}-{target.old_sha}"
+        if target
+        else _issue_request_key(repo, number)
+    )
+    if not target:
+        try:
+            prior_task = _ordinary_task(client, args, comments)
+            if result.control_task_id and prior_task != result.control_task_id:
+                raise ValueError("explicit resume differs from authoritative control task")
+            result.control_task_id = prior_task
+        except (OSError, ValueError, KeyError) as exc:
+            finish(
+                "invalid_resume",
+                f"普通工单派发身份未确认：{type(exc).__name__}；请核对原控制任务",
+                6,
+            )
     estimate = impl._estimate_files(str(issue.get("title") or ""), str(issue.get("body") or ""))
     if estimate > impl.MAX_CHANGED_FILES and not result.control_task_id:
         finish(
@@ -672,18 +760,6 @@ def run(args: argparse.Namespace) -> None:
             f"预估变更 {estimate} 文件，超过 {impl.MAX_CHANGED_FILES} 文件限制；请拆分需求",
             3,
         )
-
-    token = os.environ.get("MODSTORE_PARA_DISPATCH_TOKEN", "").strip()
-    if not token:
-        finish("para_unavailable", "MODSTORE_PARA_DISPATCH_TOKEN 未配置", 5)
-    client = DispatchClient(args.dispatch_base, token)
-    run_id = os.environ.get("GITHUB_RUN_ID", "local")
-    # Rerunning the same workflow must recover the same idempotent dispatch.
-    result.request_key = (
-        f"gh-issue-{number}-ci-{target.run_id}-attempt-{target.run_attempt}-{target.old_sha}"
-        if target
-        else f"gh-issue-{number}-run-{run_id}"
-    )
     if not result.control_task_id:
         result.status = "dispatching"
         _write_report(result)
@@ -692,7 +768,7 @@ def run(args: argparse.Namespace) -> None:
                 {
                     "request_key": result.request_key,
                     "message": build_message(
-                        number, issue, args.base_branch, cloud=target is not None
+                        number, issue, args.base_branch, cloud=target is not None, repo=repo
                     ),
                     **(
                         {
@@ -702,7 +778,11 @@ def run(args: argparse.Namespace) -> None:
                             "pull_request": target.number,
                         }
                         if target
-                        else {"tool": args.tool}
+                        else {
+                            "tool": args.tool,
+                            "repository": repo,
+                            "base_branch": args.base_branch,
+                        }
                     ),
                     "github_issue": number,
                 }
@@ -714,13 +794,13 @@ def run(args: argparse.Namespace) -> None:
             reason = (
                 "原请求内容已变化（HTTP 409），请核对原控制任务；不能重新派单"
                 if exc.code == 409
-                else f"派单未确认（HTTP {exc.code}）；请重跑同一次工作流，勿新建派单"
+                else f"派单未确认（HTTP {exc.code}）；请使用原工单恢复，勿新建派单"
             )
             finish("para_unavailable", reason, 5)
         except (OSError, ValueError, KeyError) as exc:
             finish(
                 "para_unavailable",
-                f"派单未确认：{type(exc).__name__}；请重跑同一次工作流，勿新建派单",
+                f"派单未确认：{type(exc).__name__}；请使用原工单恢复，勿新建派单",
                 5,
             )
     result.status = "dispatched"

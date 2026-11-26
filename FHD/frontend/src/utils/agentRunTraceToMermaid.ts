@@ -1,7 +1,7 @@
 /**
  * 把 AgentRunTraceData 转成 mermaid flowchart 源码字符串。
  *
- * 用于在 AgentRunTrace 组件中渲染计划图（Codex 风格的可视化增强）。
+ * 用于在 AgentRunTrace 组件中渲染计划图（Xiaox 风格的可视化增强）。
  * 节点形状：
  * - planner  → 圆角矩形 `([文本])`（stadium）
  * - tool      → 子流程图 `[[文本]]`（subroutine）

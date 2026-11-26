@@ -208,8 +208,8 @@ def test_dynamic_children_share_the_original_sql_parent_and_real_worker_generati
         SQLAlchemyTaskExecutionRepository,
     )
     from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
-    from app.infrastructure.codex.binding import CodexBindingStore
-    from app.infrastructure.codex.tools import CodexToolBridge
+    from app.infrastructure.xiaox.binding import XiaoxBindingStore
+    from app.infrastructure.xiaox.tools import XiaoxToolBridge
 
     tool, _context, log, actor = browser
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
@@ -217,13 +217,13 @@ def test_dynamic_children_share_the_original_sql_parent_and_real_worker_generati
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     set_agent_run_repository_for_tests(repository)
     parent = AgentRun(str(actor.user_id), "Click the observed save button once", status="running")
-    parent.metadata.update(runtime_type="codex", runtime_context=actor.context)
+    parent.metadata.update(runtime_type="xiaox", runtime_context=actor.context)
     contract = build_goal_contract(parent)
     parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
     repository.save(parent)
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     grant = store.create(parent.run_id)
-    bridge = CodexToolBridge(store, AgentOrchestrator(repository=repository))
+    bridge = XiaoxToolBridge(store, AgentOrchestrator(repository=repository))
 
     def invoke(action, params, identity):
         spec = bridge.invoke(

@@ -1,0 +1,57 @@
+{
+  "domain": "08",
+  "title": "桌面壳与更新恢复",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "652e4685bcc783314ee3dcb93e3dc013c6749e37",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "Electron 壳真实启动 → 后端生命周期 → 安装包升级 → 失败回退",
+    "executed": false,
+    "reason": "环境/凭证缺失，未执行真实任务；按协议保持 UNRATED、score=null"
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [],
+  "evidence_ids": [],
+  "observed_results": [],
+  "assertions": [],
+  "assertions_passed": 0,
+  "assertions_total": 0,
+  "unknowns": [
+    "需要 GUI 会话与 electron-builder 打包产物（electron-builder.yml + 签名安装包）；本环境无显示器/签名证书，无法执行真实安装与回退",
+    "未执行打包、安装、签名校验与回退流程"
+  ],
+  "axis_levels": null,
+  "domain_status": "UNRATED",
+  "level": "UNRATED",
+  "score": null,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:05:09.888656+00:00",
+  "probe_facts": {
+    "desktop_dist_compiled": true,
+    "electron_dependency_present": true,
+    "pack_script": "electron-builder --config electron-builder.yml",
+    "node": "/Users/a4243342/.local/bin/node"
+  },
+  "blocked_reasons": [
+    "需要 GUI 会话与 electron-builder 打包产物（electron-builder.yml + 签名安装包）；本环境无显示器/签名证书，无法执行真实安装与回退"
+  ]
+}

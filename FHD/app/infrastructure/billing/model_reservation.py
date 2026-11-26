@@ -31,7 +31,7 @@ def reserve_model_usage(
         provider=provider_id,
         model=model,
         cost_units=reserved,
-        source="codex.model_gateway",
+        source="xiaox.model_gateway",
         metadata={"reservation_units": reserved, "usage_status": "reserved"},
     )
     if entry.get("billing_status") not in {"debited", "metered", "unmetered"}:
@@ -210,7 +210,7 @@ def record_platform_model_usage(
         "cost_units": cost,
         "billing_status": "metered" if cost else "unmetered",
         "billing_source": "platform_xcagi",
-        "source": "codex.model_gateway",
+        "source": "xiaox.model_gateway",
         "metadata": {"platform_receipt": receipt, "usage_status": "settled"},
         "wallet_backend": "audit",
         "created_at": ledger._utc_iso(),

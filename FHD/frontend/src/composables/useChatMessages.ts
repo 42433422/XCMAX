@@ -312,7 +312,11 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       if (!raw) return getDefaultWelcome()
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
-      const sanitized = sanitizeMessagesList(parsed)
+      const withoutLegacyNotices = parsed.filter(message => !isLegacyLocalStopNotice(asRecord(message)))
+      if (withoutLegacyNotices.length !== parsed.length) {
+        try { localStorage.setItem(key, JSON.stringify(withoutLegacyNotices)) } catch { /* 仍使用清理后的内存副本 */ }
+      }
+      const sanitized = sanitizeMessagesList(withoutLegacyNotices)
       for (const message of sanitized) {
         if (message.streamingShell) {
           delete message.streamingShell
@@ -561,10 +565,17 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     }
   }
 
+  function isLegacyLocalStopNotice(row: Record<string, unknown>): boolean {
+    const persistence = asRecord(row.persistence)
+    return row.role === 'ai' && row.serverMessageId == null && persistence.status === 'local' && !persistence.request
+      && row.content === '已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。'
+  }
+
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
     return (Array.isArray(rawList) ? rawList : [])
       .map((msg: unknown) => {
         const row = asRecord(msg)
+        if (isLegacyLocalStopNotice(row)) return null
         const roleRaw = asString(row.role)
         const role = roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai'
         const content = role === 'ai' ? stripModelToolProtocol(row.content) : asString(row.content)
@@ -735,7 +746,8 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const mapped = fromServerRows(serverMessages, dataRow.durable)
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
-      const localList = messages.value
+      const currentList = messages.value
+      const localList = currentList.filter(message => !isLegacyLocalStopNotice(asRecord(message)))
       const firstServerId = Number(asRecord(serverMessages[0]).id)
       // Only an overlapping window proves the loaded pages still join the latest page.
       const joinedHistory = sameRevision && localList.some(message => message.serverMessageId === firstServerId
@@ -781,7 +793,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         has_more: messagesHaveEarlier.value, next_before_id: beforeMessageId,
       } : dataRow)
       const next = withoutRepeatedWelcomes([...older, ...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
-      const unchanged = next.length === localList.length && next.every((message, index) => message === localList[index])
+      const unchanged = next.length === currentList.length && next.every((message, index) => message === currentList[index])
       if (!unchanged) loadMessages(next)
       else persistMessagesCache()
       options.onConversation?.(dataRow)

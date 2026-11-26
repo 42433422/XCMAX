@@ -93,6 +93,7 @@ def issue(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(mod, "_checked_diff", lambda *a: 2)
     monkeypatch.setattr(mod, "_existing_pr", lambda *a: {})
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", lambda *a: None)
     return posts
 
 
@@ -111,6 +112,9 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     class Client:
         def __init__(self, base, token):
             pass
+
+        def find_issue(self, *_args):
+            return None
 
         def create(self, body):
             sent.update(body)
@@ -523,6 +527,9 @@ def test_failed_task_keeps_receipt_when_comments_fail(
         def __init__(self, base, token):
             pass
 
+        def find_issue(self, *_args):
+            return None
+
         def create(self, body):
             return {"id": "ctl1"}
 
@@ -566,7 +573,7 @@ def test_interruption_keeps_latest_task_identity(issue, monkeypatch, tmp_path):
         mod.run(_args())
     receipt = json.loads((tmp_path / "para_issue_dispatch_5.json").read_text())
     assert (receipt["control_task_id"], receipt["para_task_id"]) == ("ctl1", "p1")
-    assert receipt["request_key"].startswith("gh-issue-5-run-")
+    assert receipt["request_key"] == mod._issue_request_key("o/r", 5)
     assert receipt["final_state"] == "running"
     assert not receipt["ok"] and not receipt["finished_at"]
 
@@ -681,6 +688,7 @@ def test_resume_uses_trusted_receipt_without_dispatch_or_duplicate_pr(issue, mon
         "_fetch_issue_comments",
         lambda *a: [{"user": {"login": "github-actions[bot]", "type": "Bot"}, "body": body}],
     )
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", lambda *a: {"id": "ctl1"})
     monkeypatch.setattr(mod.DispatchClient, "create", lambda *a: pytest.fail("must resume"))
     monkeypatch.setattr(
         mod, "_existing_pr", lambda *a: {"number": 99, "html_url": "u", "head": {"sha": "d" * 40}}
@@ -776,18 +784,19 @@ def test_labels_api_list_response_keeps_success_receipt(issue, monkeypatch):
 
 def test_workflow_retry_keeps_same_idempotency_key(issue, monkeypatch):
     _completed(monkeypatch)
-    monkeypatch.setenv("GITHUB_RUN_ID", "123")
     keys = []
     monkeypatch.setattr(
         mod.DispatchClient,
         "create",
         lambda _, body: keys.append(body["request_key"]) or {"id": "ctl1"},
     )
-    for attempt in ("1", "2"):
-        monkeypatch.setenv("GITHUB_RUN_ATTEMPT", attempt)
+    for run_id in ("123", "456"):
+        monkeypatch.setenv("GITHUB_RUN_ID", run_id)
         with pytest.raises(SystemExit):
             mod.run(_args())
-    assert keys == ["gh-issue-5-run-123"] * 2
+    assert keys == [mod._issue_request_key("o/r", 5)] * 2
+    assert keys[0] != mod._issue_request_key("other/r", 5)
+    assert keys[0] != mod._issue_request_key("o/r", 6)
 
 
 def test_resume_finds_receipt_after_first_comment_page(issue, monkeypatch):
@@ -801,6 +810,7 @@ def test_resume_finds_receipt_after_first_comment_page(issue, monkeypatch):
     monkeypatch.setattr(
         mod.impl, "_gh_get", lambda url, token: [receipt] if "page=2" in url else pytest.fail(url)
     )
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", lambda *a: {"id": "ctl1"})
     monkeypatch.setattr(mod.DispatchClient, "create", lambda *a: pytest.fail("must resume"))
     with pytest.raises(SystemExit) as exc:
         mod.run(_args(control_task_id="ctl1"))
@@ -871,3 +881,88 @@ def test_completed_receipt_requires_well_formed_immutable_commit(
     assert report["status"] == "verification_failed" and report["finished_at"]
     assert "verification_failed" in issue[-1][1]["body"]
     assert not any(url.endswith("/pulls") for url, _ in issue)
+
+
+@pytest.mark.parametrize("lost_response", [False, True])
+def test_two_triggers_recover_one_control_task_without_github_comment(
+    issue, monkeypatch, lost_response
+):
+    _completed(monkeypatch)
+    accepted = []
+
+    def create(_client, body):
+        accepted.append(body["request_key"])
+        if lost_response:
+            raise OSError("accept response lost")
+        return {"id": "ctl1"}
+
+    monkeypatch.setattr(mod.DispatchClient, "create", create)
+    monkeypatch.setattr(
+        mod.DispatchClient, "find_issue", lambda *a: {"id": "ctl1"} if accepted else None
+    )
+    for index, run_id in enumerate(("100", "101")):
+        monkeypatch.setenv("GITHUB_RUN_ID", run_id)
+        if index and not lost_response:
+            monkeypatch.setattr(
+                mod, "_existing_pr",
+                lambda *a: {"number": 99, "html_url": "u", "head": {"sha": "d" * 40}},
+            )
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args())
+        assert exc.value.code == (5 if lost_response and index == 0 else 0)
+    assert accepted == [mod._issue_request_key("o/r", 5)]
+    assert len([url for url, _ in issue if url.endswith("/pulls")]) == 1
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_prior_receipts_without_matching_authority_block_create(issue, monkeypatch, count):
+    _completed(monkeypatch)
+    comments = []
+    for index in range(count):
+        mod._receipt(mod.DispatchResult(5, "o/r", "now", control_task_id=f"ctl{index}"), "gh")
+        comments.append({
+            "user": {"login": "github-actions[bot]", "type": "Bot"},
+            "body": issue.pop()[1]["body"],
+        })
+    monkeypatch.setattr(mod.impl, "_fetch_issue_comments", lambda *a: comments)
+    monkeypatch.setattr(mod.DispatchClient, "create", lambda *a: pytest.fail("must not dispatch"))
+    with pytest.raises(SystemExit) as exc:
+        mod.run(_args())
+    assert exc.value.code == 6
+
+
+def test_ordinary_lookup_error_never_falls_through_to_create(issue, monkeypatch):
+    _completed(monkeypatch)
+
+    def unavailable(*a):
+        raise OSError("private lookup failure")
+
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", unavailable)
+    monkeypatch.setattr(mod.DispatchClient, "create", lambda *a: pytest.fail("must not dispatch"))
+    with pytest.raises(SystemExit) as exc:
+        mod.run(_args())
+    assert exc.value.code == 6
+
+@pytest.mark.parametrize("http_status", [404, 405])
+def test_unupgraded_dispatch_service_blocks_without_run_id_retry(issue, monkeypatch, http_status):
+    import urllib.error
+
+    _completed(monkeypatch)
+
+    def obsolete_lookup(*_args):
+        raise urllib.error.HTTPError(
+            "https://example.invalid/api/service/mac-control/issues/5/task",
+            http_status,
+            "legacy server has no stable issue lookup",
+            {},
+            None,
+        )
+
+    monkeypatch.setattr(mod.DispatchClient, "find_issue", obsolete_lookup)
+    monkeypatch.setattr(
+        mod.DispatchClient, "create", lambda *a: pytest.fail("must not dispatch to old service")
+    )
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    with pytest.raises(SystemExit) as exc:
+        mod.run(_args())
+    assert exc.value.code == 6

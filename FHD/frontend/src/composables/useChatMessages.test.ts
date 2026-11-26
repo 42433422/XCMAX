@@ -1248,6 +1248,36 @@ it('restores only safe route receipts after server history, refresh and conversa
   expect(chatMessageExtrasFromServerRow({ role: 'user', metadata: { route_metadata: route } }).routeMetadata).toBeUndefined()
 })
 
+it('removes legacy local stop rows before history sync and keeps genuine chat messages', async () => {
+  localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
+  const chatApi = (await import('@/api/chat')).default
+  const key = 'chat_stop-history_'
+  const notice = '已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。'
+  localStorage.setItem(key, JSON.stringify([
+    { role: 'ai', content: notice, time: '12:00', persistence: { id: 'old-notice', status: 'local' } },
+    { role: 'ai', content: notice, time: '12:01', stopNotice: true, turnId: 'old', persistence: { id: 'tagged-notice', status: 'local' } },
+    { role: 'user', content: notice, time: '12:02', persistence: { id: 'server:10', status: 'saved' } },
+    { role: 'ai', content: notice, time: '12:03', persistence: { id: 'server:11', status: 'saved' } },
+  ]))
+  const chat = useChatMessages(ref('stop-history'))
+  expect(chat.messages.value.map(row => row.persistence?.id)).toEqual(['server:10', 'server:11'])
+  expect(JSON.parse(localStorage.getItem(key) || '[]').map((row: ChatMessage) => row.persistence?.id)).toEqual(['server:10', 'server:11'])
+
+  vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [
+    { id: 10, role: 'user', content: notice },
+    { id: 11, role: 'assistant', content: notice },
+    { id: 12, role: 'user', content: '只改第二天' },
+    { id: 13, role: 'assistant', content: '第二天改为颐和园' },
+  ] } as never)
+  chat.messages.value.push({ role: 'ai', content: notice, time: '12:04', persistence: { id: 'live-notice', status: 'local' } })
+  await chat.syncFromServer()
+  expect(chat.messages.value.at(-1)?.content).toBe('第二天改为颐和园')
+  resetChatMessageStores()
+  expect(useChatMessages(ref('stop-history')).messages.value.map(row => row.content)).toEqual([
+    notice, notice, '只改第二天', '第二天改为颐和园',
+  ])
+})
+
 it('does not replace current selected or failed local metadata with an older completed history receipt', async () => {
   localStorage.clear(); activeModIdRef.value = ''; setActivePinia(createPinia())
   const chatApi = (await import('@/api/chat')).default

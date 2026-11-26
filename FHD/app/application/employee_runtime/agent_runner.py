@@ -1,4 +1,4 @@
-"""Employee Codex delegation and shared single-call cognition helpers."""
+"""Employee Xiaox delegation and shared single-call cognition helpers."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from app.infrastructure.codex.policy import RuntimeSettings
+    from app.infrastructure.xiaox.policy import RuntimeSettings
 
 
 def _run_async(coro):
@@ -62,7 +62,7 @@ GateFn = Callable[[str, dict[str, Any]], dict[str, Any]]
 def _runtime_entry_error(code: str, message: str) -> dict[str, Any]:
     return {
         "handler": "agent",
-        "runtime": "codex",
+        "runtime": "xiaox",
         "ok": False,
         "error_code": code,
         "error": message,
@@ -76,7 +76,7 @@ def _runtime_entry_error(code: str, message: str) -> dict[str, Any]:
     }
 
 
-def _codex_employee_tool_scope(
+def _xiaox_employee_tool_scope(
     tools: list[dict[str, Any]],
     gate: GateFn | None,
 ) -> tuple[list[str], Callable[[str, str, dict[str, Any]], dict[str, Any]]]:
@@ -265,16 +265,16 @@ def run_employee_agent_loop(
     on_event: Callable[[dict[str, Any]], Any] | None = None,
     settings: RuntimeSettings | None = None,
 ) -> dict[str, Any]:
-    """Delegate the sole model/tool loop to Codex without a native fallback."""
+    """Delegate the sole model/tool loop to Xiaox without a native fallback."""
     from app.application.agent_runtime.gateway import run_runtime_task
 
     deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
-    if settings is not None and (settings.engine != "codex" or "employee" not in settings.surfaces):
+    if settings is not None and (settings.engine != "xiaox" or "employee" not in settings.surfaces):
         return _runtime_entry_error("runtime_configuration_invalid", "员工运行时配置无效")
     if gate is None:
         return _runtime_entry_error("gate_required", "员工工作空间和风险授权门尚未恢复，未执行")
     try:
-        allowed_actions, runtime_gate = _codex_employee_tool_scope(
+        allowed_actions, runtime_gate = _xiaox_employee_tool_scope(
             tools if tools is not None else default_employee_tools(),
             gate,
         )
@@ -308,7 +308,7 @@ def run_agent_handler(
     on_event: Callable[[dict[str, Any]], Any] | None = None,
     settings: RuntimeSettings | None = None,
 ) -> dict[str, Any]:
-    """委托固定 Codex Runtime 执行 agent handler。
+    """委托固定 Xiaox Runtime 执行 agent handler。
 
     ``reasoning`` 来自认知层：携带 system_prompt（已含记忆段落）与 input/prior reasoning。
     ``tools`` / ``gate`` 由 EmployeeAgent 注入（P1 接入作用域工具 + WorkspaceGuard/risk_gate）。

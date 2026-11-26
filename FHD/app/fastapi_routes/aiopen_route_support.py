@@ -43,6 +43,20 @@ _TRACE_FLAGS = (
 _TRACE_TOOL_NAMES = frozenset(item["name"] for item in TOOL_DEFINITIONS)
 
 
+def retired_openclaw_chat_response() -> JSONResponse:
+    """Legacy raw gateway URLs must not dispatch outside the approved task runtime."""
+    return JSONResponse(
+        {
+            "success": False,
+            "error_code": "openclaw_legacy_route_retired",
+            "execution_state": "not_started",
+            "retryable": False,
+            "message": "旧网关直连入口已停用，请通过统一任务入口申请执行。",
+        },
+        status_code=410,
+    )
+
+
 def safe_control_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep only typed operational metadata, never business values or key prefixes."""
     safe: dict[str, Any] = {"payload_redacted": True}
@@ -275,7 +289,7 @@ async def handle_mcp_message(
         mcp_result: dict[str, Any] = {
             "content": [{"type": "text", "text": format_result(tool, result)}],
             "structuredContent": result,
-            "isError": not bool(result.get("success", False)),
+            "isError": safe_control_payload(result).get("success") is not True,
         }
         if trace_id:
             mcp_result["_meta"] = {"run_id": trace_id, "agent_run_id": trace_id}

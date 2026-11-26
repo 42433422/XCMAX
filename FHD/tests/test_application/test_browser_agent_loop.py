@@ -1,4 +1,4 @@
-"""Codex-selected browser actions keep SQL approval and original page receipts.
+"""Xiaox-selected browser actions keep SQL approval and original page receipts.
 
 The page/transport is synthetic. No second model loop or deployed UI is claimed.
 """
@@ -25,8 +25,8 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
 from app.application.tools.mcp import registry
 from app.domain.task_lifecycle.agent_runtime_contract import build_goal_contract
-from app.infrastructure.codex.binding import CodexBindingError, CodexBindingStore
-from app.infrastructure.codex.tools import CodexToolBridge
+from app.infrastructure.xiaox.binding import XiaoxBindingError, XiaoxBindingStore
+from app.infrastructure.xiaox.tools import XiaoxToolBridge
 from app.infrastructure.mcp.client import McpToolInfo
 from app.infrastructure.mcp.config import McpServerConfig
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
@@ -88,11 +88,11 @@ def harness(monkeypatch, tmp_path, trusted_actor):
     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
     set_agent_run_repository_for_tests(repository)
     parent = AgentRun(str(actor.user_id), GOAL, status="running")
-    parent.metadata.update(runtime_type="codex", runtime_context=actor.context)
+    parent.metadata.update(runtime_type="xiaox", runtime_context=actor.context)
     contract = build_goal_contract(parent)
     parent.metadata.update(runtime_goal_contract=contract, runtime_goal_digest=contract["digest"])
     repository.save(parent)
-    store = CodexBindingStore(repository)
+    store = XiaoxBindingStore(repository)
     grant = store.create(parent.run_id)
     page = {
         "saved": False,
@@ -160,7 +160,7 @@ def harness(monkeypatch, tmp_path, trusted_actor):
             repository=repo, tool_executor=SimpleNamespace(execute=AgentToolExecutor().execute)
         )
 
-    bridge = CodexToolBridge(store, orchestrator(repository))
+    bridge = XiaoxToolBridge(store, orchestrator(repository))
     queue = SQLAlchemyTaskExecutionRepository(session_factory=actor.factory)
 
     def invoke(action, params=None, call_id="observe"):
@@ -308,7 +308,7 @@ def test_acknowledgement_or_echoed_code_never_proves_input_and_never_replays(
     receipt = h.store.receipt_snapshot(h.parent.run_id)[-1]["receipt"]
     assert child.status != "completed" and receipt["status"] == "unknown"
     assert receipt["reconciliation_required"] is True
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         h.invoke("browser_click", click_params(), "retry")
     assert error.value.code == "reconciliation_required"
     assert [call[0] for call in h.calls] == ["browser_snapshot", "browser_click"]
@@ -320,7 +320,7 @@ def test_changed_pending_action_cannot_reuse_approval(harness):
     pending = h.invoke("browser_click", click_params(), "click")
     changed = click_params()
     changed["ref"] = "e2"
-    with pytest.raises(CodexBindingError) as error:
+    with pytest.raises(XiaoxBindingError) as error:
         h.invoke("browser_click", changed, "click")
     assert error.value.code == "call_conflict"
     assert h.repo.get(pending["run_id"]).steps[0].params == click_params()
@@ -334,7 +334,7 @@ def test_revoked_original_owner_cannot_continue_input(harness):
     h.invoke("browser_snapshot")
     with h.actor.factory.begin() as db:
         db.delete(db.get(Session, h.actor.session_row_id))
-    with pytest.raises(CodexBindingError):
+    with pytest.raises(XiaoxBindingError):
         h.invoke("browser_click", click_params(), "click")
     assert len(h.calls) == 1
 

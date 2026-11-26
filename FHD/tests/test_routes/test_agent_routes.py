@@ -386,7 +386,7 @@ def test_resume_explains_unreconciled_result_without_state_changes():
 
 
 def _seed_legacy_run(*, user_id="u1", runtime_context=None, write=False, enqueue=True):
-    """Restore the already-frozen graph used by pre-Codex task control tests."""
+    """Restore the already-frozen graph used by pre-Xiaox task control tests."""
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.fastapi_routes.domains.agent.route_support import enqueue_run
 

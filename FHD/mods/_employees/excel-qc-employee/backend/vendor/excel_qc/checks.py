@@ -190,8 +190,296 @@ def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
 # ---------------------------------------------------------------------------
 
 
+def _check_native_table(ws, phase: Dict[str, Any], f: _Finding, targets: set) -> None:
+    from openpyxl.utils.cell import get_column_letter, range_boundaries
+
+    left, top, right, bottom = range_boundaries(phase["range"].upper())
+    columns = [ws.cell(top, col).value for col in range(left, right + 1)]
+    heading, formula = phase["sum_column"], phase["calculated_formula"]
+    table = ws.tables.get(phase["name"])
+    if table is None or heading not in columns:
+        f.fail("输出缺少计划的原生 Excel 表格或合计列", sheet=ws.title)
+        return
+    start, end = f"{get_column_letter(left)}{top}", get_column_letter(right)
+    if (table.ref != f"{start}:{end}{bottom + 1}" or table.totalsRowCount != 1
+            or table.totalsRowShown is False or table.autoFilter is None
+            or table.autoFilter.ref != f"{start}:{end}{bottom}"
+            or [column.name for column in table.tableColumns] != columns):
+        f.fail("原生表格范围、合计行、筛选范围或列标题与计划不符", sheet=ws.title)
+        return
+    idx = columns.index(heading)
+    amount, label = table.tableColumns[idx], 0 if idx else 1
+    if (amount.calculatedColumnFormula is None
+            or amount.calculatedColumnFormula.attr_text != formula[1:]
+            or amount.totalsRowFunction != "sum"
+            or table.tableColumns[label].totalsRowLabel != "合计"
+            or ws.cell(bottom + 1, left + label).value != "合计"):
+        f.fail("原生表格计算列或合计行元数据与计划不符", sheet=ws.title)
+    targets.add((ws.title, bottom + 1, left + label))
+    for row in range(top + 1, bottom + 2):
+        targets.add((ws.title, row, left + idx))
+        cell = ws.cell(row, left + idx)
+        expected = formula if row <= bottom else f"=SUBTOTAL(109,{table.displayName}[{heading}])"
+        if cell.data_type != "f" or cell.value != expected:
+            f.fail("表格计算列或合计公式与计划不符", sheet=ws.title, ref=cell.coordinate)
+
+
+def _chart_title_text(title) -> str:
+    rich = title.tx.rich if title and title.tx else None
+    return "" if rich is None else "".join(run.t for para in rich.p for run in para.r)
+
+
+def _check_native_chart(wb, ws, phase: Dict[str, Any], f: _Finding) -> None:
+    from openpyxl.chart import BarChart, LineChart, Reference
+    from openpyxl.utils.cell import range_boundaries
+
+    source = phase["source_sheet"]
+    if source not in wb.sheetnames or wb[source] not in wb.worksheets:
+        f.fail("图表源工作表不存在", sheet=source)
+        return
+
+    def expected_ref(key):
+        left, top, right, bottom = range_boundaries(phase[key].upper())
+        if any(wb[source].cell(row, left).value is None for row in range(top, bottom + 1)):
+            raise ValueError("图表源存在空值")
+        return str(Reference(wb[source], min_col=left, min_row=top, max_col=right, max_row=bottom))
+
+    categories, bar_values, line_values = map(expected_ref, ("categories", "bar_values", "line_values"))
+    for chart in ws._charts:
+        parts = chart._charts
+        if (len(parts) != 2 or not isinstance(parts[0], BarChart)
+                or not isinstance(parts[1], LineChart) or any(len(part.series) != 1 for part in parts)):
+            continue
+        bar, line = parts
+        if (bar.type != "col" or chart.legend is None or chart.legend.position != "b"
+                or _chart_title_text(chart.title) != phase["title"]
+                or bar.y_axis.axId == line.y_axis.axId or bar.y_axis.axPos != "l"
+                or line.y_axis.axPos != "r" or line.y_axis.crosses != "max"
+                or line.y_axis.crossAx != bar.x_axis.axId or line.y_axis.numFmt.formatCode != "0.00%"
+                or line.dLbls is None or not line.dLbls.showVal or line.dLbls.numFmt != "0.00%"):
+            continue
+        for part, values, title in ((bar, bar_values, phase["bar_title"]),
+                                    (line, line_values, phase["line_title"])):
+            series = part.series[0]
+            if (series.cat is None or series.cat.strRef is None or series.cat.strRef.f != categories
+                    or series.val is None or series.val.numRef is None or series.val.numRef.f != values
+                    or series.title is None or series.title.v != title
+                    or _chart_title_text(part.y_axis.title) != title):
+                break
+        else:
+            return
+    f.fail("输出缺少符合计划的原生双轴柱线组合图", sheet=ws.title)
+
+
+def _check_cell_styles(wb, plan: Dict[str, Any], f: _Finding) -> int:
+    checked = 0
+    for ph in _plan_phases(plan):
+        if str(ph.get("phase")) != "cell_styles":
+            continue
+        sheet = str(ph.get("sheet") or "").strip("'")
+        if sheet not in wb.sheetnames:
+            f.fail(f"cell_styles 的 sheet 不在输出中：{sheet!r}")
+            continue
+        ws = wb[sheet]
+        try:
+            _, min_row, min_col, max_row, max_col = _range_bounds(ws, str(ph.get("range") or ""))
+        except (TypeError, ValueError) as exc:
+            f.fail(f"cell_styles range 非法：{exc}", sheet=sheet)
+            continue
+        fill_color = str(ph.get("fill_color") or "").strip().upper()
+        border = str(ph.get("border") or "").strip()
+        for row in range(min_row, max_row + 1):
+            for col in range(min_col, max_col + 1):
+                cell = ws.cell(row, col)
+                checked += 1
+                if "bold" in ph and bool(cell.font.bold) != bool(ph.get("bold")):
+                    f.fail("bold 与计划不符", sheet=sheet, row=row, col=col,
+                           planned=str(ph.get("bold")), actual=str(cell.font.bold))
+                if "horizontal" in ph and (cell.alignment.horizontal or "") != str(ph.get("horizontal")):
+                    f.fail("horizontal 对齐与计划不符", sheet=sheet, row=row, col=col,
+                           planned=str(ph.get("horizontal")), actual=str(cell.alignment.horizontal))
+                if "vertical" in ph and (cell.alignment.vertical or "") != str(ph.get("vertical")):
+                    f.fail("vertical 对齐与计划不符", sheet=sheet, row=row, col=col,
+                           planned=str(ph.get("vertical")), actual=str(cell.alignment.vertical))
+                if "font_size" in ph and abs(float(cell.font.sz or 0) - float(ph.get("font_size"))) > _NUM_TOL:
+                    f.fail("font_size 与计划不符", sheet=sheet, row=row, col=col,
+                           planned=str(ph.get("font_size")), actual=str(cell.font.sz))
+                if fill_color:
+                    actual_color = str(cell.fill.fgColor.rgb or "").upper()
+                    if cell.fill.patternType != "solid" or not actual_color.endswith(fill_color):
+                        f.fail("填充色与计划不符", sheet=sheet, row=row, col=col,
+                               planned=fill_color, actual=f"{cell.fill.patternType}:{actual_color}")
+                if border:
+                    sides = (cell.border.left, cell.border.right, cell.border.top, cell.border.bottom)
+                    if any(side.style != border for side in sides):
+                        f.fail("边框与计划不符", sheet=sheet, row=row, col=col,
+                               planned=border,
+                               actual=",".join(str(side.style) for side in sides))
+    return checked
+
+
+_REF_ROW_RE = re.compile(r"(?<![A-Za-z$])(\$?)([A-Za-z]{1,3})(\$?)(\d+)")
+_STRUCTURAL_PHASES = {"insert_rows", "merge_cells", "set_row_height", "freeze_panes"}
+
+
+def _shift_ref_rows(token: str, insert_row: int, count: int) -> str:
+    """独立重现行插入的引用语义：行号 ≥ 插入点的引用下移 count 行。"""
+    prefix, sep, body = token.rpartition("!")
+
+    def repl(match: "re.Match[str]") -> str:
+        row = int(match.group(4))
+        if row >= insert_row:
+            row += count
+        return f"{match.group(1)}{match.group(2)}{match.group(3)}{row}"
+
+    return f"{prefix}{sep}{_REF_ROW_RE.sub(repl, body)}"
+
+
+def _shift_formula_rows(formula: str, insert_row: int, count: int) -> str:
+    from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
+
+    try:
+        tokens = Tokenizer(formula).items
+    except TokenizerError:
+        return formula
+    body = "".join(
+        _shift_ref_rows(tok.value, insert_row, count)
+        if tok.type == "OPERAND" and tok.subtype == "RANGE"
+        else tok.value
+        for tok in tokens
+    )
+    return "=" + body if formula.startswith("=") else body
+
+
+def _declared_ranges(plan: Dict[str, Any], kind: str) -> List[Tuple[str, int, int, int, int]]:
+    from openpyxl.utils.cell import range_boundaries
+
+    out: List[Tuple[str, int, int, int, int]] = []
+    for ph in _plan_phases(plan):
+        if str(ph.get("phase")) != kind:
+            continue
+        tokens = ph.get("ranges") if kind == "clear_ranges" else [ph.get("range")]
+        for token in tokens or []:
+            text = str(token).strip()
+            sheet = ""
+            if "!" in text:
+                sheet, _, text = text.partition("!")
+                sheet = sheet.strip().strip("'")
+            try:
+                left, top, right, bottom = range_boundaries(text.upper())
+            except (TypeError, ValueError):
+                continue
+            if left and top and right and bottom:
+                out.append((sheet, top, left, bottom, right))
+    return out
+
+
+def _in_ranges(ranges, sheet: str, row: int, col: int) -> bool:
+    return any(
+        (not name or name == sheet) and top <= row <= bottom and left <= col <= right
+        for name, top, left, bottom, right in ranges
+    )
+
+
+def _style_signature(cell) -> Tuple[Any, ...]:
+    return (
+        cell.number_format,
+        cell.font.sz,
+        bool(cell.font.bold),
+        cell.fill.patternType,
+        str(cell.fill.fgColor.rgb or ""),
+        cell.alignment.horizontal,
+        cell.alignment.vertical,
+    )
+
+
+def _check_insert_rows(wb, phase, plan, template_wb, planned_targets, f) -> None:
+    from openpyxl.utils.cell import range_boundaries
+
+    sheet = str(phase.get("sheet") or "").strip().strip("'")
+    row, count = int(phase.get("row")), int(phase.get("count"))
+    if template_wb is None:
+        f.warn("未提供原模板，插入行后的数据与公式迁移无法独立核验", sheet=sheet)
+        return
+    if sheet not in template_wb.sheetnames:
+        f.fail("插入行的 sheet 不在原模板中", sheet=sheet)
+        return
+    tpl, out = template_wb[sheet], wb[sheet]
+    style_ranges = _declared_ranges(plan, "cell_styles")
+    clear_ranges = _declared_ranges(plan, "clear_ranges")
+    issues = 0
+    for r in range(row, (tpl.max_row or 0) + 1):
+        for c in range(1, (tpl.max_column or 0) + 1):
+            target = (sheet, r + count, c)
+            if target in planned_targets or _in_ranges(clear_ranges, sheet, r + count, c):
+                continue
+            expected = tpl.cell(r, c).value
+            if isinstance(expected, str) and expected.startswith("="):
+                expected = _shift_formula_rows(expected, row, count)
+            if not _values_match(expected, out.cell(r + count, c).value):
+                issues += 1
+                f.fail(
+                    "插入行后原数据或公式引用未按行迁移",
+                    sheet=sheet,
+                    template_ref=tpl.cell(r, c).coordinate,
+                    actual_ref=out.cell(r + count, c).coordinate,
+                    planned=str(expected)[:80],
+                    actual=str(out.cell(r + count, c).value)[:80],
+                )
+            elif not _in_ranges(style_ranges, sheet, r + count, c) and (
+                _style_signature(tpl.cell(r, c)) != _style_signature(out.cell(r + count, c))
+            ):
+                issues += 1
+                f.fail(
+                    "插入行后原样式未保留",
+                    sheet=sheet,
+                    template_ref=tpl.cell(r, c).coordinate,
+                    actual_ref=out.cell(r + count, c).coordinate,
+                )
+            if issues >= _MAX_SAMPLES * 4:
+                return
+
+
+def _check_structural(wb, plan, template_wb, planned_targets, f) -> int:
+    from openpyxl.utils.cell import range_boundaries
+
+    checked = 0
+    for ph in _plan_phases(plan):
+        kind = str(ph.get("phase"))
+        if kind not in _STRUCTURAL_PHASES:
+            continue
+        checked += 1
+        sheet = str(ph.get("sheet") or "").strip().strip("'")
+        if sheet not in wb.sheetnames:
+            f.fail(f"{kind} 的 sheet 不在输出中：{sheet!r}")
+            continue
+        ws = wb[sheet]
+        try:
+            if kind == "insert_rows":
+                _check_insert_rows(wb, ph, plan, template_wb, planned_targets, f)
+            elif kind == "merge_cells":
+                left, top, right, bottom = range_boundaries(str(ph.get("range")).upper())
+                merged = {(r.min_row, r.min_col, r.max_row, r.max_col) for r in ws.merged_cells.ranges}
+                if (top, left, bottom, right) not in merged:
+                    f.fail("计划合并区域在输出中不存在", sheet=sheet, range=str(ph.get("range")))
+            elif kind == "set_row_height":
+                row = int(ph.get("row"))
+                height = ws.row_dimensions[row].height
+                if height is None or abs(float(height) - float(ph.get("height"))) > _NUM_TOL:
+                    f.fail("行高与计划不符", sheet=sheet, row=row,
+                           planned=str(ph.get("height")), actual=str(height))
+            else:
+                ref = str(ph.get("ref") or "").strip().upper()
+                if str(ws.freeze_panes or "").upper() != ref:
+                    f.fail("冻结窗格与计划不符", sheet=sheet,
+                           planned=ref, actual=str(ws.freeze_panes))
+        except (TypeError, ValueError, KeyError) as exc:
+            f.fail(f"{kind} 计划无法核验：{exc}", sheet=sheet)
+    return checked
+
+
 def _check_conformance(
-    wb, plan: Dict[str, Any], write_report: Optional[Dict[str, Any]]
+    wb, plan: Dict[str, Any], write_report: Optional[Dict[str, Any]], template_wb=None
 ) -> _Finding:
     f = _Finding("conformance")
     cell_writes = _iter_writes(plan, "cell_writes")
@@ -254,6 +542,27 @@ def _check_conformance(
                 actual=str(actual)[:80],
             )
 
+    native_checked = 0
+    for ph in _plan_phases(plan):
+        kind = ph.get("phase")
+        if kind not in {"create_table", "create_combo_chart"}:
+            continue
+        native_checked += 1
+        try:
+            ws = wb[ph["sheet"]]
+            if ws not in wb.worksheets:
+                raise ValueError("目标不是工作表")
+            if kind == "create_table":
+                _check_native_table(ws, ph, f, planned_targets)
+            elif template_wb is not None and ws.title.casefold() in {
+                name.casefold() for name in template_wb.sheetnames
+            }:
+                f.fail("图表未放在新工作表", sheet=ws.title)
+            else:
+                _check_native_chart(wb, ws, ph, f)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            f.fail("原生表格或组合图缺失或无法核验", phase=kind, sheet=ph.get("sheet"))
+
     residues = 0
     for ph in _plan_phases(plan):
         if str(ph.get("phase")) != "clear_ranges":
@@ -293,12 +602,20 @@ def _check_conformance(
             if extra:
                 f.fail(f"retain_sheets 后仍存在多余 sheet：{extra}")
 
+    styled_checked = _check_cell_styles(wb, plan, f)
+    structural_checked = _check_structural(wb, plan, template_wb, planned_targets, f)
+
     f.stats = {
         "cell_writes_planned": len(cell_writes),
         "formula_writes_planned": len(formula_writes),
         "cells_checked": checked,
+        "style_cells_checked": styled_checked,
         "clear_residues": residues,
     }
+    if native_checked:
+        f.stats["native_phases_checked"] = native_checked
+    if structural_checked:
+        f.stats["structural_phases_checked"] = structural_checked
     if write_report:
         rep_cells = write_report.get("cells_written")
         if rep_cells is not None and int(rep_cells) != len(cell_writes):
@@ -567,7 +884,7 @@ def run_qc(
         if template_path is not None and Path(template_path).is_file():
             template_wb = load_workbook(template_path, data_only=False)
         sections = {
-            "conformance": _check_conformance(wb, plan, write_report),
+            "conformance": _check_conformance(wb, plan, write_report, template_wb),
             "protection": _check_protection(wb, plan, template_wb),
             "expected": _check_expected(wb, plan, rules),
             "formulas": _check_formulas(wb),

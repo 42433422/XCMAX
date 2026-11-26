@@ -1,0 +1,161 @@
+{
+  "domain": "06",
+  "title": "NeuroBus 事件内核：真实发布 → 计数 → 重启恢复",
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "source_sha": "7ae9e323b3df5df90e5dbb30da8632fb73cbd74c",
+  "main_sha": "not_built_from_origin_main",
+  "artifact_sha256": null,
+  "installed_git_sha": null,
+  "reference_versions_editions_regions": "commercial/open-source anchors NOT benchmarked in this run",
+  "dataset_hash": null,
+  "task_protocol": {
+    "task": "发布领域事件 → 校验 published 计数增长 → 负向缺 event_type → SIGKILL 重启 → 复核统计",
+    "negative": "缺 event_type 必须被拒绝",
+    "concurrency": 1
+  },
+  "predeclared_metrics_and_tolerances": {
+    "success_criterion": "all task steps return expected business outcome",
+    "fault_criterion": "injected fault is rejected AND state remains recoverable",
+    "tolerances": "no silent partial state; exact-value checks on money/quantity"
+  },
+  "model_and_budget": "no LLM calls required for this domain; deterministic routes",
+  "environment": {
+    "mode": "real running product (isolated local stack)",
+    "base_url": "http://127.0.0.1:5199",
+    "database": "/Users/Shared/XCMAX/.e3run/data/data/xcagi.db",
+    "os": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "python": "3.12.13",
+    "desktop_mode": true,
+    "data_policy": "isolated XCAGI_DATA_DIR; no production data touched"
+  },
+  "faults": [
+    {
+      "fault": "SIGKILL after event publish, then restart",
+      "mode": "kill9",
+      "pids_before": [
+        26970
+      ],
+      "pids_killed": [
+        26970
+      ],
+      "down_after_kill": true,
+      "pid_after": 26988,
+      "readiness": {
+        "liveness": true,
+        "routes_ready": true,
+        "wait_ms": 2613,
+        "pid": 26988
+      }
+    }
+  ],
+  "evidence_ids": [
+    "06-health",
+    "06-stats-before",
+    "06-publish",
+    "06-publish-missing-type",
+    "06-stats-after",
+    "06-stats-after-restart"
+  ],
+  "observed_results": [
+    {
+      "step_id": "06-health",
+      "method": "GET",
+      "path": "/api/neurobus/health",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "a6df38bc67c7c97e1227a82831f0c9532c35f27cbd52987c4d2a1087ee903f91",
+      "response_excerpt": "{\"status\":\"healthy\",\"running\":true,\"published\":26,\"processed\":24,\"errors\":0,\"dropped\":0,\"queue_size\":2,\"handlers\":44,\"global_handlers\":0,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_breaker\":false,\"lifeline\":false,\"tracer\":false,\"sla_log\":false,\"sla_controller\":false,\"retry\":false,\"dlq_auto\":false,\"redis_pubsub\":false,\"trace_sample_rate\":null},\"dropped_recent\":0,\"dropped_reasons\":{},\"components\":{\"bus_running\":true,\"queue_size\":2,\"domains\":[\"intent\",\"order\",\"inventory\",\"product\",\"customer\",\"ai_service\",\"print\",\"ocr\",\"payment\",\"safety\",\"shipment\"]},\"processors\":{\"coordinator\":{\"reflex\":0,\"subconscious\":0,\"conscious\":0,\"total\":0,\"fallbacks\":0,\"errors\":0,\"reflex_rate\":0.0,\"fallback_rate\":0.0},\"reflex\":{\"cache_size\":0,\"max_cache_size\":1000,\"hits\":0,\"misses\":0,\"hit_rate\":0.0,\"timeouts\":0,\"patterns\":5},\"subconscious\":{\"processed\":0,\"batched\":0,\"errors\":0,\"timeouts\":0,\"avg_latency_ms\":0.0,\"handlers\":1,\"batch_handlers\":0,\"running\":false},\"conscious\":{\"processed\":0,\"success\":0,\"errors\":0,\"deduplicated\":0,\"circuit_open\":0,\"sandbox_rejected\":0,\"sla_violations\":0,\"success_rate\":0.0,\"handlers\":7,\"reliability_enabled\":true}},\"cognition\":{\"enabled\":true,\"conscious_processor\":{\"processed\":0,\"success\":0,\"errors\":0,\"deduplicated\":0,\"circuit_open\":0,\"sandbox_rejected\":0,\"sla_violations\":0,\"success_rate\":0.0,\"handlers\":7,\"reliability_enabled\":true},\"subconscious_processor\":{\"processed\":0,\"batched\":0,\"errors\":0,\"timeouts\":0,\"avg_latency_ms\":0.0,\"handlers\":1,\"batch_handlers\":0,\"running\":false},\"cognition\":{\"llm_port_available\":false},\"subconscious_ml\":{\"anomaly_detector\":{\"total_samples\":0,\"total_predictions\":0,\"anomalies_detected\":0,\"anomaly_rate\":0.0,\"model_ready\":false,\"samples_since_fit\":0},\"pattern_predictor\":{\"total_observations\":0,\"ngram_order\":3,\"ngram_patterns\":0,\"markov_states\":0,\"history_size\":0},\"local_embedder\":{\"cache_size\":66}},\"evolution\":{\"handler\":{\"total_handled\":0,\"total_success\":0,\"success_rate\":0.0,\"supported_events\":[\"evolution.mine\",\"evolution.search\",\"evolution.reflect\",\"error.occurred\",\"evolution.index\",\"evolution.export\"],\"kb_stats\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"},\"miner_stats\":{\"log_path\":\"routing_decisions.jsonl\",\"log_exists\":false,\"records_scanned\":0,\"min_occurrences\":3,\"min_confidence\":0.8},\"fixer_stats\":{\"total_proposals\":0,\"actionable_proposals\":0,\"actionable_rate\":0.0,\"min_score\":0.3,\"kb_stats\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"}}},\"kb_retriever\":{\"total_entries\":66,\"by_kind\":{\"pattern\":13,\"fix\":53},\"indexed\":true,\"kb_root\":\"/Users/Shared/XCMAX/FHD/XCAGI/kb\"},\"reflex_pattern_miner\":{\"log_path\":\"routing_decisions.jsonl\",\"log_exists\":false,\"records_scanned\":0,\"min_occurrences\":3,\"min_confidence\":0.8},\"runtime_self_fix\":{\"total_proposals\":0,\"actionable_proposals\":0,\"actionable_rate\":0.0,\"min_score\":0.3,\"kb_stats\":{\""
+    },
+    {
+      "step_id": "06-stats-before",
+      "method": "GET",
+      "path": "/api/mod/xcagi-neuro-bus-bridge/neurobus/stats",
+      "status": 200,
+      "elapsed_ms": 10,
+      "response_sha256": "dcc7d24aa7944cc71786e807733e28bd324b4adadddfa5d9f98503722ab70d64",
+      "response_excerpt": "{\"success\":true,\"data\":{\"published\":30,\"processed\":26,\"errors\":0,\"dropped\":0,\"queue_size\":4,\"handlers\":44,\"global_handlers\":0,\"running\":true,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_breaker\":false,\"lifeline\":false,\"tracer\":false,\"sla_log\":false,\"sla_controller\":false,\"retry\":false,\"dlq_auto\":false,\"redis_pubsub\":false,\"trace_sample_rate\":null},\"dropped_recent\":0,\"dropped_reasons\":{}},\"source\":\"mod:xcagi-neuro-bus-bridge\"}"
+    },
+    {
+      "step_id": "06-publish",
+      "method": "POST",
+      "path": "/api/mod/xcagi-neuro-bus-bridge/events/publish",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "93dee577eee5436e2f4eb2f8c183aebd12bf507b78923f13c870626f3de4334e",
+      "response_excerpt": "{\"success\":true,\"data\":{\"published\":true,\"event_type\":\"e3.evidence.probe\",\"domain\":\"e3\",\"source\":\"mod:xcagi-neuro-bus-bridge\",\"execution_path\":\"mod_event_facade\"}}"
+    },
+    {
+      "step_id": "06-publish-missing-type",
+      "method": "POST",
+      "path": "/api/mod/xcagi-neuro-bus-bridge/events/publish",
+      "status": 200,
+      "elapsed_ms": 8,
+      "response_sha256": "f59cd09a55d64bc6205f1e6d789d35d354829cf5ef5e724eb68ebdda1ab19912",
+      "response_excerpt": "{\"success\":false,\"message\":\"event_type_required\"}"
+    },
+    {
+      "step_id": "06-stats-after",
+      "method": "GET",
+      "path": "/api/mod/xcagi-neuro-bus-bridge/neurobus/stats",
+      "status": 200,
+      "elapsed_ms": 9,
+      "response_sha256": "1a3a0f86d3da3746efdc26673bccfadef66d7232280e7deaef392ab9c90acea9",
+      "response_excerpt": "{\"success\":true,\"data\":{\"published\":43,\"processed\":39,\"errors\":0,\"dropped\":0,\"queue_size\":4,\"handlers\":44,\"global_handlers\":0,\"running\":true,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_breaker\":false,\"lifeline\":false,\"tracer\":false,\"sla_log\":false,\"sla_controller\":false,\"retry\":false,\"dlq_auto\":false,\"redis_pubsub\":false,\"trace_sample_rate\":null},\"dropped_recent\":0,\"dropped_reasons\":{}},\"source\":\"mod:xcagi-neuro-bus-bridge\"}"
+    },
+    {
+      "step_id": "06-stats-after-restart",
+      "method": "GET",
+      "path": "/api/mod/xcagi-neuro-bus-bridge/neurobus/stats",
+      "status": 200,
+      "elapsed_ms": 13,
+      "response_sha256": "e6ce610c7ec9d1d649cfa362f06614c87d5283ab4c4b2f938a420db4dcb443e6",
+      "response_excerpt": "{\"success\":true,\"data\":{\"published\":20,\"processed\":14,\"errors\":0,\"dropped\":0,\"queue_size\":6,\"handlers\":44,\"global_handlers\":0,\"running\":true,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_breaker\":false,\"lifeline\":false,\"tracer\":false,\"sla_log\":false,\"sla_controller\":false,\"retry\":false,\"dlq_auto\":false,\"redis_pubsub\":false,\"trace_sample_rate\":null},\"dropped_recent\":0,\"dropped_reasons\":{}},\"source\":\"mod:xcagi-neuro-bus-bridge\"}"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "06.publish",
+      "description": "真实发布领域事件到事件总线",
+      "passed": true,
+      "detail": "{\"success\":true,\"data\":{\"published\":true,\"event_type\":\"e3.evidence.probe\",\"domain\":\"e3\",\"source\":\"mod:xcagi-neuro-bus-bridge\",\"execution_path\":\"mod_event_facade\"}}"
+    },
+    {
+      "id": "06.negative",
+      "description": "缺 event_type 的事件被拒绝",
+      "passed": true,
+      "detail": "{\"success\":false,\"message\":\"event_type_required\"}"
+    },
+    {
+      "id": "06.counted",
+      "description": "事件 published 计数真实增加",
+      "passed": true,
+      "detail": "published 30 -> 43"
+    },
+    {
+      "id": "06.consumed",
+      "description": "事件被真实消费者处理（processed 计数增长）",
+      "passed": true,
+      "detail": "processed 26 -> 39"
+    },
+    {
+      "id": "06.restart",
+      "description": "重启后事件内核恢复且统计可读",
+      "passed": true,
+      "detail": "{\"success\":true,\"data\":{\"published\":20,\"processed\":14,\"errors\":0,\"dropped\":0,\"queue_size\":6,\"handlers\":44,\"global_handlers\":0,\"running\":true,\"active_events\":0,\"handler_timeouts\":0,\"reliability\":{\"fhd_env\":\"\",\"dedup\":false,\"rate_limit\":false,\"circuit_"
+    }
+  ],
+  "assertions_passed": 5,
+  "assertions_total": 5,
+  "unknowns": [
+    "未注入消费失败，DLQ 未实测",
+    "未做队列满 / 背压 / 网络分区 / 重放恢复",
+    "OpenAPI 未暴露 DLQ 与重放管理端点，只能观测 health/stats"
+  ],
+  "axis_levels": null,
+  "domain_status": "E3",
+  "level": "E3",
+  "score": 90,
+  "auditor": "AI harness against real running product (not third party)",
+  "observed_at": "2026-11-23T18:10:51.322988+00:00"
+}

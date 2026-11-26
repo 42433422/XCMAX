@@ -29,7 +29,7 @@ def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
 
 
 def _business_plan(*, write=False):
-    """Explicit business graph fixtures; natural-language execution belongs to Codex."""
+    """Explicit business graph fixtures; natural-language execution belongs to Xiaox."""
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     node = (

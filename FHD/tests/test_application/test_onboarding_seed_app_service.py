@@ -10,9 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
@@ -191,7 +191,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         assert state.model_requests == []
         parent = state.drain(parent_id)
         assert parent.status == "completed", parent.final_output
-        assert parent.final_output["codex_result"]["business_completed"] is True
+        assert parent.final_output["xiaox_result"]["business_completed"] is True
         assert parent.metadata["runtime_goal_contract"] == contract
         assert len(state.model_requests) == 1
         assert len(state.transports) == 2

@@ -255,13 +255,13 @@ def _emit(value: dict, compact: bool, command: str = "") -> int:
 
 def _deployment_runtime_check(*, retry: bool) -> dict:
     from app.application.agent_runtime.configuration import get_deployment_runtime_settings
-    from app.infrastructure.codex.policy import CODEX_VERSION, RuntimePolicyError
+    from app.infrastructure.xiaox.policy import CODEX_VERSION, RuntimePolicyError
 
     try:
         settings = get_deployment_runtime_settings(retry=retry)
         return {
             "success": True,
-            "runtime": "codex",
+            "runtime": "xiaox",
             "codex_version": CODEX_VERSION,
             "qualification": "passed",
             "managed_by": "deployment",

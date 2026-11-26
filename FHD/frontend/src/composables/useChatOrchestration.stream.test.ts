@@ -275,9 +275,9 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it('renders a Codex input wait as waiting despite success=false and keeps its continuation', async () => {
+  it('renders a Xiaox input wait as waiting despite success=false and keeps its continuation', async () => {
     readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
-      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'codex',
+      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'xiaox',
         execution_state: 'waiting_user', needs_user_input: true,
         runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' } } })
     })

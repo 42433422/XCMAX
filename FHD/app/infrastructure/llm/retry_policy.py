@@ -46,6 +46,22 @@ def is_transport_error(error: BaseException) -> bool:
     )
 
 
+def _upstream_settlement_unresolved(error: BaseException) -> bool:
+    """The market gateway refuses replay while it settles the original request.
+
+    This proves the request was accepted upstream, so it must stay unknown:
+    neither a retry nor a local zero-usage assumption is allowed.
+    """
+    response = getattr(error, "response", None)
+    if response is None:
+        return False
+    try:
+        text = str(getattr(response, "text", "") or "")
+    except Exception:
+        return False
+    return "REQUEST_UNRESOLVED" in text or '"state":"settling"' in text.replace(" ", "")
+
+
 def model_failure_details(
     error: BaseException,
     *,
@@ -53,6 +69,8 @@ def model_failure_details(
     attempt: int,
     elapsed_ms: float,
     output_started: bool = False,
+    stream_phase: str | None = None,
+    stream_frame: int | None = None,
 ) -> dict[str, Any]:
     """Return bounded root-cause evidence without exception text or credentials."""
     status = getattr(error, "status_code", None)
@@ -69,6 +87,11 @@ def model_failure_details(
         kind, reason = "model_admission_denied", f"Provider rejected admission with HTTP {status}"
     elif type(status) is int and status >= 500:
         kind, reason = "provider_unavailable", f"Provider returned HTTP {status}"
+    elif status == 409 and _upstream_settlement_unresolved(error):
+        kind, reason = (
+            "usage_unsettled",
+            "Upstream is still settling the original request; replay is forbidden",
+        )
     elif isinstance(error, (httpx.TransportError, TimeoutError, OSError)) or (
         type(error).__module__.split(".")[0] in {"httpx2", "openai"}
         and type(error).__name__ in {"APIConnectionError", "APITimeoutError", "ReadTimeout"}
@@ -76,7 +99,7 @@ def model_failure_details(
         kind, reason = "transport_unknown", "Model request outcome could not be confirmed"
     else:
         kind, reason = "model_response_invalid", "Model response could not be accepted"
-    return {
+    details = {
         "stage": stage,
         "attempt": attempt,
         "elapsed_ms": round(elapsed_ms, 1),
@@ -88,3 +111,8 @@ def model_failure_details(
         "outcome": "not_started" if safe else "unknown",
         "output_started": output_started,
     }
+    if stream_phase is not None:
+        details["stream_phase"] = stream_phase
+    if stream_frame is not None:
+        details["stream_frame"] = stream_frame
+    return details
