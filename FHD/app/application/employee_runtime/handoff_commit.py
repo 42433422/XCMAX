@@ -102,6 +102,7 @@ def commit_registered_handoff(
         _task_grant(parent, identity_ids["employee_id"]),
         tool_id=tool_id,
         action=action,
+        params=params,
         tenant_id=identity_ids["tenant_id"],
         user_id=identity_ids["user_id"],
         task_id=identity_ids["task_id"],
@@ -449,6 +450,7 @@ def _authorized_scope(
     task_id: str,
     employee_id: str,
     bindings: dict[str, Any],
+    params: dict[str, Any] | None = None,
 ) -> tuple[list[str], dict[str, Any] | None]:
     if not grant:
         return [], _rejected("handoff_unauthorized", "父任务没有可委托的工具范围")
@@ -478,7 +480,7 @@ def _authorized_scope(
         parsed = _split_tool(token)
         if parsed is None:
             return [], _rejected("handoff_unauthorized", "父员工不能委托该工具")
-        denial = actor_tool_denial(parsed[0], parsed[1], context)
+        denial = actor_tool_denial(parsed[0], parsed[1], context), params=params if token == delegated else None
         if denial is not None:
             return [], _rejected(
                 str(denial.get("error_code") or "handoff_unauthorized"),
