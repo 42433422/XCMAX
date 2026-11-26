@@ -23,8 +23,8 @@ def _requires_frozen_parameters(
 ) -> bool:
     """Xiaox owns replanning; its child graph cannot mint a second model loop."""
     contexts = (run.metadata.get("runtime_context") or {}, runtime_context or {})
-    if run.metadata.get("runtime_type") == "xiaox" or any(
-        context.get("source") == "xiaox_runtime" for context in contexts
+    if run.metadata.get("runtime_type") in {"codex", "xiaox"} or any(
+        context.get("source") in {"codex_runtime", "xiaox_runtime"} for context in contexts
     ):
         return True
     parent_ids = {str(context.get("parent_run_id") or "") for context in contexts} - {""}
@@ -37,7 +37,7 @@ def _requires_frozen_parameters(
             repository = get_agent_run_repository()
         for parent_id in parent_ids:
             parent = repository.get(parent_id)
-            if parent is None or parent.metadata.get("runtime_type") == "xiaox":
+            if parent is None or parent.metadata.get("runtime_type") in {"codex", "xiaox"}:
                 return True
     except RECOVERABLE_ERRORS:
         # Missing ancestry is never authority to change a persisted request.

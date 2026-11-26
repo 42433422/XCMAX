@@ -11,13 +11,13 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 
 
-def repair_case(binding="source", override=None, output=None):
+def repair_case(binding="source", override=None, output=None, runtime_type="xiaox"):
     repository = InMemoryAgentRunRepository()
     parent = AgentRun(user_id="owner", message="read", status="running")
-    parent.metadata["runtime_type"] = "xiaox"
+    parent.metadata["runtime_type"] = runtime_type
     repository.save(parent)
     context = (
-        {"source": "xiaox_runtime"}
+        {"source": f"{runtime_type}_runtime"}
         if binding == "source"
         else {"parent_run_id": parent.run_id}
         if binding == "parent"
@@ -43,6 +43,8 @@ def repair_case(binding="source", override=None, output=None):
             }
         },
     )
+    if binding == "root":
+        run.metadata["runtime_type"] = runtime_type
     repair = RunRepair(
         repository,
         SimpleNamespace(refresh_repair_metadata=Mock()),
@@ -68,18 +70,27 @@ def test_frozen_child_cannot_enable_a_second_model_loop(binding):
     assert step.repair_history == []
 
 
-def test_frozen_child_can_retry_the_exact_same_read_but_cannot_patch_its_request():
-    run, step, repair, context = repair_case(override={"retry": True})
+@pytest.mark.parametrize("runtime_type", ["codex", "xiaox"])
+@pytest.mark.parametrize("binding", ["source", "parent", "root"])
+def test_frozen_child_can_retry_the_exact_same_read_but_cannot_patch_its_request(
+    binding, runtime_type
+):
+    run, step, repair, context = repair_case(
+        binding=binding, runtime_type=runtime_type, override={"retry": True}
+    )
     assert repair.prepare_repair_or_retry(run, step, runtime_context=context) is True
     assert step.status == "pending" and run.status == "retrying"
     assert step.params == {"file_path": "original.xlsx"}
     saved = repair.repository.get(run.run_id)
     assert saved.steps[0].params == step.params
     run, step, repair, context = repair_case(
-        override={"params": {"file_path": "other.xlsx"}, "retry": True}
+        binding=binding,
+        runtime_type=runtime_type,
+        override={"params": {"file_path": "other.xlsx"}, "retry": True},
     )
     assert repair.prepare_repair_or_retry(run, step, runtime_context=context) is False
     assert step.params == {"file_path": "original.xlsx"}
+    assert step.repair_history == []
 
 
 @pytest.mark.parametrize(
