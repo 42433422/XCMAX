@@ -149,6 +149,34 @@ def test_revocation_blocks_even_delivered_receipt_readback(delivery):
     assert delivery[3] == []
 
 
+@pytest.mark.parametrize("when", ["before_receipt", "between_reads"])
+def test_personal_plan_blocks_original_delivery_reads(delivery, monkeypatch, when):
+    from app.db import HostSessionLocal
+    from app.db.models.user import User
+    from app.infrastructure import kellai_client
+
+    case, receipt, _message, calls = delivery
+    receipt["provider_state"] = "delivered"
+
+    def downgrade():
+        with HostSessionLocal.begin() as db:
+            db.get(User, int(case.run.user_id)).account_tier = "personal"
+
+    if when == "before_receipt":
+        downgrade()
+    else:
+        original_read = kellai_client.request_kellai
+
+        def read_then_downgrade(*args, **kwargs):
+            result = original_read(*args, **kwargs)
+            downgrade()
+            return result
+
+        monkeypatch.setattr(kellai_client, "request_kellai", read_then_downgrade)
+    assert verify(delivery)["accepted"] is False
+    assert len(calls) == (0 if when == "before_receipt" else 1)
+
+
 def test_missing_original_message_keeps_delivery_unverified(delivery):
     delivery[1]["provider_state"] = "delivered"
     delivery[2]["id"] = "other-message"

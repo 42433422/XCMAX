@@ -7,6 +7,11 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.domain.task_lifecycle.results import (
+    execution_result_envelopes,
+    execution_result_pending_state,
+    execution_result_proven_not_executed,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -33,7 +38,20 @@ def _execute_job_task(
     """执行单个 job 的任务，返回 (ok, result, error)。"""
     try:
         from app.application.employee_runtime.executor import execute_employee_task_local
+    except ImportError:
+        logger.exception("employee cron runtime unavailable before execution")
+        error = "宿主未配置员工运行时，任务尚未执行"
+        return (
+            False,
+            {
+                "success": False,
+                "error": error,
+                "execution": {"outcome": "not_executed", "committed": False},
+            },
+            error,
+        )
 
+    try:
         payload = dict(input_data or {})
         payload.setdefault("trigger", source)
         payload.setdefault("cron_job_id", job.job_id)
@@ -47,24 +65,70 @@ def _execute_job_task(
             workspace_root=workspace_root,
             session_id=session_id,
         )
-        ok = bool(result.get("success"))
+        ok = bool(result.get("success")) and not execution_result_pending_state(result)
         error = "" if ok else _facade()._result_error(result)
+        if (
+            not ok
+            and not execution_result_pending_state(result)
+            and not execution_result_proven_not_executed(result)
+        ):
+            # Upstream employees may catch an exception after an effect and
+            # return only success=False. Failure alone never authorizes replay.
+            result = {
+                **result,
+                "execution_state": "unknown",
+                "reconciliation_required": True,
+                "retryable": False,
+            }
         if not error:
             error = "employee task failed"
         return (ok, result, error)
     except RECOVERABLE_ERRORS:
         logger.exception("run employee cron job failed")
-        return (False, {"success": False, "error": "员工定时任务执行失败"}, "员工定时任务执行失败")
+        error = "员工定时任务执行结果待核对"
+        return (
+            False,
+            {
+                "success": False,
+                "error": error,
+                "execution_state": "unknown",
+                "reconciliation_required": True,
+                "retryable": False,
+            },
+            error,
+        )
 
 
 def _apply_job_outcome(
-    job: EmployeeCronJob, *, ok: bool, error: str, duration_ms: float, finished: datetime
+    job: EmployeeCronJob,
+    *,
+    ok: bool,
+    error: str,
+    duration_ms: float,
+    finished: datetime,
+    result: dict[str, Any] | None = None,
 ) -> None:
     """根据执行结果更新 job 状态（含重试调度与告警）。必须在 _facade()._lock 内调用。"""
     job.running = False
     job.runs_total += 1
     job.last_run_at = finished
     job.last_duration_ms = duration_ms
+    pending = execution_result_pending_state(result or {})
+    if not ok and not pending and not execution_result_proven_not_executed(result or {}):
+        pending = "unknown"
+    if pending:
+        job.last_status = pending
+        job.last_error = "原任务尚未完成或结果待核对，请处理原任务，不可重新派发。"
+        job.retry_count = 0
+        job.next_retry_at = job.next_run_at = None
+        job.pending_execution = {"execution_state": pending}
+        for envelope in execution_result_envelopes(result or {}):
+            for key in ("run_id", "agent_run_id", "task_id", "execution_id"):
+                value = envelope.get(key)
+                if isinstance(value, (str, int)) and not isinstance(value, bool) and value:
+                    job.pending_execution.setdefault(key, str(value))
+        _facade()._invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
+        return
     if ok:
         job.success_count += 1
         job.last_status = "success"
@@ -119,8 +183,7 @@ def run_employee_cron_job(
 ) -> dict[str, Any]:
     """Run a configured employee cron job immediately.
 
-    失败时若 job.max_retries > 0 会自动调度指数退避重试（next_retry_at），
-    重试由调度循环在到期后触发；手动调用本函数始终执行一次新尝试。
+    仅证明未发生副作用的失败可有限退避重试；未决结果保留原执行并阻止重发。
     """
     jid = str(job_id or "").strip()
     with _facade()._lock:
@@ -128,6 +191,14 @@ def run_employee_cron_job(
         job = _facade()._jobs.get(jid)
         if job is None:
             return {"success": False, "error": f"unknown employee cron job: {jid}"}
+        if job.pending_execution:
+            return {
+                "success": False,
+                "error_code": "employee_cron_pending_execution",
+                "error": job.last_error,
+                "job": job.to_dict(),
+                "result": dict(job.pending_execution),
+            }
         if job.running:
             return {
                 "success": False,
@@ -154,7 +225,7 @@ def run_employee_cron_job(
     with _facade()._lock:
         job = _facade()._jobs[jid]
         _facade()._apply_job_outcome(
-            job, ok=ok, error=error, duration_ms=duration_ms, finished=finished
+            job, ok=ok, error=error, duration_ms=duration_ms, finished=finished, result=result
         )
         job_dict = job.to_dict()
     return {"success": ok, "job": job_dict, "result": result}

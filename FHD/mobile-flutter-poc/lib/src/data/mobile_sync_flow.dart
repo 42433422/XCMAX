@@ -17,12 +17,21 @@ class MobileSyncResult {
 /// App 暂无离线写入队列，推送 items 为空，但会让服务端应用待处理收件箱。
 /// 任一步失败抛出 `<步骤>失败：<原因>`，不推进游标。
 Future<MobileSyncResult> runMobileSync(MobileApiClient api) async {
+  final generation = api.authGeneration;
+  void requireScope() {
+    if (generation != api.authGeneration) {
+      throw '同步上下文已变更，请在当前账号重新同步';
+    }
+  }
+
   Future<Map<String, Object?>> step(
     String label,
     Future<MobileEnvelope<Map<String, Object?>>> Function() call,
   ) async {
     try {
+      requireScope();
       final env = await call();
+      requireScope();
       if (env.success) return env.data ?? const {};
       throw env.message.ifEmpty('服务端返回失败');
     } on MobileApiException catch (e) {
@@ -33,6 +42,7 @@ Future<MobileSyncResult> runMobileSync(MobileApiClient api) async {
   }
 
   final since = (await api.loadSession()).syncCursor;
+  requireScope();
   await step('检查同步状态', api.syncStatus);
   final push = await step('推送本地变更', () => api.syncPush(const []));
   final pull = await step('拉取云端变更', () => api.syncPull(sinceCursor: since));
@@ -41,7 +51,9 @@ Future<MobileSyncResult> runMobileSync(MobileApiClient api) async {
   await api.saveSyncState(
     syncCursor: cursor > since ? cursor : since,
     lastSyncAt: DateTime.now().toIso8601String(),
+    authGeneration: generation,
   );
+  requireScope();
   final changes = pull['changes'];
   return MobileSyncResult(
     int.tryParse('${push['written']}') ?? 0,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 
@@ -105,6 +106,88 @@ def test_apply_database_profile_remote_when_enabled(tmp_path, monkeypatch):
     apply_database_profile_to_env(tmp_path, local_sqlite_url=local_url)
     assert os.environ["DATABASE_URL"].startswith("postgresql")
     assert os.environ.get("XCAGI_DESKTOP_KEEP_DATABASE_URL") == "1"
+
+
+@pytest.mark.parametrize(
+    "legacy_config",
+    [
+        {"XCAGI_MOD_ISOLATED_DATABASES": "1"},
+        {"XCAGI_MOD_ISOLATED_DATABASES": "true"},
+        {"XCAGI_MOD_DATABASE_URLS": '{"sales":"postgresql://u:private@h/sales"}'},
+        {"XCAGI_MOD_DATABASE_URLS": "invalid-json"},
+        {"XCAGI_MOD_DATABASE_URL_SALES": "sqlite:///old-sales.db"},
+    ],
+)
+def test_database_profile_blocks_unreconciled_mod_configuration(
+    tmp_path, monkeypatch, legacy_config
+):
+    for key, value in legacy_config.items():
+        monkeypatch.setenv(key, value)
+    before = dict(os.environ)
+    with pytest.raises(RuntimeError, match="备份.*人工核对") as exc:
+        apply_database_profile_to_env(tmp_path, local_sqlite_url=f"sqlite:///{tmp_path}/xcagi.db")
+    assert "private" not in str(exc.value)
+    assert dict(os.environ) == before
+    assert not (tmp_path / "config").exists()
+
+
+@pytest.mark.parametrize(
+    "relative_path", ["data/xcagi__sales.db", "products__sales.db", "data/mod_dbs/sales.db"]
+)
+def test_database_profile_preserves_unreconciled_mod_data(tmp_path, monkeypatch, relative_path):
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "0")
+    old_db = tmp_path / relative_path
+    old_db.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(old_db) as db:
+        db.execute("CREATE TABLE business_fact (id INTEGER PRIMARY KEY, value TEXT)")
+        db.execute("INSERT INTO business_fact VALUES (7, 'customer-owned')")
+        db.commit()
+    original = old_db.read_bytes()
+    before = dict(os.environ)
+    with pytest.raises(RuntimeError, match="备份.*人工核对"):
+        apply_database_profile_to_env(
+            tmp_path, local_sqlite_url=f"sqlite:///{tmp_path}/data/xcagi.db"
+        )
+    assert old_db.read_bytes() == original
+    assert dict(os.environ) == before
+    assert not (tmp_path / "config").exists()
+
+
+def test_database_profile_shared_database_and_empty_mod_directory_are_not_legacy_data(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "0")
+    monkeypatch.setenv("XCAGI_MOD_DATABASE_URLS", "{}")
+    (tmp_path / "data" / "mod_dbs").mkdir(parents=True)
+    (tmp_path / "data" / "mod_dbs" / "empty.db").touch()
+    local_url = f"sqlite:///{tmp_path}/data/xcagi.db"
+    apply_database_profile_to_env(tmp_path, local_sqlite_url=local_url)
+    assert os.environ["DATABASE_URL"] == local_url
+
+
+def test_database_profile_keeps_host_sync_sidecar_without_permitting_business_mod_data(
+    tmp_path, monkeypatch
+):
+    from app.db.xcmax_sync import _DB_FILENAME, _ensure_schema
+
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "0")
+    sidecar = tmp_path / "mod_dbs" / _DB_FILENAME
+    sidecar.parent.mkdir()
+    with sqlite3.connect(sidecar) as db:
+        _ensure_schema(db)
+        db.execute(
+            "INSERT INTO sync_changes (entity_type, entity_id, operation, created_at) "
+            "VALUES ('customer', '7', 'update', '2026-11-27')"
+        )
+        db.commit()
+    original = sidecar.read_bytes()
+    local_url = f"sqlite:///{tmp_path}/data/xcagi.db"
+    apply_database_profile_to_env(tmp_path, local_sqlite_url=local_url)
+    assert os.environ["DATABASE_URL"] == local_url
+    assert sidecar.read_bytes() == original
+    (sidecar.parent / "sales.db").write_bytes(b"unreconciled-business-data")
+    with pytest.raises(RuntimeError, match="备份.*人工核对"):
+        apply_database_profile_to_env(tmp_path, local_sqlite_url=local_url)
 
 
 def test_ensure_desktop_dirs_creates_expected_layout(tmp_path):

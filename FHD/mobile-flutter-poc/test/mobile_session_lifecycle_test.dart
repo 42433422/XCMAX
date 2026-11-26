@@ -132,6 +132,10 @@ void main() {
         relayDesktopId: 'relay-A',
         localAvatarSource: 'avatar-A',
         themeMode: 'dark',
+        syncCursor: 42,
+        lastSyncAt: '2026-11-27T04:00:00',
+        accountKind: 'enterprise',
+        serverMode: 'cloud',
       )));
       await _login(api, account);
       final saved = await api.loadSession();
@@ -141,6 +145,37 @@ void main() {
       expect(saved.relayDesktopId.isNotEmpty, account == 'A');
       expect(saved.localAvatarSource.isNotEmpty, account == 'A');
       expect(saved.themeMode, 'dark');
+      expect(saved.syncCursor, account == 'A' ? 42 : 0);
+      expect(saved.lastSyncAt.isNotEmpty, account == 'A');
+    });
+  }
+
+  for (final transition in ['logout', 'tenant', 'backend']) {
+    test('sync position belongs to its original $transition scope', () async {
+      final api = MobileApiClient(
+          sessionStore: MemoryMobileSessionStore(_accountA.copyWith(
+        accountKind: 'enterprise',
+        serverMode: 'cloud',
+        relayTenantId: 'tenant-A',
+        syncCursor: 42,
+        lastSyncAt: '2026-11-27T04:00:00',
+      )));
+      addTearDown(api.dispose);
+      final generation = api.authGeneration;
+      final previous = await api.loadSession();
+      if (transition == 'logout') {
+        await api.clearActiveAuth();
+      } else {
+        await api.saveSession(transition == 'tenant'
+            ? previous.copyWith(relayTenantId: 'tenant-B')
+            : previous.copyWith(serverMode: 'lan', fhdHost: 'other-pc:5000'));
+      }
+      await api.saveSyncState(
+          syncCursor: 99, lastSyncAt: 'late', authGeneration: generation);
+      final saved = await api.loadSession();
+      expect(saved.syncCursor, 0);
+      expect(saved.lastSyncAt, isEmpty);
+      expect(api.authGeneration, greaterThan(generation));
     });
   }
 

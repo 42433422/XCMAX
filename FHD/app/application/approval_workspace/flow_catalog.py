@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 
-from .access import serial_approval_supported, unsupported_approval_policy
+from .access import (
+    serial_approval_supported,
+    single_step_policy_required,
+    unsupported_approval_policy,
+)
 from .protocols import AuditWriter, JsonObject, WorkspaceResponse
 from .repository import ApprovalRepository
 
@@ -45,10 +49,17 @@ class FlowCatalog:
             raise HTTPException(status_code=400, detail="flow_name / flow_key 为必填项")
         if not nodes_payload:
             raise HTTPException(status_code=400, detail="至少需要一个审批节点")
+        if any(not isinstance(node, dict) for node in nodes_payload):
+            raise HTTPException(status_code=400, detail="审批节点字段格式错误")
+        if (
+            len(nodes_payload) != 1
+            or flow_payload.get("allow_transfer")
+            or flow_payload.get("allow_delegate")
+        ):
+            return single_step_policy_required()
         if not serial_approval_supported(flow_payload.get("node_type")) or any(
             not serial_approval_supported(node.get("node_type"), node.get("min_approvals", 1))
             for node in nodes_payload
-            if isinstance(node, dict)
         ):
             return unsupported_approval_policy()
         with self.repository.session() as db:
@@ -68,8 +79,8 @@ class FlowCatalog:
                 industry=str(flow_payload.get("industry") or "通用").strip() or "通用",
                 business_type=business_type,
                 node_type=str(flow_payload.get("node_type") or "serial"),
-                allow_transfer=bool(flow_payload.get("allow_transfer", True)),
-                allow_delegate=bool(flow_payload.get("allow_delegate", False)),
+                allow_transfer=False,
+                allow_delegate=False,
                 allow_withdraw=bool(flow_payload.get("allow_withdraw", True)),
                 timeout_hours=int(flow_payload.get("timeout_hours") or 48),
                 is_active=bool(flow_payload.get("is_active", True)),
@@ -79,8 +90,6 @@ class FlowCatalog:
             db.add(flow)
             db.flush()
             for idx, node_data in enumerate(nodes_payload, start=1):
-                if not isinstance(node_data, dict):
-                    continue
                 approver_ids = node_data.get("approver_ids") or []
                 if not isinstance(approver_ids, list):
                     approver_ids = []
@@ -120,6 +129,8 @@ class FlowCatalog:
 
     def update_flow(self, flow_id: int, body: JsonObject, actor: int) -> WorkspaceResponse:
         """更新审批流程基础信息（不含节点，节点暂由 POST /flows 重建）。"""
+        if body.get("allow_transfer") or body.get("allow_delegate"):
+            return single_step_policy_required()
         if not serial_approval_supported(body.get("node_type")):
             return unsupported_approval_policy()
         with self.repository.session() as db:

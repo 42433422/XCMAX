@@ -20,7 +20,12 @@ from app.db.models.approval import (
 )
 from app.db.models.user import User
 
-from .access import FINAL_STATUSES, normalize_statuses
+from .access import (
+    FINAL_STATUSES,
+    normalize_statuses,
+    single_step_policy_required,
+    supported_approval_flow,
+)
 from .protocols import ApprovalAccess, AuditWriter, JsonObject, RequestView, WorkspaceResponse
 from .repository import ApprovalRepository
 
@@ -81,6 +86,13 @@ class RequestLifecycle:
                     {"success": False, "message": "审批流程未配置任何启用节点", "data": None},
                     status_code=400,
                 )
+            if (
+                len(nodes) != 1
+                or flow.allow_transfer
+                or flow.allow_delegate
+                or not supported_approval_flow(flow, nodes)
+            ):
+                return single_step_policy_required()
             first_node = nodes[0]
             req = ApprovalRequest(
                 request_no=self.request_number(),

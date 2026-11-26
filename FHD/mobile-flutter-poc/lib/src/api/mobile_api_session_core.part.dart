@@ -51,6 +51,9 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
       final candidate = update(current);
       if (candidate == null) return;
       var stored = candidate;
+      if (_connectionIdentity(current) != _connectionIdentity(stored)) {
+        stored = stored.copyWith(syncCursor: 0, lastSyncAt: '');
+      }
       if (stored.savedPassword.isNotEmpty &&
           (passwordIsPlaintext ||
               !stored.savedPassword.startsWith('enc:v1:'))) {
@@ -258,6 +261,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     int? syncCursor,
     String? lastSyncAt,
     bool? autoSync,
+    int? authGeneration,
   }) async {
     await _updateSession((current) {
       var next = current;
@@ -271,7 +275,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         next = next.copyWith(autoSync: autoSync);
       }
       return next;
-    });
+    }, authGeneration: authGeneration);
   }
 
   Future<void> saveWalletBalanceJson(String json) async {
@@ -300,6 +304,8 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         relayPairedAt: '',
         inflightRelayTasks: const <String, String>{},
         walletBalanceJson: '',
+        syncCursor: 0,
+        lastSyncAt: '',
         setupComplete: false,
         autoLogin: false,
         cachedChatMessages: const <String, List<Map<String, Object?>>>{},

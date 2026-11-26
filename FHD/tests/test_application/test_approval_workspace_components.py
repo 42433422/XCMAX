@@ -612,3 +612,229 @@ def test_workflow_queries_preserve_unknown_availability(availability, endpoint, 
         assert data["runtime_available"] is availability
     assert req.status == status
     db.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("retired", ["multiple_nodes", "transfer", "delegate"])
+def test_new_flow_refuses_retired_approval_policy_without_writing(tmp_path, retired):
+    from datetime import datetime
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application.approval_workspace.flow_catalog import FlowCatalog
+    from app.application.approval_workspace.repository import ApprovalRepository
+    from app.db.db_base import Base
+    from app.db.models.approval import ApprovalFlow
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'new-policy.sqlite3'}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(User(id=7, username="policy-owner", password="test", tenant_id=1))
+        db.commit()
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    audit = MagicMock()
+    catalog = FlowCatalog(
+        ApprovalRepository(session), audit, ApprovalFlow, ApprovalFlowNode, datetime.now
+    )
+    body = {"flow": {"flow_key": "new", "flow_name": "New"}, "nodes": [{"approver_ids": [7]}]}
+    if retired == "multiple_nodes":
+        body["nodes"].append({"approver_ids": [8]})
+    else:
+        body["flow"][f"allow_{retired}"] = True
+    try:
+        response = catalog.create_flow(body, 7)
+        assert response.status_code == 409
+        assert json.loads(response.body)["code"] == "single_step_approval_required"
+        with Session(engine) as db:
+            assert db.query(ApprovalFlow).count() == 0
+            assert db.query(ApprovalFlowNode).count() == 0
+        audit.assert_not_called()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("field", ["allow_transfer", "allow_delegate"])
+def test_flow_update_cannot_enable_retired_policy_and_preserves_inflight(tmp_path, field):
+    from datetime import datetime
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application.approval_workspace.flow_catalog import FlowCatalog
+    from app.application.approval_workspace.repository import ApprovalRepository
+    from app.db.db_base import Base
+    from app.db.models.approval import ApprovalFlow, ApprovalRecord
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-policy.sqlite3'}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(User(id=7, username="legacy-owner", password="test", tenant_id=1))
+        db.commit()
+        db.add(
+            ApprovalFlow(
+                id=1,
+                flow_key="legacy",
+                flow_name="Legacy",
+                allow_transfer=False,
+                allow_delegate=False,
+            )
+        )
+        db.add_all(
+            [
+                ApprovalFlowNode(
+                    id=step,
+                    flow_id=1,
+                    node_name=f"Step {step}",
+                    node_order=step,
+                    approver_type="user",
+                    approver_ids="[7]",
+                )
+                for step in (1, 2)
+            ]
+        )
+        db.commit()
+        db.add(
+            ApprovalRequest(
+                id=1,
+                request_no="APR-legacy",
+                flow_id=1,
+                business_type="general",
+                applicant_id=7,
+                title="Retained",
+                status="in_progress",
+                current_node_id=2,
+                current_node_order=2,
+            )
+        )
+        db.commit()
+        db.add(
+            ApprovalRecord(
+                request_id=1,
+                node_id=1,
+                node_name="Step 1",
+                node_order=1,
+                approver_id=7,
+                action="approve",
+                is_passed=True,
+            )
+        )
+        db.commit()
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    audit = MagicMock()
+    catalog = FlowCatalog(
+        ApprovalRepository(session), audit, ApprovalFlow, ApprovalFlowNode, datetime.now
+    )
+    try:
+        response = catalog.update_flow(1, {field: True, "flow_name": "Unexpected rename"}, 7)
+        assert response.status_code == 409
+        with Session(engine) as db:
+            flow = db.get(ApprovalFlow, 1)
+            assert flow.flow_name == "Legacy"
+            assert getattr(flow, field) is False
+            assert db.query(ApprovalFlowNode).count() == 2
+            request = db.get(ApprovalRequest, 1)
+            assert (request.status, request.current_node_id) == ("in_progress", 2)
+            assert db.query(ApprovalRecord).count() == 1
+        audit.assert_not_called()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "retired", ["multiple_nodes", "transfer", "delegate", "parallel", "multiple_votes", "single"]
+)
+def test_new_requests_require_single_step_policy_and_keep_inflight(tmp_path, retired):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application.approval_workspace.repository import ApprovalRepository, ordered_nodes
+    from app.application.approval_workspace.request_lifecycle import RequestLifecycle
+    from app.db.db_base import Base
+    from app.db.models.approval import ApprovalFlow
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-admission.sqlite3'}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(User(id=7, username="legacy-applicant", password="test", tenant_id=1))
+        db.add(
+            ApprovalFlow(
+                id=1,
+                flow_key="legacy",
+                flow_name="Legacy",
+                allow_transfer=retired == "transfer",
+                allow_delegate=retired == "delegate",
+            )
+        )
+        db.commit()
+        db.add_all(
+            [
+                ApprovalFlowNode(
+                    id=step,
+                    flow_id=1,
+                    node_name=f"Step {step}",
+                    node_order=step,
+                    approver_type="user",
+                    approver_ids="[7]",
+                    node_type="parallel" if retired == "parallel" else "serial",
+                    min_approvals=2 if retired == "multiple_votes" else 1,
+                )
+                for step in ((1, 2) if retired == "multiple_nodes" else (1,))
+            ]
+        )
+        db.commit()
+        db.add(
+            ApprovalRequest(
+                id=1,
+                request_no="APR-retained",
+                flow_id=1,
+                business_type="general",
+                applicant_id=7,
+                title="Retained",
+                status="in_progress",
+                current_node_id=1,
+                current_node_order=1,
+            )
+        )
+        db.commit()
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    audit = MagicMock()
+    lifecycle = RequestLifecycle(
+        ApprovalRepository(session),
+        SimpleNamespace(actor=lambda *args, **kwargs: 7),
+        audit,
+        lambda req, **kwargs: {"id": req.id},
+        ordered_nodes,
+        lambda: "APR-new",
+    )
+    try:
+        response = lifecycle.submit_request(
+            MagicMock(), {"flow_key": "legacy", "title": "New request"}, None
+        )
+        if retired == "single":
+            assert response["success"] is True
+        else:
+            assert response.status_code == 409
+        with Session(engine) as db:
+            assert db.query(ApprovalRequest).count() == (2 if retired == "single" else 1)
+            assert (
+                db.get(ApprovalRequest, 1).status,
+                db.get(ApprovalRequest, 1).current_node_id,
+            ) == ("in_progress", 1)
+        assert audit.call_count == (1 if retired == "single" else 0)
+    finally:
+        engine.dispose()

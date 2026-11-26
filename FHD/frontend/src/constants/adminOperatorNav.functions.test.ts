@@ -59,8 +59,8 @@ describe('adminOperatorNav constants and functions', () => {
   })
 
   describe('ADMIN_OPERATOR_BRAND_TITLE', () => {
-    it('is XCMAX', () => {
-      expect(ADMIN_OPERATOR_BRAND_TITLE).toBe('XCMAX')
+    it('uses the XCAGI product brand', () => {
+      expect(ADMIN_OPERATOR_BRAND_TITLE).toBe('XCAGI')
     })
   })
 

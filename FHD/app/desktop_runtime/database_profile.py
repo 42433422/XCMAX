@@ -90,12 +90,62 @@ def is_valid_remote_database_url(url: str) -> bool:
     return parsed.scheme in _REMOTE_SCHEMES and bool(parsed.hostname)
 
 
+def _require_reconciled_mod_databases(data_root: Path, local_sqlite_url: str) -> None:
+    """Never silently detach legacy Mod data when selecting the shared database."""
+    error = (
+        "检测到尚未核对的旧 Mod 分库配置或持久文件；请先备份并人工核对、受控迁移，"
+        "再停用旧分库配置并将已保全旧库归档。已阻止切换企业共享库，未删除或迁移任何数据。"
+    )
+    if _as_bool(os.environ.get("XCAGI_MOD_ISOLATED_DATABASES")) or any(
+        key.startswith("XCAGI_MOD_DATABASE_URL_") and value.strip()
+        for key, value in os.environ.items()
+    ):
+        raise RuntimeError(error)
+    raw_mapping = (os.environ.get("XCAGI_MOD_DATABASE_URLS") or "").strip()
+    if raw_mapping:
+        try:
+            mapping = json.loads(raw_mapping)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(error) from exc
+        if not isinstance(mapping, dict) or any(mapping.values()):
+            raise RuntimeError(error)
+
+    from app.db.xcmax_sync import _DB_FILENAME as sync_database_filename
+
+    candidates = set()
+    for directory in (data_root, data_root / "data"):
+        for suffix in ("db", "sqlite", "sqlite3"):
+            candidates.update(directory.glob(f"*__*.{suffix}"))
+            candidates.update(
+                path
+                for path in (directory / "mod_dbs").glob(f"*.{suffix}")
+                if path.name != sync_database_filename
+            )
+    # An explicitly selected SQLite database may live outside userData.
+    from sqlalchemy.engine import make_url
+
+    for raw_url in (
+        local_sqlite_url,
+        os.environ.get("XCAGI_DESKTOP_DATABASE_URL", ""),
+        os.environ.get("DATABASE_URL", ""),
+    ):
+        if raw_url and is_sqlite_url(raw_url):
+            database = make_url(raw_url).database
+            if database and database != ":memory:":
+                path = Path(database).expanduser()
+                candidates.update(path.parent.glob(f"{path.stem}__*{path.suffix}"))
+    for path in candidates:
+        if any(item.is_file() and item.stat().st_size for item in (path, Path(f"{path}-wal"))):
+            raise RuntimeError(error)
+
+
 def apply_database_profile_to_env(
     data_root: str | os.PathLike[str],
     *,
     local_sqlite_url: str,
 ) -> tuple[Path, dict[str, Any]]:
     """Apply profile to process env. Default is local SQLite; remote only when explicitly enabled."""
+    _require_reconciled_mod_databases(Path(data_root).expanduser().resolve(), local_sqlite_url)
     path, profile = load_or_create_profile(data_root)
     os.environ["XCAGI_MOD_ISOLATED_DATABASES"] = "0"
 

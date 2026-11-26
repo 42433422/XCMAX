@@ -161,7 +161,7 @@ def send_input() -> dict:
 
 def test_owned_scope_checks_account_tenant_and_revocation(app, monkeypatch):
     client = local_client(app)
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     monkeypatch.setattr(kellai_binding, "_client_tenant", lambda _request: "team-a")
     connection = approve_module(client)
     assert connection["authorized_scopes"] == MODULE_SCOPES
@@ -173,7 +173,7 @@ def test_owned_scope_checks_account_tenant_and_revocation(app, monkeypatch):
         ).status_code
         == 403
     )
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     monkeypatch.setattr(kellai_binding, "_client_tenant", lambda _request: "team-b")
     assert client.get("/api/kellai/binding/channels", headers=CLIENT_HEADERS).status_code == 403
     monkeypatch.setattr(kellai_binding, "_client_tenant", lambda _request: "team-a")
@@ -191,7 +191,7 @@ def test_send_preserves_idempotency_and_provider_receipt(app, monkeypatch, statu
     import io
 
     client = local_client(app)
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     approve_module(client)
     requests = []
     receipt = {
@@ -228,7 +228,7 @@ def test_send_preserves_idempotency_and_provider_receipt(app, monkeypatch, statu
 
 def test_send_timeout_never_retries_and_validates_transport_input(app, monkeypatch):
     client = local_client(app)
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     approve_module(client)
     calls = []
 
@@ -268,7 +268,7 @@ def test_desktop_only_reply_checks_original_ledger_before_reporting_unsent(
     import urllib.error
 
     client = local_client(app)
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     approve_module(client)
     requests = []
     request_id = send_input()["client_request_id"]
@@ -332,7 +332,7 @@ def test_message_receipt_must_match_original_request_even_with_success_flag(
     import io
 
     client = local_client(app)
-    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: 7)
+    monkeypatch.setattr(kellai_binding, "_client_actor", lambda _request: app.state.test_actor_id)
     approve_module(client)
     calls = []
 
@@ -415,6 +415,58 @@ def test_admin_account_is_denied_even_if_it_spoofs_the_enterprise_shell(
 
     assert response.status_code == 403
     assert "管理账号" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "account_kind,account_tier", [("personal", "normal"), ("enterprise", "personal")]
+)
+def test_personal_account_cannot_pair_or_read_with_enterprise_shell(
+    app, trusted_actor, isolated_store, account_kind, account_tier
+):
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+
+    actor = trusted_actor(tier="personal", permissions=[])
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).account_tier = account_tier
+        db.query(UserSession).filter_by(
+            session_id=actor.session_id
+        ).one().account_kind = account_kind
+    client = TestClient(app, client=("127.0.0.1", 50000), headers=actor.headers)
+    for method, path in [("GET", "status"), ("POST", "start"), ("GET", "channels")]:
+        response = client.request(method, f"/api/kellai/binding/{path}", headers=XCMAX_HEADERS)
+        assert response.status_code == 403
+        assert "个人版" in response.json()["detail"]
+    assert not isolated_store.exists()
+
+
+def test_personal_plan_blocks_existing_kellai_use_but_preserves_owner_revocation(
+    app, monkeypatch, isolated_store
+):
+    from app.db.models.user import User
+    from app.db.session import get_host_db
+
+    client = local_client(app)
+    approve_module(client)
+    original = isolated_store.read_bytes()
+    with get_host_db() as db:
+        db.get(User, app.state.test_actor_id).account_tier = "personal"
+        db.commit()
+    calls = []
+    monkeypatch.setattr(
+        kellai_binding, "_open_kellai_request", lambda *args, **kwargs: calls.append(args)
+    )
+    assert client.get("/api/kellai/binding/channels", headers=CLIENT_HEADERS).status_code == 403
+    assert (
+        client.post(
+            "/api/kellai/binding/messages/send", headers=XCMAX_HEADERS, json=send_input()
+        ).status_code
+        == 403
+    )
+    assert calls == []
+    assert isolated_store.read_bytes() == original
+    assert client.post("/api/kellai/binding/disconnect", headers=XCMAX_HEADERS).status_code == 200
+    assert kellai_binding_store.connection_credentials() is None
 
 
 def test_pairing_secrets_never_appear_in_public_status(app: FastAPI) -> None:

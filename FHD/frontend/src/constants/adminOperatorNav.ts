@@ -14,7 +14,7 @@ export const ADMIN_OPERATOR_CORE_KEYS = ADMIN_OPERATOR_VISIBLE_CORE_KEYS
 
 export const ADMIN_OPERATOR_HOME_ROUTE = 'chat'
 
-export const ADMIN_OPERATOR_BRAND_TITLE = 'XCMAX'
+export const ADMIN_OPERATOR_BRAND_TITLE = 'XCAGI'
 export const ADMIN_OPERATOR_BRAND_SUBTITLE = ''
 
 export function isAdminOperatorNavContext(_activeView: string, _isAdminAccount: boolean): boolean {

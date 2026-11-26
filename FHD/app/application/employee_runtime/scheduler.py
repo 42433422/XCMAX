@@ -134,6 +134,7 @@ class EmployeeCronJob:
     max_retries: int = 0
     retry_count: int = 0
     next_retry_at: datetime | None = None
+    pending_execution: dict[str, str] = field(default_factory=dict)
     # 来源标记（env / manifest）
     source: str = "env"
     depends_on: list[str] = field(default_factory=list)
@@ -146,6 +147,8 @@ class EmployeeCronJob:
             state = "disabled"
         elif self.running:
             state = "running"
+        elif self.pending_execution:
+            state = self.last_status
         elif self.last_status == "blocked_config":
             state = "blocked_config"
         elif self.next_retry_at is not None:
@@ -178,6 +181,7 @@ class EmployeeCronJob:
             "max_retries": self.max_retries,
             "retry_count": self.retry_count,
             "next_retry_at": next_retry,
+            "pending_execution": dict(self.pending_execution),
             "source": self.source,
             "depends_on": list(self.depends_on),
         }
@@ -223,7 +227,7 @@ from app.application.employee_runtime.scheduler_execution import (
 def refresh_employee_scheduler_jobs() -> dict[str, Any]:
     """Rebuild local employee cron jobs from env flags + manifest discovery."""
     with _lock:
-        old = _jobs
+        old = dict(_jobs)
         _jobs.clear()
         # daily-orchestrator 始终第一个（向后兼容 jobs[0]）
         for job_id, job in _configured_jobs().items():
@@ -254,6 +258,9 @@ def _inherit_job_state(job: EmployeeCronJob, previous: EmployeeCronJob) -> None:
     job.running = previous.running
     job.retry_count = previous.retry_count
     job.next_retry_at = previous.next_retry_at
+    job.pending_execution = dict(previous.pending_execution)
+    if job.pending_execution:
+        job.next_run_at = None
 
 
 def _ensure_jobs_locked() -> None:
@@ -289,6 +296,8 @@ def get_employee_scheduler_status() -> dict[str, Any]:
 
 def _job_next_due(job: EmployeeCronJob) -> datetime | None:
     """返回 job 的下一个到期时间（取 next_retry_at 和 next_run_at 的较小值）。"""
+    if job.pending_execution:
+        return None
     candidates: list[datetime] = []
     if job.next_retry_at is not None:
         candidates.append(job.next_retry_at)

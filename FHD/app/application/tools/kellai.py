@@ -6,21 +6,18 @@ import hashlib
 from typing import Any
 
 from app.application import kellai_binding_app_service as binding
-from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
 from app.infrastructure.kellai_client import KellaiRequestError, request_kellai
 
 
 def _connection(context: dict[str, Any], action: str) -> dict[str, Any]:
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
-    actor = _bound_actor(context)
     spec = get_tool_action_spec("kellai", action)
     scope = str((spec.policy if spec else {}).get("provider_scope") or "")
     if not scope:
         raise binding.KellaiAuthorizationError("客来来能力未登记")
-    return binding.scoped_connection(
-        actor=int(actor.id), tenant_id=str(context.get("tenant_id") or ""), scope=scope
-    )
+    return binding.scoped_connection(context=context, scope=scope)
 
 
 def connection_scope(context: dict[str, Any], action: str) -> dict[str, Any]:
