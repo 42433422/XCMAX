@@ -473,7 +473,11 @@ class CodexTransport:
                         client.turn_start, self.thread_id, text, outcome_unknown=True
                     )
                 else:
-                    from openai_codex.generated.v2_all import TurnStartParams, TurnToolOutput
+                    from openai_codex.generated.v2_all import (
+                        FunctionCallOutputBody,
+                        TurnStartParams,
+                        TurnToolOutput,
+                    )
 
                     # Same tool-level input as SDK ExternalMessage, with our low-level
                     # client's deny-by-default approval handler still in place.
@@ -481,7 +485,9 @@ class CodexTransport:
                         thread_id=self.thread_id,
                         input=[],
                         tool_output=TurnToolOutput(
-                            name="verify_runtime_goal", output=goal_feedback, retain=False
+                            name="verify_runtime_goal",
+                            output=FunctionCallOutputBody(root=goal_feedback),
+                            retain=False,
                         ),
                     )
                     result = await self._call(

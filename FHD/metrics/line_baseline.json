@@ -1,5 +1,5 @@
 {
-  "lines": 2734053,
+  "lines": 2734059,
   "updated": "2026-11-25",
-  "note": "棘轮下调"
+  "note": "#3525 类型修复：TurnToolOutput 的 output 必须为 FunctionCallOutputBody，显式构造并补齐导入，净增 6 行；不改变运行时行为。"
 }
