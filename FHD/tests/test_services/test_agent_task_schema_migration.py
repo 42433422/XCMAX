@@ -25,7 +25,7 @@ def database_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 
 
 def test_agent_task_migration_creates_ssot_and_command_ledger(database_url: str) -> None:
-    command.upgrade(_config(), "head")
+    command.upgrade(_config(), "2026_08_12_agent_task_execution")
 
     engine = create_engine(database_url)
     try:

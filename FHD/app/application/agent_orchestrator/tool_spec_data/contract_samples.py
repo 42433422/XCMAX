@@ -24,12 +24,16 @@ def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
     if key == "file_name":
         return "sample.docx"
     if expected_type == "object":
+        if prop.get("properties"):
+            return _sample_payload_from_schema(prop)
         return {"sample": True}
     if expected_type == "array":
         raw_items = prop.get("items")
         items = raw_items if isinstance(raw_items, dict) else {}
         if str(items.get("type") or "").strip() == "string":
             return [f"sample_{key}"]
+        if items.get("properties"):
+            return [_sample_payload_from_schema(items)]
         return [{"sample": True}]
     if expected_type == "integer":
         return 1

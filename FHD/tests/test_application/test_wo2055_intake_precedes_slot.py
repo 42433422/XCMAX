@@ -15,6 +15,7 @@ from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat
 from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 from tests.test_application.test_xiaox_goal_verifier import verifier as verifier
 
@@ -94,7 +95,10 @@ def test_registered_intake_uses_dynamic_xiaox_and_truthful_original_receipt(
         events = [
             json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
         ]
-        result = next(event["result"] for event in events if event["type"] == "done")
+        ack = next(event["result"] for event in events if event["type"] == "done")
+        if text == message:
+            assert ack["execution_state"] == "queued", ack
+        result = finish_queued_chat(state, ack)
         context.update(result.get("runtime_context_update") or {})
         return result
 

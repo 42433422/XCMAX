@@ -190,18 +190,18 @@ def test_application_uses_workflow_composition_root(tmp_path, violation):
 @pytest.mark.parametrize("violation", [False, True])
 def test_receipt_readback_does_not_import_coordinator_helpers(tmp_path, source, violation):
     _package(tmp_path, "app.domain.task_lifecycle.agent_runtime_results")
-    _package(tmp_path, "app.application.agent_runtime.codex_runtime")
+    _package(tmp_path, "app.application.agent_runtime.xiaox_runtime")
     _package(
         tmp_path,
         "app.application.agent_runtime.gateway",
-        "import app.application.agent_runtime.codex_runtime\n",
+        "import app.application.agent_runtime.xiaox_runtime\n",
     )
     for module in ("receipts", "receipt_projection"):
-        _package(tmp_path, f"app.infrastructure.codex.{module}")
+        _package(tmp_path, f"app.infrastructure.xiaox.{module}")
     _package(
         tmp_path,
-        f"app.infrastructure.codex.{source}",
-        "from app.application.agent_runtime.codex_runtime import _classify\n"
+        f"app.infrastructure.xiaox.{source}",
+        "from app.application.agent_runtime.xiaox_runtime import _classify\n"
         if violation
         else "import app.domain.task_lifecycle.agent_runtime_results\nimport app.application.agent_runtime.gateway\n",
     )

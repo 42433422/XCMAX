@@ -68,7 +68,9 @@ def test_s2_candidate_reply_resolves_second_target_and_reaches_approval(
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
-        second = Product(tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20)
+        second = Product(
+            tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20, unit="箱"
+        )
         db.add_all([first, second])
         db.flush()
         candidates = [
@@ -181,7 +183,9 @@ def test_s4_approved_step_writes_database_and_verifies_readback(
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
-        second = Product(tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20)
+        second = Product(
+            tenant_id=actor.tenant_id, name="乙型涂料", model_number="A1", price=20, unit="箱"
+        )
         db.add_all([first, second])
         db.flush()
         expected_id = int(second.id)

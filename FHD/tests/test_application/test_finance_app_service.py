@@ -24,29 +24,20 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from app.application.finance_app_service import FinanceAppService, _parse_dt
 
 
-def _setup_shared_0():
+def _draft_transaction():
     svc = FinanceAppService()
     db = MagicMock()
     txn = MagicMock()
     txn.id = 1
     txn.amount = Decimal("100")
     txn.transaction_type = "receipt"
+    txn.status = "draft"
+    txn.journal_entry_id = None
+    txn.reference_type = None
+    txn.reference_id = None
     txn.to_dict.return_value = {"id": 1}
-    q = _make_query_mock(items=[txn])
-    db.query.return_value = q
-    return (svc, db, txn, q)
-
-
-def _setup_shared_1():
-    svc = FinanceAppService()
-    db = MagicMock()
-    txn = MagicMock()
-    txn.id = 1
-    txn.amount = Decimal("100")
-    txn.transaction_type = "receipt"
-    q = _make_query_mock(items=[txn])
-    db.query.return_value = q
-    return (svc, db, txn, q)
+    db.query.return_value = _make_query_mock(items=[txn])
+    return svc, db, txn
 
 
 def _assert_shared_with_dates_0(self, _shared_literal_0, _shared_literal_1):
@@ -89,6 +80,7 @@ def _make_query_mock(items=None, count=0, scalar=None):
     q.offset.return_value = q
     q.limit.return_value = q
     q.join.return_value = q
+    q.with_for_update.return_value = q
     q.count.return_value = count
     q.all.return_value = items or []
     q.first.return_value = items[0] if items else None
@@ -493,21 +485,14 @@ class TestUpdateTransaction:
         assert "不存在" in result["message"]
 
     def test_success(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
-        txn.amount = Decimal("100")
-        txn.transaction_type = "receipt"
+        svc, db, txn = _draft_transaction()
         txn.to_dict.return_value = {"id": 1, "amount": "200"}
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"
             ) as mock_notify:
-                result = svc.update_transaction(1, {"amount": "200", "status": "completed"})
+                result = svc.update_transaction(1, {"amount": "200", "status": "pending"})
 
         assert result["success"] is True
         db.commit.assert_called_once()
@@ -515,18 +500,16 @@ class TestUpdateTransaction:
         mock_notify.assert_called_once()
 
     def test_amount_conversion(self):
-        svc, db, txn, q = _setup_shared_0()
+        svc, db, txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(1, {"amount": "250.50"})
 
-        # Verify amount was set as Decimal
-        # setattr(txn, "amount", Decimal("250.50")) should have been called
-        assert txn.amount == Decimal("250.50") or txn.amount == Decimal("250.5")
+        assert txn.amount == Decimal("250.50")
 
     def test_date_conversion(self):
-        svc, db, txn, q = _setup_shared_0()
+        svc, db, txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -538,12 +521,13 @@ class TestUpdateTransaction:
                     },
                 )
 
-        # Verify dates were converted (setattr called with datetime objects)
-        # The exact values depend on mock behavior, but commit should have been called
+        assert txn.transaction_date == datetime(2026, 1, 15, 10)
+        assert txn.due_date == datetime(2026, 2, 15)
         db.commit.assert_called_once()
 
     def test_none_values_skipped(self):
-        svc, db, txn, q = _setup_shared_0()
+        svc, db, txn = _draft_transaction()
+        txn.description = "原说明"
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
@@ -552,51 +536,55 @@ class TestUpdateTransaction:
                     {
                         "amount": None,
                         "description": None,
-                        "status": "completed",  # only this should be applied
+                        "status": "pending",
                     },
                 )
 
-        # status should be set, amount and description should not
-        # (None values are skipped per the `v is not None` check)
+        assert txn.amount == Decimal("100")
+        assert txn.description == "原说明"
+        assert txn.status == "pending"
         db.commit.assert_called_once()
 
     def test_neuro_notify_error_suppressed(self):
-        svc, db, txn, q = _setup_shared_0()
+        svc, db, _txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed",
                 side_effect=RedisConnectionError("bus down"),
             ):
-                result = svc.update_transaction(1, {"status": "completed"})
+                result = svc.update_transaction(1, {"status": "pending"})
 
         assert result["success"] is True
 
     def test_recoverable_error_returns_failure(self):
-        svc, db, txn, q = _setup_shared_1()
+        svc, db, _txn = _draft_transaction()
         db.commit.side_effect = ValueError("constraint violation")
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
-            result = svc.update_transaction(1, {"status": "completed"})
+            result = svc.update_transaction(1, {"status": "pending"})
 
         assert result["success"] is False
         assert "constraint violation" in result["message"]
         db.rollback.assert_called_once()
 
     def test_non_updatable_keys_ignored(self):
-        svc, db, txn, q = _setup_shared_0()
+        svc, db, txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_transaction_changed"):
                 svc.update_transaction(
                     1,
                     {
-                        "id": 999,  # not in updatable set
-                        "transaction_type": "payment",  # not in updatable set
-                        "status": "completed",  # in updatable set
+                        "id": 999,
+                        "transaction_type": "payment",
+                        "status": "pending",
                     },
                 )
 
+        assert txn.id == 1
+        assert txn.transaction_type == "receipt"
+        assert txn.status == "pending"
         db.commit.assert_called_once()
 
 
@@ -619,7 +607,7 @@ class TestDeleteTransaction:
         assert "不存在" in result["message"]
 
     def test_success(self):
-        svc, db, txn, q = _setup_shared_1()
+        svc, db, txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
@@ -634,7 +622,7 @@ class TestDeleteTransaction:
         mock_notify.assert_called_once()
 
     def test_neuro_notify_error_suppressed(self):
-        svc, db, txn, q = _setup_shared_1()
+        svc, db, _txn = _draft_transaction()
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(
@@ -646,7 +634,7 @@ class TestDeleteTransaction:
         assert result["success"] is True
 
     def test_recoverable_error_returns_failure(self):
-        svc, db, txn, q = _setup_shared_1()
+        svc, db, _txn = _draft_transaction()
         db.commit.side_effect = ValueError("db error")
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
@@ -657,14 +645,9 @@ class TestDeleteTransaction:
         db.rollback.assert_called_once()
 
     def test_amount_none_handled(self):
-        svc = FinanceAppService()
-        db = MagicMock()
-        txn = MagicMock()
-        txn.id = 1
+        svc, db, txn = _draft_transaction()
         txn.amount = None
         txn.transaction_type = None
-        q = _make_query_mock(items=[txn])
-        db.query.return_value = q
 
         with patch("app.application.finance_app_service.get_db", return_value=_mock_db_ctx(db)):
             with patch(

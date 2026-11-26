@@ -79,6 +79,11 @@ def enqueue_resume(
     store._reject_legacy_binding(parent)
     repository = store.repository
     queue = durable_queue(repository)
+    current = copy.deepcopy(parent)
+    metadata = current.metadata.setdefault("xiaox_runtime", {})
+    # Conversation authorization can take a write lock in the same SQLite
+    # database. Check it before the queue CAS and again in the claimed worker.
+    store._validate_authority(current, metadata)
     with repository.transaction() as db:
         execution = db.get(AgentTaskExecutionRecord, parent.run_id)
         if execution is not None:
@@ -106,9 +111,6 @@ def enqueue_resume(
             )
             if matched != 1:
                 raise XiaoxBindingError("binding_conflict", "任务执行权已变化")
-        current = copy.deepcopy(parent)
-        metadata = current.metadata.setdefault("xiaox_runtime", {})
-        store._validate_authority(current, metadata)
         if current.status == "blocked":
             if (current.final_output.get("xiaox_result") or {}).get("retryable") is not True:
                 raise XiaoxBindingError("run_inactive", "原任务尚不满足安全续跑条件")

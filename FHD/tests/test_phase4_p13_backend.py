@@ -14,6 +14,7 @@ import pytest
 
 from app.db.models import PurchaseOrder, Supplier
 from app.domain.shared_services.purchase_service import PurchaseService
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 def _fluent(*, all_=None, first=None, count=0) -> MagicMock:
@@ -116,15 +117,16 @@ def test_get_supplier_not_found(svc: PurchaseService) -> None:
 def test_update_supplier_not_found(svc: PurchaseService) -> None:
     session = MagicMock()
     session.query.return_value = _fluent(first=None)
-    with _patched_db(session):
+    with tenant_scope(7), _patched_db(session):
         out = svc.update_supplier(1, {"name": "x"})
     assert out["success"] is False
 
 
 def test_update_supplier_success(svc: PurchaseService) -> None:
     session = MagicMock()
-    session.query.return_value = _fluent(first=Supplier(code="C1", name="旧名"))
-    with _patched_db(session):
+    supplier = Supplier(id=1, tenant_id=7, code="C1", name="旧名", status="active")
+    session.query.side_effect = [_fluent(first=supplier), _fluent(first=None)]
+    with tenant_scope(7), _patched_db(session):
         out = svc.update_supplier(1, {"name": "新名", "contact_person": "张三"})
     assert out["success"] is True
     assert out["data"]["name"] == "新名"
@@ -133,18 +135,20 @@ def test_update_supplier_success(svc: PurchaseService) -> None:
 def test_delete_supplier_not_found(svc: PurchaseService) -> None:
     session = MagicMock()
     session.query.return_value = _fluent(first=None)
-    with _patched_db(session):
+    with tenant_scope(7), _patched_db(session):
         out = svc.delete_supplier(1)
     assert out["success"] is False
 
 
 def test_delete_supplier_success(svc: PurchaseService) -> None:
     session = MagicMock()
-    session.query.return_value = _fluent(first=Supplier(code="C1", name="A"))
-    with _patched_db(session):
+    supplier = Supplier(id=1, tenant_id=7, code="C1", name="A", status="active")
+    session.query.side_effect = [_fluent(first=supplier), _fluent(first=None)]
+    with tenant_scope(7), _patched_db(session):
         out = svc.delete_supplier(1)
     assert out["success"] is True
-    assert "已删除" in out["message"]
+    assert supplier.status == "deleted"
+    assert "历史关联保留" in out["message"]
 
 
 # ---------------------------------------------------------------------------

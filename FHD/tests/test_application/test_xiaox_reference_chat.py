@@ -9,12 +9,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_runtime.chat import runtime_chat_payload
 from app.domain.task_lifecycle.agent_runtime_contract import goal_answers
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.fixtures.xiaox_http_runtime import (
     dynamic_chat_runtime as dynamic_chat_runtime,
 )
+from tests.fixtures.xiaox_http_runtime import finish_queued_chat
 from tests.fixtures.xiaox_http_runtime import (
     runtime_entry as runtime_entry,
 )
@@ -78,17 +78,9 @@ def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
         assert response.status_code == 200, response.text
         return response.json()
 
-    def finish(ack):
-        if ack["execution_state"] != "queued":
-            return ack
-        run = state.drain(ack["run_id"])
-        return runtime_chat_payload(
-            run.final_output["xiaox_result"], conversation_id=state.conversation
-        )
-
     initial = send("查询候选并以选中名称新增客户")
     assert initial["execution_state"] == "queued", initial
-    first = finish(initial)
+    first = finish_queued_chat(state, initial)
     assert first["needs_user_input"] is True, first
     parent_id = first["run_id"]
     original = state.repository.get(parent_id)
@@ -96,13 +88,13 @@ def test_real_chat_candidate_answer_continues_same_goal_without_write_approval(
     thread_id = original.metadata["xiaox_runtime"]["thread_id"]
     context["agent_runtime_run_id"] = parent_id
     context["turn_id"] = "unclear-reference-answer"
-    uncertain = finish(send("确认"))
+    uncertain = finish_queued_chat(state, send("确认"))
     assert uncertain["needs_user_input"] is True, uncertain
     assert uncertain["requires_confirmation"] is False
     assert state.business_calls == [("products", "query")]
 
     context["turn_id"] = "selected-reference-answer"
-    answered = finish(send("第二个"))
+    answered = finish_queued_chat(state, send("第二个"))
     assert answered["run_id"] == parent_id, answered
     assert answered["requires_confirmation"] is True, answered
     child_id = answered["data"]["data"]["approval_card"]["run_id"]

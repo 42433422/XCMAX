@@ -23,6 +23,7 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 from app.application.agent_runtime import gateway
+from app.application.agent_runtime.chat import runtime_chat_payload
 from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.xiaox.policy import (
     CODEX_VERSION,
@@ -164,6 +165,16 @@ def fixture_goal_review(
         "uncovered_sources": [],
         "feedback": feedback,
     }
+
+
+def finish_queued_chat(state, ack):
+    if ack["execution_state"] != "queued":
+        return ack
+    run = state.drain(ack["run_id"])
+    context = ack.get("runtime_context_update") or {}
+    return runtime_chat_payload(
+        run.final_output["xiaox_result"], conversation_id=context.get("conversation_id") or ""
+    )
 
 
 @pytest.fixture

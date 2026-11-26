@@ -642,16 +642,17 @@ class TestGetCustomersSessionExtended:
             result = get_customers_session()
         assert result is mock_session
 
-    def test_resolve_fails_value_error(self):
+    def test_resolver_failure_does_not_fall_back_to_a_different_store(self):
         with (
             patch(
                 "app.mod_sdk.erp_repository_registry.resolve_customers_session",
                 side_effect=ValueError("no mod"),
             ),
             patch("app.db.SessionLocal") as mock_sl,
+            pytest.raises(ValueError, match="no mod"),
         ):
             get_customers_session()
-            mock_sl.assert_called_once()
+        mock_sl.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
