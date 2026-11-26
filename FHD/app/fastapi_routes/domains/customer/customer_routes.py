@@ -37,6 +37,7 @@ from app.neuro_bus.route_event_publisher import (
     publish_route_event,
     publish_simple_event,
 )
+from app.schemas.customer_schema import CustomerCompatMutation
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 __all__ = [
@@ -272,8 +273,12 @@ def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse
 @router.post("/customers")
 @router.post("/customers/", include_in_schema=False)
 @publish_route_event(RouteEvents.DB_QUERY, domain="customers")
-def customers_create(request: Request, body: dict = Body(default_factory=dict)) -> JSONResponse:
-    name, cp, ph, addr = _customer_body_name_contact(body)
+def customers_create(
+    request: Request,
+    body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
+) -> JSONResponse:
+    payload = body.model_dump(exclude_unset=True)
+    name, cp, ph, addr = _customer_body_name_contact(payload)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
     result, status = _run_customers_agent(
@@ -306,9 +311,12 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
 @router.put("/customers/{customer_id}")
 @router.put("/customers/{customer_id}/", include_in_schema=False)
 def customers_update(
-    request: Request, customer_id: int, body: dict = Body(default_factory=dict)
+    request: Request,
+    customer_id: int,
+    body: CustomerCompatMutation = Body(default_factory=CustomerCompatMutation),
 ) -> JSONResponse:
-    name, cp, ph, addr = _customer_body_name_contact(body)
+    payload = body.model_dump(exclude_unset=True)
+    name, cp, ph, addr = _customer_body_name_contact(payload)
     if not name:
         raise HTTPException(status_code=400, detail="客户名称不能为空")
     return JSONResponse(
@@ -323,8 +331,8 @@ def customers_update(
                 "contact_phone": ph,
                 "contact_address": addr,
                 **(
-                    {"expected_version": body["expected_version"]}
-                    if "expected_version" in body
+                    {"expected_version": payload["expected_version"]}
+                    if "expected_version" in payload
                     else {}
                 ),
             },

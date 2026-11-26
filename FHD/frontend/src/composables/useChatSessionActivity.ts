@@ -13,7 +13,7 @@ export const isChatConversationBusy = (status?: ChatConversationStatus) => statu
 const normalizeId = (id: string) => String(id || '').trim() || 'default'
 
 export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity = () => '') {
-  const activity = reactive(new Map<string, { sessionId: string; identity: string; status: ChatConversationStatus }>())
+  const activity = reactive(new Map<string, { sessionId: string; identity: string; status: ChatConversationStatus; turnId?: string }>())
   const keyOf = (sessionId: string) => JSON.stringify([getIdentity(), normalizeId(sessionId)])
   const statuses = computed(() => Object.fromEntries([...activity.values()]
     .filter(entry => entry.identity === getIdentity())
@@ -21,14 +21,22 @@ export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity
   const isSessionBusy = (sessionId: string) => isChatConversationBusy(activity.get(keyOf(sessionId))?.status)
   const isLoading = computed(() => isSessionBusy(activeSessionId.value))
   const isStreamingReply = computed(() => activity.get(keyOf(activeSessionId.value))?.status === 'streaming')
+  const pendingTurnId = computed(() => isLoading.value ? activity.get(keyOf(activeSessionId.value))?.turnId : undefined)
+  const stoppedTurnId = computed(() => {
+    const entry = activity.get(keyOf(activeSessionId.value))
+    return entry?.status === 'stopped' ? entry.turnId : undefined
+  })
 
   const generations = new Map<string, AbortController>()
-  function cancelSession(sessionId = activeSessionId.value): boolean {
+  function cancelSession(sessionId = activeSessionId.value, options?: { showStopNotice?: boolean }): boolean {
     const key = keyOf(sessionId)
-    const wasBusy = isSessionBusy(sessionId)
+    const entry = activity.get(key)
+    const wasBusy = isChatConversationBusy(entry?.status)
     generations.get(key)?.abort()
     generations.delete(key)
-    if (wasBusy) forSession(sessionId).setStatus('stopped')
+    if (entry && (wasBusy || entry.status === 'stopped')) {
+      activity.set(key, { ...entry, status: 'stopped', turnId: wasBusy && options?.showStopNotice ? entry.turnId : undefined })
+    }
     return wasBusy
   }
   function cancelAll() {
@@ -36,13 +44,13 @@ export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity
     generations.clear()
     activity.clear()
   }
-  function beginRound(sessionId = activeSessionId.value) {
+  function beginRound(sessionId = activeSessionId.value, turnId?: string) {
     const key = keyOf(sessionId)
     cancelSession(sessionId)
     const controller = new AbortController()
     generations.set(key, controller)
     const isCurrent = () => generations.get(key) === controller && !controller.signal.aborted
-    const room = forSession(sessionId)
+    const room = forSession(sessionId, turnId)
     return {
       signal: controller.signal,
       isCurrent,
@@ -56,11 +64,14 @@ export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity
     return () => generations.get(key) === generation && !generation?.signal.aborted
   }
 
-  function forSession(sessionId = activeSessionId.value) {
+  function forSession(sessionId = activeSessionId.value, turnId?: string) {
     const id = normalizeId(sessionId)
     const identity = getIdentity()
     const key = keyOf(id)
-    const setStatus = (status: ChatConversationStatus) => activity.set(key, { sessionId: id, identity, status })
+    const setStatus = (status: ChatConversationStatus) => activity.set(key, {
+      sessionId: id, identity, status,
+      turnId: isChatConversationBusy(status) ? turnId || activity.get(key)?.turnId : undefined,
+    })
     return {
       sessionId: id,
       isActive: () => normalizeId(activeSessionId.value) === id && getIdentity() === identity,
@@ -77,7 +88,7 @@ export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity
     }
   }
 
-  return { isLoading, isStreamingReply, isSessionBusy, statuses, forSession, captureGeneration, beginRound, cancelSession, cancelAll }
+  return { isLoading, isStreamingReply, pendingTurnId, stoppedTurnId, isSessionBusy, statuses, forSession, captureGeneration, beginRound, cancelSession, cancelAll }
 }
 
 export async function persistDetachedPlannerResult(

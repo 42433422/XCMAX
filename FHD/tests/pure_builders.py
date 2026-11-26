@@ -14,7 +14,7 @@ def super_employee_request(request_id: str = "req-1", **overrides) -> dict:
         "created_at": "2026-01-01T00:00:00+00:00",
         "source": "xcagi_admin_im",
         "employee_id": "codex-super-employee",
-        "employee_name": "超级员工-Codex",
+        "employee_name": "超级员工-Xiaox",
         "mode": "code",
         "device_scope": "all_devices",
         "target_devices": ["all"],

@@ -102,7 +102,7 @@ class PaymentControllerContractTest {
         assertEquals(2, plans.size());
         assertFalse(((List<?>) ((Map<?, ?>) plans.get(0)).get("features")).isEmpty());
         assertFalse(((List<?>) controller.getAccountPlans().get("plans")).isEmpty());
-        assertEquals(298000, ((Map<?, ?>) controller.getAccountPlans().get("commercial_terms"))
+        assertEquals(99900, ((Map<?, ?>) controller.getAccountPlans().get("commercial_terms"))
                 .get("customization_from_cents"));
 
         Entitlement entitlement = new Entitlement();

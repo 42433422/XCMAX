@@ -32,3 +32,51 @@ def test_customers_list_via_service(monkeypatch):
     assert out["success"] is True
     assert out["total"] == 1
     assert out.get("execution_path") == "customers_service"
+
+
+def test_facade_customer_write_contract_rejects_invalid_payload_without_execution(monkeypatch):
+    from pydantic import ValidationError
+
+    from app.mod_sdk import erp_customers_facade as facade
+
+    called = []
+    monkeypatch.setattr(facade, "_run_customer_capability", lambda *a, **kw: called.append((a, kw)))
+    for bad in (
+        {"unit_name": "Alpha", "name": "Beta"},
+        {"unit_name": 2},
+        {"unit_name": "Acme", "expected_version": True},
+    ):
+        with pytest.raises(ValidationError):
+            facade.customers_create(None, bad)
+        with pytest.raises(ValidationError):
+            facade.customers_update(None, 7, bad)
+    assert called == []
+
+
+def test_facade_customer_update_normalizes_version_without_client_tenant(monkeypatch):
+    from app.mod_sdk import erp_customers_facade as facade
+
+    records = []
+    monkeypatch.setattr(
+        facade,
+        "_run_customer_capability",
+        lambda request, action, params: records.append((action, params)),
+    )
+    facade.customers_update(
+        None,
+        42,
+        {"unit_name": "  Acme  ", "expected_version": "2", "tenant_id": 999},
+    )
+    assert records == [
+        (
+            "update",
+            {
+                "id": 42,
+                "customer_name": "Acme",
+                "contact_person": "",
+                "contact_phone": "",
+                "contact_address": "",
+                "expected_version": 2,
+            },
+        )
+    ]

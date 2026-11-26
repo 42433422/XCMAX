@@ -175,7 +175,7 @@ def test_all_offered_candidates_and_distinguishing_attributes_are_visible():
     assert "20. 同名（#119）" in question and "M19" in question
 
 
-def test_short_followup_preserves_actual_repeated_turns_in_codex_input(
+def test_short_followup_preserves_actual_repeated_turns_in_xiaox_input(
     monkeypatch, tmp_path, dialogue_db
 ):
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
@@ -188,7 +188,7 @@ def test_short_followup_preserves_actual_repeated_turns_in_codex_input(
         )
     current = {**context, "turn_id": "next"}
     prepare_chat_turn("换成上个月", current)
-    from app.application.agent_runtime.codex_runtime import _input_text
+    from app.application.agent_runtime.xiaox_runtime import _input_text
 
     history = recent_conversation_messages(current)
     prompt = _input_text("换成上个月", history, None)

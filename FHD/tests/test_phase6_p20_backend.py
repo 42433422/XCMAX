@@ -1753,51 +1753,68 @@ class TestSummarizeLedger:
 
 class TestArchiveFromCrmInvoice:
     def test_archive_db_success(self):
-        inv = {"id": 1, "amount_cents": 5000, "invoice_no": "X1"}
-        fake_txn = SimpleNamespace(id=42)
+        inv = {
+            "id": 1,
+            "market_user_id": 1,
+            "amount_cents": 5000,
+            "invoice_no": "X1",
+            "issued_at": "2026-11-01T09:00:00+08:00",
+        }
         fake_db = MagicMock()
-        fake_db.__enter__ = MagicMock(return_value=fake_db)
-        fake_db.__exit__ = MagicMock(return_value=None)
+        fake_db.__enter__.return_value = fake_db
+        verified = {"archived": True, "transaction_id": 42, "idempotent": True}
+        source = "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id"
         with (
-            patch("app.db.SessionLocal", return_value=fake_db),
-            patch("app.db.models.finance.FinancialTransaction", create=True) as mock_ft_cls,
+            patch("app.db.SessionLocal", return_value=fake_db) as sessions,
+            patch(
+                "app.db.models.finance.FinancialTransaction",
+                return_value=SimpleNamespace(id=42),
+            ),
+            patch(source, return_value=inv),
+            patch.object(fin_archive, "_crm_market_user_owned", return_value=True),
+            patch.object(
+                fin_archive, "_invoice_archive_existing", side_effect=[None, verified]
+            ) as readback,
         ):
-            mock_ft_cls.return_value = fake_txn
-            fake_db.add = MagicMock()
-            fake_db.commit = MagicMock()
-            fake_db.refresh = MagicMock()
             result = fin_archive.archive_from_crm_invoice(inv, market_user_id=1)
-        assert result["archived"] is True
-        assert result["transaction_id"] == 42
+        assert result == {"archived": True, "transaction_id": 42, "idempotent": False}
+        assert sessions.call_count == readback.call_count == 2
+        fake_db.commit.assert_called_once()
 
-    def test_archive_db_error_local_only(self):
-        inv = {"id": 1, "amount_cents": 5000}
+    def test_archive_db_error_refuses_success(self):
+        inv = {
+            "id": 1,
+            "market_user_id": 1,
+            "amount_cents": 5000,
+            "issued_at": "2026-11-01T09:00:00+08:00",
+        }
+        source = "app.domain.shared_services.user_cs_crm_store.get_crm_invoice_by_id"
         with (
             patch("app.db.SessionLocal", side_effect=OSError("db down")),
-            patch("app.db.models.finance.FinancialTransaction", create=True),
+            patch(source, return_value=inv),
+            patch.object(fin_archive, "_crm_market_user_owned", return_value=True),
         ):
             result = fin_archive.archive_from_crm_invoice(inv, market_user_id=1)
-        assert result["archived"] is True
-        assert result["local_only"] is True
-        assert "entry" in result
+        assert result == {"archived": False, "reason_code": "invoice_archive_unavailable"}
 
 
 class TestRebuildLedgerArchive:
     def test_rebuild_empty(self):
         with patch(
             "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
-            return_value={"items": []},
+            return_value={"items": [], "total": 0},
         ):
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)
         assert result["rebuilt"] == 0
+        assert result["complete"] is True
 
     def test_rebuild_with_items(self):
         items = [{"id": 1, "amount_cents": 100}, {"id": 2, "amount_cents": 200}]
         with (
             patch(
                 "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
-                return_value={"items": items},
-            ),
+                return_value={"items": items, "total": len(items)},
+            ) as list_source,
             patch(
                 "app.domain.shared_services.finance_unified_archive.archive_from_crm_invoice"
             ) as mock_archive,
@@ -1805,7 +1822,8 @@ class TestRebuildLedgerArchive:
             mock_archive.return_value = {"archived": True}
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)
         assert result["rebuilt"] == 2
-        assert mock_archive.call_count == 2
+        assert result["complete"] is True
+        assert list_source.call_count == mock_archive.call_count == 2
 
 
 # ===========================================================================

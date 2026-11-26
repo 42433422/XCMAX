@@ -110,6 +110,22 @@ async def test_compat_history_rejects_body_owner_without_authenticated_actor(
 
 
 @pytest.mark.asyncio
+async def test_observer_timeout_does_not_settle_worker_turn(monkeypatch):
+    from app.application import planner_compat_service as compat
+
+    payload = {"success": False, "requires_reconciliation": True, "observation_timeout": True}
+    monkeypatch.setattr(compat, "_execute_compat_chat_impl", AsyncMock(return_value=payload))
+
+    def must_not_settle(*args):
+        pytest.fail("an observation timeout must not settle the active worker turn")
+
+    monkeypatch.setattr(compat, "_settle_dialogue_turn", must_not_settle)
+    monkeypatch.setattr(compat, "_persist_compat_chat_turn", must_not_settle)
+    result = await compat.execute_compat_chat(_make_request(), XcagiCompatChatBody(message="核对"))
+    assert result["requires_reconciliation"] is True
+
+
+@pytest.mark.asyncio
 async def test_anonymous_mainline_cannot_persist_under_body_owner(
     durable_compat_history, monkeypatch
 ):

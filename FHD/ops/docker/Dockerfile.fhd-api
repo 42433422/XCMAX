@@ -19,12 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 构建 wheels 前必须把这些本地项目放进与 requirements 相同的相对路径。
 COPY requirements-server-api.txt requirements.txt
 COPY packages /build/packages
+COPY ops/deploy/requirements-memory-runtime.txt memory-requirements.txt
+COPY scripts/dev/provision_memory_model.py provision_memory_model.py
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt -r memory-requirements.txt \
     && pip install --no-cache-dir --no-deps --target /opt/site-packages /wheels/* \
     && pip install --no-cache-dir --target /opt/site-packages --upgrade \
         'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
+
+RUN PYTHONPATH=/opt/site-packages python provision_memory_model.py --output /build/memory-model
 
 FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323 AS production
 
@@ -65,6 +69,7 @@ COPY --chown=appuser:appuser XCAGI /app/XCAGI
 COPY --chown=appuser:appuser alembic /app/alembic
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 COPY --chown=appuser:appuser resources /app/resources
+COPY --from=builder --chown=appuser:appuser /build/memory-model /app/resources/models/fastembed
 COPY --chown=appuser:appuser templates/admin-vue-dist /app/templates/admin-vue-dist
 
 COPY --chown=appuser:appuser gunicorn_config.py /app/gunicorn_config.py

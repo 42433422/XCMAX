@@ -15,11 +15,11 @@ from fastapi.testclient import TestClient
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.workflow_types import PlanGraph, plan_to_dict
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
-from app.infrastructure.codex.policy import RuntimePolicyError
+from app.infrastructure.xiaox.policy import RuntimePolicyError
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
 
@@ -131,7 +131,7 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(
         )
     assert events[-1]["type"] == "done"
     result = events[-1]["result"]
-    assert result["runtime"] == "codex" and result["requires_confirmation"] is True, result
+    assert result["runtime"] == "xiaox" and result["requires_confirmation"] is True, result
     parent = state.repository.get(result["run_id"])
     assert parent.metadata["runtime_goal_contract"]["request"]["text"] == body.message
     child_id = result["data"]["data"]["approval_card"]["run_id"]
@@ -232,7 +232,7 @@ def test_stream_missing_spec_requests_clarification_without_document(
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment):
         raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
     result = _events(raw)[-1]["result"]
-    assert result["runtime"] == "codex" and result["needs_user_input"] is True, result
+    assert result["runtime"] == "xiaox" and result["needs_user_input"] is True, result
     assert "计量单位" in result["response"]
     assert "已生成" not in result["response"]
     parent = state.repository.get(result["run_id"])

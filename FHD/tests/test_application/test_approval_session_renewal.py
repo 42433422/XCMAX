@@ -664,16 +664,23 @@ def test_real_actor_renewal_rolls_back_with_queue_failure(real_session_task, mon
     assert renewed.status == "queued"
 
 
-@pytest.mark.parametrize("confirmed", [False, True])
-def test_resume_reconciles_durable_effects_before_requeue(waiting_task, confirmed):
+@pytest.mark.parametrize("receipt", ["pending", "legacy", "verified"])
+def test_resume_reconciles_durable_effects_before_requeue(waiting_task, monkeypatch, receipt):
     from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
     from app.domain.task_lifecycle.control import SessionBook
 
     runs, queue, _, original, previous, _ = waiting_task
     run = runs.get(original.run_id)
     run.status = "paused"
-    run.steps[0].status = "completed" if confirmed else "pending"
-    run.steps[0].output = {"success": True, "order_id": "created-once"} if confirmed else {}
+    from tests.fixtures.verified_effect import attach_fixture_verified_write
+
+    confirmed = receipt == "verified"
+    run.steps[0].status = "pending" if receipt == "pending" else "completed"
+    run.steps[0].output = (
+        {} if receipt == "pending" else {"success": True, "order_id": "created-once"}
+    )
+    if confirmed:
+        attach_fixture_verified_write(run, monkeypatch)
     runs.save(run)
     with runs.transaction() as db:
         book = SessionBook(db)

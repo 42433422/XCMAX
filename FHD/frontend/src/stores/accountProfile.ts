@@ -4,6 +4,7 @@ import { authApi, type AccountKind, type AccountTier } from '@/api/auth'
 import { captureAuthSession, getAuthSessionEpoch, invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
+import { resetWorkspacePrefsSyncState } from '@/utils/workspacePrefsApi'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import type { TenantStorageScopeInput } from '@/utils/tenantStorageScope'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -302,6 +303,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     tenantIsOwner.value = false
     userRole.value = ''
     loaded.value = false
+    resetWorkspacePrefsSyncState()
     setRuntimeTenantStorageScopeInput(null)
     void refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' }, hydrate)
   }

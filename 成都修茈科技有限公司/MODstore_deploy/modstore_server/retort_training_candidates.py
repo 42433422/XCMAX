@@ -489,16 +489,78 @@ def training_plan(request_id):
     )
 
 
+def _recheck_clock_bound(recheck, progress):
+    # The absence of a promotion clock can itself be the source fault. Bind
+    # that absence to the persisted value; do not accept a caller's omission.
+    if "promoted_at" not in recheck:
+        return False
+    clock = recheck["promoted_at"]
+    stored = progress.get("closed_at")
+    if recheck.get("reason") == "workflow_postpromotion_source_unverified":
+        if type(clock) is type(stored) and clock == stored:
+            return True
+        # Preserve the original valid clock during a withdrawal/readback.
+        if progress.get("traffic") != "control" or progress.get("decision") != "rollback":
+            return False
+    return isinstance(clock, str) and bool(clock)
+
+
 def read_training_impact(request_id, state):
+    from modstore_server.retort_feedback_experiments import approved_policy
+    from modstore_server.retort_workflow_metrics import (
+        execution_stop_loss,
+        postpromotion_stop_reason,
+    )
+
+    reject = False
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, request_id)
-        source = json_loads(row.effects_json, {}).get("training_candidate") if row else None
-    if not source:
-        return None
+        effects = json_loads(row.effects_json, {}) if row else {}
+        source = effects.get("training_candidate")
+        if not source:
+            return None
+        recheck = effects.get("training_regression_recheck")
+        if recheck is not None:
+            progress = effects.get("experiment") or {}
+            delivery = state.get("delivery") or {}
+            try:
+                policy, _ = approved_policy(row)
+                bound = (
+                    isinstance(recheck, dict)
+                    and recheck.get("source") == "original_experiment_outbox"
+                    and recheck.get("reason")
+                    in {"workflow_execution_stop_loss", "workflow_postpromotion_source_unverified"}
+                    and recheck.get("request_id") == request_id
+                    and recheck.get("release_sha") == progress.get("release_sha")
+                    and recheck.get("release_sha") == delivery.get("release_sha")
+                    and recheck.get("final_snapshot_sha256")
+                    == progress.get("final_snapshot_sha256")
+                    and bool(recheck.get("final_snapshot_sha256"))
+                    and _recheck_clock_bound(recheck, progress)
+                    and policy == source["growthbook"]
+                    and (
+                        (
+                            recheck["reason"] == "workflow_execution_stop_loss"
+                            and execution_stop_loss(db, row, policy)
+                        )
+                        or postpromotion_stop_reason(db, row, policy) == recheck["reason"]
+                    )
+                )
+            except (KeyError, TypeError, ValueError):
+                bound = False
+            if not bound:
+                return {
+                    "status": "waiting_customer_impact",
+                    "reason": "training_regression_recheck_unverified",
+                    "source": "original_experiment_outbox",
+                    "release_sha": delivery.get("release_sha"),
+                    "verified_at": None,
+                }
+            reject = True
     from modstore_server.retort_feedback_measurements import experiment_measurement
 
     experiment = experiment_measurement(
-        source["growthbook"], request_id, state["delivery"], state=state
+        source["growthbook"], request_id, state["delivery"], state=state, reject=reject
     )
     status, reason = "waiting_customer_impact", "awaiting_experiment_result"
     if experiment.get("rollout_verified"):
@@ -510,7 +572,12 @@ def read_training_impact(request_id, state):
                 (
                     "experiment_inconclusive"
                     if experiment.get("inconclusive")
-                    else "experiment_regression"
+                    else (
+                        "workflow_postpromotion_source_unverified"
+                        if reject
+                        and recheck["reason"] == "workflow_postpromotion_source_unverified"
+                        else "experiment_regression"
+                    )
                 ),
             )
     return {
@@ -521,3 +588,305 @@ def read_training_impact(request_id, state):
         "release_sha": state["delivery"].get("release_sha"),
         "verified_at": experiment.get("observed_at"),
     }
+
+
+def postpromotion_effect_snapshot(db, row, policy, effects, *, observed_at):
+    """Observe actual approved-rollout outbox receipts, not a synthetic uplift.
+
+    The original GrowthBook trial owns the randomized causal decision. Once
+    the temporary rollout starts there is no concurrent control arm, so the
+    post-rollout stream may only establish absolute observed outcomes.
+    """
+    from datetime import UTC, datetime
+
+    from modstore_server.models import OutboxEvent
+    from modstore_server.retort_experiment_surfaces import (
+        RAG_MEASUREMENT,
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+    )
+
+    def aware(value):
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.utcoffset() is not None else None
+
+    progress = effects.get("experiment") or {}
+    life = policy.get("lifecycle") or {}
+    recheck = effects.get("training_regression_recheck")
+    recheck_bound = (
+        isinstance(recheck, dict)
+        and recheck.get("request_id") == row.id
+        and recheck.get("release_sha") == progress.get("release_sha")
+        and recheck.get("final_snapshot_sha256") == progress.get("final_snapshot_sha256")
+        and recheck.get("source") == "original_experiment_outbox"
+        and recheck.get("reason")
+        in {"workflow_execution_stop_loss", "workflow_postpromotion_source_unverified"}
+        and _recheck_clock_bound(recheck, progress)
+    )
+    start = aware(recheck["promoted_at"] if recheck_bound else progress.get("closed_at"))
+    if (
+        recheck_bound
+        and recheck["reason"] == "workflow_postpromotion_source_unverified"
+        and progress.get("rollout_verified") is True
+        and observed_at.tzinfo is not None
+        and (start is None or start > observed_at)
+    ):
+        # The source fault remains actionable after local traffic is switched
+        # to control but before GrowthBook withdrawal is read back.
+        return {
+            "status": "source_unverified",
+            "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+            "reason": "invalid_original_rollout_clock",
+        }
+    if (
+        start is None
+        or observed_at.tzinfo is None
+        or start > observed_at
+        or progress.get("rollout_verified") is not True
+        or not (
+            recheck_bound
+            or (progress.get("traffic") == "candidate" and progress.get("decision") == "promote")
+        )
+    ):
+        return None
+    start = start.astimezone(UTC)
+    now = observed_at.astimezone(UTC)
+    source_digests, subjects, failed_subjects, unique_executions = [], set(), set(), set()
+    successes = failures = 0
+    unverified = False
+    query = (
+        db.query(OutboxEvent)
+        .filter_by(aggregate_id=row.id, event_name="experiment.postpromotion_observed")
+        .order_by(OutboxEvent.id)
+        .limit(10001)
+    )
+    records = list(query)
+    if len(records) > 10000:
+        return {
+            "status": "blocked_source_budget",
+            "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+            "window_start": start.isoformat(),
+            "observed_through": now.isoformat(),
+        }
+    for event in records:
+        item = json_loads(event.payload_json, {})
+        if not isinstance(item, dict) or item.get("assignment_stage") != "approved_rollout":
+            # This stream is exclusively for approved-rollout terminal receipts.
+            # A malformed or misrouted row is not equivalent to no observation.
+            unverified = True
+            continue
+        completed = aware(item.get("completed_at"))
+        assigned = aware(item.get("assigned_at"))
+        if completed is None or assigned is None:
+            unverified = True
+            continue
+        completed = completed.astimezone(UTC)
+        assigned = assigned.astimezone(UTC)
+        if not start <= assigned <= completed <= now:
+            unverified = True
+            continue
+        if (
+            item.get("request_id") != row.id
+            or item.get("experiment_id") != progress.get("experiment_id")
+            or item.get("release_sha") != progress.get("release_sha")
+            or item.get("policy_digest") != progress.get("policy_digest")
+            or item.get("measurement_scope") != life.get("measurement_scope")
+            or item.get("variation_id") != "1"
+            or type(item.get("success")) is not bool
+            or not item.get("observation_id")
+            or not item.get("subject_id")
+            or type(item.get("user_id")) is not int
+            or str(item["user_id"]) != str(item["subject_id"])
+        ):
+            unverified = True
+            continue
+        scope = life.get("measurement_scope")
+        if scope == WORKFLOW_CUSTOMER_MEASUREMENT:
+            original = item.get("customer_outcome_evidence_sha256")
+            if not isinstance(original, str) or not re.fullmatch(r"[0-9a-f]{64}", original):
+                unverified = True
+                continue
+        elif scope == RAG_MEASUREMENT:
+            original = item.get("rag_evidence_sha256")
+            if not isinstance(original, str) or not re.fullmatch(r"[0-9a-f]{64}", original):
+                unverified = True
+                continue
+        else:
+            # Other surfaces have no approved-rollout terminal evidence contract.
+            unverified = True
+            continue
+        execution = item.get("execution_id") or item["observation_id"]
+        key = (str(item["subject_id"]), str(execution))
+        if key in unique_executions:
+            unverified = True
+            continue
+        unique_executions.add(key)
+        subjects.add(str(item["subject_id"]))
+        successes += int(item["success"])
+        failures += int(not item["success"])
+        if not item["success"]:
+            failed_subjects.add(str(item["subject_id"]))
+        source_digests.append(hashlib.sha256(event.payload_json.encode()).hexdigest())
+    sample_count = successes + failures
+    return {
+        "status": (
+            "source_unverified"
+            if unverified
+            else "observational_only" if sample_count else "unknown"
+        ),
+        "scope": "postpromotion_absolute_outcomes_not_causal_lift",
+        "reason": (
+            "invalid_original_receipts"
+            if unverified
+            else (
+                "no_control_arm_after_rollout"
+                if sample_count
+                else "no_verified_postpromotion_outcomes"
+            )
+        ),
+        "source": "original_experiment_outbox",
+        "experiment_id": progress.get("experiment_id"),
+        "release_sha": progress.get("release_sha"),
+        "policy_digest": progress.get("policy_digest"),
+        "window_start": start.isoformat(),
+        "observed_through": now.isoformat(),
+        "observations": sample_count,
+        "successes": successes,
+        "failures": failures,
+        "unique_subjects": len(subjects),
+        "failed_subjects": len(failed_subjects),
+        "source_events_sha256": hashlib.sha256(
+            json_dumps(sorted(source_digests)).encode()
+        ).hexdigest(),
+        "independently_verified_lift": False,
+    }
+
+
+def request_postpromotion_regression_rechecks():
+    """Reopen the original Retort impact/recovery tail after a late live stop-loss.
+
+    The existing product outbox decides whether treatment traffic regressed.
+    Keep a bounded daily cumulative observation history without claiming causal
+    uplift after GrowthBook's randomized window. A compare-and-swap claim
+    prevents duplicate graph re-entry; no business write is replayed.
+    """
+    from datetime import UTC
+
+    from sqlalchemy import select, update
+
+    from modstore_server import retort_experiment_runtime as runtime
+    from modstore_server.retort_feedback_experiments import (
+        approved_policy,
+        traffic_block_reason,
+    )
+
+    claimed = 0
+    with get_session_factory()() as db:
+        with db.scalars(
+            select(RetortEvolutionRun).where(
+                RetortEvolutionRun.status == "completed",
+                RetortEvolutionRun.effects_json.contains('"training_candidate"', autoescape=True),
+            )
+        ).yield_per(32) as rows:
+            for row in rows:
+                original = row.effects_json
+                effects = json_loads(original, {})
+                source, experiment = effects.get("training_candidate"), effects.get("experiment")
+                if (
+                    not isinstance(source, dict)
+                    or not isinstance(experiment, dict)
+                    or experiment.get("traffic") != "candidate"
+                    or experiment.get("decision") != "promote"
+                    or experiment.get("rollout_verified") is not True
+                ):
+                    continue
+                try:
+                    policy, verified = approved_policy(row)
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if verified.get("training_candidate") != source or policy != source.get(
+                    "growthbook"
+                ):
+                    continue
+                from modstore_server.workflow_customer_feedback import (
+                    reconcile_postpromotion_customer_outcomes,
+                )
+
+                # Settle actual customer outcomes from the original business
+                # ledger in this transaction, without touching the frozen A/B
+                # event stream. Repeated ticks are idempotent by execution ID.
+                reconcile_postpromotion_customer_outcomes(row.id, session=db)
+                db.flush()
+                block = traffic_block_reason(db, row, verified)
+                if not block:
+                    # One cumulative as-of snapshot per UTC day; never a causal
+                    # uplift claim, nor fabricated control-group observations.
+                    observed_at = runtime.datetime.now(UTC)
+                    existing = effects.get("training_online_observations") or {}
+                    history = existing.get("snapshots") if isinstance(existing, dict) else None
+                    if history is None:
+                        history = []
+                    if not isinstance(history, list) or any(
+                        not isinstance(item, dict) for item in history
+                    ):
+                        continue
+                    snapshot_date = observed_at.date().isoformat()
+                    if not any(item.get("snapshot_date") == snapshot_date for item in history):
+                        snapshot = postpromotion_effect_snapshot(
+                            db, row, policy, effects, observed_at=observed_at
+                        )
+                        if snapshot is not None:
+                            effects["training_online_observations"] = {
+                                "source": "original_experiment_outbox",
+                                "scope": "cumulative_absolute_observation_not_causal_lift",
+                                "snapshots": [
+                                    *history[-29:],
+                                    {**snapshot, "snapshot_date": snapshot_date},
+                                ],
+                            }
+                            db.execute(
+                                update(RetortEvolutionRun)
+                                .where(
+                                    RetortEvolutionRun.id == row.id,
+                                    RetortEvolutionRun.status == "completed",
+                                    RetortEvolutionRun.effects_json == original,
+                                )
+                                .values(
+                                    effects_json=json_dumps(effects),
+                                    updated_at=observed_at,
+                                )
+                            )
+                    continue
+                if block not in {
+                    "workflow_execution_stop_loss",
+                    "workflow_postpromotion_source_unverified",
+                }:
+                    continue
+                effects["training_regression_recheck"] = {
+                    "source": "original_experiment_outbox",
+                    "reason": block,
+                    "request_id": row.id,
+                    "release_sha": experiment.get("release_sha"),
+                    "final_snapshot_sha256": experiment.get("final_snapshot_sha256"),
+                    "promoted_at": experiment.get("closed_at"),
+                }
+                result = db.execute(
+                    update(RetortEvolutionRun)
+                    .where(
+                        RetortEvolutionRun.id == row.id,
+                        RetortEvolutionRun.status == "completed",
+                        RetortEvolutionRun.effects_json == original,
+                    )
+                    .values(
+                        status="impact_recheck",
+                        effects_json=json_dumps(effects),
+                        updated_at=runtime.datetime.now(UTC),
+                    )
+                )
+                claimed += int(result.rowcount == 1)
+        db.commit()
+    return claimed

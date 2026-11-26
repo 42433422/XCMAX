@@ -106,8 +106,11 @@ class ProjectionService:
         force_refresh: bool = False,
         mod_id: str | None = None,
         as_of: str | None = None,
+        verify_only: bool = False,
     ) -> dict[str, Any]:
         definition = definition_for(entity_type)
+        if verify_only and as_of is not None:
+            raise ValueError("source_verification_requires_current_authority")
         if isinstance(tenant_id, bool):
             raise PermissionError("enterprise_identity_required")
         scope = SourceScope(
@@ -138,14 +141,22 @@ class ProjectionService:
             with owned_tenant_scope(scope.tenant_id), self.session_factory() as db:
                 if not self.reader.visible(db, definition, scope, entity_id):
                     return self._unknown(base, "source_not_visible_or_missing")
-                cursor = self._cursor(db, scope, entity_type, entity_id) if as_of is None else None
-                row = db.scalar(
-                    select(EnterpriseStateProjection)
-                    .where(
-                        *_conditions(EnterpriseStateProjection, scope, entity_type, entity_id),
-                        EnterpriseStateProjection.actor_id == scope.actor_id,
+                cursor = (
+                    self._cursor(db, scope, entity_type, entity_id)
+                    if as_of is None and not verify_only
+                    else None
+                )
+                row = (
+                    None
+                    if verify_only
+                    else db.scalar(
+                        select(EnterpriseStateProjection)
+                        .where(
+                            *_conditions(EnterpriseStateProjection, scope, entity_type, entity_id),
+                            EnterpriseStateProjection.actor_id == scope.actor_id,
+                        )
+                        .with_for_update()
                     )
-                    .with_for_update()
                 )
                 if as_of is not None:
                     if row is None:
@@ -154,10 +165,12 @@ class ProjectionService:
                         return {**base, **historical_observation(row.snapshot_json, as_of, base)}
                     except (ValueError, KeyError, TypeError):
                         return self._unknown(base, "observation_history_unavailable")
-                assert cursor is not None
+                if not verify_only:
+                    assert cursor is not None
                 started = self.clock()
                 if (
-                    not force_refresh
+                    not verify_only
+                    and not force_refresh
                     and row is not None
                     and row.expires_at > started
                     and row.observed_at <= started
@@ -196,7 +209,7 @@ class ProjectionService:
                     "observed_at": _iso(observed),
                     "expires_at": _iso(expires),
                     "retrieved_from": "authority",
-                    "last_event_id": cursor.event_id or None,
+                    "last_event_id": (cursor.event_id or None) if cursor is not None else None,
                     "evidence": [
                         {
                             "source": definition.source,
@@ -211,6 +224,10 @@ class ProjectionService:
                         }
                     ],
                 }
+                if verify_only:
+                    # An ERP reference check must not allocate cursor rows,
+                    # consume history slots or write materialized projections.
+                    return public_snapshot(result)
                 try:
                     stored, conflict = record_observation(
                         row.snapshot_json if row is not None else None, result

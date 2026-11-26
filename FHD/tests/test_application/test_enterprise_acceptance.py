@@ -40,9 +40,9 @@ from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 from app.domain.shared_services import user_memory_service
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 def _seed_order(actor):
@@ -342,7 +342,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
         waiting = state.drain(run.run_id)
         assert waiting.status == "waiting_user", waiting.to_dict()
-        confirm_id = waiting.metadata["codex_runtime"]["calls"]["confirm"]["child_run_id"]
+        confirm_id = waiting.metadata["xiaox_runtime"]["calls"]["confirm"]["child_run_id"]
         confirm_child = repository.get(confirm_id)
         assert confirm_child.steps[0].risk == "high" and not confirm_child.tool_calls
         confirmed, _ = _approve_and_execute(actor, repository, queue, dispatcher, confirm_child)
@@ -357,7 +357,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
 
         waiting = state.drain(run.run_id)
         assert waiting.status == "waiting_user", waiting.to_dict()
-        deliver_id = waiting.metadata["codex_runtime"]["calls"]["deliver"]["child_run_id"]
+        deliver_id = waiting.metadata["xiaox_runtime"]["calls"]["deliver"]["child_run_id"]
         deliver_child = repository.get(deliver_id)
         assert deliver_child.steps[0].risk == "high" and not deliver_child.tool_calls
         delivered, last_grant = _approve_and_execute(
@@ -367,7 +367,7 @@ def test_order_goal_approval_receipt_stock_and_memory_share_one_original_task(
         assert len(delivered.tool_calls) == 1
         completed = state.drain(run.run_id)
         assert completed.status == "completed", completed.final_output
-        assert completed.final_output["codex_result"]["business_completed"] is True
+        assert completed.final_output["xiaox_result"]["business_completed"] is True
         assert len(state.model_requests) == 1
         for child in (confirmed, delivered):
             approvals = [event for event in child.events if event.event_type == "step.approved"]

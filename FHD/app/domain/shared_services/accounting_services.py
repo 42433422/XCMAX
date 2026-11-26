@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from app.db.models import ChartOfAccount, JournalEntry, JournalEntryLine
@@ -132,16 +132,28 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     debit_total = Decimal("0")
     credit_total = Decimal("0")
     for item in lines_data:
+        if not isinstance(item, dict):
+            return {"success": False, "message": "分录行格式无效"}
         account_id = item.get("account_id")
         account = None
         if account_id:
             account = _find_account(db, account_id)
         elif item.get("account_code"):
             account = _find_account_by_code(db, item.get("account_code"))
-        debit = _to_decimal(item.get("debit", 0))
-        credit = _to_decimal(item.get("credit", 0))
-        if debit == 0 and credit == 0:
-            return {"success": False, "message": "分录行借贷不能同时为 0"}
+        try:
+            debit = _to_decimal(item.get("debit", 0))
+            credit = _to_decimal(item.get("credit", 0))
+            for amount in (debit, credit):
+                if (
+                    not amount.is_finite()
+                    or amount < 0
+                    or amount != amount.quantize(Decimal("0.01"))
+                ):
+                    raise ValueError("会计金额必须是非负、最多两位小数的有限数")
+        except (ValueError, TypeError, InvalidOperation):
+            return {"success": False, "message": "会计金额必须是非负、最多两位小数的有限数"}
+        if (debit > 0) == (credit > 0):
+            return {"success": False, "message": "分录行必须且只能有一侧借贷金额"}
         debit_total += debit
         credit_total += credit
         parsed_lines.append(
@@ -157,7 +169,7 @@ def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
             }
         )
 
-    if abs(debit_total - credit_total) > Decimal("0.01"):
+    if debit_total != credit_total:
         return {
             "success": False,
             "message": f"借贷不平衡: 借 {debit_total} vs 贷 {credit_total}",
@@ -268,6 +280,21 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
                 "message": f"凭证 {entry.entry_no} 已冲销，不能重复冲销",
             }
 
+        # Atomic claim: concurrent reversals must not each create a second
+        # counter-entry. This fences SQLite writers and PostgreSQL row updates.
+        claimed = (
+            db.query(JournalEntry)
+            .filter(
+                JournalEntry.id == entry.id,
+                JournalEntry.reversed_of_id.is_(None),
+                JournalEntry.reversed_at.is_(None),
+            )
+            .update({JournalEntry.reversed_at: datetime.now()}, synchronize_session=False)
+        )
+        if claimed != 1:
+            db.rollback()
+            return {"success": False, "message": "原凭证已被其他请求冲销，请核对原回执"}
+        db.refresh(entry)
         new_entry = JournalEntry(
             entry_no=_generate_entry_no(),
             journal_date=date.today(),
@@ -281,7 +308,7 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
         db.add(new_entry)
         db.flush()
         for line in entry.lines:
-            db.add(
+            new_entry.lines.append(
                 JournalEntryLine(
                     entry_id=new_entry.id,
                     account_id=line.account_id,
@@ -296,7 +323,7 @@ def journal_entry_reverse(entry_id: int, *, description: str | None = None) -> d
                 )
             )
         new_entry.refresh_totals()
-        entry.reversed_at = datetime.now()
+        db.flush()
         db.commit()
         db.refresh(new_entry)
         return {

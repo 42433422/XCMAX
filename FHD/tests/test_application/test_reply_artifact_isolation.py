@@ -9,13 +9,13 @@ from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentArtifact, AgentRun
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import (
+from tests.fixtures.xiaox_http_runtime import (
     dynamic_chat_runtime as dynamic_chat_runtime,
 )
-from tests.fixtures.codex_http_runtime import (
+from tests.fixtures.xiaox_http_runtime import (
     fixture_goal_review,
 )
-from tests.fixtures.codex_http_runtime import (
+from tests.fixtures.xiaox_http_runtime import (
     runtime_entry as runtime_entry,
 )
 

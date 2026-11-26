@@ -393,3 +393,194 @@ def test_empty_authorized_world_query_is_unknown_not_a_verified_fact():
     assert result["current_state_verified"] is False
     assert result["reason_code"] == "no_visible_source_records"
     assert cognition_result_verified("query", query, result) is False
+
+
+def test_erp_fact_reference_requires_live_source_version_before_reuse(enterprise_http):
+    """A confirmed memory version is not a license to reuse a stale ERP fact."""
+    actor, client, order_id, _, foreign_id = enterprise_http
+    base = {"entity_type": "order", "entity_id": order_id}
+    original_result = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": base},
+        headers=actor.headers,
+    ).json()["data"]
+    original = original_result["snapshots"][0]
+    remembered_version = original["source_version"]
+    remembered_token = original_result["fact_references"][0]["fact_token"]
+    assert original_result["fact_references"][0]["entity_id"] == order_id
+    guarded = {
+        **base,
+        "expected_source_version": remembered_version,
+        "expected_fact_token": remembered_token,
+    }
+    current = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": guarded},
+        headers=actor.headers,
+    ).json()
+    assert current["success"] is True
+    assert current["data"]["fact_verification"]["status"] == "current"
+    assert current["data"]["fact_verification"]["memory_reuse_allowed"] is True
+    assert current["data"]["snapshots"][0]["retrieved_from"] == "authority"
+
+    # Change only ERP, within the original TTL, without emitting an event.
+    with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
+        db.query(SalesOrderItem).filter_by(order_id=int(order_id)).one().delivered_quantity = 5
+    obsolete = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": guarded},
+        headers=actor.headers,
+    ).json()
+    assert obsolete["success"] is False
+    check = obsolete["data"]["fact_verification"]
+    assert check["status"] == "superseded"
+    assert check["expected_source_version"] == remembered_version
+    assert check["expected_fact_token"] == remembered_token
+    assert check["current_source_version"] != remembered_version
+    assert check["memory_reuse_allowed"] is False
+    assert check["requires_reconciliation"] is True
+    assert obsolete["data"]["remembered_fact_current"] is False
+    assert obsolete["data"]["operating_gap_candidates"] == []
+    assert obsolete["data"]["snapshots"][0]["retrieved_from"] == "authority"
+    assert Decimal(obsolete["data"]["snapshots"][0]["state"]["remaining_quantity"]) == 5
+    tool = execute_registered_workflow_tool(
+        "enterprise_cognition", "query", {**guarded, "_runtime_context": actor.context}
+    )
+    assert tool["success"] is False
+    assert tool["data"]["fact_verification"]["status"] == "superseded"
+
+    corrected = {
+        **base,
+        "expected_source_version": check["current_source_version"],
+        "expected_fact_token": check["current_fact_token"],
+    }
+    assert (
+        client.post(
+            "/api/enterprise/cognition",
+            json={"action": "query", "params": corrected},
+            headers=actor.headers,
+        ).json()["data"]["fact_verification"]["status"]
+        == "current"
+    )
+    missing = client.post(
+        "/api/enterprise/cognition",
+        json={
+            "action": "query",
+            "params": {**guarded, "entity_id": foreign_id},
+        },
+        headers=actor.headers,
+    ).json()
+    assert missing["success"] is False
+    assert missing["data"]["fact_verification"]["status"] == "unknown"
+    assert missing["data"]["fact_verification"]["current_source_version"] is None
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"expected_source_version": "sha256:" + "0" * 64},
+        {"entity_id": "1", "expected_fact_token": "erp:" + "f" * 64},
+        {
+            "entity_id": "1",
+            "expected_source_version": "sha256:not-a-hash",
+            "expected_fact_token": "erp:" + "f" * 64,
+        },
+        {
+            "entity_id": "1",
+            "expected_source_version": "sha256:" + "0" * 64,
+            "expected_fact_token": "not-a-token",
+        },
+        {
+            "entity_id": "1",
+            "expected_source_version": "sha256:" + "0" * 64,
+            "expected_fact_token": "erp:" + "f" * 64,
+            "as_of": "2026-01-01T00:00:00+00:00",
+        },
+        {
+            "entity_id": "1",
+            "expected_source_version": "sha256:" + "0" * 64,
+            "expected_fact_token": "erp:" + "f" * 64,
+            "scenario_delivery_quantity": "2",
+        },
+        {
+            "entity_id": "1",
+            "expected_source_version": "sha256:" + "0" * 64,
+            "expected_fact_token": "erp:" + "f" * 64,
+            "tenant_id": "999",
+        },
+        {
+            "expected_source_version": "sha256:" + "0" * 64,
+            "expected_fact_token": "erp:" + "f" * 64,
+        },
+    ],
+)
+def test_erp_fact_reference_rejects_ambiguity_and_identity_injection(enterprise_http, params):
+    actor, client, *_ = enterprise_http
+    result = client.post(
+        "/api/enterprise/cognition",
+        json={"action": "query", "params": params},
+        headers=actor.headers,
+    )
+    assert result.status_code == 422
+
+
+def test_erp_reference_cannot_be_verified_from_cached_or_unknown_projection():
+    from app.application.enterprise_cognition.service import verify_source_reference
+
+    version = "sha256:" + "a" * 64
+    stale = {
+        "freshness": "fresh",
+        "knowledge_kind": "fact",
+        "retrieved_from": "projection",
+        "source_version": version,
+        "evidence": [{"content_sha256": "a" * 64}],
+    }
+    for untrusted in (
+        stale,
+        {"freshness": "unknown", "reason_code": "authority_unavailable"},
+    ):
+        result = verify_source_reference(untrusted, version, "erp:" + "b" * 64)
+        assert result["status"] == "unknown"
+        assert result["memory_reuse_allowed"] is False
+        assert result["requires_reconciliation"] is True
+        assert result["business_data_written"] is False
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"entity_id": "202"},
+        {"tenant_id": "22"},
+        {"mod_id": "finance"},
+        {"entity_type": "order"},
+        {"source": "different_authority"},
+    ],
+)
+def test_erp_reference_token_rejects_identical_content_with_wrong_identity(changed):
+    from app.application.enterprise_cognition.service import (
+        make_fact_reference,
+        verify_source_reference,
+    )
+
+    snapshot = {
+        "freshness": "fresh",
+        "knowledge_kind": "fact",
+        "retrieved_from": "authority",
+        "tenant_id": "11",
+        "mod_id": "",
+        "source": "customers",
+        "entity_type": "customer",
+        "entity_id": "201",
+        "source_version": "sha256:" + "a" * 64,
+        "observed_at": "2026-11-25T00:00:00+00:00",
+        "evidence": [{"source": "customers", "content_sha256": "a" * 64}],
+    }
+    original_reference = make_fact_reference(snapshot)
+    assert original_reference is not None
+    version = snapshot["source_version"]
+    token = original_reference["fact_token"]
+    assert verify_source_reference(snapshot, version, token)["status"] == "current"
+    different = verify_source_reference({**snapshot, **changed}, version, token)
+    assert different["status"] == "superseded"
+    assert different["reason_code"] == "fact_reference_scope_or_entity_mismatch"
+    assert different["memory_reuse_allowed"] is False

@@ -58,10 +58,42 @@ def read_observations(
         digest = hashlib.sha256(canonical.encode()).hexdigest()
         if item["source_version"] != "sha256:" + digest:
             raise ValueError("observation_digest_mismatch")
+        proofs = item["evidence"]
+        if (
+            not isinstance(proofs, list)
+            or not proofs
+            or any(
+                not isinstance(proof, dict)
+                or proof.get("source") != expected_scope.get("source")
+                or proof.get("content_sha256") != digest
+                or any(
+                    proof.get(proof_key) not in (None, str(expected_scope.get(scope_key)))
+                    for proof_key, scope_key in (
+                        ("tenant_id", "tenant_id"),
+                        ("actor_id", "actor_id"),
+                        ("mod_id", "mod_id"),
+                        ("row_id", "entity_id"),
+                    )
+                )
+                for proof in proofs
+            )
+        ):
+            raise ValueError("observation_source_evidence_mismatch")
         observation_time(item)
+    if len({(observation_time(item), item["source_version"]) for item in history}) != len(history):
+        raise ValueError("observation_duplicate_history_entry")
+    # Stored history is ordered by record_observation; a reordered valid-digest
+    # list must not make historical_observation return an older value as fact.
+    if any(
+        observation_time(older) > observation_time(newer)
+        for older, newer in zip(history, history[1:])
+    ):
+        raise ValueError("observation_history_out_of_order")
     # A valid history cannot authorize an altered current cache envelope.
     # This detects stale/tampered current state, provenance, source version and scope.
-    if decoded.get("freshness") == "fresh" and public_snapshot(decoded) not in history:
+    if decoded.get("freshness") == "fresh" and (
+        not history or public_snapshot(decoded) != history[-1]
+    ):
         raise ValueError("current_observation_history_mismatch")
     return history, decoded.get(_TRUNCATED_KEY) is True
 
@@ -83,6 +115,36 @@ def record_observation(raw: str | None, snapshot: dict[str, Any]) -> tuple[dict[
     history, truncated = read_observations(raw, scope) if raw else ([], False)
     entry = public_snapshot(snapshot)
     instant = observation_time(entry)
+    # An older valid snapshot is not a write authorization for the current envelope.
+    # Preserve the last recorded value and expire the caller's derived projection.
+    if history and instant < observation_time(history[-1]):
+        return {
+            **history[-1],
+            _HISTORY_KEY: history,
+            _TRUNCATED_KEY: truncated,
+        }, True
+    matching = next(
+        (
+            item
+            for item in history
+            if observation_time(item) == instant
+            and item["source_version"] == entry["source_version"]
+        ),
+        None,
+    )
+    if matching is not None:
+        # An identical event is idempotent. Same version/time but different
+        # provenance must not rewrite the envelope under the old digest.
+        divergent = matching != entry
+        conflicting = any(
+            observation_time(item) == instant and item["source_version"] != entry["source_version"]
+            for item in history
+        )
+        return {
+            **history[-1],
+            _HISTORY_KEY: history,
+            _TRUNCATED_KEY: truncated,
+        }, divergent or conflicting
     conflict = any(
         observation_time(item) >= instant and item["source_version"] != entry["source_version"]
         for item in history

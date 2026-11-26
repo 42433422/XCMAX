@@ -183,7 +183,10 @@ def traffic_block_reason(db, row, effects, *, historical=False):
             or (resolution.get("reopened_at") or "") != source["revision"]
         ):
             return "experiment_customer_reopened"
-    from modstore_server.retort_workflow_metrics import execution_stop_loss
+    from modstore_server.retort_workflow_metrics import (
+        execution_stop_loss,
+        postpromotion_stop_reason,
+    )
 
     policy = (effects.get("customer_feedback") or effects.get("training_candidate") or {}).get(
         "growthbook"
@@ -193,7 +196,9 @@ def traffic_block_reason(db, row, effects, *, historical=False):
     customer_block = customer_stop_reason(db, row.id, policy)
     if customer_block:
         return customer_block
-    return "workflow_execution_stop_loss" if execution_stop_loss(db, row, policy) else ""
+    if execution_stop_loss(db, row, policy):
+        return "workflow_execution_stop_loss"
+    return postpromotion_stop_reason(db, row, policy)
 
 
 def _save(request_id, progress):

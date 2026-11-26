@@ -20,6 +20,7 @@ from modstore_server.strategic_portfolio import (
     create_portfolio_proposal,
     digest,
 )
+from modstore_server.xiaoc_goal_governance import governance_gate
 from modstore_server.xiaoc_goal_management import (
     ORIGIN,
     GoalStepAllocation,
@@ -31,6 +32,7 @@ from modstore_server.xiaoc_life_store import (
     _event,
     _event_dict,
     _mutate,
+    manage_operating_goal,
     read_state,
     update_settings,
     wake,
@@ -47,6 +49,13 @@ class RevisionBody(BaseModel):
 class ReviewExperience(RevisionBody):
     candidate_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     action: Literal["confirm", "reject", "revoke"]
+
+
+class ManageGoal(RevisionBody):
+    action: Literal["pause", "resume", "cancel", "adjust"]
+    reason: str = Field(min_length=1, max_length=500)
+    review_note: str | None = Field(default=None, max_length=1000)
+    review_deadline: str | None = Field(default=None, max_length=64)
 
 
 class PromoteGoal(RevisionBody):
@@ -149,7 +158,10 @@ def experiences(
     _admin: User = Depends(require_admin),
 ) -> dict[str, Any]:
     with get_session_factory()() as session:
-        statement = select(XiaoCLifeEvent).where(XiaoCLifeEvent.identity_id == IDENTITY_ID)
+        statement = select(XiaoCLifeEvent).where(
+            XiaoCLifeEvent.identity_id == IDENTITY_ID,
+            XiaoCLifeEvent.kind != "life_transition",
+        )
         if query.strip():
             statement = statement.where(
                 XiaoCLifeEvent.summary.icontains(query.strip(), autoescape=True)
@@ -196,6 +208,25 @@ def review_experience(
     )
 
 
+@router.post("/goals/{goal_id}/manage")
+def manage_goal(
+    goal_id: str, body: ManageGoal, admin: User = Depends(require_admin)
+) -> dict[str, Any]:
+    """Manage only review material; bound jobs remain owned by original portfolio."""
+    return cast_state(
+        _call(
+            manage_operating_goal,
+            goal_id,
+            action=body.action,
+            expected_revision=body.expected_revision,
+            actor_user_id=int(admin.id),
+            reason=body.reason,
+            review_note=body.review_note,
+            review_deadline=body.review_deadline,
+        )
+    )
+
+
 @router.post("/goals/{goal_id}/portfolio")
 def promote_goal(
     goal_id: str, body: PromoteGoal, admin: User = Depends(require_admin)
@@ -225,6 +256,9 @@ def promote_goal(
         raise HTTPException(409, "没有实际来源的想法不能转为执行提案")
     limits = body.limits.model_dump()
     if goal.get("candidate_origin") == ORIGIN:
+        gate = governance_gate(goal, state["goals"], now=utcnow())
+        if gate["status"] != "reviewable":
+            raise HTTPException(409, "目标存在冲突或未完成的真实前置条件，禁止转入审批")
         from modstore_server.strategy_business_context import customer_value_context
 
         _call(
@@ -286,6 +320,10 @@ def promote_goal(
             or (not target.get("decision_id") and target.get("status") != "proposed")
         ):
             raise LifePolicyError("原经营候选已改变，提案未绑定")
+        if goal.get("candidate_origin") == ORIGIN and (
+            governance_gate(target, current["goals"], now=utcnow())["status"] != "reviewable"
+        ):
+            raise LifePolicyError("并发状态中的原目标已冲突、过期或来源被更改，禁止绑定")
         if target.get("decision_id") not in (None, "", decision_id):
             raise LifePolicyError("目标已绑定另一个提案")
         if target.get("decision_id") == decision_id:

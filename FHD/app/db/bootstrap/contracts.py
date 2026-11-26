@@ -7,10 +7,10 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.reflection import Inspector
 
-InspectorFactory = Callable[[Engine], Inspector]
+InspectorFactory = Callable[[Engine | Connection], Inspector]
 SqliteConnection = Callable[[str], AbstractContextManager[sqlite3.Connection]]
 
 

@@ -12,7 +12,11 @@ import pytest
 
 from scripts.dev import benchmark_evidence
 from scripts.dev.benchmark_evidence import gate_policy, require_reports
-from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
+from scripts.dev.task_benchmark_report import (
+    classify_trial_failure,
+    passes_gate,
+    summarize_trials,
+)
 
 TASKS = [
     {"task_id": "create", "instruction": "create a customer", "domain": "customers"},
@@ -22,8 +26,20 @@ TASKS = [
 
 def outcomes(trial=0, *, create=True, reject=True):
     return [
-        {"task_id": "create", "trial": trial, "pass": create},
-        {"task_id": "reject", "trial": trial, "pass": reject},
+        {
+            "task_id": "create",
+            "trial": trial,
+            "pass": create,
+            "runtime_admitted": True,
+            "exec_pass": create,
+        },
+        {
+            "task_id": "reject",
+            "trial": trial,
+            "pass": reject,
+            "runtime_admitted": True,
+            "exec_pass": reject,
+        },
     ]
 
 
@@ -276,6 +292,26 @@ def test_producer_never_masks_safety_failure_with_aggregate_threshold(producer, 
     assert report["pass_k"] == 0.5 and report["gate_passed"] is False
 
 
+@pytest.mark.parametrize("mode", ["observe", "gate"])
+def test_producer_rejects_unadmitted_trial_even_at_low_threshold(producer, monkeypatch, mode):
+    monkeypatch.setenv("TASK_BENCHMARK_MODE", mode)
+    monkeypatch.setenv("TASK_BENCHMARK_MIN_PASS", "0.4")
+
+    def rows(trial):
+        result = outcomes(trial, create=False)
+        if trial == 1:
+            result[0]["runtime_admitted"] = False
+        return result
+
+    _producer_trials(producer, monkeypatch, rows)
+    with pytest.raises(pytest.fail.Exception, match="未真正开始执行"):
+        producer[0].test_task_set_pass_k()
+    report = json.loads((producer[2] / "task_benchmark_report.json").read_text())
+    assert report["startup_blocked_tasks"] == ["create"]
+    assert report["pass_k"] == 0.5 and report["gate_passed"] is False
+    assert len(report["trial_artifacts"]) == 3
+
+
 def test_holdout_defaults_to_observation_without_claiming_acceptance(producer, monkeypatch):
     module, dataset, output = producer
     monkeypatch.delenv("TASK_BENCHMARK_MODE")
@@ -329,3 +365,64 @@ def test_source_change_during_trials_is_not_clean_evidence(producer, monkeypatch
     module.test_task_set_pass_k()
     report = json.loads((output / "task_benchmark_report.json").read_text())
     assert report["source_sha"] == "a" * 40 and report["tracked_source_dirty"] is True
+
+
+@pytest.mark.parametrize(
+    "failure, admitted, expected",
+    [
+        ("sqlite3.OperationalError: database is locked", False, "database_lock"),
+        ("OpenAI model provider HTTP 401 Unauthorized", False, "model_provider_auth"),
+        ("LLM provider HTTP 429 Too Many Requests", False, "model_provider_rate_limit"),
+        ("Codex model API HTTP 503", False, "model_provider_service"),
+        ("Business API HTTP 401 Unauthorized", True, "runtime_execution_unverified"),
+        ("runtime_policy_blocked", False, "runtime_admission"),
+    ],
+)
+def test_failure_causes_never_confuse_model_keys_with_database_or_business(
+    failure, admitted, expected
+):
+    assert (
+        classify_trial_failure(
+            {"pass": False, "failure": failure, "runtime_admitted": admitted, "exec_pass": None}
+        )
+        == expected
+    )
+
+
+def test_failure_cause_counts_preserve_original_success_threshold():
+    rows = outcomes(create=False, reject=False)
+    rows[0]["failure"] = "sqlite3.OperationalError: database is locked"
+    rows[0]["runtime_admitted"] = False
+    rows[1]["failure"] = "OpenAI model provider HTTP 401"
+    rows[1]["runtime_admitted"] = False
+    measured = summarize_trials(TASKS, [rows])
+    assert measured["failure_categories"] == {"database_lock": 1, "model_provider_auth": 1}
+    assert measured["pass_k"] == 0 and not passes_gate(measured, 0.4)
+
+
+@pytest.mark.parametrize(
+    "output, admitted, expected",
+    [
+        (
+            {
+                "error_code": "runtime_login_required",
+                "execution_state": "blocked",
+                "failure_stage": "runtime_setup",
+            },
+            False,
+            "runtime_account_auth",
+        ),
+        ({"error_code": "runtime_login_required"}, False, "runtime_admission"),
+        ({"error_code": "runtime_login_required"}, True, "runtime_execution_unverified"),
+        (None, False, "runtime_admission"),
+    ],
+)
+def test_runtime_account_auth_requires_structured_setup_receipt(output, admitted, expected):
+    row = {
+        "pass": False,
+        "failure": "runtime_login_required",
+        "runtime_admitted": admitted,
+        "exec_pass": None,
+        "execution": {"final_output": output},
+    }
+    assert classify_trial_failure(row) == expected

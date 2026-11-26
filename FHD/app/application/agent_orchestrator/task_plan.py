@@ -142,6 +142,12 @@ class UnifiedTaskPlanMixin:
         step = next((item for item in run.steps if item.status == "pending"), None)
         if step is None:
             return cast("AgentRun", run)
+        from app.application.agent_orchestrator.run_repair import RunRepair
+
+        auto_mode = str((runtime_context or {}).get("chat_approval_mode") or "").strip() == "auto"
+        if auto_mode and RunRepair.can_auto_execute(step, runtime_context):
+            # 自动审批模式：共享自治策略已授权，不留审批断点，交给调用方派发。
+            return cast("AgentRun", self._repo.save(run)) if persist else run
         step.status = "waiting_user"
         run.status = "waiting_user"
         run.metadata["task_model"] = {

@@ -828,7 +828,7 @@ def test_sqlite_creates_parent_dir(tmp_path):
 
 
 def test_integration_handle_failure_reason_mapping():
-    integ = NeuroBusDLQIntegration()
+    integ = NeuroBusDLQIntegration(DeadLetterQueue())
     ev = make_event("x")
     # retry_count >= max_retries -> RETRY_EXHAUSTED
     eid = integ.handle_failure(ev, RuntimeError("x"), retry_count=3)
@@ -836,19 +836,19 @@ def test_integration_handle_failure_reason_mapping():
 
 
 def test_integration_handle_failure_timeout():
-    integ = NeuroBusDLQIntegration()
+    integ = NeuroBusDLQIntegration(DeadLetterQueue())
     eid = integ.handle_failure(make_event("x"), TimeoutError("t"), retry_count=0)
     assert integ.dlq.dequeue(eid).reason == DeadLetterReason.TIMEOUT
 
 
 def test_integration_handle_failure_value_error():
-    integ = NeuroBusDLQIntegration()
+    integ = NeuroBusDLQIntegration(DeadLetterQueue())
     eid = integ.handle_failure(make_event("x"), ValueError("bad"), retry_count=0)
     assert integ.dlq.dequeue(eid).reason == DeadLetterReason.INVALID_PAYLOAD
 
 
 def test_integration_handle_failure_unrecoverable():
-    integ = NeuroBusDLQIntegration()
+    integ = NeuroBusDLQIntegration(DeadLetterQueue())
     eid = integ.handle_failure(make_event("x"), KeyError("k"), retry_count=0)
     assert integ.dlq.dequeue(eid).reason == DeadLetterReason.UNRECOVERABLE
 
@@ -862,7 +862,7 @@ def test_integration_setup_replay_to_bus():
             self.published.append(ev)
 
     bus = FakeBus()
-    integ = NeuroBusDLQIntegration()
+    integ = NeuroBusDLQIntegration(DeadLetterQueue())
     integ.setup_replay_to_bus(bus)
     eid = integ.dlq.enqueue(make_event("x"), DeadLetterReason.TIMEOUT, "e", 0)
     integ.dlq.replay(eid)
@@ -878,6 +878,11 @@ def test_integration_uses_provided_dlq():
 # ========================================================================
 # 全局单例与快捷函数
 # ========================================================================
+
+
+@pytest.fixture(autouse=True)
+def _isolated_global_dlq_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_NEURO_BUS_DLQ_PATH", str(tmp_path / "global.sqlite3"))
 
 
 def test_get_dead_letter_queue_singleton(monkeypatch):

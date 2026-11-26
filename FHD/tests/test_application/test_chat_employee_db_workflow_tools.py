@@ -7,9 +7,9 @@ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRe
 from app.application.task_conversation_store import task_conversation_store
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
-from tests.fixtures.codex_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
-from tests.fixtures.codex_http_runtime import fixture_goal_review
-from tests.fixtures.codex_http_runtime import runtime_entry as runtime_entry
+from tests.fixtures.xiaox_http_runtime import dynamic_chat_runtime as dynamic_chat_runtime
+from tests.fixtures.xiaox_http_runtime import fixture_goal_review
+from tests.fixtures.xiaox_http_runtime import runtime_entry as runtime_entry
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -597,7 +597,7 @@ def test_customer_workflow_read_never_expands_explicit_id(monkeypatch, customer_
         ),
     ],
 )
-def test_codex_business_dispatch_requires_real_approval_and_rejects_unproved_success(
+def test_xiaox_business_dispatch_requires_real_approval_and_rejects_unproved_success(
     dynamic_chat_runtime, monkeypatch, local_tools, source, profile, tool, action, params, message
 ):
     from app.application.ai_chat_app_service import AIChatApplicationService
@@ -651,7 +651,7 @@ def test_codex_business_dispatch_requires_real_approval_and_rejects_unproved_suc
         parent = state.client.get(f"/api/agent/runs/{parent_id}")
         assert parent.status_code == 200
         saved = state.repository.get(parent_id)
-        result = saved.final_output["codex_result"]
+        result = saved.final_output["xiaox_result"]
         assert result["execution_state"] == "unknown"
         assert result["reconciliation_required"] is True and result["retryable"] is False
         assert result["business_completed"] is False
@@ -662,7 +662,7 @@ def test_codex_business_dispatch_requires_real_approval_and_rejects_unproved_suc
     assert called_params["_runtime_context"]["run_id"] == child_id
 
 
-def test_codex_business_database_read_uses_original_authorized_child(
+def test_xiaox_business_database_read_uses_original_authorized_child(
     dynamic_chat_runtime, monkeypatch, local_tools
 ):
     from app.application.ai_chat_app_service import AIChatApplicationService
@@ -692,4 +692,4 @@ def test_codex_business_database_read_uses_original_authorized_child(
     assert result["success"] is True and result["execution_state"] == "completed", result
     dispatch.assert_called_once()
     assert dispatch.call_args.args[:2] == ("business_db", "read")
-    assert state.repository.get(result["run_id"]).metadata["runtime_type"] == "codex"
+    assert state.repository.get(result["run_id"]).metadata["runtime_type"] == "xiaox"

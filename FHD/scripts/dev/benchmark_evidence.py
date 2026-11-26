@@ -123,7 +123,11 @@ def validate_task_artifacts(
     *,
     require_gate: bool = True,
 ) -> list[list[dict[str, Any]]]:
-    from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
+    from scripts.dev.task_benchmark_report import (
+        passes_gate,
+        startup_blocked_task_ids,
+        summarize_trials,
+    )
 
     trials = report.get("trials")
     artifacts = report.get("trial_artifacts") or []
@@ -146,6 +150,8 @@ def validate_task_artifacts(
     measured = summarize_trials(json.loads(dataset.read_text())["tasks"], rows)
     if any(report.get(key) != value for key, value in measured.items()):
         raise ValueError("task summary differs from the actual trial outcomes")
+    if startup_blocked_task_ids(rows):
+        raise ValueError("task evidence contains trials not admitted to runtime or without execution")
     minimum = report.get("min_required")
     mode = report.get("acceptance_mode")
     if (

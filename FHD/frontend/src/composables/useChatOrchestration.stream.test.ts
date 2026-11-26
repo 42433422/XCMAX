@@ -275,9 +275,9 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it('renders a Codex input wait as waiting despite success=false and keeps its continuation', async () => {
+  it('renders a Xiaox input wait as waiting despite success=false and keeps its continuation', async () => {
     readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
-      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'codex',
+      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'xiaox',
         execution_state: 'waiting_user', needs_user_input: true,
         runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' } } })
     })
@@ -591,7 +591,7 @@ describe('useChatOrchestration stream', () => {
     expect(lastChatModelRoute('route-receipt')).toEqual(route)
   })
 
-  it('keeps selected identity unconfirmed after meta then stop and preserves it in the local interruption message', async () => {
+  it('keeps the selected model unconfirmed and shows stop on the original turn', async () => {
     const selected = { provider: 'xiaomi', model: 'request-model', route_source: 'platform_configuration', key_source: 'platform', config_revision: 'a', route_state: 'selected' }
     let finish!: () => void
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
@@ -602,7 +602,8 @@ describe('useChatOrchestration stream', () => {
     const pending = api.sendMessage('hello')
     await vi.waitFor(() => expect(lastChatModelRoute('selected-stop')).toEqual(selected))
     api.stopReply()
-    expect(addMessage.mock.calls.find(call => String(call[0]).includes('已停止接收'))?.[2]).toEqual({ routeMetadata: selected })
+    expect(api.stoppedTurnId.value).toBe(addMessage.mock.calls[0][2].turnId)
+    expect(addMessage.mock.calls.every(call => call[1] === 'user')).toBe(true)
     finish(); await pending
     expect(lastChatModelRoute('selected-stop')).toEqual(selected)
   })
@@ -1006,7 +1007,8 @@ describe('useChatOrchestration stream', () => {
       await vi.waitFor(() => expect(callbacks).toHaveLength(2))
     }
     expect(oldSignal.aborted).toBe(true)
-    expect(addMessage.mock.calls.some(call => String(call[0]).includes('已停止接收'))).toBe(action === 'stop')
+    expect(Boolean(api.stoppedTurnId.value)).toBe(action === 'stop')
+    if (action === 'stop') expect(api.stoppedTurnId.value).toBe(addMessage.mock.calls[0][2].turnId)
     callbacks[0]({ type: 'route_metadata', route_metadata: { provider: 'old', model: 'stale', route_source: 'preference', key_source: 'user_override', config_revision: 'old' } })
     callbacks[0]({ type: 'token', text: 'late old answer' })
     callbacks[0]({ type: 'requires_token', token_name: 'DB_WRITE' })

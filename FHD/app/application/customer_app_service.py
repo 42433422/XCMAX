@@ -1,9 +1,4 @@
-import logging
-
 from app.di.registry import get_service_registry
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 
 def get_customers_session():
@@ -14,17 +9,14 @@ def get_customers_session():
     请求头 ``X-XCAGI-Active-Mod-Id`` 会自动把 URL 改写成 ``xcagi__<mod>``
     （或 ``products__<mod>.db``），与 ``SQLAlchemyCustomerRepository`` 一致。
 
-    里程碑 L++：安装 ERP 门面 Mod 且 ``repository_via_mod`` 时经 Mod 适配器解析。
+    里程碑 L++：启用 Mod 时解析失败必须失败关闭，禁止回退另一数据源。
     """
-    try:
-        from app.mod_sdk.erp_repository_registry import resolve_customers_session
+    from app.mod_sdk.erp_repository_registry import resolve_customers_session
 
-        return resolve_customers_session()
-    except RECOVERABLE_ERRORS:
-        logger.debug("resolve_customers_session fallback to host SessionLocal", exc_info=True)
-    from app.db import SessionLocal
-
-    return SessionLocal()
+    session = resolve_customers_session()
+    if session is None:
+        raise RuntimeError("Customer repository did not provide a session")
+    return session
 
 
 def reset_customers_engine() -> None:

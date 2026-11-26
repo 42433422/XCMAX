@@ -80,13 +80,24 @@ class CompatChatApplication:
         body.context = context
         if is_offline(body.mode):
             turn = ChatTurn(body, body.message, context, "compat_chat_offline")
+            # Reauthorize before reading an old cached reply: revoked credentials
+            # must not disclose a prior business result via the replay fast path.
+            admitted = self.admission.check(request, turn)
+            if admitted.payload is not None:
+                scoped = admitted.context_update if admitted.context_update is not None else context
+                return self._attach(
+                    admitted.payload,
+                    ChatTurn(body, body.message, scoped, turn.channel),
+                )
             from app.application.ai_chat.dialogue_memory import prepare_chat_turn
 
             prepared = prepare_chat_turn(body.message, context)
             if prepared is not None:
                 return self._attach(prepared, turn)
             return self._attach(
-                offline_turn(request, turn, self.admission, self.fast_paths.business),
+                offline_turn(
+                    request, turn, self.admission, self.fast_paths.business, admitted=admitted
+                ),
                 turn,
             )
         from app.application.ai_chat.chat_evidence import (

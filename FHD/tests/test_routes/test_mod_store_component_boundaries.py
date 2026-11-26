@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, Request, UploadFile
 
 from app.domain.shared_services.mod_zip_normalize import normalize_package_zip_path
 from app.fastapi_routes import mod_store_routes as api
@@ -57,7 +57,7 @@ async def test_rejected_upload_closes_its_stream(
 ) -> None:
     upload = UploadFile(io.BytesIO(body), filename=name)
     with pytest.raises(HTTPException) as error:
-        await api.mod_store_upload(upload, activate=True)
+        await api.mod_store_upload(Request({"type": "http", "headers": []}), upload, activate=True)
     assert error.value.status_code == 400
     assert upload.file.closed
     assert list(tmp_path.iterdir()) == []
@@ -116,26 +116,30 @@ async def test_upload_releases_original_and_real_normalized_zip(
     )
     seen: list[Path] = []
 
-    def install(path: str, **kwargs: bool) -> tuple[bool, str] | tuple[bool, str, None]:
+    def install(path: str, **kwargs: bool | str) -> tuple[bool, str] | tuple[bool, str, None]:
         normalized = Path(path)
         seen.append(normalized)
         with zipfile.ZipFile(normalized) as archive:
             assert "manifest.json" in archive.namelist()
             assert "demo/manifest.json" not in archive.namelist()
         assert kwargs["verify_signature"] is True
-        if not employee:
+        if employee:
+            assert "owner_scope" not in kwargs
+        else:
             assert kwargs["activate"] is False
+            assert kwargs["owner_scope"] == ""
         if raises:
             raise RuntimeError("installer failed")
         return (True, "installed employee") if employee else (True, "installed", None)
 
     installer.side_effect = install
     upload = UploadFile(io.BytesIO(_wrapped_zip()), filename="demo.xcemp")
+    request = Request({"type": "http", "headers": []})
     if raises:
         with pytest.raises(RuntimeError, match="installer failed"):
-            await api.mod_store_upload(upload, activate=False)
+            await api.mod_store_upload(request, upload, activate=False)
     else:
-        result = await api.mod_store_upload(upload, activate=False)
+        result = await api.mod_store_upload(request, upload, activate=False)
         assert result.success is True
     assert len(seen) == 1
     assert list(tmp_path.iterdir()) == []
@@ -149,7 +153,7 @@ async def test_cancelled_upload_closes_stream_and_removes_partial_archive(
     upload = UploadFile(io.BytesIO(b""), filename="demo.zip")
     monkeypatch.setattr(upload, "read", AsyncMock(side_effect=[b"partial", asyncio.CancelledError]))
     with pytest.raises(asyncio.CancelledError):
-        await api.mod_store_upload(upload, activate=True)
+        await api.mod_store_upload(Request({"type": "http", "headers": []}), upload, activate=True)
     assert upload.file.closed
     assert list(tmp_path.iterdir()) == []
     package_adapters[0].install_mod_package.assert_not_called()
@@ -162,7 +166,7 @@ async def test_temporary_file_failure_still_closes_the_upload(
     monkeypatch.setattr(tempfile, "NamedTemporaryFile", Mock(side_effect=OSError("disk full")))
     upload = UploadFile(io.BytesIO(_wrapped_zip()), filename="demo.zip")
     with pytest.raises(OSError, match="disk full"):
-        await api.mod_store_upload(upload, activate=True)
+        await api.mod_store_upload(Request({"type": "http", "headers": []}), upload, activate=True)
     assert upload.file.closed and list(tmp_path.iterdir()) == []
     package_adapters[0].install_mod_package.assert_not_called()
 

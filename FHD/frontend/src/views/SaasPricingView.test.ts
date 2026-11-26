@@ -8,7 +8,7 @@ vi.mock('@/api/modelPayment', () => ({ default: { getPlans: mocks.getPlans, chec
 vi.mock('@/api/auth', () => ({ authApi: { getSubscriptionStatus: mocks.subscription } }))
 vi.mock('@/api/marketAccount', () => ({ createMarketBrowserHandoff: mocks.handoff }))
 vi.mock('@/constants/loginBranding', () => ({ marketBaseUrl: () => 'https://xiu-ci.com/market' }))
-const standard = { id: 'saas-permanent-standard', title: 'XCAGI 软件', amount_cents: 680000, description: '企业标准功能永久使用' }
+const standard = { id: 'saas-permanent-standard', title: 'XCAGI 软件', amount_cents: 300000, description: '企业标准功能永久使用' }
 const trial = { id: 'saas-trial-30', title: '30 天企业功能体验', amount_cents: 9900, duration_days: 30, description: '包含活动 AI 额度' }
 
 async function open(query: Record<string, string> = {}) {
@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.getPlans.mockResolvedValue({ success: true, data: {
     plans: [trial, standard, { id: 'saas-permanent-growth', title: '旧成长版', amount_cents: 9999900 }],
-    commercial_terms: { customization_from_cents: 298000 },
+    commercial_terms: { customization_from_cents: 99900 },
   } })
   mocks.subscription.mockResolvedValue(null)
   Object.defineProperty(window, 'xcagiDesktop', { value: {}, configurable: true })
@@ -46,8 +46,8 @@ describe('SaasPricingView simple commerce', () => {
     const { wrapper } = await open({ budget: 'high' })
     expect(mocks.getPlans).toHaveBeenCalledWith()
     expect(wrapper.get('h1').text()).toBe('软件一次买断，按需定制')
-    expect(wrapper.get('.saas-plan-card--recommended').text()).toContain('¥6,800')
-    expect(wrapper.text()).toContain('¥2,980 起')
+    expect(wrapper.get('.saas-plan-card--recommended').text()).toContain('¥3,000')
+    expect(wrapper.text()).toContain('¥999 起')
     expect(wrapper.text()).toContain('AI 调用按实际用量付费')
     expect(wrapper.text()).not.toMatch(/旧成长版|按预算推荐|选择套餐/)
     expect(wrapper.get('a[href="/enterprise-customer-service"]').text()).toBe('咨询定制')
@@ -81,7 +81,7 @@ describe('SaasPricingView simple commerce', () => {
     const { wrapper } = await open()
     expect(wrapper.get('[role="alert"]').text()).toContain('暂时无法加载价格')
     expect(wrapper.find('.saas-plan-card--recommended').exists()).toBe(false)
-    expect(wrapper.text()).not.toMatch(/private gateway|2,980|6,800/)
+    expect(wrapper.text()).not.toMatch(/private gateway|999|3,000/)
     expect(mocks.checkout).not.toHaveBeenCalled()
   })
 

@@ -334,6 +334,97 @@ def _measured(db, execution, binding, due):
     return result["success"], result["evidence_sha256"], result["reason"]
 
 
+def reconcile_postpromotion_customer_outcomes(request_id, *, session):
+    """Write product-outcome receipts separately from frozen randomized samples.
+
+    This reuses the original customer agreement, owned execution, and receipt
+    classifier. A promoted execution is never retrofitted into experiment.observed.
+    The caller owns the SQL transaction and its stop-loss readback.
+    """
+    from modstore_server import retort_experiment_runtime as runtime
+    from modstore_server.retort_feedback_experiments import approved_policy
+    from modstore_server.workflow_execution_feedback import _admitted, _owned_graph
+
+    db = session
+    row = db.get(RetortEvolutionRun, request_id)
+    if row is None or row.status != "completed":
+        return {"observed": 0, "pending": 0}
+    try:
+        spec, effects = approved_policy(row)
+    except (KeyError, TypeError, ValueError):
+        return {"observed": 0, "pending": 0}
+    progress = effects.get("experiment") or {}
+    if (
+        spec.get("lifecycle", {}).get("measurement_scope") != WORKFLOW_CUSTOMER_MEASUREMENT
+        or progress.get("traffic") != "candidate"
+        or progress.get("decision") != "promote"
+        or progress.get("rollout_verified") is not True
+    ):
+        return {"observed": 0, "pending": 0}
+    now = runtime.datetime.now(UTC)
+    counts = {"observed": 0, "pending": 0}
+    for binding in _bindings(db, request_id):
+        assignment = binding.get("assignment") or {}
+        if (
+            binding.get("metric_admitted") is not False
+            or binding.get("rollout_admitted") is not True
+            or assignment.get("assignment_stage") != "approved_rollout"
+        ):
+            continue
+        execution_id = binding.get("execution_id")
+        if not execution_id:
+            continue
+        event_id = f"experiment.postpromotion_observed:workflow-customer:{execution_id}"
+        if db.scalar(select(OutboxEvent.id).where(OutboxEvent.event_id == event_id)):
+            continue
+        due = parse_datetime(binding.get("customer_outcome_due_at"))
+        execution = db.get(WorkflowExecution, execution_id)
+        if (
+            due is None
+            or now < due
+            or execution is None
+            or execution.status not in {"completed", "failed"}
+        ):
+            counts["pending"] += 1
+            continue
+        if (
+            binding.get("execution_allowed") is not True
+            or execution.user_id != binding.get("user_id")
+            or execution.workflow_id != binding.get("workflow_id")
+            or _digest(json_loads(execution.input_data, None)) != binding.get("input_sha256")
+            or not _owned_graph(db, execution, binding.get("graph_fingerprint"))
+            or not _admitted(db, binding, completing=True, mining=True)
+        ):
+            counts["pending"] += 1
+            continue
+        try:
+            outcome = classify_customer_outcome(db, execution, binding, due)
+        except (HTTPException, ValueError):
+            counts["pending"] += 1
+            continue
+        enqueue(
+            db,
+            "experiment.postpromotion_observed",
+            request_id,
+            {
+                **assignment,
+                "observation_id": f"postpromotion-workflow-customer:{execution_id}",
+                "execution_id": execution_id,
+                "assigned_at": binding["started_at"],
+                "customer_outcome_evidence_sha256": outcome["evidence_sha256"],
+                "customer_outcome_classification": outcome["classification"],
+                "success": outcome["success"],
+                "duration_ms": max(
+                    0, (due - parse_datetime(binding["started_at"])).total_seconds() * 1000
+                ),
+                "completed_at": now.isoformat(),
+            },
+            event_id=event_id,
+        )
+        counts["observed"] += 1
+    return counts
+
+
 def reconcile_customer_executions(request_id):
     """Existing Retort scheduler calls this before fetching/freezing GrowthBook results."""
     from modstore_server import retort_experiment_runtime as runtime

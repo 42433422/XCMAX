@@ -3,6 +3,12 @@ import type { ChatPlannerPayload } from '@/types/chat'
 import { asRecord, asString } from '@/utils/typeGuards'
 
 const WAITING = new Set(['waiting_user', 'waiting_approval'])
+/** Queued work keeps its run id for event following, but never blocks a new turn. */
+const FOLLOWING = new Set(['queued'])
+
+function keepsRunId(status: string): boolean {
+  return WAITING.has(status) || FOLLOWING.has(status)
+}
 
 export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuation | undefined {
   const value = asRecord(raw)
@@ -11,12 +17,17 @@ export function restoreRuntimeContinuation(raw: unknown): ChatRuntimeContinuatio
   if (!status || status.length > 64 || !sessionId || sessionId.length > 512) return undefined
   const runId = value.runId
   if (runId !== null && (typeof runId !== 'string' || !/^[\w.:-]{1,256}$/.test(runId))) return undefined
-  return { runId: WAITING.has(status) ? runId as string | null : null, status, sessionId }
+  return { runId: keepsRunId(status) ? runId as string | null : null, status, sessionId }
+}
+
+/** Historical wire labels identify the same runtime, not another executor. */
+export function isFixedRuntimePayload(payload: ChatPlannerPayload): boolean {
+  const envelope = asRecord(payload.data)
+  return [payload.runtime, envelope.runtime].some(label => label === 'codex' || label === 'xiaox')
 }
 
 export function runtimeContinuationFromPayload(payload: ChatPlannerPayload): ChatRuntimeContinuation | undefined {
-  const envelope = asRecord(payload.data)
-  if (payload.runtime !== 'codex' && envelope.runtime !== 'codex') return undefined
+  if (!isFixedRuntimePayload(payload)) return undefined
   const update = asRecord(payload.runtime_context_update)
   return restoreRuntimeContinuation({
     runId: update.agent_runtime_run_id,
@@ -30,9 +41,14 @@ export function runtimeExecutionState(payload: ChatPlannerPayload): string {
 }
 
 export function isRuntimeWaiting(payload: ChatPlannerPayload): boolean {
-  const envelope = asRecord(payload.data)
-  return (payload.runtime === 'codex' || envelope.runtime === 'codex')
+  return isFixedRuntimePayload(payload)
     && WAITING.has(runtimeExecutionState(payload))
+}
+
+/** The durable queue accepted the turn; follow the run instead of finalizing. */
+export function isRuntimeQueued(payload: ChatPlannerPayload): boolean {
+  return isFixedRuntimePayload(payload)
+    && runtimeExecutionState(payload) === 'queued'
 }
 
 /** Only the latest actual assistant reply can ask to continue its parent. */

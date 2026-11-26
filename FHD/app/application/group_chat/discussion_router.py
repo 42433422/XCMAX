@@ -326,10 +326,16 @@ class GroupDiscussion:
         discussion_turns: list[dict[str, str]],
         mentions: list[str] | None,
     ) -> tuple[list[dict[str, Any]], str]:
-        if DispatchTargeting.is_broadcast_mention(task) or DispatchTargeting.explicit_member_ids(
-            candidates, task, mentions
-        ):
-            return (candidates[:MAX_RESPONDERS], "用户已明确点名或广播，按指定成员执行。")
+        candidates = DispatchTargeting.unique_dispatch_members(candidates)
+        if DispatchTargeting.is_broadcast_mention(task):
+            return (candidates[:MAX_RESPONDERS], "用户已明确广播，按当前候选成员执行。")
+        explicit = DispatchTargeting.explicit_member_ids(candidates, task, mentions)
+        if explicit:
+            selected = [m for m in candidates if str(m.get("employee_id") or "") in explicit]
+            return (
+                selected[:MAX_RESPONDERS],
+                "按用户点名派工。" if selected else "点名员工不在当前候选范围内，未执行。",
+            )
         candidate_lines = "\n".join(
             f"- {m.get('employee_id')}: {m.get('name')}，{m.get('summary')}" for m in candidates
         )

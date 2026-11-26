@@ -261,7 +261,7 @@ def _employee_runtime_gate_denial(
         from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 
         parent = get_agent_run_repository().get(parent_id) if parent_id else None
-        if parent is None or parent.metadata.get("runtime_type") != "codex":
+        if parent is None or parent.metadata.get("runtime_type") != "xiaox":
             return denied if employee_bound else None
         if not parent.metadata.get("runtime_gate_required"):
             return denied if employee_bound else None
@@ -295,12 +295,12 @@ def _employee_runtime_gate_denial(
             )
         ):
             return denied
-        from app.application.employee_runtime.agent import restore_codex_employee_gate
+        from app.application.employee_runtime.agent import restore_xiaox_employee_gate
 
-        actions, gate = restore_codex_employee_gate(
+        actions, gate = restore_xiaox_employee_gate(
             str(original.get("employee_id") or ""),
             original,
-            input_data=parent.metadata.get("_codex_input_data"),
+            input_data=parent.metadata.get("_xiaox_input_data"),
         )
         if actions != parent.metadata.get("runtime_allowed_actions"):
             return denied
@@ -389,6 +389,24 @@ class AgentToolExecutor:
         )
 
         context_for_limit = runtime_context if isinstance(runtime_context, dict) else {}
+        from app.domain.task_lifecycle.execution_mode import CONTEXT_KEY, deny_reason
+
+        blocked = deny_reason(
+            context_for_limit.get(CONTEXT_KEY),
+            step.tool_id,
+            step.action,
+            dict(step.params or {}),
+            lookup_spec=get_tool_action_spec,
+        )
+        if blocked:
+            # Plan mode is enforced here, not by the model, so no other entry can bypass it.
+            return {
+                "success": False,
+                "error_code": "execution_mode_plan_blocked",
+                "retryable": False,
+                "execution_status": "not_started",
+                "message": blocked,
+            }
         tenant = context_for_limit.get("tenant_id") or context_for_limit.get("user_id") or "shared"
         endpoint = f"agent-tool:{step.tool_id}.{step.action}"
         try:

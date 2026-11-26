@@ -42,7 +42,7 @@ def attach_context_evidence(run: Any, contract: dict[str, Any]) -> None:
             "status": "completed" if evidence.get("status") == "completed" else "failed",
             "error": "" if evidence.get("status") == "completed" else "recall_unavailable",
             "metadata": {
-                "origin": "codex.goal_admission",
+                "origin": "xiaox.goal_admission",
                 "goal_digest": contract["digest"],
                 "owner_id": evidence.get("owner_id"),
                 "tenant_id": contract["scope"].get("tenant_id"),
@@ -117,7 +117,7 @@ def _context_evidence(run: Any, context: dict[str, Any]) -> list[dict[str, Any]]
                     }
                 )
         except RECOVERABLE_ERRORS:
-            logger.warning("Codex original goal memory recall unavailable", exc_info=True)
+            logger.warning("Xiaox original goal memory recall unavailable", exc_info=True)
             evidence.append({"source": "memory_v2", "owner_id": owner, "status": "unavailable"})
         try:
             from app.application.user_memory_vector_app_service import (
@@ -140,7 +140,7 @@ def _context_evidence(run: Any, context: dict[str, Any]) -> list[dict[str, Any]]
                     }
                 )
         except RECOVERABLE_ERRORS:
-            logger.warning("Codex original goal memory RAG unavailable", exc_info=True)
+            logger.warning("Xiaox original goal memory RAG unavailable", exc_info=True)
             evidence.append(
                 {"source": "user_memory_rag", "owner_id": owner, "status": "unavailable"}
             )
@@ -170,7 +170,7 @@ def _context_evidence(run: Any, context: dict[str, Any]) -> list[dict[str, Any]]
                 }
             )
         except RECOVERABLE_ERRORS:
-            logger.warning("Codex original goal knowledge recall unavailable", exc_info=True)
+            logger.warning("Xiaox original goal knowledge recall unavailable", exc_info=True)
             evidence.append(
                 {"source": "dataset_rag", "dataset_id": dataset_id, "status": "unavailable"}
             )
@@ -203,7 +203,7 @@ def prepare_runtime_goal(
     # Only upload references cross this boundary. Paths/analysis supplied by a
     # caller remain quoted user data and cannot become verified file evidence.
     for attached in [
-        run.metadata.get("_codex_input_data"),
+        run.metadata.get("_xiaox_input_data"),
         *(e.data.get("input_data") for e in answered),
     ]:
         if isinstance(attached, dict) and "attachment_upload_ids" in attached:

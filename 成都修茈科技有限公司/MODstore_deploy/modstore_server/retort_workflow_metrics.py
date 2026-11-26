@@ -196,3 +196,42 @@ def execution_stop_loss(db, row, spec):
                 failures += 1
     failures += len(failed_accounts)
     return failures >= source["maximum_treatment_failures"]
+
+
+def postpromotion_stop_reason(db, row, spec):
+    """Apply the frozen customer stop-loss to separate real rollout receipts.
+
+    Postpromotion samples cannot revise the original GrowthBook A/B result.
+    Unknown/corrupt receipts block treatment, never manufacture a new lift.
+    """
+    from datetime import UTC
+
+    from modstore_server import retort_experiment_runtime as runtime
+    from modstore_server.customer_service_tools import json_loads
+    from modstore_server.retort_training_candidates import postpromotion_effect_snapshot
+
+    if (spec.get("lifecycle") or {}).get("measurement_scope") != WORKFLOW_CUSTOMER_MEASUREMENT:
+        return ""
+    original = execution_policy(spec)
+    if original is None:
+        return ""
+    effects = json_loads(row.effects_json, {})
+    evidence = postpromotion_effect_snapshot(
+        db, row, spec, effects, observed_at=runtime.datetime.now(UTC)
+    )
+    if evidence is None:
+        # No snapshot is normal before promotion, but an already promoted
+        # candidate must not continue with a missing/invalid rollout clock.
+        progress = effects.get("experiment") or {}
+        if (
+            progress.get("traffic") == "candidate"
+            and progress.get("decision") == "promote"
+            and progress.get("rollout_verified") is True
+        ):
+            return "workflow_postpromotion_source_unverified"
+        return ""
+    if evidence["status"] in {"source_unverified", "blocked_source_budget"}:
+        return "workflow_postpromotion_source_unverified"
+    if evidence["failed_subjects"] >= original["maximum_treatment_failures"]:
+        return "workflow_execution_stop_loss"
+    return ""

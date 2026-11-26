@@ -35,9 +35,9 @@ public final class AccountLicensePlans {
                     "normal", "体验", 10000,
                     "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
                     List.of("XCAGI 桌面端完整功能", "30 天使用期", "100 元 AI 使用额度")),
-            new Metadata(STANDARD_PLAN_ID, "XCAGI 软件买断", new BigDecimal("6800.00"),
+            new Metadata(STANDARD_PLAN_ID, "XCAGI 软件买断", new BigDecimal("3000.00"),
                     "permanent", null, "normal", "一次购买", 0,
-                    "6,800 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
+                    "3,000 元一次购买，永久使用已购软件；定制按确认的报价收费，AI 调用按量另计。",
                     List.of("软件永久使用", "无软件续租费", "定制另行报价", "AI 调用按量付费"))
     );
     // Historical grants and pending orders keep their original product identity.

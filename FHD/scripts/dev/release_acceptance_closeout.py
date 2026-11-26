@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,119 @@ logger = logging.getLogger(__name__)
 
 LABEL_FAILED = "acceptance-failed"
 LABEL_ACCEPTED = "customer-accepted"
+
+LABEL_BUSINESS_REQUIRED = "business-acceptance-required"
+
+
+def _valid_digest(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        char in "0123456789abcdef" for char in value.lower()
+    )
+
+
+def _business_receipts_complete(
+    issue: dict[str, Any], acceptance: dict[str, Any], version: str, build_sha: str
+) -> bool:
+    """Release installation receipts never substitute for business acceptance.
+
+    This verifies the identity/completeness of a trusted market-side readback;
+    raw SQL, workbook and customer signoff must be independently checked by
+    the producing services, not invented by this closeout script.
+    """
+    if LABEL_BUSINESS_REQUIRED not in _label_names(issue):
+        return True
+    receipts = acceptance.get("business_receipts")
+    record = receipts.get(str(issue["number"])) if isinstance(receipts, dict) else None
+    if not isinstance(record, dict) or record.get("status") != "accepted":
+        return False
+    # The market receipt must identify the exact published release itself;
+    # checking only its nested stages permits a stale top-level verdict.
+    if record.get("version") != version or record.get("build_sha") != build_sha:
+        return False
+    identity = {
+        "version": version, "build_sha": build_sha,
+        "tenant_id": record.get("tenant_id"), "customer_id": record.get("customer_id"),
+        "task_id": record.get("task_id"), "run_id": record.get("run_id"),
+    }
+    if any(not str(value or "").strip() for value in identity.values()):
+        return False
+    if not _valid_digest(record.get("source_sha256")) or not _valid_digest(
+        record.get("artifact_sha256")
+    ):
+        return False
+    stages = record.get("stages")
+    required = (
+        "source", "approval", "execution", "database", "artifact",
+        "independent_reconciliation", "customer_confirmation",
+    )
+    if not isinstance(stages, dict):
+        return False
+    receipt_ids = set()
+    for name in required:
+        stage = stages.get(name)
+        if not isinstance(stage, dict):
+            return False
+        receipt_id = stage.get("receipt_id")
+        if not isinstance(receipt_id, str) or not receipt_id.strip() or receipt_id in receipt_ids:
+            return False
+        receipt_ids.add(receipt_id)
+        if any(stage.get(key) != value for key, value in identity.items()):
+            return False
+        if stage.get("source_sha256") != record["source_sha256"]:
+            return False
+        expected = "accepted" if name == "customer_confirmation" else "verified"
+        if stage.get("status") != expected:
+            return False
+    if (
+        not _valid_digest(stages["approval"].get("approved_action_sha256"))
+        or stages["approval"].get("approved_action_sha256")
+        != stages["execution"].get("approved_action_sha256")
+        or stages["artifact"].get("artifact_sha256") != record["artifact_sha256"]
+        or stages["customer_confirmation"].get("artifact_sha256") != record["artifact_sha256"]
+        or not stages["customer_confirmation"].get("confirmed_by")
+        or not stages["customer_confirmation"].get("confirmed_at")
+    ):
+        return False
+    # An installation verdict and a syntactically complete set of stages are
+    # not sufficient. Explicit source provenance, committed stock/accounting
+    # readbacks, downloadable XLSX and independent reconciliation are required.
+    # These fields are claims from the authenticated market endpoint: they do
+    # not replace its independent verification of originals and transactions.
+    source = stages["source"]
+    approval = stages["approval"]
+    execution = stages["execution"]
+    database = stages["database"]
+    artifact = stages["artifact"]
+    confirmation = stages["customer_confirmation"]
+    oracle = stages["independent_reconciliation"]
+    if (
+        source.get("source_kind") != "authorized_customer_original"
+        or source.get("synthetic") is not False
+        or not isinstance(approval.get("approved_by"), str)
+        or not approval["approved_by"].strip()
+        or not isinstance(execution.get("executed_by"), str)
+        or not execution["executed_by"].strip()
+        or approval["approved_by"] == execution["executed_by"]
+        or database.get("inventory_committed") is not True
+        or database.get("finance_committed") is not True
+        or database.get("readback_verified") is not True
+        or not _valid_digest(database.get("inventory_readback_sha256"))
+        or not _valid_digest(database.get("finance_readback_sha256"))
+        or artifact.get("format") != "xlsx"
+        or artifact.get("download_hash_verified") is not True
+        or confirmation.get("confirmed_by") == execution.get("executed_by")
+        or not _valid_digest(oracle.get("reconciliation_sha256"))
+    ):
+        return False
+    return (
+        bool(oracle.get("verifier_id"))
+        and oracle["verifier_id"] != execution.get("executed_by")
+        and oracle.get("original_to_database") is True
+        and oracle.get("database_to_artifact") is True
+        and oracle.get("inventory_and_accounting") is True
+        and oracle.get("approval_scope") is True
+    )
+
 
 
 def _fetch_published_release(market_base: str) -> dict[str, Any]:
@@ -201,14 +315,29 @@ def _record_verdict_local(
     acceptance: dict,
 ) -> bool:
     """Persist the verdict on the shared market host, never on an ephemeral CI runner."""
+    # Persist an immutable fingerprint of the *same* business receipt used
+    # for the decision. Do not copy customer names, amounts or source bytes to
+    # GitHub comments or to the public-facing release ledger.
+    business_receipts = acceptance.get("business_receipts")
+    business = (
+        business_receipts.get(str(issue_number))
+        if isinstance(business_receipts, dict) else None
+    )
+    evidence = {
+        "build_sha": acceptance.get("build_sha") or acceptance.get("git_sha"),
+        "per_platform": acceptance.get("per_platform") or {},
+    }
+    if isinstance(business, dict):
+        evidence["business_receipt_sha256"] = hashlib.sha256(
+            json.dumps(
+                business, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
     payload = {
         "issue_number": int(issue_number),
         "release_version": version,
         "verdict": verdict,
-        "evidence": {
-            "build_sha": acceptance.get("build_sha") or acceptance.get("git_sha"),
-            "per_platform": acceptance.get("per_platform") or {},
-        },
+        "evidence": evidence,
     }
     result = _http(
         "POST", f"{market_base.rstrip('/')}/api/work-orders/acceptance",
@@ -304,6 +433,14 @@ def run(args: argparse.Namespace) -> int:
             continue
         if "pull_request" in issue:
             logger.error("linked work order #%d is a pull request, not an issue", number)
+            failures += 1
+            continue
+        # Install receipts prove the client started, not that any customer
+        # workbook, approval, stock or financial result was accepted.
+        if verdict == "accepted" and not _business_receipts_complete(
+            issue, acceptance, version, build_sha
+        ):
+            logger.error("business issue #%d lacks bound independent customer evidence", number)
             failures += 1
             continue
         # CI runner disk is ephemeral. Never report an issue closed if the

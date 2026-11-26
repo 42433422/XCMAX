@@ -438,7 +438,7 @@ def test_private_capture_does_not_need_dataset_write_but_cannot_write_tenant(
     assert memory.memory_service.list_memories(namespace()) == []
     persist_recallable_chat_turn(context=context, **kwargs)
     rows = memory.memory_service.list_memories(namespace())
-    assert len(rows) == 1 and rows[0]["status"] == "pending"
+    assert len(rows) == 1 and rows[0]["status"] == "active"
 
 
 @pytest.mark.parametrize(
@@ -446,7 +446,7 @@ def test_private_capture_does_not_need_dataset_write_but_cannot_write_tenant(
     [
         "请翻译下面这段话：\n我叫王敏\n我喜欢咖啡",
         "小说台词：\n我住在杭州",
-        "我喜欢简洁报告",
+        "以下是引用：\n我喜欢简洁报告",
     ],
 )
 def test_fallback_does_not_promote_unverified_assertion_context(memory, monkeypatch, message):

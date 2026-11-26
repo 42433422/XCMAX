@@ -174,7 +174,7 @@ def _discover(
             "description": (
                 f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）"
                 + (
-                    "。Codex 按实际 browser_snapshot 发现 ref 并逐个提交明确动作；"
+                    "。Xiaox 按实际 browser_snapshot 发现 ref 并逐个提交明确动作；"
                     "同一受信父任务共享会话，每次写入独立审批和回读，不能猜测 ref 或重放未知结果。"
                     if config.browser and config.session_mode == "persistent"
                     else ""
@@ -360,8 +360,8 @@ def call_mcp_tool(
 def mcp_session_scope(context: dict[str, Any]) -> str:
     """Only trusted executor context can bind a browser; model arguments cannot."""
     identity = [str(context.get(key) or "").strip() for key in ("tenant_id", "user_id", "run_id")]
-    if context.get("source") == "codex_runtime" and context.get("parent_run_id"):
-        from app.infrastructure.codex.receipts import action_parent
+    if context.get("source") == "xiaox_runtime" and context.get("parent_run_id"):
+        from app.infrastructure.xiaox.receipts import action_parent
 
         try:
             parent = action_parent(context)
@@ -374,7 +374,7 @@ def mcp_session_scope(context: dict[str, Any]) -> str:
 
 
 def browser_session_outputs(context: dict, tool_id: str) -> list[dict]:
-    from app.infrastructure.codex.receipts import browser_action_receipts
+    from app.infrastructure.xiaox.receipts import browser_action_receipts
 
     outputs = context.get("node_outputs")
     current = [
@@ -398,7 +398,7 @@ def release_run_browser_sessions(context: dict[str, Any]) -> int:
     from app.application.agent_orchestrator.browser_tool_process import close_browser_worker_scope
     from app.infrastructure.mcp.client import close_scope
 
-    if context.get("source") == "codex_runtime" and context.get("parent_run_id"):
+    if context.get("source") == "xiaox_runtime" and context.get("parent_run_id"):
         # A dynamic child does not own the shared parent session lifetime.
         return 0
 

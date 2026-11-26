@@ -1,4 +1,4 @@
-"""Employee tool-catalog compatibility retained by the fixed Codex entry."""
+"""Employee tool-catalog compatibility retained by the fixed Xiaox entry."""
 
 from unittest.mock import patch
 

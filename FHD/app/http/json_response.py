@@ -23,7 +23,7 @@ class _JsonResponse(Response):
     _json_data: dict[str, Any]
 
     def __init__(self, data: dict[str, Any], status: int = 200) -> None:
-        body = json.dumps(data, ensure_ascii=False)
+        body = json.dumps(data, ensure_ascii=False, default=str)
         super().__init__(
             content=body,
             status_code=status,

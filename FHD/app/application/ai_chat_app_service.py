@@ -1,4 +1,4 @@
-"""Unified chat lifecycle around the fixed Codex runtime and business evidence."""
+"""Unified chat lifecycle around the fixed Xiaox runtime and business evidence."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from app.application.ai_chat.conversation_history import (
 
 
 class AIChatApplicationService:
-    """Chat identity, context and history around the single Codex agent runtime."""
+    """Chat identity, context and history around the single Xiaox agent runtime."""
 
     def process_chat(
         self,

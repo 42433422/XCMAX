@@ -19,7 +19,7 @@ class AccountLicensePlansTest {
         Map<String, BigDecimal> expectedPrices = Map.of(
                 "saas-personal-free", BigDecimal.ZERO,
                 "saas-trial-30", new BigDecimal("99.00"),
-                "saas-permanent-standard", new BigDecimal("6800.00"));
+                "saas-permanent-standard", new BigDecimal("3000.00"));
 
         assertThat(AccountLicensePlans.PLANS.stream()
                 .collect(Collectors.toMap(AccountLicensePlans.Metadata::id, AccountLicensePlans.Metadata::name)))
