@@ -1,5 +1,5 @@
 {
-  "lines": 2734475,
+  "lines": 2734480,
   "updated": "2026-11-26",
-  "note": "M07 持续运行可验证：监控回执改为可验证证据并对失败告警重试（净 +113 行），属运维验收链路补强。 #3617 and #3632 exact integrated main delta, including new in-flight handoff test and shared PostgreSQL CI; source-growth review retained. No CI result or release acceptance claimed. Parametric mid-flight role revocation and account-disable negatives: +10 net tracked lines. #3617/#3632 门禁修复净减 6 行；按两侧 diff 合并既有增量，不新增预算，正式 preflight 待复核。"
+  "note": "M07 持续运行可验证：监控回执改为可验证证据并对失败告警重试（净 +113 行），属运维验收链路补强。 #3617 and #3632 exact integrated main delta, including new in-flight handoff test and shared PostgreSQL CI; source-growth review retained. No CI result or release acceptance claimed. Parametric mid-flight role revocation and account-disable negatives: +10 net tracked lines. #3617/#3632 门禁修复净减 6 行；按两侧 diff 合并既有增量，不新增预算，正式 preflight 待复核。 #3632 修复 4 项测试（+5 行）。"
 }
