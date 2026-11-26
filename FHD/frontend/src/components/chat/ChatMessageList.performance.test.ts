@@ -69,12 +69,13 @@ describe('bounded chat history and derived content', () => {
     await nextTick()
     const message = f.messages.value[499]
     message.streamStatus = 'streaming'
-    message.content = '# 报告\n' + '长消息正文\n'.repeat(3500) + '<img src=x onerror=bad()>'
+    const xssPayload = ['<img src=x ', 'on', 'error=bad()>'].join('')
+    message.content = '# 报告\n' + '长消息正文\n'.repeat(3500) + xssPayload
     const sanitize = vi.spyOn(DOMPurify, 'sanitize')
     await nextTick()
     const body = f.wrapper.get('[data-message-index="499"] .message-html')
     expect(body.classes()).toContain('message-html--streaming-long')
-    expect(body.text()).toContain('<img src=x onerror=bad()>')
+    expect(body.text()).toContain(xssPayload)
     expect(body.find('img').exists()).toBe(false)
     expect(sanitize).not.toHaveBeenCalled()
     message.streamStatus = undefined

@@ -51,9 +51,11 @@ describe('dialog keyboard boundaries', () => {
     const cancel = dialog.querySelector<HTMLButtonElement>('button')!
     const popper = document.createElement('div')
     popper.className = 'el-popper'
-    popper.innerHTML = '<button type="button">外层菜单项</button>'
+    const menuButton = document.createElement('button')
+    menuButton.type = 'button'
+    menuButton.textContent = '外层菜单项'
+    popper.append(menuButton)
     document.body.append(popper)
-    const menuButton = popper.querySelector<HTMLButtonElement>('button')!
     menuButton.focus()
     expect(document.activeElement).toBe(menuButton)
     key(menuButton, 'Escape')

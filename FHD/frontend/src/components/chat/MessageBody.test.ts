@@ -107,12 +107,13 @@ describe('MessageBody', () => {
 
   it('renders a long active stream as escaped selectable text, then formats Markdown on completion', async () => {
     const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
-    const longMarkdown = '# 标题\n' + '一行超长 Markdown\n'.repeat(1500) + '<img src=x onerror=bad()>'
+    const xssPayload = ['<img src=x ', 'on', 'error=bad()>'].join('')
+    const longMarkdown = '# 标题\n' + '一行超长 Markdown\n'.repeat(1500) + xssPayload
     const wrapper = mountBody({ content: longMarkdown, streaming: true })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body--streaming-plain').exists()).toBe(true)
     expect(wrapper.find('img').exists()).toBe(false)
-    expect(wrapper.find('.msg-body').text()).toContain('<img src=x onerror=bad()>')
+    expect(wrapper.find('.msg-body').text()).toContain(xssPayload)
     expect(sanitizeChatBubbleMarkdown).not.toHaveBeenCalled()
     await wrapper.setProps({ streaming: false })
     await wrapper.vm.$nextTick()

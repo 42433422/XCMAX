@@ -3,15 +3,28 @@ import { findRouteScrollRoot, RouteScrollMemory } from './routeScrollMemory'
 
 function setup() {
   const root = document.createElement('section')
-  root.innerHTML = '<div class="shell"><div id="orders" class="scrollable"><p>Orders</p></div></div>'
-  const scroller = root.querySelector<HTMLElement>('#orders')!
+  const shell = document.createElement('div')
+  shell.className = 'shell'
+  const scroller = document.createElement('div')
+  scroller.id = 'orders'
+  scroller.className = 'scrollable'
+  const p = document.createElement('p')
+  p.textContent = 'Orders'
+  scroller.append(p)
+  shell.append(scroller)
+  root.append(shell)
   return { root, scroller }
 }
 
 describe('route scroll root identity', () => {
   it('excludes old pages and unmarked loading fallbacks', () => {
     const container = document.createElement('div')
-    container.innerHTML = '<div class="route-view-shell" data-route-scroll-key="/orders"></div><div class="route-view-shell route-view-shell--loading"></div>'
+    const oldPage = document.createElement('div')
+    oldPage.className = 'route-view-shell'
+    oldPage.setAttribute('data-route-scroll-key', '/orders')
+    const loading = document.createElement('div')
+    loading.className = 'route-view-shell route-view-shell--loading'
+    container.append(oldPage, loading)
     expect(findRouteScrollRoot(container, '/settings')).toBeNull()
     const next = document.createElement('main')
     next.className = 'route-view-shell'
