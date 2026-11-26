@@ -116,6 +116,7 @@ def list_events(
             if (
                 isinstance(target, str)
                 and target
+                and isinstance(verdict, str)
                 and verdict in _AUDIT_VERDICTS
                 and isinstance(audited_at, str)
                 and audited_at
@@ -158,7 +159,7 @@ def mark_audited(event_id: str, verdict: str) -> bool:
     """
     if not isinstance(event_id, str) or not event_id:
         raise ValueError("invalid_evolution_event_id")
-    if verdict not in _AUDIT_VERDICTS:
+    if not isinstance(verdict, str) or verdict not in _AUDIT_VERDICTS:
         raise ValueError("invalid_evolution_audit_verdict")
     path = _ledger_path().resolve()
     if not path.is_file():

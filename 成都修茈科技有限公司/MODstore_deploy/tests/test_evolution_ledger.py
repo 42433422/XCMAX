@@ -215,3 +215,26 @@ def test_list_events_handles_legacy_invalid_event_ids(tmp_ledger):
     assert events[0]["owner_audit"]["verdict"] == "approved"
     assert [event["event_id"] for event in events[1:]] == [None, [], {"id": "invalid"}]
     assert all("owner_audit" not in event for event in events[1:])
+
+
+@pytest.mark.parametrize("verdict", [None, [], {"invalid": True}])
+def test_invalid_audit_verdict_does_not_break_projection(tmp_ledger, verdict):
+    original = append_event({"event_type": "signal_detected"})
+    # A legacy or damaged audit line must not create approval or break reads.
+    with tmp_ledger.open("a", encoding="utf-8") as fh:
+        fh.write(
+            json.dumps(
+                {
+                    "event_type": "owner_audit_recorded",
+                    "audit_target_event_id": original["event_id"],
+                    "audit_verdict": verdict,
+                    "audited_at": original["recorded_at"],
+                }
+            )
+            + "\n"
+        )
+    before = tmp_ledger.read_bytes()
+    assert list_events()[0]["owner_audit"]["audited"] is False
+    with pytest.raises(ValueError, match="invalid_evolution_audit_verdict"):
+        mark_audited(original["event_id"], verdict)
+    assert tmp_ledger.read_bytes() == before
