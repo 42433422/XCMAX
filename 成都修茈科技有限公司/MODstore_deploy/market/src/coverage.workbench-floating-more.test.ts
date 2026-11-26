@@ -236,7 +236,7 @@ describe('workbench and floating agent extra component coverage', () => {
           toolCall: { name: 'search', args: { q: '客户', limit: 2 } },
         },
       },
-    )
+    })
     expect(toolBubble.text()).toContain('search · 参数已隐藏')
     expect(toolBubble.html()).not.toContain('客户')
     expect(toolBubble.html()).not.toContain('limit=2')
