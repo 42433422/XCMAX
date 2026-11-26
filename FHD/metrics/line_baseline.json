@@ -1,5 +1,5 @@
 {
-  "lines": 2734063,
+  "lines": 2734053,
   "updated": "2026-11-25",
-  "note": "#3525 Codex loopback proxy 与 verifier JSON 修复：新增代理/校验回归夹具与非提权验证用例（净 +816 行），属缺陷修复链路补强，不降低覆盖率门槛。"
+  "note": "棘轮下调"
 }
