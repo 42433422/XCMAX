@@ -311,7 +311,9 @@ def test_verified_operations_do_not_satisfy_a_missing_original_goal(setup_runtim
     result = asyncio.run(invoke(store, Transport(store, completed("已全部完成"))))
     assert result["verified_operations"] is True and result["business_completed"] is False
     assert result["exit_status"] == "goal_verification_required"
-    assert result["output"] == "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。"
+    assert result["output"] == (
+        "本轮未通过完整性核验，原任务与回执已保留，请核对后重试。整体目标尚未核验完成。"
+    )
     assert all(message["role"] == "user" for message in result["session_messages"])
     assert store.run.status == "blocked"
 
