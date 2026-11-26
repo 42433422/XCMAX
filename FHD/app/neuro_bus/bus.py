@@ -349,6 +349,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             outcome = "handler_failed"
             self._error_count += 1
             logger.exception("Error dispatching %s", event)
+            return "failed"
         finally:
             self._resolve_stream_delivery(event, outcome)
             self._active_partitions.discard(key)
@@ -360,6 +361,18 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
     def _record_partition_outcome(self, task: asyncio.Task[str]) -> None:
         # Count tasks cancelled before their coroutine starts, too.
+        if task.cancelled():
+            outcome = "cancelled"
+        elif task.exception() is not None:
+            outcome = "failed"
+        else:
+            outcome = task.result()
+        if outcome not in ("delivered", "failed", "unhandled", "cancelled"):
+            outcome = "failed"
+        record_event_outcome(self._enable_metrics, outcome)
+
+    def _record_partition_outcome(self, task: asyncio.Task[str]) -> None:
+        # Count even tasks cancelled before their coroutine starts.
         if task.cancelled():
             outcome = "cancelled"
         elif task.exception() is not None:
