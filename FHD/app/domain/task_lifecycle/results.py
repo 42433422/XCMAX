@@ -96,8 +96,14 @@ _EXECUTION_ENVELOPE_KEYS = frozenset(
 )
 
 
-def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
-    """Walk only result envelopes; business rows in items/sheets are not run states."""
+def execution_result_envelopes(
+    data: dict[str, Any], *, include_execution: bool = False
+) -> Iterator[dict[str, Any]]:
+    """Walk result envelopes; authoritative receipt readers include execution summaries.
+
+    Ordinary control replies may embed a separate unfinished workflow summary.
+    Business rows in items/sheets are never interpreted as run states.
+    """
     pending: list[tuple[dict[str, Any], dict[str, Any] | None]] = [(data, None)]
     seen: set[int] = set()
     while pending:
@@ -137,6 +143,8 @@ def execution_result_envelopes(data: dict[str, Any]) -> Iterator[dict[str, Any]]
                 "chat_payload",
             )
         ]
+        if include_execution:
+            children.append((current.get("execution"), None))
         for key in ("outputs", "node_outputs"):
             outputs = current.get(key)
             if isinstance(outputs, dict):
@@ -258,14 +266,59 @@ def execution_result_error(data: dict[str, Any]) -> str:
     return ""
 
 
-def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
+def execution_result_outcome_unknown(
+    data: dict[str, Any], *, include_execution: bool = False
+) -> bool:
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
         execution_result_states(result) & _UNKNOWN_STATES
-        or result.get("reconciliation_required") is True
-        or result.get("requires_reconciliation") is True
+        or result.get("reconciliation_required")
+        or result.get("requires_reconciliation")
         or result.get("outcome_unknown") is True
-        for result in execution_result_envelopes(data)
+        for result in execution_result_envelopes(data, include_execution=include_execution)
+    )
+
+
+def execution_result_proven_not_executed(data: dict[str, Any]) -> bool:
+    """An explicit failed receipt must consistently attest that no effect occurred."""
+    execution = data.get("execution")
+    if not (
+        data.get("success") is False
+        and isinstance(execution, dict)
+        and execution.get("outcome") == "not_executed"
+        and execution.get("committed") is False
+    ):
+        return False
+    return not execution_result_outcome_unknown(data, include_execution=True) and all(
+        not execution_result_states(row)
+        - {"failed", "cancelled", "rejected", "expired", "not_started", "not_executed"}
+        and not any(
+            row.get(flag)
+            for flag in (
+                "success",
+                "ok",
+                "verified",
+                "execution_accepted",
+                "accepted",
+                "pending_approval",
+                "requires_token",
+                "needs_user_input",
+                "requires_user_decision",
+            )
+        )
+        and ("committed" not in row or row["committed"] is False)
+        and row.get("effect") in (None, "none")
+        and (
+            "execution" not in row
+            or (
+                isinstance(row["execution"], dict)
+                and row["execution"].get("outcome") == "not_executed"
+                and row["execution"].get("committed") is False
+            )
+        )
+        and row.get("in_flight", 0) == 0
+        and row.get("unknown", 0) == 0
+        for row in execution_result_envelopes(data, include_execution=True)
     )
 
 

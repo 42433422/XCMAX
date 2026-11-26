@@ -12,6 +12,7 @@ from app.domain.task_lifecycle.results import (
     execution_result_envelopes,
     execution_result_error,
     execution_result_outcome_unknown,
+    execution_result_proven_not_executed,
 )
 from app.infrastructure.xiaox.binding import (
     XiaoxBinding,
@@ -53,7 +54,7 @@ def _verified_step(step: Any, record: Any) -> bool:
         == (step.node_id, step.tool_id, step.action, step.params, step.output)
         and step.output.get("success") is True
         and not execution_result_error(step.output)
-        and not execution_result_outcome_unknown(step.output)
+        and not execution_result_outcome_unknown(step.output, include_execution=True)
         and not any(
             isinstance(row.get("status_code"), int) and row["status_code"] >= 400
             for row in execution_result_envelopes(step.output)
@@ -61,18 +62,35 @@ def _verified_step(step: Any, record: Any) -> bool:
     )
 
 
-def _definitely_not_applied(child: Any, verification: dict[str, Any]) -> bool:
-    """A blocked child with failed verification and no effect is retryable, not unknown."""
-    if str(getattr(child, "status", "")) not in {"blocked", "failed"}:
-        return False
-    if list(getattr(child, "artifacts", None) or []):
-        return False
-    if any(
-        (getattr(record, "output", None) or {}).get("success") is True
-        for record in getattr(child, "tool_calls", None) or []
+def _failed_execution_receipt(child: Any, step: Any, record: Any) -> dict[str, Any] | None:
+    """Project only the bound, frozen original rejection; never infer from failure."""
+    from app.application.agent_orchestrator.result_verification import _binding_valid
+
+    if (
+        record is None
+        or child.status != "failed"
+        # Additional attempts are not this bridge's single frozen action receipt;
+        # the latest rejection must not hide earlier effects or unbound history.
+        or len(child.tool_calls) != 1
+        or bool(child.artifacts)
+        or step.status != "failed"
+        or record.status != "failed"
+        or not execution_result_proven_not_executed(record.output)
     ):
-        return False
-    return str((verification or {}).get("status") or "") in {"failed", "inconclusive"}
+        return None
+    try:
+        if not _binding_valid(
+            child,
+            step,
+            record,
+            child.metadata.get("runtime_context") or {},
+            record.metadata.get("verification_contract"),
+        ):
+            return None
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    execution = record.output["execution"]
+    return {key: execution[key] for key in ("outcome", "committed", "effect") if key in execution}
 
 
 def _failed_step_detail(child: Any) -> str:
@@ -152,22 +170,28 @@ def read_call_receipt(
     from app.application.agent_orchestrator.result_verification import summarize_verification
 
     verification = summarize_verification(child)
+    execution = (
+        _failed_execution_receipt(child, child.steps[0], child.tool_calls[0])
+        if len(child.steps) == len(child.tool_calls) == 1
+        else None
+    )
     unverified_effect = not verification["accepted"] and any(
-        record.output.get("success") is True
-        and (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+        (record.metadata.get("verification_contract") or {}).get("read_only") is not True
+        and (
+            record.output.get("success") is True
+            or (child.status in {"blocked", "failed"} and execution is None)
+        )
         for record in child.tool_calls
     )
     unknown = (
         bool(child.metadata.get("non_retryable"))
         and (child.metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
     )
-    definite_failure = _definitely_not_applied(child, verification)
     if (
         unknown
         or unverified_effect
-        or (
-            not definite_failure
-            and any(execution_result_outcome_unknown(output) for output in outputs)
+        or any(
+            execution_result_outcome_unknown(output, include_execution=True) for output in outputs
         )
     ):
         return {
@@ -248,8 +272,7 @@ def read_call_receipt(
             else None
         )
     message = str(child.error or ("业务回执已核验" if verified else "业务任务尚未完成"))
-    if definite_failure:
-        # 明确失败（无产物、无成功调用）允许同一原任务修正后重试。
+    if execution is not None:
         message = _failed_step_detail(child) or message
     return {
         "success": verified,
@@ -264,8 +287,9 @@ def read_call_receipt(
         "approval_card": approval_card,
         "needs_user_input": clarification is not None,
         "clarification": clarification,
-        "retryable": definite_failure,
+        "retryable": False,
         "reconciliation_required": False,
+        **({"execution": execution} if execution is not None else {}),
         "message": message,
         "tool_calls": [_safe_output(record.to_dict()) for record in latest.values()],
         "artifacts": [_safe_output(artifact.to_dict()) for artifact in child.artifacts],
