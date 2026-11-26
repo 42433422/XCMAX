@@ -18,9 +18,9 @@ def _seed_transaction(real_engine: Engine) -> Iterator[Connection]:
     through the read and the whole seed makes concurrent startup idempotent.
     """
     with real_engine.begin() as conn:
-        if real_engine.dialect.name == "sqlite" and real_engine.url.database not in (
-            None,
-            ":memory:",
+        if (
+            real_engine.dialect.name == "sqlite"
+            and real_engine.url.database not in (None, ":memory:")
         ):
             conn.exec_driver_sql("BEGIN IMMEDIATE")
         yield conn
@@ -78,9 +78,8 @@ def seed_rbac(real_engine: Engine, *, logger: Logger) -> None:
 
     from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES, Permission, Role
 
-    if not {"permissions", "roles", "role_permissions"}.issubset(
-        set(inspect(real_engine).get_table_names() or [])
-    ):
+    table_names = set(inspect(real_engine).get_table_names() or [])
+    if not {"permissions", "roles", "role_permissions"}.issubset(table_names):
         return
     SessionLocal = sessionmaker(bind=real_engine)
     with _seed_transaction(real_engine) as conn, SessionLocal(bind=conn) as session:

@@ -45,6 +45,19 @@ finally:
 """
 
 
+def _assert_default_graph(session: Session) -> None:
+    permissions = session.query(Permission).all()
+    assert len(permissions) == len(DEFAULT_PERMISSIONS)
+    assert {perm.code for perm in permissions} == {spec["code"] for spec in DEFAULT_PERMISSIONS}
+    roles = session.query(Role).all()
+    assert len(roles) == len(DEFAULT_ROLES)
+    expected = {spec["name"]: set(spec["permissions"]) for spec in DEFAULT_ROLES}
+    actual = {role.name: {perm.code for perm in role.permissions} for role in roles}
+    assert actual == expected
+    assert all(role.is_system for role in roles)
+    assert all("model_payment.refund" not in grants for grants in actual.values())
+
+
 def test_concurrent_sqlite_bootstrap_seeds_one_consistent_permission_graph(tmp_path: Path):
     url = f"sqlite+pysqlite:///{tmp_path / 'concurrent.sqlite3'}"
     root = Path(__file__).resolve().parents[2]
@@ -96,15 +109,7 @@ def test_concurrent_sqlite_bootstrap_seeds_one_consistent_permission_graph(tmp_p
     try:
         with Session(engine) as session:
             assert session.query(User).count() == 1
-            assert session.query(Permission).count() == len(DEFAULT_PERMISSIONS)
-            assert session.query(Role).count() == len(DEFAULT_ROLES)
-            roles = {role.name: role for role in session.query(Role).all()}
-            for role_spec in DEFAULT_ROLES:
-                role = roles[role_spec["name"]]
-                assert role.is_system
-                assert {permission.code for permission in role.permissions} == set(
-                    role_spec["permissions"]
-                )
+            _assert_default_graph(session)
     finally:
         engine.dispose()
 
@@ -131,13 +136,7 @@ def test_sqlite_rbac_seed_failure_rolls_back_and_retry_is_idempotent(tmp_path: P
         for _ in range(2):
             ensure_sqlite_rbac_bootstrap(engine=engine, swallow_errors=False)
         with Session(engine) as session:
-            assert session.query(Permission).count() == len(DEFAULT_PERMISSIONS)
-            assert session.query(Role).count() == len(DEFAULT_ROLES)
-            roles = {role.name: role for role in session.query(Role).all()}
-            for spec in DEFAULT_ROLES:
-                assert {permission.code for permission in roles[spec["name"]].permissions} == set(
-                    spec["permissions"]
-                )
+            _assert_default_graph(session)
     finally:
         engine.dispose()
 
@@ -174,19 +173,6 @@ def test_rbac_seed_waits_for_external_writer_without_expanding_grants(tmp_path: 
                 writer.commit()
             future.result(timeout=30)
         with Session(engine) as session:
-            permissions = session.query(Permission).all()
-            assert len(permissions) == len(DEFAULT_PERMISSIONS)
-            assert {permission.code for permission in permissions} == {
-                spec["code"] for spec in DEFAULT_PERMISSIONS
-            }
-            roles = session.query(Role).all()
-            assert len(roles) == len(DEFAULT_ROLES)
-            expected = {spec["name"]: set(spec["permissions"]) for spec in DEFAULT_ROLES}
-            assert {role.name: {perm.code for perm in role.permissions} for role in roles} == expected
-            assert all(
-                permission.code != "model_payment.refund"
-                for role in roles
-                for permission in role.permissions
-            )
+            _assert_default_graph(session)
     finally:
         engine.dispose()

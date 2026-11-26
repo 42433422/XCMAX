@@ -102,9 +102,8 @@ def _run_trial(tasks_path: Path, trial: int) -> list[dict]:
         pytest.fail(
             f"trial {trial} runner 失败（exit={proc.returncode}）:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
         )
-    return [
-        json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    lines = out.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
 
 
 def test_task_set_pass_k():
@@ -136,6 +135,7 @@ def test_task_set_pass_k():
         or completed_identity["tracked_source_dirty"]
         or any(identity[key] != completed_identity[key] for key in ("source_sha", "dataset_sha256"))
     )
+    gate_passed = not startup_blocked_tasks and mode == "gate" and passes_gate(measured, minimum)
     report = {
         **identity,
         **measured,
@@ -146,9 +146,7 @@ def test_task_set_pass_k():
         "startup_blocked_tasks": startup_blocked_tasks,
         "acceptance_mode": mode,
         "min_required": minimum,
-        "gate_passed": (
-            not startup_blocked_tasks and mode == "gate" and passes_gate(measured, minimum)
-        ),
+        "gate_passed": gate_passed,
         "trial_artifacts": [
             trial_artifact(report_directory() / f"task_benchmark_trial_{i}.jsonl")
             for i in range(trials)

@@ -28,9 +28,11 @@ def _engine(db_path):
 def _seed_from_independent_connection(db_path, barrier, write_attempt=None):
     engine = _engine(db_path)
     if write_attempt is not None:
+
         def _watch_begin(_conn, _cursor, statement, _params, _context, _many):
             if statement.strip().upper() == "BEGIN IMMEDIATE":
                 write_attempt.set()
+
         event.listen(engine, "before_cursor_execute", _watch_begin)
     try:
         barrier.wait(timeout=10)
@@ -74,9 +76,7 @@ def test_parallel_rbac_bootstrap_has_one_catalog_and_no_duplicate_grants(tmp_pat
         assert set(roles) == {row["name"] for row in DEFAULT_ROLES}
         assert len(roles) == len(set(roles))
         expected_grants = {
-            (role["name"], code)
-            for role in DEFAULT_ROLES
-            for code in role["permissions"]
+            (role["name"], code) for role in DEFAULT_ROLES for code in role["permissions"]
         }
         assert set(grants) == expected_grants
         assert len(grants) == len(expected_grants)
@@ -112,6 +112,7 @@ def test_seed_waits_for_external_sqlite_writer_and_preserves_existing_rows(tmp_p
         assert len(codes) == len(set(codes))
     finally:
         engine.dispose()
+
 
 # Distinct from the four fresh-start processes in #3613: a separate writer
 # holds the lock while the RBAC seeder in a second interpreter attempts it.
@@ -213,9 +214,7 @@ def test_independent_process_writer_lock_is_respected(tmp_path):
                 )
             ).all()
         expected = {
-            (role["name"], code)
-            for role in DEFAULT_ROLES
-            for code in role["permissions"]
+            (role["name"], code) for role in DEFAULT_ROLES for code in role["permissions"]
         }
         assert len(rows) == len({row["code"] for row in DEFAULT_PERMISSIONS})
         assert set(rows) == {row["code"] for row in DEFAULT_PERMISSIONS}

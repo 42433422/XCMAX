@@ -381,9 +381,12 @@ def test_source_change_during_trials_is_not_clean_evidence(producer, monkeypatch
 def test_failure_causes_never_confuse_model_keys_with_database_or_business(
     failure, admitted, expected
 ):
-    assert classify_trial_failure(
-        {"pass": False, "failure": failure, "runtime_admitted": admitted, "exec_pass": None}
-    ) == expected
+    assert (
+        classify_trial_failure(
+            {"pass": False, "failure": failure, "runtime_admitted": admitted, "exec_pass": None}
+        )
+        == expected
+    )
 
 
 def test_failure_cause_counts_preserve_original_success_threshold():

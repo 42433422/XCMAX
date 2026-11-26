@@ -175,7 +175,9 @@ class OrmBootstrap:
                 missing = [table for table in group.tables if table.name not in existing]
                 if missing:
                     self.logger.info(
-                        "%s 缺少表 %s，正在通过 ORM 创建 …", group.operation, [t.name for t in missing]
+                        "%s 缺少表 %s，正在通过 ORM 创建 …",
+                        group.operation,
+                        [t.name for t in missing],
                     )
                     self.metadata.create_all(
                         bind,
