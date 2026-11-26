@@ -157,13 +157,13 @@ if (!marketThemeCss.includes('--el-bg-color-overlay: var(--wb-dialog-bg);')) {
 const marketFocusBlock = marketBlock('.app-confirm-dialog__cancel:focus-visible,\n.app-confirm-dialog__confirm:focus-visible');
 const marketFocusColor = /(?:^|;)\s*outline\s*:\s*[\d.]+px\s+solid\s+([^;]+);/.exec(marketFocusBlock)?.[1]?.trim();
 for (const label of ['light', 'dark']) {
-  const surfaceToken = '--xc-token-market-' + label + '-wb-dialog-bg';
-  if (!marketThemeCss.includes('--wb-dialog-bg: var(' + surfaceToken + ');')) {
+  const surfaceCssVariable = '--xc-token-market-' + label + '-wb-dialog-bg';
+  if (!marketThemeCss.includes('--wb-dialog-bg: var(' + surfaceCssVariable + ');')) {
     throw Error('Market dialog surface alias missing: ' + label);
   }
   pair('Market AppConfirmDialog focus ring on ' + label,
     () => resolveColor(marketFocusColor, [], marketGeneratedCss),
-    () => resolveColor('var(' + surfaceToken + ')', [], marketGeneratedCss), 3);
+    () => resolveColor('var(' + surfaceCssVariable + ')', [], marketGeneratedCss), 3);
 }
 
 // Market light muted text is rendered in blockquotes, placeholders, sidebar
