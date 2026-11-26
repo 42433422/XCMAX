@@ -52,12 +52,12 @@
     "FHD/app/application/agent_orchestrator/tool_executor.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_executor.py",
       "base_blob": "730674111a8bdd799cc3cd03b1dfa065edc2d81f",
-      "head_blob": "bfa63e0ca57ee5bc8723029900302e09dde4033a",
+      "head_blob": "955441adecd495f0f616177133925c07623b3b8f",
       "before_lines": 1097,
-      "after_lines": 1133,
+      "after_lines": 1135,
       "reason": "实际工具执行使用发现阶段同一账号的权限和输入契约",
-      "boundary": "以当前经认证账号重新计算已发布摘要。权限或摘要变化在派发前拒绝。",
-      "validation": "通过原业务数据库读和客户查询的持久子任务及回执重放回归。",
+      "boundary": "以执行端实际校验的契约对同一个账号做投影。权限、输入契约或版本发生变化，在派发前拒绝。",
+      "validation": "复验企业客户范围的读取、持久回执重放以及已审批契约变化的拒绝，59 项定向回归通过。",
       "follow_up": "由 @42433422 结合本次不可变base/head/blob和CI复核；后续相同职责继续归现役模块，保留单一事实源。此记录是评审请求，不代表人工审批。",
       "review_owner": "@42433422"
     },
