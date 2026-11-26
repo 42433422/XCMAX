@@ -174,7 +174,7 @@ def _range_bounds(ws, token: str) -> Tuple[str, int, int, int, int]:
     if "!" in text:
         sheet, _, text = text.partition("!")
         sheet = sheet.strip().strip("'")
-    m = _RANGE_RE.match(text.upper())
+    m = _RANGE_RE.match(text.upper().replace("$", ""))
     if not m:
         raise ValueError(f"非法范围：{token!r}")
     _, c1, r1, c2, r2 = m.groups()

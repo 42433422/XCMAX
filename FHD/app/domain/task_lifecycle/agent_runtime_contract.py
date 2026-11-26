@@ -236,6 +236,19 @@ def is_deferred_reply_preference(request_text: str, goal: GoalAssessment) -> boo
     return not _STYLE_NEGATION_RE.search(source)
 
 
+def _batch_goal_capacity(row: dict[str, Any]) -> int:
+    """A verified employee batch can cover one goal per declared phase."""
+    params = row.get("params")
+    if (row.get("tool_id"), row.get("action")) != ("employee", "execute") or not isinstance(
+        params, dict
+    ):
+        return 1
+    payload = params.get("input") if isinstance(params.get("input"), dict) else params
+    plan = payload.get("plan") if isinstance(payload, dict) else None
+    phases = plan.get("phases") if isinstance(plan, dict) else None
+    return len(phases) if isinstance(phases, list) and phases else 1
+
+
 def validate_goal_review(
     raw: Any, contract: dict[str, Any], snapshot: dict[str, Any], output: str
 ) -> tuple[dict[str, Any], list[str]]:
@@ -264,7 +277,7 @@ def validate_goal_review(
     errors = list(snapshot["conflicts"])
     seen: set[str] = set()
     used_writes: set[str] = set()
-    assigned: dict[str, str] = {}
+    assigned: dict[str, list[str]] = {}
     deferred_preferences = 0
     for goal in review.goals:
         if goal.goal_id in seen or goal.source not in sources.get(goal.source_id, ""):
@@ -300,9 +313,13 @@ def validate_goal_review(
                     errors.append(f"写入目标 {goal.goal_id} 不能用只读结果冒充完成")
                 used_writes.update(writes)
                 for key in writes:
-                    if key in assigned:
-                        errors.append(f"目标 {goal.goal_id} 重用了 {assigned[key]} 的同一写入回执")
-                    assigned[key] = goal.goal_id
+                    owners = assigned.get(key)
+                    if owners is None:
+                        assigned[key] = [goal.goal_id]
+                    elif len(owners) < _batch_goal_capacity(verified[key]):
+                        owners.append(goal.goal_id)
+                    else:
+                        errors.append(f"目标 {goal.goal_id} 重用了 {owners[0]} 的同一写入回执")
             elif any(not verified.get(key, {}).get("read_only", True) for key in selected):
                 errors.append(f"只读目标 {goal.goal_id} 包含额外写入")
         elif goal.status != "satisfied" or selected - verified.keys():

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -10,7 +10,6 @@ from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_veto,
 )
 
-UTC = timezone.utc
 ALLOWED_AT = datetime(2026, 7, 28, 8, 0, tzinfo=UTC)
 MERGE_SHA = "6" * 40
 HEAD_SHA = "7" * 40
@@ -23,6 +22,11 @@ ALLOWED_FILE = (
 OUTSIDE_LEGACY_SCOPE_FILE = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_scheduler.py"
 )
+
+
+@pytest.fixture(autouse=True)
+def _github_repository(monkeypatch):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_GITHUB_REPOSITORY", "xcagi/XCMAX")
 
 
 def _responses():
@@ -90,22 +94,14 @@ def _responses():
 
 def _fetcher(responses):
     def _fetch(path, params=None):
+        assert path.startswith("/repos/xcagi/XCMAX/")
         if path.endswith("/pulls"):
-            assert params == {
-                "head": f"42433422:{BRANCH}",
-                "per_page": "20",
-                "state": "all",
-            }
+            assert params == {"head": f"xcagi:{BRANCH}", "per_page": "20", "state": "all"}
             return responses["pulls"]
-        if path.endswith("/pulls/799"):
-            return responses["detail"]
-        if path.endswith("/files"):
-            return responses["files"]
-        if path.endswith("/check-runs"):
-            return responses["checks"]
         if "/compare/" in path:
             return responses["comparison"]
-        raise AssertionError(f"unexpected GitHub path: {path}")
+        response_key = {"799": "detail", "files": "files", "check-runs": "checks"}
+        return responses[response_key[path.rsplit("/", 1)[-1]]]
 
     return _fetch
 
