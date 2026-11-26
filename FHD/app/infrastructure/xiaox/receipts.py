@@ -99,19 +99,25 @@ def read_call_receipt(
     """Read business truth, never turn completion or MCP transport success."""
     if (call.get("tool_id"), call.get("action")) == ("xcmax_workflow", "execute"):
         return {**_unknown(call), "error_code": "retired_runtime_contract"}
-    child = store.repository.get(str(call.get("child_run_id") or ""))
-    if child is None:
+    child_run_id = str(call.get("child_run_id") or "")
+    child = store.repository.get(child_run_id) if child_run_id else None
+    if child is None and not child_run_id:
         task = store.repository.get_task(
             user_id=binding.run.user_id,
             task_id=call["child_task_id"],
             tenant_id=tenant_id_of_run(binding.run),
         )
         if task is not None:
+            # A lost binding ACK may adopt only the sole original admission.
+            # A later active attempt cannot supply this call's original proof.
+            if task.attempt != 1 or task.run_count != 1:
+                return _unknown(call)
             child = store.repository.get(task.active_run_id)
     if child is None:
         metadata = binding.metadata
         if (
-            call.get("state") == "claimed"
+            not child_run_id
+            and call.get("state") == "claimed"
             and call.get("generation") == metadata.get("generation")
             and metadata.get("coordinator_active")
             and not metadata.get("revoked")
