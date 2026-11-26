@@ -284,7 +284,17 @@ class FulfillmentService:
                 )
                 if not inv["success"]:
                     return inv
-                item.reserved_quantity = reserved + q
+                changed = db.query(SalesOrderItem).filter(
+                    SalesOrderItem.id == item.id,
+                    SalesOrderItem.tenant_id == order.tenant_id,
+                    SalesOrderItem.reserved_quantity == reserved,
+                ).update(
+                    {SalesOrderItem.reserved_quantity: reserved + q},
+                    synchronize_session=False,
+                )
+                if changed != 1:
+                    db.rollback()
+                    return {"success": False, "message": "订单预留量并发变化，原库存预留已回滚"}
                 db.commit()
                 db.refresh(item)
                 return {
@@ -363,10 +373,28 @@ class FulfillmentService:
                 )
                 if not inv["success"]:
                     return inv
-                item.delivered_quantity = delivered + q
-                # 交付消耗对应预留
-                item.reserved_quantity = max(Decimal("0"), _to_decimal(item.reserved_quantity) - q)
+                old_reserved = _to_decimal(item.reserved_quantity)
                 new_delivered = delivered + q
+                changed = ctx.query(SalesOrderItem).filter(
+                    SalesOrderItem.id == item.id,
+                    SalesOrderItem.tenant_id == order.tenant_id,
+                    SalesOrderItem.delivered_quantity == delivered,
+                    SalesOrderItem.reserved_quantity == old_reserved,
+                ).update(
+                    {
+                        SalesOrderItem.delivered_quantity: new_delivered,
+                        SalesOrderItem.reserved_quantity: max(
+                            Decimal("0"), old_reserved - q
+                        ),
+                    },
+                    synchronize_session=False,
+                )
+                if changed != 1:
+                    # A caller-owned UoW must not commit a successful stock move
+                    # without its corresponding order-item movement.
+                    ctx.rollback()
+                    return {"success": False, "message": "订单发货量并发变化，原库存扣减已回滚"}
+                ctx.refresh(item)
                 partial = new_delivered < ordered
                 backorder_qty = max(Decimal("0"), ordered - new_delivered)
                 child = self._sync_backorder(ctx, order, item, backorder_qty)
@@ -450,7 +478,17 @@ class FulfillmentService:
                 )
                 if not inv["success"]:
                     return inv
-                item.returned_quantity = returned + q
+                changed = db.query(SalesOrderItem).filter(
+                    SalesOrderItem.id == item.id,
+                    SalesOrderItem.tenant_id == order.tenant_id,
+                    SalesOrderItem.returned_quantity == returned,
+                ).update(
+                    {SalesOrderItem.returned_quantity: returned + q},
+                    synchronize_session=False,
+                )
+                if changed != 1:
+                    db.rollback()
+                    return {"success": False, "message": "订单退货量并发变化，原库存回补已回滚"}
                 db.commit()
                 db.refresh(item)
                 return {

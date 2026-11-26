@@ -78,6 +78,8 @@ from app.db.models.purchase import (
     PurchaseInboundItem,
     PurchaseOrder,
     PurchaseOrderItem,
+    PurchaseReturn,
+    PurchaseReturnItem,
     Supplier,
 )
 from app.db.models.purchase_unit import PurchaseUnit
@@ -180,6 +182,8 @@ __all__ = [
     "PurchaseOrderItem",
     "PurchaseInbound",
     "PurchaseInboundItem",
+    "PurchaseReturn",
+    "PurchaseReturnItem",
     "ApprovalFlow",
     "ApprovalFlowNode",
     "ApprovalRequest",

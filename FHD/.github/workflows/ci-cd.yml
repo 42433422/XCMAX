@@ -171,6 +171,41 @@ jobs:
             tests/test_routes/test_mobile_super_employee_receipts.py \
             tests/test_services/test_mobile_relay_request_identity.py \
             -q -o addopts= --junitxml=agent-postgres-results.xml
+      - name: Verify supplier return PostgreSQL and legacy upgrade invariants
+        working-directory: FHD
+        env:
+          XCAGI_TEST_POSTGRES_URL: postgresql+psycopg://agent_test:agent-test-only@127.0.0.1:5432/agent_test
+        run: |
+          test -n "$XCAGI_TEST_POSTGRES_URL"
+          uv run --no-sync pytest \
+            tests/test_purchase_return_posting.py \
+            tests/test_db/test_purchase_return_migration.py \
+            -k "not sqlite" -q -o addopts= --junitxml=purchase-return-postgres-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("purchase-return-postgres-results.xml")
+          cases = root.findall(".//testcase")
+          assert len(cases) >= 6, "supplier-return PostgreSQL tests must execute"
+          assert not root.findall(".//skipped"), "PostgreSQL acceptance must not skip"
+          assert not root.findall(".//failure") and not root.findall(".//error")
+          PY
+      - name: Verify finance invoice archive source ownership and PostgreSQL replay
+        working-directory: FHD
+        env:
+          XCAGI_TEST_POSTGRES_URL: postgresql+psycopg://agent_test:agent-test-only@127.0.0.1:5432/agent_test
+        run: |
+          test -n "$XCAGI_TEST_POSTGRES_URL"
+          uv run --no-sync pytest \
+            tests/test_db/test_finance_archive_postgres.py \
+            -q -o addopts= --junitxml=finance-archive-postgres-results.xml
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          result = ET.parse("finance-archive-postgres-results.xml")
+          cases = result.findall(".//testcase")
+          assert len(cases) >= 2, "PostgreSQL source-owner and replay tests must execute"
+          assert not result.findall(".//skipped"), "finance PostgreSQL checks must not skip"
+          assert not result.findall(".//failure") and not result.findall(".//error")
+          PY
       - name: Verify ELT ownership, savepoints, and lost commit receipts on PostgreSQL
         working-directory: FHD
         env:
@@ -206,6 +241,8 @@ jobs:
           path: |
             FHD/agent-postgres-results.xml
             FHD/elt-postgres-results.xml
+            FHD/finance-archive-postgres-results.xml
+            FHD/purchase-return-postgres-results.xml
             FHD/postgres-backup-snapshot-results.xml
           if-no-files-found: warn
   # Share one runner checkout for the cheap guard, change classification, and shard plan.

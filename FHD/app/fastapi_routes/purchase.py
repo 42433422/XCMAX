@@ -215,6 +215,31 @@ def purchase_inbounds_post(request: Request, body: dict[str, Any] = Body(default
     )
 
 
+@router.post("/api/purchase/inbounds/{inbound_id}/return")
+def purchase_inbound_supplier_return(
+    request: Request,
+    inbound_id: int,
+    body: dict[str, Any] = Body(default_factory=dict),
+):
+    """Only the original approved return may be posted via the canonical runtime."""
+    if (
+        inbound_id <= 0
+        or "inbound_id" in body
+        or "tenant_id" in body
+        or "user_id" in body
+    ):
+        return JSONResponse(
+            {"success": False, "message": "退货来源身份不允许覆盖"},
+            status_code=400,
+        )
+    return _run_purchase_agent(
+        request=request,
+        action="post_return",
+        params={"inbound_id": inbound_id, **dict(body or {})},
+        route_path="/api/purchase/inbounds/{inbound_id}/return",
+    )
+
+
 # ──────────────────────────── 汇总 ────────────────────────────
 
 

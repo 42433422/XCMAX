@@ -21,6 +21,7 @@ from app.db.models.approval import (
     ApprovalRequest,
     ApprovalStatus,
 )
+from app.db.models.user import User
 
 from .access import supported_approval_flow, unsupported_approval_policy
 from .outcomes import execution_handed_off, execution_outcome, persist_outcome
@@ -35,6 +36,36 @@ from .protocols import (
     WorkspaceResponse,
 )
 from .repository import ApprovalRepository
+
+
+def _active_decision_actor(db: Session, req: ApprovalRequest, actor: int) -> bool:
+    """An old reviewer list cannot reauthorize a deactivated or moved user."""
+    # PostgreSQL holds the reviewer row until this decision commits.
+    # A concurrent revocation/tenant move must serialize before or after the
+    # approval, rather than slip between the permission read and the CAS.
+    user = (
+        db.query(User)
+        .filter(User.id == actor, User.is_active.is_(True))
+        .with_for_update(read=True)
+        .first()
+    )
+    return user is not None and (
+        req.tenant_id is None or user.tenant_id == req.tenant_id
+    )
+
+
+def _claim_open_step(db: Session, req: ApprovalRequest, target: str) -> bool:
+    """CAS status and current node to fence a stale reviewer or duplicated decision."""
+    return db.query(ApprovalRequest).filter(
+        ApprovalRequest.id == req.id,
+        ApprovalRequest.tenant_id == req.tenant_id,
+        ApprovalRequest.status == req.status,
+        ApprovalRequest.current_node_id == req.current_node_id,
+        ApprovalRequest.current_node_order == req.current_node_order,
+    ).update(
+        {ApprovalRequest.status: target},
+        synchronize_session=False,
+    ) == 1
 
 
 class ApprovalDecisions:
@@ -86,6 +117,11 @@ class ApprovalDecisions:
                     {"success": False, "message": f"当前状态不可审批：{req.status}"},
                     status_code=400,
                 )
+            if not _active_decision_actor(db, req, actor):
+                return JSONResponse(
+                    {"success": False, "message": "审批人已停用或企业归属发生变更"},
+                    status_code=403,
+                )
             current_node = req.current_node
             if current_node is None:
                 if self.access.is_workflow(req):
@@ -118,6 +154,12 @@ class ApprovalDecisions:
                 self.nodes.next_node(nodes, req.current_node_order or 0) is None
             )
             workflow_execution = None
+            if not final_workflow and not _claim_open_step(db, req, status_before):
+                db.rollback()
+                return JSONResponse(
+                    {"success": False, "message": "审批节点已由其他请求处理或状态变更，请刷新"},
+                    status_code=409,
+                )
             final_restore = (
                 final_workflow
                 and isinstance(business, dict)
@@ -266,6 +308,11 @@ class ApprovalDecisions:
                     {"success": False, "message": f"当前状态不可拒绝：{req.status}"},
                     status_code=400,
                 )
+            if not _active_decision_actor(db, req, actor):
+                return JSONResponse(
+                    {"success": False, "message": "审批人已停用或企业归属发生变更"},
+                    status_code=403,
+                )
             node = req.current_node
             workflow_without_node = node is None and self.access.is_workflow(req)
             if node is None:
@@ -302,28 +349,35 @@ class ApprovalDecisions:
                     else None
                 )
                 conflict = isinstance(business, dict) and "agent_execution_claim" in business
-                if not conflict and isinstance(snapshot, dict) and snapshot.get("agent_run_id"):
-                    # Compete with the original execution claim before writing
-                    # history or cancelling its run, including stale readers.
-                    conflict = (
-                        db.query(ApprovalRequest)
-                        .filter(
-                            ApprovalRequest.id == req.id,
-                            ApprovalRequest.status == status_before,
-                            ApprovalRequest.business_data == req.business_data,
-                        )
-                        .update(
-                            {ApprovalRequest.status: ApprovalStatus.REJECTED.value},
-                            synchronize_session=False,
-                        )
-                        != 1
+                if not conflict:
+                    # One durable claim for ordinary and AI requests; the latter
+                    # also binds its persisted execution snapshot.
+                    query = db.query(ApprovalRequest).filter(
+                        ApprovalRequest.id == req.id,
+                        ApprovalRequest.tenant_id == req.tenant_id,
+                        ApprovalRequest.status == status_before,
+                        ApprovalRequest.current_node_id == req.current_node_id,
+                        ApprovalRequest.current_node_order == req.current_node_order,
+                        ApprovalRequest.business_data == req.business_data,
                     )
+                    conflict = query.update(
+                        {ApprovalRequest.status: ApprovalStatus.REJECTED.value},
+                        synchronize_session=False,
+                    ) != 1
                 if conflict:
                     db.rollback()
                     return JSONResponse(
                         {"success": False, "message": "该审批已被领取或状态已变更，请核对原任务。"},
                         status_code=409,
                     )
+            if not self.access.is_workflow(req) and not _claim_open_step(
+                db, req, ApprovalStatus.REJECTED.value
+            ):
+                db.rollback()
+                return JSONResponse(
+                    {"success": False, "message": "审批已被其他请求处理或状态变更，请刷新"},
+                    status_code=409,
+                )
             db.add(
                 ApprovalRecord(
                     request_id=req.id,

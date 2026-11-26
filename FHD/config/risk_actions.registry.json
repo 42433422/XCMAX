@@ -1253,6 +1253,19 @@
           "required_params": [],
           "availability": "shared"
         },
+        "post_return": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "return_no",
+            "inbound_id",
+            "approval_request_id",
+            "items"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write",
+          "requires_write_approval": true
+        },
         "query_suppliers": {
           "risk": "low",
           "read_only": true,

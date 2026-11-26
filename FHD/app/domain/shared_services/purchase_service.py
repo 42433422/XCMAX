@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from sqlalchemy import text
@@ -20,6 +20,8 @@ from app.db.models import (
     PurchaseInboundItem,
     PurchaseOrder,
     PurchaseOrderItem,
+    PurchaseReturn,
+    PurchaseReturnItem,
     Supplier,
 )
 from app.db.session import get_db
@@ -58,6 +60,11 @@ def _line_values(item):
         return quantity, price
     except InvalidOperation as exc:
         raise ValueError("采购数量或单价无效") from exc
+
+
+def _line_amount(quantity: Decimal, price: Decimal) -> Decimal:
+    """Per-line currency amount matches persisted NUMERIC(18, 2) and journal totals."""
+    return (quantity * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def purchase_execution_number(action: str, run_id: str, step_id: str, tenant_id: str) -> str:
@@ -159,7 +166,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity, unit_price = _line_values(item_data)
-                    amount = quantity * unit_price
+                    amount = _line_amount(quantity, unit_price)
                     total_amount += amount
 
                     item = PurchaseOrderItem(
@@ -258,7 +265,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                             .first()
                         )
                         quantity, unit_price = _line_values(item_data)
-                        amount = quantity * unit_price
+                        amount = _line_amount(quantity, unit_price)
                         total_amount += amount
 
                         item = PurchaseOrderItem(
@@ -305,18 +312,22 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
 
                 if order.status != "draft":
                     return {"success": False, "message": "只有草稿状态的订单可以审核"}
-                expected = sum(
-                    (
-                        quantity * price
-                        for quantity, price in (
-                            _line_values({"quantity": item.quantity, "unit_price": item.unit_price})
-                            for item in order.items
-                        )
-                    ),
-                    Decimal(0),
-                ).quantize(Decimal("0.01"))
-                if not order.items or expected != Decimal(str(order.total_amount)):
-                    raise ValueError("采购审批需要有效的原订单明细")
+                lines = [
+                    _line_amount(*_line_values({
+                        "quantity": item.quantity, "unit_price": item.unit_price
+                    }))
+                    for item in order.items
+                ]
+                expected = sum(lines, Decimal("0"))
+                if (
+                    not lines
+                    or expected != Decimal(str(order.total_amount))
+                    or any(
+                        amount != Decimal(str(item.amount or 0))
+                        for amount, item in zip(lines, order.items)
+                    )
+                ):
+                    raise ValueError("采购审批需要金额与数量一致的原订单明细")
                 supplier = (
                     db.query(Supplier)
                     .filter(
@@ -374,8 +385,22 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
-                if order.status in ("completed", "cancelled"):
-                    return {"success": False, "message": "该订单无法取消"}
+                if order.status not in {"draft", "rejected", "approved"}:
+                    return {"success": False, "message": "已履约或终态的采购订单不可取消"}
+                if (
+                    Decimal(str(order.paid_amount or 0)) != 0
+                    or any(
+                        Decimal(str(item.received_quantity or 0)) > 0
+                        or Decimal(str(item.invoiced_quantity or 0)) > 0
+                        for item in order.items
+                    )
+                    or db.query(PurchaseInbound.id).filter(
+                        PurchaseInbound.order_id == order.id,
+                        PurchaseInbound.tenant_id == order.tenant_id,
+                        PurchaseInbound.status == "completed",
+                    ).first() is not None
+                ):
+                    return {"success": False, "message": "采购订单已有入库、开票或付款，须通过原业务冲销，不得直接取消"}
 
                 order.status = "cancelled"
                 order.updated_at = datetime.now()
@@ -427,7 +452,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                         db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity, unit_price = _line_values(item_data)
-                    amount = quantity * unit_price
+                    amount = _line_amount(quantity, unit_price)
                     total_amount += amount
 
                     item = PurchaseInboundItem(
@@ -469,6 +494,9 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 inbound.status = "completed"
                 order_id = data.get("order_id")
                 if order_id is not None:
+                    # SessionLocal has autoflush=False: make new inbound items visible
+                    # to the exact-source progress query before posting a payable.
+                    db.flush()
                     self._update_order_received_quantity(db, int(order_id))
 
                 # Inventory, receipt, order progress and payable share one transaction.
@@ -572,26 +600,219 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
         for item in order.items:
             inbound_items = (
                 db.query(PurchaseInboundItem)
-                .filter(PurchaseInboundItem.order_item_id == item.id)
+                .join(PurchaseInbound, PurchaseInbound.id == PurchaseInboundItem.inbound_id)
+                .filter(
+                    PurchaseInboundItem.order_item_id == item.id,
+                    PurchaseInboundItem.tenant_id == order.tenant_id,
+                    PurchaseInbound.order_id == order.id,
+                    PurchaseInbound.tenant_id == order.tenant_id,
+                    PurchaseInbound.status == "completed",
+                )
                 .all()
             )
-            received = sum(float(i.quantity) for i in inbound_items)
+            gross_received = sum(
+                (Decimal(str(i.quantity)) for i in inbound_items), Decimal("0")
+            )
+            # Posted returns are subtracted by the original receipt-line ID.
+            return_items = (
+                db.query(PurchaseReturnItem)
+                .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnItem.return_id)
+                .join(
+                    PurchaseInboundItem,
+                    PurchaseInboundItem.id == PurchaseReturnItem.inbound_item_id,
+                )
+                .filter(
+                    PurchaseReturn.tenant_id == order.tenant_id,
+                    PurchaseReturnItem.tenant_id == order.tenant_id,
+                    PurchaseInboundItem.tenant_id == order.tenant_id,
+                    PurchaseReturn.status == "posted",
+                    PurchaseInboundItem.order_item_id == item.id,
+                )
+                .all()
+            )
+            returned = sum(
+                (Decimal(str(i.quantity)) for i in return_items), Decimal("0")
+            )
+            received = gross_received - returned
+            if received < 0:
+                raise ValueError("采购退货超过原入库数量，原账本需先独立核对")
             item.received_quantity = received
 
-            if float(item.quantity) <= received:
+            if Decimal(str(item.quantity)) <= received:
                 item.status = "completed"
             elif received > 0:
                 item.status = "partial"
+            else:
+                item.status = "approved"
 
         all_completed = all(
-            float(item.quantity) <= float(item.received_quantity) for item in order.items
+            Decimal(str(item.quantity)) <= Decimal(str(item.received_quantity or 0))
+            for item in order.items
         )
-        any_received = any(float(item.received_quantity) > 0 for item in order.items)
+        any_received = any(Decimal(str(item.received_quantity or 0)) > 0 for item in order.items)
 
         if all_completed:
             order.status = "completed"
         elif any_received:
             order.status = "partial"
+        elif order.status in {"partial", "completed"}:
+            order.status = "approved"
+
+    def post_purchase_return(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Post only source receipt quantities frozen by an approved request."""
+        from app.domain.shared_services.purchase_return_posting import post_purchase_return
+
+        return post_purchase_return(data)
+
+    def reconcile_purchase_inbound(self, inbound_id: int) -> dict[str, Any]:
+        """Read-only cross-check: source receipt ↔ batch movements ↔ AP journal.
+
+        This is an independent query of the original rows in the same database,
+        NOT independent banking, customer sign-off or supplier settlement.
+        """
+        from collections import defaultdict
+
+        from app.db.models.accounting import JournalEntry
+        from app.db.models.inventory import InventoryTransaction
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+        if tenant_id is None:
+            return {"success": False, "reason_code": "tenant_context_required"}
+        with get_db() as db:
+            receipt = (
+                db.query(PurchaseInbound)
+                .filter(
+                    PurchaseInbound.id == inbound_id,
+                    PurchaseInbound.tenant_id == tenant_id,
+                )
+                .one_or_none()
+            )
+            if receipt is None or receipt.status != "completed":
+                return {
+                    "success": False,
+                    "reason_code": "completed_purchase_receipt_required",
+                }
+
+            issues: list[str] = []
+            expected: dict[tuple[int, int, str | None, int | None], Decimal] = defaultdict(
+                lambda: Decimal("0")
+            )
+            source_total = Decimal("0")
+            if not receipt.items:
+                issues.append("receipt_items_missing")
+            for item in receipt.items:
+                if item.tenant_id != tenant_id or item.product_id is None:
+                    issues.append("receipt_item_tenant_or_identity_conflict")
+                    continue
+                quantity = Decimal(str(item.quantity))
+                if not quantity.is_finite() or quantity <= 0:
+                    issues.append("receipt_item_quantity_invalid")
+                    continue
+                key = (
+                    item.product_id,
+                    receipt.warehouse_id,
+                    item.batch_no,
+                    item.location_id,
+                )
+                expected[key] += quantity
+                source_total += _line_amount(quantity, Decimal(str(item.unit_price or 0)))
+                if Decimal(str(item.amount or 0)) != _line_amount(
+                    quantity, Decimal(str(item.unit_price or 0))
+                ):
+                    issues.append("receipt_item_amount_mismatch")
+
+            postings = (
+                db.query(InventoryTransaction)
+                .filter(
+                    InventoryTransaction.tenant_id == tenant_id,
+                    InventoryTransaction.reference_type == "purchase_inbound",
+                    InventoryTransaction.reference_id == receipt.id,
+                )
+                .all()
+            )
+            actual: dict[tuple[int, int, str | None, int | None], Decimal] = defaultdict(
+                lambda: Decimal("0")
+            )
+            for txn in postings:
+                if txn.transaction_type != "in":
+                    issues.append("unexpected_purchase_stock_movement")
+                    continue
+                actual[
+                    (txn.product_id, txn.warehouse_id, txn.batch_no, txn.location_id)
+                ] += Decimal(str(txn.quantity))
+            if dict(actual) != dict(expected):
+                issues.append("purchase_batch_stock_mismatch")
+
+            total = Decimal(str(receipt.total_amount or 0))
+            if total != source_total:
+                issues.append("purchase_receipt_total_mismatch")
+            entries = (
+                db.query(JournalEntry)
+                .filter(
+                    JournalEntry.tenant_id == tenant_id,
+                    JournalEntry.reference_type == "purchase_inbound",
+                    JournalEntry.reference_id == receipt.id,
+                )
+                .all()
+            )
+            journal_id = entries[0].id if len(entries) == 1 else None
+            if total > 0:
+                if len(entries) != 1:
+                    issues.append("purchase_payable_journal_missing_or_duplicate")
+                else:
+                    entry = entries[0]
+                    debit = sum(
+                        (Decimal(str(line.debit or 0)) for line in entry.lines),
+                        Decimal("0"),
+                    )
+                    credit = sum(
+                        (Decimal(str(line.credit or 0)) for line in entry.lines),
+                        Decimal("0"),
+                    )
+                    asset = sum(
+                        (
+                            Decimal(str(line.debit or 0))
+                            for line in entry.lines
+                            if line.account_code == "1401"
+                        ),
+                        Decimal("0"),
+                    )
+                    payable = sum(
+                        (
+                            Decimal(str(line.credit or 0))
+                            for line in entry.lines
+                            if line.account_code == "2201"
+                        ),
+                        Decimal("0"),
+                    )
+                    if (
+                        entry.status != "posted"
+                        or entry.reversed_at is not None
+                        or debit != total
+                        or credit != total
+                        or asset != total
+                        or payable != total
+                    ):
+                        issues.append("purchase_payable_journal_amount_or_status_mismatch")
+            elif entries:
+                issues.append("unexpected_zero_amount_purchase_journal")
+
+            issues = sorted(set(issues))
+            return {
+                "success": not issues,
+                "posting_consistent": not issues,
+                "issues": issues,
+                "receipt_id": receipt.id,
+                "receipt_no": receipt.inbound_no,
+                "source_amount": str(total),
+                "source_line_count": len(receipt.items),
+                "inventory_posting_count": len(postings),
+                "journal_id": journal_id,
+                "scope": "same_database_cross_table_only",
+                "bank_settlement_verified": False,
+                "customer_signoff_verified": False,
+            }
 
     def get_purchase_inbounds(
         self,

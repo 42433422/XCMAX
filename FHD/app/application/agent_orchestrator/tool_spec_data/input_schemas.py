@@ -477,6 +477,27 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "remark": {"type": "string"},
         },
     ),
+    ("purchase", "post_return"): _object_schema(
+        ["return_no", "inbound_id", "approval_request_id", "items"],
+        {
+            "return_no": {"type": "string", "minLength": 1, "maxLength": 50},
+            "inbound_id": {"type": "integer", "minimum": 1},
+            "approval_request_id": {"type": "integer", "minimum": 1},
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "required": ["inbound_item_id", "quantity"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "inbound_item_id": {"type": "integer", "minimum": 1},
+                        "quantity": {"type": ["string", "number"]},
+                    },
+                },
+            },
+        },
+    ),
     ("finance", "create_transaction"): _object_schema(
         ["transaction_type", "amount"],
         {
