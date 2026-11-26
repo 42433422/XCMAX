@@ -3,18 +3,20 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey, defaultWorkflowBuiltinEnabled } from './workflowAiEmployees'
 import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
-import { fetchWorkspacePrefs, flushWorkspacePrefsSync, patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import { confirmWorkspacePrefsSnapshot, fetchWorkspacePrefs, flushWorkspacePrefsSync, patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 
 vi.mock('@/utils/workspacePrefsApi', () => ({
   fetchWorkspacePrefs: vi.fn(),
   flushWorkspacePrefsSync: vi.fn(async () => {}),
   patchWorkspacePrefs: vi.fn(),
+  confirmWorkspacePrefsSnapshot: vi.fn(),
   queueWorkspacePrefsSync: vi.fn(),
 }))
 
 const confirmed = (enabled: boolean) => ({
   success: true,
   owner_id: 'tenant-owner',
+  revision: 7,
   data: { workflow_ai_employees: { label_print: enabled } },
 })
 
@@ -159,6 +161,7 @@ describe('workflowAiEmployees store', () => {
     expect(patchWorkspacePrefs).not.toHaveBeenCalled()
     vi.mocked(fetchWorkspacePrefs).mockResolvedValueOnce(confirmed(false))
     await store.refreshConfirmedPreferences()
+    expect(confirmWorkspacePrefsSnapshot).toHaveBeenCalledExactlyOnceWith(confirmed(false), 'tenant:1')
     expect(store.prefsReady).toBe(true)
     expect(store.confirmedEnabled.label_print).toBe(false)
 

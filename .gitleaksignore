@@ -100,3 +100,10 @@ e0e5228e9583af38e2a54887a173aa9c9f40ba81:FHD/mobile-flutter-poc/lib/src/security
 4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:23
 4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:24
 4b41f8e418ccd46510395a1f0f023543590c97f4:FHD/scripts/dev/provision_memory_model.py:generic-api-key:25
+
+# Same public model SHA256 literals after #3680 squash into d33f2f93.
+# Source blob unchanged; exact main-commit occurrences independently reverified.
+# Evidence n32.json through n34.json; all other commits, paths and lines still scan.
+d33f2f938e3f3bcbd4df49baf74fa5ace88796b2:FHD/scripts/dev/provision_memory_model.py:generic-api-key:23
+d33f2f938e3f3bcbd4df49baf74fa5ace88796b2:FHD/scripts/dev/provision_memory_model.py:generic-api-key:24
+d33f2f938e3f3bcbd4df49baf74fa5ace88796b2:FHD/scripts/dev/provision_memory_model.py:generic-api-key:25
