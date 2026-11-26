@@ -364,9 +364,9 @@
     "FHD/app/application/persy_memory_app_service.py": {
       "base_file": "FHD/app/application/persy_memory_app_service.py",
       "base_blob": "be2cb773e67fe1186abdd94c7be33b6048c754f1",
-      "head_blob": "a81ff313c21b146479348845721036191143e63e",
+      "head_blob": "d095b2b59c6025eb4b8cb0082f4bd21d632c2c81",
       "before_lines": 600,
-      "after_lines": 915,
+      "after_lines": 916,
       "reason": "接入个人和企业记忆的不同持久化及审核边界",
       "boundary": "沿原有宿主、租户、权限和回执边界核对本文件变更。",
       "validation": "检查个人自动保存、企业审批与租户隔离回归",
@@ -532,9 +532,9 @@
     "FHD/app/fastapi_routes/ai_open.py": {
       "base_file": "FHD/app/fastapi_routes/ai_open.py",
       "base_blob": "fdf383bceafe0f681ee5a45f4f72bb806f48c3a8",
-      "head_blob": "e4eb5dc7d49a0e309e9f8c83c4a3432586ce21ef",
+      "head_blob": "c29937cbc7edb62cfad7213e7782905d16c15cd6",
       "before_lines": 878,
-      "after_lines": 895,
+      "after_lines": 896,
       "reason": "本记录为本次全部开放PR集成的精确架构评审请求。外部能力入口改为同一目录及受信API key范围，消息执行接入现役Codex持久队列并返回原任务身份。",
       "boundary": "继续校验原账号与凭据，排队不提前调用模型；旧LLMWorkflowPlanner入口已退役。",
       "validation": "真实SQL队列、相同请求回读、改参冲突和凭据隔离专项已执行；最终必需CI仍待通过。",
