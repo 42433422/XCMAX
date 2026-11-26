@@ -16,11 +16,11 @@ on:
   workflow_dispatch:
     inputs:
       backend_shards:
-        description: "Backend partitions (default 32 on 500-runner org; max-parallel 64)"
+        description: "Backend partitions (auto: 32 with XCAGI_LINUX_RUNNER, else 8; max-parallel 64)"
         required: false
-        default: '32'
+        default: 'auto'
         type: choice
-        options: ['4', '8', '16', '24', '32', '48', '64']
+        options: ['auto', '4', '8', '16', '24', '32', '48', '64']
       release_channel:
         description: "Release channel (stable=prod, staging)"
         required: false
@@ -123,7 +123,7 @@ jobs:
           if-no-files-found: warn
   agent-postgres-transactions:
     name: Agent PostgreSQL transactions
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     services:
       postgres:
@@ -210,7 +210,7 @@ jobs:
           if-no-files-found: warn
   # Share one runner checkout for the cheap guard, change classification, and shard plan.
   guard-temp-scripts:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       valid: ${{ steps.paths.outputs.valid }}
       source_sha: ${{ steps.paths.outputs.source_sha }}
@@ -222,6 +222,8 @@ jobs:
       windows: ${{ steps.paths.outputs.windows }}
       backend_matrix: ${{ steps.plan.outputs.matrix }}
       backend_total: ${{ steps.plan.outputs.total }}
+      frontend_matrix: ${{ steps.plan.outputs.frontend_matrix }}
+      frontend_total: ${{ steps.plan.outputs.frontend_total }}
     steps:
       - name: Validate explicit CVM release inputs
         if: github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true
@@ -300,8 +302,24 @@ jobs:
         id: plan
         working-directory: .
         env:
-          SHARD_TOTAL: ${{ inputs.backend_shards || '32' }}
-        run: python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
+          INPUT_SHARDS: ${{ inputs.backend_shards }}
+          VAR_BACKEND_SHARDS: ${{ vars.XCAGI_BACKEND_SHARDS }}
+          VAR_FRONTEND_SHARDS: ${{ vars.XCAGI_FRONTEND_SHARDS }}
+          LINUX_RUNNER: ${{ vars.XCAGI_LINUX_RUNNER }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_SHARDS" ] && [ "$INPUT_SHARDS" != "auto" ]; then
+            SHARD_TOTAL="$INPUT_SHARDS"
+          elif [ -n "$VAR_BACKEND_SHARDS" ]; then
+            SHARD_TOTAL="$VAR_BACKEND_SHARDS"
+          elif [ -n "$LINUX_RUNNER" ]; then
+            SHARD_TOTAL="32"
+          else
+            SHARD_TOTAL="8"
+          fi
+          python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
+          FRONTEND_TOTAL="${VAR_FRONTEND_SHARDS:-$([ -n "$LINUX_RUNNER" ] && echo 8 || echo 4)}"
+          python -c 'import json,os,sys; n=int(sys.argv[1]); assert n in (4,8,16); m=json.dumps(dict(shard=list(range(1,n+1)))); open(os.environ["GITHUB_OUTPUT"],"a").write(f"frontend_total={n}\nfrontend_matrix={m}\n")' "$FRONTEND_TOTAL"
       - uses: actions/upload-artifact@v4
         with:
           name: ci-classification-${{ github.run_attempt }}
@@ -312,7 +330,7 @@ jobs:
   backend-quality:
     # SSOT runs alongside tests; aggregate gates still require every guard to succeed.
     needs: [guard-temp-scripts]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       skip: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
     services:
@@ -444,7 +462,7 @@ jobs:
   backend-test-shard:
     needs: [guard-temp-scripts]
     if: needs.guard-temp-scripts.outputs.backend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       max-parallel: 64
@@ -541,7 +559,7 @@ jobs:
   backend-test:
     needs: [guard-temp-scripts, ssot-drift-gate, backend-quality, backend-test-shard, agent-postgres-transactions]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       skip: ${{ needs.guard-temp-scripts.outputs.backend_skip }}
     env:
@@ -653,7 +671,7 @@ jobs:
 
   frontend-quality:
     needs: [guard-temp-scripts]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -700,15 +718,14 @@ jobs:
   frontend-test-shard:
     needs: [guard-temp-scripts]
     if: needs.guard-temp-scripts.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
-      max-parallel: 8
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.guard-temp-scripts.outputs.frontend_matrix) }}
     env:
       FRONTEND_SHARD_INDEX: ${{ matrix.shard }}
-      FRONTEND_SHARD_TOTAL: "8"
+      FRONTEND_SHARD_TOTAL: ${{ needs.guard-temp-scripts.outputs.frontend_total }}
       FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -739,11 +756,11 @@ jobs:
   frontend-test:
     needs: [guard-temp-scripts, ssot-drift-gate, frontend-quality, frontend-test-shard]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     outputs:
       skip: ${{ needs.guard-temp-scripts.outputs.frontend_skip }}
     env:
-      FRONTEND_SHARD_TOTAL: "8"
+      FRONTEND_SHARD_TOTAL: ${{ needs.guard-temp-scripts.outputs.frontend_total }}
       FRONTEND_SOURCE_SHA: ${{ inputs.release_sha || github.sha }}
     steps:
       - name: Validate prerequisites and skip semantics
@@ -824,7 +841,7 @@ jobs:
     name: Vitest (173 文件 · jsdom)
     needs: frontend-test
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Require the verified frontend result
         working-directory: .
@@ -835,7 +852,7 @@ jobs:
   frontend-smoke:
     needs: frontend-test
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Require the verified frontend result
         working-directory: .
@@ -852,7 +869,7 @@ jobs:
   frontend-e2e:
     needs: [guard-temp-scripts]
     if: needs.guard-temp-scripts.outputs.backend == 'true' || needs.guard-temp-scripts.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -954,7 +971,7 @@ jobs:
 
   arch-fitness:
     needs: guard-temp-scripts
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1029,7 +1046,7 @@ jobs:
 
   security-scan:
     needs: guard-temp-scripts
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1057,7 +1074,7 @@ jobs:
   container-scan:
     needs: [guard-temp-scripts, pack-verify]
     if: needs.guard-temp-scripts.outputs.backend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1130,7 +1147,7 @@ jobs:
   pack-verify:
     needs: [guard-temp-scripts]
     if: needs.guard-temp-scripts.outputs.backend == 'true' || needs.guard-temp-scripts.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1179,7 +1196,7 @@ jobs:
       github.event_name != 'schedule' &&
       !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
       needs.backend-test.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
     steps:
@@ -1218,7 +1235,7 @@ jobs:
       github.event_name != 'schedule' && github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v')) &&
       needs.backend-test.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     # image_tag: 用 metadata-action outputs.version（勿手搓短 sha）— docker/metadata-action#479
     outputs:
       image_tag: ${{ steps.meta_fhd.outputs.version }}
@@ -1381,7 +1398,7 @@ jobs:
     name: docker-build-fhd-api
     needs: [backend-test, docker-build-fhd-api-pr, docker-build-fhd-api]
     if: ${{ !cancelled() && github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     permissions: {}
     steps:
       - name: Require one successful image build
@@ -1408,7 +1425,7 @@ jobs:
       needs.docker-build-fhd-api.result == 'success' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.push_to_cvm == true
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       actions: read
@@ -1545,7 +1562,7 @@ jobs:
     name: release-verify
     needs: [backend-test, frontend-test, frontend-e2e, browser-agent-integration, pack-verify, arch-fitness]
     if: needs.backend-test.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     env:
       RELEASE_VERIFY_SKIP_E2E: "1"
@@ -1609,7 +1626,7 @@ jobs:
     needs: [frontend-test, guard-temp-scripts]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
     if: needs.guard-temp-scripts.outputs.macos != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1630,7 +1647,7 @@ jobs:
     needs: [frontend-test, guard-temp-scripts]
     # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
     if: needs.guard-temp-scripts.outputs.macos != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1785,7 +1802,7 @@ jobs:
   ssot-drift-gate:
     name: SSOT Drift Gate
     needs: guard-temp-scripts
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     continue-on-error: false
     steps:
       - uses: actions/checkout@v4

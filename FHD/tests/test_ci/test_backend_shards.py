@@ -236,7 +236,7 @@ def test_workflow_preserves_gates_and_uses_isolated_hosted_shards():
     prerequisites = {"guard-temp-scripts"}
     assert set(quality["needs"]) == set(shard["needs"]) == prerequisites
     assert shard["if"] == "needs.guard-temp-scripts.outputs.backend == 'true'"
-    assert shard["runs-on"] == "ubuntu-latest"
+    assert shard["runs-on"] == "${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}"
     assert shard["strategy"] == {
         "fail-fast": False,
         "max-parallel": 64,
@@ -532,7 +532,9 @@ def test_dynamic_production_configuration_keeps_full_and_behavior():
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-cd.yml").read_text())["jobs"]
     shard, gate = (jobs[n] for n in ("backend-test-shard", "backend-test"))
     assert not {"backend-four-shard", "backend-four-test", "backend-shard-comparison"} & jobs.keys()
-    assert shard["runs-on"] == gate["runs-on"] == "ubuntu-latest"
+    assert (
+        shard["runs-on"] == gate["runs-on"] == "${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}"
+    )
     assert (
         shard["env"]["BACKEND_SHARD_TOTAL"]
         == gate["env"]["BACKEND_SHARD_TOTAL"]

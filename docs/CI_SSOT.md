@@ -187,10 +187,10 @@ PR Fast CI
 | 事件去重 | Flutter、Android smoke、Market E2E 和 Retort 的分支 push 限定 main/develop/master，特性分支由 PR 验证；保留 tag、手动及既有定时入口。源 workflow 与根镜像的触发路径分别保留，生成器仅重写精确的根路径。 |
 | 旧轮取消 | 无副作用的 PR 测试和守卫按 workflow/PR 分组取消旧轮；非 PR 以 run_id 隔离。可信主线的 `cancel-superseded-ci.yml` 在同仓 PR synchronize 后只读元数据：新 head 冲突等原因未触发原生取消时，对同 PR、同主 CI、旧 head 的原始 attempt 请求官方普通 cancel；只有同 attempt 已有 cancelled job 且仍未完成时才使用 force-cancel 收尾。取消前复查事件 head、live PR、run/attempt、时间边界和完整 jobs，身份缺失或漂移即停止；没有取消证据的人工重跑不启动清理。它不检出 PR 内容，也不修改检查结论；当前 head 的 `always()` 聚合仍失败阻断。发布、部署及缓存预热沿用各自策略。Mac 专项分类精确补取 base/head 后读取 diff，缺失时仍保守全跑。 |
 | 统一分类 | `change_classifier.py --all` 只读一次 diff；绑定实际 checkout SHA。PR 使用 merge SHA；base/head 只负责分类。diff 缺失或为空时全跑。 |
-| 后端分片 | 默认 32 片，最多同时 64 片；手动 `backend_shards` 可选 4/8/16/24/32/48/64。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，各片只收集自己的文件。汇总从同版源码独立重算文件全集与分配，逐文件核对收集回执、用例和执行结果，保留 run/attempt/source 与文件哈希校验。 |
+| 后端分片 | 自适应并发：未设 `vars.XCAGI_LINUX_RUNNER` 时默认 8 片跑 `ubuntu-latest`，设置后切至弹性 runner 并默认 32 片（`vars.XCAGI_BACKEND_SHARDS` 或手动 `backend_shards` 可选 4/8/16/24/32/48/64，`max-parallel: 64`）。导入前按当前 pytest 配置枚举文件、按历史模块耗时分配，汇总独立重算全集并逐文件核对收集回执与文件哈希。 |
 | 后端安装 | uv 使用同一 Python 安装现有 requirements，并从同一 uv.lock 同时固定 pytest、pytest-cov、coverage；锁缺失或歧义时在安装前停止。缓存绑定 requirements、uv.lock 及本地包声明，安装后校验依赖一致性，每片保存解析版本。其余间接依赖仍以实际清单和回归为准。 |
 | 后端报告 | stdlib 先验证所有证据及工具链，再只安装分片实际使用的 coverage 版本。full/behavior 数据隔离生成 JSON，保留 XML 和两道 ratchet；HTML 仅手动 `--html`。逐阶段耗时保存在 `backend-aggregate-timings.json`。 |
-| 前端分片 | 全集只运行 8 片 Vitest，合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`。验证完整文件集合、片号唯一、身份及原始报告哈希。源码与测试 ESLint、stub/any 棘轮及现有 advisory vue-tsc 在质量任务执行。 |
+| 前端分片 | 自适应 Vitest 分片：未设 `vars.XCAGI_LINUX_RUNNER` 时默认 4 片，设置后默认 8 片（`vars.XCAGI_FRONTEND_SHARDS` 可选 4/8/16，`max-parallel: 16`），合并原生 blob/V8 和 JUnit 后执行原全局阈值及 `--require-frontend`，核验全集、片号唯一、身份及原始报告哈希。 |
 | 下游验证 | mock E2E 与打包提前开始；容器扫描等待实际打包产物。镜像发布仍等待前后端聚合、E2E、安全、容器扫描、打包和架构检查。 |
 | 无关变更 | 只有守卫和 SSOT 均成功、有效分类、正确源码、质量任务成功且分片明确 skipped 时，聚合才接受 skip；空输出或未知状态均失败。 |
 
