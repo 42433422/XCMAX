@@ -628,7 +628,6 @@ def test_inflight_handoff_rechecks_original_session_after_role_revocation(
         role = Role(
             name="tenant:11:handoff-reviewer",
             is_system=False,
-                    tier="enterprise",
             permissions=[Permission(code="customer.view", name="Read customer")],
         )
         db.add(role)
