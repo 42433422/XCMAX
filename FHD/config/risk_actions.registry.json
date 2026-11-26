@@ -587,6 +587,10 @@
               "customer_id": {"type": ["integer", "string"], "description": "已知档案 ID 时按 ID 查找"}
             }
           },
+          "contract_samples": [
+            {"name": "customers.query.contract", "input": {}, "output": {"success": true, "data": []}},
+            {"name": "customers.query.by_name", "input": {"keyword": "示例客户"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -807,6 +811,9 @@
               "keyword": {"type": ["string", "null"], "description": "按名称搜索时填写产品名称"}
             }
           },
+          "contract_samples": [
+            {"name": "products.query.by_model", "input": {"model_number": "EXAMPLE-1"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,
@@ -1429,6 +1436,9 @@
       "actions": {
         "sales_summary": {
           "description": "汇总销售额及产品明细。查询本月时传 period=this_month，由宿主按完整自然月汇总。",
+          "contract_samples": [
+            {"name": "reports.sales_summary.calendar_month", "input": {"period": "this_month"}, "output": {"success": true, "data": []}}
+          ],
           "risk": "low",
           "idempotent": true,
           "read_only": true,
@@ -1496,6 +1506,9 @@
         },
         "ledger_query": {
           "description": "查询财务账本记录、会计台账和记账凭证。查询本月时传 period=this_month。",
+          "contract_samples": [
+            {"name": "finance.ledger_query.calendar_month", "input": {"period": "this_month"}, "output": {"success": true, "data": []}}
+          ],
           "read_only": true,
           "risk": "low",
           "idempotent": true,

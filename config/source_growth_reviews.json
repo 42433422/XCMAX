@@ -146,26 +146,26 @@
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/verification_transactions.py": {
-      "reason": "在原 #3513 只读发票历史核验中复用 SQLAlchemy 查询和已有分录合同，支持 finance.journal_entry_reverse 生成的原生冲销，并发现同租户同单原票状态变化后的孤儿冲销；这属于既有财务语义接线，不新增账本或执行器。 当前受保护主线已正常纳入来源#3513；以上为原来源修复说明，本次以新main1a5e1d1重新实测base/head/blob和行数，仅更新精确比较身份，生产文件未因本次基线刷新改变。",
-      "boundary": "扩大发现范围以捕获不合法历史，但有效配对仍只接受已过账原票；保留同租户客户、原引用双字段、金额和借贷方向、唯一配对、贷项规则及唯一当前票。核验不得改写账簿或重派业务动作。",
-      "validation": "真实原会计服务的开票→通用冲销→再开票先复现误拒绝，草稿原票关联已过账冲销先复现漏检；严格修复后8个业务完整模块217 passed，包含错误引用、客户、金额、重复与孤儿反例，独立复核通过。合成隔离数据不替代客户B31原件或生产验收。",
-      "follow_up": "请求 @42433422 基于本次精确源码身份与最终受保护CI审查既有核验边界；继续按业务职责复用原模块，不为行数拆出重复核验器。本登记不代表人工架构批准。 请按最新main1a5e1d1与当前精确源码身份评审；登记仍不代表人工批准。",
+      "reason": "在原采购、销售与发票冲销核验逻辑内复用租户数据库只读边界，补齐财务流水原审批写入的独立回执。真实留出集中审批后已有提交记录，但宿主缺财务动作核验，无法结束任务。",
+      "boundary": "核验必须具备原登录与财务查询权限，在签名对应的租户和 Mod 中按原流水 ID 查库，匹配原参数、记录时间和返回快照。允许带相同业务引用的原流水回读，拒绝借用无引用的历史流水。复用财务服务的金额和日期校验。",
+      "validation": "隔离 SQLite 中核对真实提交金额、跨租户隔离、无引用旧回执拦截与写入后的篡改反例。已通过相关 7 项定向回归，财务原任务仍须通过同一候选的正式模型验收。",
+      "follow_up": "按现行保护检查与本次精确源码记录复核。后续财务回执继续使用现有事务核验入口。",
       "review_owner": "@42433422",
       "base_file": "FHD/app/application/agent_orchestrator/verification_transactions.py",
-      "base_blob": "902af2294a88a43052b69236bc8eab6b02e1d4e9",
-      "head_blob": "3337b2c888ba8fdcf6d094c55caeec35fe6d2ff9",
-      "before_lines": 798,
-      "after_lines": 828
+      "base_blob": "3337b2c888ba8fdcf6d094c55caeec35fe6d2ff9",
+      "head_blob": "be5e83cb846bcc7ec8444b2dcc99392f4fe2f0a7",
+      "before_lines": 828,
+      "after_lines": 874
     },
     "FHD/app/application/agent_runtime/gateway.py": {
       "base_file": "FHD/app/application/agent_runtime/gateway.py",
       "base_blob": "ea56beef93ac7626b32c57bd7b5798573a3fda8b",
-      "head_blob": "b6578e9586b6e8b2fb606710f177c29af9704e60",
+      "head_blob": "e29340dec58626191fe8c30996d734435c38d2ec",
       "before_lines": 747,
-      "after_lines": 830,
+      "after_lines": 831,
       "reason": "把单一 Xiaox 网关与原会话绑定，并明确动态业务能力的检索与缺省值规则",
       "boundary": "宿主权限及原任务授权决定能力。模型使用业务对象检索，宿主继续拒绝未开放的原始 SQL。",
-      "validation": "通过原会话与排队回归，继续执行企业租户的真实模型留出集。",
+      "validation": "原候选的 39 次真实留出试验已完整运行。本次根据发现、契约描述与调用回执补全真实 execute_action 参数要求，使用原摘要和原任务证据。独立进程已核对客户、产品、销售和财务查询。正式真实模型与回执重验以本候选为准。",
       "follow_up": "请架构评审者核对增长必要性，并在合入前确认测试原始回执。",
       "review_owner": "@42433422"
     },
