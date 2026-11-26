@@ -1,3 +1,5 @@
+# CI SSOT: generated from FHD/.github/workflows/task-holdout-real-model.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: XCMAX Holdout 13x3 Real Model and Database Evidence
 
 on:
@@ -10,6 +12,10 @@ permissions:
 concurrency:
   group: sqlite-model-holdout-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: FHD
 
 jobs:
   original-model-holdout:
