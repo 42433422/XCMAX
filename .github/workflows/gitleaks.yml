@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -53,7 +53,7 @@ jobs:
   # 凭据统一托管门禁：gitleaks 管高熵令牌形态；这里补短口令、默认值、命令行明文密码与 Markdown，
   # 只看本次新增行、只输出 文件:行号:规则（不打印值）。另跑凭据层（Mac 执行端）单测。
   credential-guard:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.XCAGI_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Checkout
