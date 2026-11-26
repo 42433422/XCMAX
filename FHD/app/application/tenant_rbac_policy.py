@@ -18,6 +18,7 @@ TENANT_PERMISSION_CODES = frozenset(
         "elt.execute",
         "elt.rollback",
         "elt.target.manage",
+        "customer.view",
     }
 )
 
