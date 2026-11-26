@@ -249,6 +249,15 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
     )
 
 
+def _trial_session_factory():
+    """Bind a real engine once; the lazy proxy is not an ORM transaction identity."""
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import get_runtime_engine
+
+    return sessionmaker(bind=get_runtime_engine())
+
+
 def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list[Any]]:
     """Use the same authenticated Codex/SQL queue as product requests.
 
@@ -260,7 +269,6 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     from types import SimpleNamespace
     from uuid import uuid4
 
-    from sqlalchemy.orm import sessionmaker
     from starlette.requests import Request
 
     from app.application.agent_orchestrator import AgentOrchestrator
@@ -276,7 +284,6 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
         SQLAlchemyTaskExecutionRepository,
     )
     from app.application.agent_runtime.gateway import run_runtime_task
-    from app.db import engine
     from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
@@ -290,7 +297,7 @@ def _execute_goal(task: dict[str, Any]) -> tuple[bool, str, dict[str, Any], list
     from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
-    factory = sessionmaker(bind=engine)
+    factory = _trial_session_factory()
     sid = uuid4().hex
     with factory.begin() as db:
         role = Role(name="admin")

@@ -499,7 +499,8 @@ def main() -> None:
         result = record_fixture_report(*args.audit_fixture)
     else:
         result = record_identity_check()
-    print(json.dumps(result, ensure_ascii=False))
+    safe = {key: result[key] for key in ("status", "evidence_ref", "reason") if key in result}
+    print(json.dumps(safe, ensure_ascii=False))
 
 
 if __name__ == "__main__":
