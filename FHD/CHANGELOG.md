@@ -1,5 +1,7 @@
 ## Unreleased
 
+- 自动审批遵守自治风险决策的 allowed 与 requires_confirmation 字段，人工确认与冷却期不得被自动模式放行；新增拒绝及允许分支回归，正式 CI 待验证。
+
 - iOS 候选构建沿用 Flutter 移动端唯一 SDK 锁 `.flutter-version`，与 Android 发布链及移动端 CI 一致；源码合同覆盖源工作流与根镜像，不改变签名、真机或分发门禁。
 
 - 工作簿写入员复用 openpyxl 创建条件格式、命名下拉与整数校验、打印版式；质检员重开产物核对。Excel 取数返回原件摘要和源行区间，ELT 核验回执附原文件摘要和各购买单位实际回读记录数。
