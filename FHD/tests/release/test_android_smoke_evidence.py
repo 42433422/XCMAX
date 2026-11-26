@@ -1,7 +1,7 @@
 """Host-side regression of emulator smoke control flow (mock adb, not device evidence)."""
-from pathlib import Path
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
