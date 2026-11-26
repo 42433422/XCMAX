@@ -160,12 +160,12 @@
     "FHD/app/application/agent_runtime/gateway.py": {
       "base_file": "FHD/app/application/agent_runtime/gateway.py",
       "base_blob": "ea56beef93ac7626b32c57bd7b5798573a3fda8b",
-      "head_blob": "e29340dec58626191fe8c30996d734435c38d2ec",
+      "head_blob": "b77054dd921417c310f87583525cce9babf36a10",
       "before_lines": 747,
-      "after_lines": 831,
+      "after_lines": 833,
       "reason": "把单一 Xiaox 网关与原会话绑定，并明确动态业务能力的检索与缺省值规则",
       "boundary": "宿主权限及原任务授权决定能力。模型使用业务对象检索，宿主继续拒绝未开放的原始 SQL。",
-      "validation": "原候选的 39 次真实留出试验已完整运行。本次根据发现、契约描述与调用回执补全真实 execute_action 参数要求，使用原摘要和原任务证据。独立进程已核对客户、产品、销售和财务查询。正式真实模型与回执重验以本候选为准。",
+      "validation": "原候选的 39 次真实留出试验已完整运行。本次根据发现、契约描述与调用回执补全真实 execute_action 参数要求，使用原摘要和原任务证据。独立进程已核对客户、产品、销售和财务查询。正式真实模型与回执重验以本候选为准。d013d0b 的真实留出集中客户查询和财务写入通过，销售与账本数据满足原断言。继续校准产品档案与库存、销售与采购的会话契约，按原门槛重验。",
       "follow_up": "请架构评审者核对增长必要性，并在合入前确认测试原始回执。",
       "review_owner": "@42433422"
     },
