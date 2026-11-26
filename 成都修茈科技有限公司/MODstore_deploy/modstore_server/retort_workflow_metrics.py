@@ -204,8 +204,9 @@ def postpromotion_stop_reason(db, row, spec):
     Postpromotion samples cannot revise the original GrowthBook A/B result.
     Unknown/corrupt receipts block treatment, never manufacture a new lift.
     """
-    from datetime import UTC, datetime
+    from datetime import UTC
 
+    from modstore_server import retort_experiment_runtime as runtime
     from modstore_server.customer_service_tools import json_loads
     from modstore_server.retort_training_candidates import postpromotion_effect_snapshot
 
@@ -215,7 +216,9 @@ def postpromotion_stop_reason(db, row, spec):
     if original is None:
         return ""
     effects = json_loads(row.effects_json, {})
-    evidence = postpromotion_effect_snapshot(db, row, spec, effects, observed_at=datetime.now(UTC))
+    evidence = postpromotion_effect_snapshot(
+        db, row, spec, effects, observed_at=runtime.datetime.now(UTC)
+    )
     if evidence is None:
         # No snapshot is normal before promotion, but an already promoted
         # candidate must not continue with a missing/invalid rollout clock.

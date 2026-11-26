@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import json
-import multiprocessing
+import subprocess
+import sys
 
 import pytest
 
@@ -162,32 +163,38 @@ def test_audit_missing_event_and_invalid_verdict_fail_closed(tmp_ledger):
     assert tmp_ledger.read_bytes() == before
 
 
-def _audit_in_process(event_id, barrier):
-    barrier.wait(timeout=30)
-    if not mark_audited(event_id, "approved"):
-        raise RuntimeError("audit target missing")
-
-
 def test_same_audit_is_idempotent_across_processes(tmp_ledger):
     original = append_event({"event_type": "signal_detected"})
     before = tmp_ledger.read_bytes()
-    ctx = multiprocessing.get_context("spawn")
-    barrier = ctx.Barrier(4)
-    workers = [
-        ctx.Process(target=_audit_in_process, args=(original["event_id"], barrier))
-        for _ in range(4)
-    ]
+    # Fresh interpreters import only the production module, not pytest's
+    # importlib-loaded test module, which spawn cannot reliably import.
+    script = (
+        "import sys\n"
+        "from modstore_server.evolution_ledger import mark_audited\n"
+        "if sys.stdin.read(1) != '1' or not mark_audited(sys.argv[1], 'approved'):\n"
+        "    raise SystemExit(1)\n"
+    )
+    workers = []
     try:
+        for _ in range(4):
+            workers.append(
+                subprocess.Popen(
+                    [sys.executable, "-c", script, original["event_id"]],
+                    stdin=subprocess.PIPE,
+                    text=True,
+                )
+            )
         for worker in workers:
-            worker.start()
+            assert worker.stdin is not None
+            worker.stdin.write("1")
+            worker.stdin.close()
         for worker in workers:
-            worker.join(timeout=45)
-            assert worker.exitcode == 0
+            assert worker.wait(timeout=45) == 0
     finally:
         for worker in workers:
-            if worker.is_alive():
-                worker.terminate()
-                worker.join(timeout=10)
+            if worker.poll() is None:
+                worker.kill()
+                worker.wait(timeout=10)
     after = tmp_ledger.read_bytes()
     assert after.startswith(before)
     rows = [json.loads(line) for line in after.splitlines()]

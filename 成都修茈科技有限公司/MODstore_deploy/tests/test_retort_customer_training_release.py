@@ -156,6 +156,7 @@ def test_late_postpromotion_failure_reopens_original_training_compensation(
                 event_id="experiment.postpromotion_observed:" + observation_id,
             )
             db.commit()
+    Clock.value += timedelta(seconds=3)
     # Stop-loss blocks the next real assignment immediately, even before the
     # original scheduler has restarted the completed Retort recovery tail.
     owner = run["users"][0]
@@ -299,6 +300,7 @@ def test_completed_training_keeps_only_original_postpromotion_effect_evidence(
             event_id="experiment.postpromotion_observed:" + observation_id,
         )
         db.commit()
+    Clock.value += timedelta(seconds=3)
     assert training.request_postpromotion_regression_rechecks() == 0
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, run["id"])
@@ -375,6 +377,7 @@ def test_invalid_postpromotion_terminal_cannot_supply_verified_improvement(
         assert snapshot["independently_verified_lift"] is False
         from modstore_server.retort_workflow_metrics import postpromotion_stop_reason
 
+        Clock.value += timedelta(seconds=4)
         assert postpromotion_stop_reason(db, row, run["spec"]) == (
             "workflow_postpromotion_source_unverified"
         )

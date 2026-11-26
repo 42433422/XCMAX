@@ -774,10 +774,11 @@ def request_postpromotion_regression_rechecks():
     uplift after GrowthBook's randomized window. A compare-and-swap claim
     prevents duplicate graph re-entry; no business write is replayed.
     """
-    from datetime import UTC, datetime
+    from datetime import UTC
 
     from sqlalchemy import select, update
 
+    from modstore_server import retort_experiment_runtime as runtime
     from modstore_server.retort_feedback_experiments import (
         approved_policy,
         traffic_block_reason,
@@ -824,7 +825,7 @@ def request_postpromotion_regression_rechecks():
                 if not block:
                     # One cumulative as-of snapshot per UTC day; never a causal
                     # uplift claim, nor fabricated control-group observations.
-                    observed_at = datetime.now(UTC)
+                    observed_at = runtime.datetime.now(UTC)
                     existing = effects.get("training_online_observations") or {}
                     history = existing.get("snapshots") if isinstance(existing, dict) else None
                     if history is None:
@@ -883,7 +884,7 @@ def request_postpromotion_regression_rechecks():
                     .values(
                         status="impact_recheck",
                         effects_json=json_dumps(effects),
-                        updated_at=datetime.now(UTC),
+                        updated_at=runtime.datetime.now(UTC),
                     )
                 )
                 claimed += int(result.rowcount == 1)
